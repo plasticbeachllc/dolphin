@@ -24,17 +24,14 @@ stop-openwebui:
 # set up open webui (pull, build, start)
 setup-openwebui: stop-openwebui pull-openwebui start-openwebui
 
-# # Build MCP server (Python/uv)
-setup-openwebui-mcp:
-    source .env && uv run 
-
 # reset installation settings
 clean-openwebui:
     docker image rm ghcr.io/open-webui/open-webui:main || true
     docker volume rm open-webui || true
 
 # # Run MCP server
-# run-mcp:
+setup-openwebui-mcp:
+    uvx mcpo --config ./mcpo_config.json
 #     cd {{MCP_DIR}} && source venv/bin/activate && python main.py
 
 # # # Build all
