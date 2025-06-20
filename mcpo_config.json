@@ -19,6 +19,17 @@
     "notionMCP": {
       "command": "npx",
       "args": ["-y", "mcp-remote", "https://mcp.notion.com/sse"]
+    },
+    "github": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "ghcr.io/github/github-mcp-server"
+      ]
     }
   }
 }
