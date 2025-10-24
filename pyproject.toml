@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "dolphin"
 version = "0.1.2"
@@ -9,5 +13,27 @@ dependencies = [
     "requests>=2.32.4", # For test scripts
     "mcpo>=0.0.19", # The main orchestrator
     "mcp-server-time>=0.1.0", # The time tool,
-    "mcp-server-git>=0.0.1" # The git tool
+    "mcp-server-git>=0.0.1", # The git tool
+    "fastapi",
+    "uvicorn",
+    "typer",
+    "lancedb",
+    "pydantic",
+    "tiktoken",
+    "openai",
+    "tree_sitter",
+    "pathspec",
+    "pyyaml",
+    "python-dotenv",
+    "sqlite-utils"
 ]
+
+[project.scripts]
+kb = "pb_kb.ingest.cli:app"
+kb-api = "pb_kb.api.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pb_kb"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/pb_kb"]
