@@ -1,5 +1,6 @@
 # Generated configuration file
 mcpo_config.json
+.mcpo.pid
 
 # Local environment variables
 .env
