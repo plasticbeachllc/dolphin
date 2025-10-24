@@ -20,13 +20,39 @@ list:
 clean: stop clean-openwebui clean-mcpo-config
 
 # Start all services
-run: start-openwebui start-mcp
+run: start
+
+# Start all services (Ollama, OpenWebUI, MCP) and wait for readiness
+start:
+	@echo "Starting all services..."
+	@just --quiet ollama-start
+	@echo "Waiting for Ollama to become ready..."
+	@TIMEOUT=30; while ! just --quiet ollama-check >/dev/null 2>&1; do \
+		sleep 1; TIMEOUT=$((TIMEOUT-1)); \
+		if [ $TIMEOUT -le 0 ]; then echo "❌ Timed out waiting for Ollama"; exit 1; fi; \
+	done
+	@just --quiet start-openwebui
+	@echo "Waiting for OpenWebUI to become ready on port {{OPENWEBUI_PORT}}..."
+	@TIMEOUT=60; while ! just --quiet openwebui-check >/dev/null 2>&1; do \
+		sleep 2; TIMEOUT=$((TIMEOUT-1)); \
+		if [ $TIMEOUT -le 0 ]; then echo "❌ Timed out waiting for OpenWebUI"; exit 1; fi; \
+	done
+	@just --quiet start-mcp
+	@echo "Waiting for MCP to listen on port {{MCP_PORT}}..."
+	@TIMEOUT=30; while ! just --quiet mcp-check >/dev/null 2>&1; do \
+		sleep 1; TIMEOUT=$((TIMEOUT-1)); \
+		if [ $TIMEOUT -le 0 ]; then echo "❌ Timed out waiting for MCP"; exit 1; fi; \
+	done
+	@echo "✅ All services are up:"
+	@echo " - Ollama API:       http://localhost:11434"
+	@echo " - OpenWebUI:        http://localhost:{{OPENWEBUI_PORT}}"
+	@echo " - MCP Orchestrator: http://localhost:{{MCP_PORT}}"
 
 # Set up the entire project
 setup: setup-env setup-python setup-openwebui
 
 # Stop all services
-stop: stop-openwebui stop-mcp
+stop: stop-mcp stop-openwebui ollama-stop
 
 # Run all tests
 test: test-mcp
@@ -75,9 +101,48 @@ clean-openwebui:
 	docker image rm ghcr.io/open-webui/open-webui:main || true
 	docker volume rm open-webui || true
 
+# Health check for OpenWebUI
+openwebui-check:
+	@curl -sSf http://localhost:{{OPENWEBUI_PORT}}/ >/dev/null
+
+# ==============================================================================
+# Ollama (Homebrew Services) Management
+# ==============================================================================
+
+# Start Ollama as a background macOS service
+ollama-start:
+	@echo "Starting Ollama via Homebrew services..."
+	brew services start ollama
+
+# Stop the Ollama service
+ollama-stop:
+	@echo "Stopping Ollama via Homebrew services..."
+	brew services stop ollama
+
+# Restart the Ollama service
+ollama-restart:
+	@echo "Restarting Ollama via Homebrew services..."
+	brew services restart ollama
+
+# Show Ollama service status and port
+ollama-status:
+	@echo "Ollama service status:"
+	brew services list | grep -E '^ollama\s' || true
+	@echo "Checking if port 11434 is listening:"
+	lsof -nP -iTCP:11434 -sTCP:LISTEN || true
+
+# Health check for the local Ollama API
+ollama-check:
+	@echo "Checking Ollama API at http://localhost:11434 ..."
+	@curl -sSf http://localhost:11434/api/tags >/dev/null && echo "API reachable" || (echo "API not reachable"; exit 1)
+
 # ==============================================================================
 # MCP (Multi-tool Caching Proxy) Management
 # ==============================================================================
+
+# MCP readiness check
+mcp-check:
+	@lsof -nP -iTCP:{{MCP_PORT}} -sTCP:LISTEN >/dev/null 2>&1
 
 # Start the MCP server orchestrator
 start-mcp:
