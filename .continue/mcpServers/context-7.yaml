@@ -1,0 +1,12 @@
+name: Context 7
+version: 0.0.1
+schema: v1
+mcpServers:
+  - name: context-7
+    command: bunx
+    args:
+      - -y
+      - "@upstash/context7-mcp"
+      - "--api-key"
+      - "ctx7sk-bf634979-e0be-4895-a142-3ae16d234323"
+    env: {}
