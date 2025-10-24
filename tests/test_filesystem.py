@@ -6,7 +6,7 @@ def run_test(base_url):
     base_endpoint = f"{base_url}/filesystem"
     endpoint = f"{base_endpoint}/list_directory"
     wait_for_endpoint(base_endpoint)
-    payload = {"path": "/files/worktable/dolphin"}
+    payload = {"path": "/worktable/dolphin"}
     headers = {"Accept": "application/json, text/event-stream"}
     response = requests.post(endpoint, json=payload, headers=headers)
     print(response.text)

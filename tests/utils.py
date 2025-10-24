@@ -20,7 +20,6 @@ def wait_for_endpoint(endpoint_url, timeout=30, interval=1):
         try:
             # The /docs endpoint is a reliable indicator that the tool router is up.
             response = requests.get(f"{endpoint_url}/docs", timeout=1)
-            print(response.text)
             if response.ok:
                 print(" up!")
                 return

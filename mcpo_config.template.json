@@ -9,7 +9,7 @@
         "--mount",
         "type=bind,src=__HOME__/worktable,dst=/worktable",
         "mcp/filesystem",
-        "/projects"
+        "/worktable"
       ]
     },
     "memory": {
@@ -26,8 +26,6 @@
       "command": "uvx",
       "args": [
         "mcp-server-git",
-        "--repository",
-        "__HOME__/worktable/lighthouse",
         "--repository",
         "__HOME__/worktable/dolphin"
       ]
