@@ -9,7 +9,8 @@ Your personal AI companion.
 ### Prerequisites
 
 *   just
-*   ... (e.g., Docker, Python 3.11, etc.)
+*   Docker
+*   Python >=3.13 (with `uv` installed)
 
 ### Installation & Setup
 
@@ -37,13 +38,8 @@ This will launch OpenWebUI and the necessary backend MCP servers.
 *   `just run`: Starts all services.
 *   `just stop`: Stops all services.
 *   `just setup-openwebui`: Pulls the latest images and starts the web UI.
+*   `just test`: Runs tests for all MCP servers.
 
 To see all available commands, run:
 ```sh
 just list
-```
-
-### Common Commands
-
-*   `just run`: ... (e.g., Starts the AI companion)
-*   `just ...`: ...

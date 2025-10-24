@@ -6,19 +6,31 @@
         "run",
         "-i",
         "--rm",
-        "--mount", "type=bind,src=__HOME__/Desktop,dst=/files/Desktop",
-        "--mount", "type=bind,src=__HOME__/worktable,dst=/files/worktable",
+        "--mount",
+        "type=bind,src=__HOME__/worktable,dst=/worktable",
         "mcp/filesystem",
-        "/files"
+        "/projects"
       ]
+    },
+    "memory": {
+      "command": "npx", "args": ["-y", "@modelcontextprotocol/server-memory"]
     },
     "time": {
       "command": "uvx",
-      "args": ["mcp-server-time", "--local-timezone=America/Los_Angeles"]
+      "args": [
+        "mcp-server-time",
+        "--local-timezone=America/New_York"
+      ]
     },
-    "github": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "ghcr.io/github/github-mcp-server"]
+    "git": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-git",
+        "--repository",
+        "__HOME__/worktable/lighthouse",
+        "--repository",
+        "__HOME__/worktable/dolphin"
+      ]
     }
   }
 }

@@ -1,2 +1,10 @@
 # Generated configuration file
 mcpo_config.json
+
+# Local environment variables
+.env
+.env.*
+!.env.example
+
+# Python cache
+__pycache__/
