@@ -13,8 +13,8 @@ Scope (Sprint 1)
 
 Invariants
 - One global collection per dimension; filter by `repo` and (optionally) `path_prefix` at query time.
-- Idempotent ingestion: for a given `(repo, file, commit, text_hash, embed_model)`, never re-embed or duplicate metadata.
-- Snippets are computed at query time (not stored); H1–H3 heading context is stored as metadata but not embedded.
+- Idempotent ingestion: for a given `(repo, file, commit, start_line, end_line, text_hash, embed_model)`, never re-embed or duplicate metadata.
+- Persist chunk text once per unique `text_hash` in SQLite for stable snippet generation independent of filesystem state; H1–H3 heading context is stored as metadata (not embedded) and is always prepended to returned snippets.
 
 ---
 
@@ -24,6 +24,8 @@ Notes
 - Enable `PRAGMA foreign_keys = ON`.
 - Timestamps are stored as `TEXT` in ISO 8601 UTC (`YYYY-MM-DDTHH:MM:SSZ`).
 - Keep schema minimal for Sprint 1; defer per-file history beyond current commit.
+- Store full 40-character Git commit SHAs; sessions also record branch.
+- Scanning is tracked-only: include tracked files not ignored by .gitignore; skip symlinks; follow submodules only if separately registered as repos.
 
 SQL
 ```sql
@@ -44,10 +46,9 @@ CREATE TABLE IF NOT EXISTS repos (
 CREATE TABLE IF NOT EXISTS sessions (
   id INTEGER PRIMARY KEY,
   repo_id INTEGER NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
-  commit_sha TEXT NOT NULL,
+  commit_sha TEXT NOT NULL CHECK (length(commit_sha) = 40),
+  branch TEXT NOT NULL,
   embed_model TEXT NOT NULL DEFAULT 'small',
-  spend_cap_usd REAL NOT NULL DEFAULT 10.0,
-  spent_usd REAL NOT NULL DEFAULT 0.0,
   files_indexed INTEGER NOT NULL DEFAULT 0,
   chunks_indexed INTEGER NOT NULL DEFAULT 0,
   vectors_written INTEGER NOT NULL DEFAULT 0,
@@ -74,6 +75,14 @@ CREATE TABLE IF NOT EXISTS files (
 );
 CREATE INDEX IF NOT EXISTS idx_files_repo_path ON files(repo_id, path);
 
+-- Deduplicated chunk text stored once per content hash
+CREATE TABLE IF NOT EXISTS chunk_texts (
+  text_hash TEXT PRIMARY KEY,
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_chunk_texts_created_at ON chunk_texts(created_at);
+
 -- Chunk metadata per occurrence (per commit); vectors live in LanceDB
 CREATE TABLE IF NOT EXISTS chunks_meta (
   id INTEGER PRIMARY KEY,
@@ -92,7 +101,7 @@ CREATE TABLE IF NOT EXISTS chunks_meta (
   h2 TEXT,
   h3 TEXT,
   -- content identity & accounting
-  text_hash TEXT NOT NULL,         -- sha256(canonicalize_text(chunk_text))
+  text_hash TEXT NOT NULL REFERENCES chunk_texts(text_hash) ON DELETE RESTRICT, -- sha256(canonicalize_text(chunk_text))
   token_count INTEGER NOT NULL,    -- tokens in chunk_text used for embedding
   embed_model TEXT NOT NULL,       -- 'small' | 'large'
   vector_dim INTEGER NOT NULL,     -- 1536 | 3072
@@ -100,7 +109,7 @@ CREATE TABLE IF NOT EXISTS chunks_meta (
   vector_id TEXT NOT NULL,         -- primary key of the LanceDB record (chunk_uid)
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   -- idempotency: do not duplicate this exact chunk occurrence
-  UNIQUE (repo_id, file_id, commit_sha, text_hash, embed_model)
+  UNIQUE (repo_id, file_id, commit_sha, start_line, end_line, text_hash, embed_model)
 );
 CREATE INDEX IF NOT EXISTS idx_chunks_repo_file_commit ON chunks_meta(repo_id, file_id, commit_sha);
 CREATE INDEX IF NOT EXISTS idx_chunks_text_hash ON chunks_meta(text_hash);
@@ -115,10 +124,10 @@ Semantics
 
 Idempotency and keys
 - Compute `text_hash = sha256(canonicalize_text(chunk_text))`.
-- Define `chunk_uid = sha256("repo={repo}|path={path}|commit={commit_sha}|hash={text_hash}|model={embed_model}")`.
+- Define `chunk_uid = sha256("repo={repo}|path={path}|commit={commit_sha}|start={start_line}|end={end_line}|hash={text_hash}|model={embed_model}")`.
   - Use `chunk_uid` as `vector_id` in LanceDB and store it in `chunks_meta.vector_id`.
-  - Upsert rule: if a row with the same `(repo_id, file_id, commit_sha, text_hash, embed_model)` exists, skip re-embedding and LanceDB upsert.
-- Optional optimization (deferred): if any LanceDB record exists with the same `(text_hash, embed_model)`, reuse its `vector` instead of re-calling the embedding API. For Sprint 1, reusing is allowed but not required.
+  - Upsert rule: if a row with the same `(repo_id, file_id, commit_sha, start_line, end_line, text_hash, embed_model)` exists, skip re-embedding and LanceDB upsert.
+- Enhancement (tracked for later, not Sprint 1): if any LanceDB record exists with the same `(text_hash, embed_model)`, allow vector reuse to avoid re-embedding across repos.
 
 ---
 
@@ -137,6 +146,7 @@ Record shape (Arrow schema)
 - `end_line: int32` — 1-based inclusive.
 - `text_hash: string` — sha256 of canonicalized chunk text.
 - `commit: string` — HEAD commit SHA recorded at index time.
+- `branch: string` — branch name captured at session start.
 - `embed_model: string` — model bucket: `small` or `large`.
 - `language: string?` — coarse language tag.
 - `symbol_kind: string?` — function/class/module, etc.
@@ -166,7 +176,7 @@ Search response mapping (for retriever)
 - `start_line`, `end_line` ← LanceDB.
 - `provenance.commit` ← LanceDB `commit`.
 - `provenance.text_hash` ← LanceDB `text_hash`.
-- `snippet`, `truncated`, `snippet_tokens`, `total_tokens` ← computed at query time from the source text (not stored in LanceDB) or reconstructed if available.
+- `snippet`, `truncated`, `snippet_tokens`, `total_tokens` ← computed at query time from the persisted chunk text (via `text_hash` → SQLite `chunk_texts`) to ensure stability across file changes.
 
 ---
 
@@ -174,12 +184,21 @@ Operational notes
 - Initialization:
   - On `kb init`, ensure SQLite file exists and run the DDL above.
   - Ensure LanceDB root exists; create `chunks_small` and `chunks_large` with the Arrow schema specified (metadata columns + `vector`).
-- Budget:
-  - Enforce per-session cap via `sessions.spent_usd` vs `sessions.spend_cap_usd`.
-  - Track `vectors_written` and `chunks_indexed` for post-run summaries.
+- Tokenization:
+  - Use model-specific `tiktoken` for embeddings and `token_count` computation.
+  - Snippet construction prepends available H1–H3 heading metadata.
+- Scanning rules:
+  - Include only tracked files (per Git index) that are not ignored by `.gitignore`.
+  - Skip symlinks; follow submodules only when those submodule roots are independently registered as repos.
+- Budget (descoped in Sprint 1):
+  - No spend cap enforcement; retry with exponential backoff + jitter on transient failures; concurrency default 3.
+  - Keep `files_indexed`, `chunks_indexed`, and `vectors_written` counters for status only.
 - Provenance:
-  - Abort indexing if the repo working tree is dirty.
-  - Store `commit_sha` in `sessions` and per chunk.
+  - Fail only on tracked changes; ignore untracked/ignored files when checking for a clean working tree.
+  - Capture commit SHA (40 chars) and branch at session start; store in `sessions` and per chunk (commit only per chunk).
+- Retention and pruning:
+  - Eagerly create both LanceDB collections on init.
+  - Keep the last N sessions per repo (N configurable later); add `kb prune` in v2.
 
 Open items (documented, can be added later)
 - File history table to record per-commit file-level stats for diffs and pruning.
@@ -188,4 +207,48 @@ Open items (documented, can be added later)
 - Optional JSON column for additional language/tool-specific metadata (e.g., TS import graph pointers).
 
 This schema is authoritative for Sprint 1 and aligns with immediate next steps in execution-1.
+
+---
+
+MCP tool request shapes (proposals)
+
+Option A — Minimal
 ```
+{
+  "query": "calibration metrics"
+}
+```
+
+Option B — Scoped (recommended default)
+```
+{
+  "query": "calibration metrics",
+  "repos": ["active"],
+  "path_prefix": ["src/", "docs/"],
+  "top_k": 8,
+  "max_snippet_tokens": 240,
+  "score_cutoff": 0.15
+}
+```
+
+Option C — Advanced overrides
+```
+{
+  "query": "calibration metrics",
+  "repos": ["lighthouse", "dolphin"],
+  "path_prefix": ["src/widgets/"],
+  "top_k": 12,
+  "max_snippet_tokens": 320,
+  "score_cutoff": 0.10,
+  "embed_model": "small"
+}
+```
+
+Defaults
+- Active repo scope when `repos` omitted or includes `"active"`.
+- Multiple `path_prefix` values supported; interpreted as OR filters under the chosen repo scope.
+- Server applies default `top_k`, `max_snippet_tokens`, and `score_cutoff` but allows per-request overrides.
+
+Security and hygiene additions
+- Extend default ignores with common secret paths (examples): `**/id_rsa`, `**/*.pem`, `**/.aws/**`, `**/gcloud/**`, `**/secrets/**`, `**/*keys.json`, `**/*service_account.json`, `**/*auth.json`.
+- Avoid logging snippet text; logs should include request ids, counts, and resource identifiers only.
