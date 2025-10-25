@@ -29,6 +29,10 @@
         "--repository",
         "__HOME__/worktable/dolphin"
       ]
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp", "--api-key", "ctx7sk-b899474f-827f-4c94-98b0-95e214070444"]
     }
   }
 }
