@@ -4,8 +4,8 @@ import bisect
 import logging
 from typing import List, Optional, Tuple, NamedTuple
 
-from tree_sitter import Parser
-from tree_sitter_languages import get_language
+import tree_sitter_python as tspython
+from tree_sitter import Language, Parser
 
 from . import Chunk
 from .token_utils import get_tokenizer, window_text_by_tokens, count_tokens
@@ -16,16 +16,14 @@ _log = logging.getLogger(__name__)
 _PY_PARSER: Optional[Parser] = None
 
 def _get_python_parser() -> Parser:
+    """Return a cached tree-sitter Parser configured for Python.
+    
+    Uses tree-sitter 0.25+ API with Language wrapper.
+    """
     global _PY_PARSER
     if _PY_PARSER is None:
-        lang = get_language("python")
-        # Prefer new API: pass language in constructor, else assign attribute
-        try:
-            parser = Parser(lang)  # type: ignore[call-arg]
-        except TypeError:
-            parser = Parser()
-            setattr(parser, "language", lang)
-        _PY_PARSER = parser
+        PY_LANGUAGE = Language(tspython.language())
+        _PY_PARSER = Parser(PY_LANGUAGE)
     return _PY_PARSER
 
 class Symbol(NamedTuple):

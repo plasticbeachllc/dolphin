@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
-__all__ = ["Chunk", "ChunkList"]
+from .repo_config import RepoChunkingConfig, load_repo_chunking_config
+
+__all__ = ["Chunk", "ChunkList", "RepoChunkingConfig", "load_repo_chunking_config"]
 
 
 @dataclass(slots=True)

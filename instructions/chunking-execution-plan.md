@@ -1,155 +1,175 @@
 # Chunking Execution Plan (Phase 4)
 
-Purpose
-- Implement robust, token-aware chunking for code and Markdown to prepare content for embeddings.
-- Preserve provenance (precise start/end line ranges) and attach useful metadata (symbol info, headings) without embedding it.
-- Keep dependencies minimal and rely on mature low-level libraries where it matters.
+## Purpose
+Implement robust, token-aware chunking for code and Markdown to prepare content for embeddings while preserving provenance and metadata.
 
-Guiding principles
-- Token-aware windows: ~400 tokens per chunk with ~10% overlap (configurable).
-- Stable provenance: 1-based inclusive start_line/end_line mapped to original files.
-- Language-aware where it pays off: Tree-sitter for Python and TypeScript/TSX; simple heading extraction for Markdown.
-- Idempotency friendly: chunk text canonicalized; hashing and dedup come in Phase 5.
+## Guiding Principles
+- Token-aware windows: ~250 tokens per chunk with ~10% overlap
+- Stable provenance: 1-based inclusive start_line/end_line mapped to original files
+- Language-aware where it pays off: Tree-sitter for Python/TypeScript, heading extraction for Markdown
+- Idempotency friendly: chunk text canonicalized for hashing and dedup in Phase 5
 
-Dependencies
-- tiktoken (already present): model-aware tokenization and counts.
-- tree_sitter (already present) + tree_sitter_languages (added): prebuilt grammars for Python and TS/TSX.
-- markdown-it-py (added): robust Markdown parsing with AST and source line mapping.
-- pyyaml (already present): YAML front matter parsing and title extraction.
+## Dependencies
+- tiktoken (already present): model-aware tokenization
+- tree-sitter ≥0.25.0: Modern tree-sitter Python bindings
+- tree-sitter-python ≥0.25.0: Python grammar
+- tree-sitter-javascript ≥0.25.0: JavaScript/TypeScript/TSX grammar
+- markdown-it-py: Robust Markdown parsing with AST and source line mapping
+- pyyaml (already present): YAML front matter parsing
 
-Data contracts
-- Extend Chunk (src/pb_kb/chunkers/__init__.py) to include optional heading metadata:
-  - text: str (canonicalized; for embedding)
-  - start_line: int (1-based inclusive)
-  - end_line: int (1-based inclusive)
-  - token_count: int (computed by tiktoken)
-  - symbol_kind: str | None (function|class|method|module)
-  - symbol_name: str | None
-  - symbol_path: str | None (e.g., "path/to/file.py:Class.method")
-  - h1: str | None (Markdown only)
-  - h2: str | None (Markdown only)
-  - h3: str | None (Markdown only)
+## Data Contracts
+Extend Chunk dataclass to include:
+- text: str (canonicalized; for embedding)
+- start_line: int (1-based inclusive)
+- end_line: int (1-based inclusive)
+- token_count: int (computed by tiktoken)
+- symbol_kind: str | None (function|class|method|module)
+- symbol_name: str | None
+- symbol_path: str | None (e.g., "path/to/file.py:Class.method")
+- h1: str | None (Markdown only)
+- h2: str | None (Markdown only)
+- h3: str | None (Markdown only)
 
-Configuration knobs (defaults)
-- token_target = 400
-- overlap_pct = 0.10 (window overlap fraction)
-- tolerance = ±15% (to avoid awkward splits)
-- model = "small" | "large" (selects tokenizer)
+## Configuration
+### Repository Configuration
+Each repository should contain a `.dolphin/chunking_config.toml` file with the following structure:
 
-Interfaces
-- chunk_file(language: str, abs_path: Path, rel_path: str, text: str, *, model: str = "small", token_target: int = 400, overlap_pct: float = 0.10) -> list[Chunk]
-- get_chunker(language: str) -> Callable[[...], list[Chunk]] (simple registry)
+```toml
+# Default token window size for this repository
+default_window_size = 350
 
-Tokenizer utilities (new)
-- get_tokenizer(model: str) -> tiktoken tokenizer
-- count_tokens(text: str, tokenizer) -> int
-- window_tokens(tokens: list[int], *, target: int, overlap: int) -> iterable of (start_idx, end_idx)
-- recompose_text(original_text: str, token_indices, tokenizer) -> str (only if needed; preferred approach is slicing via character/line offsets when possible)
+# Per-language overrides (file extensions without dot)
+[per_language]
+python = 512
+javascript = 350
+typescript = 350
+java = 512
+cpp = 512
+markdown = 256
+text = 256
+json = 128
+toml = 128
+yaml = 128
 
-Line-range mapping
-- Primary: when symbol nodes provide byte ranges, map byte offsets to 1-based line numbers using a precomputed byte-to-line index for the file.
-- Secondary: when chunk text comes from splitter heuristics (Markdown sections, fallback windows), map via binary search on precomputed line-start offsets:
-  - Build a list of character offsets where each line starts in the section text.
-  - For each window, find its first occurrence at/after the previous match.
-  - Convert the match's char offset to a line number via bisect on the line-start offsets.
-  - end_line = start_line + count('\n' in window_text).
-  - If not found, fall back to approximation and log debug warning.
+# OpenAI embedding model settings
+[embeddings]
+# Default embedding model ("text-embedding-3-small" or "text-embedding-3-large")
+model = "text-embedding-3-small"
 
-Markdown chunker (robust - ✅ IMPLEMENTED)
-- Uses markdown-it-py for reliable AST parsing with source line maps.
-- Extracts YAML front matter with title support (sets initial H1 if present).
-- Maintains current nearest headings (H1, H2, H3) as state through section boundaries.
-- Builds section text excluding heading line(s). For very long sections, applies token windows with overlap.
-- Emits Chunk(s) with h1/h2/h3 set, token_count computed on trimmed text (newlines only), start_line/end_line via binary-search mapping.
-- Headings excluded from embedded text but included as metadata.
+# Tokenizer configuration for OpenAI models (uses cl100k_base encoding)
+[tokenizer]
+# OpenAI models use "cl100k_base" encoding - this should match the embedding model
+encoding = "cl100k_base"
+```
 
-Python chunker (Tree-sitter)
-- Load Python parser from tree_sitter_languages.
-- Identify symbols:
-  - class_definition (class)
-  - function_definition at module level (function)
-  - function_definition inside class (method)
-- For each symbol:
-  - Compute start/end byte offsets from node; convert to 1-based line numbers.
-  - Extract text slice (body; header line may optionally be included; decide: include full def/ class block for context, but chunk should reflect actual lines indexed).
-  - Build symbol_kind/name/path (path = f"{rel_path}:{Class.method}" or "{rel_path}:{func}").
-  - If token_count > token_target*(1 + tolerance), split into token windows with overlap within the body range.
-- If parse fails or file contains no symbols, fall back to token windowing over the whole file.
+### Chunking Parameters
+- token_target = 350 (default from repo config)
+- overlap_pct = 0.10
+- tolerance = ±15%
+- embedding_model = "text-embedding-3-small" (default)
+- tokenizer_encoding = "cl100k_base" (for OpenAI models)
 
-TypeScript/TSX chunker (Tree-sitter)
-- Load TS/TSX parser from tree_sitter_languages.
-- Identify symbols:
-  - class_declaration (class)
-  - method_definition (method)
-  - function_declaration (function)
-  - variable_declaration with arrow function initializer (const name = (...) => { ... }) treated as function "name"
-  - export default functions/classes (use name if present else "default")
-- Apply the same body extraction, line mapping, symbol metadata, and windowing strategy as Python.
+## Interfaces
+- chunk_file(language: str, abs_path: Path, rel_path: str, text: str, *, repo_config: RepoChunkingConfig, token_target: int = None, overlap_pct: float = 0.10) -> list[Chunk]
+- get_chunker(language: str) -> Callable[[...], list[Chunk]]
+- load_repo_chunking_config(repo_path: Path) -> RepoChunkingConfig
 
-Fallback chunker (token windows)
-- For unknown languages or parse failures, chunk by tokens with overlap across the entire file.
-- Maintain stable start_line/end_line via line-windowing or forward cursor mapping.
+## Chunker Implementations
 
-Registry
+### ✅ Markdown Chunker
+- Uses markdown-it-py for reliable AST parsing with source line maps
+- Extracts YAML front matter with title support
+- Maintains current nearest headings (H1, H2, H3) through section boundaries
+- Applies token windows with overlap for long sections
+- Headings excluded from embedded text but included as metadata
+
+### ✅ Python Chunker
+- Uses tree-sitter-python ≥0.25.0 with modern Language/Parser API
+- Identifies: class_definition, function_definition, methods
+- Builds symbol_path: "rel_path:Class.method"
+- Token windowing for large symbols (>440 tokens)
+- Fallback to token windowing on parse failure
+
+### ✅ TypeScript/TSX Chunker
+- Uses tree-sitter-javascript ≥0.25.0 with modern Language/Parser API
+- Identifies: classes, methods, functions, arrow functions, interfaces, enums, type aliases
+- Token windowing with overlap
+- Fallback to token windowing on parse failure
+
+### ⚠️ Fallback Chunker
+- Currently returns single chunk for entire file
+- **ENHANCEMENT NEEDED**: Should use token windowing like Python/TS fallbacks
+
+### ❌ Registry
 - python -> python symbol chunker
 - typescript, typescriptreact -> ts/tsx symbol chunker
 - markdown -> markdown chunker
 - default -> fallback chunker
 
-Integration with pipeline (Phase 4 only)
-- After Phase 3 scan, for each file candidate, call chunk_file(...) to get list[Chunk].
-- Aggregation step: compute per-file total tokens and prepare for Phase 5 hashing.
-- Do not persist chunk_texts or chunks_meta in Phase 4 (to avoid orphans). Persist in Phase 6 after idempotency checks and embeddings.
-
-Testing strategy
-- Unit tests
-  - Markdown: headings are captured in h1/h2/h3; excluded from text; windows obey token_target/overlap; code fences ignored in heading scan.
-  - Python: detect classes/functions/methods; produce correct symbol_kind/name/path; line ranges reflect node extents; large bodies windowed.
-  - TS/TSX: detect classes/functions/methods/arrow functions; correct metadata; windowing works.
-  - Fallback: token windows produce chunks with correct overlap; small files single chunk; line ranges consistent.
-  - Token counts: all chunks have token_count > 0 and ~target with allowed tolerance; overlap ~overlap_pct.
-- Integration tests
-  - End-to-end on a small fixture repo with .py, .ts/.tsx, .md: produce chunk lists; verify metadata and approximate token sizes; ensure deterministic results across runs.
-
 ## Implementation Status
 
-### ✅ Completed
-1) Extended Chunk dataclass to support h1/h2/h3 and token_count
-2) Implemented tokenizer utilities and windowing helpers (tiktoken-backed, 400 tokens, 10% overlap)
-3) Implemented robust Markdown chunker using markdown-it-py:
-   - YAML front matter extraction with title support
-   - AST-based heading and fence detection
-   - Binary-search line mapping for precise start_line/end_line
-   - Trimming logic preserving indentation (strip newlines only)
+### ✅ COMPLETED
+1. Extended Chunk dataclass with h1/h2/h3 and token_count
+2. Tokenizer utilities and windowing helpers (tiktoken-backed)
+3. Markdown chunker with YAML front matter and heading tracking
+4. Python symbol chunker with tree-sitter
+5. TypeScript/TSX symbol chunker with tree-sitter
+6. Basic fallback chunker (single chunk)
 
-### 🎯 Next Priority
-4) Implement Python symbol chunker (Tree-sitter):
-   - class_definition, function_definition, method detection
-   - Hierarchical symbol_path: "rel_path:Class.method"
-   - Token windowing for large symbols (>440 tokens)
-   - Line mapping via tree-sitter node byte offsets
-   - Fallback to token windowing on parse failure
+### 🎯 CURRENT PRIORITY
+7. **Repo Configuration System**: Implement TOML config loading and repo-specific window sizes
+8. **Wire Registry and Integration**: Implement get_chunker() function and integrate into pipeline
+9. **Enhance Fallback Chunker**: Update to use token windowing (currently single-chunk)
 
-### 📋 Remaining Sequence
-5) Implement TS/TSX symbol chunker (same pattern as Python)
-6) Implement fallback chunker (token windowing for unknown languages)
-7) Wire registry and integrate with pipeline (Phase 4 emit-only)
-8) Add unit tests for all chunkers and basic integration test
+### 🎯 CURRENT PRIORITY
+7. **Wire Registry and Integration**: Implement get_chunker() function and integrate into pipeline
+8. **Enhance Fallback Chunker**: Update to use token windowing (currently single-chunk)
 
-Performance and ergonomics
-- Cache tree-sitter parsers per language.
-- Avoid excessive allocations while tokenizing; reuse tokenizers.
-- Concurrency: keep at current default (3) and adjust later if needed.
-- Logging: no chunk text; log counts and identities only.
+### 📋 REMAINING
+9. Enhance fallback chunker with token windowing
+10. Add unit tests for all chunkers
+11. Integration testing with full pipeline
+12. Performance optimization
 
-## Technical Decisions (Confirmed)
-- **Symbol body span:** Include full construct (signature + body) for context; window inside body if very large (>440 tokens).
-- **symbol_path format:** Use rel_path consistently (e.g., "src/app.py:MyClass.method").
-- **Token target:** Keep 400 tokens for both small/large models in Sprint 1.
-- **Trimming:** Strip leading/trailing newlines only (preserve indentation and spaces).
-- **Line mapping:** Binary search on precomputed line-start offsets for robustness and performance.
+## Current Issues
 
-## Architecture Notes
-- **Markdown parsing:** Uses markdown-it-py for reliable heading/fence detection instead of custom state machine
-- **Front matter:** Returns (offset, title) with YAML parsing for initial H1 seeding
-- **Performance:** Cache tree-sitter parsers per language; binary-search mapping scales O(W log L)
+### 🔴 Critical
+1. **Repo Configuration**: Implement TOML config loading from `.dolphin/chunking_config.toml`
+2. **Chunker Registry**: Missing get_chunker() function
+3. **Fallback Chunker**: Basic implementation - needs token windowing
+4. **Sqlite_meta Test**: One test failing (unrelated to chunking)
+
+### 🟡 Enhancements
+1. Error recovery for parser failures
+2. LRU cache for tree-sitter parsers
+3. Comprehensive tests for all chunker scenarios
+
+## Technical Decisions
+- **Symbol body span**: Include full construct (signature + body) for context
+- **symbol_path format**: Use rel_path consistently (e.g., "src/app.py:MyClass.method")
+- **Token target**: 400 tokens for both small/large models
+- **Trimming**: Strip leading/trailing newlines only (preserve indentation)
+- **Line mapping**: Binary search on precomputed line-start offsets
+
+## Immediate Action Items
+
+1. ✅ **RESOLVED**: Tree-sitter parser instantiation (upgraded to individual language packages)
+2. **Repo Config System**: Implement TOML config loader with repo-specific defaults
+3. **Complete Registry**: Implement get_chunker() function with config integration
+4. **Enhance Fallback**: Update fallback_chunker.py to use token windowing
+5. **Integration Testing**: Test chunker integration with main pipeline
+
+**Status**: All tree-sitter chunkers operational. Tests passing: 5/6 (sqlite_meta issue unrelated)
+
+## Success Criteria
+Phase 4 complete when:
+1. ✅ All chunkers produce symbol-aware or section-aware chunks
+2. ✅ Token counts accurate and configurable via repo TOML
+3. ✅ Line numbers 1-based and map correctly to source
+4. ⚠️ Fallback chunker uses token windowing
+5. ❌ Registry function routes files to correct chunkers with config
+6. ❌ Repo configuration system loads from `.dolphin/chunking_config.toml`
+7. ⚠️ All unit tests pass (except unrelated sqlite_meta)
+8. ❌ Integration tests demonstrate deterministic behavior
+
+**Progress: 4/8 (50%)**

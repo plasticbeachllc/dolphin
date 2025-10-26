@@ -79,6 +79,10 @@ just personas-preview --id journalist --verbose
 
 ## Development Workflow
 
+### Testing
+
+We use a custom test harness in `tests/run_tests.py` which runs all `test_*.py` tests in the `tests/` dir. Each test must implement a run_test() method which should use `assert` to ensure tested modules / functionalities work as expected across all input surface areas.
+
 ### Running Services
 
 Start all services:

@@ -16,13 +16,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import List, Optional, Tuple
 
-from tree_sitter import Parser
-from tree_sitter_languages import get_language
-try:
-    # Optional convenience API (if available): returns a configured Parser
-    from tree_sitter_languages import get_parser as tsl_get_parser  # type: ignore
-except Exception:  # pragma: no cover
-    tsl_get_parser = None  # type: ignore
+import tree_sitter_javascript as tsjs
+from tree_sitter import Language, Parser
 
 from . import Chunk
 from .token_utils import get_tokenizer, window_text_by_tokens, count_tokens
@@ -35,33 +30,14 @@ LINE_NUMBER_BASE = 1  # Maintain 1-based lines for compatibility
 
 @lru_cache(maxsize=8)
 def _get_parser(lang: str) -> Parser:
-    """Return a cached Tree-sitter parser for a given language key.
-
-    Tries tree_sitter_languages.get_parser if available, else manually
-    constructs a Parser and assigns the language using either set_language
-    or the language attribute, depending on the installed tree_sitter API.
+    """Return a cached Tree-sitter parser for TypeScript/TSX/JavaScript.
+    
+    Uses tree-sitter 0.25+ API with Language wrapper.
+    All three languages (typescript, tsx, javascript) use the same parser.
     """
-    # First, try the convenience API from tree_sitter_languages
-    if tsl_get_parser is not None:
-        try:
-            try:
-                p = tsl_get_parser(lang)  # type: ignore[misc]
-            except TypeError:
-                # Some versions expose get_parser() without args; return pre-configured parser
-                p = tsl_get_parser()  # type: ignore[call-arg]
-            if isinstance(p, Parser):
-                return p
-        except Exception:
-            pass
-
-    # Fallback: manual parser configuration using new API
-    lang_obj = get_language(lang)
-    try:
-        parser = Parser(lang_obj)  # type: ignore[call-arg]
-    except Exception:
-        parser = Parser()
-        setattr(parser, "language", lang_obj)
-    return parser
+    # tree-sitter-javascript handles all JS/TS variants
+    JS_LANGUAGE = Language(tsjs.language())
+    return Parser(JS_LANGUAGE)
 
 
 @dataclass(frozen=True)

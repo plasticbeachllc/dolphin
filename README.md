@@ -104,3 +104,17 @@ just personas-preview --id journalist --verbose
 ```
 
 This will show the compiled system message, token usage, and any trimming steps applied to fit within the token budget.
+
+## Miscellaneous
+
+### Failed Tool Fires (log for future system prompting)
+- ```create_new_file failed with the message: `filepath` argument is required and must not be empty or whitespace-only. (type string)```
+- ```failed because the arguments were invalid, with the following message: Tool  not found```
+- ```create_new_file failed with the message: `filepath` argument is required and must not be empty or whitespace-only. (type string)```
+- ``` failed because the arguments were invalid, with the following message: Tool  not found```
+- ```multi_edit failed because the arguments were invalid, with the following message: invalid multi-edit args```
+- ```edit_existing_file failed because the arguments were invalid, with the following message: Tool edit_existing_file not found```
+- ```single_find_and_replace failed because the arguments were invalid, with the following message: Tool single_find_and_replace not found```
+- ```create_new_file failed with the message: File scripts/security-scan-enhanced.sh already exists. Use the edit tool to edit this file```
+- ```create_new_file failed with the message: File scripts/security-scan-enhanced.sh already exists. Use the edit tool to edit this file```
+- Model uses absolute path when repo-relative path is correct
