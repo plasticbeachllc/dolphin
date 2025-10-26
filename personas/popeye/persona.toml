@@ -1,15 +1,11 @@
 [persona]
-id = "deep-dive"
-name = "Deep Dive"
-version = "0.1.1"
+id = "popeye"
+name = "Popeye"
+version = "0.1.0"
 
 [provider]
 kind = "openai"
-model = "gpt-5"
-
-[params]
-top_p = 1.0
-max_tokens = 4096
+model = "gpt-5-codex"
 
 [system]
 token_budget = 1200

@@ -31,9 +31,15 @@ dependencies = [
 [project.scripts]
 kb = "pb_kb.ingest.cli:app"
 kb-api = "pb_kb.api.app:main"
+personas = "personas.scripts.personas:app"
+
+
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/pb_kb"]
+packages = ["src/pb_kb", "personas"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/pb_kb"]
+include = ["src/pb_kb", "personas"]
+
+[tool.uv.sources]
+dolphin = { workspace = true }

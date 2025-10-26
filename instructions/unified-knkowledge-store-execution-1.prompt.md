@@ -178,8 +178,8 @@ Operational quick start (concrete)
 7) Configure Continue to use the MCP tool; default scope should be the active workspace repo; fetch snippets before answering code questions.
 
 Open items (confirm or defer)
-1) Return behavior for Markdown heading metadata (always prepend in the snippet payload vs. behind a request flag).
-2) Any additional repo-specific ignore patterns beyond the generic set (e.g., .turbo, .netlify) to add now.
-3) Timing to add hybrid retrieval (SQLite FTS5 + dense) and an optional reranker after Sprint 1.
+1) Return behavior for Markdown heading metadata (always prepend in the snippet payload vs. behind a request flag): always prepend
+2) Any additional repo-specific ignore patterns beyond the generic set (e.g., .turbo, .netlify) to add now: no
+3) Timing to add hybrid retrieval (SQLite FTS5 + dense) and an optional reranker after Sprint 1: defer for now, let's get a POC going.
 
 This prompt is authoritative for Sprint 1 execution. Keep it updated as we progress.

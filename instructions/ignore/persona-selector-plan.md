@@ -45,7 +45,7 @@
 - Popeye: Senior SWE on gpt-5-codex via OpenAI API.
 - Little Ripper: Junior SWE on a smaller Codex model via OpenAI API.
 - Fancy Slave: Runs gpt-oss:20b locally via Ollama.
-- Journalist: Runs Code Llama locally via Ollama.
+- Journalist: Documentation specialist on DeepSeek Reasoner (OpenAI-compatible API).
 
 Notes:
 - Exact model IDs are parameterized in persona definitions (examples: gpt-5-pro, gpt-5-codex, codex-5-small, gpt-oss:20b, codellama:34b-instruct).
@@ -218,7 +218,7 @@ system = "system.md"
 
 ### 8.1 Continue usage and reload notes
 
-- Generator writes `.continue/config.json`. If Continue is running, reload the extension or re-open the model picker to see new aliases.
+- Generator writes `.continue/agents/personas_config.yaml`. If Continue is running, reload the extension or re-open the model picker to see new aliases.
 - The file is fully overwritten on each generation; do not hand-edit.
 - The auxiliary `.continue/personas.manifest.json` contains `{ name, id, provider, model, version }` entries to assist tooling.
 
@@ -246,11 +246,11 @@ system = "system.md"
     - persona.toml
     - system.md
     - guardrails.md (optional)
-- scripts/
-  - personas_generator.py: builds the Continue config from personas.
-  - personas_preview.py: prints compiled system text and token estimate for a persona.
+- personas/scripts/
+  - personas.py: Typer CLI with `preview` and `generate` commands for personas.
 - .continue/
-  - config.json (generated; do not edit manually)
+  - agents/
+    - personas_config.yaml (generated; do not edit manually)
 - docs/
   - usage.md (instructions for selecting personas and previewing compiled system prompts)
 
@@ -300,9 +300,8 @@ You are bound by these non-negotiable constraints:
 
 - Paths
   - Personas root: `personas/` (each subdir is a persona).
-  - Generator CLI: `scripts/personas_generator.py`.
-  - Preview CLI: `scripts/personas_preview.py`.
-  - Output: `.continue/config.json` (overwritten on each generation).
+  - Persona CLI: `personas/scripts/personas.py` (subcommands `preview`, `generate`).
+  - Output: `.continue/agents/personas_config.yaml` (overwritten on each generation).
   - Optional manifest: `.continue/personas.manifest.json` (name → provider/model mapping).
 
 - Generator behavior
@@ -317,6 +316,10 @@ You are bound by these non-negotiable constraints:
     - `temperature`, `top_p`, `max_tokens` from `[params]` if present
   - Sort entries by `title` for deterministic output.
   - Merge `[provider.options]` and `[continue.extra]` into each model entry.
+  - Ensure a default autocomplete model (`qwen2.5-coder:1.5b` via Ollama) is included if no persona specifies an autocomplete role.
+  - Auto-inject API keys from env vars:
+    - `OPENAI_API_KEY` for native OpenAI personas.
+    - `DEEPSEEK_API_KEY` when `[provider.options].apiBase` contains `deepseek`.
 
 - Token estimation
   - If `tiktoken` can load a matching encoding for the model, use it to count tokens.
@@ -329,10 +332,10 @@ You are bound by these non-negotiable constraints:
 
 - CLI interfaces and usage
   - Preview:
-    - `python scripts/personas_preview.py --personas ./personas --id deep-dive [--overlay overlay.md] [--verbose]`
+    - `python personas/scripts/personas.py preview --personas ./personas --id deep-dive [--overlay overlay.md] [--verbose]`
     - Outputs: compiled token count, trims applied, optional compiled text.
   - Generate config:
-    - `python scripts/personas_generator.py --personas ./personas --out ./.continue/config.json [--manifest ./.continue/personas.manifest.json] [--dry-run] [--strict]`
+    - `python personas/scripts/personas.py generate --personas ./personas --out ./.continue/agents/personas_config.yaml [--manifest ./.continue/personas.manifest.json] [--dry-run] [--strict]`
     - Outputs: number of models written, per-model provider/model mapping.
   - Optional Justfile recipes:
     - `just personas:preview ID=deep-dive`
@@ -350,27 +353,36 @@ You are bound by these non-negotiable constraints:
     - Guardrails file referenced but empty.
 
 - Continue config shape (example)
-  - JSON root with a `models` array; exact provider-specific fields pass-through.
+  - YAML root includes metadata (`name`, `version`, `schema`) and a `models` array; `mcpServers` defaults to an empty array and can be extended manually.
   - Example entry (OpenAI):
     ```json
     {
-      "title": "Deep Dive",
-      "provider": "openai",
-      "model": "gpt-5-pro",
-      "systemMessage": "...compiled text...",
-      "temperature": 0.2,
-      "top_p": 1.0,
-      "max_tokens": 4096
+      name: "Deep Dive"
+      title: "Deep Dive"
+      provider: "openai"
+      model: "gpt-5-pro"
+      roles: ["chat", "edit"]
+      systemMessage: "...compiled text..."
+      temperature: 0.2
+      top_p: 1.0
+      max_tokens: 4096
     }
     ```
-  - Example entry (Ollama):
+  - Example entry (DeepSeek via OpenAI-compatible API):
     ```json
     {
-      "title": "Journalist",
-      "provider": "ollama",
-      "model": "codellama:34b-instruct",
-      "systemMessage": "...compiled text...",
-      "temperature": 0.4
+      name: "Journalist"
+      title: "Journalist"
+      provider: "openai"
+      model: "deepseek-reasoner"
+      roles: ["chat", "edit"]
+      apiBase: "https://api.deepseek.com/v1"
+      systemMessage: "...compiled text..."
+      defaultCompletionOptions: {
+        temperature: 0.25
+        topP: 0.95
+        maxTokens: 4096
+      }
     }
     ```
 
@@ -466,7 +478,7 @@ def compile_system_message(system: str, guardrails: str, model: str, budget: int
 Emit Continue config:
 
 ```python
-import json
+import yaml
 
 def build_continue_models(personas_root: str) -> list[dict]:
     root = pathlib.Path(personas_root)
@@ -479,9 +491,11 @@ def build_continue_models(personas_root: str) -> list[dict]:
         budget = data.get("system", {}).get("token_budget", 1200)
         compiled, _ = compile_system_message(payload["system"], payload["guardrails"], model, budget)
         entry = {
+            "name": name,
             "title": name,
             "provider": data["provider"]["kind"],
             "model": model,
+            "roles": data.get("continue", {}).get("roles", ["chat", "edit"]),
             "systemMessage": compiled,
         }
         params = data.get("params", {})
@@ -494,17 +508,25 @@ def build_continue_models(personas_root: str) -> list[dict]:
     return models
 
 def write_continue_config(models: list[dict], out_path: str) -> None:
-    out = {"models": models}
+    out = {
+        "name": "dolphin-personas",
+        "version": "0.1.0",
+        "schema": "v1",
+        "models": models,
+        "mcpServers": [],
+    }
     pathlib.Path(out_path).parent.mkdir(parents=True, exist_ok=True)
-    pathlib.Path(out_path).write_text(json.dumps(out, indent=2), encoding="utf-8")
+    pathlib.Path(out_path).write_text(
+        yaml.safe_dump(out, sort_keys=False),
+        encoding="utf-8",
+    )
 ```
 
 ## 15. Task Checklist
 
 - Create `personas/` root and scaffold two POC personas (Deep Dive, Fancy Slave).
 - Author `persona.toml` per schema; add `system.md`; add `guardrails.md` using the generic template.
-- Implement `scripts/personas_preview.py` to print compiled systemMessage + token counts.
-- Implement `scripts/personas_generator.py` to emit `.continue/config.json`.
+- Implement `personas/scripts/personas.py` with `preview` (systemMessage + token counts) and `generate` subcommands (emit `.continue/agents/personas_config.yaml`).
 - Validate output loads in Continue; confirm `systemMessage` is respected for chat + edit flows.
 - Expand to remaining three personas; tune defaults and budgets.
 - Add `.continue/personas.manifest.json` for quick provider/model lookup.
@@ -537,6 +559,6 @@ def write_continue_config(models: list[dict], out_path: str) -> None:
   - Popeye: OpenAI Codex model name.
   - Little Ripper: OpenAI smaller Codex model name.
   - Fancy Slave: Ollama model tag for gpt-oss:20b.
-  - Journalist: Ollama model tag for Code Llama.
+  - Journalist: DeepSeek `deepseek-reasoner` (OpenAI-compatible endpoint).
 - Confirm default token budget (proposal: 1200 system tokens).
 - Confirm default parameters per persona (temperature, top_p, max_tokens) if you have strong preferences.

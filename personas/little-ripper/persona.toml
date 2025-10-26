@@ -1,14 +1,15 @@
 [persona]
-id = "deep-dive"
-name = "Deep Dive"
-version = "0.1.1"
+id = "little-ripper"
+name = "Little Ripper"
+version = "0.1.0"
 
 [provider]
 kind = "openai"
-model = "gpt-5"
+model = "gpt-5-codex-mini"
 
 [params]
-top_p = 1.0
+temperature = 0.35
+top_p = 0.9
 max_tokens = 4096
 
 [system]

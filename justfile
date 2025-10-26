@@ -37,7 +37,7 @@ start:
 		sleep 2; TIMEOUT=$((TIMEOUT-1)); \
 		if [ $TIMEOUT -le 0 ]; then echo "❌ Timed out waiting for OpenWebUI"; exit 1; fi; \
 	done
-	@just --quiet start-mcp
+	@just --quiet start-mcpo
 	@echo "Waiting for MCP to listen on port {{MCP_PORT}}..."
 	@TIMEOUT=30; while ! just --quiet mcp-check >/dev/null 2>&1; do \
 		sleep 1; TIMEOUT=$((TIMEOUT-1)); \
@@ -52,10 +52,10 @@ start:
 setup: setup-env setup-python setup-openwebui
 
 # Stop all services
-stop: stop-mcp stop-openwebui ollama-stop
+stop: stop-mcpo stop-openwebui ollama-stop
 
 # Run all tests
-test: test-mcp
+test: test-mcpo
 
 # ==============================================================================
 # Environment Management
@@ -67,6 +67,7 @@ setup-env:
 	@[ -f .env ] || (echo "Creating .env from .env.template..."; cp .env.template .env)
 	@# Check if GITHUB_PERSONAL_ACCESS_TOKEN is set and not empty
 	@test -n "${GITHUB_PERSONAL_ACCESS_TOKEN}" || (echo "❌ Error: GITHUB_PERSONAL_ACCESS_TOKEN is not set in .env file. Please add it and try again."; exit 1)
+	@test -n "${OPENAI_API_KEY}" || (echo "❌ Error: OPENAI_API_KEY is not set in .env file. Please add it and try again."; exit 1)
 	@echo "✅ Environment is configured."
 
 # Install Python dependencies from pyproject.toml
@@ -137,15 +138,15 @@ ollama-check:
 	@curl -sSf http://localhost:11434/api/tags >/dev/null && echo "API reachable" || (echo "API not reachable"; exit 1)
 
 # ==============================================================================
-# MCP (Multi-tool Caching Proxy) Management
+# Manage mcpo (backs OWUI)
 # ==============================================================================
 
 # MCP readiness check
-mcp-check:
+mcpo-check:
 	@lsof -nP -iTCP:{{MCP_PORT}} -sTCP:LISTEN >/dev/null 2>&1
 
 # Start the MCP server orchestrator
-start-mcp:
+start-mcpo:
 	@echo "Generating MCP config from template..."
 	@# Using '|' as a separator for sed to avoid issues with paths containing '/'
 	@sed 's|__HOME__|{{HOME}}|g' mcpo_config.template.json > mcpo_config.json
@@ -154,14 +155,14 @@ start-mcp:
 	uv run mcpo --config ./mcpo_config.json --port {{MCP_PORT}} & echo $! > .mcpo.pid
 
 # Stop the MCP server orchestrator
-stop-mcp:
+stop-mcpo:
 	@if [ -f .mcpo.pid ]; then \
 		echo "Stopping MCP servers..."; \
 		kill $(cat .mcpo.pid) || true; \
 		rm .mcpo.pid; \
 	fi
 
-show-mcp:
+show-mcpo:
 	lsof -i :{{MCP_PORT}}
 
 # ==============================================================================
@@ -169,7 +170,7 @@ show-mcp:
 # ==============================================================================
 
 # Test all MCP servers
-test-mcp: setup-python
+test-mcpo: setup-python
 	@echo "Ensuring no old MCP servers are running..."
 	@just --quiet stop-mcp
 	@just --quiet start-mcp
@@ -183,3 +184,17 @@ test-mcp: setup-python
 clean-mcpo-config: 
 	rm -f .mcpo.pid
 	rm -f mcpo_config.json
+
+# ==============================================================================
+# Personas CLI
+# ==============================================================================
+
+# Wrap the Typer CLI commands from personas/scripts/personas.py
+personas-preview:
+	uv run python -m personas.scripts.personas preview $*
+
+personas-generate:
+	uv run python -m personas.scripts.personas generate $*
+
+personas-list:
+	uv run python -m personas.scripts.personas preview --list

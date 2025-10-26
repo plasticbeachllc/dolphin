@@ -2,7 +2,7 @@
 store_root: ~/.dolphin/knowledge_store
 endpoint: 127.0.0.1:7777
 default_embed_model: small
-concurrency: 3
+concurrency: 4
 per_session_spend_cap_usd: 10.0
 ignore:
   - .env

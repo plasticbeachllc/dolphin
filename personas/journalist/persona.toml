@@ -1,0 +1,26 @@
+[persona]
+id = "journalist"
+name = "Journalist"
+version = "0.1.0"
+
+[provider]
+kind = "openai"
+model = "deepseek-reasoner"
+
+[provider.options]
+apiBase = "https://api.deepseek.com/v1"
+
+[params]
+temperature = 0.25
+top_p = 0.95
+max_tokens = 4096
+
+[system]
+token_budget = 1400
+
+[files]
+system = "system.md"
+guardrails = "guardrails.md"
+
+[continue]
+roles = ["chat", "edit"]

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -459,11 +460,13 @@ def iter_persona_dirs(personas_root: Path) -> Iterable[Path]:
     if not personas_root.exists():
         raise PersonaError(f"Personas root '{personas_root}' does not exist")
     if not personas_root.is_dir():
-        raise PersonaError(f"Personas root '{personas_root}' is not a directory")
+        raise PersonaError(f"Personas root '{personas_root}' is not a diraectory")
     for candidate in sorted(personas_root.iterdir()):
-        if candidate.is_dir():
-            yield candidate
-
+        if not candidate.is_dir():
+            continue
+        if candidate.name.startswith(".") or candidate.name.startswith("_") or candidate.name == "scripts":
+            continue
+        yield candidate
 
 def ensure_unique_models(personas: Iterable[Persona]) -> None:
     seen: Dict[Tuple[str, str, str], Persona] = {}
@@ -478,20 +481,56 @@ def ensure_unique_models(personas: Iterable[Persona]) -> None:
 
 
 def build_continue_entry(persona: Persona, system_message: str) -> Dict[str, Any]:
+    roles = persona.raw.get("continue", {}).get("roles")
+    if not roles:
+        roles = ["chat", "edit"]
+    elif isinstance(roles, str):
+        roles = [roles]
     entry: Dict[str, Any] = {
+        "name": persona.name,
         "title": persona.name,
         "provider": persona.provider_kind,
         "model": persona.provider_model,
+        "roles": roles,
         "systemMessage": system_message,
     }
 
-    for key in ("temperature", "top_p", "max_tokens"):
-        value = persona.params.get(key)
-        if value is not None:
+    completion_map = {
+        "temperature": "temperature",
+        "top_p": "topP",
+        "topP": "topP",
+        "max_tokens": "maxTokens",
+        "maxTokens": "maxTokens",
+        "presence_penalty": "presencePenalty",
+        "frequency_penalty": "frequencyPenalty",
+    }
+    default_completion: Dict[str, Any] = {}
+
+    for key, value in persona.params.items():
+        if value is None:
+            continue
+        mapped = completion_map.get(key)
+        if mapped:
+            default_completion[mapped] = value
+        else:
             entry[key] = value
+
+    if default_completion:
+        entry["defaultCompletionOptions"] = default_completion
 
     entry.update(persona.provider_options)
     entry.update(persona.continue_extra)
+
+    if persona.provider_kind.lower() == "openai":
+        api_base = str(persona.provider_options.get("apiBase", "")).lower()
+        api_key = None
+        if "deepseek" in api_base:
+            api_key = os.getenv("DEEPSEEK_API_KEY")
+        else:
+            api_key = os.getenv("OPENAI_API_KEY")
+        if api_key:
+            entry.setdefault("apiKey", api_key)
+
     return entry
 
 
