@@ -5,7 +5,7 @@ import argparse
 import traceback
 
 
-def run_all_tests(base_url):
+def run_all_tests():
     """
     Dynamically discovers and runs all test scripts in the 'tests' directory.
     """
@@ -40,7 +40,7 @@ def run_all_tests(base_url):
             spec.loader.exec_module(test_module)
 
             # Run the test and get the result
-            test_module.run_test(base_url)
+            test_module.run_test()
             print(f"✅ {test_name} is working.")
             passed_tests += 1
         except Exception:
@@ -54,11 +54,7 @@ def run_all_tests(base_url):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run MCP server tests.")
-    parser.add_argument("base_url", help="Base URL of the MCP orchestrator (e.g., http://localhost:8010)")
-    args = parser.parse_args()
-
-    if run_all_tests(args.base_url):
+    if run_all_tests():
         sys.exit(0)
     else:
         sys.exit(1)

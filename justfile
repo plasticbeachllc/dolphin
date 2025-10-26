@@ -55,7 +55,7 @@ setup: setup-env setup-python setup-openwebui
 stop: stop-mcpo stop-openwebui ollama-stop
 
 # Run all tests
-test: test-mcpo
+# test: 
 
 # ==============================================================================
 # Environment Management
@@ -137,8 +137,18 @@ ollama-check:
 	@echo "Checking Ollama API at http://localhost:11434 ..."
 	@curl -sSf http://localhost:11434/api/tags >/dev/null && echo "API reachable" || (echo "API not reachable"; exit 1)
 
+
 # ==============================================================================
-# Manage mcpo (backs OWUI)
+# Testing
+# ==============================================================================
+
+# Test all MCP servers
+test: setup-python
+	@echo "🧪 Running tests..."
+	@uv run python -m tests.run_tests
+
+# ==============================================================================
+# MCP(o)
 # ==============================================================================
 
 # MCP readiness check
@@ -164,22 +174,6 @@ stop-mcpo:
 
 show-mcpo:
 	lsof -i :{{MCP_PORT}}
-
-# ==============================================================================
-# MCP Testing
-# ==============================================================================
-
-# Test all MCP servers
-test-mcpo: setup-python
-	@echo "Ensuring no old MCP servers are running..."
-	@just --quiet stop-mcp
-	@just --quiet start-mcp
-	@sleep 1 # Give the main server process a moment to start
-	@echo "🧪 Running MCP server tests..."
-	@# Ensure the test runner executes within the project's virtual environment
-	@uv run python -m tests.run_tests http://localhost:{{MCP_PORT}}
-	@echo "Stopping MCP servers after test run..."
-	@just --quiet stop-mcp
 
 clean-mcpo-config: 
 	rm -f .mcpo.pid

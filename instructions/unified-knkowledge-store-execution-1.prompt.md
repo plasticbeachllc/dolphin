@@ -45,35 +45,44 @@ High-level architecture (frozen for Sprint 1)
 4) Data stores: LanceDB ANN index (global per-dimension collections) + SQLite for repos/files/chunks/sessions ledgers and configuration.
 
 Current status and deltas (Sprint 1, checkpoint)
-- Bootstrap: Done — pyproject, kb CLI and kb-api stubs run; config template present; entrypoints wired.
-- Config: Defaults align with plan (store_root ~/.dolphin/knowledge_store; endpoint 127.0.0.1:7777; cap $10; concurrency 3).
+- ✅ Bootstrap: Done — pyproject, kb CLI and kb-api stubs run; config template present; entrypoints wired.
+- ✅ Config: Defaults align with plan (store_root ~/.dolphin/knowledge_store; endpoint 127.0.0.1:7777; cap $10; concurrency 3).
 - API: /v1/health OK; /v1/search stub returns empty hits (latency/meta only).
-- Storage: LanceDB and SQLite adapters exist as placeholders; DB schema will be driven by SQLModel models; LanceDB collections created at init.
-- Ignoring/scanning: Default ignore set defined; scanner exists but returns empty; .gitignore merge not implemented.
+- ✅ Storage: SQLiteMetadataStore fully implemented with all CRUD operations; SQLModel models defined; tables created via SQLModel.metadata.create_all() in kb init.
+- ✅ LanceDB collections created at init.
+- ✅ Ignoring/scanning: Default ignore set defined and implemented; scanner fully implemented with .gitignore merge, submodule/symlink/binary filtering, language classification.
 - Chunking: Python/TS/fallback chunkers exist as single-chunk stubs; no tiktoken windows; no tree-sitter-languages yet.
 - Hashing: canonicalize_text + SHA256 implemented; not wired into pipeline.
 - Embeddings/budget: Not implemented.
-- CLI: kb commands exist; init writes config; add-repo/index/status/prune mostly stubs; status shows placeholder summary.
+- ✅ CLI: kb commands implemented; init creates config and initializes storage; add-repo registers repos; index performs scanning with session/file catalog persistence; status shows real counts; --dry-run and --force flags implemented.
 - MCP integrations: Not implemented; mcpo template includes filesystem/memory/time/git only.
-- Tests: Present tests are for other MCP servers; no KB ingestion/retrieval tests yet.
+- ✅ Tests: Scanner and SQLiteMetadataStore unit tests implemented and passing.
 
-Immediate next steps (prioritized)
-1) Phase 2 — Metadata and storage
-   - Create SQLite schema (repos, files, sessions, chunks_meta) and bootstrap in kb init; implement summarize() with real counts.
-   - Initialize LanceDB under ~/.dolphin/knowledge_store/lancedb; create chunks_small (1536) and chunks_large (3072) collections with metadata schema.
-2) Phase 3 — Ignore rules and scanning
-   - Merge .gitignore via pathspec with default ignores; enumerate code/Markdown; tag language.
-3) Phase 4 — Chunking
+Completed phases
+1) ✅ Phase 2 — Metadata and storage
+   - ✅ SQLite schema (repos, files, sessions, chunks_meta) implemented via SQLModel; bootstrap in kb init; summarize() with real counts.
+   - ✅ LanceDB initialized under ~/.dolphin/knowledge_store/lancedb; chunks_small (1536) and chunks_large (3072) collections created.
+2) ✅ Phase 3 — Ignore rules and scanning
+   - ✅ Merge .gitignore via pathspec with default ignores; enumerate code/Markdown; tag language via extension/filename mapping.
+   - ✅ Scanner: git ls-files -z for tracked files; submodule/symlink/binary filtering; pathspec ignore matching.
+3) ✅ Phase 7 — Ingestion CLI (partial)
+   - ✅ Wire add-repo to SQLite; implement index flow with clean working tree check and HEAD SHA recording; support --dry-run and --force flags.
+   - ✅ SQLiteMetadataStore: complete CRUD operations for repos, sessions, files, counters.
+   - ✅ IngestionPipeline.scan(): orchestrate repo resolution, guard/provenance, ignore merge, scan, file catalog persistence.
+
+Next phases (prioritized)
+4) Phase 4 — Chunking
    - Implement tiktoken 400-token windows (~10% overlap) fallback; Markdown heading handling (strip from embeddings, store H1–H3 as metadata, prepend on return).
-   - Add dependency tree-sitter-languages and plan TS/Python symbol-level chunking next.
-4) Phase 5 — Hashing/idempotency
+   - Add dependency tree-sitter-languages and implement TS/Python symbol-level chunking.
+5) Phase 5 — Hashing/idempotency
    - Wire canonicalize_text + SHA256; define upsert key (repo, path, start_line, end_line, text_hash); pre-embed dedup via chunks_meta.
-5) Phase 6 — Embeddings and budget control
+6) Phase 6 — Embeddings and budget control
    - Implement OpenAI embed batching with concurrency=3, backoff on 429/5xx; pre-estimate tokens/cost; persist sessions ledger and enforce $10 cap.
-6) Phase 7 — Ingestion CLI
-   - Wire add-repo to SQLite; implement index flow with clean working tree check and HEAD SHA recording; support --dry-run.
 7) Phase 8 — Retriever HTTP API
    - Embed query, search LanceDB with repo/path filters; truncate snippets to max_snippet_tokens; return provenance fields.
+8) Phase 9 — MCP wrapper and integrations
+   - MCP tool: search_knowledge proxying to /v1/search on localhost.
+   - Open WebUI and Continue integrations.
 
 Clarifications and adjustments
 - Python version: repo currently requires Python >=3.13 (pyproject). You may relax to >=3.11 later if desired.

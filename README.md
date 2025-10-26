@@ -38,12 +38,24 @@ This will launch OpenWebUI and the necessary backend MCP servers.
 *   `just run`: Starts all services.
 *   `just stop`: Stops all services.
 *   `just setup-openwebui`: Pulls the latest images and starts the web UI.
-*   `just test`: Runs tests for all MCP servers.
+*   `just test`: Runs the project's test runner (tests.run_tests) which discovers test_*.py modules in the tests/ directory and executes their run_test() functions.
 
 To see all available commands, run:
 ```sh
 just list
 ```
+
+### Running tests manually
+
+You can also run the test runner directly (without just):
+
+```sh
+python -m tests.run_tests
+```
+
+Notes:
+- Individual test modules now export `run_test()` with no parameters; the test runner imports each test_*.py module and calls run_test().
+- If you prefer pytest, you can of course run any test file with `pytest tests/` (ensure pytest is installed).
 
 ## 🎭 Personas
 

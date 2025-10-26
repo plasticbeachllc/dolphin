@@ -8,85 +8,6 @@ from typing import Any
 from sqlalchemy import event
 from sqlmodel import SQLModel, create_engine
 
-# Fallback DDL if models fail to register (debug/edge cases)
-_SCHEMA_SQL = """
-PRAGMA foreign_keys = ON;
-
-CREATE TABLE IF NOT EXISTS repos (
-  id INTEGER PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
-  root_path TEXT NOT NULL,
-  default_embed_model TEXT NOT NULL DEFAULT 'small',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS sessions (
-  id INTEGER PRIMARY KEY,
-  repo_id INTEGER NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
-  commit_sha TEXT NOT NULL,
-  branch TEXT NOT NULL,
-  embed_model TEXT NOT NULL DEFAULT 'small',
-  files_indexed INTEGER NOT NULL DEFAULT 0,
-  chunks_indexed INTEGER NOT NULL DEFAULT 0,
-  vectors_written INTEGER NOT NULL DEFAULT 0,
-  status TEXT NOT NULL DEFAULT 'running',
-  started_at TEXT NOT NULL DEFAULT (datetime('now')),
-  ended_at TEXT,
-  notes TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_sessions_repo_commit ON sessions(repo_id, commit_sha);
-
-CREATE TABLE IF NOT EXISTS files (
-  id INTEGER PRIMARY KEY,
-  repo_id INTEGER NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
-  path TEXT NOT NULL,
-  ext TEXT,
-  language TEXT,
-  is_binary INTEGER NOT NULL DEFAULT 0,
-  size_bytes INTEGER,
-  latest_commit_sha TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (repo_id, path)
-);
-CREATE INDEX IF NOT EXISTS idx_files_repo_path ON files(repo_id, path);
-
-CREATE TABLE IF NOT EXISTS chunk_texts (
-  text_hash TEXT PRIMARY KEY,
-  text TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE INDEX IF NOT EXISTS idx_chunk_texts_created_at ON chunk_texts(created_at);
-
-CREATE TABLE IF NOT EXISTS chunks_meta (
-  id INTEGER PRIMARY KEY,
-  repo_id INTEGER NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
-  file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-  session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-  commit_sha TEXT NOT NULL,
-  start_line INTEGER NOT NULL,
-  end_line INTEGER NOT NULL,
-  symbol_kind TEXT,
-  symbol_name TEXT,
-  symbol_path TEXT,
-  h1 TEXT,
-  h2 TEXT,
-  h3 TEXT,
-  text_hash TEXT NOT NULL REFERENCES chunk_texts(text_hash) ON DELETE RESTRICT,
-  token_count INTEGER NOT NULL,
-  embed_model TEXT NOT NULL,
-  vector_dim INTEGER NOT NULL,
-  vector_collection TEXT NOT NULL,
-  vector_id TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (repo_id, file_id, commit_sha, start_line, end_line, text_hash, embed_model)
-);
-CREATE INDEX IF NOT EXISTS idx_chunks_repo_file_commit ON chunks_meta(repo_id, file_id, commit_sha);
-CREATE INDEX IF NOT EXISTS idx_chunks_text_hash ON chunks_meta(text_hash);
-CREATE INDEX IF NOT EXISTS idx_chunks_vector ON chunks_meta(vector_collection, vector_id);
-"""
-
 
 class SQLiteMetadataStore:
     """SQLite-backed metadata store using SQLModel for schema materialization."""
@@ -117,18 +38,16 @@ class SQLiteMetadataStore:
     def initialize(self) -> None:
         """Ensure the database exists and the schema is applied idempotently via SQLModel."""
         engine = self._engine()
-        try:
-            # Import models at call time to register them with SQLModel.metadata
-            from . import sql_models as _models  # noqa: F401
-            # If no tables registered (edge case), raise to fallback to DDL
-            if not SQLModel.metadata.tables:
-                raise RuntimeError("SQLModel metadata empty; falling back to DDL")
-            SQLModel.metadata.create_all(engine)
-        except Exception:
-            # Fallback to raw DDL (keeps Sprint 1 unblocked)
-            with self._connect() as conn:
-                conn.executescript(_SCHEMA_SQL)
-                conn.commit()
+        # Import models at call time to register them with SQLModel.metadata
+        from . import sql_models as _models  # noqa: F401
+        # Create all tables if they don't exist (via SQLModel models)
+        SQLModel.metadata.create_all(engine)
+        # Sanity check: ensure tables exist without hardcoded DDL
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            for table in ("repos", "sessions", "files"):
+                cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
+                if cur.fetchone() is None:
+                    raise RuntimeError(f"Database initialization failed: '{table}' table missing.")
 
     def record_repo(self, name: str, path: Path, *, default_embed_model: str = "small") -> None:
         """Insert or update a repo registration.
@@ -162,3 +81,136 @@ class SQLiteMetadataStore:
             # If initialization hasn't run, keep zeros.
             pass
         return counts
+
+    def get_repo_by_name(self, name: str) -> dict[str, str | int] | None:
+        """Return repo record by name or None if not found."""
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute(
+                "SELECT id, root_path, default_embed_model FROM repos WHERE name = ?",
+                (name,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return {
+                "id": int(row[0]),
+                "root_path": str(row[1]),
+                "default_embed_model": str(row[2]),
+            }
+
+    def begin_session(self, repo_id: int, commit_sha: str, branch: str, embed_model: str) -> int:
+        """Create a new ingestion session and return its id."""
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute(
+                """
+                INSERT INTO sessions (repo_id, commit_sha, branch, embed_model, status)
+                VALUES (?, ?, ?, ?, 'running')
+                """,
+                (repo_id, commit_sha, branch, embed_model),
+            )
+            conn.commit()
+            return int(cur.lastrowid)
+
+    def set_session_status(self, session_id: int, status: str, notes: str | None = None) -> None:
+        """Update a session status; set ended_at when terminal."""
+        terminal = {"succeeded", "failed", "aborted"}
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            if status in terminal:
+                cur.execute(
+                    """
+                    UPDATE sessions
+                    SET status = ?, ended_at = datetime('now'), notes = COALESCE(?, notes)
+                    WHERE id = ?
+                    """,
+                    (status, notes, session_id),
+                )
+            else:
+                cur.execute(
+                    "UPDATE sessions SET status = ?, notes = COALESCE(?, notes) WHERE id = ?",
+                    (status, notes, session_id),
+                )
+            conn.commit()
+
+    def bump_session_counters(
+        self,
+        session_id: int,
+        *,
+        files_indexed: int | None = None,
+        chunks_indexed: int | None = None,
+        vectors_written: int | None = None,
+    ) -> None:
+        """Set session counters to the provided values (no-op if all None)."""
+        sets: list[str] = []
+        params: list[int] = []
+        if files_indexed is not None:
+            sets.append("files_indexed = ?")
+            params.append(int(files_indexed))
+        if chunks_indexed is not None:
+            sets.append("chunks_indexed = ?")
+            params.append(int(chunks_indexed))
+        if vectors_written is not None:
+            sets.append("vectors_written = ?")
+            params.append(int(vectors_written))
+        if not sets:
+            return
+        sql = f"UPDATE sessions SET {', '.join(sets)} WHERE id = ?"
+        params.append(int(session_id))
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute(sql, tuple(params))
+            conn.commit()
+
+    def upsert_file(
+        self,
+        repo_id: int,
+        *,
+        path: str,
+        ext: str | None,
+        language: str | None,
+        is_binary: bool,
+        size_bytes: int | None,
+    ) -> int:
+        """Insert or update a file row; return file id."""
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute(
+                """
+                INSERT INTO files (repo_id, path, ext, language, is_binary, size_bytes)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(repo_id, path) DO UPDATE SET
+                  ext=excluded.ext,
+                  language=excluded.language,
+                  is_binary=excluded.is_binary,
+                  size_bytes=excluded.size_bytes,
+                  updated_at=datetime('now')
+                """,
+                (
+                    int(repo_id),
+                    path,
+                    ext,
+                    language,
+                    1 if is_binary else 0,
+                    size_bytes,
+                ),
+            )
+            file_id = int(cur.lastrowid)
+            if file_id == 0:
+                cur.execute(
+                    "SELECT id FROM files WHERE repo_id = ? AND path = ?",
+                    (int(repo_id), path),
+                )
+                row = cur.fetchone()
+                file_id = int(row[0]) if row else 0
+            conn.commit()
+            return file_id
+
+    def set_file_latest_commit(self, repo_id: int, path: str, commit_sha: str) -> None:
+        """Update latest_commit_sha for a file."""
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute(
+                """
+                UPDATE files
+                SET latest_commit_sha = ?, updated_at = datetime('now')
+                WHERE repo_id = ? AND path = ?
+                """,
+                (commit_sha, int(repo_id), path),
+            )
+            conn.commit()

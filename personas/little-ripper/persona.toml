@@ -8,8 +8,6 @@ kind = "openai"
 model = "gpt-5-codex-mini"
 
 [params]
-temperature = 0.35
-top_p = 0.9
 max_tokens = 4096
 
 [system]

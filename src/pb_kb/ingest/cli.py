@@ -93,12 +93,17 @@ def add_repo(
 def index(
     name: str = typer.Argument(..., help="Name of the repository to index."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Run without persisting."),
+    force: bool = typer.Option(False, "--force", help="Bypass clean working tree check."),
 ) -> None:
-    """Index the specified repository (stub)."""
+    """Index the specified repository (scan phase implemented)."""
     config = load_config()
     pipeline = _build_pipeline(config)
-    _ = (name, dry_run, pipeline)
-    typer.echo("Indexing pipeline is not yet implemented.")
+    try:
+        result = pipeline.scan(name, dry_run=dry_run, force=force)
+    except Exception as e:
+        typer.echo(f"Indexing failed: {e}")
+        raise
+    typer.echo(f"Scan complete for {name}: files_kept={result.get('files_kept')}, session={result.get('session_id')}")
 
 
 @app.command()

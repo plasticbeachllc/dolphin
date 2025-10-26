@@ -7,9 +7,8 @@ from pb_kb.hashing import hash_text
 from tests.kb_utils import FIXTURE_REPO_ROOT, kb_backend_context
 
 
-def run_test(base_url: str) -> None:
+def run_test() -> None:
     """Golden test verifying /v1/search returns provenance-rich snippets."""
-    _ = base_url  # HTTP base URL unused; we rely on the in-process API.
     target_file = FIXTURE_REPO_ROOT / "src" / "widgets.py"
     expected_hash = hash_text(target_file.read_text(encoding="utf-8"))
 

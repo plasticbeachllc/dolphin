@@ -11,6 +11,7 @@ def chunk_text(text: str) -> list[Chunk]:
             text=text,
             start_line=1,
             end_line=line_count,
+            token_count=len(text.split()),
             symbol_kind=None,
             symbol_name=None,
             symbol_path=None,

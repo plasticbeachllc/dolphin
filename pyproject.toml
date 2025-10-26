@@ -7,7 +7,7 @@ name = "dolphin"
 version = "0.1.2"
 description = "Simple package to build and run OpenWebUI with helful MCP servers"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "docker>=7.1.0",
     "requests>=2.32.4", # For test scripts
@@ -22,7 +22,9 @@ dependencies = [
     "sqlmodel",
     "tiktoken",
     "openai",
-    "tree_sitter",
+    "tree_sitter==0.25.2",
+    "tree_sitter_languages==1.10.2",
+    "markdown-it-py",
     "pathspec",
     "pyyaml",
     "python-dotenv",
@@ -33,8 +35,6 @@ dependencies = [
 kb = "pb_kb.ingest.cli:app"
 kb-api = "pb_kb.api.app:main"
 personas = "personas.scripts.personas:app"
-
-
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pb_kb", "personas"]

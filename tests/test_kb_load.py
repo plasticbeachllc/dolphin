@@ -5,9 +5,8 @@ from pb_kb.ignores import DEFAULT_IGNORE_PATTERNS, build_ignore_set
 from tests.kb_utils import FIXTURE_REPO_ROOT
 
 
-def run_test(base_url: str) -> None:
+def run_test() -> None:
     """Verify ignore patterns and hashing stability for the KB pipeline."""
-    _ = base_url
 
     # Ignore patterns include defaults and custom additions without duplication.
     ignores = build_ignore_set({"*.log", "coverage"})

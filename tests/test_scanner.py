@@ -103,8 +103,7 @@ def _test_scanner_not_a_git_repo(root: Path) -> None:
         assert "Not a git repository" in str(e)
 
 
-def run_test(base_url: str) -> None:
-    _ = base_url
+def run_test() -> None:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         # basic
