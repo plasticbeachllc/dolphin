@@ -9,3 +9,4 @@ mcpo_config.json
 
 # Python cache
 __pycache__/
+.continue/agents/personas_config.yaml

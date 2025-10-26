@@ -1,0 +1,17 @@
+# Persona metadata
+[persona]
+id = "smartest-guy"
+name = "Smartest Guy"
+version = "0.1.0"
+
+[provider]
+name = "Claude Sonnet 4.5"
+kind = "anthropic"
+model = "claude-sonnet-4-5-20250929"
+
+[files]
+system = "system.md"
+guardrails = "guardrails.md"
+
+[system]
+token_budget = 1200

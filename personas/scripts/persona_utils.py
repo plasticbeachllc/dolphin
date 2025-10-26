@@ -523,13 +523,17 @@ def build_continue_entry(persona: Persona, system_message: str) -> Dict[str, Any
 
     if persona.provider_kind.lower() == "openai":
         api_base = str(persona.provider_options.get("apiBase", "")).lower()
-        api_key = None
         if "deepseek" in api_base:
             api_key = os.getenv("DEEPSEEK_API_KEY")
         else:
             api_key = os.getenv("OPENAI_API_KEY")
-        if api_key:
-            entry.setdefault("apiKey", api_key)
+    elif persona.provider_kind.lower() == "anthropic":
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+    else:
+        api_key = None
+    
+    if api_key is not None:
+        entry.setdefault("apiKey", api_key)
 
     return entry
 
