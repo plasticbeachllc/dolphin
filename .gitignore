@@ -9,6 +9,7 @@ mcpo_config.json
 
 # continue configs (contain secrets)
 .continue/*
+.continue/**/*
 
 # Python cache
 __pycache__/
