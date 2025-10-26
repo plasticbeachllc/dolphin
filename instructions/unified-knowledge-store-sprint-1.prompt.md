@@ -24,7 +24,8 @@ High-level architecture
 
 2) Technology choices (frozen for Sprint 1)
    - Embeddings: OpenAI text-embedding-3-small (1536 dims) default; text-embedding-3-large (3072 dims) optional per collection.
-   - Chunking: target 400 tokens, 10% overlap; tree-sitter for TS/Python; line-based fallback.
+   - Chunking: target 350 tokens (configurable per-repo), 10% overlap; tree-sitter for TS/Python; line-based fallback.
+   - Repository Configuration: Per-repo `.dolphin/chunking_config.toml` files for custom token windows and embedding models.
    - Retrieval: dense KNN only (top_k default 8). No reranker/BM25 yet.
    - Cost controls: deduplicate unchanged chunks via SHA256 content hash; per-session spend cap; backoff on rate limits.
 
@@ -73,11 +74,12 @@ sequenceDiagram
 Process flows in detail
 1) Index-time flow
    1. Enumerate files → apply ignore sets and .gitignore.
-   2. Parse and chunk (tree-sitter for TS/Py; fallback otherwise).
-   3. Canonicalize + hash chunks → skip unchanged.
-   4. Batch-embed with OpenAI (concurrency 2–4; backoff on 429/5xx).
-   5. Persist to LanceDB (vectors + metadata) and SQLite (provenance + session ledger).
-   6. Emit summary and enforce per-session cost cap (abort gracefully if reached).
+   2. Load repository chunking configuration from `.dolphin/chunking_config.toml` (or use defaults).
+   3. Parse and chunk (tree-sitter for TS/Py; fallback otherwise) using repo-specific token windows.
+   4. Canonicalize + hash chunks → skip unchanged.
+   5. Batch-embed with OpenAI (concurrency 2–4; backoff on 429/5xx) using repo-configured model.
+   6. Persist to LanceDB (vectors + metadata) and SQLite (provenance + session ledger).
+   7. Emit summary and enforce per-session cost cap (abort gracefully if reached).
 
 2) Query-time flow
    1. Receive query + scope.
@@ -98,6 +100,8 @@ src/pb_kb/
     ts_chunker.py
     py_chunker.py
     fallback_chunker.py
+    repo_config.py      # Repository chunking configuration system
+    token_utils.py
   embeddings.py
   store/
     lancedb_store.py
@@ -251,7 +255,22 @@ Implementation details and guidance
 1) Chunking specifics
    - Tokenization via tiktoken; adjust per OpenAI tokenizer.
    - TS/Python with tree-sitter; fallback windowing when parse fails.
-   - 400-token target with 10% overlap.
+   - 350-token default target (configurable per-repo) with 10% overlap.
+   - Repository configuration via `.dolphin/chunking_config.toml`:
+     ```toml
+     default_window_size = 350
+     
+     [per_language]
+     python = 512
+     typescript = 350
+     markdown = 256
+     
+     [embeddings]
+     model = "text-embedding-3-small"
+     
+     [tokenizer]
+     encoding = "cl100k_base"
+     ```
 
 2) Hashing/idempotency
    - Canonicalize content (normalize line endings, strip trailing spaces) before SHA256.
@@ -283,7 +302,7 @@ Rollout plan (1 week)
 1) Days 1–2: Project bootstrap with uv, SQLite schema, ignore logic, hashing, Typer CLI skeleton.
 2) Days 3–4: TS/Python chunkers via tree-sitter; OpenAI embeddings client; LanceDB writers; session ledger.
 3) Day 5: FastAPI retriever service; /v1/search; health; simple tests.
-4) Days 6–7: MCP wrapper, Continue integration, budget enforcement, polish docs.
+4) Days 6–7: MCP wrapper, Continue integration, budget enforcement, repository chunking configuration system, polish docs.
 
 Future enhancements (kept off for Sprint 1)
 1) Retrieval quality: add SQLite FTS5 BM25 + hybrid scoring; add local reranker.

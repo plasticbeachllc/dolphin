@@ -15,8 +15,16 @@ dolphin/
 │   ├── fancy-slave/         # Senior engineer for rapid local deployment
 │   ├── popeye/              # High-priority project engineer
 │   └── scripts/             # Persona management utilities
+├── .dolphin/                # Repository configuration files
+│   └── chunking_config.toml # Repository chunking configuration
 ├── .continue/               # Continue configuration files
 ├── instructions/            # Documentation and guides (this file)
+├── src/pb_kb/chunkers/      # File chunking implementations
+│   ├── repo_config.py       # Repository configuration system
+│   ├── py_chunker.py        # Python chunker
+│   ├── ts_chunker.py        # TypeScript chunker
+│   ├── md_chunker.py        # Markdown chunker
+│   └── token_utils.py       # Tokenization utilities
 └── Justfile                 # Task runner configuration
 ```
 
@@ -66,6 +74,41 @@ The personas system defines different AI agent personalities with specific behav
 - **Fancy Slave**: Pragmatic senior engineer focused on rapidly shipping reliable features for local/offline deployments, optimizing for resource-constrained environments
 - **Popeye**: Senior engineer at Plastic Beach responsible for implementation and engineering on high-priority projects, writing thoughtful, elegant, and maintainable code
 
+### Repository Chunking Configuration System
+
+The chunking configuration system allows per-repository customization of file chunking parameters for semantic retrieval. Each repository can have a `.dolphin/chunking_config.toml` file:
+
+```toml
+# .dolphin/chunking_config.toml
+default_window_size = 350
+
+[per_language]
+python = 512
+typescript = 350
+markdown = 256
+
+[embeddings]
+model = "text-embedding-3-small"
+
+[tokenizer]
+encoding = "cl100k_base"
+```
+
+**Key Features:**
+- Per-repository token window sizes (200-500 tokens recommended)
+- Per-language overrides for 14 common languages
+- OpenAI embedding model selection (text-embedding-3-small/large)
+- Tokenizer encoding configuration
+- 10% overlap between chunks for context preservation
+
+**Default Settings:**
+- Default window: 350 tokens (optimal for semantic retrieval)
+- Python/Java/C++: 512 tokens (more verbose languages)
+- JSON/YAML/TOML: 128 tokens (structured data)
+- Markdown/Text: 256 tokens
+- Embedding model: text-embedding-3-small
+- Tokenizer: cl100k_base (OpenAI standard)
+
 ### Personas Management Commands
 
 - `just personas-list`: List all available personas
@@ -75,6 +118,13 @@ The personas system defines different AI agent personalities with specific behav
 Example usage:
 ```sh
 just personas-preview --id journalist --verbose
+```
+
+### Chunking Configuration Testing
+
+Test the repository chunking configuration system:
+```sh
+uv run python -m tests.test_repo_config
 ```
 
 ## Development Workflow
@@ -107,8 +157,9 @@ This launches:
 
 1. **Code Changes**: Modify files in the appropriate directories
 2. **Persona Updates**: Edit persona files in `personas/<persona-id>/`
-3. **Testing**: Use `just test` to verify changes
-4. **Configuration**: Update `.continue/` files for Continue integration
+3. **Chunking Configuration**: Update `.dolphin/chunking_config.toml` for repository settings
+4. **Testing**: Use `just test` to verify changes
+5. **Configuration**: Update `.continue/` files for Continue integration
 
 ### Creating New Personas
 
@@ -132,17 +183,47 @@ This launches:
    just personas-generate
    ```
 
+### Configuring Repository Chunking
+
+1. Create or edit `.dolphin/chunking_config.toml` in repository root
+2. Configure token window sizes and embedding model:
+   ```toml
+   default_window_size = 350
+   
+   [per_language]
+   python = 512
+   typescript = 350
+   
+   [embeddings]
+   model = "text-embedding-3-small"
+   ```
+
+3. Test configuration loading:
+   ```python
+   from pb_kb.chunkers import load_repo_chunking_config
+   config = load_repo_chunking_config(Path("/path/to/repo"))
+   python_window = config.get_window_size_for_language("python")  # 512
+   ```
+
 ## Key Files and Their Purposes
 
 ### Configuration Files
 - `Justfile`: Task definitions and project commands
 - `pyproject.toml`: Python project configuration and dependencies
 - `.env`: Environment variables (create from `.env.example`)
+- `.dolphin/chunking_config.toml`: Repository chunking configuration
 
 ### Persona Files
 - `persona.toml`: Persona metadata, provider settings, token budgets
 - `system.md`: Core behavior definition and capabilities
 - `guardrails.md`: Constraints and safety rules
+
+### Chunking System Files
+- `src/pb_kb/chunkers/repo_config.py`: Repository configuration loading and validation
+- `src/pb_kb/chunkers/py_chunker.py`: Python source code chunker with tree-sitter
+- `src/pb_kb/chunkers/ts_chunker.py`: TypeScript/JavaScript chunker
+- `src/pb_kb/chunkers/md_chunker.py`: Markdown chunker with heading tracking
+- `src/pb_kb/chunkers/token_utils.py`: Tokenization and windowing utilities
 
 ### Scripts
 - `personas/scripts/personas.py`: CLI for persona management
@@ -155,18 +236,21 @@ This launches:
 2. Use the personas system context to provide appropriate responses
 3. Suggest relevant Just commands for common tasks
 4. Consider the user's current context (open files, recent changes)
+5. Mention repository chunking configuration when discussing file processing
 
 ### When Making Changes
 1. Use the multi_edit tool for multiple changes to a single file
 2. Follow existing code patterns and conventions
 3. Test changes with `just test` when appropriate
 4. Update documentation if functionality changes
+5. Consider repository chunking configuration when modifying file processing
 
 ### When Developing Plans
 1. Break down complex tasks into smaller, testable increments
 2. Consider which persona might be best suited for the task
 3. Surface trade-offs, risks, and unknowns
 4. Provide implementation steps with verification criteria
+5. Consider token window sizes and embedding models for semantic retrieval
 
 ## Troubleshooting Common Issues
 
@@ -179,6 +263,12 @@ This launches:
 - Use `just personas-preview` to validate persona configurations
 - Check for syntax errors in TOML files
 - Verify token budgets are within 200-8000 range
+
+### Chunking Configuration Issues
+- Verify `.dolphin/chunking_config.toml` syntax is valid TOML
+- Test configuration loading with `tests/test_repo_config.py`
+- Check that window sizes are positive integers
+- Ensure embedding model is "text-embedding-3-small" or "text-embedding-3-large"
 
 ### Service Problems
 - Use `just stop` and `just run` to restart services
@@ -201,5 +291,10 @@ This launches:
 - Defines available models and their behaviors
 - Maps personas to specific provider configurations
 - Manages roles and capabilities for each persona
+
+### Knowledge Base System
+- Uses repository chunking configuration for file processing
+- Supports per-repository token window sizes and embedding models
+- Integrates with semantic retrieval for code and documentation
 
 This guide should enable AI assistants to effectively understand, navigate, and contribute to the dolphin project while providing accurate assistance to users.

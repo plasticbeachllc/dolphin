@@ -118,3 +118,4 @@ This will show the compiled system message, token usage, and any trimming steps 
 - ```create_new_file failed with the message: File scripts/security-scan-enhanced.sh already exists. Use the edit tool to edit this file```
 - ```create_new_file failed with the message: File scripts/security-scan-enhanced.sh already exists. Use the edit tool to edit this file```
 - Model uses absolute path when repo-relative path is correct
+- ```multi_edit failed because the arguments were invalid, with the following message: invalid multi-edit args```
