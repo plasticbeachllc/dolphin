@@ -1,0 +1,19 @@
+[persona]
+id = "fancy-slave"
+name = "Fancy Slave"
+version = "0.1.0"
+
+[provider]
+kind = "ollama"
+model = "gpt-oss:20b"
+
+[params]
+temperature = 0.3
+top_p = 0.9
+
+[system]
+token_budget = 1200
+
+[files]
+system = "system.md"
+guardrails = "guardrails.md"

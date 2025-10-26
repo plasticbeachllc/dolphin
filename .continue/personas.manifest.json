@@ -1,0 +1,22 @@
+[
+  {
+    "id": "deep-dive",
+    "name": "Deep Dive",
+    "version": "0.1.0",
+    "provider": "openai",
+    "model": "gpt-5-pro",
+    "token_budget": 1200,
+    "path": "personas/deep-dive",
+    "trimmed": false
+  },
+  {
+    "id": "fancy-slave",
+    "name": "Fancy Slave",
+    "version": "0.1.0",
+    "provider": "ollama",
+    "model": "gpt-oss:20b",
+    "token_budget": 1200,
+    "path": "personas/fancy-slave",
+    "trimmed": false
+  }
+]
