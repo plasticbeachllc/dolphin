@@ -7,7 +7,7 @@ mcpo_config.json
 .env.*
 !.env.example
 
-# contineu configs (contain secrets)
+# continue configs (contain secrets)
 .continue/*
 
 # Python cache
