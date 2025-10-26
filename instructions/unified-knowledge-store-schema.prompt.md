@@ -21,6 +21,7 @@ Invariants
 SQLite schema (authoritative)
 
 Notes
+- Implementation uses SQLModel to define models and materialize tables that match this schema; the SQL below is the authoritative shape/specification.
 - Enable `PRAGMA foreign_keys = ON`.
 - Timestamps are stored as `TEXT` in ISO 8601 UTC (`YYYY-MM-DDTHH:MM:SSZ`).
 - Keep schema minimal for Sprint 1; defer per-file history beyond current commit.
@@ -182,7 +183,7 @@ Search response mapping (for retriever)
 
 Operational notes
 - Initialization:
-  - On `kb init`, ensure SQLite file exists and run the DDL above.
+  - On `kb init`, ensure SQLite file exists and create tables via SQLModel models (`SQLModel.metadata.create_all`), enforcing the schema above. Ensure `PRAGMA foreign_keys = ON`.
   - Ensure LanceDB root exists; create `chunks_small` and `chunks_large` with the Arrow schema specified (metadata columns + `vector`).
 - Tokenization:
   - Use model-specific `tiktoken` for embeddings and `token_count` computation.

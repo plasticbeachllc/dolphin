@@ -19,6 +19,7 @@ dependencies = [
     "typer",
     "lancedb",
     "pydantic",
+    "sqlmodel",
     "tiktoken",
     "openai",
     "tree_sitter",

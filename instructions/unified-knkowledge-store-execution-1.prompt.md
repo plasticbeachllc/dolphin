@@ -48,7 +48,7 @@ Current status and deltas (Sprint 1, checkpoint)
 - Bootstrap: Done — pyproject, kb CLI and kb-api stubs run; config template present; entrypoints wired.
 - Config: Defaults align with plan (store_root ~/.dolphin/knowledge_store; endpoint 127.0.0.1:7777; cap $10; concurrency 3).
 - API: /v1/health OK; /v1/search stub returns empty hits (latency/meta only).
-- Storage: LanceDB and SQLite adapters exist as placeholders; no DB schema or LanceDB collections yet.
+- Storage: LanceDB and SQLite adapters exist as placeholders; DB schema will be driven by SQLModel models; LanceDB collections created at init.
 - Ignoring/scanning: Default ignore set defined; scanner exists but returns empty; .gitignore merge not implemented.
 - Chunking: Python/TS/fallback chunkers exist as single-chunk stubs; no tiktoken windows; no tree-sitter-languages yet.
 - Hashing: canonicalize_text + SHA256 implemented; not wired into pipeline.
@@ -93,8 +93,8 @@ Phase 1 — Project bootstrap
 4) Create entrypoints (kb CLI stub and kb-api HTTP stub). Ensure they run.
 
 Phase 2 — Metadata and storage
-1) SQLite knowledge.db: create tables repos, files, sessions, chunks_meta with the specified columns; run migrations in kb init.
-2) LanceDB: create chunks_small (1536) and chunks_large (3072) collections with metadata fields; persist model and dimensions.
+1) SQLite knowledge.db: define SQLModel classes for repos, files, chunk_texts, sessions, and chunks_meta matching the authoritative schema; create tables with `SQLModel.metadata.create_all()` in kb init; keep a path to Alembic for future migrations.
+2) LanceDB: create chunks_small (1536) and chunks_large (3072) collections with metadata fields; persist model and dimensions. Use SQLModel for SQLite metadata tables (repos, files, sessions, chunks_meta, chunk_texts), created via `SQLModel.metadata.create_all()` during kb init.
 3) kb status command: show repo count, file counts, vector counts per collection, and DB sizes.
 
 Phase 3 — Ignore rules and scanning
