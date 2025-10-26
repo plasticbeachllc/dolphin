@@ -41,10 +41,10 @@ def run_all_tests(base_url):
 
             # Run the test and get the result
             test_module.run_test(base_url)
-            print(f"✅ {test_name} MCP is working.")
+            print(f"✅ {test_name} is working.")
             passed_tests += 1
         except Exception:
-            print(f"❌ {test_name} MCP test failed!")
+            print(f"❌ {test_name} test failed!")
             traceback.print_exc(file=sys.stdout)
         finally:
             print("-" * (len(test_name) + 18))
