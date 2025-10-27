@@ -15,5 +15,7 @@ max_tokens = 4096
 token_budget = 1200
 
 [files]
-system = "system.md"
-guardrails = "guardrails.md"
+system = "prompt.md"
+
+[continue]
+roles = ["chat", "edit"]

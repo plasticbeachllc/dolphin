@@ -58,7 +58,6 @@ class Persona:
     token_budget: int
     trim_policy: str
     system_text: str
-    guardrails_text: str
     provider_options: Dict[str, Any]
     continue_extra: Dict[str, Any]
     raw: Dict[str, Any]
@@ -417,21 +416,6 @@ def load_persona(persona_dir: Path) -> Persona:
             )
         system_text = system_path.read_text(encoding="utf-8")
 
-    guardrails_text = ""
-    guardrails_file = files.get("guardrails")
-    if guardrails_file:
-        guardrails_path = persona_dir / guardrails_file
-        if guardrails_path.exists():
-            guardrails_text = guardrails_path.read_text(encoding="utf-8")
-            if not guardrails_text.strip():
-                warnings.append(
-                    f"Persona '{persona_id}' guardrails file '{guardrails_file}' is empty"
-                )
-        else:
-            warnings.append(
-                f"Persona '{persona_id}' guardrails file '{guardrails_file}' not found"
-            )
-
     continue_table = data.get("continue") or {}
     continue_extra = continue_table.get("extra") or {}
     if not isinstance(continue_extra, dict):  # pragma: no cover - defensive
@@ -448,7 +432,6 @@ def load_persona(persona_dir: Path) -> Persona:
         token_budget=token_budget,
         trim_policy=trim_policy,
         system_text=system_text,
-        guardrails_text=guardrails_text,
         provider_options=provider_options,
         continue_extra=continue_extra,
         raw=data,
@@ -464,7 +447,7 @@ def iter_persona_dirs(personas_root: Path) -> Iterable[Path]:
     for candidate in sorted(personas_root.iterdir()):
         if not candidate.is_dir():
             continue
-        if candidate.name.startswith(".") or candidate.name.startswith("_") or candidate.name == "scripts":
+        if candidate.name.startswith(".") or candidate.name.startswith("_"):
             continue
         yield candidate
 

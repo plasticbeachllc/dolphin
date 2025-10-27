@@ -8,12 +8,14 @@ kind = "ollama"
 model = "gpt-oss:20b"
 
 [params]
-temperature = 0.3
+temperature = 0.1
 top_p = 0.9
 
 [system]
 token_budget = 1200
 
 [files]
-system = "system.md"
-guardrails = "guardrails.md"
+system = "prompt.md"
+
+[continue]
+roles = ["chat", "edit"]

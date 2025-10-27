@@ -26,6 +26,9 @@ app = typer.Typer(
     help="Persona toolkit for previewing and generating Continue configs.",
 )
 
+PERSONAS_SUBDIR = 'cast'
+SRC_SUBDIR = 'src'
+
 
 def _read_overlay(overlay: Optional[Path], overlay_text: Optional[str]) -> str:
     if overlay and overlay_text:
@@ -44,9 +47,18 @@ def _read_overlay(overlay: Optional[Path], overlay_text: Optional[str]) -> str:
     return ""
 
 
+def _load_guardrails(personas_root: Path) -> str:
+    guardrails_path = personas_root / SRC_SUBDIR / "system.md"
+    if not guardrails_path.exists():
+        raise PersonaError(f"guardrails file '{guardrails_path}' not found")
+    if not guardrails_path.is_file():
+        raise PersonaError(f"guardrails path '{guardrails_path}' is not a file")
+    return guardrails_path.read_text(encoding="utf-8")
+
+
 def _list_personas(personas_root: Path) -> List[Persona]:
     try:
-        directories = list(iter_persona_dirs(personas_root))
+        directories = list(iter_persona_dirs(personas_root / PERSONAS_SUBDIR))
     except PersonaError as exc:
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from exc
@@ -59,7 +71,7 @@ def _list_personas(personas_root: Path) -> List[Persona]:
 
     typer.echo(f"Personas in {personas_root}:")
     for directory in directories:
-        if directory.name.startswith(".") or directory.name.startswith('_') or directory.name == 'scripts':
+        if directory.name.startswith(".") or directory.name.startswith('_'):
             continue
         try:
             persona = load_persona(directory)
@@ -127,7 +139,7 @@ def preview(
         typer.secho("error: --id is required unless --list is used", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2)
 
-    persona_dir = personas_root / persona_id
+    persona_dir = personas_root / PERSONAS_SUBDIR / persona_id
 
     try:
         persona = load_persona(persona_dir)
@@ -147,9 +159,15 @@ def preview(
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from exc
 
+    try:
+        shared_guardrails = _load_guardrails(personas_root)
+    except PersonaError as exc:
+        typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
+
     compiled, info = compile_system_message(
         system=persona.system_text,
-        guardrails=persona.guardrails_text,
+        guardrails=shared_guardrails,
         overlay=overlay_content,
         model=persona.provider_model,
         budget=persona.token_budget,
@@ -219,7 +237,7 @@ def generate(
     warnings: List[str] = []
 
     try:
-        directories = list(iter_persona_dirs(personas_root))
+        directories = list(iter_persona_dirs(personas_root / PERSONAS_SUBDIR))
     except PersonaError as exc:
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from exc
@@ -227,6 +245,13 @@ def generate(
     if not directories:
         typer.secho(f"error: no personas found in {personas_root}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2)
+
+    # Load the shared guardrails file once
+    try:
+        shared_guardrails = _load_guardrails(personas_root)
+    except PersonaError as exc:
+        typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from exc
 
     for directory in directories:
         try:
@@ -259,7 +284,7 @@ def generate(
     for persona in sorted(personas_list, key=lambda p: p.name.lower()):
         compiled, info = compile_system_message(
             system=persona.system_text,
-            guardrails=persona.guardrails_text,
+            guardrails=shared_guardrails,  # Use the shared guardrails file
             overlay="",
             model=persona.provider_model,
             budget=persona.token_budget,

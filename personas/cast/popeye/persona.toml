@@ -5,11 +5,11 @@ version = "0.1.0"
 
 [provider]
 kind = "openai"
-model = "gpt-5-codex"
+model = "gpt-5"
 
 [system]
 token_budget = 1200
+temperature = 0
 
 [files]
-system = "system.md"
-guardrails = "guardrails.md"
+system = "prompt.md"
