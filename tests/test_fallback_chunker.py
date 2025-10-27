@@ -158,8 +158,7 @@ def test_various_file_types():
     chunks = chunk_text(plain_text, token_target=50)
     assert len(chunks) == 1
 
-
-if __name__ == "__main__":
+def run_test():
     # Run all test functions
     import sys
     
@@ -189,3 +188,6 @@ if __name__ == "__main__":
     
     print(f"\n{len(tests) - failed}/{len(tests)} tests passed")
     sys.exit(0 if failed == 0 else 1)
+
+if __name__ == "__main__":
+    run_test()
