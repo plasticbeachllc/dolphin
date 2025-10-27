@@ -51,6 +51,9 @@ start:
 # Set up the entire project
 setup: setup-env setup-python setup-openwebui
 
+# Development setup (without OpenWebUI)
+setup-dev: setup-env setup-python
+
 # Stop all services
 stop: stop-mcpo stop-openwebui ollama-stop
 
@@ -72,7 +75,7 @@ setup-env:
 
 # Install Python dependencies from pyproject.toml
 setup-python:
-	uv sync
+	uv sync --group test
 
 # ==============================================================================
 # OpenWebUI Management
@@ -142,10 +145,36 @@ ollama-check:
 # Testing
 # ==============================================================================
 
-# Test all MCP servers
+
+# Test all components using pytest
 test: setup-python
-	@echo "🧪 Running tests..."
-	@uv run python -m tests.run_tests
+	@echo "🧪 Running all tests with pytest..."
+	uv run pytest -q
+
+# Run unit tests only
+test-unit: setup-python
+	@echo "🧪 Running unit tests..."
+	uv run pytest tests/unit/ -q
+
+# Run integration tests only
+test-integration: setup-python
+	@echo "🧪 Running integration tests..."
+	uv run pytest tests/integration/ -q
+
+# Run tests with coverage reporting
+test-coverage: setup-python
+	@echo "🧪 Running tests with coverage..."
+	uv run pytest --cov=src/pb_kb --cov-report=html --cov-report=term-missing
+
+# Run specific test file
+test-file: setup-python
+	@echo "🧪 Running specific test file: $(file)"
+	uv run pytest $(file) -v
+
+# Run tests with detailed output
+test-verbose: setup-python
+	@echo "🧪 Running tests with verbose output..."
+	uv run pytest -v
 
 # ==============================================================================
 # MCP(o)
@@ -192,3 +221,15 @@ personas-generate:
 
 personas-list:
 	uv run python -m personas.scripts.personas preview --list
+
+# ==============================================================================
+# KB Pipeline Development
+# ==============================================================================
+
+# Run KB pipeline CLI
+kb:
+	uv run python -m pb_kb.ingest.cli $*
+
+# Run KB API server
+kb-api:
+	uv run python -m pb_kb.api.app $*
