@@ -1,0 +1,234 @@
+# Dolphin Knowledge Base Configuration
+# This file consolidates all kb-related settings in TOML format
+
+# ======================================================================
+# STORAGE AND DATA PATHS
+# ======================================================================
+[storage]
+# Root directory for the knowledge store (databases, indexes, etc.)
+store_root = "~/.dolphin/knowledge_store"
+
+# ======================================================================
+# SERVER CONFIGURATION
+# ======================================================================
+[server]
+# gRPC endpoint for the knowledge store service
+endpoint = "127.0.0.1:7777"
+
+# ======================================================================
+# CHUNKING CONFIGURATION
+# ======================================================================
+[chunking]
+# Default token window size for all files
+default_window_size = 350
+
+# Overlap percentage between consecutive chunks (0.0-1.0)
+overlap_pct = 0.10
+
+# Per-language token window size overrides
+[chunking.per_language]
+python = 512
+javascript = 350
+typescript = 350
+typescriptreact = 350
+java = 512
+cpp = 512
+c = 512
+go = 400
+rust = 400
+markdown = 256
+text = 256
+json = 128
+toml = 128
+yaml = 128
+
+# ======================================================================
+# LANGUAGE DETECTION: FILE EXTENSION -> LANGUAGE MAPPING
+# ======================================================================
+# This section maps file extensions to language identifiers for chunker routing
+[languages]
+# Python
+py = "python"
+pyw = "python"
+pyi = "python"
+
+# JavaScript / TypeScript
+js = "javascript"
+mjs = "javascript"
+cjs = "javascript"
+jsx = "javascriptreact"
+ts = "typescript"
+tsx = "typescriptreact"
+mts = "typescript"
+cts = "typescript"
+
+# Markup / Documentation
+md = "markdown"
+markdown = "markdown"
+mdx = "markdown"
+rst = "restructuredtext"
+
+# Data / Config
+json = "json"
+jsonc = "json"
+json5 = "json"
+toml = "toml"
+yaml = "yaml"
+yml = "yaml"
+xml = "xml"
+
+# C / C++
+c = "c"
+h = "c"
+cpp = "cpp"
+cxx = "cpp"
+cc = "cpp"
+hpp = "cpp"
+hxx = "cpp"
+hh = "cpp"
+
+# Java / JVM
+java = "java"
+kt = "kotlin"
+kts = "kotlin"
+scala = "scala"
+
+# Go
+go = "go"
+
+# Rust
+rs = "rust"
+
+# Ruby
+rb = "ruby"
+
+# PHP
+php = "php"
+
+# Shell
+sh = "shell"
+bash = "shell"
+zsh = "shell"
+
+# Other
+txt = "text"
+log = "text"
+sql = "sql"
+graphql = "graphql"
+proto = "protobuf"
+
+# ======================================================================
+# EMBEDDINGS CONFIGURATION
+# ======================================================================
+[embeddings]
+# Default embedding model for new repositories
+# Options: "text-embedding-3-small" (cost-effective) or "text-embedding-3-large" (highest quality)
+model = "text-embedding-3-small"
+
+# Default embedding model shorthand (for backward compatibility)
+# "small" -> text-embedding-3-small, "large" -> text-embedding-3-large
+default_embed_model = "small"
+
+# Concurrency limit for embedding API calls
+concurrency = 3
+
+# Per-session spending cap (USD) to prevent runaway costs
+per_session_spend_cap_usd = 10.0
+
+# ======================================================================
+# TOKENIZER CONFIGURATION
+# ======================================================================
+[tokenizer]
+# Encoding for OpenAI models (cl100k_base for text-embedding-3-* models)
+encoding = "cl100k_base"
+
+# ======================================================================
+# RETRIEVAL CONFIGURATION
+# ======================================================================
+[retrieval]
+# Minimum similarity score threshold (0.0-1.0)
+# Higher values = more precise but fewer results
+score_cutoff = 0.15
+
+# Maximum number of results to return
+top_k = 8
+
+# Maximum tokens per snippet in search results
+max_snippet_tokens = 240
+
+# ======================================================================
+# IGNORE PATTERNS
+# ======================================================================
+# Files and directories to ignore during indexing (glob patterns)
+ignore = [
+    # Version control
+    ".git/**",
+    ".svn/**",
+    ".hg/**",
+    
+    # Dependencies
+    "node_modules/**",
+    "venv/**",
+    ".venv/**",
+    "env/**",
+    ".env/**",
+    "__pycache__/**",
+    "*.pyc",
+    "*.pyo",
+    
+    # Build artifacts
+    "dist/**",
+    "build/**",
+    "target/**",
+    "out/**",
+    ".next/**",
+    ".nuxt/**",
+    
+    # IDE / Editor
+    ".vscode/**",
+    ".idea/**",
+    "*.swp",
+    "*.swo",
+    "*~",
+    ".DS_Store",
+    
+    # Caches
+    ".cache/**",
+    ".pytest_cache/**",
+    ".mypy_cache/**",
+    ".ruff_cache/**",
+    
+    # Lock files
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "poetry.lock",
+    "Pipfile.lock",
+    "Cargo.lock",
+    
+    # Compiled / Binary
+    "*.so",
+    "*.dylib",
+    "*.dll",
+    "*.exe",
+    "*.o",
+    "*.a",
+    
+    # Archives
+    "*.zip",
+    "*.tar.gz",
+    "*.rar",
+    "*.7z",
+    
+    # Media
+    "*.jpg",
+    "*.jpeg",
+    "*.png",
+    "*.gif",
+    "*.ico",
+    "*.svg",
+    "*.pdf",
+    "*.mp3",
+    "*.mp4",
+    "*.avi",
+]

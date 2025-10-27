@@ -7,8 +7,8 @@ from typing import List, Optional, Tuple, NamedTuple
 import tree_sitter_python as tspython
 from tree_sitter import Language, Parser
 
-from . import Chunk
 from .token_utils import get_tokenizer, window_text_by_tokens, count_tokens
+from .types import Chunk
 
 _log = logging.getLogger(__name__)
 

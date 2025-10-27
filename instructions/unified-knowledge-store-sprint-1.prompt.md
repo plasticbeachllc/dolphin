@@ -25,7 +25,7 @@ High-level architecture
 2) Technology choices (frozen for Sprint 1)
    - Embeddings: OpenAI text-embedding-3-small (1536 dims) default; text-embedding-3-large (3072 dims) optional per collection.
    - Chunking: target 350 tokens (configurable per-repo), 10% overlap; tree-sitter for TS/Python; line-based fallback.
-   - Repository Configuration: Per-repo `.dolphin/chunking_config.toml` files for custom token windows and embedding models.
+   - Repository Configuration: Per-repo `.dolphin/chunking_config.toml` files for custom token windows and embedding models, integrated with global configuration in `.dolphin/config.toml`.
    - Retrieval: dense KNN only (top_k default 8). No reranker/BM25 yet.
    - Cost controls: deduplicate unchanged chunks via SHA256 content hash; per-session spend cap; backoff on rate limits.
 
@@ -99,8 +99,11 @@ src/pb_kb/
     __init__.py
     ts_chunker.py
     py_chunker.py
+    md_chunker.py
     fallback_chunker.py
     repo_config.py      # Repository chunking configuration system
+    registry.py         # Chunker registry and routing system
+    types.py            # Core data types (Chunk, ChunkList)
     token_utils.py
   embeddings.py
   store/
@@ -147,31 +150,70 @@ Package management with uv (no pip)
    uv run kb-api --host 127.0.0.1 --port 7777
    ```
 
-Configuration (config.yaml)
-```yaml
-store_root: ~/.plastic_beach/knowledge_store
-default_embed_model: small  # small|large
-endpoint: 127.0.0.1:7777
-concurrency: 3
-per_session_spend_cap_usd: 10.0
-ignore:
-  use_gitignore: true
-  extra:
-    - node_modules
-    - dist
-    - build
-    - .next
-    - .venv
-    - .mypy_cache
-    - .pytest_cache
-    - .DS_Store
-    - .env
-    - .env.*
-    - .secrets
-    - coverage
-    - .cache
-    - target
-    - vendor
+Configuration (.dolphin/config.toml)
+```toml
+# Storage and Data Paths
+[storage]
+store_root = "~/.dolphin/knowledge_store"
+
+# Server Configuration
+[server]
+endpoint = "127.0.0.1:7777"
+
+# Chunking Configuration
+[chunking]
+default_window_size = 350
+overlap_pct = 0.10
+
+[chunking.per_language]
+python = 512
+typescript = 350
+markdown = 256
+
+# Language Detection: File Extension -> Language Mapping
+[languages]
+py = "python"
+ts = "typescript"
+md = "markdown"
+json = "json"
+# ... 50+ mappings
+
+# Embeddings Configuration
+[embeddings]
+model = "text-embedding-3-small"
+default_embed_model = "small"
+concurrency = 3
+per_session_spend_cap_usd = 10.0
+
+# Tokenizer Configuration
+[tokenizer]
+encoding = "cl100k_base"
+
+# Retrieval Configuration
+[retrieval]
+score_cutoff = 0.15
+top_k = 8
+max_snippet_tokens = 240
+
+# Ignore Patterns
+ignore = [
+    "node_modules/**",
+    "dist/**",
+    "build/**",
+    ".next/**",
+    ".venv/**",
+    ".mypy_cache/**",
+    ".pytest_cache/**",
+    ".DS_Store",
+    ".env",
+    ".env.*",
+    ".secrets",
+    "coverage",
+    ".cache/**",
+    "target/**",
+    "vendor/**",
+    # ... more patterns
+]
 ```
 
 SQLite metadata schema (knowledge.db)
@@ -254,6 +296,7 @@ MCP retriever tool
 Implementation details and guidance
 1) Chunking specifics
    - Tokenization via tiktoken; adjust per OpenAI tokenizer.
+   - Automatic language detection and routing via chunker registry (50+ file extensions supported).
    - TS/Python with tree-sitter; fallback windowing when parse fails.
    - 350-token default target (configurable per-repo) with 10% overlap.
    - Repository configuration via `.dolphin/chunking_config.toml`:
@@ -271,6 +314,7 @@ Implementation details and guidance
      [tokenizer]
      encoding = "cl100k_base"
      ```
+   - **Phase 4 Status**: ✅ **COMPLETE** - Chunker registry and configuration system fully implemented and tested
 
 2) Hashing/idempotency
    - Canonicalize content (normalize line endings, strip trailing spaces) before SHA256.

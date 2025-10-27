@@ -146,15 +146,45 @@ Implementation completed
 4) ✅ Add unit tests for SQLiteMetadataStore methods.
 
 Next phases
-- Phase 4: Implement chunking with token-based windowing and language-specific parsers
-- Phase 5: Implement hashing and idempotency checks
+- Phase 4: ✅ **COMPLETED** - Implement chunking with token-based windowing and language-specific parsers
+  - ✅ Repository configuration system with TOML config loading
+  - ✅ Python chunker with tree-sitter symbol extraction
+  - ✅ TypeScript/TSX chunker with tree-sitter symbol extraction
+  - ✅ Markdown chunker with heading tracking and YAML front matter
+  - ✅ Enhanced fallback chunker with token windowing for all file types
+  - ✅ Comprehensive test coverage (9/9 fallback tests, 6/6 chunker tests)
+  - ✅ **COMPLETED**: Chunker registry and integration (get_chunker(), chunk_file(), detect_language_from_extension())
+  - ✅ Global configuration system (`.dolphin/config.toml`) with 50+ extension mappings
+  - ✅ Configuration migration from legacy `config.yaml` to TOML format
+  - ✅ All registry tests passing (4/4 test groups)
+  - ✅ **PHASE 4 STATUS**: 100% Complete - Ready for Phase 5
+- Phase 5: **CURRENT** - Implement hashing and idempotency checks
+  - File content hashing for change detection
+  - Chunk deduplication and idempotent processing
+  - Integration with existing file catalog system
 - Phase 6: Implement embeddings and budget control
+  - OpenAI embeddings integration with cost tracking
+  - Batch processing and concurrency management
+  - Spending caps and budget controls
 - Phase 7: Complete ingestion CLI with full pipeline
+  - End-to-end `kb index` command
+  - Progress tracking and error recovery
+  - Performance optimization for large repositories
 - Phase 8: Implement retriever HTTP API
+  - Semantic search API endpoints
+  - Query processing and result ranking
+  - Integration with existing knowledge base
 - Phase 9: MCP wrapper and integrations
+  - Model Context Protocol integration
+  - External tool and service integrations
+  - Production deployment and monitoring
 
 Notes
 - Keep paths POSIX-style for storage consistency.
 - Do not follow symlinks during scanning.
 - Do not traverse submodules; register them as independent repos when needed.
-- Keep this plan minimal and focused; chunking, hashing, and embeddings follow next.
+- **Phase 4 Complete**: Chunking system is fully operational with enhanced fallback chunker using token windowing.
+- All chunkers maintain accurate 1-based line number mapping and configurable token targets.
+- Repository configuration system supports per-language window sizes and OpenAI embedding models.
+- Chunker registry provides automatic routing for 50+ file types with global config support.
+- **Ready for Phase 5**: Hashing and idempotency checks can now build on the complete chunking foundation.

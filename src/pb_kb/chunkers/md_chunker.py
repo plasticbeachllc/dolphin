@@ -10,8 +10,8 @@ from markdown_it import MarkdownIt
 from markdown_it.token import Token
 import yaml
 
-from . import Chunk
 from .token_utils import get_tokenizer, window_text_by_tokens, count_tokens
+from .types import Chunk
 from ..hashing import canonicalize_text
 
 
