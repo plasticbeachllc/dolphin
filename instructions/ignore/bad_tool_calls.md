@@ -23,9 +23,11 @@
 -- ```edit_existing_file failed because the arguments were invalid, with the following message: Tool edit_existing_file not found```
 -- ```multi_edit failed because the arguments were invalid, with the following message: invalid multi-edit args```
 -- ```tool_use_instructions failed because the arguments were invalid, with the following message: Tool tool_use_instructions not found```
---- ```create_new_file failed with the message: `filepath` argument is required and must not be empty or whitespace-only. (type string)```
---- ```multi_edit failed because the arguments were invalid, with the following message: Edit at index 0: string not found in file: "	private write(entry: LogEvent) {
+-- ```create_new_file failed with the message: `filepath` argument is required and must not be empty or whitespace-only. (type string)```
+-- ```multi_edit failed because the arguments were invalid, with the following message: Edit at index 0: string not found in file: "	private write(entry: LogEvent) {
 		const msg = `[${entry.level}] ${entry.type}`;
 		console.log(msg, entry);
 	}"```
---- ```create_new_file failed with the message: File src/pb_kb/hashing.py already exists. Use the edit tool to edit this file```
+-- ```create_new_file failed with the message: File src/pb_kb/hashing.py already exists. Use the edit tool to edit this file```
+-- ```multi_edit failed because the arguments were invalid, with the following message: Edit at index 0: string not found in file:```
+-- ```multi_edit failed because the arguments were invalid, with the following message: Edit at index 1: string not found in file:```

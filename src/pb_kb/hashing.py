@@ -7,8 +7,9 @@ to ensure consistent fingerprints across platforms and editors.
 Canonicalization Rules:
 1. Normalize line endings to Unix-style (\\n)
 2. Strip trailing whitespace from each line
-3. Preserve leading/trailing newlines if present in original
-4. Preserve indentation (significant in Python/YAML)
+3. Remove leading/trailing blank lines
+4. Ensure a single trailing newline
+5. Preserve indentation (significant in Python/YAML)
 
 Usage:
     from pb_kb.hashing import hash_text, canonicalize_text
@@ -37,7 +38,8 @@ def canonicalize_text(text: str) -> str:
     Applies the following transformations:
     1. Normalize line endings to \\n (Unix-style)
     2. Strip trailing whitespace from each line
-    3. Preserve original trailing newline if present
+    3. Remove leading/trailing blank lines
+    4. Ensure exactly one trailing newline
     
     Indentation is preserved as it's semantically significant in many languages
     (Python, YAML, Makefile, etc.).
@@ -56,16 +58,33 @@ def canonicalize_text(text: str) -> str:
         '  def foo():\\n    pass'
     """
     if not text:
-        return ""
-    
-    # Normalize line endings and strip trailing whitespace per line
-    lines = [line.rstrip() for line in text.splitlines()]
-    normalized = "\n".join(lines)
-    
-    # Preserve trailing newline if present in original
-    if text.endswith(("\n", "\r\n", "\r")):
-        return normalized + "\n"
-    return normalized
+        return "\n"
+
+    # Normalize line endings to \n
+    normalized_ends = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    # Split into lines and strip trailing whitespace per line
+    raw_lines = normalized_ends.split("\n")
+    lines = [line.rstrip() for line in raw_lines]
+
+    # Remove leading blank lines
+    start = 0
+    while start < len(lines) and lines[start].strip() == "":
+        start += 1
+
+    # Remove trailing blank lines
+    end = len(lines)
+    while end > start and lines[end - 1].strip() == "":
+        end -= 1
+
+    trimmed_lines = lines[start:end]
+    if not trimmed_lines:
+        return "\n"
+
+    normalized = "\n".join(trimmed_lines)
+
+    # Ensure exactly one trailing newline
+    return normalized + "\n"
 
 
 def hash_text(text: str) -> str:

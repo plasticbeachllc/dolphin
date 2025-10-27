@@ -17,6 +17,7 @@ class Chunk:
         start_line: 1-based inclusive starting line number
         end_line: 1-based inclusive ending line number
         token_count: Number of tokens in the chunk (computed by tiktoken)
+        text_hash: SHA256 hash of canonicalized text for deduplication
         symbol_kind: Optional symbol kind (function|class|method|module)
         symbol_name: Optional symbol name
         symbol_path: Optional symbol path (e.g., "path/to/file.py:Class.method")
@@ -29,6 +30,7 @@ class Chunk:
     start_line: int
     end_line: int
     token_count: int
+    text_hash: str | None = None
     symbol_kind: str | None = None
     symbol_name: str | None = None
     symbol_path: str | None = None
