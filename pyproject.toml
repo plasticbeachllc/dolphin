@@ -33,6 +33,26 @@ dependencies = [
     "tomli ; python_full_version < '3.11'",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-xdist>=3.3.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-mock>=3.11.0",
+    "responses>=0.24.0",
+    "freezegun>=1.2.0",
+    "fakeredis>=2.18.0",
+    "httpx>=0.25.0",
+]
+dev = [
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.5.0",
+    "ruff>=0.1.0",
+    "pre-commit>=3.4.0",
+]
+
 [project.scripts]
 kb = "pb_kb.ingest.cli:app"
 kb-api = "pb_kb.api.app:main"
@@ -46,3 +66,17 @@ include = ["src/pb_kb", "personas"]
 
 [tool.uv.sources]
 dolphin = { workspace = true }
+
+[dependency-groups]
+test = [
+    "fakeredis>=2.32.0",
+    "freezegun>=1.5.5",
+    "httpx>=0.28.1",
+    "psutil>=7.1.2",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "pytest-cov>=7.0.0",
+    "pytest-mock>=3.15.1",
+    "pytest-xdist>=3.8.0",
+    "responses>=0.25.8",
+]

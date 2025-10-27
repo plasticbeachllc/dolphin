@@ -1,5 +1,4 @@
-"""Ingestion CLI package."""
+"""Ingestion package."""
 
-from .cli import app
-
-__all__ = ["app"]
+# Avoid importing CLI and pipeline at package import time to prevent cycles.
+__all__: list[str] = []

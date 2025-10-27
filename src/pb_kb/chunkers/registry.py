@@ -40,6 +40,7 @@ from .types import Chunk
 
 __all__ = [
     "get_chunker",
+    "get_chunker_for_file",
     "chunk_file",
     "detect_language_from_extension",
     "ChunkerFunction",
@@ -180,6 +181,21 @@ def detect_language_from_extension(file_path: Path) -> Optional[str]:
     
     ext_map = _load_global_extension_map()
     return ext_map.get(ext)
+
+
+def get_chunker_for_file(file_path: Path) -> Optional[ChunkerFunction]:
+    """Get the appropriate chunker for a file based on its extension.
+    
+    Args:
+        file_path: Path to the file (can be relative or absolute)
+        
+    Returns:
+        A chunker function if the language is known, otherwise None.
+    """
+    language = detect_language_from_extension(file_path)
+    if language is None:
+        return None
+    return get_chunker(language)
 
 
 def get_chunker(language: str) -> ChunkerFunction:

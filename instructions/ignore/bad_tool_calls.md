@@ -31,3 +31,18 @@
 -- ```create_new_file failed with the message: File src/pb_kb/hashing.py already exists. Use the edit tool to edit this file```
 -- ```multi_edit failed because the arguments were invalid, with the following message: Edit at index 0: string not found in file:```
 -- ```multi_edit failed because the arguments were invalid, with the following message: Edit at index 1: string not found in file:```
+-- ```multi_edit failed because the arguments were invalid, with the following message: edit at index 0: old_string and new_string must be different```
+-- ```create_new_file failed with the message: File src/pb_kb/ingest/error_logging.py already exists. Use the edit tool to edit this file```
+-- ```multi_edit failed because the arguments were invalid, with the following message: Edit at index 0: string not found in file:```
+-- ```create_new_file failed with the message: `filepath` argument is required and must not be empty or whitespace-only. (type string)```
+-- ```create_new_file failed with the message: `filepath` argument is required and must not be empty or whitespace-only. (type string)```
+-- ```create_new_file failed with the message: `filepath` argument is required and must not be empty or whitespace-only. (type string)```
+## WRITEBACK 10/26/25
+
+-- ```create_new_file failed with the message: `filepath` argument is required and must not be empty or whitespace-only. (type string)```
+-- ```create_new_file failed with the message: `filepath` argument is required and must not be empty or whitespace-only. (type string)```
+-- floundering with failed dependencies -- ensure virtual env is used in all cases (e.g., use uv)
+-- ```400 Invalid 'messages[60].tool_calls[0].function.name': empty string. Expected a string with minimum length 1, but got an empty string instead.```
+-- ```"Premature Close" error: this tool call was aborted mid-stream because the arguments took too long to stream or there were network issues. Please re-attempt by breaking the operation into smaller chunks or trying something else```
+-- ```multi_edit failed because the arguments were invalid, with the following message: edit at index 0: old_string and new_string must be different```
+-- ```multi_edit failed because the arguments were invalid, with the following message: edit at index 1: old_string and new_string must be different```

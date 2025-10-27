@@ -49,15 +49,16 @@ class LanceDBStore:
                 pa.field("commit", pa.string()),
                 pa.field("branch", pa.string()),
                 pa.field("embed_model", pa.string()),
-                pa.field("language", pa.string()),
-                pa.field("symbol_kind", pa.string()),
-                pa.field("symbol_name", pa.string()),
-                pa.field("symbol_path", pa.string()),
-                pa.field("heading_h1", pa.string()),
-                pa.field("heading_h2", pa.string()),
-                pa.field("heading_h3", pa.string()),
+                # Optional/nullable metadata fields
+                pa.field("language", pa.string(), nullable=True),
+                pa.field("symbol_kind", pa.string(), nullable=True),
+                pa.field("symbol_name", pa.string(), nullable=True),
+                pa.field("symbol_path", pa.string(), nullable=True),
+                pa.field("heading_h1", pa.string(), nullable=True),
+                pa.field("heading_h2", pa.string(), nullable=True),
+                pa.field("heading_h3", pa.string(), nullable=True),
                 pa.field("token_count", pa.int32()),
-                pa.field("created_at", pa.timestamp("us", tz="UTC")),
+                pa.field("created_at", pa.timestamp("us", tz="UTC"), nullable=True),
             ]
             return pa.schema(fields)
 
@@ -72,8 +73,74 @@ class LanceDBStore:
             db.create_table(name, data=[], schema=schema)
 
     def upsert_chunks(self, repo: str, chunks: Iterable[Any], *, model: str) -> None:
-        """Persist chunk data (stub)."""
-        _ = (repo, chunks, model)  # suppress unused-variable warnings
+        """Persist chunk data using delete-then-append strategy.
+        
+        Args:
+            repo: Repository name
+            chunks: Iterable of chunk dictionaries with LanceDB schema
+            model: Embedding model name ('small' or 'large')
+        """
+        import lancedb
+        import pyarrow as pa
+        
+        # Map model to table name and expected dimension
+        model_to_table = {
+            'small': 'chunks_small',
+            'large': 'chunks_large'
+        }
+        model_to_dim = {
+            'small': 1536,
+            'large': 3072
+        }
+        
+        if model not in model_to_table:
+            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
+        
+        table_name = model_to_table[model]
+        expected_dim = model_to_dim[model]
+        
+        # Connect to database
+        db = lancedb.connect(self.root.as_posix())
+        
+        # Convert chunks to list for processing
+        chunks_list = list(chunks)
+        if not chunks_list:
+            return  # Nothing to do
+        
+        # Validate vector dimensions
+        for chunk in chunks_list:
+            vector = chunk.get('vector', [])
+            if len(vector) != expected_dim:
+                raise ValueError(
+                    f"Vector dimension mismatch for model '{model}': "
+                    f"expected {expected_dim}, got {len(vector)}"
+                )
+        
+        # Extract IDs for deletion
+        ids_to_delete = [chunk['id'] for chunk in chunks_list if 'id' in chunk]
+        
+        # Delete existing rows with these IDs
+        if ids_to_delete:
+            try:
+                table = db.open_table(table_name)
+                # Build safe filter expression for IDs using IN clause
+                id_list = ", ".join([repr(x) for x in ids_to_delete])
+                filter_expr = f"id in ({id_list})"
+                table.delete(filter_expr)
+            except Exception as e:
+                # If table doesn't exist or delete fails, we'll append anyway
+                print(f"Warning: Failed to delete existing rows: {e}")
+        
+        # Append new rows
+        try:
+            table = db.open_table(table_name)
+            table.add(chunks_list)
+        except Exception as e:
+            # If table doesn't exist, create it and try again
+            print(f"Table {table_name} not found, creating it: {e}")
+            self.initialize_collections()
+            table = db.open_table(table_name)
+            table.add(chunks_list)
 
     def query(
         self,

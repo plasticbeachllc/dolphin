@@ -11,5 +11,9 @@ mcpo_config.json
 .continue/*
 .continue/**/*
 
+# logs
+*.log
+
 # Python cache
 __pycache__/
+.coverage

@@ -89,4 +89,59 @@ def run_test() -> None:
         assert summary["repos"] >= 1
         assert summary["files"] >= 1
 
+        # chunk_content hashing APIs start empty
+        assert store.get_distinct_hashes_for_file(repo_id, file_id, "small") == set()
+
+        hash_a = "a" * 64
+        cid_a1 = store.upsert_chunk_content(repo_id, file_id, hash_a, "small")
+        assert isinstance(cid_a1, str) and len(cid_a1) > 0
+        # Re-upsert should return same id and just bump last_indexed_at
+        cid_a2 = store.upsert_chunk_content(repo_id, file_id, hash_a, "small")
+        assert cid_a1 == cid_a2
+        assert store.get_distinct_hashes_for_file(repo_id, file_id, "small") == {hash_a}
+
+        # Location sync should insert/update/delete as needed
+        first_locations = [
+            {"start_line": 1, "end_line": 5, "symbol_kind": "class", "symbol_name": "Widget", "symbol_path": "Widget"},
+            {"start_line": 8, "end_line": 12, "symbol_kind": "method", "symbol_name": "Widget.render", "symbol_path": "Widget.render"},
+        ]
+        stats = store.sync_locations_for_content(cid_a1, first_locations)
+        assert stats == {"inserted": 2, "updated": 0, "deleted": 0}
+
+        locations_after_first = store.get_locations_for_content_ids([cid_a1])
+        assert cid_a1 in locations_after_first
+        assert len(locations_after_first[cid_a1]) == 2
+
+        second_locations = [
+            {"start_line": 1, "end_line": 5, "symbol_kind": "class", "symbol_name": "WidgetRenamed", "symbol_path": "WidgetRenamed"},
+            {"start_line": 20, "end_line": 24, "symbol_kind": "method", "symbol_name": "Widget.debug", "symbol_path": "Widget.debug"},
+        ]
+        stats = store.sync_locations_for_content(cid_a1, second_locations)
+        assert stats == {"inserted": 1, "updated": 1, "deleted": 1}
+
+        locations_after_second = store.get_locations_for_content_ids([cid_a1])
+        assert len(locations_after_second[cid_a1]) == 2
+        names = {loc["symbol_name"] for loc in locations_after_second[cid_a1]}
+        assert names == {"WidgetRenamed", "Widget.debug"}
+
+        # Prune should remove content not in current hashes
+        hash_b = "b" * 64
+        cid_b = store.upsert_chunk_content(repo_id, file_id, hash_b, "small")
+        assert cid_b != cid_a1
+        pruned = store.prune_invalidated_content_for_file(repo_id, file_id, "small", {hash_a})
+        assert pruned == 1
+        hashes_after_prune = store.get_distinct_hashes_for_file(repo_id, file_id, "small")
+        assert hashes_after_prune == {hash_a}
+
+        # sync_file_state should upsert content rows and locations end-to-end
+        desired = {
+            hash_a: [{"start_line": 1, "end_line": 5, "symbol_kind": "class", "symbol_name": "WidgetRenamed", "symbol_path": "WidgetRenamed"}],
+            "c" * 64: [{"start_line": 30, "end_line": 40, "symbol_kind": None, "symbol_name": None, "symbol_path": None}],
+        }
+        stats = store.sync_file_state(repo_id, file_id, "small", desired)
+        assert stats["content_upserted"] == len(desired)
+        assert stats["locations_inserted"] >= 1
+        hashes_final = store.get_distinct_hashes_for_file(repo_id, file_id, "small")
+        assert hashes_final == set(desired.keys())
+
     print("SQLiteMetadataStore tests passed")

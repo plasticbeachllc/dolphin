@@ -3,12 +3,24 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import List, Dict, Any
 
 from ..config import KBConfig
 from ..store import LanceDBStore, SQLiteMetadataStore
 from ..ingest.scanner import FileCandidate, scan_repo
 from ..ignores import build_ignore_set
+from ..ingest.dedup import ChunkDeduplicator
+from ..ingest._helpers import (
+    build_desired_map, 
+    git_changed_files_modified_added, 
+    git_changed_files_deleted,
+    get_all_tracked_files,
+    representative_text_for_hash
+)
+from ..ingest.error_logging import ErrorLogger
+from ..embeddings.provider import embed_texts_with_retry
+from ..chunkers.registry import get_chunker_for_file, detect_language_from_extension, chunk_file as chunk_file_with_config
+from ..hashing import hash_text
 
 
 @dataclass
@@ -46,6 +58,10 @@ class IngestionPipeline:
         repo_id = int(repo["id"])
         root = Path(repo["root_path"])
         embed_model = repo.get("default_embed_model", self.config.default_embed_model)
+        # Validate embed model early
+        from ..embeddings.provider import SUPPORTED_MODELS
+        if embed_model not in SUPPORTED_MODELS:
+            raise ValueError(f"Unsupported embed model configured for repo {repo_name}: {embed_model}")
 
         # Ensure clean working tree and capture provenance (unless forced)
         if not force:
@@ -110,3 +126,264 @@ class IngestionPipeline:
         _ = repo_path
         result = self.scan(repo_name, dry_run=dry_run)
         print(f"Scan complete for {repo_name}: files_kept={result['files_kept']}, session={result['session_id']}")
+
+    def index(
+        self, 
+        repo_name: str, 
+        *, 
+        dry_run: bool = False, 
+        force: bool = False, 
+        full_reindex: bool = False
+    ) -> Dict[str, Any]:
+        """Perform full indexing pipeline for the named repository.
+        
+        This method implements the Phase 6 indexing pipeline:
+        - Git diff gating for incremental indexing
+        - Content hashing and deduplication
+        - Embedding only new unique content
+        - Metadata and vector persistence
+        - Error handling and logging
+        
+        Args:
+            repo_name: Name of the repository to index
+            dry_run: If True, don't persist changes
+            force: If True, skip clean working tree check
+            full_reindex: If True, ignore last success and process all files
+            
+        Returns:
+            Dictionary with session summary and counters
+        """
+        # Resolve repo and Git state
+        repo = self.metadata.get_repo_by_name(repo_name)
+        if not repo:
+            raise ValueError(f"Repository not registered: {repo_name}")
+
+        repo_id = int(repo["id"])
+        root = Path(repo["root_path"])
+        embed_model = repo.get("default_embed_model", self.config.default_embed_model)
+        # Validate embed model early
+        from ..embeddings.provider import SUPPORTED_MODELS
+        if embed_model not in SUPPORTED_MODELS:
+            raise ValueError(f"Unsupported embed model configured for repo {repo_name}: {embed_model}")
+
+        # Ensure clean working tree and capture provenance (unless forced)
+        if not force:
+            self._ensure_clean_working_tree(root)
+        else:
+            print(f"Warning: force=True, skipping clean working tree check for {repo_name}")
+        
+        commit_sha = self._git(root, "rev-parse", "HEAD").strip()
+        branch = self._git(root, "rev-parse", "--abbrev-ref", "HEAD").strip()
+
+        # Get last successful commit
+        last_success = self.metadata.get_last_successful_commit(repo_id)
+
+        # Start session
+        session_id = self.metadata.begin_session(repo_id, commit_sha, branch, embed_model)
+        
+        # Initialize error logger
+        error_logger = ErrorLogger(root, str(session_id))
+
+        # Determine changed files list
+        if full_reindex or last_success is None:
+            print(f"Full reindex mode: processing all tracked files for {repo_name}")
+            changed_files = get_all_tracked_files(root)
+            deleted_files = []
+        else:
+            print(f"Incremental mode: processing files changed since {last_success[:8]}")
+            changed_files = git_changed_files_modified_added(root, last_success, commit_sha)
+            deleted_files = git_changed_files_deleted(root, last_success, commit_sha)
+
+        # Initialize counters
+        files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
+
+        # Process modified/added files
+        for path in changed_files:
+            try:
+                # Skip binary files and files that don't exist
+                file_path = root / path
+                if not file_path.exists() or file_path.is_dir():
+                    continue
+
+                # Resolve or upsert file_id
+                file_id = self.metadata.upsert_file(
+                    repo_id=repo_id,
+                    path=path,
+                    ext=file_path.suffix,
+                    language=None,  # Will be detected by chunker
+                    is_binary=False,
+                    size_bytes=file_path.stat().st_size
+                )
+
+                # Determine language and chunk the file using repo config
+                language = detect_language_from_extension(file_path) or "text"
+                try:
+                    text = file_path.read_text(encoding="utf-8", errors="ignore")
+                except Exception as e:
+                    error_logger.log_file_error(path, e)
+                    print(f"Error reading {path}: {e}")
+                    continue
+                
+                from ..chunkers.repo_config import load_repo_chunking_config
+                repo_config = load_repo_chunking_config(root)
+                
+                chunks = chunk_file_with_config(
+                    abs_path=file_path,
+                    rel_path=path,
+                    language=language,
+                    text=text,
+                    repo_config=repo_config,
+                )
+                
+                # Compute text_hash for each chunk
+                for chunk in chunks:
+                    chunk.text_hash = hash_text(chunk.text)
+
+                # Build desired map
+                desired = build_desired_map(chunks)
+
+                # Deduplicate by text_hash
+                dedup = ChunkDeduplicator(self.metadata)
+                changed_chunks, unchanged_chunks = dedup.filter_unchanged_chunks(
+                    chunks, repo_id, file_id, embed_model
+                )
+                new_hashes = {c.text_hash for c in changed_chunks}
+                skipped_occurrences = len(unchanged_chunks)
+
+                # Embed only new hashes (batched)
+                hash_to_vec: Dict[str, Any] = {}
+                if new_hashes and not dry_run:
+                    hashes_list = sorted(new_hashes)
+                    batch_size = 128
+                    for i in range(0, len(hashes_list), batch_size):
+                        batch_hashes = hashes_list[i:i+batch_size]
+                        texts_to_embed = [
+                            representative_text_for_hash(h, chunks) for h in batch_hashes
+                        ]
+                        if not texts_to_embed:
+                            continue
+                        vectors = embed_texts_with_retry(embed_model, texts_to_embed)
+                        hash_to_vec.update(dict(zip(batch_hashes, vectors)))
+
+                # Upsert metadata and locations; prune invalidated
+                if not dry_run:
+                    mapping = self.metadata.ensure_content_rows_for_file(
+                        repo_id, file_id, embed_model, list(desired.keys())
+                    )
+                    
+                    for h, occs in desired.items():
+                        cid = mapping.get(h)
+                        if cid:
+                            self.metadata.sync_locations_for_content_row(cid, occs)
+                    
+                    self.metadata.prune_invalidated_content_for_file(
+                        repo_id, file_id, embed_model, set(desired.keys())
+                    )
+
+                    # Build a quick lookup for token_count by occurrence position
+                    occ_token_counts: Dict[tuple[int, int], int] = {
+                        (ch.start_line, ch.end_line): getattr(ch, 'token_count', 0) for ch in chunks
+                    }
+
+                    # Persist vectors to LanceDB (per occurrence)
+                    payload = []
+                    for h, occs in desired.items():
+                        vec = hash_to_vec.get(h)
+                        if vec is None:
+                            continue  # unchanged hash
+                        for occ in occs:
+                            row_id = f"{repo_id}:{file_id}:{embed_model}:{h}:{occ['start_line']}:{occ['end_line']}"
+                            payload.append({
+                                'id': row_id,
+                                'vector': vec,
+                                'repo': repo_name,
+                                'path': path,
+                                'start_line': occ['start_line'],
+                                'end_line': occ['end_line'],
+                                'text_hash': h,
+                                'commit': commit_sha,
+                                'branch': branch,
+                                'embed_model': embed_model,
+                                'language': language,
+                                'symbol_kind': occ.get('symbol_kind'),
+                                'symbol_name': occ.get('symbol_name'),
+                                'symbol_path': occ.get('symbol_path'),
+                                'heading_h1': occ.get('heading_h1'),
+                                'heading_h2': occ.get('heading_h2'),
+                                'heading_h3': occ.get('heading_h3'),
+                                'token_count': occ_token_counts.get((occ['start_line'], occ['end_line']), 0),
+                                'created_at': None,  # Will be set by LanceDB
+                            })
+                    
+                    if payload:
+                        self.lancedb.upsert_chunks(repo_name, payload, model=embed_model)
+
+                # Update counters
+                files_done += 1
+                chunks_indexed += len(new_hashes)
+                chunks_skipped += skipped_occurrences
+                vectors_written += len(new_hashes)
+
+                # Log per-file summary
+                print(f"  {path}: {len(chunks)} chunks, {len(new_hashes)} new, {skipped_occurrences} skipped")
+
+            except Exception as e:
+                error_logger.log_file_error(path, e)
+                print(f"Error processing {path}: {e}")
+                continue
+
+        # Process deleted files
+        for path in deleted_files:
+            try:
+                file_id = self.metadata.get_file_id(repo_id, path)
+                if file_id:
+                    pruned_count = self.metadata.prune_invalidated_content_for_file(
+                        repo_id, file_id, embed_model, current_hashes=set()
+                    )
+                    files_done += 1
+                    chunks_pruned += pruned_count
+                    print(f"  {path}: deleted, {pruned_count} chunks pruned")
+            except Exception as e:
+                error_logger.log_file_error(f"deleted: {path}", e)
+                print(f"Error processing deleted file {path}: {e}")
+                continue
+
+        # Update session counters
+        if not dry_run:
+            self.metadata.bump_session_counters(
+                session_id,
+                files_indexed=files_done,
+                chunks_indexed=chunks_indexed,
+                chunks_skipped=chunks_skipped,
+                vectors_written=vectors_written,
+                chunks_pruned=chunks_pruned
+            )
+            self.metadata.set_session_status(session_id, "succeeded")
+        else:
+            print(f"Dry run: would have updated counters for session {session_id}")
+
+        # Print summary
+        print(f"\nIndexing complete for {repo_name}:")
+        print(f"  Files processed: {files_done}")
+        print(f"  Chunks indexed: {chunks_indexed}")
+        print(f"  Chunks skipped (dedup): {chunks_skipped}")
+        print(f"  Chunks pruned (deleted): {chunks_pruned}")
+        print(f"  Vectors written: {vectors_written}")
+        print(f"  Session: {session_id}")
+        
+        if error_logger.get_log_path().exists():
+            print(f"  Errors logged to: {error_logger.get_log_path()}")
+
+        return {
+            "repo": repo_name,
+            "repo_id": repo_id,
+            "session_id": session_id,
+            "commit": commit_sha,
+            "branch": branch,
+            "files_indexed": files_done,
+            "chunks_indexed": chunks_indexed,
+            "chunks_skipped": chunks_skipped,
+            "vectors_written": vectors_written,
+            "chunks_pruned": chunks_pruned,
+            "dry_run": dry_run
+        }

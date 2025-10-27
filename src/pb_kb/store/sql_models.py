@@ -35,6 +35,7 @@ class Session(SQLModel, table=True):
     chunks_indexed: int = Field(default=0)
     vectors_written: int = Field(default=0)
     chunks_skipped: int = Field(default=0)
+    chunks_pruned: int = Field(default=0)  # Added for Phase 6: tracks chunks removed from deleted files
 
     # Notes and lifecycle
     notes: Optional[str] = Field(default=None)
@@ -65,27 +66,48 @@ class File(SQLModel, table=True):
     updated_at: Optional[str] = Field(default=None)
 
 
-class ChunkMeta(SQLModel, table=True):
-    __tablename__ = "chunks_meta"
+class ChunkContent(SQLModel, table=True):
+    __tablename__ = "chunk_content"
     __table_args__ = (
         UniqueConstraint(
             "repo_id",
             "file_id",
-            "start_line",
-            "end_line",
             "text_hash",
-            name="uq_chunk_meta_location_hash",
+            "embed_model",
+            name="uq_chunk_content_identity",
         ),
-        Index("ix_chunks_meta_repo_file", "repo_id", "file_id"),
+        Index("ix_chunk_content_repo_file", "repo_id", "file_id"),
     )
 
-    # Stable id for chunk (UUID string)
+    # Stable id for content (UUID string)
     id: str = Field(primary_key=True)
 
     repo_id: int = Field(foreign_key="repos.id")
     file_id: int = Field(foreign_key="files.id")
 
     text_hash: str
+    embed_model: str
+
+    first_indexed_at: Optional[str] = Field(default=None)
+    last_indexed_at: Optional[str] = Field(default=None)
+
+
+class ChunkLocation(SQLModel, table=True):
+    __tablename__ = "chunk_locations"
+    __table_args__ = (
+        UniqueConstraint(
+            "content_id",
+            "start_line",
+            "end_line",
+            name="uq_chunk_location_unique",
+        ),
+        Index("ix_chunk_locations_content", "content_id"),
+    )
+
+    id: str = Field(primary_key=True)
+
+    content_id: str = Field(foreign_key="chunk_content.id")
+
     start_line: int
     end_line: int
 
@@ -93,5 +115,4 @@ class ChunkMeta(SQLModel, table=True):
     symbol_name: Optional[str] = Field(default=None)
     symbol_path: Optional[str] = Field(default=None)
 
-    embed_model: str
-    indexed_at: str  # ISO timestamp string
+    last_seen_at: Optional[str] = Field(default=None)
