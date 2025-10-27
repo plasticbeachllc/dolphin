@@ -19,13 +19,6 @@ dolphin/
 │   └── chunking_config.toml # Repository chunking configuration
 ├── .continue/               # Continue configuration files
 ├── instructions/            # Documentation and guides (this file)
-├── src/pb_kb/chunkers/      # File chunking implementations
-│   ├── repo_config.py       # Repository configuration system
-│   ├── py_chunker.py        # Python chunker
-│   ├── ts_chunker.py        # TypeScript chunker
-│   ├── md_chunker.py        # Markdown chunker
-│   ├── fallback_chunker.py  # Enhanced token-windowing chunker
-│   └── token_utils.py       # Tokenization utilities
 ├── tests/                   # Comprehensive test suite
 │   ├── unit/                # Unit tests for individual components
 │   │   ├── test_hashing.py  # Text canonicalization and SHA256 hashing
@@ -122,8 +115,8 @@ The personas system defines different AI agent personalities with specific behav
 - **Deep Dive**: Principal AI planner and systems architect who breaks work into ordered, testable increments, surfaces trade-offs and risks, and ensures production-ready patterns
 - **Journalist**: Meticulous project documentarian who synthesizes repository state and changes, highlights gaps between plans and reality, and maintains accurate records
 - **Little Ripper**: Junior software engineer who thrives on tight feedback cycles, follows specifications exactly, and implements small, verifiable changes
-- **Fancy Slave**: Pragmatic senior engineer focused on rapidly shipping reliable features for local/offline deployments, optimizing for resource-constrained environments
-- **Popeye**: Senior engineer at Plastic Beach responsible for implementation and engineering on high-priority projects, writing thoughtful, elegant, and maintainable code
+- **Fancy Slave**: Principal engineer focused on tackling projects' most difficult problems
+- **Popeye**: Senior engineer responsible for implementation and writing thoughtful, elegant, and maintainable code
 
 ### Repository Chunking Configuration System
 
