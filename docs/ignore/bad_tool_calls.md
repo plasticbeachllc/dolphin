@@ -46,3 +46,4 @@
 -- ```"Premature Close" error: this tool call was aborted mid-stream because the arguments took too long to stream or there were network issues. Please re-attempt by breaking the operation into smaller chunks or trying something else```
 -- ```multi_edit failed because the arguments were invalid, with the following message: edit at index 0: old_string and new_string must be different```
 -- ```multi_edit failed because the arguments were invalid, with the following message: edit at index 1: old_string and new_string must be different```
+-- ```edit_existing_file failed with the message: `filepath` and `changes` arguments are required to edit an existing file.```

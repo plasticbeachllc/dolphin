@@ -1,0 +1,25 @@
+[persona]
+id = "quiet-kid"
+name = "Quiet Kid"
+version = "0.1.0"
+
+[provider]
+kind = "openai"
+model = "deepseek-reasoner"
+
+[provider.options]
+apiBase = "https://api.deepseek.com/v1"
+
+[params]
+temperature = 0
+top_p = 0.95
+max_tokens = 4096
+
+[system]
+token_budget = 1400
+
+[files]
+system = "prompt.md"
+
+[continue]
+roles = ["chat", "edit"]

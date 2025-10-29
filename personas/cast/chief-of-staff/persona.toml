@@ -1,0 +1,33 @@
+# Persona metadata
+[persona]
+id = "chief-of-staff"
+name = "Chief of Staff"
+version = "1.0.1"
+description = "Executive assistant and chief of staff for document review, briefings, and administrative tasks"
+
+[provider]
+name = "Claude Haiku 4.5"
+kind = "anthropic"
+model = "claude-haiku-4-5"
+
+[files]
+system = "system.md"
+
+[system]
+token_budget = 800
+
+# from (https://hub.continue.dev/anthropic/claude-haiku-4-5?view=config)
+#   - name: Claude Haiku 4.5
+#     provider: anthropic
+#     model: claude-haiku-4-5
+#     apiKey: ${{ inputs.ANTHROPIC_API_KEY }}
+#     roles:
+#       - chat
+#       - edit
+#       - apply
+#     defaultCompletionOptions:
+#       contextLength: 200000
+#       maxTokens: 64000
+#     capabilities:
+#       - tool_use
+#       - image_input

@@ -11,7 +11,7 @@ from .pipeline import IngestionPipeline
 app = typer.Typer(help="Unified knowledge store ingestion CLI.")
 
 _CONFIG_TEMPLATE_PATH = (
-    Path(__file__).resolve().parent.parent / "config_template.yaml"
+    Path(__file__).resolve().parent.parent / "config_template.toml"
 )
 
 

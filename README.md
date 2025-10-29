@@ -1,218 +1,91 @@
-# dolphin
+# 🐬 Dolphin
 
-Your personal AI companion.
+A full-stack AI enablement platform that integrates semantic code retrieval with multiple AI interfaces to provide intelligent assistance across development workflows.
+
+## Overview
+
+Dolphin is designed to power intelligent coding and documentation assistance through:
+
+1. **OpenWebUI** — General-purpose conversational AI interface for researching code, planning, and documentation
+2. **Continue (VSCode)** — IDE-integrated assistant for real-time code completion, explanation, and refactoring
+3. **Custom MCP Servers** — Extensible Model Context Protocol integrations providing domain-specific tools and capabilities
+
+At its core, Dolphin combines:
+- **Personas System** — Multiple AI agent personalities with specific behaviors and guardrails
+- **Unified Knowledge Store** — Semantic retrieval system for code and documentation with intelligent chunking and embeddings
+- **Metadata Management** — SQLite-backed provenance and session tracking
+- **Vector Indexing** — LanceDB-powered semantic search for efficient retrieval
 
 ---
 
-## 🚀 Getting Started
+## 🎯 Current Implementation Status
+
+### ✅ PHASES 1-6 COMPLETE: Knowledge Base Pipeline
+
+**Phase 6 (Embeddings & Pipeline)** — ✅ Complete
+- ✅ Full KB pipeline operational and tested (147/147 tests passing)
+- ✅ OpenAI embedding integration with exponential backoff retry logic
+- ✅ SQLite + LanceDB storage layer working
+- ✅ Git-aware incremental indexing
+- ✅ Language-specific chunking (Python, TypeScript, Markdown, fallback)
+- ✅ Per-repository configuration system
+- ✅ Content-based deduplication
+- ✅ Idempotent ingestion (safe re-runs)
+
+### 🔜 PHASE 7 (NEXT PRIORITY): Retriever HTTP API
+
+**Status**: Skeleton exists, endpoints not yet implemented.
+
+**Required endpoints**:
+- ❌ `GET /v1/health` — shallow check (current) + deep check (lancedb, embeddings status)
+- ❌ `GET /v1/repos` — list all repositories with metadata
+- ❌ `POST /v1/search` — semantic search with pagination, cursors, filtering
+- ❌ `GET /v1/chunks/{id}` — fetch specific chunk by ID
+- ❌ `GET /v1/file` — fetch file slice [start, end] from disk
+
+**Location**: `src/pb_kb/api/app.py` (FastAPI, port 127.0.0.1:7777)
+
+### 🔄 PHASE 5b (IN PROGRESS): MCP Bridge
+
+**Status**: Specification complete, scaffolding done, **blocked on Phase 7**.
+
+**Location**: `mcp-bridge/` (TypeScript + Bun runtime)
+
+**Completed**:
+- ✅ Specification and design (`docs/phase-5-mcp-bridge-spec.md`)
+- ✅ Project structure and scaffolding
+- ✅ Unit test framework with mock REST server
+- ✅ Tool definitions and error handling
+- ✅ JSONL logging with rotation
+
+**Awaiting Phase 7**:
+- 🔜 Tool implementations (search_knowledge, fetch_chunk, fetch_lines, open_in_editor, get_vector_store_info, get_metadata)
+- 🔜 Integration tests with real REST service
+- 🔜 Content truncation logic (50 KB budget enforcement)
+- 🔜 Pagination cursor handling
+
+**Tier 1 Tools** (when Phase 7 ready):
+- `search_knowledge` — Query repos, return ranked snippets with citations
+- `fetch_chunk` — Get full chunk by ID
+- `fetch_lines` — Read file slice
+- `open_in_editor` — Generate vscode://file URI for Continue
+
+**Tier 2 Tools** (when Phase 7 ready):
+- `get_vector_store_info` — Namespaces, dims, limits, counts
+- `get_metadata` — Chunk metadata
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
-*   just
-*   Docker
-*   Python >=3.13 (with `uv` installed)
+- **Python** ≥3.13 with `uv` package manager
+- **Bun** (for MCP Bridge)
+- **Docker** (for OpenWebUI)
+- **Git** (for repository scanning)
+- **OpenAI API Key** (for embeddings)
 
-### Installation & Setup
+### Setup
 
-1.  Clone the repository:
-    ```sh
-    git clone <your-repo-url>
-    cd dolphin
-    ```
-2.  Run the setup command:
-    ```sh
-    just setup
-    ```
+1. **Clone and initialize**:
 
-## 🤖 Usage
-
-To start all services for the AI companion, run:
-```sh
-just run
-```
-
-This will launch OpenWebUI and the necessary backend MCP servers.
-
-### Common Commands
-
-*   `just run`: Starts all services.
-*   `just stop`: Stops all services.
-*   `just setup-openwebui`: Pulls the latest images and starts the web UI.
-*   `just test`: Runs the project's test runner (tests.run_tests) which discovers test_*.py modules in the tests/ directory and executes their run_test() functions.
-
-To see all available commands, run:
-```sh
-just list
-```
-
-### Testing
-
-The project uses **pytest** as the primary test framework with comprehensive fixture support and integration testing.
-
-Run the complete test suite:
-```sh
-uv run pytest -q
-```
-
-Run specific test categories:
-```sh
-# Run only unit tests
-uv run pytest tests/unit/ -q
-
-# Run only integration tests  
-uv run pytest tests/integration/ -q
-
-# Run with coverage reporting
-uv run pytest --cov=src/pb_kb --cov-report=html
-```
-
-**Test Status**: ✅ **Complete Test Framework**
-- **147/147 tests passing** with comprehensive coverage
-- **Unit Tests**: 144 passing - Core component functionality
-- **Integration Tests**: 21 passing - Component interactions and workflows
-- **Skipped Tests**: 2 - External service dependencies
-- **Execution Time**: ~2.8 seconds for full test suite
-
-## 🎭 Personas
-
-The dolphin project includes a personas system that allows you to define and use different AI agent personalities with specific behaviors, guardrails, and configurations.
-
-## 🧠 Knowledge Base & Chunking System
-
-### ✅ Phase 4 Complete: Chunker Registry & Integration
-
-The project features a sophisticated knowledge base system with language-aware file chunking for semantic retrieval. The chunker registry system provides unified, configuration-driven routing of files to appropriate chunkers.
-
-### Chunking Features
-- **Repository Configuration**: Per-repository token window sizes via `.dolphin/chunking_config.toml`
-- **Language-Aware Chunking**: Specialized chunkers for Python, TypeScript, and Markdown
-- **Token-Based Windowing**: Accurate token counting using tiktoken with configurable overlap
-- **Enhanced Fallback Chunker**: Robust token-windowing for generic file types (JSON, YAML, plain text, etc.)
-- **Accurate Line Mapping**: Binary search-based line number tracking with 1-based indexing
-- **Chunker Registry**: Automatic routing based on file extension and language
-- **Global Configuration**: Consolidated settings in `.dolphin/config.toml`
-
-### Available Chunkers
-- ✅ **Python Chunker**: Tree-sitter based symbol extraction (classes, functions, methods)
-- ✅ **TypeScript/TSX Chunker**: Tree-sitter based symbol extraction with token windowing
-- ✅ **Markdown Chunker**: Heading-aware section chunking with YAML front matter
-- ✅ **Fallback Chunker**: Token-windowing for all other file types with accurate line mapping
-- ✅ **Chunker Registry**: Routes 50+ file extensions to appropriate chunkers
-
-### Configuration Examples
-
-**Repository Configuration** (`.dolphin/chunking_config.toml`):
-```toml
-default_window_size = 350
-
-[per_language]
-python = 512
-typescript = 350
-markdown = 256
-
-[embeddings]
-model = "text-embedding-3-small"
-```
-
-**Global Configuration** (`.dolphin/config.toml`):
-```toml
-# Extension → Language mappings
-[languages]
-py = "python"
-ts = "typescript"
-md = "markdown"
-json = "json"
-# ... 50+ mappings
-
-[chunking]
-default_window_size = 350
-overlap_pct = 0.10
-
-[chunking.per_language]
-python = 512
-typescript = 350
-markdown = 256
-```
-
-### Available Personas
-
-- **Deep Dive**: Principal AI planner and systems architect who breaks work into ordered, testable increments, surfaces trade-offs and risks, and ensures production-ready patterns
-- **Journalist**: Meticulous project documentarian who synthesizes repository state and changes, highlights gaps between plans and reality, and maintains accurate records
-- **Little Ripper**: Junior software engineer who thrives on tight feedback cycles, follows specifications exactly, and implements small, verifiable changes
-- **Fancy Slave**: Pragmatic cheap labor focused on conversation, efficiency, and adaptability
-- **Popeye**: Senior engineer at Plastic Beach responsible for implementation and engineering on high-priority projects, writing thoughtful, elegant, and maintainable code
-
-### Personas Commands
-
-* `just personas-list`: List all available personas
-* `just personas-preview --id <persona_id>`: Preview a specific persona's configuration and system message
-* `just personas-generate`: Generate Continue config from all personas (writes to `.continue/agents/personas_config.yaml`)
-
-### Persona Structure
-
-Each persona is defined in its own directory under `personas/` with the following structure:
-
-```
-personas/
-  ├── <persona-id>/
-  │   ├── persona.toml    # Persona metadata and configuration
-  │   ├── system.md       # System prompt and behavior definition
-  │   └── guardrails.md   # Safety rules and constraints
-```
-
-### Creating a New Persona
-
-1. Create a new directory under `personas/` with a slug-style name (e.g., `my-new-persona`)
-2. Add the required files:
-   - `persona.toml`: Define persona metadata, provider settings, and parameters
-   - `system.md`: Write the system prompt that defines the persona's behavior
-   - `guardrails.md`: (Optional) Add safety rules and constraints
-3. Use `just personas-preview --id my-new-persona` to validate your persona
-4. Run `just personas-generate` to include it in the Continue configuration
-
-### Example: Previewing a Persona
-
-```sh
-just personas-preview --id journalist --verbose
-```
-
-This will show the compiled system message, token usage, and any trimming steps applied to fit within the token budget.
-
-## 🧪 Testing
-
-### Test Framework
-
-The project features a comprehensive test framework with both unit and integration tests:
-
-**Unit Tests** (`tests/unit/`)
-- Core components: hashing, scanning, token utilities, deduplication
-- Chunkers: Python, TypeScript, Markdown, fallback with advanced behavior
-- Storage: SQLite metadata and LanceDB vector stores
-- Embeddings: Retry logic and error handling
-
-**Integration Tests** (`tests/integration/`)
-- Pipeline workflows: scanning, indexing, and search
-- Performance testing with large repositories
-- Error handling and recovery scenarios
-- Git repository integration
-
-Run comprehensive tests:
-```sh
-# Run all tests
-uv run pytest -q
-
-# Test specific components
-uv run pytest tests/unit/test_chunkers/ -q
-uv run pytest tests/unit/test_store/ -q
-uv run pytest tests/integration/ -q
-
-# Test with detailed output
-uv run pytest -v
-```
-
-**Test Status**: ✅ **Complete Test Framework**
-- **147/147 tests passing** with comprehensive coverage
-- **Unit Tests**: 144 passing - Core component functionality
-- **Integration Tests**: 21 passing - Component interactions and workflows
-- **Skipped Tests**: 2 - External service dependencies
-- **Execution Time**: ~2.8 seconds for full test suite

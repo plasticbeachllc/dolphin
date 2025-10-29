@@ -347,7 +347,7 @@ Testing and validation
    - Continue: add context via retriever and verify code navigation usefulness.
    - OpenWebUI: SWE agent uses search_knowledge then answers grounded questions.
 
-Rollout plan (Current Status)
+Rollout plan (Current Status)a
 ✅ **Phase 1-3 Complete**: Core pipeline implementation
 - Project bootstrap with uv, SQLite schema, ignore logic, hashing, Typer CLI
 - TS/Python chunkers via tree-sitter; OpenAI embeddings client; LanceDB writers; session ledger
@@ -470,3 +470,5 @@ Notes
 - All networking binds to localhost. Expose beyond localhost only with explicit opt-in later.
 - Embedding prices vary; configure prices for accurate budget enforcement.
 - Keep API keys in environment (not committed). Use a .env file only if you are comfortable, but .env is excluded from indexing by default.
+
+

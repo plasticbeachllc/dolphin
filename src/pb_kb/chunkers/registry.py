@@ -134,6 +134,11 @@ def _load_global_extension_map() -> Dict[str, str]:
         repo_root = PathLib(__file__).parent.parent.parent.parent
         config_path = repo_root / ".dolphin" / "config.toml"
         
+        # Also check in the default config location
+        if not config_path.exists():
+            config_path = PathLib.home() / ".dolphin" / "knowledge_store" / "config.toml"
+        
+        # If we still don't find it, error
         if not config_path.exists():
             _log.debug("No global config at %s, using defaults", config_path)
             return _DEFAULT_EXTENSION_MAP.copy()

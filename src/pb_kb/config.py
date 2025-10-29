@@ -4,12 +4,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
-import yaml
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 
 from .ignores import DEFAULT_IGNORE_PATTERNS
 
 CONFIG_ROOT = Path.home() / ".dolphin" / "knowledge_store"
-DEFAULT_CONFIG_PATH = CONFIG_ROOT / "config.yaml"
+DEFAULT_CONFIG_PATH = CONFIG_ROOT / "config.toml"
 
 
 def _to_path(value: Any) -> Path:
@@ -64,8 +67,8 @@ def load_config(path: Path | None = None) -> KBConfig:
     """Load configuration values from disk or fall back to defaults."""
     config_path = path or DEFAULT_CONFIG_PATH
     if config_path.exists():
-        with config_path.open("r", encoding="utf-8") as handle:
-            data = yaml.safe_load(handle) or {}
+        with config_path.open("rb") as handle:
+            data = tomllib.load(handle) or {}
         if not isinstance(data, Mapping):
             raise ValueError(f"Config file {config_path} must contain a mapping.")
         return KBConfig.from_mapping(data)
