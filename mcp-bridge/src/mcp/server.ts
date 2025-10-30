@@ -1,4 +1,4 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { tools } from './tools/index.js'
 import { initLogger, logInfo } from '../util/logger.js'
@@ -7,18 +7,27 @@ export async function createServer (): Promise<void> {
   // Initialize file logger (no stdout pollution)
   await initLogger()
 
-  const server = new Server({
-    name: 'pb-kb-mcp',
-    version: '0.2.0',
-    capabilities: {
-      tools: { listChanged: false },
-      logging: {}
+  const server = new McpServer(
+    {
+      name: 'pb-kb-mcp',
+      version: '0.2.0'
+    },
+    {
+      capabilities: {
+        tools: { listChanged: false },
+        logging: {}
+      }
     }
-  })
+  )
 
   // Register tools
   for (const tool of tools) {
-    server.tool(tool.definition, tool.handler)
+    server.registerTool(tool.definition.name, {
+      title: tool.definition.annotations?.title,
+      description: tool.definition.description,
+      inputSchema: tool.inputSchema,
+      annotations: tool.definition.annotations
+    }, tool.handler)
   }
 
   // Start transport

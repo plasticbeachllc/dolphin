@@ -5,14 +5,16 @@ import { restGetFileSlice } from '../../rest/client.js'
 import { mimeFromLangOrPath } from '../../util/mime.js'
 import { logInfo, logError } from '../../util/logger.js'
 
-const INPUT = z.object({
+const INPUT_SHAPE = {
   repo: z.string(),
   path: z.string(),
   start: z.number().int().min(1),
   end: z.number().int().min(1)
-})
+}
 
-export function makeFetchLines (): { definition: Tool, handler: any } {
+const INPUT = z.object(INPUT_SHAPE)
+
+export function makeFetchLines (): { definition: Tool, handler: any, inputSchema: typeof INPUT_SHAPE } {
   const definition: Tool = {
     name: 'fetch_lines',
     description: 'Fetch a file slice [start, end] inclusive from disk and return fenced code with citation.',
@@ -42,5 +44,5 @@ export function makeFetchLines (): { definition: Tool, handler: any } {
     }
   }
 
-  return { definition, handler }
+  return { definition, handler, inputSchema: INPUT_SHAPE }
 }

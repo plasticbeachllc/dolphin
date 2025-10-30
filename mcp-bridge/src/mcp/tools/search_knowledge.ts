@@ -6,7 +6,7 @@ import { mimeFromLangOrPath } from '../../util/mime.js'
 import { jsonSizeBytes } from '../../util/payloadCap.js'
 import { logInfo, logWarn, logError } from '../../util/logger.js'
 
-const INPUT = z.object({
+const INPUT_SHAPE = {
   query: z.string().min(1),
   repos: z.array(z.string()).optional(),
   path_prefix: z.array(z.string()).optional(),
@@ -16,7 +16,9 @@ const INPUT = z.object({
   embed_model: z.enum(['small', 'large']).optional().default('small'),
   score_cutoff: z.number().optional(),
   cursor: z.string().optional()
-})
+}
+
+const INPUT = z.object(INPUT_SHAPE)
 
 type Input = z.infer<typeof INPUT>
 
@@ -46,7 +48,7 @@ function buildPromptReady (res: SearchResponse): string {
   return parts.join('\n') + (parts.length ? '\n' : '')
 }
 
-export function makeSearchKnowledge (): { definition: Tool, handler: any } {
+export function makeSearchKnowledge (): { definition: Tool, handler: any, inputSchema: typeof INPUT_SHAPE } {
   const definition: Tool = {
     name: 'search_knowledge',
     description: 'Query code and docs across indexed repositories and return ranked snippets with citations.',
@@ -227,5 +229,5 @@ export function makeSearchKnowledge (): { definition: Tool, handler: any } {
     }
   }
 
-  return { definition, handler }
+  return { definition, handler, inputSchema: INPUT_SHAPE }
 }

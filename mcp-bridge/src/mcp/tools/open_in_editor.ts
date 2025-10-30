@@ -4,12 +4,14 @@ import { zodToJsonSchema } from 'zod-to-json-schema'
 import { restListRepos, type RepoInfo } from '../../rest/client.js'
 import { logInfo, logError } from '../../util/logger.js'
 
-const INPUT = z.object({
+const INPUT_SHAPE = {
   repo: z.string(),
   path: z.string(),
   line: z.number().int().min(1).optional(),
   column: z.number().int().min(1).optional()
-})
+}
+
+const INPUT = z.object(INPUT_SHAPE)
 
 type CacheEntry = { ts: number, repos: RepoInfo[] }
 let cache: CacheEntry | null = null
@@ -19,7 +21,7 @@ function isExpired (entry: CacheEntry): boolean {
   return (Date.now() - entry.ts) > TTL_MS
 }
 
-export function makeOpenInEditor (): { definition: Tool, handler: any } {
+export function makeOpenInEditor (): { definition: Tool, handler: any, inputSchema: typeof INPUT_SHAPE } {
   const definition: Tool = {
     name: 'open_in_editor',
     description: 'Compute a vscode://file URI for a repo path and optional position.',
@@ -60,5 +62,5 @@ export function makeOpenInEditor (): { definition: Tool, handler: any } {
     }
   }
 
-  return { definition, handler }
+  return { definition, handler, inputSchema: INPUT_SHAPE }
 }

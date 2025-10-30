@@ -4,9 +4,10 @@ import { zodToJsonSchema } from 'zod-to-json-schema'
 import { restGetChunk } from '../../rest/client.js'
 import { logInfo, logError } from '../../util/logger.js'
 
-const INPUT = z.object({ chunk_id: z.string() })
+const INPUT_SHAPE = { chunk_id: z.string() }
+const INPUT = z.object(INPUT_SHAPE)
 
-export function makeGetMetadata (): { definition: Tool, handler: any } {
+export function makeGetMetadata (): { definition: Tool, handler: any, inputSchema: typeof INPUT_SHAPE } {
   const definition: Tool = {
     name: 'get_metadata',
     description: 'Return metadata for a chunk by chunk_id.',
@@ -31,5 +32,5 @@ export function makeGetMetadata (): { definition: Tool, handler: any } {
     }
   }
 
-  return { definition, handler }
+  return { definition, handler, inputSchema: INPUT_SHAPE }
 }

@@ -5,9 +5,10 @@ import { restGetChunk } from '../../rest/client.js'
 import { mimeFromLangOrPath } from '../../util/mime.js'
 import { logInfo, logError } from '../../util/logger.js'
 
-const INPUT = z.object({ chunk_id: z.string() })
+const INPUT_SHAPE = { chunk_id: z.string() }
+const INPUT = z.object(INPUT_SHAPE)
 
-export function makeFetchChunk (): { definition: Tool, handler: any } {
+export function makeFetchChunk (): { definition: Tool, handler: any, inputSchema: typeof INPUT_SHAPE } {
   const definition: Tool = {
     name: 'fetch_chunk',
     description: 'Fetch a chunk by chunk_id and return fenced code with citation.',
@@ -39,5 +40,5 @@ export function makeFetchChunk (): { definition: Tool, handler: any } {
     }
   }
 
-  return { definition, handler }
+  return { definition, handler, inputSchema: INPUT_SHAPE }
 }
