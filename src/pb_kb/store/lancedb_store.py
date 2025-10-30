@@ -33,9 +33,9 @@ class LanceDBStore:
         db = lancedb.connect(self.root.as_posix())
 
         def _vector_field(dim: int) -> pa.Field:
-            # Arrow has no fixed-size list for variable enforcement in LanceDB;
-            # use a list<float32>, LanceDB will validate vector length at write.
-            return pa.field("vector", pa.list_(pa.float32()))
+            # Use fixed-size list for LanceDB vector search to work properly
+            # Syntax: pa.list_(value_type, list_size) creates a FixedSizeListType
+            return pa.field("vector", pa.list_(pa.float32(), dim))
 
         def _schema_for(dim: int) -> pa.Schema:
             fields = [
@@ -146,9 +146,66 @@ class LanceDBStore:
         self,
         query_vector: Sequence[float],
         *,
+        model: str = "small",
         repo: str | None = None,
         top_k: int = 8,
     ) -> list[dict[str, Any]]:
-        """Return an empty result set until retrieval is implemented."""
-        _ = (query_vector, repo, top_k)
-        return []
+        """Execute KNN search against the vector store.
+
+        Args:
+            query_vector: The query embedding vector
+            model: Model type ('small' or 'large') determines which table to search
+            repo: Optional repository filter (exact match on 'repo' field)
+            top_k: Number of nearest neighbors to return
+
+        Returns:
+            List of matching chunks with metadata, sorted by similarity (closest first)
+        """
+        import lancedb
+
+        # Map model to table name and expected dimension
+        model_to_table = {
+            'small': 'chunks_small',
+            'large': 'chunks_large'
+        }
+        model_to_dim = {
+            'small': 1536,
+            'large': 3072
+        }
+
+        if model not in model_to_table:
+            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
+
+        table_name = model_to_table[model]
+        expected_dim = model_to_dim[model]
+
+        # Validate query vector dimension
+        if len(query_vector) != expected_dim:
+            raise ValueError(
+                f"Query vector dimension mismatch for model '{model}': "
+                f"expected {expected_dim}, got {len(query_vector)}"
+            )
+
+        # Connect to database and open table
+        db = lancedb.connect(self.root.as_posix())
+
+        try:
+            table = db.open_table(table_name)
+        except Exception:
+            # Table doesn't exist yet
+            return []
+
+        # Build search query - explicitly specify vector column name
+        search_query = table.search(list(query_vector), vector_column_name="vector").limit(top_k)
+
+        # Add repository filter if specified
+        if repo is not None:
+            search_query = search_query.where(f"repo = '{repo}'")
+
+        # Execute search and convert to list of dicts
+        try:
+            results = search_query.to_list()
+            return results
+        except Exception:
+            # Handle empty table or other search errors
+            return []

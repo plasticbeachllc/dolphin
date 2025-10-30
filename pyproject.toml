@@ -55,7 +55,7 @@ dev = [
 
 [project.scripts]
 kb = "pb_kb.ingest.cli:app"
-kb-api = "pb_kb.api.app:main"
+kb-api = "pb_kb.api.server:main"
 personas = "personas.src.personas:app"
 
 [tool.hatch.build.targets.wheel]

@@ -1,13 +1,31 @@
 from __future__ import annotations
 
 from inspect import isawaitable
+from pathlib import Path
 from time import perf_counter
 from typing import Awaitable, Iterable, Protocol, Sequence
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
 app = FastAPI(title="Unified Knowledge Store", version="0.1.0")
+
+# Will be set by server startup
+_sql_store = None
+_lance_store = None
+
+def set_stores(sql_store, lance_store):
+    """Set the SQL and Lance stores for API endpoints."""
+    global _sql_store, _lance_store
+    _sql_store = sql_store
+    _lance_store = lance_store
+
+
+def reset_stores():
+    """Reset stores to None (for testing)."""
+    global _sql_store, _lance_store
+    _sql_store = None
+    _lance_store = None
 
 
 class SearchRequest(BaseModel):
@@ -60,8 +78,33 @@ def reset_search_backend() -> None:
 
 
 @app.get("/v1/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+async def health(check: str = Query(default="shallow")) -> dict[str, object]:
+    """Health check endpoint with optional deep checks."""
+    if check == "shallow":
+        return {"status": "ok"}
+
+    # Deep health check
+    checks = {}
+
+    # Check LanceDB
+    if _lance_store is not None:
+        try:
+            # Try to connect
+            _lance_store.connect()
+            checks["lancedb"] = "ok"
+        except Exception:
+            checks["lancedb"] = "error"
+    else:
+        checks["lancedb"] = "not_configured"
+
+    # Check embeddings (just verify backend exists)
+    backend = get_search_backend()
+    if backend and not isinstance(backend, _EmptySearchBackend):
+        checks["embeddings"] = "ok"
+    else:
+        checks["embeddings"] = "not_configured"
+
+    return {"status": "ok", "checks": checks}
 
 
 @app.post("/v1/search")
@@ -86,6 +129,167 @@ async def search(request: SearchRequest) -> dict[str, object]:
             "max_snippet_tokens": request.max_snippet_tokens,
         },
     }
+
+
+@app.get("/v1/repos")
+async def list_repos() -> dict[str, list[dict[str, object]]]:
+    """List all registered repositories with metadata."""
+    if _sql_store is None:
+        raise HTTPException(status_code=503, detail="SQL store not initialized")
+
+    # Query all repos from SQL store
+    try:
+        import sqlite3
+        from contextlib import closing
+
+        repos = []
+        with _sql_store._connect() as conn, closing(conn.cursor()) as cur:
+            # Get all repos
+            cur.execute("SELECT id, name, root_path, default_embed_model FROM repos")
+            repo_rows = cur.fetchall()
+
+            for repo_row in repo_rows:
+                repo_id, name, root_path, default_model = repo_row
+
+                # Count files for this repo
+                cur.execute("SELECT COUNT(*) FROM files WHERE repo_id = ?", (repo_id,))
+                file_count = cur.fetchone()[0]
+
+                # Count chunks for this repo
+                cur.execute("SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,))
+                chunk_count = cur.fetchone()[0]
+
+                repos.append({
+                    "name": name,
+                    "path": root_path,
+                    "default_embed_model": default_model,
+                    "files": file_count,
+                    "chunks": chunk_count
+                })
+
+        return {"repos": repos}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@app.get("/v1/chunks/{chunk_id}")
+async def fetch_chunk(chunk_id: str) -> dict[str, object]:
+    """Fetch a specific chunk by ID."""
+    if _lance_store is None:
+        raise HTTPException(status_code=503, detail="Vector store not initialized")
+
+    try:
+        import lancedb
+
+        # Connect to LanceDB and search for the chunk by ID
+        db = lancedb.connect(_lance_store.root.as_posix())
+
+        # Try both small and large tables
+        for table_name in ["chunks_small", "chunks_large"]:
+            try:
+                table = db.open_table(table_name)
+                # Query by ID
+                results = table.search().where(f"id = '{chunk_id}'").limit(1).to_list()
+
+                if results:
+                    result = results[0]
+                    return {
+                        "chunk_id": result.get("id"),
+                        "repo": result.get("repo"),
+                        "path": result.get("path"),
+                        "start_line": result.get("start_line"),
+                        "end_line": result.get("end_line"),
+                        "text_hash": result.get("text_hash"),
+                        "commit": result.get("commit"),
+                        "branch": result.get("branch"),
+                        "language": result.get("language"),
+                        "symbol_kind": result.get("symbol_kind"),
+                        "symbol_name": result.get("symbol_name"),
+                        "symbol_path": result.get("symbol_path"),
+                        "token_count": result.get("token_count"),
+                    }
+            except Exception:
+                continue
+
+        # Not found in any table
+        raise HTTPException(status_code=404, detail=f"Chunk not found: {chunk_id}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching chunk: {str(e)}")
+
+
+@app.get("/v1/file")
+async def fetch_file_slice(
+    repo: str = Query(..., description="Repository name"),
+    path: str = Query(..., description="File path relative to repo root"),
+    start: int = Query(1, description="Start line (1-indexed, inclusive)"),
+    end: int = Query(..., description="End line (1-indexed, inclusive)")
+) -> dict[str, object]:
+    """Fetch a slice of a file by line range."""
+    if _sql_store is None:
+        raise HTTPException(status_code=503, detail="SQL store not initialized")
+
+    try:
+        # Get repo info
+        repo_info = _sql_store.get_repo_by_name(repo)
+        if not repo_info:
+            raise HTTPException(status_code=404, detail=f"Repository not found: {repo}")
+
+        # Build full file path
+        repo_root = Path(repo_info["root_path"])
+        full_path = repo_root / path
+
+        # Security check: ensure path is within repo
+        try:
+            full_path = full_path.resolve()
+            if not str(full_path).startswith(str(repo_root.resolve())):
+                raise HTTPException(status_code=403, detail="Path outside repository")
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid file path")
+
+        # Check file exists
+        if not full_path.exists():
+            raise HTTPException(status_code=404, detail=f"File not found: {path}")
+
+        if not full_path.is_file():
+            raise HTTPException(status_code=400, detail=f"Not a file: {path}")
+
+        # Read file and extract lines
+        try:
+            with open(full_path, 'r', encoding='utf-8') as f:
+                all_lines = f.readlines()
+
+            # Convert to 0-indexed
+            start_idx = max(0, start - 1)
+            end_idx = min(len(all_lines), end)
+
+            if start_idx >= len(all_lines):
+                selected_lines = []
+            else:
+                selected_lines = all_lines[start_idx:end_idx]
+
+            # Join lines
+            content = ''.join(selected_lines)
+
+            return {
+                "repo": repo,
+                "path": path,
+                "start_line": start,
+                "end_line": end,
+                "content": content,
+                "total_lines": len(all_lines)
+            }
+
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=400, detail="File is not valid UTF-8")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
 
 
 def main() -> None:

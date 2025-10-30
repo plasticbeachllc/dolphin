@@ -45,6 +45,16 @@ zsh = "shell"
 txt = "text"
 log = "text"
 
+[embedding]
+# Provider type: "stub" (zero-vectors for testing) or "openai" (real embeddings)
+provider = "stub"
+
+# Batch size for API calls (only used with "openai" provider)
+batch_size = 100
+
+# Environment variable name containing the OpenAI API key
+api_key_env = "OPENAI_API_KEY"
+
 [embeddings]
 model = "text-embedding-3-small"
 default_embed_model = "small"

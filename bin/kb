@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+# Plastic Beach Knowledge Base CLI
+# Provides simple command-line access to the knowledge base
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+MCP_BRIDGE="$PROJECT_ROOT/mcp-bridge"
+
+# Check if kb-api is running
+check_api() {
+  if ! curl -s http://127.0.0.1:7777/v1/health > /dev/null 2>&1; then
+    echo "⚠️  kb-api server is not running" >&2
+    echo "   Start it with: kb-api" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Check if bun is installed
+check_bun() {
+  if ! command -v bun &> /dev/null; then
+    echo "❌ Error: bun is not installed" >&2
+    echo "   Install it from: https://bun.sh" >&2
+    return 1
+  fi
+  return 0
+}
+
+case "$1" in
+  search)
+    check_api || exit 1
+    check_bun || exit 1
+    shift
+    cd "$MCP_BRIDGE"
+    bun run kb-cli.ts search "$@"
+    ;;
+
+  repos)
+    check_api || exit 1
+    check_bun || exit 1
+    cd "$MCP_BRIDGE"
+    bun run kb-cli.ts repos
+    ;;
+
+  chunk)
+    check_api || exit 1
+    check_bun || exit 1
+    shift
+    cd "$MCP_BRIDGE"
+    bun run kb-cli.ts chunk "$@"
+    ;;
+
+  lines)
+    check_api || exit 1
+    check_bun || exit 1
+    shift
+    cd "$MCP_BRIDGE"
+    bun run kb-cli.ts lines "$@"
+    ;;
+
+  info)
+    check_api || exit 1
+    check_bun || exit 1
+    cd "$MCP_BRIDGE"
+    bun run kb-cli.ts info
+    ;;
+
+  # Direct curl-based commands (no bun required)
+  curl-search)
+    check_api || exit 1
+    shift
+    query="$*"
+    if [ -z "$query" ]; then
+      echo "Usage: kb curl-search <query>" >&2
+      exit 1
+    fi
+    curl -s -X POST http://127.0.0.1:7777/v1/search \
+      -H "Content-Type: application/json" \
+      -d "{\"query\": \"$query\", \"top_k\": ${KB_TOP_K:-5}}" | jq .
+    ;;
+
+  curl-repos)
+    check_api || exit 1
+    curl -s http://127.0.0.1:7777/v1/repos | jq .
+    ;;
+
+  curl-chunk)
+    check_api || exit 1
+    if [ -z "$2" ]; then
+      echo "Usage: kb curl-chunk <chunk-id>" >&2
+      exit 1
+    fi
+    curl -s "http://127.0.0.1:7777/v1/chunks/$2" | jq .
+    ;;
+
+  curl-file)
+    check_api || exit 1
+    if [ "$#" -lt 5 ]; then
+      echo "Usage: kb curl-file <repo> <path> <start> <end>" >&2
+      exit 1
+    fi
+    repo="$2"
+    path="$3"
+    start="$4"
+    end="$5"
+    curl -s "http://127.0.0.1:7777/v1/file?repo=$repo&path=$path&start=$start&end=$end" | jq .
+    ;;
+
+  health)
+    if curl -s http://127.0.0.1:7777/v1/health > /dev/null 2>&1; then
+      echo "✅ kb-api server is running"
+      curl -s http://127.0.0.1:7777/v1/health | jq .
+    else
+      echo "❌ kb-api server is not running"
+      exit 1
+    fi
+    ;;
+
+  help|--help|-h|"")
+    cat <<'EOF'
+Plastic Beach Knowledge Base CLI
+
+Usage: kb <command> [options]
+
+High-level commands (requires bun):
+  search <query>                 Search the knowledge base
+  repos                          List indexed repositories
+  chunk <chunk-id>               Fetch a chunk by ID
+  lines <repo> <path> <start> <end>
+                                 Fetch file lines
+  info                           Show vector store info
+
+Direct REST API commands (curl-based, no bun required):
+  curl-search <query>            Search via curl (outputs JSON)
+  curl-repos                     List repos via curl (outputs JSON)
+  curl-chunk <chunk-id>          Fetch chunk via curl (outputs JSON)
+  curl-file <repo> <path> <start> <end>
+                                 Fetch file via curl (outputs JSON)
+  health                         Check if kb-api is running
+
+Environment Variables:
+  KB_TOP_K=N                     Number of search results (default: 5)
+  KB_REPOS=repo1,repo2           Filter search to specific repos
+
+Examples:
+  # Search for code
+  kb search "authentication function"
+  KB_TOP_K=10 kb search "error handling"
+  KB_REPOS=api-server kb search "login"
+
+  # List repositories
+  kb repos
+  kb curl-repos | jq '.repos[] | .name'
+
+  # Fetch chunk
+  kb chunk abc123def456
+
+  # Fetch file lines
+  kb lines my-repo src/main.py 1 50
+
+  # Get store info
+  kb info
+
+  # Check API health
+  kb health
+
+  # Raw API calls with curl
+  kb curl-search "function" | jq '.hits[] | {repo, path, score}'
+  kb curl-chunk abc123 | jq '.content'
+
+Prerequisites:
+  - kb-api server must be running: kb-api
+  - At least one repository indexed: kb-index /path/to/repo --name my-repo
+  - bun installed (for high-level commands): https://bun.sh
+  - jq installed (recommended for curl commands): brew install jq
+
+Notes:
+  - Use 'curl-*' commands if you don't have bun installed
+  - The 'curl-*' commands output raw JSON that you can pipe to jq
+  - Regular commands provide nicely formatted output
+EOF
+    ;;
+
+  *)
+    echo "Error: Unknown command '$1'" >&2
+    echo "Run 'kb help' for usage information" >&2
+    exit 1
+    ;;
+esac

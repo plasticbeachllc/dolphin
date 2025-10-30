@@ -34,12 +34,17 @@ class KBConfig:
     score_cutoff: float = 0.15
     top_k: int = 8
     max_snippet_tokens: int = 240
+    # Embedding provider configuration
+    embedding_provider: str = "stub"  # 'stub' or 'openai'
+    embedding_batch_size: int = 100
+    openai_api_key_env: str = "OPENAI_API_KEY"
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "KBConfig":
         """Create a configuration object from a mapping."""
         ignore_values = data.get("ignore") or DEFAULT_IGNORE_PATTERNS
         retrieval = data.get("retrieval") or {}
+        embedding = data.get("embedding") or {}
         return cls(
             store_root=_to_path(data.get("store_root", CONFIG_ROOT)),
             endpoint=str(data.get("endpoint", "127.0.0.1:7777")),
@@ -55,6 +60,15 @@ class KBConfig:
             top_k=int(retrieval.get("top_k", data.get("top_k", 8))),
             max_snippet_tokens=int(
                 retrieval.get("max_snippet_tokens", data.get("max_snippet_tokens", 240))
+            ),
+            embedding_provider=str(
+                embedding.get("provider", data.get("embedding_provider", "stub"))
+            ),
+            embedding_batch_size=int(
+                embedding.get("batch_size", data.get("embedding_batch_size", 100))
+            ),
+            openai_api_key_env=str(
+                embedding.get("api_key_env", data.get("openai_api_key_env", "OPENAI_API_KEY"))
             ),
         )
 
