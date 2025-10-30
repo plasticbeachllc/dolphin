@@ -233,3 +233,85 @@ kb:
 # Run KB API server
 kb-api:
 	uv run python -m pb_kb.api.app $*
+
+
+# Defaults (override on CLI: just NAME=myrepo ...)
+NAME ?= "dolphin"
+REPO_PATH ?= "$(pwd)"
+
+default:
+  @just --list
+
+# --- Environment & Setup ---
+
+venv:
+  python3 -m venv .venv
+  . .venv/bin/activate && pip install -U pip
+  . .venv/bin/activate && pip install -e .[dev]
+
+bun-install:
+  cd mcp-bridge && bun install
+
+# --- Services ---
+
+api:
+  . .venv/bin/activate && kb-api
+
+mcp:
+  bun run mcp-bridge/src/index.ts
+
+# --- Ingestion ---
+
+init:
+  . .venv/bin/activate && kb init
+
+add-repo name: path="$(pwd)"
+  . .venv/bin/activate && kb add-repo {{name}} {{path}} --default-embed-model large
+
+index name:
+  . .venv/bin/activate && kb index {{name}}
+
+reindex name:
+  . .venv/bin/activate && kb index {{name}} --full --force
+
+reset name: path="$(pwd)"
+  just init
+  just add-repo {{name}} {{path}}
+  just reindex {{name}}
+
+# --- Search & Tools ---
+
+repos:
+  ./bin/kb-search repos
+
+info:
+  ./bin/kb-search info
+
+health:
+  ./bin/kb-search health
+
+search query:
+  ./bin/kb-search search "{{query}}"
+
+chunk id:
+  ./bin/kb-search chunk {{id}}
+
+lines repo path start end:
+  ./bin/kb-search lines {{repo}} {{path}} {{start}} {{end}}
+
+curl-search query:
+  ./bin/kb-search curl-search "{{query}}"
+
+# --- Logs ---
+
+tail-mcp:
+  tail -f mcp-bridge/logs/mcp.log
+
+# --- Clean (dangerous) ---
+
+store-clean:
+  @echo "This will DELETE ~/.dolphin/knowledge_store"
+  @echo "Press Ctrl-C to abort or wait 5 seconds to continue..."
+  sleep 5
+  rm -rf ~/.dolphin/knowledge_store
+

@@ -129,11 +129,15 @@ def create_search_backend(
     embedding_provider = create_provider(embedding_provider_type, **embedding_kwargs)
 
     # Create LanceDB store
-    lance_root = store_root / "vectors"
+    lance_root = store_root / "lancedb"
     lance_store = LanceDBStore(lance_root)
 
     # Create SQL metadata store
-    sql_path = store_root / "metadata.db"
+    sql_path = store_root / "knowledge.db"
     sql_store = SQLiteMetadataStore(sql_path)
+
+    # Ensure stores are initialized (match ingestion pipeline expectations)
+    sql_store.initialize()
+    lance_store.initialize_collections()
 
     return KnowledgeSearchBackend(embedding_provider, lance_store, sql_store)

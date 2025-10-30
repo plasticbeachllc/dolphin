@@ -202,7 +202,7 @@ The inspector provides a GUI to:
 
 ## Option 4: Direct CLI Tool
 
-A command-line tool is provided for direct access to the knowledge base.
+A command-line tool is provided for direct access to the knowledge base. You can also use the Justfile shortcuts.
 
 ### Setup
 
@@ -216,6 +216,18 @@ Or create a symlink:
 
 ```bash
 ln -s /Users/tdc/worktable/dolphin/bin/kb-search /usr/local/bin/kb-search
+
+### Using the Justfile
+
+```bash
+just venv && just bun-install
+just api     # start REST API
+just mcp     # start MCP bridge
+just reindex dolphin
+just search "authentication"
+```
+
+See docs/JUSTFILE_REFERENCE.md for the full list.
 ```
 
 ### Usage
