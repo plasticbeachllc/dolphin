@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Any
 
+from pathspec import PathSpec
+
 from ..config import KBConfig
 from ..store import LanceDBStore, SQLiteMetadataStore
 from ..ingest.scanner import FileCandidate, scan_repo
@@ -85,10 +87,11 @@ class IngestionPipeline:
             "**/*service_account.json",
             "**/*auth.json",
         }
-        merged_ignores = set(self.config.ignore) | extra_security
+        ignore_patterns = build_ignore_set(self.config.ignore)
+        ignore_patterns.update(extra_security)
 
         # Scan
-        candidates: List[FileCandidate] = scan_repo(root, merged_ignores)
+        candidates: List[FileCandidate] = scan_repo(root, ignore_patterns)
 
         summary = {
             "repo": repo_name,
@@ -184,6 +187,21 @@ class IngestionPipeline:
         # Initialize error logger
         error_logger = ErrorLogger(root, str(session_id))
 
+        # Build ignore spec for incremental processing
+        extra_security = {
+            "**/id_rsa",
+            "**/*.pem",
+            "**/.aws/**",
+            "**/gcloud/**",
+            "**/secrets/**",
+            "**/*keys.json",
+            "**/*service_account.json",
+            "**/*auth.json",
+        }
+        ignore_patterns = build_ignore_set(self.config.ignore)
+        ignore_patterns.update(extra_security)
+        ignore_spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
+
         # Determine changed files list
         if full_reindex or last_success is None:
             print(f"Full reindex mode: processing all tracked files for {repo_name}")
@@ -200,6 +218,17 @@ class IngestionPipeline:
         # Process modified/added files
         for path in changed_files:
             try:
+                if ignore_spec.match_file(path):
+                    print(f"  {path}: skipped (ignored pattern)")
+                    if not dry_run:
+                        file_id = self.metadata.get_file_id(repo_id, path)
+                        if file_id:
+                            pruned = self.metadata.prune_invalidated_content_for_file(
+                                repo_id, file_id, embed_model, current_hashes=set()
+                            )
+                            if pruned:
+                                chunks_pruned += pruned
+                    continue
                 # Skip binary files and files that don't exist
                 file_path = root / path
                 if not file_path.exists() or file_path.is_dir():
