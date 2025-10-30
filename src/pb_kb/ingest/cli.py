@@ -22,6 +22,7 @@ def _read_config_template() -> str:
 def _build_pipeline(config: KBConfig) -> IngestionPipeline:
     lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
     metadata = SQLiteMetadataStore(config.resolved_store_root() / "knowledge.db")
+    metadata.initialize()  # Ensure schema (and migrations) are applied before use
     return IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
 
 
