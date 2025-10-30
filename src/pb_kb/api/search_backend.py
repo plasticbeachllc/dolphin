@@ -56,19 +56,15 @@ class KnowledgeSearchBackend:
             top_k=request.top_k,
         )
 
-        # Step 3: Filter by score cutoff if specified
-        if request.score_cutoff is not None:
-            # LanceDB returns _distance field (lower is better for L2 distance)
-            # Convert to similarity score (higher is better)
-            vector_results = [
-                r for r in vector_results
-                if r.get("_distance", float("inf")) <= (1.0 - request.score_cutoff)
-            ]
-
-        # Step 4: Format results for API response
+        # Step 3: Format results for API response and apply score cutoff
         hits = []
         for result in vector_results:
             # Extract metadata from LanceDB result
+            distance = float(result.get("_distance", 1.0))
+            score = self._distance_to_similarity(distance)
+            if request.score_cutoff is not None and score < request.score_cutoff:
+                continue
+
             hit = {
                 "chunk_id": result.get("id"),
                 "repo": result.get("repo"),
@@ -79,7 +75,7 @@ class KnowledgeSearchBackend:
                 "symbol_kind": result.get("symbol_kind"),
                 "symbol_name": result.get("symbol_name"),
                 "symbol_path": result.get("symbol_path"),
-                "score": self._distance_to_similarity(result.get("_distance", 1.0)),
+                "score": score,
                 "commit": result.get("commit"),
                 "branch": result.get("branch"),
             }

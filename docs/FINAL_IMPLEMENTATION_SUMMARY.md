@@ -43,7 +43,7 @@ The Plastic Beach Knowledge Store MCP server is **100% complete** with full comm
 - ✅ Comprehensive help and examples
 
 **Files**:
-- [bin/kb](../bin/kb) - Main CLI wrapper script
+- [bin/kb-search](../bin/kb-search) - MCP/search CLI wrapper script
 - [mcp-bridge/kb-cli.ts](../mcp-bridge/kb-cli.ts) - TypeScript CLI implementation
 
 ---
@@ -72,17 +72,17 @@ The Plastic Beach Knowledge Store MCP server is **100% complete** with full comm
 **Setup**:
 ```bash
 export PATH="/Users/tdc/worktable/dolphin/bin:$PATH"
-# Or: ln -s /Users/tdc/worktable/dolphin/bin/kb /usr/local/bin/kb
+# Or: ln -s /Users/tdc/worktable/dolphin/bin/kb-search /usr/local/bin/kb-search
 ```
 
 **Commands**:
 ```bash
-kb search "authentication"        # Search code
-kb repos                          # List repositories
-kb chunk abc123                   # Fetch chunk
-kb lines my-repo src/main.py 1 50 # Fetch file lines
-kb info                           # Vector store stats
-kb health                         # Check API status
+kb-search search "authentication"        # Search code
+kb-search repos                          # List repositories
+kb-search chunk abc123                   # Fetch chunk
+kb-search lines my-repo src/main.py 1 50 # Fetch file lines
+kb-search info                           # Vector store stats
+kb-search health                         # Check API status
 ```
 
 ### Option 3: Direct REST API
@@ -102,10 +102,10 @@ curl "http://127.0.0.1:7777/v1/file?repo=my-repo&path=main.py&start=1&end=50"
 
 **For environments without Bun**:
 ```bash
-kb curl-search "function" | jq .
-kb curl-repos | jq .
-kb curl-chunk abc123 | jq .
-kb curl-file my-repo main.py 1 50 | jq .
+kb-search curl-search "function" | jq .
+kb-search curl-repos | jq .
+kb-search curl-chunk abc123 | jq .
+kb-search curl-file my-repo main.py 1 50 | jq .
 ```
 
 ---
@@ -130,13 +130,13 @@ kb-index /path/to/your/project --name my-project
 export PATH="/Users/tdc/worktable/dolphin/bin:$PATH"
 
 # Search
-kb search "authentication"
+kb-search search "authentication"
 
 # List repos
-kb repos
+kb-search repos
 
 # Check status
-kb health
+kb-search health
 ```
 
 ### 4. Or Use Claude Desktop
@@ -151,20 +151,20 @@ kb health
 ### Basic Commands
 | Command | Description |
 |---------|-------------|
-| `kb health` | Check if kb-api is running |
-| `kb repos` | List indexed repositories |
-| `kb info` | Show vector store statistics |
-| `kb search <query>` | Search the knowledge base |
-| `kb chunk <id>` | Fetch chunk by ID |
-| `kb lines <repo> <path> <start> <end>` | Fetch file lines |
+| `kb-search health` | Check if kb-api is running |
+| `kb-search repos` | List indexed repositories |
+| `kb-search info` | Show vector store statistics |
+| `kb-search search <query>` | Search the knowledge base |
+| `kb-search chunk <id>` | Fetch chunk by ID |
+| `kb-search lines <repo> <path> <start> <end>` | Fetch file lines |
 
 ### curl Commands (No Bun Required)
 | Command | Description |
 |---------|-------------|
-| `kb curl-search <query>` | Search via curl (JSON output) |
-| `kb curl-repos` | List repos via curl (JSON output) |
-| `kb curl-chunk <id>` | Fetch chunk via curl (JSON output) |
-| `kb curl-file <repo> <path> <start> <end>` | Fetch file via curl (JSON output) |
+| `kb-search curl-search <query>` | Search via curl (JSON output) |
+| `kb-search curl-repos` | List repos via curl (JSON output) |
+| `kb-search curl-chunk <id>` | Fetch chunk via curl (JSON output) |
+| `kb-search curl-file <repo> <path> <start> <end>` | Fetch file via curl (JSON output) |
 
 ### Environment Variables
 | Variable | Default | Description |
@@ -180,7 +180,7 @@ kb health
 ### Find Authentication Code
 ```bash
 # Search for auth-related code
-kb search "authentication"
+kb-search search "authentication"
 
 # Output:
 # 🔍 Searching for: "authentication"
@@ -198,15 +198,15 @@ kb search "authentication"
 #    Chunk ID: def456ghi789
 
 # Fetch the code
-kb chunk abc123def456
+kb-search chunk abc123def456
 
 # Or fetch from file directly
-kb lines my-api src/auth/jwt.py 45 89
+kb-search lines my-api src/auth/jwt.py 45 89
 ```
 
 ### Check What's Indexed
 ```bash
-kb repos
+kb-search repos
 
 # Output:
 # 📚 Indexed Repositories:
@@ -227,13 +227,13 @@ kb repos
 ### Batch Search with jq
 ```bash
 # Find all TODO comments
-kb curl-search "TODO" | jq '.hits[] | "\(.repo)/\(.path):\(.start_line)"'
+kb-search curl-search "TODO" | jq '.hits[] | "\(.repo)/\(.path):\(.start_line)"'
 
 # Get all repos with chunk counts
-kb curl-repos | jq '.repos[] | {name, chunks}'
+kb-search curl-repos | jq '.repos[] | {name, chunks}'
 
 # Search and extract just file paths
-kb curl-search "main function" | jq '.hits[] | .path' | sort -u
+kb-search curl-search "main function" | jq '.hits[] | .path' | sort -u
 ```
 
 ---
@@ -355,7 +355,7 @@ The system is complete and ready for production use:
 
 2. **Start using it**:
    - **For AI assistance**: Configure Claude Desktop and start asking questions
-   - **For development**: Use `kb search`, `kb repos`, etc.
+   - **For development**: Use `kb-search search`, `kb-search repos`, etc.
    - **For automation**: Use curl commands in scripts
 
 3. **Monitor and optimize**:

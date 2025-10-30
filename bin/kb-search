@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
-# Plastic Beach Knowledge Base CLI
-# Provides simple command-line access to the knowledge base
+# Plastic Beach Knowledge Base MCP CLI
+# Provides Bun-based access to search-related MCP tools
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MCP_BRIDGE="$PROJECT_ROOT/mcp-bridge"
 
@@ -73,7 +79,7 @@ case "$1" in
     shift
     query="$*"
     if [ -z "$query" ]; then
-      echo "Usage: kb curl-search <query>" >&2
+      echo "Usage: kb-search curl-search <query>" >&2
       exit 1
     fi
     curl -s -X POST http://127.0.0.1:7777/v1/search \
@@ -89,7 +95,7 @@ case "$1" in
   curl-chunk)
     check_api || exit 1
     if [ -z "$2" ]; then
-      echo "Usage: kb curl-chunk <chunk-id>" >&2
+      echo "Usage: kb-search curl-chunk <chunk-id>" >&2
       exit 1
     fi
     curl -s "http://127.0.0.1:7777/v1/chunks/$2" | jq .
@@ -98,7 +104,7 @@ case "$1" in
   curl-file)
     check_api || exit 1
     if [ "$#" -lt 5 ]; then
-      echo "Usage: kb curl-file <repo> <path> <start> <end>" >&2
+      echo "Usage: kb-search curl-file <repo> <path> <start> <end>" >&2
       exit 1
     fi
     repo="$2"
@@ -120,9 +126,9 @@ case "$1" in
 
   help|--help|-h|"")
     cat <<'EOF'
-Plastic Beach Knowledge Base CLI
+Plastic Beach Knowledge Base MCP CLI
 
-Usage: kb <command> [options]
+Usage: kb-search <command> [options]
 
 High-level commands (requires bun):
   search <query>                 Search the knowledge base
@@ -145,47 +151,23 @@ Environment Variables:
   KB_REPOS=repo1,repo2           Filter search to specific repos
 
 Examples:
-  # Search for code
-  kb search "authentication function"
-  KB_TOP_K=10 kb search "error handling"
-  KB_REPOS=api-server kb search "login"
-
-  # List repositories
-  kb repos
-  kb curl-repos | jq '.repos[] | .name'
-
-  # Fetch chunk
-  kb chunk abc123def456
-
-  # Fetch file lines
-  kb lines my-repo src/main.py 1 50
-
-  # Get store info
-  kb info
-
-  # Check API health
-  kb health
-
-  # Raw API calls with curl
-  kb curl-search "function" | jq '.hits[] | {repo, path, score}'
-  kb curl-chunk abc123 | jq '.content'
-
-Prerequisites:
-  - kb-api server must be running: kb-api
-  - At least one repository indexed: kb-index /path/to/repo --name my-repo
-  - bun installed (for high-level commands): https://bun.sh
-  - jq installed (recommended for curl commands): brew install jq
+  kb-search search "authentication function"
+  KB_TOP_K=10 kb-search search "error handling"
+  KB_REPOS=api-server kb-search search "login"
+  kb-search repos
+  kb-search chunk abc123def456
+  kb-search lines my-repo src/main.py 1 50
 
 Notes:
   - Use 'curl-*' commands if you don't have bun installed
   - The 'curl-*' commands output raw JSON that you can pipe to jq
-  - Regular commands provide nicely formatted output
+  - High-level commands rely on bun and the MCP bridge tooling
 EOF
     ;;
 
   *)
     echo "Error: Unknown command '$1'" >&2
-    echo "Run 'kb help' for usage information" >&2
+    echo "Run 'kb-search help' for usage information" >&2
     exit 1
     ;;
 esac

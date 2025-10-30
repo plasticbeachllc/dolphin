@@ -215,35 +215,35 @@ export PATH="/Users/tdc/worktable/dolphin/bin:$PATH"
 Or create a symlink:
 
 ```bash
-ln -s /Users/tdc/worktable/dolphin/bin/kb /usr/local/bin/kb
+ln -s /Users/tdc/worktable/dolphin/bin/kb-search /usr/local/bin/kb-search
 ```
 
 ### Usage
 
-The `kb` command provides easy access to all knowledge base features:
+Use `kb-search` for fast MCP-friendly queries:
 
 ```bash
 # Search for code
-kb search "authentication function"
-KB_TOP_K=10 kb search "error handling"
+kb-search search "authentication function"
+KB_TOP_K=10 kb-search search "error handling"
 
 # List repositories
-kb repos
+kb-search repos
 
 # Fetch chunk by ID
-kb chunk abc123def456
+kb-search chunk abc123def456
 
 # Fetch file lines
-kb lines my-repo src/main.py 1 50
+kb-search lines my-repo src/main.py 1 50
 
 # Get vector store info
-kb info
+kb-search info
 
 # Check API health
-kb health
+kb-search health
 
 # Show help
-kb help
+kb-search help
 ```
 
 ### Advanced: Direct REST API Calls (No Bun Required)
@@ -252,16 +252,16 @@ For environments without Bun, use the `curl-*` commands:
 
 ```bash
 # Search (returns JSON)
-kb curl-search "function" | jq '.hits[] | {repo, path, score}'
+kb-search curl-search "function" | jq '.hits[] | {repo, path, score}'
 
 # List repos
-kb curl-repos | jq '.repos[] | .name'
+kb-search curl-repos | jq '.repos[] | .name'
 
 # Fetch chunk
-kb curl-chunk abc123 | jq '.content'
+kb-search curl-chunk abc123 | jq '.content'
 
 # Fetch file
-kb curl-file my-repo src/main.py 1 50 | jq '.content'
+kb-search curl-file my-repo src/main.py 1 50 | jq '.content'
 ```
 
 ### TypeScript CLI (Advanced)

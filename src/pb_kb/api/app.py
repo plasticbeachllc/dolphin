@@ -34,7 +34,7 @@ class SearchRequest(BaseModel):
     path_prefix: list[str] | None = None
     top_k: int = 8
     max_snippet_tokens: int = 240
-    embed_model: str = "small"
+    embed_model: str = "large"
     score_cutoff: float | None = None
 
 
