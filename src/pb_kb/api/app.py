@@ -35,7 +35,7 @@ class SearchRequest(BaseModel):
     top_k: int = 8
     max_snippet_tokens: int = 240
     embed_model: str = "large"
-    score_cutoff: float | None = None
+    score_cutoff: float | None = 0.0
 
 
 class SearchBackend(Protocol):
