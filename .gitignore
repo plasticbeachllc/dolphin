@@ -18,3 +18,4 @@ mcpo_config.json
 __pycache__/
 .coverage
 .env
+.scratch/*
