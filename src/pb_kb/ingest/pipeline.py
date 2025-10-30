@@ -184,7 +184,7 @@ class IngestionPipeline:
         # Start session
         session_id = self.metadata.begin_session(repo_id, commit_sha, branch, embed_model)
         
-        # Initialize error logger
+        # Initialize error logger (lazy file creation on first error)
         error_logger = ErrorLogger(root, str(session_id))
 
         # Build ignore spec for incremental processing
@@ -400,8 +400,14 @@ class IngestionPipeline:
         print(f"  Vectors written: {vectors_written}")
         print(f"  Session: {session_id}")
         
-        if error_logger.get_log_path().exists():
-            print(f"  Errors logged to: {error_logger.get_log_path()}")
+        # Only mention error log if something was actually written
+        try:
+            if error_logger.had_errors():
+                lp = error_logger.get_log_path()
+                if lp.exists() and lp.stat().st_size > 0:
+                    print(f"  Errors logged to: {lp}")
+        except Exception:
+            pass
 
         return {
             "repo": repo_name,

@@ -24,25 +24,29 @@ class ErrorLogger:
         self.repo_root = repo_root
         self.session_id = session_id
 
-        # Create log directory if it doesn't exist
+        # Log directory and file path (dir created lazily on first write)
         self.log_dir = repo_root / ".pb_kb_logs"
-        self.log_dir.mkdir(exist_ok=True)
 
         # Generate log filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         session_suffix = f"_session_{session_id}" if session_id else ""
         self.log_file = self.log_dir / f"indexing_errors_{timestamp}{session_suffix}.log"
 
-        # Set up logging
-        self._setup_logging()
+        # Lazy logger/file creation
+        self._logger_name = f"pb_kb_ingest_{self.session_id or 'unknown'}"
+        self.logger: Optional[logging.Logger] = None
+        self._initialized = False
+        self._had_errors = False
 
     def _setup_logging(self) -> None:
         """Configure logging to write to both file and console."""
-        logger_name = f"pb_kb_ingest_{self.session_id or 'unknown'}"
-        logger = logging.getLogger(logger_name)
+        # Ensure directory exists only when we need to log
+        self.log_dir.mkdir(exist_ok=True)
+
+        logger = logging.getLogger(self._logger_name)
         logger.setLevel(logging.ERROR)
 
-        if not _initialized_loggers.get(logger_name):
+        if not _initialized_loggers.get(self._logger_name):
             # File handler
             file_handler = logging.FileHandler(self.log_file)
             file_handler.setLevel(logging.ERROR)
@@ -59,9 +63,9 @@ class ErrorLogger:
             console_handler.setFormatter(console_formatter)
             logger.addHandler(console_handler)
 
-            _initialized_loggers[logger_name] = True
-
+            _initialized_loggers[self._logger_name] = True
         self.logger = logger
+        self._initialized = True
 
     def log_error(self, message: str, exc_info: bool = False) -> None:
         """Log an error message.
@@ -70,6 +74,10 @@ class ErrorLogger:
             message: Error message to log
             exc_info: Whether to include exception info if available
         """
+        if not self._initialized:
+            self._setup_logging()
+        self._had_errors = True
+        assert self.logger is not None
         self.logger.error(message, exc_info=exc_info)
 
     def log_file_error(self, file_path: str, error: Exception) -> None:
@@ -95,6 +103,10 @@ class ErrorLogger:
     def get_log_path(self) -> Path:
         """Return the path to the current log file."""
         return self.log_file
+
+    def had_errors(self) -> bool:
+        """Return True if any error has been logged during this session."""
+        return self._had_errors
 
 
 # Convenience function for quick error logging without full setup
