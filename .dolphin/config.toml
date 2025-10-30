@@ -123,14 +123,14 @@ proto = "protobuf"
 [embeddings]
 # Default embedding model for new repositories
 # Options: "text-embedding-3-small" (cost-effective) or "text-embedding-3-large" (highest quality)
-model = "text-embedding-3-small"
+model = "text-embedding-3-large"
 
 # Default embedding model shorthand (for backward compatibility)
 # "small" -> text-embedding-3-small, "large" -> text-embedding-3-large
-default_embed_model = "small"
+default_embed_model = "large"
 
 # Concurrency limit for embedding API calls
-concurrency = 3
+concurrency = 8
 
 # Per-session spending cap (USD) to prevent runaway costs
 per_session_spend_cap_usd = 10.0
@@ -171,11 +171,10 @@ ignore = [
     "venv/**",
     ".venv/**",
     "env/**",
-    ".env/**",
     "__pycache__/**",
     "*.pyc",
     "*.pyo",
-    
+
     # Build artifacts
     "dist/**",
     "build/**",

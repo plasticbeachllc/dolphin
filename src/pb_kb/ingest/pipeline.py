@@ -10,7 +10,7 @@ from pathspec import PathSpec
 from ..config import KBConfig
 from ..store import LanceDBStore, SQLiteMetadataStore
 from ..ingest.scanner import FileCandidate, scan_repo
-from ..ignores import build_ignore_set
+from ..ignores import build_ignore_set, load_repo_ignores
 from ..ingest.dedup import ChunkDeduplicator
 from ..ingest._helpers import (
     build_desired_map, 
@@ -88,6 +88,10 @@ class IngestionPipeline:
             "**/*auth.json",
         }
         ignore_patterns = build_ignore_set(self.config.ignore)
+        # Merge repo-level ignores from .dolphin/config.toml
+        repo_level = load_repo_ignores(root)
+        if repo_level:
+            ignore_patterns.update(repo_level)
         ignore_patterns.update(extra_security)
 
         # Scan
@@ -199,6 +203,9 @@ class IngestionPipeline:
             "**/*auth.json",
         }
         ignore_patterns = build_ignore_set(self.config.ignore)
+        repo_level = load_repo_ignores(root)
+        if repo_level:
+            ignore_patterns.update(repo_level)
         ignore_patterns.update(extra_security)
         ignore_spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
 
