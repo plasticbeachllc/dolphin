@@ -551,13 +551,14 @@ echo $OPENAI_API_KEY
 
 ---
 
-## 📚 Additional Documentation
+## 📚 Documentation
 
-- **[CLI Quick Reference](docs/CLI_QUICK_REFERENCE.md)** — Command-line usage guide
-- **[MCP Setup Guide](docs/MCP_SETUP_GUIDE.md)** — Detailed MCP configuration
-- **[Search API Guide](docs/SEARCH_API_GUIDE.md)** — REST API reference
-- **[Justfile Reference](docs/JUSTFILE_REFERENCE.md)** — Task automation guide
-- **[Implementation Summary](docs/FINAL_IMPLEMENTATION_SUMMARY.md)** — Architecture deep dive
+Dolphin has comprehensive documentation organized into two main guides:
+
+- **[User Guide](docs/GUIDE.md)** — Complete guide for installation, indexing, searching, CLI usage, REST API, MCP integration, and troubleshooting
+- **[Architecture](docs/ARCHITECTURE.md)** — Technical architecture, implementation status, data models, pipeline flow, and test coverage
+
+For historical documentation and implementation plans, see `docs/ignore/`.
 
 ---
 
