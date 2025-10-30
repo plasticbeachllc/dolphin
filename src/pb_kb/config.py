@@ -27,7 +27,7 @@ class KBConfig:
 
     store_root: Path = field(default_factory=lambda: _to_path(CONFIG_ROOT))
     endpoint: str = "127.0.0.1:7777"
-    default_embed_model: str = "small"
+    default_embed_model: str = "large"
     concurrency: int = 3
     per_session_spend_cap_usd: float = 10.0
     ignore: list[str] = field(default_factory=lambda: list(DEFAULT_IGNORE_PATTERNS))

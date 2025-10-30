@@ -13,7 +13,7 @@ const INPUT_SHAPE = {
   top_k: z.number().int().min(1).max(100).optional(),
   max_snippets: z.number().int().min(1).optional(),
   deadline_ms: z.number().int().min(50).optional(),
-  embed_model: z.enum(['small', 'large']).optional().default('small'),
+  embed_model: z.enum(['small', 'large']).optional().default('large'),
   score_cutoff: z.number().optional(),
   cursor: z.string().optional()
 }

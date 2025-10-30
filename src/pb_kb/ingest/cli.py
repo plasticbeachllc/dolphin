@@ -84,7 +84,7 @@ def add_repo(
     name: str = typer.Argument(..., help="Logical name for the repository."),
     path: Path = typer.Argument(..., help="Absolute path to the repository root."),
     default_embed_model: str = typer.Option(
-        "small", "--default-embed-model", help="Default embedding model for the Repo (small|large)."
+        "large", "--default-embed-model", help="Default embedding model for the Repo (small|large)."
     ),
 ) -> None:
     """Register or update a repository in the metadata store."""

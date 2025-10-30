@@ -56,8 +56,8 @@ batch_size = 100
 api_key_env = "OPENAI_API_KEY"
 
 [embeddings]
-model = "text-embedding-3-small"
-default_embed_model = "small"
+model = "text-embedding-3-large"
+default_embed_model = "large"
 concurrency = 3
 per_session_spend_cap_usd = 10.0
 

@@ -12,7 +12,7 @@ class Repo(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
     root_path: str
-    default_embed_model: str = Field(default="small")
+    default_embed_model: str = Field(default="large")
 
     # Timestamps (managed by DML in store methods)
     created_at: Optional[str] = Field(default=None)
