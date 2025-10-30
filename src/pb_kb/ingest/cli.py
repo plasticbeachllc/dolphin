@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 
 import typer
 
 from ..config import DEFAULT_CONFIG_PATH, KBConfig, load_config
 from ..store import LanceDBStore, SQLiteMetadataStore
 from .pipeline import IngestionPipeline
+from ..embeddings.provider import create_provider, set_default_provider
 
 app = typer.Typer(help="Unified knowledge store ingestion CLI.")
 
@@ -23,6 +25,22 @@ def _build_pipeline(config: KBConfig) -> IngestionPipeline:
     lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
     metadata = SQLiteMetadataStore(config.resolved_store_root() / "knowledge.db")
     metadata.initialize()  # Ensure schema (and migrations) are applied before use
+
+    # Configure embedding provider for ingestion pipeline
+    provider_type = config.embedding_provider
+    provider_kwargs: dict[str, object] = {}
+    if provider_type == "openai":
+        api_key = os.environ.get(config.openai_api_key_env)
+        if not api_key:
+            raise RuntimeError(
+                f"{config.openai_api_key_env} environment variable is required for OpenAI embeddings."
+            )
+        provider_kwargs["api_key"] = api_key
+        provider_kwargs["batch_size"] = config.embedding_batch_size
+
+    provider = create_provider(provider_type, **provider_kwargs)
+    set_default_provider(provider)
+
     return IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
 
 
@@ -95,16 +113,21 @@ def index(
     name: str = typer.Argument(..., help="Name of the repository to index."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Run without persisting."),
     force: bool = typer.Option(False, "--force", help="Bypass clean working tree check."),
+    full: bool = typer.Option(False, "--full", help="Process all files instead of incremental diff."),
 ) -> None:
-    """Index the specified repository (scan phase implemented)."""
+    """Run the full indexing pipeline for the specified repository."""
     config = load_config()
     pipeline = _build_pipeline(config)
     try:
-        result = pipeline.scan(name, dry_run=dry_run, force=force)
+        result = pipeline.index(name, dry_run=dry_run, force=force, full_reindex=full)
     except Exception as e:
         typer.echo(f"Indexing failed: {e}")
         raise
-    typer.echo(f"Scan complete for {name}: files_kept={result.get('files_kept')}, session={result.get('session_id')}")
+    typer.echo(f"Index complete for {name}: session={result.get('session_id')}")
+    typer.echo(f"  files_indexed: {result.get('files_indexed')}")
+    typer.echo(f"  chunks_indexed: {result.get('chunks_indexed')}")
+    typer.echo(f"  chunks_skipped: {result.get('chunks_skipped')}")
+    typer.echo(f"  vectors_written: {result.get('vectors_written')}")
 
 
 @app.command()
