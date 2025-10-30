@@ -1,10 +1,40 @@
 import type { Tool, CallToolResult, EmbeddedResource, TextContent } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { zodToJsonSchema } from 'zod-to-json-schema'
-import { restSearch, type SearchResponse } from '../../rest/client.js'
+import { restSearch, type SearchResponse, restGetFileSlice } from '../../rest/client.js'
 import { mimeFromLangOrPath } from '../../util/mime.js'
 import { jsonSizeBytes } from '../../util/payloadCap.js'
 import { logInfo, logWarn, logError } from '../../util/logger.js'
+
+// Interface for the actual API response
+interface ApiSearchHit {
+  chunk_id: string
+  repo: string
+  path: string
+  start_line: number
+  end_line: number
+  language?: string
+  symbol_kind?: string | null
+  symbol_name?: string | null
+  symbol_path?: string | null
+  score: number
+  commit?: string
+  branch?: string
+}
+
+interface ApiSearchResponse {
+  hits: ApiSearchHit[]
+  meta: {
+    top_k?: number
+    model?: string
+    latency_ms?: number
+    timing?: { embedding_ms?: number, search_ms?: number, processing_ms?: number }
+    cursor?: string
+    estimated_total?: number
+    complete?: boolean
+    warnings?: string[]
+  }
+}
 
 const INPUT_SHAPE = {
   query: z.string().min(1),
@@ -83,12 +113,53 @@ export function makeSearchKnowledge (): { definition: Tool, handler: any, inputS
 
       const res: SearchResponse = await restSearch(body, signal)
 
+      // Transform API response to match expected format
+      const transformedHits = await Promise.all(
+        (res.hits as any[]).map(async (hit: any) => {
+          // Map 'language' to 'lang' and fetch snippet content
+          const transformedHit = {
+            ...hit,
+            lang: hit.language || hit.lang,
+            // Generate snippet by fetching file content
+            snippet: await (async () => {
+              try {
+                const fileSlice = await restGetFileSlice(
+                  hit.repo,
+                  hit.path,
+                  hit.start_line,
+                  hit.end_line,
+                  signal
+                )
+                return fileSlice.content
+              } catch (error: any) {
+                await logWarn('search', 'Failed to fetch snippet content', {
+                  repo: hit.repo,
+                  path: hit.path,
+                  lines: `${hit.start_line}-${hit.end_line}`,
+                  error: error?.message || String(error)
+                })
+                return ''
+              }
+            })(),
+            // Generate resource_link from available data
+            resource_link: `kb://${hit.repo}/${hit.path}#L${hit.start_line}-L${hit.end_line}`
+          }
+          return transformedHit
+        })
+      )
+
+      // Replace hits with transformed version
+      const transformedRes = {
+        ...res,
+        hits: transformedHits
+      }
+
       // Build summary
-      const k = res.hits.length
-      const reposSet = new Set(res.hits.map(h => h.repo))
+      const k = transformedRes.hits.length
+      const reposSet = new Set(transformedRes.hits.map(h => h.repo))
       const rcount = reposSet.size
-      const est = res.meta.estimated_total
-      const more = res.meta.complete === false && res.meta.cursor
+      const est = transformedRes.meta.estimated_total
+      const more = transformedRes.meta.complete === false && transformedRes.meta.cursor
       const summaryParts = [
         `Found ${k} result${k === 1 ? '' : 's'}${rcount > 0 ? ` across ${rcount} repo${rcount === 1 ? '' : 's'}` : ''}.`
       ]
@@ -97,7 +168,7 @@ export function makeSearchKnowledge (): { definition: Tool, handler: any, inputS
       const summary = summaryParts.join(' ')
 
       // Build prompt-ready text
-      let promptReady = buildPromptReady(res)
+      let promptReady = buildPromptReady(transformedRes)
 
       // Build content blocks: one text summary + prompt-ready + resource blocks for each hit
       const content: CallToolResult['content'] = []
@@ -106,18 +177,23 @@ export function makeSearchKnowledge (): { definition: Tool, handler: any, inputS
         content.push({ type: 'text', text: promptReady } as TextContent)
       }
 
-      for (const hit of res.hits) {
+      for (const hit of transformedRes.hits) {
         const includeText = (hit.snippet ?? '').length <= PER_SNIPPET_CHAR_CAP
-        const resource: EmbeddedResource = {
-          uri: hit.resource_link,
-          mimeType: mimeFromLangOrPath(hit.lang, hit.path),
-          text: includeText ? hit.snippet : undefined
+        const resourceBlock = {
+          type: 'resource' as const,
+          resource: {
+            uri: hit.resource_link,
+            mimeType: mimeFromLangOrPath(hit.lang, hit.path),
+            // MCP SDK requires either text or blob to be present in the resource union.
+            // Always provide a string (possibly empty) to satisfy schema under tight caps.
+            text: includeText ? (hit.snippet ?? '') : ''
+          }
         }
-        content.push({ type: 'resource', resource })
+        content.push(resourceBlock)
       }
 
       // _meta compact hits list
-      const metaHits = res.hits.map(h => ({
+      const metaHits = transformedRes.hits.map(h => ({
         chunk_id: h.chunk_id,
         repo: h.repo,
         path: h.path,
@@ -131,12 +207,12 @@ export function makeSearchKnowledge (): { definition: Tool, handler: any, inputS
         isError: false,
         _meta: {
           hits: metaHits,
-          cursor: res.meta.cursor,
-          estimated_total: res.meta.estimated_total,
-          complete: res.meta.complete,
-          warnings: res.meta.warnings,
-          model: res.meta.model,
-          top_k: res.meta.top_k,
+          cursor: transformedRes.meta.cursor,
+          estimated_total: transformedRes.meta.estimated_total,
+          complete: transformedRes.meta.complete,
+          warnings: transformedRes.meta.warnings,
+          model: transformedRes.meta.model,
+          top_k: transformedRes.meta.top_k,
           mcp_latency_ms: Date.now() - started
         }
       }
@@ -148,7 +224,7 @@ export function makeSearchKnowledge (): { definition: Tool, handler: any, inputS
       if (size > CAP_BYTES) {
         const prIndex = content.length > 1 && (content[1] as any)?.type === 'text' ? 1 : -1
         if (prIndex === 1) {
-          let prText = (content[1] as TextContent).text
+          let prText: string = (content[1] as TextContent).text
           // Iteratively trim promptReady by 10% until under cap or floor
           while (prText.length > 0 && size > CAP_BYTES) {
             const cut = Math.max(Math.floor(prText.length * 0.9), 0)
@@ -164,10 +240,10 @@ export function makeSearchKnowledge (): { definition: Tool, handler: any, inputS
         // First pass: cap each resource text to SHRUNK_SNIPPET_CHAR_CAP
         for (let i = 0; i < content.length && size > CAP_BYTES; i++) {
           const block = content[i]
-          if (block.type === 'resource' && block.resource?.text) {
-            const txt = block.resource.text
+          if (block.type === 'resource' && (block as any).resource?.text) {
+            const txt: string = (block as any).resource.text
             if (txt.length > SHRUNK_SNIPPET_CHAR_CAP) {
-              block.resource.text = txt.slice(0, SHRUNK_SNIPPET_CHAR_CAP)
+              (block as any).resource.text = txt.slice(0, SHRUNK_SNIPPET_CHAR_CAP)
               size = jsonSizeBytes(result)
             }
           }
@@ -175,23 +251,24 @@ export function makeSearchKnowledge (): { definition: Tool, handler: any, inputS
         // Second pass: cap further to MIN_SNIPPET_CHAR_FLOOR if still too big
         for (let i = 0; i < content.length && size > CAP_BYTES; i++) {
           const block = content[i]
-          if (block.type === 'resource' && block.resource?.text) {
-            const txt = block.resource.text
+          if (block.type === 'resource' && (block as any).resource?.text) {
+            const txt: string = (block as any).resource.text
             if (txt.length > MIN_SNIPPET_CHAR_FLOOR) {
-              block.resource.text = txt.slice(0, MIN_SNIPPET_CHAR_FLOOR)
+              (block as any).resource.text = txt.slice(0, MIN_SNIPPET_CHAR_FLOOR)
               size = jsonSizeBytes(result)
             }
           }
         }
       }
 
-      // Step 3: Remove snippet text from lowest-scoring hits first (keep citations)
+      // Step 3: Minimize snippet text from lowest-scoring hits first (keep citations present)
       if (size > CAP_BYTES) {
-        for (let i = res.hits.length - 1; i >= 0 && size > CAP_BYTES; i--) {
+        for (let i = transformedRes.hits.length - 1; i >= 0 && size > CAP_BYTES; i--) {
           const blockIdx = i + 2 // +2 to skip summary and promptReady
           const block = result.content[blockIdx]
-          if (block?.type === 'resource' && block.resource?.text) {
-            delete (block.resource as any).text
+          if (block?.type === 'resource' && typeof (block as any).resource?.text === 'string') {
+            // Replace with empty string to satisfy SDK schema while trimming payload
+            ;(block as any).resource.text = ''
             size = jsonSizeBytes(result)
           }
         }
@@ -213,9 +290,9 @@ export function makeSearchKnowledge (): { definition: Tool, handler: any, inputS
       }
 
       await logInfo('search', 'search_knowledge success', {
-        hits_count: res.hits.length,
-        warnings: res.meta.warnings,
-        latency_ms: res.meta.latency_ms,
+        hits_count: transformedRes.hits.length,
+        warnings: transformedRes.meta.warnings,
+        latency_ms: transformedRes.meta.latency_ms,
         mcp_latency_ms: Date.now() - started
       })
 
