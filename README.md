@@ -434,21 +434,28 @@ pytest tests/integration/ # Integration tests
 pytest tests/unit/test_search_api.py -v
 ```
 
-### Optional: Enable Real Tiktoken for Integration Tests
+### Test Requirements
 
-By default, integration tests use a mock tiktoken (fast, offline). To validate production behavior with real tiktoken:
-
+**Unit tests** (`tests/unit/`): Always work (use mock tiktoken)
 ```bash
-# Download tiktoken encoding data (run once)
-python scripts/download_tiktoken.py
-
-# Now integration tests will automatically use real tiktoken
-pytest tests/integration/
+pytest tests/unit/  # Fast, offline, 324 tests
 ```
 
-Note: In environments where network access to OpenAI's blob storage is blocked, tests will gracefully fall back to mock and emit warnings. All tests will still pass.
+**Integration tests** (`tests/integration/`): Require real tiktoken
+```bash
+# First run attempts auto-download
+pytest tests/integration/
 
-See [tests/TESTING.md](tests/TESTING.md) for detailed testing documentation.
+# If download fails (403 error), pre-download first:
+python scripts/download_tiktoken.py
+```
+
+**Why integration tests require real tiktoken:**
+- Production uses real tiktoken (OpenAI's tokenizer)
+- Mock tiktoken has different behavior (token counts, chunk boundaries)
+- Tests should fail if production won't work (no false confidence)
+
+See [tests/TESTING.md](tests/TESTING.md) for detailed testing documentation and troubleshooting.
 
 ### Test Coverage
 

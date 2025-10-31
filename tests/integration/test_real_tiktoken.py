@@ -1,16 +1,15 @@
 """Integration tests that validate real tiktoken behavior.
 
-These tests use real tiktoken (if available) to ensure production behavior
-matches expectations. They verify:
+These tests use real tiktoken to ensure production behavior matches expectations.
+They verify:
 1. Token counts match OpenAI's tokenizer
 2. Chunk boundaries are correct
 3. Text windowing produces expected results
 
-If tiktoken data is not available, tests will use mock and emit warnings.
+Tiktoken is required for all tests (enforced by setup_tiktoken fixture).
 """
 
 import pytest
-from tests.conftest import is_tiktoken_available
 from pb_kb.chunkers.token_utils import (
     count_tokens,
     window_text_by_tokens,
@@ -19,10 +18,6 @@ from pb_kb.chunkers.token_utils import (
 )
 
 
-@pytest.mark.skipif(
-    not is_tiktoken_available(),
-    reason="Requires real tiktoken - run: python scripts/download_tiktoken.py"
-)
 class TestRealTiktokenBehavior:
     """Tests that validate real tiktoken produces expected results."""
 

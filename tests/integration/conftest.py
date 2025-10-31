@@ -1,35 +1,8 @@
 """Additional fixtures for integration tests."""
 
 import pytest
-import warnings
 from pathlib import Path
 from typing import Generator
-
-
-@pytest.fixture(scope="session", autouse=True)
-def check_tiktoken_availability():
-    """Check if real tiktoken is available for integration tests.
-
-    Integration tests should use real tiktoken, not mocks. This fixture
-    warns if tiktoken data is not available.
-    """
-    from tests.conftest import is_tiktoken_available
-
-    if not is_tiktoken_available():
-        warnings.warn(
-            "\n"
-            "=" * 70 + "\n"
-            "WARNING: Real tiktoken encoding data not available!\n"
-            "Integration tests are using fallback to mock tiktoken.\n"
-            "\n"
-            "To download tiktoken data for integration tests:\n"
-            "  python scripts/download_tiktoken.py\n"
-            "\n"
-            "Or run: python -c \"import tiktoken; tiktoken.get_encoding('cl100k_base')\"\n"
-            "=" * 70,
-            RuntimeWarning,
-            stacklevel=2
-        )
 
 
 @pytest.fixture(scope="session")

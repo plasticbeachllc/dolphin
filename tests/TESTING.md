@@ -46,59 +46,88 @@ The mock tokenizer is **fundamentally different** from real tiktoken:
 
 **Current Implementation**:
 
-The test suite uses a **smart fallback strategy**:
+The test suite uses a **strict production-parity strategy**:
 
 ```
-┌─────────────────────────────────────────────────┐
-│              Test Type Decision Tree            │
-├─────────────────────────────────────────────────┤
-│                                                  │
-│  Unit Tests (tests/unit/)                       │
-│    ✓ ALWAYS use mock tiktoken                   │
-│    ✓ Fast, offline, deterministic               │
-│    ✓ Verify logic, not production results       │
-│                                                  │
-│  Integration Tests (tests/integration/)         │
-│    ┌────────────────────────────────┐           │
-│    │ Real tiktoken available?       │           │
-│    ├────────────────────────────────┤           │
-│    │ YES → Use real tiktoken        │←─────┐    │
-│    │       (validates production)   │      │    │
-│    │                                │      │    │
-│    │ NO  → Use mock tiktoken        │      │    │
-│    │       (fallback, warns)        │      │    │
-│    └────────────────────────────────┘      │    │
-│                                             │    │
-└─────────────────────────────────────────────┼────┘
-                                              │
-                                              │
-              ┌───────────────────────────────┘
-              │
-              │  Download real tiktoken:
-              │  python scripts/download_tiktoken.py
-              │
-              └──> Integration tests use real tiktoken
+┌─────────────────────────────────────────────────────────────┐
+│                 Test Type Decision Tree                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│  Unit Tests (tests/unit/)                                    │
+│    ✓ ALWAYS use mock tiktoken                                │
+│    ✓ Fast, offline, deterministic                            │
+│    ✓ Verify logic, not tokenization accuracy                 │
+│    ✓ Can run without network access                          │
+│                                                               │
+│  Integration Tests (tests/integration/)                      │
+│    ┌────────────────────────────────────┐                    │
+│    │ Real tiktoken available?           │                    │
+│    ├────────────────────────────────────┤                    │
+│    │ Cached? → Use cached data ✓        │                    │
+│    │ Download? → Try auto-download      │                    │
+│    │    Success → Use real tiktoken ✓   │                    │
+│    │    Failed  → FAIL TESTS ❌         │                    │
+│    └────────────────────────────────────┘                    │
+│                                                               │
+│  Why fail instead of fallback to mock?                       │
+│    • Production requires real tiktoken                        │
+│    • Mock has different behavior (token counts, boundaries)  │
+│    • Passing tests with mock gives false confidence          │
+│    • Better to fail loudly than silently diverge from prod   │
+│                                                               │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**How to enable real tiktoken for integration tests**:
+**Running Tests**:
 
 ```bash
-# Download tiktoken encoding data (run once)
-python scripts/download_tiktoken.py
+# Unit tests: Always work (use mock)
+pytest tests/unit/
 
-# Now integration tests will automatically use real tiktoken
+# Integration tests: Require real tiktoken
+# First run downloads tiktoken automatically
 pytest tests/integration/
+# → Attempts download, uses cache if available, fails if neither work
 
-# In environments where download is blocked (403 errors):
-# - Integration tests will use mock and emit warnings
-# - All tests will still pass
+# Full test suite
+pytest
+# → Unit tests pass, integration tests may fail without tiktoken
+
+# After first successful run, tiktoken is cached
+pytest tests/integration/
+# → Uses cached data, no network required
 ```
 
+**When Integration Tests Fail**:
+
+If you see:
+```
+❌ ERROR: Integration tests require tiktoken encoding data
+```
+
+This means production won't work either! Solutions:
+
+1. **Run from environment with network access** (one-time setup):
+   ```bash
+   python scripts/download_tiktoken.py
+   # Downloads to ~/.cache/tiktoken/ (used by production too)
+   ```
+
+2. **Copy cached data from another machine**:
+   ```bash
+   scp user@dev-machine:~/.cache/tiktoken/* ~/.cache/tiktoken/
+   ```
+
+3. **In CI/CD**: Pre-download in container build or deployment
+   ```dockerfile
+   RUN python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
+   ```
+
 **Test Status**:
-- ✅ Unit tests: Always use mock (362 tests)
-- ✅ Integration tests: Use real if available, mock as fallback
-- ✅ Real tiktoken validation: 4 tests in `test_real_tiktoken.py` (skipped if unavailable)
-- ✅ Graceful degradation: All tests pass with or without real tiktoken
+- ✅ Unit tests: Always work with mock (324 tests)
+- ⚠️ Integration tests: Require real tiktoken (fail without it)
+- 🎯 Production parity: Tests use same tokenizer as production
+- 🔒 No false confidence: Tests fail if production won't work
 
 ---
 

@@ -123,19 +123,104 @@ class MockTiktokenEncoding:
         return ''.join(result)
 
 
-def is_tiktoken_available() -> bool:
-    """Check if real tiktoken encoding data is available (downloaded).
+def ensure_tiktoken_available() -> bool:
+    """Ensure tiktoken encoding data is available.
 
-    Returns True if tiktoken can load encodings without network access.
+    Tries to:
+    1. Use existing cached tiktoken data
+    2. Download tiktoken data if cache missing
+
+    Returns True if tiktoken is available, False otherwise.
     """
     try:
         import tiktoken
-        # Try to get encoding without downloading
-        # This will succeed if data is cached, fail if it needs to download
+        # Try to load encoding - will use cache if available
         tiktoken.get_encoding("cl100k_base")
         return True
-    except Exception:
+    except Exception as e:
+        error_msg = str(e)
+        # If it's a network error, data isn't cached
+        if "403" in error_msg or "Forbidden" in error_msg or "Failed to fetch" in error_msg:
+            return False
+        # Other errors might be real issues
         return False
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_tiktoken(request):
+    """Ensure tiktoken is available for integration tests.
+
+    This runs once at the start of the test session and:
+    1. Checks if integration tests are being run
+    2. If yes, ensures tiktoken data is available (cached or downloads)
+    3. If download fails and no cache, fails the test session
+
+    Unit tests use mock tiktoken (fast, testing logic).
+    Integration tests require real tiktoken (production validation).
+    """
+    # Check if any integration tests are being run
+    has_integration_tests = any(
+        "tests/integration" in str(item.fspath)
+        for item in request.session.items
+    )
+
+    if not has_integration_tests:
+        # Only unit tests - mock tiktoken is fine
+        return
+
+    # Integration tests require real tiktoken
+    if ensure_tiktoken_available():
+        # Tiktoken is available (either cached or just downloaded)
+        return
+
+    # Try to download
+    print("\n" + "=" * 70)
+    print("Tiktoken encoding data not found. Attempting download...")
+    print("=" * 70)
+
+    try:
+        import tiktoken
+        print("Downloading cl100k_base encoding...", end=" ", flush=True)
+        tiktoken.get_encoding("cl100k_base")
+        print("✓ Success!")
+        print("=" * 70)
+        return
+    except Exception as e:
+        error_msg = str(e)
+        print(f"✗ Failed: {error_msg[:100]}")
+        print("=" * 70)
+        print()
+        print("❌ ERROR: Integration tests require tiktoken encoding data")
+        print()
+        print("Production requires real tiktoken (OpenAI's tokenizer).")
+        print("Integration tests must use real tiktoken to validate production behavior.")
+        print()
+        print("Unit tests can run offline (use mock tiktoken):")
+        print("  pytest tests/unit/")
+        print()
+
+        if "403" in error_msg or "Forbidden" in error_msg:
+            print("Network access to OpenAI's blob storage is blocked.")
+            print()
+            print("Solutions:")
+            print("  1. Run from an environment with network access:")
+            print("     python scripts/download_tiktoken.py")
+            print()
+            print("  2. Copy cached data from another machine:")
+            print("     scp user@other-machine:~/.cache/tiktoken/* ~/.cache/tiktoken/")
+            print()
+            print("  3. In production, ensure tiktoken data is pre-downloaded")
+            print("     during deployment or included in container image")
+        else:
+            print(f"Unexpected error: {error_msg}")
+            print()
+            print("Try running: python scripts/download_tiktoken.py")
+
+        print()
+        print("=" * 70)
+
+        # Fail the test session
+        pytest.exit("Tiktoken encoding data required for integration tests", returncode=1)
 
 
 @pytest.fixture(scope="session")
@@ -165,22 +250,18 @@ def pytest_configure(config):
 
 
 def pytest_collection_modifyitems(config, items):
-    """Automatically apply mock_tiktoken fixture based on availability.
+    """Automatically apply mock_tiktoken fixture to unit tests only.
 
-    - Unit tests always get mock tiktoken (fast, offline)
-    - Integration tests get mock tiktoken as fallback if real tiktoken unavailable
+    Unit tests use mock tiktoken for speed and to test logic in isolation.
+    Integration tests use real tiktoken to validate production behavior.
     """
-    tiktoken_available = is_tiktoken_available()
-
     for item in items:
         # Check if test is in unit test directory
         if "tests/unit" in str(item.fspath):
-            # Unit tests always use mock
+            # Unit tests use mock for speed (testing logic, not tokenization accuracy)
             if "mock_tiktoken" not in item.fixturenames:
                 item.fixturenames.append("mock_tiktoken")
             item.add_marker(pytest.mark.unit)
         elif "tests/integration" in str(item.fspath):
-            # Integration tests use real tiktoken if available, otherwise mock
-            if not tiktoken_available and "mock_tiktoken" not in item.fixturenames:
-                item.fixturenames.append("mock_tiktoken")
+            # Integration tests use real tiktoken (validated by setup_tiktoken fixture)
             item.add_marker(pytest.mark.integration)
