@@ -9,6 +9,8 @@ from ..config import DEFAULT_CONFIG_PATH, KBConfig, load_config
 from ..store import LanceDBStore, SQLiteMetadataStore
 from .pipeline import IngestionPipeline
 from ..embeddings.provider import create_provider, set_default_provider
+from ..ignores import build_ignore_set, load_repo_ignores
+from pathspec import PathSpec
 
 app = typer.Typer(help="Unified knowledge store ingestion CLI.")
 
@@ -140,6 +142,91 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
     summary = metadata.summarize()
     _ = name
     typer.echo(f"Knowledge store summary: {summary}")
+
+
+@app.command("prune-ignored")
+def prune_ignored(
+    name: str = typer.Argument(..., help="Repository name to clean up."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be removed without persisting."),
+) -> None:
+    """Remove chunks for files that match the ignore patterns.
+    
+    Use this after updating ignore patterns to clean up previously-indexed
+    files that should no longer be included.
+    """
+    config = load_config()
+    repo = config.resolved_store_root()
+    
+    metadata = SQLiteMetadataStore(repo / "knowledge.db")
+    metadata.initialize()
+    
+    lancedb = LanceDBStore(repo / "lancedb")
+    lancedb.initialize_collections()
+    
+    # Resolve repo and get its root path
+    repo_record = metadata.get_repo_by_name(name)
+    if not repo_record:
+        typer.echo(f"Error: Repository '{name}' not registered.")
+        raise typer.Exit(code=1)
+    
+    repo_id = int(repo_record["id"])
+    repo_root = Path(repo_record["root_path"])
+    
+    # Build ignore spec
+    extra_security = {
+        "**/id_rsa",
+        "**/*.pem",
+        "**/.aws/**",
+        "**/gcloud/**",
+        "**/secrets/**",
+        "**/*keys.json",
+        "**/*service_account.json",
+        "**/*auth.json",
+    }
+    ignore_patterns = build_ignore_set(config.ignore)
+    repo_level = load_repo_ignores(repo_root)
+    if repo_level:
+        ignore_patterns.update(repo_level)
+    ignore_patterns.update(extra_security)
+    ignore_spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
+    
+    # Get all files for this repo
+    files = metadata.get_all_files_for_repo(repo_id)
+    
+    total_chunks_pruned = 0
+    pruned_files = []
+    
+    for file_record in files:
+        file_path = file_record["path"]
+        file_id = file_record["id"]
+        
+        # Check if file matches ignore patterns
+        if ignore_spec.match_file(file_path):
+            pruned_files.append(file_path)
+            
+            # Prune all content for this file
+            if not dry_run:
+                pruned_count = metadata.prune_invalidated_content_for_file(
+                    repo_id, file_id, embed_model=None, current_hashes=set()
+                )
+                total_chunks_pruned += pruned_count
+            else:
+                # In dry-run, just count what would be pruned
+                file_chunks = metadata.get_chunks_for_file(file_id)
+                total_chunks_pruned += len(file_chunks) if file_chunks else 0
+    
+    if dry_run:
+        typer.echo(f"[DRY RUN] Would prune:")
+        typer.echo(f"  Files: {len(pruned_files)}")
+        typer.echo(f"  Chunks: {total_chunks_pruned}")
+        for f in pruned_files[:10]:
+            typer.echo(f"    - {f}")
+        if len(pruned_files) > 10:
+            typer.echo(f"    ... and {len(pruned_files) - 10} more")
+    else:
+        typer.echo(f"✅ Pruned ignored content from '{name}':")
+        typer.echo(f"  Files: {len(pruned_files)}")
+        typer.echo(f"  Chunks: {total_chunks_pruned}")
 
 
 @app.command()
