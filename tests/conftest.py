@@ -5,6 +5,7 @@ import tempfile
 import shutil
 from pathlib import Path
 from typing import Generator
+from unittest.mock import patch, MagicMock
 
 from tests.kb_utils import InMemoryKBBackend, FIXTURE_REPO_ROOT
 
@@ -69,3 +70,60 @@ def git_repo(temp_dir: Path) -> Path:
     subprocess.run(["git", "-C", str(repo_path), "config", "commit.gpgsign", "false"], check=True)
 
     return repo_path
+
+
+class MockTiktokenEncoding:
+    """Mock tiktoken encoding for testing without network access.
+
+    Uses a hybrid approach: roughly 3 characters per token on average,
+    similar to real tiktoken behavior, while maintaining reversibility.
+    """
+
+    def __init__(self, name: str = "cl100k_base"):
+        self.name = name
+        self._token_map = {}  # Maps tokens back to text
+        self._next_token_id = 1000  # Start from 1000 to avoid chr() conflicts
+
+    def encode(self, text: str) -> list[int]:
+        """Encode text with ~3 chars per token average."""
+        tokens = []
+        i = 0
+        while i < len(text):
+            # Take 2-4 characters per token (avg 3)
+            chunk_size = 3
+            if i + chunk_size > len(text):
+                chunk_size = len(text) - i
+
+            chunk = text[i:i+chunk_size]
+
+            # Create or retrieve token ID for this chunk
+            token_id = hash(chunk) % 1000000  # Use hash for deterministic IDs
+            self._token_map[token_id] = chunk
+            tokens.append(token_id)
+
+            i += chunk_size
+
+        return tokens
+
+    def decode(self, tokens: list[int]) -> str:
+        """Decode tokens back to text."""
+        result = []
+        for token_id in tokens:
+            if token_id in self._token_map:
+                result.append(self._token_map[token_id])
+            else:
+                # Fallback for unknown tokens - shouldn't happen in practice
+                result.append('???')
+        return ''.join(result)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_tiktoken():
+    """Mock tiktoken.get_encoding to avoid network calls during tests."""
+    mock_encoding = MockTiktokenEncoding()
+
+    def mock_get_encoding(encoding_name: str):
+        return mock_encoding
+
+    with patch('tiktoken.get_encoding', side_effect=mock_get_encoding):
+        yield mock_encoding
