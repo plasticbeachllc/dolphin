@@ -21,5 +21,6 @@ __pycache__/
 .scratch/*
 docs/ignore/*
 
-tests/reports/junit/test-results.xml
-tests/reports/coverage.xml
+# test artifacts
+tests/**/test-results.xml
+tests/**/coverage.xml
