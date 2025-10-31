@@ -616,3 +616,32 @@ class SQLiteMetadataStore:
             "locations_deleted": deleted,
             "content_pruned": pruned,
         }
+
+    def get_all_files_for_repo(self, repo_id: int) -> list[dict[str, object]]:
+        """Get all files for a repository.
+        
+        Returns list of dicts with keys: id, path
+        """
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute(
+                "SELECT id, path FROM files WHERE repo_id = ? ORDER BY path",
+                (int(repo_id),)
+            )
+            rows = cur.fetchall() or []
+            return [
+                {"id": int(r[0]), "path": str(r[1])}
+                for r in rows
+            ]
+
+    def get_chunks_for_file(self, file_id: int) -> list[dict[str, object]] | None:
+        """Get all chunks (content rows) for a file.
+        
+        Returns list of dicts or None if no chunks found.
+        """
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute(
+                "SELECT id FROM chunk_content WHERE file_id = ?",
+                (int(file_id),)
+            )
+            rows = cur.fetchall() or []
+            return [{"id": str(r[0])} for r in rows] if rows else None
