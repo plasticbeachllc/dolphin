@@ -204,12 +204,14 @@ def prune_ignored(
         if ignore_spec.match_file(file_path):
             pruned_files.append(file_path)
             
-            # Prune all content for this file
+            # Prune all content for this file across all embedding models
             if not dry_run:
-                pruned_count = metadata.prune_invalidated_content_for_file(
-                    repo_id, file_id, embed_model=None, current_hashes=set()
-                )
-                total_chunks_pruned += pruned_count
+                # Get all embed models used for this file and prune each
+                for embed_model in ["small", "large"]:
+                    pruned_count = metadata.prune_invalidated_content_for_file(
+                        repo_id, file_id, embed_model=embed_model, current_hashes=set()
+                    )
+                    total_chunks_pruned += pruned_count
             else:
                 # In dry-run, just count what would be pruned
                 file_chunks = metadata.get_chunks_for_file(file_id)
@@ -241,9 +243,42 @@ def prune(
     typer.echo("Prune functionality will arrive after ingestion is wired up.")
 
 
+@app.command("list-files")
+def list_files(
+    name: str = typer.Argument(..., help="Repository name."),
+) -> None:
+    """List all indexed files in a repository.
+
+    Output is one file path per line for easy grepping.
+    """
+    config = load_config()
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / "knowledge.db")
+    metadata.initialize()
+
+    # Resolve repo
+    repo_record = metadata.get_repo_by_name(name)
+    if not repo_record:
+        typer.echo(f"Error: Repository '{name}' not registered.", err=True)
+        raise typer.Exit(code=1)
+
+    repo_id = int(repo_record["id"])
+
+    # Get all files for this repo
+    files = metadata.get_all_files_for_repo(repo_id)
+
+    if not files:
+        typer.echo(f"No indexed files in repository '{name}'.", err=True)
+        raise typer.Exit(code=0)
+
+    # Print one file per line
+    for file_record in files:
+        typer.echo(file_record["path"])
+
+
 def main() -> None:
     app()
 
 
 if __name__ == "__main__":
     main()
+
