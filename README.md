@@ -11,7 +11,7 @@ Dolphin is designed to power intelligent coding and documentation assistance thr
 3. **Custom MCP Servers** — Extensible Model Context Protocol integrations providing domain-specific tools and capabilities
 
 At its core, Dolphin combines:
-- **Personas System** — Multiple AI agent personalities with specific behaviors and guardrails
+- **Personas System** — Multiple AI agent personalities with specific behaviors and guardrails (compiled for OpenWebUI and Continue)
 - **Unified Knowledge Store** — Semantic retrieval system for code and documentation with intelligent chunking and embeddings
 - **Metadata Management** — SQLite-backed provenance and session tracking
 - **Vector Indexing** — LanceDB-powered semantic search for efficient retrieval
@@ -20,10 +20,10 @@ At its core, Dolphin combines:
 
 ## 🎯 Current Implementation Status
 
-### ✅ PHASES 1-6 COMPLETE: Knowledge Base Pipeline
+### ✅ PHASES 1-5b COMPLETE: Fully Functional Platform
 
 **Phase 6 (Embeddings & Pipeline)** — ✅ Complete
-- ✅ Full KB pipeline operational and tested (147/147 tests passing)
+- ✅ Full KB pipeline operational and tested (191/191 tests passing)
 - ✅ OpenAI embedding integration with exponential backoff retry logic
 - ✅ SQLite + LanceDB storage layer working
 - ✅ Git-aware incremental indexing
@@ -32,47 +32,27 @@ At its core, Dolphin combines:
 - ✅ Content-based deduplication
 - ✅ Idempotent ingestion (safe re-runs)
 
-### 🔜 PHASE 7 (NEXT PRIORITY): Retriever HTTP API
+**Phase 7 (REST API)** — ✅ Complete
+- ✅ All 5 endpoints implemented and tested (52/52 tests passing)
+- ✅ Retrieval server initialization with database connections
+- ✅ Path traversal security protection
+- ✅ Comprehensive error handling
+- ✅ Health checks (shallow + deep)
+- ✅ Repository listing with stats
+- ✅ Semantic search with filtering
+- ✅ Chunk and file retrieval
 
-**Status**: Skeleton exists, endpoints not yet implemented.
-
-**Required endpoints**:
-- ❌ `GET /v1/health` — shallow check (current) + deep check (lancedb, embeddings status)
-- ❌ `GET /v1/repos` — list all repositories with metadata
-- ❌ `POST /v1/search` — semantic search with pagination, cursors, filtering
-- ❌ `GET /v1/chunks/{id}` — fetch specific chunk by ID
-- ❌ `GET /v1/file` — fetch file slice [start, end] from disk
-
-**Location**: `src/pb_kb/api/app.py` (FastAPI, port 127.0.0.1:7777)
-
-### 🔄 PHASE 5b (IN PROGRESS): MCP Bridge
-
-**Status**: Specification complete, scaffolding done, **blocked on Phase 7**.
-
-**Location**: `mcp-bridge/` (TypeScript + Bun runtime)
-
-**Completed**:
-- ✅ Specification and design (`docs/phase-5-mcp-bridge-spec.md`)
-- ✅ Project structure and scaffolding
-- ✅ Unit test framework with mock REST server
-- ✅ Tool definitions and error handling
+**Phase 5b (MCP Bridge)** — ✅ Complete
+- ✅ All 6 MCP tools implemented (52/52 tests passing)
+- ✅ MCP Protocol 2025-06-18 compliance
+- ✅ 50KB content budget with multi-stage trimming for context windows
+- ✅ Structured error responses with remediation hints
 - ✅ JSONL logging with rotation
+- ✅ Full TypeScript types with Zod validation
+- ✅ AbortSignal support for cancellation
 
-**Awaiting Phase 7**:
-- 🔜 Tool implementations (search_knowledge, fetch_chunk, fetch_lines, open_in_editor, get_vector_store_info, get_metadata)
-- 🔜 Integration tests with real REST service
-- 🔜 Content truncation logic (50 KB budget enforcement)
-- 🔜 Pagination cursor handling
+**Total Test Coverage**: 243/243 tests passing ✅
 
-**Tier 1 Tools** (when Phase 7 ready):
-- `search_knowledge` — Query repos, return ranked snippets with citations
-- `fetch_chunk` — Get full chunk by ID
-- `fetch_lines` — Read file slice
-- `open_in_editor` — Generate vscode://file URI for Continue
-
-**Tier 2 Tools** (when Phase 7 ready):
-- `get_vector_store_info` — Namespaces, dims, limits, counts
-- `get_metadata` — Chunk metadata
 ---
 
 ## 🚀 Quick Start
@@ -106,9 +86,8 @@ cd mcp-bridge && bun install && cd ..
 # Copy example env file
 cp env.example .env
 
-# Add your API keys
+# Add your API key
 export OPENAI_API_KEY=sk-...
-export GITHUB_PERSONAL_ACCESS_TOKEN=ghp_...
 ```
 
 3. **Initialize the knowledge store**:
@@ -130,14 +109,15 @@ just add-repo my-repo /path/to/repo
 just reindex my-repo
 
 # Start services
-just api             # Start REST API server
+just api             # Start retrieval server
 just mcp             # Start MCP bridge
+just start           # Start OpenWebUI (localhost:3010)
 
 # Search
 just search "your query"
 just repos           # List indexed repositories
 just info            # Vector store information
-just health          # API health check
+just health          # Retrieval server health check
 ```
 
 ---
@@ -145,6 +125,8 @@ just health          # API health check
 ## 📖 Usage
 
 ### Indexing Repositories
+
+Indexing commands are part of the knowledge base management:
 
 ```bash
 # Initialize the knowledge base
@@ -165,11 +147,13 @@ just reset my-repo /path/to/repo  # Complete setup: init + add + reindex
 
 ### Searching via CLI
 
+Retrieval commands query the indexed knowledge store through the retrieval server:
+
 ```bash
 # Add bin directory to PATH
-export PATH="$PWD/bin:$PATH"
+export PATH="\$PWD/bin:\$PATH"
 
-# Start the API server (in one terminal)
+# Start the retrieval server (in one terminal)
 kb-api
 
 # Search for code (in another terminal)
@@ -197,7 +181,7 @@ kb-search lines my-repo src/main.py 1 50
 ### Searching via REST API
 
 ```bash
-# Start the API server
+# Start the retrieval server
 kb-api
 
 # Search for code
@@ -225,11 +209,36 @@ curl http://127.0.0.1:7777/v1/health
 
 ---
 
-## 🔌 MCP Integration
+## 🔌 Integration Interfaces
 
-Dolphin provides a Model Context Protocol (MCP) bridge that allows Claude Desktop and other MCP-compatible tools to search your codebase.
+### OpenWebUI
 
-### Claude Desktop Setup
+OpenWebUI provides a general-purpose conversational interface with integrated MCP tools:
+
+```bash
+# Start OpenWebUI (requires Docker)
+just start
+
+# Access at http://localhost:3010
+```
+
+OpenWebUI connects to the knowledge base through MCP services and can use configured personas for specialized agents.
+
+### Continue (VSCode)
+
+Continue configurations are generated from persona definitions:
+
+```bash
+# Generate Continue agent configurations
+personas generate
+
+# This creates individual Continue "agents" from each persona subdirectory
+# Each agent has its own system prompt and knowledge base access
+```
+
+### Claude Desktop (MCP)
+
+Dolphin provides a Model Context Protocol (MCP) bridge that allows Claude Desktop to search your codebase:
 
 1. **Locate your Claude Desktop config**:
    - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
@@ -255,7 +264,7 @@ Dolphin provides a Model Context Protocol (MCP) bridge that allows Claude Deskto
 }
 ```
 
-3. **Start the REST API** (in a terminal):
+3. **Start the retrieval server** (in a terminal):
 
 ```bash
 cd /path/to/dolphin
@@ -281,7 +290,7 @@ Once configured, Claude can use these tools:
 # Install MCP Inspector
 npm install -g @modelcontextprotocol/inspector
 
-# Start REST API (terminal 1)
+# Start retrieval server (terminal 1)
 kb-api
 
 # Start MCP Inspector (terminal 2)
@@ -350,31 +359,47 @@ ignore_patterns = [
 ### System Components
 
 ```
-┌─────────────────┐
-│  Claude Desktop │
-│   (MCP Client)  │
-└────────┬────────┘
-         │ MCP Protocol
-         ▼
-┌─────────────────┐      ┌──────────────────┐
-│   MCP Bridge    │◄────►│   REST API       │
-│  (TypeScript)   │      │   (FastAPI)      │
-│  Port: stdio    │      │   Port: 7777     │
-└─────────────────┘      └────────┬─────────┘
-                                  │
-                    ┌─────────────┴─────────────┐
-                    ▼                           ▼
-         ┌──────────────────┐      ┌──────────────────┐
-         │  LanceDB         │      │  SQLite Metadata │
-         │  (Vector Store)  │      │  (Provenance)    │
-         └──────────────────┘      └──────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                      AI Interfaces                           │
+│  ┌─────────────────┐  ┌──────────────┐  ┌───────────────┐  │
+│  │   Claude        │  │  OpenWebUI   │  │  Continue     │  │
+│  │   Desktop       │  │  (Port 3010) │  │  (VSCode)     │  │
+│  └────────┬────────┘  └──────┬───────┘  └───────┬───────┘  │
+└───────────┼─────────────────┼──────────────────┼──────────┘
+            │                 │                  │
+            │ MCP Protocol    │ MCP Services     │ Generated
+            │                 │                  │ Personas
+            ▼                 ▼                  ▼
+┌─────────────────────────────────────────────────────────────┐
+│           Knowledge Base Services Layer                      │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │    MCP Bridge (TypeScript)                          │   │
+│  │    - Tool implementations (search, fetch, etc.)     │   │
+│  │    - Content budget trimming (50KB)                 │   │
+│  │    - JSONL logging with rotation                    │   │
+│  └────────────────┬────────────────────────────────────┘   │
+│                   │ HTTP                                     │
+│  ┌────────────────▼────────────────────────────────────┐   │
+│  │    Retrieval Server (FastAPI, Port 7777)           │   │
+│  │    - 5 REST endpoints                              │   │
+│  │    - Database connection initialization            │   │
+│  │    - Semantic search and filtering                 │   │
+│  └────────────────┬────────────────────────────────────┘   │
+└───────────────────┼──────────────────────────────────────────┘
+                    │
+        ┌───────────┴───────────┐
+        ▼                       ▼
+    ┌────────────┐      ┌──────────────┐
+    │  LanceDB   │      │  SQLite      │
+    │ (Vectors)  │      │ (Metadata)   │
+    └────────────┘      └──────────────┘
 ```
 
 ### Pipeline Flow
 
-1. **Ingestion**: Scan repos → Language-aware chunking → Compute embeddings → Store in LanceDB + SQLite
-2. **Retrieval**: Query → Embed query → Vector search → Re-rank → Return results
-3. **MCP Bridge**: Transform REST API responses → MCP protocol messages
+1. **Ingestion**: Scan repos (`kb` commands) → Language-aware chunking → Compute embeddings → Store in LanceDB + SQLite
+2. **Retrieval**: Query (`kb-search` commands) → Embed query → Vector search → Re-rank → Return results
+3. **MCP Bridge**: Transform REST API responses → MCP protocol messages for Claude/tools
 
 ### Key Features
 
@@ -382,7 +407,8 @@ ignore_patterns = [
 - **Semantic search**: OpenAI embeddings + LanceDB vector store
 - **Git-aware indexing**: Incremental updates based on commit history
 - **Content deduplication**: Hash-based dedup to avoid redundant storage
-- **Session tracking**: SQLite metadata for provenance and debugging
+- **Multi-interface access**: MCP, REST API, CLI, and conversational interfaces
+- **Context budget management**: 50KB trimming for optimal LLM context windows
 
 ---
 
@@ -410,15 +436,20 @@ just test-verbose
 
 ### Test Coverage
 
-Current test coverage: **147/147 tests passing** (100% for knowledge base pipeline)
+Current test coverage: **243/243 tests passing** (100% for entire platform)
 
-Key test areas:
+**Python Tests**: 191/191 passing
 - Chunking (Python, TypeScript, Markdown, fallback)
 - Embeddings (OpenAI provider, retry logic, stub provider)
 - Storage (LanceDB, SQLite metadata)
 - Search (semantic search, filtering, ranking)
 - API (REST endpoints, error handling)
-- MCP Bridge (tool implementations, logging)
+
+**TypeScript Tests**: 52/52 passing
+- MCP Bridge tools and protocol compliance
+- REST client and error handling
+- Logging and concurrency
+- Security and connectivity
 
 ---
 
@@ -428,15 +459,19 @@ Key test areas:
 
 ```
 dolphin/
-├── bin/                      # CLI tools (kb-search)
+├── bin/                      # CLI tools (kb, kb-search, kb-api)
 ├── docs/                     # Documentation
 ├── mcp-bridge/              # TypeScript MCP bridge
 │   ├── src/
 │   │   ├── index.ts         # MCP server entry point
-│   │   ├── kb-cli.ts        # CLI wrapper
+│   │   ├── kb-cli.ts        # CLI wrapper for retrieval
 │   │   └── tools/           # MCP tool implementations
 │   └── logs/                # JSONL logs
-├── personas/                # AI agent personas (OpenWebUI)
+├── personas/                # AI agent personas
+│   ├── my-agent/           # Example persona structure
+│   │   ├── system.md       # System prompt
+│   │   └── config.json     # Configuration
+│   └── generate.sh         # Generate Continue configs
 ├── src/pb_kb/              # Main Python package
 │   ├── api/                # REST API (FastAPI)
 │   ├── chunkers/           # Language-specific chunking
@@ -463,7 +498,7 @@ pytest --watch tests/
 just reset test-repo /path/to/test/repo
 
 # 4. Start services for testing
-just api     # Terminal 1: REST API
+just api     # Terminal 1: Retrieval server
 just mcp     # Terminal 2: MCP Bridge
 
 # 5. Test search
@@ -491,10 +526,10 @@ mypy src/
 
 ## 🐛 Troubleshooting
 
-### API Not Running
+### Retrieval Server Not Running
 
 ```bash
-# Check if API is up
+# Check if server is up
 curl http://127.0.0.1:7777/v1/health
 
 # If not, start it
@@ -541,7 +576,7 @@ bun --version
 
 ```bash
 # Verify API key is set
-echo $OPENAI_API_KEY
+echo \$OPENAI_API_KEY
 
 # Switch to stub provider for testing
 # Edit ~/.dolphin/knowledge_store/config.toml:
@@ -553,10 +588,11 @@ echo $OPENAI_API_KEY
 
 ## 📚 Documentation
 
-Dolphin has comprehensive documentation organized into two main guides:
+Dolphin has comprehensive documentation organized into guides and technical references:
 
 - **[User Guide](docs/GUIDE.md)** — Complete guide for installation, indexing, searching, CLI usage, REST API, MCP integration, and troubleshooting
 - **[Architecture](docs/ARCHITECTURE.md)** — Technical architecture, implementation status, data models, pipeline flow, and test coverage
+- **[Production Readiness](docs/PRODUCTION_READINESS.md)** — Path to production including monitoring, security, and scalability
 
 For historical documentation and implementation plans, see `docs/ignore/`.
 
@@ -564,20 +600,24 @@ For historical documentation and implementation plans, see `docs/ignore/`.
 
 ## 🎯 Roadmap
 
-### Current Status (Phase 6 Complete)
+### Current Status (Phases 1-5b Complete)
 
 - ✅ Knowledge base ingestion pipeline
 - ✅ Semantic search with OpenAI embeddings
 - ✅ REST API with filtering and ranking
 - ✅ MCP bridge implementation
 - ✅ CLI tools and Justfile workflows
-- ✅ Comprehensive test coverage
+- ✅ Multi-interface support (MCP, CLI, REST API)
+- ✅ Comprehensive test coverage (243/243 tests passing)
 
-### Upcoming (Phase 7-9)
+### Upcoming Focus Areas
 
-- 🔜 **Phase 7**: REST API endpoint implementation (health, repos, search, chunks, file)
-- 🔜 **Phase 8**: Evaluation framework (P@5, R@10, MRR metrics)
-- 🔜 **Phase 9**: Production hardening (monitoring, auto-indexing, recovery)
+- 🔜 **Production Readiness**: Monitoring, observability, error recovery
+- 🔜 **Performance Optimization**: Caching, query optimization, SLA targets
+- 🔜 **User Experience**: Installation simplification, performance optimization
+- 🔜 **Security Hardening**: Authentication, authorization, encryption at rest
+- 🔜 **Scalability**: Distributed indexing, multi-tenant support
+- 🔜 **Evaluation Framework**: P@5, R@10, MRR metrics
 
 ---
 
@@ -606,7 +646,7 @@ This project is licensed under the MIT License.
 - Built with [LanceDB](https://lancedb.com/) for vector storage
 - Uses [OpenAI](https://openai.com/) for embeddings
 - MCP protocol by [Anthropic](https://www.anthropic.com/)
-- Powered by [FastAPI](https://fastapi.tiangolo.com/) and [Bun](https://bun.sh/)
+- Powered by [FastAPI](https://fastapi.tiangelo.com/) and [Bun](https://bun.sh/)
 
 ---
 
