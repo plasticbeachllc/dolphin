@@ -68,6 +68,9 @@ include = ["src/pb_kb", "personas"]
 dolphin = { workspace = true }
 
 [dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+]
 test = [
     "fakeredis>=2.32.0",
     "freezegun>=1.5.5",

@@ -236,8 +236,8 @@ kb-api:
 
 
 # Defaults (override on CLI: just NAME=myrepo ...)
-NAME ?= "dolphin"
-REPO_PATH ?= "$(pwd)"
+NAME := "dolphin"
+REPO_PATH := "$(pwd)"
 
 default:
   @just --list

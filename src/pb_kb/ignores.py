@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Iterable
 from pathlib import Path
 
@@ -7,6 +8,8 @@ try:
     import tomllib  # Python 3.11+
 except ImportError:  # pragma: no cover
     import tomli as tomllib  # type: ignore[import-not-found]
+
+_log = logging.getLogger(__name__)
 
 DEFAULT_IGNORE_PATTERNS: tuple[str, ...] = (
     ".env",
@@ -68,8 +71,8 @@ def build_ignore_set(extra: Iterable[str] | None = None) -> set[str]:
 def load_repo_ignores(repo_root: Path) -> set[str]:
     """Load repo-level ignore patterns from .dolphin/config.toml if present.
 
-    Looks for either a top-level `ignore = [..]` array or an
-    `[indexing] ignore = [..]` table within the file.
+    Looks for either a top-level `ignore_patterns = [..]` array or an
+    `[indexing] ignore_patterns = [..]` table within the file.
     """
     repo_root = repo_root.expanduser().resolve()
     cfg = repo_root / ".dolphin" / "config.toml"
@@ -79,12 +82,17 @@ def load_repo_ignores(repo_root: Path) -> set[str]:
         with cfg.open("rb") as fh:
             data = tomllib.load(fh) or {}
         patterns: list[str] = []
-        if isinstance(data.get("ignore"), list):
-            patterns.extend([str(x) for x in data.get("ignore", [])])
+        
+        # Look for ignore_patterns in top-level or indexing section
+        if isinstance(data.get("ignore_patterns"), list):
+            patterns.extend([str(x) for x in data.get("ignore_patterns", [])])
+            
         indexing = data.get("indexing") or {}
-        if isinstance(indexing.get("ignore"), list):
-            patterns.extend([str(x) for x in indexing.get("ignore", [])])
+        if isinstance(indexing.get("ignore_patterns"), list):
+            patterns.extend([str(x) for x in indexing.get("ignore_patterns", [])])
+            
         return build_ignore_set(patterns)
     except Exception:
         # On parse issues, fail closed (no additional repo ignores)
+        _log.warning("Failed to load repo ignore configuration from %s", cfg, exc_info=True)
         return set()

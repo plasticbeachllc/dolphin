@@ -424,6 +424,9 @@ test = [
 ]
 
 [package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
 test = [
     { name = "fakeredis" },
     { name = "freezegun" },
@@ -479,6 +482,7 @@ requires-dist = [
 provides-extras = ["test", "dev"]
 
 [package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.4.2" }]
 test = [
     { name = "fakeredis", specifier = ">=2.32.0" },
     { name = "freezegun", specifier = ">=1.5.5" },

@@ -1,3 +1,5 @@
+"""Integration tests for KB search with provenance and snippet handling."""
+
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
@@ -7,7 +9,7 @@ from pb_kb.hashing import hash_text
 from tests.kb_utils import FIXTURE_REPO_ROOT, kb_backend_context
 
 
-def run_test() -> None:
+def test_search_returns_provenance_rich_snippets():
     """Golden test verifying /v1/search returns provenance-rich snippets."""
     target_file = FIXTURE_REPO_ROOT / "src" / "widgets.py"
     expected_hash = hash_text(target_file.read_text(encoding="utf-8"))

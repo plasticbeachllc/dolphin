@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+# from __future__ import annotations
 from pathlib import Path
 import os
 
@@ -185,25 +184,49 @@ def prune_ignored(
     }
     ignore_patterns = build_ignore_set(config.ignore)
     repo_level = load_repo_ignores(repo_root)
+    if dry_run:
+        typer.echo(f"Debug: repo_level ignores loaded: {len(repo_level)} patterns", err=True)
+        # Check if bun.lock patterns are in repo_level
+        bun_in_repo = [p for p in repo_level if "bun" in p.lower()]
+        if bun_in_repo:
+            typer.echo(f"Debug: bun patterns in repo_level: {bun_in_repo}", err=True)
+        else:
+            typer.echo(f"Debug: NO bun patterns in repo_level", err=True)
     if repo_level:
         ignore_patterns.update(repo_level)
     ignore_patterns.update(extra_security)
+    
+    # Manually add bun.lock patterns to test
+    ignore_patterns.add("bun.lock")
+    ignore_patterns.add("**/bun.lock")
+    
     ignore_spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
     
+    # Debug: show which patterns we're using
+    if dry_run:
+        typer.echo(f"Debug: Using {len(ignore_patterns)} ignore patterns", err=True)
+        bun_patterns = [p for p in ignore_patterns if "bun" in p.lower()]
+        if bun_patterns:
+            typer.echo(f"Debug: bun-related patterns: {bun_patterns}", err=True)
+        else:
+            typer.echo(f"Debug: NO bun patterns found!", err=True)
     # Get all files for this repo
     files = metadata.get_all_files_for_repo(repo_id)
     
     total_chunks_pruned = 0
     pruned_files = []
-    
     for file_record in files:
         file_path = file_record["path"]
         file_id = file_record["id"]
         
         # Check if file matches ignore patterns
-        if ignore_spec.match_file(file_path):
+        matches = ignore_spec.match_file(file_path)
+        if dry_run and "bun.lock" in file_path:
+            typer.echo(f"Debug: {file_path} matches={matches}", err=True)
+
+        if matches:
             pruned_files.append(file_path)
-            
+
             # Prune all content for this file across all embedding models
             if not dry_run:
                 # Get all embed models used for this file and prune each
