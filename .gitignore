@@ -16,5 +16,8 @@ mcpo_config.json
 
 # Python cache
 __pycache__/
+
 .coverage
 .scratch/*
+docs/ignore/*
+
