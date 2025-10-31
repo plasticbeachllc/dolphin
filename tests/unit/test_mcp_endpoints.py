@@ -302,10 +302,10 @@ class TestMCPEndpointsIntegration:
         assert len(repos) >= 1
         assert repos[0]["name"] == "myproject"
 
-        # 2. Search for code
+        # 2. Search for code (specify model to match indexed chunks)
         search_response = client_with_indexed_repo.post(
             "/v1/search",
-            json={"query": "main function", "repos": ["myproject"], "top_k": 5}
+            json={"query": "main function", "repos": ["myproject"], "top_k": 5, "embed_model": "small"}
         )
         assert search_response.status_code == 200
         hits = search_response.json()["hits"]

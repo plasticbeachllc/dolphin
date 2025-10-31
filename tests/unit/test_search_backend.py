@@ -223,13 +223,16 @@ class TestKnowledgeSearchBackend:
         backend = KnowledgeSearchBackend(embedding_provider, lance_store, sql_store)
 
         # Set score cutoff to filter low-similarity results
+        # With distance_to_similarity = 1.0 / (1.0 + distance):
+        # - chunk1: distance=0.1 -> similarity = 1.0/1.1 = 0.909 (passes)
+        # - chunk2: distance=0.9 -> similarity = 1.0/1.9 = 0.526 (passes)
+        # Use score_cutoff=0.6 to filter out chunk2
         request = SearchRequest(
-            query="test", score_cutoff=0.5, embed_model="small"
+            query="test", score_cutoff=0.6, embed_model="small"
         )
         results = backend.search(request)
 
         # Only high-similarity result should pass
-        # distance <= (1.0 - 0.5) = 0.5
         assert len(results) == 1
         assert results[0]["chunk_id"] == "chunk1"
 

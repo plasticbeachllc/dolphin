@@ -12,6 +12,35 @@ import sys
 from pathlib import Path
 
 
+def check_dependencies() -> tuple[bool, list[str]]:
+    """Check if required test dependencies are installed.
+
+    Returns:
+        Tuple of (all_installed, missing_packages)
+    """
+    missing = []
+
+    # Check for pytest-cov if coverage is needed
+    try:
+        import pytest_cov
+    except ImportError:
+        missing.append("pytest-cov")
+
+    # Check for pytest-xdist for parallel execution
+    try:
+        import xdist
+    except ImportError:
+        missing.append("pytest-xdist")
+
+    # Check for pytest-asyncio for async tests
+    try:
+        import pytest_asyncio
+    except ImportError:
+        missing.append("pytest-asyncio")
+
+    return len(missing) == 0, missing
+
+
 def run_tests(
     target: str | None = None,
     coverage: bool = True,
@@ -33,6 +62,26 @@ def run_tests(
     Returns:
         True if tests passed, False otherwise
     """
+    # Check dependencies
+    all_installed, missing = check_dependencies()
+    if not all_installed:
+        print("⚠️  Warning: Some optional test dependencies are missing:")
+        for pkg in missing:
+            print(f"  - {pkg}")
+        print("\nTo install all test dependencies, run:")
+        print("  uv sync --group test")
+        print("  # or")
+        print("  pip install -e '.[test]'")
+        print("\nContinuing with available features...\n")
+
+        # Disable features that require missing dependencies
+        if "pytest-cov" in missing and coverage:
+            print("ℹ️  Coverage disabled (pytest-cov not installed)")
+            coverage = False
+        if "pytest-xdist" in missing and parallel:
+            print("ℹ️  Parallel execution disabled (pytest-xdist not installed)")
+            parallel = False
+
     tests_dir = Path(__file__).parent
     reports_dir = tests_dir / "reports"
     reports_dir.mkdir(exist_ok=True)
@@ -61,7 +110,9 @@ def run_tests(
         cmd.append(f"--cov-report=xml:{reports_dir}/coverage.xml")
 
     # JUnit XML for CI/CD
-    cmd.append(f"--junitxml={reports_dir}/junit/test-results.xml")
+    junit_dir = reports_dir / "junit"
+    junit_dir.mkdir(exist_ok=True)
+    cmd.append(f"--junitxml={junit_dir}/test-results.xml")
 
     # Markers
     if markers:

@@ -2,6 +2,28 @@
 
 This directory contains the complete test suite for the dolphin project, organized into unit, integration, and e2e tests.
 
+## Installation
+
+Before running tests, install the test dependencies:
+
+```bash
+# Using uv (recommended)
+uv sync --group test
+
+# Or using pip
+pip install -e '.[test]'
+```
+
+**Required test dependencies:**
+- `pytest` - Test framework
+- `pytest-cov` - Coverage reporting
+- `pytest-asyncio` - Async test support
+- `pytest-xdist` - Parallel test execution
+- `pytest-mock` - Mocking utilities
+- `psutil` - System monitoring (for performance tests)
+- `httpx` - HTTP client for API tests
+- `fakeredis`, `freezegun`, `responses` - Test utilities
+
 ## Test Organization
 
 ```

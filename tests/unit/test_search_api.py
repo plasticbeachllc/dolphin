@@ -178,7 +178,7 @@ class TestSearchAPI:
 
         # Should use defaults from SearchRequest
         assert data["meta"]["top_k"] == 8  # Default top_k
-        assert data["meta"]["model"] == "small"  # Default embed_model
+        assert data["meta"]["model"] == "large"  # Default embed_model
 
     def test_search_empty_query(self, client_with_backend):
         """Test search with empty query."""
