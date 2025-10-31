@@ -204,6 +204,7 @@ ignore = [
     "poetry.lock",
     "Pipfile.lock",
     "Cargo.lock",
+    "bun.lock",
     
     # Compiled / Binary
     "*.so",
