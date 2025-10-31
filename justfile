@@ -255,7 +255,7 @@ bun-install:
 # --- Services ---
 
 api:
-  . .venv/bin/activate && kb-api
+  uv run kb-api
 
 mcp:
   bun run mcp-bridge/src/index.ts
@@ -263,20 +263,20 @@ mcp:
 # --- Ingestion ---
 
 init:
-  . .venv/bin/activate && kb init
+  uv run kb init
 
-add-repo name: path="$(pwd)"
-  . .venv/bin/activate && kb add-repo {{name}} {{path}} --default-embed-model large
+add-repo name:
+  uv run kb add-repo {{name}} $(pwd) --default-embed-model large
 
 index name:
-  . .venv/bin/activate && kb index {{name}}
+  uv run kb index {{name}}
 
 reindex name:
-  . .venv/bin/activate && kb index {{name}} --full --force
+  uv run kb index {{name}} --full --force
 
-reset name: path="$(pwd)"
+reset name:
   just init
-  just add-repo {{name}} {{path}}
+  just add-repo {{name}} $(pwd)
   just reindex {{name}}
 
 # --- Search & Tools ---
