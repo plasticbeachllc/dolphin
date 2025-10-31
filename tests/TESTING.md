@@ -87,15 +87,39 @@ pytest tests/unit/
 # Integration tests: Require real tiktoken
 # First run downloads tiktoken automatically
 pytest tests/integration/
-# → Attempts download, uses cache if available, fails if neither work
+# → Attempts download, validates cache, fails if neither work
 
 # Full test suite
 pytest
 # → Unit tests pass, integration tests may fail without tiktoken
 
-# After first successful run, tiktoken is cached
+# After first successful run, tiktoken is cached and validated
 pytest tests/integration/
-# → Uses cached data, no network required
+# → Uses cached data (after validation), no network required
+```
+
+**Cache Validation**:
+
+Tiktoken cache is validated before use to prevent issues with:
+- Corrupted downloads
+- Partial/incomplete cache files
+- Wrong tiktoken version
+- Stale data
+
+Validation checks:
+1. ✓ Encoding loads successfully
+2. ✓ Known text produces expected token counts (e.g., "hello world" → 2 tokens)
+3. ✓ Encode/decode roundtrip works correctly
+
+**Force Refresh** (if cache is corrupted):
+
+```bash
+# Clear cache and re-download
+TIKTOKEN_FORCE_REFRESH=1 pytest tests/integration/
+
+# Or manually:
+rm -rf ~/.cache/tiktoken/
+python scripts/download_tiktoken.py
 ```
 
 **When Integration Tests Fail**:
@@ -105,8 +129,9 @@ If you see:
 ❌ ERROR: Integration tests require tiktoken encoding data
 ```
 
-This means production won't work either! Solutions:
+This means production won't work either! Solutions depend on the error:
 
+**Network blocked (403 Forbidden)**:
 1. **Run from environment with network access** (one-time setup):
    ```bash
    python scripts/download_tiktoken.py
@@ -121,6 +146,23 @@ This means production won't work either! Solutions:
 3. **In CI/CD**: Pre-download in container build or deployment
    ```dockerfile
    RUN python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
+   ```
+
+**Cache validation failed (corrupted/wrong version)**:
+1. **Force refresh** (recommended):
+   ```bash
+   TIKTOKEN_FORCE_REFRESH=1 pytest tests/integration/
+   ```
+
+2. **Manually clear and re-download**:
+   ```bash
+   rm -rf ~/.cache/tiktoken/
+   python scripts/download_tiktoken.py
+   ```
+
+3. **Check tiktoken version**:
+   ```bash
+   pip show tiktoken  # Should be 0.12.0+
    ```
 
 **Test Status**:

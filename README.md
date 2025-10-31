@@ -455,6 +455,10 @@ python scripts/download_tiktoken.py
 - Mock tiktoken has different behavior (token counts, chunk boundaries)
 - Tests should fail if production won't work (no false confidence)
 
+**Cache validation:**
+- Tiktoken cache is validated before use (prevents corrupted/stale data)
+- If validation fails: `TIKTOKEN_FORCE_REFRESH=1 pytest tests/integration/`
+
 See [tests/TESTING.md](tests/TESTING.md) for detailed testing documentation and troubleshooting.
 
 ### Test Coverage

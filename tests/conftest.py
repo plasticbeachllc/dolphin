@@ -123,20 +123,95 @@ class MockTiktokenEncoding:
         return ''.join(result)
 
 
-def ensure_tiktoken_available() -> bool:
-    """Ensure tiktoken encoding data is available.
+def validate_tiktoken_cache() -> tuple[bool, str]:
+    """Validate that cached tiktoken data is usable.
 
-    Tries to:
-    1. Use existing cached tiktoken data
-    2. Download tiktoken data if cache missing
+    Returns (is_valid, error_message).
 
-    Returns True if tiktoken is available, False otherwise.
+    Performs actual encode/decode operations to verify cache integrity:
+    - Loads the encoding
+    - Encodes known text
+    - Verifies token count is reasonable
+    - Decodes tokens back to text
+    - Verifies roundtrip works
     """
     try:
         import tiktoken
-        # Try to load encoding - will use cache if available
-        tiktoken.get_encoding("cl100k_base")
-        return True
+
+        # Load the encoding
+        enc = tiktoken.get_encoding("cl100k_base")
+
+        # Test with known text - these values are stable for cl100k_base
+        test_cases = [
+            ("hello world", 2),  # Should be exactly 2 tokens
+            ("The quick brown fox", 4),  # Should be exactly 4 tokens
+        ]
+
+        for text, expected_tokens in test_cases:
+            # Encode
+            tokens = enc.encode(text)
+
+            # Verify token count is reasonable
+            if len(tokens) != expected_tokens:
+                return False, (
+                    f"Cache validation failed: '{text}' produced {len(tokens)} tokens, "
+                    f"expected {expected_tokens}. Cache may be corrupted or from wrong tiktoken version."
+                )
+
+            # Verify decode roundtrip
+            decoded = enc.decode(tokens)
+            if decoded != text:
+                return False, (
+                    f"Cache validation failed: Encode/decode roundtrip failed. "
+                    f"Original: '{text}', Decoded: '{decoded}'. Cache is corrupted."
+                )
+
+        return True, ""
+
+    except Exception as e:
+        return False, f"Cache validation failed: {str(e)}"
+
+
+def ensure_tiktoken_available(force_refresh: bool = False) -> bool:
+    """Ensure tiktoken encoding data is available and valid.
+
+    Args:
+        force_refresh: If True, skip cache and force re-download
+
+    Validates cached data by:
+    1. Loading encoding successfully
+    2. Testing encode/decode operations
+    3. Verifying token counts match expected values
+
+    Returns True if tiktoken is available and validated, False otherwise.
+    """
+    import os
+
+    # Check for force refresh environment variable
+    if not force_refresh:
+        force_refresh = os.getenv("TIKTOKEN_FORCE_REFRESH", "").lower() in ("1", "true", "yes")
+
+    if force_refresh:
+        # Clear cache to force re-download
+        import shutil
+        cache_dir = os.path.expanduser("~/.cache/tiktoken")
+        if os.path.exists(cache_dir):
+            print(f"Force refresh: Clearing tiktoken cache at {cache_dir}")
+            shutil.rmtree(cache_dir)
+
+    try:
+        import tiktoken
+
+        # Try to load and validate encoding
+        is_valid, error_msg = validate_tiktoken_cache()
+
+        if is_valid:
+            return True
+        else:
+            # Cache exists but is invalid
+            print(f"Warning: {error_msg}")
+            return False
+
     except Exception as e:
         error_msg = str(e)
         # If it's a network error, data isn't cached
@@ -170,19 +245,29 @@ def setup_tiktoken(request):
 
     # Integration tests require real tiktoken
     if ensure_tiktoken_available():
-        # Tiktoken is available (either cached or just downloaded)
+        # Tiktoken is available and validated
         return
 
-    # Try to download
+    # Tiktoken not available or validation failed - try to download
     print("\n" + "=" * 70)
-    print("Tiktoken encoding data not found. Attempting download...")
+    print("Tiktoken encoding data not found or invalid. Attempting download...")
     print("=" * 70)
 
     try:
         import tiktoken
         print("Downloading cl100k_base encoding...", end=" ", flush=True)
         tiktoken.get_encoding("cl100k_base")
-        print("✓ Success!")
+        print("✓ Downloaded!")
+
+        # Validate the downloaded data
+        print("Validating downloaded data...", end=" ", flush=True)
+        is_valid, error_msg = validate_tiktoken_cache()
+        if not is_valid:
+            print(f"✗ Validation failed!")
+            print(f"Error: {error_msg}")
+            raise RuntimeError(f"Downloaded tiktoken data is invalid: {error_msg}")
+
+        print("✓ Validated!")
         print("=" * 70)
         return
     except Exception as e:
@@ -207,14 +292,32 @@ def setup_tiktoken(request):
             print("     python scripts/download_tiktoken.py")
             print()
             print("  2. Copy cached data from another machine:")
-            print("     scp user@other-machine:~/.cache/tiktoken/* ~/.cache/tiktoken/")
+            print("     scp user@dev-machine:~/.cache/tiktoken/* ~/.cache/tiktoken/")
             print()
             print("  3. In production, ensure tiktoken data is pre-downloaded")
             print("     during deployment or included in container image")
+        elif "validation failed" in error_msg.lower() or "corrupted" in error_msg.lower():
+            print("Cached tiktoken data failed validation (corrupted or wrong version).")
+            print()
+            print("Solutions:")
+            print("  1. Force refresh (clears cache and re-downloads):")
+            print("     TIKTOKEN_FORCE_REFRESH=1 pytest tests/integration/")
+            print()
+            print("  2. Manually clear cache and re-download:")
+            print("     rm -rf ~/.cache/tiktoken/")
+            print("     python scripts/download_tiktoken.py")
+            print()
+            print("  3. If problem persists, check tiktoken library version:")
+            print("     pip show tiktoken")
         else:
             print(f"Unexpected error: {error_msg}")
             print()
-            print("Try running: python scripts/download_tiktoken.py")
+            print("Solutions:")
+            print("  1. Try force refresh:")
+            print("     TIKTOKEN_FORCE_REFRESH=1 pytest tests/integration/")
+            print()
+            print("  2. Try manual download:")
+            print("     python scripts/download_tiktoken.py")
 
         print()
         print("=" * 70)
