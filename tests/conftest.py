@@ -54,21 +54,27 @@ def mock_embedding_service():
     return MockEmbeddingService()
 
 
-@pytest.fixture
-def git_repo(temp_dir: Path) -> Path:
-    """Create a git repository for testing."""
+def init_test_git_repo(repo_path: Path) -> None:
+    """Initialize a git repository with test-friendly defaults.
+
+    This helper disables commit signing at the repo level (not globally)
+    to avoid signing server failures in test environments.
+    """
     import subprocess
 
-    repo_path = temp_dir / "test_repo"
-    repo_path.mkdir()
-
-    # Initialize git repo
     subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
     subprocess.run(["git", "-C", str(repo_path), "config", "user.email", "test@example.com"], check=True)
     subprocess.run(["git", "-C", str(repo_path), "config", "user.name", "Test User"], check=True)
-    # Disable GPG signing for tests
+    # Disable GPG signing for this repo only (not globally)
     subprocess.run(["git", "-C", str(repo_path), "config", "commit.gpgsign", "false"], check=True)
 
+
+@pytest.fixture
+def git_repo(temp_dir: Path) -> Path:
+    """Create a git repository for testing."""
+    repo_path = temp_dir / "test_repo"
+    repo_path.mkdir()
+    init_test_git_repo(repo_path)
     return repo_path
 
 
