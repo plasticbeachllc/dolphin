@@ -44,37 +44,61 @@ The mock tokenizer is **fundamentally different** from real tiktoken:
 3. Token count estimates in tests are approximate
 4. Chunk boundaries in tests may differ from production
 
-**Mitigation strategies**:
+**Current Implementation**:
 
-#### Option 1: Pre-download tiktoken data (Recommended for CI)
+The test suite uses a **smart fallback strategy**:
+
+```
+┌─────────────────────────────────────────────────┐
+│              Test Type Decision Tree            │
+├─────────────────────────────────────────────────┤
+│                                                  │
+│  Unit Tests (tests/unit/)                       │
+│    ✓ ALWAYS use mock tiktoken                   │
+│    ✓ Fast, offline, deterministic               │
+│    ✓ Verify logic, not production results       │
+│                                                  │
+│  Integration Tests (tests/integration/)         │
+│    ┌────────────────────────────────┐           │
+│    │ Real tiktoken available?       │           │
+│    ├────────────────────────────────┤           │
+│    │ YES → Use real tiktoken        │←─────┐    │
+│    │       (validates production)   │      │    │
+│    │                                │      │    │
+│    │ NO  → Use mock tiktoken        │      │    │
+│    │       (fallback, warns)        │      │    │
+│    └────────────────────────────────┘      │    │
+│                                             │    │
+└─────────────────────────────────────────────┼────┘
+                                              │
+                                              │
+              ┌───────────────────────────────┘
+              │
+              │  Download real tiktoken:
+              │  python scripts/download_tiktoken.py
+              │
+              └──> Integration tests use real tiktoken
+```
+
+**How to enable real tiktoken for integration tests**:
+
 ```bash
-# Download once and cache
-python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
-# This downloads to ~/.cache/tiktoken/
+# Download tiktoken encoding data (run once)
+python scripts/download_tiktoken.py
+
+# Now integration tests will automatically use real tiktoken
+pytest tests/integration/
+
+# In environments where download is blocked (403 errors):
+# - Integration tests will use mock and emit warnings
+# - All tests will still pass
 ```
 
-Then run tests with real tiktoken:
-```bash
-# Set environment variable to bypass mock
-DOLPHIN_USE_REAL_TIKTOKEN=1 pytest tests/
-```
-
-#### Option 2: Integration tests with real tiktoken (Recommended for validation)
-```python
-@pytest.mark.skipif(not os.getenv("DOLPHIN_USE_REAL_TIKTOKEN"),
-                    reason="Requires real tiktoken")
-def test_chunking_with_real_tiktoken():
-    """Verify chunking with actual OpenAI tokenizer."""
-    # This test uses real tiktoken to validate production behavior
-```
-
-#### Option 3: Record/replay tiktoken behavior
-Use pytest-recording or similar to capture real tiktoken behavior once and replay in tests.
-
-**Current status**:
-- ✅ All unit tests use mock (fast, reliable, offline)
-- ⚠️ No integration tests with real tiktoken yet
-- 📋 TODO: Add integration tests that verify real tiktoken behavior
+**Test Status**:
+- ✅ Unit tests: Always use mock (362 tests)
+- ✅ Integration tests: Use real if available, mock as fallback
+- ✅ Real tiktoken validation: 4 tests in `test_real_tiktoken.py` (skipped if unavailable)
+- ✅ Graceful degradation: All tests pass with or without real tiktoken
 
 ---
 

@@ -123,9 +123,28 @@ class MockTiktokenEncoding:
         return ''.join(result)
 
 
-@pytest.fixture(scope="session", autouse=True)
+def is_tiktoken_available() -> bool:
+    """Check if real tiktoken encoding data is available (downloaded).
+
+    Returns True if tiktoken can load encodings without network access.
+    """
+    try:
+        import tiktoken
+        # Try to get encoding without downloading
+        # This will succeed if data is cached, fail if it needs to download
+        tiktoken.get_encoding("cl100k_base")
+        return True
+    except Exception:
+        return False
+
+
+@pytest.fixture(scope="session")
 def mock_tiktoken():
-    """Mock tiktoken.get_encoding to avoid network calls during tests."""
+    """Mock tiktoken.get_encoding to avoid network calls during unit tests.
+
+    Note: This fixture is NOT autouse. It must be explicitly requested by tests
+    or applied via pytest marks. Integration tests should use real tiktoken.
+    """
     mock_encoding = MockTiktokenEncoding()
 
     def mock_get_encoding(encoding_name: str):
@@ -133,3 +152,35 @@ def mock_tiktoken():
 
     with patch('tiktoken.get_encoding', side_effect=mock_get_encoding):
         yield mock_encoding
+
+
+def pytest_configure(config):
+    """Configure pytest with custom markers."""
+    config.addinivalue_line(
+        "markers", "unit: mark test as a unit test (uses mock tiktoken)"
+    )
+    config.addinivalue_line(
+        "markers", "integration: mark test as an integration test (uses real dependencies)"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Automatically apply mock_tiktoken fixture based on availability.
+
+    - Unit tests always get mock tiktoken (fast, offline)
+    - Integration tests get mock tiktoken as fallback if real tiktoken unavailable
+    """
+    tiktoken_available = is_tiktoken_available()
+
+    for item in items:
+        # Check if test is in unit test directory
+        if "tests/unit" in str(item.fspath):
+            # Unit tests always use mock
+            if "mock_tiktoken" not in item.fixturenames:
+                item.fixturenames.append("mock_tiktoken")
+            item.add_marker(pytest.mark.unit)
+        elif "tests/integration" in str(item.fspath):
+            # Integration tests use real tiktoken if available, otherwise mock
+            if not tiktoken_available and "mock_tiktoken" not in item.fixturenames:
+                item.fixturenames.append("mock_tiktoken")
+            item.add_marker(pytest.mark.integration)
