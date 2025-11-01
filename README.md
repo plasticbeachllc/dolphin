@@ -499,7 +499,7 @@ dolphin/
 │   │   ├── system.md       # System prompt
 │   │   └── config.json     # Configuration
 │   └── generate.sh         # Generate Continue configs
-├── src/pb_kb/              # Main Python package
+├── pb_kb/src/              # Main Python package
 │   ├── api/                # REST API (FastAPI)
 │   ├── chunkers/           # Language-specific chunking
 │   ├── embeddings/         # Embedding providers

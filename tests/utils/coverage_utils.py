@@ -9,7 +9,7 @@ from typing import Dict, Optional, List
 class CoverageManager:
     """Manage test coverage collection and reporting."""
     
-    def __init__(self, source_dir: str = "src/pb_kb", output_dir: Path = None):
+    def __init__(self, source_dir: str = "pb_kb/src", output_dir: Path = None):
         self.source_dir = source_dir
         self.output_dir = output_dir or Path("tests/reports")
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -118,7 +118,7 @@ class CoverageManager:
 
 def run_tests_with_coverage(
     test_paths: List[str] = None,
-    source_dir: str = "src/pb_kb",
+    source_dir: str = "pb_kb/src",
     min_coverage: float = 0.0,
     output_dir: Path = None
 ) -> bool:
