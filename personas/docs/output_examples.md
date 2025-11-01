@@ -22,7 +22,6 @@ This document shows what the generated KiloCode and Continue configuration files
 
 **Key Changes from Previous Implementation:**
 - Instructions are now embedded directly in mode configuration files
-- Only global configuration (~/.kilocode/) is supported  
 - Provider configurations match official KiloCode schema exactly
 - Uses KiloCode Custom Modes format specification
 
