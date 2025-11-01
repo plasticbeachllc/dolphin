@@ -102,7 +102,7 @@ def run_tests(
     # Coverage
     if coverage:
         cmd.extend([
-            "--cov=src/pb_kb",
+            "--cov=pb_kb/src",
             "--cov-report=term-missing",
         ])
         if html_report:

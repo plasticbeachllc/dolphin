@@ -84,7 +84,7 @@ You can also use pytest directly for more control:
 pytest tests/
 
 # Run with coverage
-pytest tests/ --cov=src/pb_kb --cov-report=html
+pytest tests/ --cov=pb_kb/src --cov-report=html
 
 # Run specific test
 pytest tests/unit/test_hashing.py::test_hash_stability -v

@@ -13,17 +13,26 @@ except ModuleNotFoundError as exc:  # pragma: no cover - should be in deps
 from .persona_utils import (
     Persona,
     PersonaError,
-    build_continue_entry,
     compile_system_message,
     ensure_unique_models,
     iter_persona_dirs,
     load_persona,
     write_json,
 )
+from .continue_utils import (
+    ContinueError,
+    write_continue_config,
+    validate_continue_config,
+)
+from .kilocode_utils import (
+    KiloCodeError,
+    write_kilocode_config,
+    validate_kilocode_config,
+)
 
 app = typer.Typer(
     add_completion=False,
-    help="Persona toolkit for previewing and generating Continue configs.",
+    help="Persona toolkit for previewing and generating Continue or KiloCode configs.",
 )
 
 PERSONAS_SUBDIR = 'cast'
@@ -201,11 +210,11 @@ def generate(
         "-p",
         help="Path to the personas root directory.",
     ),
-    out: Path = typer.Option(
-        Path(".continue/agents/personas_config.yaml"),
+    out: Optional[Path] = typer.Option(
+        None,
         "--out",
         "-o",
-        help="Path to write the Continue config YAML output.",
+        help="Path to write the configuration output (auto-determined if not specified).",
     ),
     manifest: Optional[Path] = typer.Option(
         None,
@@ -228,10 +237,61 @@ def generate(
         "--verbose",
         help="Print compiled systemMessage text for each persona.",
     ),
+    kilocode: bool = typer.Option(
+        False,
+        "--kilocode",
+        help="Generate KiloCode Custom Modes configuration.",
+    ),
+    continue_compat: bool = typer.Option(
+        False,
+        "--continue",
+        help="Generate Continue configuration.",
+    ),
+    target_format: Optional[str] = typer.Option(
+        None,
+        "--target-format",
+        help="Target format for output: 'kilocode' or 'continue' (alternative to --kilocode/--continue flags).",
+    ),
 ) -> None:
-    """Generate a Continue config from persona definitions."""
+    """Generate a Continue or KiloCode config from persona definitions."""
 
     personas_root = personas
+
+    # Handle target_format option vs legacy flags
+    if target_format is not None:
+        # New --target-format option used
+        if kilocode or continue_compat:
+            typer.secho("error: --target-format cannot be used with --kilocode or --continue", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2)
+        
+        if target_format not in ["kilocode", "continue"]:
+            typer.secho("error: --target-format must be 'kilocode' or 'continue'", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2)
+        
+        # Set the corresponding flags for backward compatibility with existing logic
+        if target_format == "kilocode":
+            kilocode = True
+        else:
+            continue_compat = True
+    else:
+        # Legacy flags used
+        if not (kilocode or continue_compat):
+            typer.secho("error: must specify either --kilocode, --continue, or --target-format", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2)
+        
+        if kilocode and continue_compat:
+            typer.secho("error: --kilocode and --continue are mutually exclusive", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2)
+        
+        # Set target_format based on flags
+        target_format = "kilocode" if kilocode else "continue"
+    
+    # Determine output paths - Both formats output to private directories
+    if out is None:
+        if target_format == "kilocode":
+            out = Path(".") / "config.json"  # File path, will create .kilocode-config subdirectory
+        else:  # continue
+            out = Path(".") / "personas_config.yaml"  # File path, will create .continue-config subdirectory
 
     personas_list: List[Persona] = []
     warnings: List[str] = []
@@ -278,8 +338,7 @@ def generate(
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from exc
 
-    models = []
-    manifest_entries = []
+    compiled_messages = {}  # Store compiled messages for both formats
 
     for persona in sorted(personas_list, key=lambda p: p.name.lower()):
         compiled, info = compile_system_message(
@@ -289,21 +348,9 @@ def generate(
             model=persona.provider_model,
             budget=persona.token_budget,
         )
-        entry = build_continue_entry(persona, compiled)
-        models.append(entry)
-
-        manifest_entries.append(
-            {
-                "id": persona.id,
-                "name": persona.name,
-                "version": persona.version,
-                "provider": persona.provider_kind,
-                "model": persona.provider_model,
-                "token_budget": persona.token_budget,
-                "path": str(persona.path),
-                "trimmed": info["trimmed"],
-            }
-        )
+        
+        # Store compiled message for both generators
+        compiled_messages[persona.id] = compiled
 
         summary = (
             f"[{persona.id}] {persona.name} -> {persona.provider_kind}:{persona.provider_model} "
@@ -319,49 +366,109 @@ def generate(
             typer.echo(compiled)
             typer.echo("--- end systemMessage ---\n")
 
-    has_qwen_autocomplete = any(
-        ("autocomplete" in (entry.get("roles") or []))
-        or entry.get("model") == "qwen2.5-coder:1.5b"
-        for entry in models
-    )
+    # Generate configuration based on target format
+    if target_format == "kilocode":
+        # Generate KiloCode configuration
+        try:
+            result = write_kilocode_config(
+                personas_list,
+                compiled_messages,
+                shared_guardrails,
+                out,
+                dry_run=dry_run
+            )
+            
+            if dry_run:
+                typer.echo(f"(dry-run) Would generate KiloCode config with {result['modes_count']} modes")
+                typer.echo(f"(dry-run) Would write to: {result['output_directory']}")
+                for file_path in result['generated_files']:
+                    typer.echo(f"  - {file_path}")
+            else:
+                typer.echo(f"Generated KiloCode config with {result['modes_count']} modes")
+                typer.echo(f"Configuration written to: {result['output_directory']}")
+                
+                # Validate generated configurations
+                validation_errors = []
+                for persona in personas_list:
+                    config_file = Path(result['output_directory']) / "modes" / f"{persona.id}.json"
+                    errors = validate_kilocode_config(config_file)
+                    validation_errors.extend(errors)
+                
+                if validation_errors:
+                    typer.secho("Validation warnings:", fg=typer.colors.YELLOW)
+                    for error in validation_errors:
+                        typer.secho(f"  - {error}", fg=typer.colors.YELLOW)
+                else:
+                    typer.secho("✓ All generated configurations validated successfully", fg=typer.colors.GREEN)
+            
+            if manifest:
+                # Create manifest entries with KiloCode-specific data
+                manifest_entries = []
+                for persona in personas_list:
+                    manifest_entries.append({
+                        "id": persona.id,
+                        "name": persona.name,
+                        "version": persona.version,
+                        "provider": persona.provider_kind,
+                        "model": persona.provider_model,
+                        "token_budget": persona.token_budget,
+                        "path": str(persona.path),
+                        "target_format": "kilocode",
+                        "config_file": f"modes/{persona.id}.json",
+                        "instructions_file": f"instructions/{persona.id}-instructions.md"
+                    })
+                
+                write_json(manifest, manifest_entries, dry_run=dry_run)
+                
+        except KiloCodeError as exc:
+            typer.secho(f"error: KiloCode generation failed: {exc}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2) from exc
+    
+    elif target_format == "continue":
+        # Generate Continue configuration
+        try:
+            if dry_run:
+                result = write_continue_config(
+                    personas_list,
+                    compiled_messages,
+                    out,
+                    manifest,
+                    dry_run=True
+                )
+                typer.echo(yaml.safe_dump(result['config_payload'], sort_keys=False))
+                typer.echo(f"(dry-run) Would write {result['models_count']} models to {result['output_file']}")
+                if manifest:
+                    typer.echo(f"(dry-run) Would write manifest to {manifest}")
+            else:
+                result = write_continue_config(
+                    personas_list,
+                    compiled_messages,
+                    out,
+                    manifest,
+                    dry_run=False
+                )
+                typer.echo(f"Wrote {result['models_count']} models to {result['output_file']}")
+                if manifest and result['manifest_file']:
+                    typer.echo(f"Wrote manifest to {result['manifest_file']}")
+                
+                # Validate generated configuration
+                validation_errors = validate_continue_config(out)
+                if validation_errors:
+                    typer.secho("Validation warnings:", fg=typer.colors.YELLOW)
+                    for error in validation_errors:
+                        typer.secho(f"  - {error}", fg=typer.colors.YELLOW)
+                else:
+                    typer.secho("✓ Configuration validated successfully", fg=typer.colors.GREEN)
+                    
+        except ContinueError as exc:
+            typer.secho(f"error: Continue generation failed: {exc}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2) from exc
 
-    if not has_qwen_autocomplete:
-        models.append(
-            {
-                "name": "qwen2.5-coder:1.5b",
-                "title": "qwen2.5-coder:1.5b",
-                "provider": "ollama",
-                "model": "qwen2.5-coder:1.5b",
-                "roles": ["autocomplete", "chat"],
-            }
-        )
 
-    config_payload = {
-        "name": "Dolphin Personas",
-        "version": "0.1.1",
-        "schema": "v1",
-        "models": models,
-        "mcpServers": [],
-    }
-    if dry_run:
-        typer.echo(yaml.safe_dump(config_payload, sort_keys=False))
-    else:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        if out.exists():
-            out.unlink()
-        out.write_text(yaml.safe_dump(config_payload, sort_keys=False), encoding="utf-8")
-    if manifest:
-        write_json(manifest, manifest_entries, dry_run=dry_run)
-
-    if dry_run:
-        typer.echo(f"(dry-run) Would write {len(models)} models to {out}")
-        if manifest:
-            typer.echo(f"(dry-run) Would write manifest to {manifest}")
-    else:
-        typer.echo(f"Wrote {len(models)} models to {out}")
-        if manifest:
-            typer.echo(f"Wrote manifest to {manifest}")
+def main() -> None:
+    """CLI entry point."""
+    app()
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
-    app()
+    main()

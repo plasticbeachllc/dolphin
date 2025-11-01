@@ -59,10 +59,10 @@ kb-api = "pb_kb.api.server:main"
 personas = "personas.src.personas:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/pb_kb", "personas"]
+packages = ["pb_kb/src", "personas"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/pb_kb", "personas"]
+include = ["pb_kb/src", "personas"]
 
 [tool.uv.sources]
 dolphin = { workspace = true }
