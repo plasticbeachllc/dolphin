@@ -408,13 +408,33 @@ def load_persona(persona_dir: Path) -> Persona:
     if system_inline:
         system_text = str(system_inline)
     else:
-        system_file = files.get("system", "system.md")
-        system_path = persona_dir / system_file
-        if not system_path.exists():
-            raise PersonaError(
-                f"Persona '{persona_id}' system file '{system_file}' not found in {persona_dir}"
-            )
-        system_text = system_path.read_text(encoding="utf-8")
+        system_file = files.get("system")
+        
+        # If no specific system file specified, check for common variants
+        if not system_file:
+            # Try system.md first, then prompt.md
+            system_path = persona_dir / "system.md"
+            if system_path.exists():
+                system_file = "system.md"
+            else:
+                prompt_path = persona_dir / "prompt.md"
+                if prompt_path.exists():
+                    system_file = "prompt.md"
+                else:
+                    raise PersonaError(
+                        f"Persona '{persona_id}' system file not found in {persona_dir}. "
+                        f"Expected 'system.md' or 'prompt.md'"
+                    )
+        
+    system_path = persona_dir / system_file
+    
+    # If the explicitly specified file doesn't exist, raise error
+    if not system_path.exists():
+        raise PersonaError(
+            f"Persona '{persona_id}' system file '{system_file}' not found in {persona_dir}"
+        )
+    
+    system_text = system_path.read_text(encoding="utf-8")
 
     continue_table = data.get("continue") or {}
     continue_extra = continue_table.get("extra") or {}
@@ -463,62 +483,7 @@ def ensure_unique_models(personas: Iterable[Persona]) -> None:
         seen[key] = persona
 
 
-def build_continue_entry(persona: Persona, system_message: str) -> Dict[str, Any]:
-    roles = persona.raw.get("continue", {}).get("roles")
-    if not roles:
-        roles = ["chat", "edit"]
-    elif isinstance(roles, str):
-        roles = [roles]
-    entry: Dict[str, Any] = {
-        "name": persona.name,
-        "title": persona.name,
-        "provider": persona.provider_kind,
-        "model": persona.provider_model,
-        "roles": roles,
-        "systemMessage": system_message,
-    }
-
-    completion_map = {
-        "temperature": "temperature",
-        "top_p": "topP",
-        "topP": "topP",
-        "max_tokens": "maxTokens",
-        "maxTokens": "maxTokens",
-        "presence_penalty": "presencePenalty",
-        "frequency_penalty": "frequencyPenalty",
-    }
-    default_completion: Dict[str, Any] = {}
-
-    for key, value in persona.params.items():
-        if value is None:
-            continue
-        mapped = completion_map.get(key)
-        if mapped:
-            default_completion[mapped] = value
-        else:
-            entry[key] = value
-
-    if default_completion:
-        entry["defaultCompletionOptions"] = default_completion
-
-    entry.update(persona.provider_options)
-    entry.update(persona.continue_extra)
-
-    if persona.provider_kind.lower() == "openai":
-        api_base = str(persona.provider_options.get("apiBase", "")).lower()
-        if "deepseek" in api_base:
-            api_key = os.getenv("DEEPSEEK_API_KEY")
-        else:
-            api_key = os.getenv("OPENAI_API_KEY")
-    elif persona.provider_kind.lower() == "anthropic":
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-    else:
-        api_key = None
-    
-    if api_key is not None:
-        entry.setdefault("apiKey", api_key)
-
-    return entry
+# build_continue_entry moved to continue_utils.py
 
 
 def write_json(path: Path, payload: Any, *, dry_run: bool = False) -> None:

@@ -11,7 +11,7 @@ kind = "anthropic"
 model = "claude-haiku-4-5"
 
 [files]
-system = "system.md"
+system = "prompt.md"
 
 [system]
 token_budget = 800
