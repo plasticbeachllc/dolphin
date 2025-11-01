@@ -247,22 +247,44 @@ def generate(
         "--continue",
         help="Generate Continue configuration.",
     ),
+    target_format: Optional[str] = typer.Option(
+        None,
+        "--target-format",
+        help="Target format for output: 'kilocode' or 'continue' (alternative to --kilocode/--continue flags).",
+    ),
 ) -> None:
     """Generate a Continue or KiloCode config from persona definitions."""
 
     personas_root = personas
 
-    # Validate flags - now require one or the other
-    if not (kilocode or continue_compat):
-        typer.secho("error: must specify either --kilocode or --continue", fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=2)
-    
-    if kilocode and continue_compat:
-        typer.secho("error: --kilocode and --continue are mutually exclusive", fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=2)
-    
-    # Determine target format
-    target_format = "kilocode" if kilocode else "continue"
+    # Handle target_format option vs legacy flags
+    if target_format is not None:
+        # New --target-format option used
+        if kilocode or continue_compat:
+            typer.secho("error: --target-format cannot be used with --kilocode or --continue", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2)
+        
+        if target_format not in ["kilocode", "continue"]:
+            typer.secho("error: --target-format must be 'kilocode' or 'continue'", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2)
+        
+        # Set the corresponding flags for backward compatibility with existing logic
+        if target_format == "kilocode":
+            kilocode = True
+        else:
+            continue_compat = True
+    else:
+        # Legacy flags used
+        if not (kilocode or continue_compat):
+            typer.secho("error: must specify either --kilocode, --continue, or --target-format", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2)
+        
+        if kilocode and continue_compat:
+            typer.secho("error: --kilocode and --continue are mutually exclusive", fg=typer.colors.RED, err=True)
+            raise typer.Exit(code=2)
+        
+        # Set target_format based on flags
+        target_format = "kilocode" if kilocode else "continue"
     
     # Determine output paths - Both formats output to repository directories for safety
     if out is None:

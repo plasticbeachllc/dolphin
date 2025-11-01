@@ -11,6 +11,9 @@ mcpo_config.json
 .continue/*
 .continue/**/*
 
+# output dirs
+kilocode-config/*
+
 # logs
 *.log
 

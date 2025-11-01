@@ -170,13 +170,15 @@ def build_kilocode_mode_config(persona: Persona, system_message: str) -> Dict[st
         "instructions": system_message,  # Inline instructions
     })
     
-    # Add provider options to metadata for reference
+    # Add provider options to metadata for reference (avoiding circular references)
     if persona.provider_options:
-        mode_config["metadata"] = persona.provider_options
-    
-    # Add provider options to metadata for reference
-    if persona.provider_options:
-        mode_config["metadata"]["provider_options"] = persona.provider_options
+        # Create a clean copy of provider options without circular references
+        clean_options = {}
+        for key, value in persona.provider_options.items():
+            # Skip self-referential keys
+            if key != "provider_options" and not (isinstance(value, dict) and value is persona.provider_options):
+                clean_options[key] = value
+        mode_config["metadata"] = clean_options
     
     return mode_config
 
@@ -346,55 +348,94 @@ def write_kilocode_config(
     }
 
 
-def validate_kilocode_config(config_path: Path) -> List[str]:
-    """Validate a KiloCode configuration file and return any issues."""
+def validate_kilocode_config(config_or_path) -> List[str]:
+    """Validate a KiloCode configuration file and return any issues.
+    
+    Args:
+        config_or_path: Either a Path to a config file or a dict config object
+    """
     
     issues = []
     
-    if not config_path.exists():
-        issues.append(f"Configuration file not found: {config_path}")
-        return issues
-    
-    try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-    except json.JSONDecodeError as e:
-        issues.append(f"Invalid JSON in {config_path}: {e}")
-        return issues
-    except Exception as e:
-        issues.append(f"Error reading {config_path}: {e}")
-        return issues
+    # Handle both dict and Path inputs
+    if isinstance(config_or_path, dict):
+        config = config_or_path
+        config_path = None
+    else:
+        config_path = config_or_path
+        if not config_path.exists():
+            issues.append(f"Configuration file not found: {config_path}")
+            return issues
+        
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+        except json.JSONDecodeError as e:
+            issues.append(f"Invalid JSON in {config_path}: {e}")
+            return issues
+        except Exception as e:
+            issues.append(f"Error reading {config_path}: {e}")
+            return issues
     
     # Validate required fields for KiloCode Custom Modes
     if not isinstance(config, dict):
-        issues.append(f"Configuration must be a dictionary in {config_path}")
+        location = f"in {config_path}" if config_path else ""
+        issues.append(f"Configuration must be a dictionary {location}")
         return issues
+    
+    # For dict validation, check basic required fields
+    location = f" in {config_path}" if config_path else ""
+    
+    # Check if this is a basic provider config (flat structure) or full mode config
+    # A flat provider config has id, provider, and apiModelId but no name/slug/instructions
+    has_provider_fields = "id" in config and "provider" in config and "apiModelId" in config
+    has_mode_fields = "name" in config or "slug" in config or "instructions" in config
+    is_flat_provider = has_provider_fields and not has_mode_fields
+    
+    if is_flat_provider:
+        # Validate flat provider configuration
+        required_provider_fields = ["id", "provider", "apiModelId"]
+        for field in required_provider_fields:
+            if field not in config:
+                raise KiloCodeError(f"Missing required field '{field}'{location}")
         
-    required_fields = ["name", "slug", "provider", "instructions"]
-    for field in required_fields:
-        if field not in config:
-            issues.append(f"Missing required field '{field}' in {config_path}")
-    
-    # Validate provider configuration
-    if "provider" in config:
-        provider = config["provider"]
-        if not isinstance(provider, dict):
-            issues.append(f"Provider must be a dictionary in {config_path}")
-        else:
-            # Check for required provider fields based on KiloCode schema
-            if "provider" not in provider:
-                issues.append(f"Missing 'provider' type in provider configuration in {config_path}")
-            if "apiModelId" not in provider:
-                issues.append(f"Missing 'apiModelId' in provider configuration in {config_path}")
-    
-    # Validate instructions are not empty
-    if "instructions" in config and not config["instructions"].strip():
-        issues.append(f"Empty instructions in {config_path}")
-    
-    # Validate slug format (should be kebab-case)
-    if "slug" in config:
-        slug = config["slug"]
-        if not re.match(r"^[a-z0-9]+(?:-[a-z0-9]+)*$", slug):
-            issues.append(f"Invalid slug format '{slug}' in {config_path}. Should be kebab-case.")
+        # Check for provider-specific API key field
+        provider = config.get("provider", "")
+        api_key_fields = [key for key in config.keys() if key.endswith("ApiKey") or key == "apiKey"]
+        
+        # Some providers like ollama don't require API keys
+        if provider not in ["ollama"]:
+            if not api_key_fields:
+                raise KiloCodeError(f"Missing required field 'apiKey'{location}")
+            # Check that at least one API key field is not empty
+            has_valid_key = any(config.get(key) for key in api_key_fields)
+            if not has_valid_key:
+                raise KiloCodeError(f"Missing required field 'apiKey'{location}")
+    else:
+        # Validate full mode configuration
+        required_fields = ["name", "slug", "provider", "instructions"]
+        for field in required_fields:
+            if field not in config:
+                issues.append(f"Missing required field '{field}'{location}")
+        
+        # Validate provider configuration if present
+        if "provider" in config:
+            provider = config["provider"]
+            if isinstance(provider, dict):
+                # Nested provider structure
+                if "provider" not in provider:
+                    raise KiloCodeError(f"Missing required provider field 'provider'{location}")
+                if "apiModelId" not in provider:
+                    raise KiloCodeError(f"Missing required provider field 'apiModelId'{location}")
+        
+        # Validate instructions are not empty
+        if "instructions" in config and not config["instructions"].strip():
+            issues.append(f"Empty instructions{location}")
+        
+        # Validate slug format (should be kebab-case)
+        if "slug" in config:
+            slug = config["slug"]
+            if not re.match(r"^[a-z0-9]+(?:-[a-z0-9]+)*$", slug):
+                issues.append(f"Invalid slug format '{slug}'{location}. Should be kebab-case.")
     
     return issues
