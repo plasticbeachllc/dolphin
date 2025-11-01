@@ -263,6 +263,8 @@ def ensure_fixture_repo_is_git(sample_repo_path: Path) -> Path:
             subprocess.run(["git", "init"], cwd=sample_repo_path, check=True, capture_output=True)
             subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=sample_repo_path, check=True)
             subprocess.run(["git", "config", "user.name", "Test User"], cwd=sample_repo_path, check=True)
+            # Disable GPG signing for this repo only (not globally)
+            subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=sample_repo_path, check=True)
             subprocess.run(["git", "add", "."], cwd=sample_repo_path, check=True, capture_output=True)
             subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=sample_repo_path, check=True, capture_output=True)
         except subprocess.CalledProcessError:

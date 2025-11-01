@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 from pb_kb.ingest.scanner import ScannerError, scan_repo
 from pb_kb.ignores import build_ignore_set
+from tests.conftest import init_test_git_repo
 
 
 class TestScannerBasic:
@@ -15,11 +16,7 @@ class TestScannerBasic:
         """Test repository file enumeration with various file types."""
         repo_path = temp_dir / "repo1"
         repo_path.mkdir()
-        
-        # Initialize git repo
-        subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo_path), "config", "user.email", "test@example.com"], check=True)
-        subprocess.run(["git", "-C", str(repo_path), "config", "user.name", "Test User"], check=True)
+        init_test_git_repo(repo_path)
         
         # Create test files
         (repo_path / "src" / "app.py").parent.mkdir(parents=True, exist_ok=True)
@@ -59,11 +56,7 @@ class TestScannerBasic:
         """Test .gitignore integration and untracked file handling."""
         repo_path = temp_dir / "repo2"
         repo_path.mkdir()
-        
-        # Initialize git repo
-        subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo_path), "config", "user.email", "test@example.com"], check=True)
-        subprocess.run(["git", "-C", str(repo_path), "config", "user.name", "Test User"], check=True)
+        init_test_git_repo(repo_path)
         
         # Create .gitignore
         (repo_path / ".gitignore").write_text("node_modules\ndist\n")
@@ -92,12 +85,10 @@ class TestScannerBasic:
         sub_root = temp_dir / "sub"
         super_root.mkdir()
         sub_root.mkdir()
-        
+
         # Initialize both repos
         for repo in [super_root, sub_root]:
-            subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
-            subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"], check=True)
-            subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test User"], check=True)
+            init_test_git_repo(repo)
 
         # Add file to submodule and commit
         (sub_root / "sub.txt").write_text("hi\n")
@@ -148,11 +139,7 @@ class TestIgnorePatterns:
         """Test specific ignore pattern matching behavior."""
         repo_path = temp_dir / "repo"
         repo_path.mkdir()
-        
-        # Initialize git repo
-        subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo_path), "config", "user.email", "test@example.com"], check=True)
-        subprocess.run(["git", "-C", str(repo_path), "config", "user.name", "Test User"], check=True)
+        init_test_git_repo(repo_path)
         
         # Create files that should be ignored
         (repo_path / "node_modules" / "package" / "index.js").parent.mkdir(parents=True, exist_ok=True)

@@ -417,39 +417,66 @@ ignore_patterns = [
 ### Run All Tests
 
 ```bash
-# Run all tests
+# Run all tests (unit + integration)
+pytest
+
+# Or using justfile
 just test
 
 # Run with coverage
 just test-coverage
 
 # Run specific test suites
-just test-unit
-just test-integration
+pytest tests/unit/        # Fast unit tests with mocks
+pytest tests/integration/ # Integration tests
 
 # Run specific test file
-just test-file file=tests/unit/test_search_api.py
-
-# Verbose output
-just test-verbose
+pytest tests/unit/test_search_api.py -v
 ```
+
+### Test Requirements
+
+**Unit tests** (`tests/unit/`): Always work (use mock tiktoken)
+```bash
+pytest tests/unit/  # Fast, offline, 324 tests
+```
+
+**Integration tests** (`tests/integration/`): Require real tiktoken
+```bash
+# First run attempts auto-download
+pytest tests/integration/
+
+# If download fails (403 error), pre-download first:
+python scripts/download_tiktoken.py
+```
+
+**Why integration tests require real tiktoken:**
+- Production uses real tiktoken (OpenAI's tokenizer)
+- Mock tiktoken has different behavior (token counts, chunk boundaries)
+- Tests should fail if production won't work (no false confidence)
+
+**Cache validation:**
+- Tiktoken cache is validated before use (prevents corrupted/stale data)
+- If validation fails: `TIKTOKEN_FORCE_REFRESH=1 pytest tests/integration/`
+
+See [tests/TESTING.md](tests/TESTING.md) for detailed testing documentation and troubleshooting.
 
 ### Test Coverage
 
-Current test coverage: **243/243 tests passing** (100% for entire platform)
+Current test coverage: **362 passed, 8 skipped** (all passing)
 
-**Python Tests**: 191/191 passing
+**Python Tests**: 362 tests covering:
 - Chunking (Python, TypeScript, Markdown, fallback)
 - Embeddings (OpenAI provider, retry logic, stub provider)
 - Storage (LanceDB, SQLite metadata)
 - Search (semantic search, filtering, ranking)
 - API (REST endpoints, error handling)
+- Pipeline (scanning, indexing, error recovery)
+- Git integration (incremental updates)
 
-**TypeScript Tests**: 52/52 passing
-- MCP Bridge tools and protocol compliance
-- REST client and error handling
-- Logging and concurrency
-- Security and connectivity
+**Test Organization**:
+- **Unit tests** (`tests/unit/`): Fast, offline, use mocks
+- **Integration tests** (`tests/integration/`): Use real dependencies when available
 
 ---
 
