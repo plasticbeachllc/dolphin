@@ -289,9 +289,9 @@ def generate(
     # Determine output paths - Both formats output to private directories
     if out is None:
         if target_format == "kilocode":
-            out = Path(".") / "config.json"  # File path, will create .kilocode-config subdirectory
+            out = Path(".")  # Directory, will create .kilocode-config subdirectory
         else:  # continue
-            out = Path(".") / "personas_config.yaml"  # File path, will create .continue-config subdirectory
+            out = Path(".")  # Directory, will create .continue-config subdirectory
 
     personas_list: List[Persona] = []
     warnings: List[str] = []
@@ -374,7 +374,7 @@ def generate(
                 personas_list,
                 compiled_messages,
                 shared_guardrails,
-                out,
+                out.parent if out.parent != Path(".") else Path("."),
                 dry_run=dry_run
             )
             
@@ -427,11 +427,12 @@ def generate(
     elif target_format == "continue":
         # Generate Continue configuration
         try:
+            target_dir = out.parent if out.parent != Path(".") else Path(".")
             if dry_run:
                 result = write_continue_config(
                     personas_list,
                     compiled_messages,
-                    out,
+                    target_dir,
                     manifest,
                     dry_run=True
                 )
@@ -443,7 +444,7 @@ def generate(
                 result = write_continue_config(
                     personas_list,
                     compiled_messages,
-                    out,
+                    target_dir,
                     manifest,
                     dry_run=False
                 )
@@ -452,7 +453,8 @@ def generate(
                     typer.echo(f"Wrote manifest to {result['manifest_file']}")
                 
                 # Validate generated configuration
-                validation_errors = validate_continue_config(out)
+                output_file = Path(result['output_file'])
+                validation_errors = validate_continue_config(output_file)
                 if validation_errors:
                     typer.secho("Validation warnings:", fg=typer.colors.YELLOW)
                     for error in validation_errors:

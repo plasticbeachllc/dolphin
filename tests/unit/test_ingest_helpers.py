@@ -15,7 +15,7 @@ from pb_kb.ingest._helpers import (
 
 # Simple test chunk class
 @dataclass
-class TestChunk:
+class ChunkTestData:
     """Test chunk for testing."""
     text: str
     text_hash: str
@@ -39,7 +39,7 @@ class TestBuildDesiredMap:
 
     def test_build_desired_map_single_chunk(self):
         """Test with single chunk."""
-        chunk = TestChunk(
+        chunk = ChunkTestData(
             text="def foo(): pass",
             text_hash="hash123",
             start_line=1,
@@ -61,7 +61,7 @@ class TestBuildDesiredMap:
 
     def test_build_desired_map_multiple_chunks_same_hash(self):
         """Test multiple chunks with same hash (duplicates)."""
-        chunk1 = TestChunk(
+        chunk1 = ChunkTestData(
             text="common code",
             text_hash="hash_dup",
             start_line=1,
@@ -69,7 +69,7 @@ class TestBuildDesiredMap:
             symbol_kind="function",
             symbol_name="func1",
         )
-        chunk2 = TestChunk(
+        chunk2 = ChunkTestData(
             text="common code",
             text_hash="hash_dup",
             start_line=10,
@@ -86,10 +86,10 @@ class TestBuildDesiredMap:
 
     def test_build_desired_map_multiple_different_hashes(self):
         """Test multiple chunks with different hashes."""
-        chunk1 = TestChunk(
+        chunk1 = ChunkTestData(
             text="code1", text_hash="hash1", start_line=1, end_line=2
         )
-        chunk2 = TestChunk(
+        chunk2 = ChunkTestData(
             text="code2", text_hash="hash2", start_line=5, end_line=6
         )
         result = build_desired_map([chunk1, chunk2])
@@ -101,7 +101,7 @@ class TestBuildDesiredMap:
 
     def test_build_desired_map_with_headings(self):
         """Test with markdown headings."""
-        chunk = TestChunk(
+        chunk = ChunkTestData(
             text="# Title\nContent",
             text_hash="md_hash",
             start_line=1,
@@ -132,7 +132,7 @@ class TestBuildDesiredMap:
 
     def test_build_desired_map_none_text_hash(self):
         """Test chunk with None text_hash is skipped."""
-        chunk = TestChunk(
+        chunk = ChunkTestData(
             text="code", text_hash=None, start_line=1, end_line=2
         )
         result = build_desired_map([chunk])
@@ -141,7 +141,7 @@ class TestBuildDesiredMap:
 
     def test_build_desired_map_optional_fields_none(self):
         """Test that None optional fields are included."""
-        chunk = TestChunk(
+        chunk = ChunkTestData(
             text="code",
             text_hash="hash1",
             start_line=1,
@@ -305,9 +305,9 @@ class TestRepresentativeTextForHash:
     def test_representative_text_found(self):
         """Test finding text for existing hash."""
         chunks = [
-            TestChunk("text1", "hash1", 1, 5),
-            TestChunk("text2", "hash2", 10, 15),
-            TestChunk("text3", "hash3", 20, 25),
+            ChunkTestData("text1", "hash1", 1, 5),
+            ChunkTestData("text2", "hash2", 10, 15),
+            ChunkTestData("text3", "hash3", 20, 25),
         ]
 
         text = representative_text_for_hash("hash2", chunks)
@@ -316,8 +316,8 @@ class TestRepresentativeTextForHash:
     def test_representative_text_first_match(self):
         """Test that first matching chunk is returned."""
         chunks = [
-            TestChunk("first", "hash_dup", 1, 5),
-            TestChunk("second", "hash_dup", 10, 15),
+            ChunkTestData("first", "hash_dup", 1, 5),
+            ChunkTestData("second", "hash_dup", 10, 15),
         ]
 
         text = representative_text_for_hash("hash_dup", chunks)
@@ -326,8 +326,8 @@ class TestRepresentativeTextForHash:
     def test_representative_text_not_found(self):
         """Test that missing hash raises ValueError."""
         chunks = [
-            TestChunk("text1", "hash1", 1, 5),
-            TestChunk("text2", "hash2", 10, 15),
+            ChunkTestData("text1", "hash1", 1, 5),
+            ChunkTestData("text2", "hash2", 10, 15),
         ]
 
         with pytest.raises(ValueError, match="No chunk found with text_hash"):
@@ -348,7 +348,7 @@ class TestRepresentativeTextForHash:
 
         chunks = [
             ChunkNoHash("text1", 1, 5),
-            TestChunk("text2", "hash2", 10, 15),
+            ChunkTestData("text2", "hash2", 10, 15),
         ]
 
         # Should skip first chunk and find second

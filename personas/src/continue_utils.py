@@ -79,7 +79,7 @@ def build_continue_entry(persona: Persona, system_message: str) -> Dict[str, Any
 def write_continue_config(
     personas: List[Persona],
     compiled_messages: Dict[str, str],
-    output_file: Path,
+    target_dir: Path,
     manifest_file: Path = None,
     dry_run: bool = False
 ) -> Dict[str, Any]:
@@ -88,13 +88,14 @@ def write_continue_config(
     Args:
         personas: List of personas to generate configs for
         compiled_messages: Compiled system messages by persona ID
-        output_file: Target file path (will be placed in .continue-config)
+        target_dir: Target directory for config files (will create .continue-config subdirectory)
         manifest_file: Optional manifest file path
         dry_run: If True, don't write files
     """
     
-    # Update output_file to be in .continue-config directory
-    output_file = output_file.parent / ".continue-config" / output_file.name
+    # Create .continue-config subdirectory within the target directory
+    base_dir = target_dir / ".continue-config"
+    output_file = base_dir / "personas_config.yaml"
     
     models = []
     manifest_entries = []
@@ -150,7 +151,7 @@ def write_continue_config(
         }
     else:
         # Ensure .continue-config directory exists
-        output_file.parent.mkdir(parents=True, exist_ok=True)
+        base_dir.mkdir(parents=True, exist_ok=True)
         if output_file.exists():
             output_file.unlink()
         output_file.write_text(yaml.safe_dump(config_payload, sort_keys=False), encoding="utf-8")

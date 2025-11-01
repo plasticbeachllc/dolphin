@@ -149,32 +149,32 @@ ollama-check:
 # Test all components using pytest
 test: setup-python
 	@echo "🧪 Running all tests with pytest..."
-	uv run pytest -q
+	@uv run pytest -q
 
 # Run unit tests only
 test-unit: setup-python
 	@echo "🧪 Running unit tests..."
-	uv run pytest tests/unit/ -q
+	@uv run pytest tests/unit/ -q
 
 # Run integration tests only
 test-integration: setup-python
 	@echo "🧪 Running integration tests..."
-	uv run pytest tests/integration/ -q
+	@uv run pytest tests/integration/ -q
 
 # Run tests with coverage reporting
 test-coverage: setup-python
 	@echo "🧪 Running tests with coverage..."
-	uv run pytest --cov=src/pb_kb --cov-report=html --cov-report=term-missing
+	@uv run pytest --cov=src/pb_kb --cov-report=html --cov-report=term-missing
 
 # Run specific test file
 test-file: setup-python
 	@echo "🧪 Running specific test file: $(file)"
-	uv run pytest $(file) -v
+	@uv run pytest $(file) -v
 
 # Run tests with detailed output
 test-verbose: setup-python
 	@echo "🧪 Running tests with verbose output..."
-	uv run pytest -v
+	@uv run pytest -v
 
 # ==============================================================================
 # MCP(o)

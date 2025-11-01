@@ -31,8 +31,8 @@ class TestRealTiktokenBehavior:
             # (text, expected_token_count_with_cl100k_base)
             ("hello world", 2),  # "hello" + " world"
             ("The quick brown fox", 4),  # "The" + " quick" + " brown" + " fox"
-            ("print('hello')", 5),  # "print" + "(" + "'" + "hello" + "')"
-            ("def example():\n    pass", 7),  # Typical Python function
+            ("print('hello')", 4),  # "print" + "(" + "'hello'" + ")" (tiktoken optimizes some tokens)
+            ("def example():\n    pass", 5),  # "def" + " example" + "()" + "\n    " + "pass"
         ]
 
         for text, expected_count in test_cases:

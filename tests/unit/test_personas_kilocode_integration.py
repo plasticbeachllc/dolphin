@@ -320,12 +320,12 @@ class TestConfigurationWriting:
                 personas=personas,
                 compiled_messages=compiled_messages,
                 guardrails="Be helpful",
-                output_dir=Path(tmpdir),
+                target_dir=Path(tmpdir),
                 dry_run=False
             )
             
-            # Check that kilocode-config directory was created
-            config_dir = Path(tmpdir) / "kilocode-config"
+            # Check that .kilocode-config directory was created
+            config_dir = Path(tmpdir) / ".kilocode-config"
             assert config_dir.exists()
             assert config_dir.is_dir()
             
@@ -364,12 +364,12 @@ class TestConfigurationWriting:
                 personas=personas,
                 compiled_messages=compiled_messages,
                 guardrails="Be helpful",
-                output_dir=Path(tmpdir),
+                target_dir=Path(tmpdir),
                 dry_run=True  # Dry run mode
             )
             
             # Check that no directories were created
-            config_dir = Path(tmpdir) / "kilocode-config"
+            config_dir = Path(tmpdir) / ".kilocode-config"
             assert not config_dir.exists()
             
             # But result should still be returned
@@ -395,14 +395,14 @@ class TestConfigurationWriting:
             compiled_messages = {"test-persona": "Test instructions"}
             
             # Directory doesn't exist initially
-            config_dir = Path(tmpdir) / "kilocode-config"
+            config_dir = Path(tmpdir) / ".kilocode-config"
             assert not config_dir.exists()
             
             result = write_kilocode_config(
                 personas=personas,
                 compiled_messages=compiled_messages,
                 guardrails="Be helpful",
-                output_dir=Path(tmpdir),
+                target_dir=Path(tmpdir),
                 dry_run=False
             )
             
