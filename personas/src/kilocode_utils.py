@@ -248,13 +248,21 @@ def write_kilocode_config(
     personas: List[Persona],
     compiled_messages: Dict[str, str],
     guardrails: str,
-    output_dir: Path,
+    output_file: Path,
     dry_run: bool = False
 ) -> Dict[str, Any]:
-    """Write KiloCode configuration files to repository directory."""
+    """Write KiloCode configuration files to private directory.
     
-    # Create kilocode-config subdirectory within the specified output directory
-    base_dir = output_dir / "kilocode-config"
+    Args:
+        personas: List of personas to generate configs for
+        compiled_messages: Compiled system messages by persona ID
+        guardrails: Shared guardrails text
+        output_file: Target file path (parent directory will be used as base)
+        dry_run: If True, don't write files
+    """
+    
+    # Create .kilocode-config subdirectory within the parent of the output file
+    base_dir = output_file.parent / ".kilocode-config"
     modes_dir = base_dir / "modes"
     workflows_dir = base_dir / "workflows"
     

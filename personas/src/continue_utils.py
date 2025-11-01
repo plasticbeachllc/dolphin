@@ -83,7 +83,18 @@ def write_continue_config(
     manifest_file: Path = None,
     dry_run: bool = False
 ) -> Dict[str, Any]:
-    """Write Continue configuration files."""
+    """Write Continue configuration files to private directory.
+    
+    Args:
+        personas: List of personas to generate configs for
+        compiled_messages: Compiled system messages by persona ID
+        output_file: Target file path (will be placed in .continue-config)
+        manifest_file: Optional manifest file path
+        dry_run: If True, don't write files
+    """
+    
+    # Update output_file to be in .continue-config directory
+    output_file = output_file.parent / ".continue-config" / output_file.name
     
     models = []
     manifest_entries = []
@@ -138,6 +149,7 @@ def write_continue_config(
             "output_file": str(output_file)
         }
     else:
+        # Ensure .continue-config directory exists
         output_file.parent.mkdir(parents=True, exist_ok=True)
         if output_file.exists():
             output_file.unlink()

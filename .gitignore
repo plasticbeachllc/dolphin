@@ -11,6 +11,10 @@ mcpo_config.json
 .continue/*
 .continue/**/*
 
+# generated persona configs (contain secrets and are private)
+.continue-config/
+.kilocode-config/
+
 # output dirs
 kilocode-config/*
 

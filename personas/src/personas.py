@@ -286,12 +286,12 @@ def generate(
         # Set target_format based on flags
         target_format = "kilocode" if kilocode else "continue"
     
-    # Determine output paths - Both formats output to repository directories for safety
+    # Determine output paths - Both formats output to private directories
     if out is None:
         if target_format == "kilocode":
-            out = Path(".")  # Base directory, will create kilocode-config subdirectory
+            out = Path(".") / "config.json"  # File path, will create .kilocode-config subdirectory
         else:  # continue
-            out = Path(".") / "continue-config"
+            out = Path(".") / "personas_config.yaml"  # File path, will create .continue-config subdirectory
 
     personas_list: List[Persona] = []
     warnings: List[str] = []
@@ -374,7 +374,7 @@ def generate(
                 personas_list,
                 compiled_messages,
                 shared_guardrails,
-                out.parent if out.parent != Path(".") else Path("."),
+                out,
                 dry_run=dry_run
             )
             
