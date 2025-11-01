@@ -57,13 +57,15 @@ def mock_embedding_service():
 def git_repo(temp_dir: Path) -> Path:
     """Create a git repository for testing."""
     import subprocess
-    
+
     repo_path = temp_dir / "test_repo"
     repo_path.mkdir()
-    
+
     # Initialize git repo
     subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
     subprocess.run(["git", "-C", str(repo_path), "config", "user.email", "test@example.com"], check=True)
     subprocess.run(["git", "-C", str(repo_path), "config", "user.name", "Test User"], check=True)
-    
+    # Disable GPG signing for tests
+    subprocess.run(["git", "-C", str(repo_path), "config", "commit.gpgsign", "false"], check=True)
+
     return repo_path
