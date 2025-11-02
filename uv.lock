@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.12, <3.14"
 
 [[package]]
@@ -373,127 +373,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/91/9b/4a2ea29aeba62471211598dac5d96825bb49348fa07e906ea930394a83ce/docker-7.1.0.tar.gz", hash = "sha256:ad8c70e6e3f8926cb8a92619b832b4ea5299e2831c14284663184e200546fa6c", size = 117834, upload-time = "2024-05-23T11:13:57.216Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e3/26/57c6fb270950d476074c087527a558ccb6f4436657314bfb6cdf484114c4/docker-7.1.0-py3-none-any.whl", hash = "sha256:c96b93b7f0a746f9e77d325bcfb87422a3d8bd4f03136ae8a85b37f1898d5fc0", size = 147774, upload-time = "2024-05-23T11:13:55.01Z" },
-]
-
-[[package]]
-name = "dolphin"
-version = "0.1.2"
-source = { editable = "." }
-dependencies = [
-    { name = "docker" },
-    { name = "fastapi" },
-    { name = "lancedb" },
-    { name = "markdown-it-py" },
-    { name = "mcp-server-git" },
-    { name = "mcp-server-time" },
-    { name = "mcpo" },
-    { name = "openai" },
-    { name = "pathspec" },
-    { name = "pydantic" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
-    { name = "requests" },
-    { name = "sqlite-utils" },
-    { name = "sqlmodel" },
-    { name = "tiktoken" },
-    { name = "tree-sitter" },
-    { name = "tree-sitter-javascript" },
-    { name = "tree-sitter-python" },
-    { name = "typer" },
-    { name = "uvicorn" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "black" },
-    { name = "isort" },
-    { name = "mypy" },
-    { name = "pre-commit" },
-    { name = "ruff" },
-]
-test = [
-    { name = "fakeredis" },
-    { name = "freezegun" },
-    { name = "httpx" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "pytest-mock" },
-    { name = "pytest-xdist" },
-    { name = "responses" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-]
-test = [
-    { name = "fakeredis" },
-    { name = "freezegun" },
-    { name = "httpx" },
-    { name = "psutil" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "pytest-mock" },
-    { name = "pytest-xdist" },
-    { name = "responses" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
-    { name = "docker", specifier = ">=7.1.0" },
-    { name = "fakeredis", marker = "extra == 'test'", specifier = ">=2.18.0" },
-    { name = "fastapi" },
-    { name = "freezegun", marker = "extra == 'test'", specifier = ">=1.2.0" },
-    { name = "httpx", marker = "extra == 'test'", specifier = ">=0.25.0" },
-    { name = "isort", marker = "extra == 'dev'", specifier = ">=5.12.0" },
-    { name = "lancedb" },
-    { name = "markdown-it-py" },
-    { name = "mcp-server-git", specifier = ">=0.0.1" },
-    { name = "mcp-server-time", specifier = ">=0.1.0" },
-    { name = "mcpo", specifier = ">=0.0.19" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.5.0" },
-    { name = "openai" },
-    { name = "pathspec" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.4.0" },
-    { name = "pydantic" },
-    { name = "pytest", marker = "extra == 'test'", specifier = ">=7.4.0" },
-    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.21.0" },
-    { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.1.0" },
-    { name = "pytest-mock", marker = "extra == 'test'", specifier = ">=3.11.0" },
-    { name = "pytest-xdist", marker = "extra == 'test'", specifier = ">=3.3.0" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
-    { name = "requests", specifier = ">=2.32.4" },
-    { name = "responses", marker = "extra == 'test'", specifier = ">=0.24.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
-    { name = "sqlite-utils" },
-    { name = "sqlmodel" },
-    { name = "tiktoken" },
-    { name = "tomli", marker = "python_full_version < '3.11'" },
-    { name = "tree-sitter", specifier = ">=0.25.0" },
-    { name = "tree-sitter-javascript", specifier = ">=0.25.0" },
-    { name = "tree-sitter-python", specifier = ">=0.25.0" },
-    { name = "typer" },
-    { name = "uvicorn" },
-]
-provides-extras = ["test", "dev"]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8.4.2" }]
-test = [
-    { name = "fakeredis", specifier = ">=2.32.0" },
-    { name = "freezegun", specifier = ">=1.5.5" },
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "psutil", specifier = ">=7.1.2" },
-    { name = "pytest", specifier = ">=8.4.2" },
-    { name = "pytest-asyncio", specifier = ">=1.2.0" },
-    { name = "pytest-cov", specifier = ">=7.0.0" },
-    { name = "pytest-mock", specifier = ">=3.15.1" },
-    { name = "pytest-xdist", specifier = ">=3.8.0" },
-    { name = "responses", specifier = ">=0.25.8" },
 ]
 
 [[package]]
@@ -1043,6 +922,127 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712", size = 51043, upload-time = "2023-12-10T22:30:45Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08", size = 31191, upload-time = "2023-12-10T22:30:43.14Z" },
+]
+
+[[package]]
+name = "pb-dolphin"
+version = "0.1.3"
+source = { editable = "." }
+dependencies = [
+    { name = "docker" },
+    { name = "fastapi" },
+    { name = "lancedb" },
+    { name = "markdown-it-py" },
+    { name = "mcp-server-git" },
+    { name = "mcp-server-time" },
+    { name = "mcpo" },
+    { name = "openai" },
+    { name = "pathspec" },
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "sqlite-utils" },
+    { name = "sqlmodel" },
+    { name = "tiktoken" },
+    { name = "tree-sitter" },
+    { name = "tree-sitter-javascript" },
+    { name = "tree-sitter-python" },
+    { name = "typer" },
+    { name = "uvicorn" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "black" },
+    { name = "isort" },
+    { name = "mypy" },
+    { name = "pre-commit" },
+    { name = "ruff" },
+]
+test = [
+    { name = "fakeredis" },
+    { name = "freezegun" },
+    { name = "httpx" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "pytest-mock" },
+    { name = "pytest-xdist" },
+    { name = "responses" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+test = [
+    { name = "fakeredis" },
+    { name = "freezegun" },
+    { name = "httpx" },
+    { name = "psutil" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "pytest-mock" },
+    { name = "pytest-xdist" },
+    { name = "responses" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
+    { name = "docker", specifier = ">=7.1.0" },
+    { name = "fakeredis", marker = "extra == 'test'", specifier = ">=2.18.0" },
+    { name = "fastapi" },
+    { name = "freezegun", marker = "extra == 'test'", specifier = ">=1.2.0" },
+    { name = "httpx", marker = "extra == 'test'", specifier = ">=0.25.0" },
+    { name = "isort", marker = "extra == 'dev'", specifier = ">=5.12.0" },
+    { name = "lancedb" },
+    { name = "markdown-it-py" },
+    { name = "mcp-server-git", specifier = ">=0.0.1" },
+    { name = "mcp-server-time", specifier = ">=0.1.0" },
+    { name = "mcpo", specifier = ">=0.0.19" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.5.0" },
+    { name = "openai" },
+    { name = "pathspec" },
+    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.4.0" },
+    { name = "pydantic" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=7.4.0" },
+    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.21.0" },
+    { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.1.0" },
+    { name = "pytest-mock", marker = "extra == 'test'", specifier = ">=3.11.0" },
+    { name = "pytest-xdist", marker = "extra == 'test'", specifier = ">=3.3.0" },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+    { name = "requests", specifier = ">=2.32.4" },
+    { name = "responses", marker = "extra == 'test'", specifier = ">=0.24.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
+    { name = "sqlite-utils" },
+    { name = "sqlmodel" },
+    { name = "tiktoken" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
+    { name = "tree-sitter", specifier = ">=0.25.0" },
+    { name = "tree-sitter-javascript", specifier = ">=0.25.0" },
+    { name = "tree-sitter-python", specifier = ">=0.25.0" },
+    { name = "typer" },
+    { name = "uvicorn" },
+]
+provides-extras = ["test", "dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.4.2" }]
+test = [
+    { name = "fakeredis", specifier = ">=2.32.0" },
+    { name = "freezegun", specifier = ">=1.5.5" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "psutil", specifier = ">=7.1.2" },
+    { name = "pytest", specifier = ">=8.4.2" },
+    { name = "pytest-asyncio", specifier = ">=1.2.0" },
+    { name = "pytest-cov", specifier = ">=7.0.0" },
+    { name = "pytest-mock", specifier = ">=3.15.1" },
+    { name = "pytest-xdist", specifier = ">=3.8.0" },
+    { name = "responses", specifier = ">=0.25.8" },
 ]
 
 [[package]]

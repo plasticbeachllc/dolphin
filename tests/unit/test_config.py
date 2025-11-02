@@ -234,13 +234,13 @@ endpoint = "test"
         assert "~" not in str(config.store_root)
 
     def test_load_config_default_path(self, tmp_path, monkeypatch):
-        """Test load_config with no arguments uses DEFAULT_CONFIG_PATH."""
-        # Create a config at the default location
-        default_path = tmp_path / "config.toml"
-        default_path.write_text('endpoint = "custom:1234"')
+        """Test load_config with no arguments uses user config path."""
+        # Create a config at the user config location
+        user_config_path = tmp_path / "config.toml"
+        user_config_path.write_text('endpoint = "custom:1234"')
 
-        # Monkeypatch DEFAULT_CONFIG_PATH
-        monkeypatch.setattr("kb.config.DEFAULT_CONFIG_PATH", default_path)
+        # Monkeypatch USER_CONFIG_PATH
+        monkeypatch.setattr("kb.config.USER_CONFIG_PATH", user_config_path)
 
         config = load_config()
         assert config.endpoint == "custom:1234"

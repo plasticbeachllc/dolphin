@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "dolphin"
-version = "0.1.2"
-description = "Simple package to build and run OpenWebUI with helful MCP servers"
+name = "pb-dolphin"
+version = "0.1.4"
+description = "Full-stack AI enablement platform"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
 dependencies = [
@@ -54,6 +54,7 @@ dev = [
 ]
 
 [project.scripts]
+dolphin = "kb.cli:main"
 kb = "kb.ingest.cli:app"
 kb-api = "kb.api.server:main"
 personas = "personas.src.personas:app"
@@ -61,8 +62,11 @@ personas = "personas.src.personas:app"
 [tool.hatch.build.targets.wheel]
 packages = ["kb", "personas"]
 
+[tool.hatch.build.targets.wheel.shared-data]
+"kb/config_template.toml" = "kb/config_template.toml"
+
 [tool.hatch.build.targets.sdist]
-include = ["kb", "personas"]
+include = ["kb", "personas", "kb/config_template.toml"]
 
 [tool.uv.sources]
 dolphin = { workspace = true }

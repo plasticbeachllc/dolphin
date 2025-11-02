@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
@@ -11,14 +12,48 @@ except ImportError:
 
 from .ignores import DEFAULT_IGNORE_PATTERNS
 
+_log = logging.getLogger(__name__)
+
 CONFIG_ROOT = Path.home() / ".dolphin" / "knowledge_store"
 DEFAULT_CONFIG_PATH = CONFIG_ROOT / "config.toml"
+USER_CONFIG_PATH = Path.home() / ".dolphin" / "config.toml"
+
+# Path to the bundled config template
+_TEMPLATE_PATH = Path(__file__).parent / "config_template.toml"
 
 
 def _to_path(value: Any) -> Path:
     if isinstance(value, Path):
         return value.expanduser().resolve()
     return Path(str(value)).expanduser().resolve()
+
+
+def _read_template() -> str:
+    """Read the bundled config template."""
+    if _TEMPLATE_PATH.exists():
+        return _TEMPLATE_PATH.read_text(encoding="utf-8")
+    _log.warning("Config template not found at %s", _TEMPLATE_PATH)
+    return ""
+
+
+def _ensure_user_config() -> Path:
+    """Ensure user config exists, creating it from template if needed.
+    
+    Returns the path to the user config file.
+    """
+    config_path = USER_CONFIG_PATH
+    
+    if not config_path.exists():
+        _log.info("Creating user config at %s", config_path)
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        template = _read_template()
+        if template:
+            config_path.write_text(template, encoding="utf-8")
+            _log.info("User config created successfully")
+        else:
+            _log.warning("Could not create user config: template not available")
+    
+    return config_path
 
 
 @dataclass
@@ -77,13 +112,59 @@ class KBConfig:
         return _to_path(self.store_root)
 
 
-def load_config(path: Path | None = None) -> KBConfig:
-    """Load configuration values from disk or fall back to defaults."""
-    config_path = path or DEFAULT_CONFIG_PATH
-    if config_path.exists():
-        with config_path.open("rb") as handle:
-            data = tomllib.load(handle) or {}
-        if not isinstance(data, Mapping):
-            raise ValueError(f"Config file {config_path} must contain a mapping.")
-        return KBConfig.from_mapping(data)
-    return KBConfig()
+def load_config(path: Path | None = None, repo_path: Path | None = None) -> KBConfig:
+    """Load configuration with multi-level hierarchy.
+    
+    Priority order (highest to lowest):
+    1. Explicitly provided path (if exists, otherwise use defaults - no auto-create)
+    2. Repo-specific config (./.dolphin/config.toml)
+    3. User config (~/.dolphin/config.toml, auto-created if missing)
+    4. Built-in defaults
+    
+    Args:
+        path: Explicit config file path (highest priority, won't auto-create)
+        repo_path: Path to repository root for repo-specific config lookup
+        
+    Returns:
+        KBConfig instance with merged configuration
+    """
+    config_data: dict[str, Any] = {}
+    
+    # Try explicit path first - if provided but doesn't exist, return defaults (no auto-create)
+    if path is not None:
+        if path.exists():
+            _log.debug("Loading config from explicit path: %s", path)
+            with path.open("rb") as f:
+                config_data = tomllib.load(f) or {}
+        else:
+            _log.debug("Explicit path %s doesn't exist, using defaults", path)
+            return KBConfig()
+    
+    # Try repo-specific config
+    elif repo_path:
+        repo_config_path = repo_path / ".dolphin" / "config.toml"
+        if repo_config_path.exists():
+            _log.debug("Loading repo config: %s", repo_config_path)
+            with repo_config_path.open("rb") as f:
+                config_data = tomllib.load(f) or {}
+        else:
+            # Fall through to user config
+            _log.debug("No repo config at %s, trying user config", repo_config_path)
+    
+    # If no explicit path and no config loaded yet, try user config (auto-create if needed)
+    if not config_data and path is None:
+        user_config = _ensure_user_config()
+        if user_config.exists():
+            _log.debug("Loading user config: %s", user_config)
+            with user_config.open("rb") as f:
+                config_data = tomllib.load(f) or {}
+    
+    # If still no config, use defaults
+    if not config_data:
+        _log.debug("No config found, using built-in defaults")
+        return KBConfig()
+    
+    if not isinstance(config_data, Mapping):
+        raise ValueError(f"Config must contain a mapping")
+    
+    return KBConfig.from_mapping(config_data)

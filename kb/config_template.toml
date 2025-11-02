@@ -6,6 +6,9 @@ store_root = "~/.dolphin/knowledge_store"
 [server]
 endpoint = "127.0.0.1:7777"
 
+# Top-level settings
+default_embed_model = "large"
+
 [chunking]
 default_window_size = 350
 overlap_pct = 0.10

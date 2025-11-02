@@ -64,10 +64,15 @@ _BUILTIN_CHUNKERS: Dict[str, ChunkerFunction] = {
 
 @lru_cache(maxsize=1)
 def _load_global_extension_map() -> Dict[str, str]:
-    """Load the global extension-to-language mapping from .dolphin/config.toml.
+    """Load the global extension-to-language mapping using config hierarchy.
+    
+    Uses the same multi-level config system as the main config loader:
+    1. Repo-specific config (if in a repo)
+    2. User config (~/.dolphin/config.toml, auto-created)
+    3. Built-in template
     
     This is cached since the config file rarely changes during a session.
-    Returns an empty map if config file or [languages] section is missing.
+    Returns an empty map if no [languages] section is found.
     """
     try:
         # Import TOML library (Python 3.11+ has tomllib, else use tomli)
@@ -80,31 +85,36 @@ def _load_global_extension_map() -> Dict[str, str]:
                 _log.warning("No TOML library (tomli) available. Language detection will be disabled.")
                 return {}
         
-# Look for config in dolphin repo root
         from pathlib import Path as PathLib
-        repo_root = PathLib(__file__).parent.parent.parent  # Fixed: was .parent.parent.parent.parent
-        config_path = repo_root / ".dolphin" / "config.toml"
         
-        _log.debug("Looking for config at: %s", config_path)
-        _log.debug("Config exists: %s", config_path.exists())
+        # Try user config first (will be auto-created if missing)
+        user_config_path = PathLib.home() / ".dolphin" / "config.toml"
         
-        # Also check in the default config location
-        if not config_path.exists():
-            config_path = PathLib.home() / ".dolphin" / "knowledge_store" / "config.toml"
-            _log.debug("Trying fallback config at: %s", config_path)
-            _log.debug("Fallback config exists: %s", config_path.exists())
+        # Auto-create user config if it doesn't exist
+        if not user_config_path.exists():
+            _log.info("User config not found, creating from template")
+            user_config_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Read bundled template
+            template_path = PathLib(__file__).parent.parent / "config_template.toml"
+            if template_path.exists():
+                template_content = template_path.read_text(encoding="utf-8")
+                user_config_path.write_text(template_content, encoding="utf-8")
+                _log.info("Created user config at %s", user_config_path)
+            else:
+                _log.warning("Config template not found at %s", template_path)
+                return {}
         
-        # If we still don't find it, error
-        if not config_path.exists():
-            _log.warning("No global config at %s. Language detection will be disabled.", config_path)
-            return {}
+        # Load the config
+        config_path = user_config_path
+        _log.debug("Loading language mappings from: %s", config_path)
         
         with config_path.open("rb") as f:
             data = tomllib.load(f)
         
         lang_section = data.get("languages", {})
         if not lang_section:
-            _log.warning("No [languages] section in config. Language detection will be disabled.")
+            _log.warning("No [languages] section in config at %s", config_path)
             return {}
         
         # Build extension map from config
@@ -117,7 +127,7 @@ def _load_global_extension_map() -> Dict[str, str]:
         return ext_map
         
     except Exception as e:
-        _log.warning("Failed to load global config: %s. Language detection will be disabled.", e)
+        _log.warning("Failed to load extension mappings: %s. Language detection will be disabled.", e)
         return {}
 
 
