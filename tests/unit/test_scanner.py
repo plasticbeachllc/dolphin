@@ -4,8 +4,8 @@ import pytest
 import subprocess
 import tempfile
 from pathlib import Path
-from pb_kb.ingest.scanner import ScannerError, scan_repo
-from pb_kb.ignores import build_ignore_set
+from kb.ingest.scanner import ScannerError, scan_repo
+from kb.ignores import build_ignore_set
 from tests.conftest import init_test_git_repo
 
 

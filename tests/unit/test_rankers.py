@@ -2,7 +2,7 @@
 
 import pytest
 
-from pb_kb.retrieval.rankers import reciprocal_rank_fusion, weighted_score_fusion
+from kb.retrieval.rankers import reciprocal_rank_fusion, weighted_score_fusion
 
 
 class TestReciprocalRankFusion:

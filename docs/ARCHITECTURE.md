@@ -102,7 +102,7 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 
 ### 1. REST API Backend (Python/FastAPI)
 
-**Location**: `src/pb_kb/api/`
+**Location**: `kb/api/`
 
 **Endpoints**:
 
@@ -123,9 +123,9 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 - Session spend cap enforcement
 
 **Files**:
-- `src/pb_kb/api/app.py` - FastAPI endpoints
-- `src/pb_kb/api/server.py` - Server initialization
-- `src/pb_kb/api/search_backend.py` - Search pipeline
+- `kb/api/app.py` - FastAPI endpoints
+- `kb/api/server.py` - Server initialization
+- `kb/api/search_backend.py` - Search pipeline
 
 ### 2. MCP Bridge (TypeScript/Bun)
 
@@ -158,7 +158,7 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 
 ### 3. Knowledge Base Pipeline (Python)
 
-**Location**: `src/pb_kb/`
+**Location**: `kb/`
 
 **Components**:
 
@@ -487,7 +487,7 @@ Columns:
 # Python tests
 pytest tests/unit/ -v                    # Unit tests
 pytest tests/integration/ -v             # Integration tests
-pytest --cov=src/pb_kb                   # With coverage
+pytest --cov=kb/src                    # With coverage
 
 # TypeScript tests
 cd mcp-bridge && bun test                # All MCP tests
@@ -655,7 +655,7 @@ cd mcp-bridge && bun run test-integration.ts
 
 - [User Guide](GUIDE.md) - Complete user documentation
 - [README](../README.md) - Project overview
-- [Main codebase](../src/pb_kb/) - Python implementation
+- [Main codebase](../kb/src/) - Python implementation
 - [MCP Bridge](../mcp-bridge/) - TypeScript implementation
 
 ---

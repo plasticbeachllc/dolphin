@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from pb_kb.api.app import app, set_search_backend, reset_search_backend
-from pb_kb.api.search_backend import create_search_backend
+from kb.api.app import app, set_search_backend, reset_search_backend
+from kb.api.search_backend import create_search_backend
 
 
 class TestSearchAPI:

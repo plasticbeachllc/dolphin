@@ -1,8 +1,8 @@
 """Unit tests for fallback chunker with token windowing."""
 
 import pytest
-from pb_kb.chunkers.fallback_chunker import chunk_text
-from pb_kb.chunkers.token_utils import count_tokens, get_tokenizer
+from kb.chunkers.fallback_chunker import chunk_text
+from kb.chunkers.token_utils import count_tokens, get_tokenizer
 
 
 class TestFallbackChunker:

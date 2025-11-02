@@ -10,7 +10,7 @@ Tiktoken is required for all tests (enforced by setup_tiktoken fixture).
 """
 
 import pytest
-from pb_kb.chunkers.token_utils import (
+from kb.chunkers.token_utils import (
     count_tokens,
     window_text_by_tokens,
     window_token_ranges,

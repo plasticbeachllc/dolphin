@@ -3,10 +3,10 @@
 import pytest
 from pathlib import Path
 
-from pb_kb.chunkers.py_chunker import chunk_source as chunk_python
-from pb_kb.chunkers.md_chunker import chunk_markdown
-from pb_kb.chunkers.fallback_chunker import chunk_text as chunk_fallback
-from pb_kb.chunkers.token_utils import get_tokenizer
+from kb.chunkers.py_chunker import chunk_source as chunk_python
+from kb.chunkers.md_chunker import chunk_markdown
+from kb.chunkers.fallback_chunker import chunk_text as chunk_fallback
+from kb.chunkers.token_utils import get_tokenizer
 
 
 def test_python_chunker_symbol_extraction_with_fallback(monkeypatch):
@@ -28,7 +28,7 @@ def f():
     def boom(*args, **kwargs):
         raise RuntimeError("parser boom")
 
-    from pb_kb.chunkers import py_chunker as pyc
+    from kb.chunkers import py_chunker as pyc
     monkeypatch.setattr(pyc, "_get_python_parser", boom)
 
     chunks_fb = chunk_python(src_ok, model="small", token_target=64, overlap_pct=0.1)

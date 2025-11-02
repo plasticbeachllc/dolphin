@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 import pytest
 
-from pb_kb.store.lancedb_store import LanceDBStore
+from kb.store.lancedb_store import LanceDBStore
 
 
 class TestLanceDBQuery:

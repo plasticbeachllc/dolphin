@@ -2,7 +2,7 @@
 
 import textwrap
 import pytest
-from pb_kb.chunkers.token_utils import window_text_by_tokens, count_tokens, get_tokenizer
+from kb.chunkers.token_utils import window_text_by_tokens, count_tokens, get_tokenizer
 
 
 class TestTokenUtilities:

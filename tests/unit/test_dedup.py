@@ -5,10 +5,10 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from pb_kb.chunkers.types import Chunk
-from pb_kb.hashing import hash_text
-from pb_kb.ingest.dedup import ChunkDeduplicator
-from pb_kb.store.sqlite_meta import SQLiteMetadataStore
+from kb.chunkers.types import Chunk
+from kb.hashing import hash_text
+from kb.ingest.dedup import ChunkDeduplicator
+from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
 class TestChunkDeduplication:

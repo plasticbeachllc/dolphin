@@ -164,7 +164,7 @@ test-integration: setup-python
 # Run tests with coverage reporting
 test-coverage: setup-python
 	@echo "🧪 Running tests with coverage..."
-	@uv run pytest --cov=src/pb_kb --cov-report=html --cov-report=term-missing
+	@uv run pytest --cov=kb --cov-report=html --cov-report=term-missing
 
 # Run specific test file
 test-file: setup-python
@@ -247,11 +247,11 @@ personas-generate-kilocode-manifest:
 
 # Run KB pipeline CLI
 kb:
-	uv run python -m pb_kb.ingest.cli $*
+	uv run kb $*
 
 # Run KB API server
 kb-api:
-	uv run python -m pb_kb.api.app $*
+	uv run kb-api $*
 
 
 # Defaults (override on CLI: just NAME=myrepo ...)

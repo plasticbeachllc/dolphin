@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
-from pb_kb.api.server import initialize_search_backend
-from pb_kb.api.app import get_search_backend, reset_search_backend
+from kb.api.server import initialize_search_backend
+from kb.api.app import get_search_backend, reset_search_backend
 
 
 class TestServerInitialization:
@@ -27,9 +27,9 @@ class TestServerInitialization:
                 }
             }
 
-            with patch("pb_kb.api.server.load_config") as mock_load_config:
+            with patch("kb.api.server.load_config") as mock_load_config:
                 # Mock config
-                from pb_kb.config import KBConfig
+                from kb.config import KBConfig
                 mock_config = KBConfig.from_mapping(config_dict)
                 mock_load_config.return_value = mock_config
 
@@ -55,10 +55,10 @@ class TestServerInitialization:
 
             # Mock environment with API key
             with patch.dict("os.environ", {"TEST_OPENAI_API_KEY": "test-key"}):
-                with patch("pb_kb.api.server.load_config") as mock_load_config:
+                with patch("kb.api.server.load_config") as mock_load_config:
                     with patch("openai.OpenAI"):  # Mock OpenAI client
                         # Mock config
-                        from pb_kb.config import KBConfig
+                        from kb.config import KBConfig
                         mock_config = KBConfig.from_mapping(config_dict)
                         mock_load_config.return_value = mock_config
 
@@ -83,9 +83,9 @@ class TestServerInitialization:
 
             # No API key in environment
             with patch.dict("os.environ", {}, clear=True):
-                with patch("pb_kb.api.server.load_config") as mock_load_config:
+                with patch("kb.api.server.load_config") as mock_load_config:
                     # Mock config
-                    from pb_kb.config import KBConfig
+                    from kb.config import KBConfig
                     mock_config = KBConfig.from_mapping(config_dict)
                     mock_load_config.return_value = mock_config
 

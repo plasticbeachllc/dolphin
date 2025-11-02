@@ -2,8 +2,8 @@
 
 import pytest
 from pathlib import Path
-from pb_kb.chunkers.py_chunker import chunk_source
-from pb_kb.hashing import canonicalize_text
+from kb.chunkers.py_chunker import chunk_source
+from kb.hashing import canonicalize_text
 
 
 class TestPythonChunker:

@@ -4,9 +4,9 @@ import pytest
 from pathlib import Path
 from typing import Dict, Any, List
 
-from pb_kb.api.app import SearchRequest, set_search_backend, reset_search_backend
-from pb_kb.store import LanceDBStore, SQLiteMetadataStore
-from pb_kb.config import KBConfig
+from kb.api.app import SearchRequest, set_search_backend, reset_search_backend
+from kb.store import LanceDBStore, SQLiteMetadataStore
+from kb.config import KBConfig
 from tests.utils.mock_services import MockEmbeddingService
 
 
@@ -87,7 +87,7 @@ class TestSearchIntegration:
             embed_model="small"
         )
         
-        from pb_kb.api.app import search
+        from kb.api.app import search
         response = await search(request)
         
         # Verify response structure
@@ -128,7 +128,7 @@ class TestSearchIntegration:
             embed_model="small"
         )
         
-        from pb_kb.api.app import search
+        from kb.api.app import search
         response = await search(request)
         
         # Verify response
@@ -161,7 +161,7 @@ class TestSearchIntegration:
             embed_model="small"
         )
         
-        from pb_kb.api.app import search
+        from kb.api.app import search
         response = await search(request)
         
         # Verify empty results
@@ -192,7 +192,7 @@ class TestSearchIntegration:
             embed_model="small"
         )
         
-        from pb_kb.api.app import search
+        from kb.api.app import search
         response = await search(request)
         
         # Verify latency measurement
@@ -208,7 +208,7 @@ class TestSearchIntegration:
         mock_embedding_service: MockEmbeddingService
     ):
         """Test search backend configuration and lifecycle."""
-        from pb_kb.api.app import get_search_backend, set_search_backend, reset_search_backend
+        from kb.api.app import get_search_backend, set_search_backend, reset_search_backend
         
         # Get default backend
         default_backend = get_search_backend()
@@ -249,7 +249,7 @@ class TestSearchIntegration:
             embed_model="small"
         )
         
-        from pb_kb.api.app import search
+        from kb.api.app import search
         response = await search(request)
         
         # Verify backend received correct repositories
@@ -288,7 +288,7 @@ class TestSearchPerformance:
             embed_model="small"
         )
         
-        from pb_kb.api.app import search
+        from kb.api.app import search
         
         start_time = time.time()
         response = await search(request)
@@ -319,7 +319,7 @@ class TestSearchPerformance:
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
         
-        from pb_kb.api.app import search
+        from kb.api.app import search
         
         # Create multiple search requests
         requests = [

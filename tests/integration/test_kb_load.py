@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pb_kb.hashing import canonicalize_text, hash_text
-from pb_kb.ignores import DEFAULT_IGNORE_PATTERNS, build_ignore_set
+from kb.hashing import canonicalize_text, hash_text
+from kb.ignores import DEFAULT_IGNORE_PATTERNS, build_ignore_set
 from tests.kb_utils import FIXTURE_REPO_ROOT
 
 

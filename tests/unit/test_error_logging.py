@@ -4,7 +4,7 @@ import io
 import logging
 from pathlib import Path
 
-from pb_kb.ingest.error_logging import ErrorLogger, log_error_to_file, with_retry
+from kb.ingest.error_logging import ErrorLogger, log_error_to_file, with_retry
 
 
 def test_error_logger_writes_file(tmp_path: Path):

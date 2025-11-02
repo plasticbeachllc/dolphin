@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from pb_kb.api.app import app
-from pb_kb.hashing import hash_text
+from kb.api.app import app
+from kb.hashing import hash_text
 from tests.kb_utils import FIXTURE_REPO_ROOT, kb_backend_context
 
 

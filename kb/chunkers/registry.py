@@ -80,14 +80,19 @@ def _load_global_extension_map() -> Dict[str, str]:
                 _log.warning("No TOML library (tomli) available. Language detection will be disabled.")
                 return {}
         
-        # Look for config in dolphin repo root
+# Look for config in dolphin repo root
         from pathlib import Path as PathLib
-        repo_root = PathLib(__file__).parent.parent.parent.parent
+        repo_root = PathLib(__file__).parent.parent.parent  # Fixed: was .parent.parent.parent.parent
         config_path = repo_root / ".dolphin" / "config.toml"
+        
+        _log.debug("Looking for config at: %s", config_path)
+        _log.debug("Config exists: %s", config_path.exists())
         
         # Also check in the default config location
         if not config_path.exists():
             config_path = PathLib.home() / ".dolphin" / "knowledge_store" / "config.toml"
+            _log.debug("Trying fallback config at: %s", config_path)
+            _log.debug("Fallback config exists: %s", config_path.exists())
         
         # If we still don't find it, error
         if not config_path.exists():

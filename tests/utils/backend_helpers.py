@@ -37,7 +37,7 @@ class TestBackendFactory:
         """
         try:
             # Try to import and create actual LanceDB backend
-            from pb_kb.api.app import LanceDBBackend
+            from kb.api.app import LanceDBBackend
             
             db_path = temp_dir / "test_lancedb"
             return LanceDBBackend(str(db_path), **kwargs)

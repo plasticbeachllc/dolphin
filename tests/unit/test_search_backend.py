@@ -6,11 +6,11 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from pb_kb.api.app import SearchRequest
-from pb_kb.api.search_backend import KnowledgeSearchBackend, create_search_backend
-from pb_kb.embeddings.provider import EmbeddingProvider
-from pb_kb.store.lancedb_store import LanceDBStore
-from pb_kb.store.sqlite_meta import SQLiteMetadataStore
+from kb.api.app import SearchRequest
+from kb.api.search_backend import KnowledgeSearchBackend, create_search_backend
+from kb.embeddings.provider import EmbeddingProvider
+from kb.store.lancedb_store import LanceDBStore
+from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
 class TestKnowledgeSearchBackend:

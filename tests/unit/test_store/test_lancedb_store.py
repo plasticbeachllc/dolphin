@@ -4,7 +4,7 @@ import types
 import pytest
 from pathlib import Path
 
-from pb_kb.store.lancedb_store import LanceDBStore
+from kb.store.lancedb_store import LanceDBStore
 
 
 class _MockTable:

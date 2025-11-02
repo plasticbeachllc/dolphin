@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 from typer.testing import CliRunner
-from pb_kb.ingest.cli import app
+from kb.ingest.cli import app
 
 runner = CliRunner()
 

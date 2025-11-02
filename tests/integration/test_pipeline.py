@@ -4,9 +4,9 @@ import pytest
 from pathlib import Path
 from typing import Dict, Any
 
-from pb_kb.ingest.pipeline import IngestionPipeline
-from pb_kb.store import LanceDBStore, SQLiteMetadataStore
-from pb_kb.config import KBConfig
+from kb.ingest.pipeline import IngestionPipeline
+from kb.store import LanceDBStore, SQLiteMetadataStore
+from kb.config import KBConfig
 from tests.utils.mock_services import MockEmbeddingService
 
 

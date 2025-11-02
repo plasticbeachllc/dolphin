@@ -2,7 +2,7 @@
 
 import pytest
 from pathlib import Path
-from pb_kb.config import (
+from kb.config import (
     KBConfig,
     load_config,
     _to_path,
@@ -240,7 +240,7 @@ endpoint = "test"
         default_path.write_text('endpoint = "custom:1234"')
 
         # Monkeypatch DEFAULT_CONFIG_PATH
-        monkeypatch.setattr("pb_kb.config.DEFAULT_CONFIG_PATH", default_path)
+        monkeypatch.setattr("kb.config.DEFAULT_CONFIG_PATH", default_path)
 
         config = load_config()
         assert config.endpoint == "custom:1234"

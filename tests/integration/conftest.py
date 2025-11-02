@@ -157,8 +157,8 @@ def integration_backend_config(
     mock_embedding_service
 ):
     """Provide a complete backend configuration for integration testing."""
-    from pb_kb.config import KBConfig
-    from pb_kb.store import LanceDBStore, SQLiteMetadataStore
+    from kb.config import KBConfig
+    from kb.store import LanceDBStore, SQLiteMetadataStore
     
     config = KBConfig(
         default_embed_model="small",
@@ -204,7 +204,7 @@ def registered_test_repo(integration_backend_config):
 @pytest.fixture
 def pipeline_with_registered_repo(integration_backend_config, registered_test_repo):
     """Create an ingestion pipeline with a pre-registered repository."""
-    from pb_kb.ingest.pipeline import IngestionPipeline
+    from kb.ingest.pipeline import IngestionPipeline
     
     pipeline = IngestionPipeline(
         config=integration_backend_config["config"],

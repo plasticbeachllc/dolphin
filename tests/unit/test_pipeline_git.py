@@ -3,9 +3,9 @@
 import pytest
 import subprocess
 from pathlib import Path
-from pb_kb.ingest.pipeline import IngestionPipeline
-from pb_kb.config import KBConfig
-from pb_kb.store import SQLiteMetadataStore, LanceDBStore
+from kb.ingest.pipeline import IngestionPipeline
+from kb.config import KBConfig
+from kb.store import SQLiteMetadataStore, LanceDBStore
 
 
 class TestPipelineGitOperations:

@@ -4,11 +4,11 @@ import pytest
 from pathlib import Path
 from typing import Dict, Any, List
 
-from pb_kb.ingest.pipeline import IngestionPipeline
-from pb_kb.store import LanceDBStore, SQLiteMetadataStore
-from pb_kb.config import KBConfig
-from pb_kb.ingest.scanner import scan_repo
-from pb_kb.chunkers.registry import get_chunker_for_file
+from kb.ingest.pipeline import IngestionPipeline
+from kb.store import LanceDBStore, SQLiteMetadataStore
+from kb.config import KBConfig
+from kb.ingest.scanner import scan_repo
+from kb.chunkers.registry import get_chunker_for_file
 from tests.utils.mock_services import MockEmbeddingService
 
 

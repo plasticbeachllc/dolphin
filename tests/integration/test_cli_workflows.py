@@ -4,8 +4,8 @@ import pytest
 import subprocess
 from pathlib import Path
 from typer.testing import CliRunner
-from pb_kb.ingest.cli import app
-from pb_kb.store import SQLiteMetadataStore
+from kb.ingest.cli import app
+from kb.store import SQLiteMetadataStore
 
 runner = CliRunner()
 

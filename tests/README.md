@@ -145,7 +145,7 @@ Full system tests that verify end-to-end functionality (currently empty, placeho
 ```python
 """Unit tests for hashing functionality."""
 
-from pb_kb.hashing import hash_text
+from kb.hashing import hash_text
 
 
 def test_hash_stability():

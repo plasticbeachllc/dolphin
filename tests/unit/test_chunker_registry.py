@@ -2,7 +2,7 @@
 
 import pytest
 from pathlib import Path
-from pb_kb.chunkers import (
+from kb.chunkers import (
     Chunk,
     RepoChunkingConfig,
     chunk_file,

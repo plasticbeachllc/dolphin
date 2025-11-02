@@ -4,8 +4,8 @@ import pytest
 import subprocess
 from pathlib import Path
 from typer.testing import CliRunner
-from pb_kb.ingest.cli import app, _read_config_template, _build_pipeline
-from pb_kb.config import KBConfig
+from kb.ingest.cli import app, _read_config_template, _build_pipeline
+from kb.config import KBConfig
 
 runner = CliRunner()
 
@@ -67,7 +67,7 @@ class TestInitCommand:
     def test_init_uses_default_path_when_not_specified(self, tmp_path, monkeypatch):
         """Test that init uses DEFAULT_CONFIG_PATH when path not specified."""
         default_path = tmp_path / "default_config.toml"
-        monkeypatch.setattr("pb_kb.ingest.cli.DEFAULT_CONFIG_PATH", default_path)
+        monkeypatch.setattr("kb.ingest.cli.DEFAULT_CONFIG_PATH", default_path)
 
         result = runner.invoke(app, ["init"])
 

@@ -12,7 +12,7 @@ Canonicalization Rules:
 5. Preserve indentation (significant in Python/YAML)
 
 Usage:
-    from pb_kb.hashing import hash_text, canonicalize_text
+    from kb.hashing import hash_text, canonicalize_text
     
     # Hash a chunk directly
     chunk_hash = hash_text(chunk.text)

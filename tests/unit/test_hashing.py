@@ -1,7 +1,7 @@
 """Unit tests for text hashing and canonicalization."""
 
 import pytest
-from pb_kb.hashing import canonicalize_text, hash_text, verify_hash
+from kb.hashing import canonicalize_text, hash_text, verify_hash
 
 
 class TestCanonicalizeText:

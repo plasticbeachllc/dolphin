@@ -54,15 +54,15 @@ dev = [
 ]
 
 [project.scripts]
-kb = "pb_kb.ingest.cli:app"
-kb-api = "pb_kb.api.server:main"
+kb = "kb.ingest.cli:app"
+kb-api = "kb.api.server:main"
 personas = "personas.src.personas:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["pb_kb/src", "personas"]
+packages = ["kb", "personas"]
 
 [tool.hatch.build.targets.sdist]
-include = ["pb_kb/src", "personas"]
+include = ["kb", "personas"]
 
 [tool.uv.sources]
 dolphin = { workspace = true }

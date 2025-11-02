@@ -4,7 +4,7 @@ import os
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 
-from pb_kb.embeddings.provider import (
+from kb.embeddings.provider import (
     EmbeddingProvider,
     OpenAIEmbeddingProvider,
     create_provider,

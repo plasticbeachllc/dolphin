@@ -2,8 +2,8 @@
 
 import textwrap
 import pytest
-from pb_kb.chunkers.md_chunker import chunk_markdown
-from pb_kb.hashing import canonicalize_text
+from kb.chunkers.md_chunker import chunk_markdown
+from kb.hashing import canonicalize_text
 
 
 class TestMarkdownChunker:

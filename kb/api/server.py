@@ -86,7 +86,7 @@ def main() -> None:
     print("="*60, file=sys.stderr)
 
     uvicorn.run(
-        "pb_kb.api.server:app_with_lifespan",
+        "kb.api.server:app_with_lifespan",
         host="127.0.0.1",
         port=7777,
         reload=False,

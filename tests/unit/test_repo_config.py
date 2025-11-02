@@ -3,7 +3,7 @@
 import tempfile
 from pathlib import Path
 
-from pb_kb.chunkers import RepoChunkingConfig, load_repo_chunking_config
+from kb.chunkers import RepoChunkingConfig, load_repo_chunking_config
 
 
 def test_load_dolphin_repo_config():

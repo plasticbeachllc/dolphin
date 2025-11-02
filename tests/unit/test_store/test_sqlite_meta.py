@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 import pytest
 
-from pb_kb.store.sqlite_meta import SQLiteMetadataStore
+from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
 class TestSQLiteMetadataStore:

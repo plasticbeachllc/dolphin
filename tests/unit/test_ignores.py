@@ -2,7 +2,7 @@
 
 import pytest
 from pathlib import Path
-from pb_kb.ignores import (
+from kb.ignores import (
     DEFAULT_IGNORE_PATTERNS,
     build_ignore_set,
     load_repo_ignores,

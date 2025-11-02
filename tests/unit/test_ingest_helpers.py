@@ -4,7 +4,7 @@ import pytest
 import subprocess
 from pathlib import Path
 from dataclasses import dataclass
-from pb_kb.ingest._helpers import (
+from kb.ingest._helpers import (
     build_desired_map,
     git_changed_files_modified_added,
     git_changed_files_deleted,
