@@ -1,4 +1,4 @@
-# 🐬 Dolphin
+# 🐬 dolphin
 
 **⚠️ EXPERIMENTAL - This is a developmental library under active development. APIs and interfaces are unstable and subject to change without notice.**
 
