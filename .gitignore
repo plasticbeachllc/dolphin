@@ -31,3 +31,4 @@ docs/ignore/*
 # test artifacts
 tests/**/test-results.xml
 tests/**/coverage.xml
+.DS_Store
