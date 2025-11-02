@@ -57,9 +57,6 @@ setup-dev: setup-env setup-python
 # Stop all services
 stop: stop-mcpo stop-openwebui ollama-stop
 
-# Run all tests
-# test: 
-
 # ==============================================================================
 # Environment Management
 # ==============================================================================
@@ -145,7 +142,6 @@ ollama-check:
 # Testing
 # ==============================================================================
 
-
 # Test all components using pytest
 test: setup-python
 	@echo "🧪 Running all tests with pytest..."
@@ -174,8 +170,7 @@ test-file: setup-python
 # Run tests with detailed output
 test-verbose: setup-python
 	@echo "🧪 Running tests with verbose output..."
-	@
-	uv run pytest -v
+	@uv run pytest -v
 
 # ==============================================================================
 # MCP(o)
@@ -199,7 +194,7 @@ stop-mcpo:
 	@if [ -f .mcpo.pid ]; then \
 		echo "Stopping MCP servers..."; \
 		kill $(cat .mcpo.pid) || true; \
-		rm .mcpo.pid; \
+		rm -f .mcpo.pid; \
 	fi
 
 show-mcpo:
@@ -210,123 +205,94 @@ clean-mcpo-config:
 	rm -f mcpo_config.json
 
 # ==============================================================================
-# Personas CLI
+# Centralized Dolphin CLI
 # ==============================================================================
 
-# List all available personas
+# Main Dolphin CLI (centralized interface)
+dolphin:
+	uv run dolphin $*
+
+# --- Core Dolphin Commands ---
+
+# Initialize Dolphin configuration (knowledge base init)
+init:
+	uv run dolphin init
+
+# Initialize repo-specific configuration
+init-repo:
+	uv run dolphin init
+
+# Show Dolphin configuration
+config-show:
+	uv run dolphin config --show
+
+# --- Knowledge Base Management (via dolphin kb) ---
+
+# Add repository to knowledge base
+add-repo name:
+	uv run dolphin kb add-repo {{name}} $(pwd) --default-embed-model large
+
+# Index repository into knowledge base
+index name:
+	uv run dolphin kb index {{name}}
+
+# Full reindex
+reindex name:
+	uv run dolphin kb index {{name}} --full --force
+
+# Reset and reindex
+reset name:
+	uv run dolphin init
+	uv run dolphin kb add-repo {{name}} $(pwd) --default-embed-model large
+	uv run dolphin kb index {{name}} --full --force
+
+# Show knowledge base status
+kb-status:
+	uv run dolphin kb status
+
+# --- Persona Management (via dolphin personas) ---
+
+# List available personas
 personas-list:
-	uv run personas preview --list
+	uv run dolphin personas preview --list
 
-# Preview a specific persona
+# Preview specific persona
 personas-preview id:
-	uv run personas preview --id {{id}} --verbose
-
-# Generate KiloCode configuration (dry-run preview)
-personas-generate-kilocode-preview:
-	uv run personas generate --kilocode --dry-run --verbose
+	uv run dolphin personas preview --id {{id}} --verbose
 
 # Generate KiloCode configuration
-personas-generate-kilocode:
-	uv run personas generate --kilocode --verbose
-
-# Generate Continue configuration (dry-run preview)
-personas-generate-continue-preview:
-	uv run personas generate --continue --dry-run --verbose
+personas-kilocode:
+	uv run dolphin personas generate --kilocode --verbose
 
 # Generate Continue configuration
-personas-generate-continue:
-	uv run personas generate --continue --verbose
+personas-continue:
+	uv run dolphin personas generate --continue --verbose
 
-# Generate KiloCode config with manifest
-personas-generate-kilocode-manifest:
-	uv run personas generate --kilocode --manifest ./personas-manifest.json --verbose
+# --- API Server ---
 
-# ==============================================================================
-# KB Pipeline Development
-# ==============================================================================
-
-# Run KB pipeline CLI
-kb:
-	uv run kb $*
-
-# Run KB API server
-kb-api:
-	uv run kb-api $*
-
-
-# Defaults (override on CLI: just NAME=myrepo ...)
-NAME := "dolphin"
-REPO_PATH := "$(pwd)"
-
-default:
-  @just --list
-
-# --- Environment & Setup ---
-
-venv:
-  python3 -m venv .venv
-  . .venv/bin/activate && pip install -U pip
-  . .venv/bin/activate && pip install -e .[dev]
-
-bun-install:
-  cd mcp-bridge && bun install
-
-# --- Services ---
-
+# Start the Dolphin API server
 api:
-  uv run kb-api
+	uv run dolphin serve
+
+# Health check for API server
+health:
+	curl -s http://127.0.0.1:7777/v1/health || echo "API server not running"
+
+# --- MCP Bridge ---
 
 mcp:
-  bun run mcp-bridge/src/index.ts
+	cd mcp-bridge && bun run src/index.ts
 
-# --- Ingestion ---
-
-init:
-  uv run kb init
-
-add-repo name:
-  uv run kb add-repo {{name}} $(pwd) --default-embed-model large
-
-index name:
-  uv run kb index {{name}}
-
-reindex name:
-  uv run kb index {{name}} --full --force
-
-reset name:
-  just init
-  just add-repo {{name}} $(pwd)
-  just reindex {{name}}
-
-# --- Search & Tools ---
-
-repos:
-  ./bin/kb-search repos
-
-info:
-  ./bin/kb-search info
-
-health:
-  ./bin/kb-search health
-
-search query:
-  ./bin/kb-search search "{{query}}"
-
-chunk id:
-  ./bin/kb-search chunk {{id}}
-
-lines repo path start end:
-  ./bin/kb-search lines {{repo}} {{path}} {{start}} {{end}}
-
-curl-search query:
-  ./bin/kb-search curl-search "{{query}}"
-
-# --- Logs ---
+# ==============================================================================
+# Logs & Development
+# ==============================================================================
 
 tail-mcp:
   tail -f mcp-bridge/logs/mcp.log
 
-# --- Clean (dangerous) ---
+# ==============================================================================
+# Cleanup (dangerous)
+# ==============================================================================
 
 store-clean:
   @echo "This will DELETE ~/.dolphin/knowledge_store"
@@ -334,3 +300,115 @@ store-clean:
   sleep 5
   rm -rf ~/.dolphin/knowledge_store
 
+# ==============================================================================
+# CLI Tool Development & Building
+# ==============================================================================
+
+# Install all CLI tools in development mode
+install-cli-tools:
+	@echo "Installing CLI tools in development mode..."
+	@uv pip install -e .
+
+# Build all CLI tools (creates standalone binaries/scripts)
+build-cli-tools:
+	@echo "Building all CLI tools..."
+	@echo "📦 Building Dolphin CLI..."
+	@uv run build --wheel dist/dolphin
+	@echo "📦 Building KB CLI..."  
+	@uv run build --wheel dist/kb
+	@echo "📦 Building KB API CLI..."
+	@uv run build --wheel dist/kb-api
+	@echo "📦 Building Personas CLI..."
+	@uv run build --wheel dist/personas
+	@echo "✅ All CLI tools built successfully"
+
+# Create standalone scripts for local development
+create-scripts:
+	@echo "Creating standalone scripts for local development..."
+	@mkdir -p bin
+	@# Create dolphin script
+	@echo '#!/usr/bin/env bash' > bin/dolphin
+	@echo 'set -e' >> bin/dolphin
+	@echo 'cd "$(dirname "$0")/.."' >> bin/dolphin
+	@echo 'exec uv run dolphin "$@"' >> bin/dolphin
+	@chmod +x bin/dolphin
+	@# Create kb script
+	@echo '#!/usr/bin/env bash' > bin/kb
+	@echo 'set -e' >> bin/kb
+	@echo 'cd "$(dirname "$0")/.."' >> bin/kb
+	@echo 'exec uv run kb "$@"' >> bin/kb
+	@chmod +x bin/kb
+	@# Create kb-api script
+	@echo '#!/usr/bin/env bash' > bin/kb-api
+	@echo 'set -e' >> bin/kb-api
+	@echo 'cd "$(dirname "$0")/.."' >> bin/kb-api
+	@echo 'exec uv run kb-api "$@"' >> bin/kb-api
+	@chmod +x bin/kb-api
+	@# Create personas script
+	@echo '#!/usr/bin/env bash' > bin/personas
+	@echo 'set -e' >> bin/personas
+	@echo 'cd "$(dirname "$0")/.."' >> bin/personas
+	@echo 'exec uv run personas "$@"' >> bin/personas
+	@chmod +x bin/personas
+	@echo "✅ Created standalone scripts in bin/ directory"
+
+# Install MCP bridge dependencies
+install-mcp-bridge:
+	@echo "Installing MCP bridge dependencies..."
+	@cd mcp-bridge && bun install
+
+# Build MCP bridge
+build-mcp-bridge:
+	@echo "Building MCP bridge..."
+	@cd mcp-bridge && bun build
+
+# Reinstall all tools (full rebuild)
+reinstall-all: install-cli-tools create-scripts install-mcp-bridge build-mcp-bridge
+	@echo "✅ All CLI tools and MCP bridge reinstalled"
+
+# ==============================================================================
+# Deployment
+# ==============================================================================
+
+# Build Python packages for distribution
+build:
+	@echo "Building Python packages..."
+	@uv build
+
+# Check package integrity before uploading
+deploy-check: build
+	@echo "Checking package integrity..."
+	@uv run twine check dist/*
+
+# Build and upload to PyPI in one command
+deploy-prod: build
+	@echo "Checking packages and uploading to PyPI..."
+	@uv run twine check dist/* && twine upload dist/*
+
+# Build and upload to Test PyPI in one command
+deploy-test: build
+	@echo "Checking packages and uploading to Test PyPI..."
+	@uv run twine check dist/* && twine upload --repository testpypi dist/*
+
+# Clean build artifacts
+clean-build:
+	@echo "Cleaning build artifacts..."
+	@rm -rf build/
+	@rm -rf dist/
+	@rm -rf *.egg-info/
+	@find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	@find . -type f -name "*.pyc" -delete
+
+# Complete clean including build artifacts
+clean-all: clean clean-build
+
+# ==============================================================================
+# Defaults and Variables
+# ==============================================================================
+
+# Defaults (override on CLI: just NAME=myrepo ...)
+NAME := "dolphin"
+REPO_PATH := "$(pwd)"
+
+default:
+  @just --list

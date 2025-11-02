@@ -8,81 +8,98 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Optional
 
 import typer
 
 # Import subcommand apps
 from kb.ingest.cli import app as kb_app
+from personas.src.personas import app as personas_app
 from kb.api.server import main as api_main
 
+# Import kb CLI functions for top-level commands
+from kb.ingest.cli import (
+    init as kb_init,
+    add_repo as kb_add_repo,
+    index as kb_index,
+    status as kb_status,
+    prune_ignored as kb_prune_ignored,
+    list_files as kb_list_files,
+)
+
+# Create main Dolphin app
 app = typer.Typer(
     name="dolphin",
-    help="Unified CLI for Dolphin knowledge base and AI tools",
+    help="Unified CLI for 🐬 Dolphin knowledge base and AI tools",
     add_completion=False,
 )
 
+# Add subcommand apps
+app.add_typer(kb_app, name="kb", help="Knowledge base management commands")
+app.add_typer(personas_app, name="personas", help="Persona management and generation commands")
+
+
+# ==============================================================================
+# Top-Level Knowledge Base Commands
+# ==============================================================================
 
 @app.command()
 def init(
-    repo: bool = typer.Option(False, "--repo", help="Initialize repo-specific config in current directory"),
+    config_path: Optional[Path] = typer.Option(None, "--config", help="Optional config path."),
 ) -> None:
-    """Initialize Dolphin configuration.
-    
-    By default, initializes user config at ~/.dolphin/config.toml (auto-created on first use).
-    With --repo flag, creates a repo-specific config in ./.dolphin/config.toml.
-    """
-    if repo:
-        # Create repo-specific config
-        repo_config_path = Path.cwd() / ".dolphin" / "config.toml"
-        
-        if repo_config_path.exists():
-            typer.echo(f"Repo config already exists at {repo_config_path}")
-            raise typer.Exit(0)
-        
-        # Read template
-        from kb.config import _read_template
-        template = _read_template()
-        
-        if not template:
-            typer.echo("Error: Could not find config template", err=True)
-            raise typer.Exit(1)
-        
-        # Create repo config
-        repo_config_path.parent.mkdir(parents=True, exist_ok=True)
-        repo_config_path.write_text(template, encoding="utf-8")
-        typer.echo(f"✅ Created repo config at {repo_config_path}")
-        typer.echo("Edit this file to customize chunking behavior for this repository.")
-    else:
-        # Initialize user config (will be auto-created if missing)
-        from kb.config import _ensure_user_config
-        config_path = _ensure_user_config()
-        typer.echo(f"✅ User config ready at {config_path}")
-        typer.echo("This config is used globally unless overridden by repo-specific config.")
+    """Initialize the knowledge store (config + SQLite + LanceDB collections)."""
+    kb_init(config_path)
+
+
+@app.command()
+def add_repo(
+    name: str = typer.Argument(..., help="Logical name for the repository."),
+    path: Path = typer.Argument(..., help="Absolute path to the repository root."),
+    default_embed_model: str = typer.Option("large", "--default-embed-model", help="Default embedding model (small|large)."),
+) -> None:
+    """Register or update a repository in the metadata store."""
+    kb_add_repo(name=name, path=path, default_embed_model=default_embed_model)
 
 
 @app.command()
 def index(
-    name: str = typer.Argument(..., help="Name of the repository to index"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Run without persisting"),
-    force: bool = typer.Option(False, "--force", help="Bypass clean working tree check"),
-    full: bool = typer.Option(False, "--full", help="Process all files instead of incremental"),
+    name: str = typer.Argument(..., help="Name of the repository to index."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Run without persisting."),
+    force: bool = typer.Option(False, "--force", help="Bypass clean working tree check."),
+    full: bool = typer.Option(False, "--full", help="Process all files instead of incremental diff."),
 ) -> None:
-    """Index a repository into the knowledge base."""
-    # Delegate to kb subcommand
-    from kb.ingest.cli import index as kb_index
+    """Run the full indexing pipeline for the specified repository."""
     kb_index(name=name, dry_run=dry_run, force=force, full=full)
 
 
 @app.command()
-def search(
-    query: str = typer.Argument(..., help="Search query"),
-    top_k: int = typer.Option(5, "--top-k", "-k", help="Number of results"),
-    repos: str = typer.Option(None, "--repos", "-r", help="Comma-separated repo names"),
+def status(
+    name: Optional[str] = typer.Argument(None, help="Optional repository name."),
 ) -> None:
-    """Search the knowledge base."""
-    typer.echo(f"Searching for: {query}")
-    typer.echo("(Search functionality will be connected to kb-search CLI)")
+    """Report knowledge store status."""
+    kb_status(name)
 
+
+@app.command()
+def prune_ignored(
+    name: str = typer.Argument(..., help="Repository name to clean up."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be removed without persisting."),
+) -> None:
+    """Remove chunks for files that match the ignore patterns."""
+    kb_prune_ignored(name, dry_run)
+
+
+@app.command()
+def list_files(
+    name: str = typer.Argument(..., help="Repository name."),
+) -> None:
+    """List all indexed files in a repository."""
+    kb_list_files(name)
+
+
+# ==============================================================================
+# Core Service Commands
+# ==============================================================================
 
 @app.command()
 def serve(
@@ -90,30 +107,10 @@ def serve(
     port: int = typer.Option(7777, "--port", help="Port to bind to"),
 ) -> None:
     """Start the Dolphin API server."""
-    typer.echo(f"Starting Dolphin API server on {host}:{port}")
-    # Note: api_main expects to be called directly, not with params
-    # For now, just call it as-is; we can enhance it later
+    import os
+    os.environ["HOST"] = host
+    os.environ["PORT"] = str(port)
     api_main()
-
-
-@app.command()
-def add_repo(
-    name: str = typer.Argument(..., help="Repository name"),
-    path: Path = typer.Argument(..., help="Path to repository root"),
-    embed_model: str = typer.Option("large", "--embed-model", help="Embedding model (small|large)"),
-) -> None:
-    """Register a repository with the knowledge base."""
-    from kb.ingest.cli import add_repo as kb_add_repo
-    kb_add_repo(name=name, path=path, default_embed_model=embed_model)
-
-
-@app.command()
-def status(
-    name: str = typer.Argument(None, help="Optional repository name"),
-) -> None:
-    """Show knowledge base status."""
-    from kb.ingest.cli import status as kb_status
-    kb_status(name=name)
 
 
 @app.command()
@@ -131,7 +128,6 @@ def config(
         typer.echo(f"  Embedding provider: {config.embedding_provider}")
     else:
         typer.echo("Use 'dolphin init' to initialize configuration")
-        typer.echo("Use 'dolphin init --repo' for repo-specific config")
         typer.echo("Use 'dolphin config --show' to view current config")
 
 

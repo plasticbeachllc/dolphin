@@ -197,7 +197,7 @@ curl http://127.0.0.1:7777/v1/health
 ## Requirements
 
 - Python ≥3.12
-- OpenAI API key (for embeddings) - **Required**
+- OpenAI API key (for embeddings)
 - Bun (for MCP bridge)
 - Git (for repository scanning)
 
