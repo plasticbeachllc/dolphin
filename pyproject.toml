@@ -8,6 +8,24 @@ version = "0.1.4"
 description = "Full-stack AI enablement platform"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
+authors = [
+    {name = "Plastic Beach, LLC", email = "taylor@plasticbeach.email"},
+    {name = "tdc93", email = "taylor@plasticbeach.email"}
+]
+maintainers = [
+    {name = "Plastic Beach, LLC", email = "taylor@plasticbeach.email"},
+    {name = "tdc93", email = "taylor@plasticbeach.email"}
+]
+license = {text = "MIT"}
+keywords = ["ai", "ml", "nlp", "knowledge-base"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
 dependencies = [
     "docker>=7.1.0",
     "requests>=2.32.4", # For test scripts
@@ -73,7 +91,9 @@ dolphin = { workspace = true }
 
 [dependency-groups]
 dev = [
+    "build>=1.3.0",
     "pytest>=8.4.2",
+    "twine>=6.2.0",
 ]
 test = [
     "fakeredis>=2.32.0",

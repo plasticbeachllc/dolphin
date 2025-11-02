@@ -9,13 +9,11 @@ A semantic code search and knowledge management system with AI-native interfaces
 ### Installation
 
 ```bash
-# Install from source
-git clone https://github.com/plasticbeachllc/dolphin.git
-cd dolphin
-uv sync
+# Install from PyPI
+pip install pb-dolphin
 
-# Or install from PyPI (when available)
-pip install dolphin
+# ⚠️ IMPORTANT: You'll need to set up environment variables
+# See the "Environment Variables" section below for details
 ```
 
 ### Basic Usage
@@ -77,6 +75,61 @@ dolphin serve
 - **REST API** - FastAPI server with search, retrieval, and metadata endpoints
 - **Unified CLI** - Single `dolphin` command for all operations
 - **Auto-Configuration** - Smart config hierarchy (repo → user → defaults)
+
+## Environment Variables
+
+Dolphin requires the following environment variables depending on your usage:
+
+### Required for OpenAI Embeddings
+
+```bash
+# Required when using OpenAI embeddings (recommended for production)
+export OPENAI_API_KEY="sk-your-openai-api-key-here"
+```
+
+### Optional Variables
+
+```bash
+# Custom environment variable name for OpenAI API key (default: OPENAI_API_KEY)
+# Only needed if you want to use a different variable name
+export OPENAI_API_KEY_ALT="sk-your-openai-api-key-here"
+
+# GitHub token for enhanced repository scanning (optional)
+export GITHUB_PERSONAL_ACCESS_TOKEN="ghp_your_token_here"
+```
+
+### Setting Environment Variables
+
+**macOS/Linux (bash/zsh):**
+```bash
+echo 'export OPENAI_API_KEY="sk-your-key-here"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**macOS/Linux (fish):**
+```bash
+set -Ux OPENAI_API_KEY "sk-your-key-here"
+```
+
+**Windows (Command Prompt):**
+```cmd
+setx OPENAI_API_KEY "sk-your-key-here"
+```
+
+**Windows (PowerShell):**
+```powershell
+[System.Environment]::SetEnvironmentVariable('OPENAI_API_KEY', 'sk-your-key-here', 'User')
+```
+
+### Getting Your OpenAI API Key
+
+1. Visit [OpenAI Platform](https://platform.openai.com/)
+2. Sign up or log in to your account
+3. Navigate to [API Keys](https://platform.openai.com/api-keys)
+4. Click "Create new secret key"
+5. Copy the key and set it as `OPENAI_API_KEY`
+
+**⚠️ Security Note**: Never commit your API keys to version control. Use environment variables or a secure secrets manager.
 
 ## Configuration
 
@@ -147,12 +200,8 @@ curl http://127.0.0.1:7777/v1/health
 
 - ✅ Core indexing and search pipeline
 - ✅ Language-aware chunking (Python, TS, JS, Markdown)
-- ✅ MCP bridge implementation
-- ✅ REST API with 5 endpoints
-- ✅ 391 tests passing
-- ⚠️  APIs subject to breaking changes
-- ⚠️  No stability guarantees
-- ⚠️  Documentation may be incomplete
+- ✅ REST API with MCP bridge
+- ⚠️ Developmental stage
 
 **Upcoming**:
 - Performance optimization
@@ -163,7 +212,7 @@ curl http://127.0.0.1:7777/v1/health
 ## Requirements
 
 - Python ≥3.12
-- OpenAI API key (for embeddings)
+- OpenAI API key (for embeddings) - **Required**
 - Bun (for MCP bridge)
 - Git (for repository scanning)
 
@@ -177,21 +226,6 @@ uv run pytest
 uv run pytest tests/unit/
 uv run pytest tests/integration/
 ```
-
-## Contributing
-
-This is experimental software. Contributions welcome, but expect rapid changes:
-
-1. Fork the repository
-2. Create feature branch
-3. Add tests for new functionality
-4. Submit pull request
-
-## Documentation
-
-- **[User Guide](docs/GUIDE.md)** - Detailed installation and usage
-- **[Architecture](docs/ARCHITECTURE.md)** - Technical architecture and design
-- **[Testing](tests/TESTING.md)** - Testing strategy and troubleshooting
 
 ## License
 
