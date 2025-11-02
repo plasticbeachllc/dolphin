@@ -56,6 +56,33 @@ class TestKBConfig:
         assert isinstance(config.retrieval.score_cutoff, float) and config.retrieval.score_cutoff == 0.5
         assert isinstance(config.retrieval.top_k, int) and config.retrieval.top_k == 12
 
+    def test_config_ignore_exceptions_field(self):
+        """Test that ignore_exceptions field is properly initialized and used."""
+        config_data = {
+            "ignore": [".env", "*.log"],
+            "ignore_exceptions": [".env.example", "config.log"]
+        }
+        
+        config = KBConfig.from_mapping(config_data)
+        
+        assert ".env" in config.ignore
+        assert "*.log" in config.ignore
+        assert ".env.example" in config.ignore_exceptions
+        assert "config.log" in config.ignore_exceptions
+        
+        # Test that build_ignore_set works with config exceptions
+        from kb.ignores import build_ignore_set
+        
+        result = build_ignore_set(config.ignore, config.ignore_exceptions)
+        
+        # Basic patterns should be there
+        assert ".env" in result
+        assert "*.log" in result
+        
+        # Exceptions should be excluded
+        assert ".env.example" not in result
+        assert "config.log" not in result
+
 class TestLoadConfig:
     """Test cases for loading configuration from files."""
 

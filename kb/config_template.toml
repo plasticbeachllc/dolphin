@@ -89,6 +89,11 @@ patterns = [
     "*.sqlite",
     "*.sqlite3",
 ]
+# Exceptions to ignore patterns - files/directories that match these patterns
+# will NOT be ignored even if they match a pattern above
+exceptions = [
+    ".env.example",
+]
 
 [retrieval]
 # Settings for Approximate Nearest Neighbor (ANN) search

@@ -87,11 +87,14 @@ class IngestionPipeline:
             "**/*service_account.json",
             "**/*auth.json",
         }
-        ignore_patterns = build_ignore_set(self.config.ignore)
+        ignore_patterns = build_ignore_set(self.config.ignore, self.config.ignore_exceptions)
         # Merge repo-level ignores from .dolphin/config.toml
-        repo_level = load_repo_ignores(root)
-        if repo_level:
-            ignore_patterns.update(repo_level)
+        repo_level_patterns, repo_level_exceptions = load_repo_ignores(root)
+        if repo_level_patterns:
+            ignore_patterns.update(repo_level_patterns)
+        # Apply repo-level exceptions
+        if repo_level_exceptions:
+            ignore_patterns = build_ignore_set(ignore_patterns, repo_level_exceptions)
         ignore_patterns.update(extra_security)
 
         # Scan
@@ -202,10 +205,13 @@ class IngestionPipeline:
             "**/*service_account.json",
             "**/*auth.json",
         }
-        ignore_patterns = build_ignore_set(self.config.ignore)
-        repo_level = load_repo_ignores(root)
-        if repo_level:
-            ignore_patterns.update(repo_level)
+        ignore_patterns = build_ignore_set(self.config.ignore, self.config.ignore_exceptions)
+        repo_level_patterns, repo_level_exceptions = load_repo_ignores(root)
+        if repo_level_patterns:
+            ignore_patterns.update(repo_level_patterns)
+        # Apply repo-level exceptions
+        if repo_level_exceptions:
+            ignore_patterns = build_ignore_set(ignore_patterns, repo_level_exceptions)
         ignore_patterns.update(extra_security)
         ignore_spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
 

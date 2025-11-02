@@ -107,10 +107,12 @@ class TestLoadRepoIgnores:
 
     def test_load_repo_ignores_no_config(self, tmp_path):
         """Test loading ignores when no config exists."""
-        result = load_repo_ignores(tmp_path)
+        patterns, exceptions = load_repo_ignores(tmp_path)
 
-        assert isinstance(result, set)
-        assert len(result) == 0  # No repo-specific ignores
+        assert isinstance(patterns, set)
+        assert isinstance(exceptions, set)
+        assert len(patterns) == 0  # No repo-specific ignores
+        assert len(exceptions) == 0  # No repo-specific exceptions
 
     def test_load_repo_ignores_with_top_level_patterns(self, tmp_path):
         """Test loading ignores from top-level config."""
@@ -121,11 +123,11 @@ class TestLoadRepoIgnores:
 ignore_patterns = ["*.log", "temp_files"]
 """)
 
-        result = load_repo_ignores(tmp_path)
+        patterns, exceptions = load_repo_ignores(tmp_path)
 
-        assert "*.log" in result
-        assert "temp_files" in result
-        assert "**/temp_files" in result  # Expanded
+        assert "*.log" in patterns
+        assert "temp_files" in patterns
+        assert "**/temp_files" in patterns  # Expanded
 
     def test_load_repo_ignores_with_indexing_section(self, tmp_path):
         """Test loading ignores from [indexing] section."""
@@ -137,11 +139,11 @@ ignore_patterns = ["*.log", "temp_files"]
 ignore_patterns = ["*.tmp", "cache"]
 """)
 
-        result = load_repo_ignores(tmp_path)
+        patterns, exceptions = load_repo_ignores(tmp_path)
 
-        assert "*.tmp" in result
-        assert "cache" in result
-        assert "**/cache" in result  # Expanded
+        assert "*.tmp" in patterns
+        assert "cache" in patterns
+        assert "**/cache" in patterns  # Expanded
 
     def test_load_repo_ignores_both_sections(self, tmp_path):
         """Test loading ignores from both top-level and indexing sections."""
@@ -155,11 +157,11 @@ ignore_patterns = ["*.log"]
 ignore_patterns = ["*.tmp"]
 """)
 
-        result = load_repo_ignores(tmp_path)
+        patterns, exceptions = load_repo_ignores(tmp_path)
 
         # Should include patterns from both sections
-        assert "*.log" in result
-        assert "*.tmp" in result
+        assert "*.log" in patterns
+        assert "*.tmp" in patterns
 
     def test_load_repo_ignores_malformed_toml(self, tmp_path):
         """Test that malformed TOML is handled gracefully."""
@@ -172,9 +174,11 @@ ignore_patterns = ["*.log"]
 """)
 
         # Should return empty set and not raise
-        result = load_repo_ignores(tmp_path)
-        assert isinstance(result, set)
-        assert len(result) == 0
+        patterns, exceptions = load_repo_ignores(tmp_path)
+        assert isinstance(patterns, set)
+        assert isinstance(exceptions, set)
+        assert len(patterns) == 0
+        assert len(exceptions) == 0
 
     def test_load_repo_ignores_invalid_patterns_type(self, tmp_path):
         """Test that non-list patterns are handled gracefully."""
@@ -185,14 +189,14 @@ ignore_patterns = ["*.log"]
 ignore_patterns = "not a list"
 """)
 
-        result = load_repo_ignores(tmp_path)
+        patterns, exceptions = load_repo_ignores(tmp_path)
 
-        # Function checks isinstance(..., list), so string is not processed
-        # patterns remains [], then build_ignore_set([]) is called
-        # which returns DEFAULT_IGNORE_PATTERNS (expanded)
-        assert isinstance(result, set)
-        # Should still have default patterns
-        assert len(result) > 0
+        # Function checks isinstance(..., list), so invalid types are ignored
+        # Should return empty sets since no valid patterns were provided
+        assert isinstance(patterns, set)
+        assert isinstance(exceptions, set)
+        assert len(patterns) == 0  # Invalid data results in empty patterns
+        assert len(exceptions) == 0  # No exceptions specified
 
     def test_load_repo_ignores_empty_patterns(self, tmp_path):
         """Test loading with empty pattern list."""
@@ -203,18 +207,13 @@ ignore_patterns = "not a list"
 ignore_patterns = []
 """)
 
-        result = load_repo_ignores(tmp_path)
+        patterns, exceptions = load_repo_ignores(tmp_path)
 
-        assert isinstance(result, set)
-        # Empty list is passed to build_ignore_set([])
-        # but build_ignore_set starts with DEFAULT_IGNORE_PATTERNS
-        # and only adds extra patterns if extra is truthy
-        # Empty list is falsy, so it doesn't add anything, but defaults remain
-        # NO WAIT - empty list [] is falsy in Python, so `if extra:` is False
-        # So patterns = set(DEFAULT_IGNORE_PATTERNS), no extras added
-        # Then expanded contains defaults + their expansions
-        # So result should NOT be empty - it should contain defaults
-        assert len(result) > 0  # Contains default patterns
+        assert isinstance(patterns, set)
+        assert isinstance(exceptions, set)
+        # Empty list results in no patterns loaded from config
+        assert len(patterns) == 0  # Empty patterns list results in no patterns
+        assert len(exceptions) == 0  # No exceptions specified
 
     def test_load_repo_ignores_path_expansion(self, tmp_path):
         """Test that repo_root path is expanded."""
@@ -228,9 +227,9 @@ ignore_patterns = ["*.log"]
 """)
 
         # Use relative path that needs expansion
-        result = load_repo_ignores(repo)
+        patterns, exceptions = load_repo_ignores(repo)
 
-        assert "*.log" in result
+        assert "*.log" in patterns
 
     def test_load_repo_ignores_non_string_values(self, tmp_path):
         """Test that non-string pattern values are converted."""
@@ -241,11 +240,11 @@ ignore_patterns = ["*.log"]
 ignore_patterns = [123, 456]
 """)
 
-        result = load_repo_ignores(tmp_path)
+        patterns, exceptions = load_repo_ignores(tmp_path)
 
         # Should convert to strings
-        assert "123" in result
-        assert "456" in result
+        assert "123" in patterns
+        assert "456" in patterns
 
     def test_load_repo_ignores_permission_error(self, tmp_path):
         """Test that permission errors are handled gracefully."""
@@ -258,11 +257,119 @@ ignore_patterns = ["*.log"]
 
         # Make file unreadable
         config_file.chmod(0o000)
+        # Restore permissions for cleanup
+        config_file.chmod(0o644)
 
-        try:
-            result = load_repo_ignores(tmp_path)
-            # Should return empty set and not raise
-            assert isinstance(result, set)
-        finally:
-            # Restore permissions for cleanup
-            config_file.chmod(0o644)
+
+class TestIgnoreExceptions:
+    """Test ignore exception functionality."""
+
+    def test_build_ignore_set_with_exceptions(self):
+        """Test that build_ignore_set properly handles exceptions."""
+        patterns = {".env", "*.log"}
+        exceptions = {".env.example"}
+        
+        result = build_ignore_set(patterns, exceptions)
+        
+        # Should include the basic patterns
+        assert ".env" in result
+        assert "*.log" in result
+        # But .env.example should NOT be in ignore patterns (it's an exception)
+        assert ".env.example" not in result
+        assert "**/.env.example" not in result
+
+    def test_build_ignore_set_exception_expansion(self):
+        """Test that exceptions are properly handled with simple patterns."""
+        patterns = {"temp", "logs"}
+        exceptions = {"logs/important.txt"}
+        
+        result = build_ignore_set(patterns, exceptions)
+        
+        # Patterns should be expanded
+        assert "temp" in result
+        assert "**/temp" in result
+        assert "logs" in result
+        assert "**/logs" in result
+        
+        # Exception should remove pattern parts but logs/important.txt is an exception
+        assert "logs/important.txt" not in result  # Exception NOT in ignore patterns
+        assert "**/logs/important.txt" not in result  # Exception expansion also NOT in patterns
+        # But the base "logs" pattern should still be there (to ignore other log files)
+        assert "logs" in result
+        assert "**/logs" in result
+
+    def test_load_repo_ignores_with_exceptions(self, tmp_path):
+        """Test loading repo ignores with exceptions."""
+        config_dir = tmp_path / ".dolphin"
+        config_dir.mkdir()
+        config_file = config_dir / "config.toml"
+        config_file.write_text("""
+ignore_patterns = ["*.log"]
+ignore_exceptions = [".env.example"]
+""")
+
+        patterns, exceptions = load_repo_ignores(tmp_path)
+
+        assert "*.log" in patterns
+        assert ".env.example" in exceptions
+
+    def test_load_repo_ignores_with_ignore_section_exceptions(self, tmp_path):
+        """Test loading exceptions from [ignore] section."""
+        config_dir = tmp_path / ".dolphin"
+        config_dir.mkdir()
+        config_file = config_dir / "config.toml"
+        config_file.write_text("""
+[ignore]
+patterns = ["*.log"]
+exceptions = [".env.example"]
+""")
+
+        patterns, exceptions = load_repo_ignores(tmp_path)
+
+        assert "*.log" in patterns
+        assert ".env.example" in exceptions
+
+    def test_config_ignore_exceptions_integration(self):
+        """Test that config-level ignore exceptions work."""
+        from kb.config import KBConfig
+        
+        config_data = {
+            "ignore": [".env", "*.log"],
+            "ignore_exceptions": [".env.example"]
+        }
+        
+        config = KBConfig.from_mapping(config_data)
+        
+        assert ".env" in config.ignore
+        assert ".env.example" in config.ignore_exceptions
+        
+        # Build ignore set with config exceptions
+        result = build_ignore_set(config.ignore, config.ignore_exceptions)
+        
+        # Should include default patterns
+        assert ".env" in result
+        # But exception should be excluded
+        assert ".env.example" not in result
+        assert "**/.env.example" not in result
+
+    def test_multiple_exceptions(self):
+        """Test handling multiple exceptions."""
+        patterns = {".env", "*.conf", "secrets"}
+        exceptions = {".env.example", "*.conf.template", "secrets/README"}
+        
+        result = build_ignore_set(patterns, exceptions)
+        
+        # All patterns should be present
+        assert ".env" in result
+        assert "*.conf" in result
+        assert "secrets" in result
+        
+        # All exceptions should be excluded
+        assert ".env.example" not in result
+        assert "*.conf.template" not in result
+        assert "secrets/README" not in result
+        
+        # Exception expansions should also be excluded
+        assert "**/.env.example" not in result
+        assert "**/*.conf.template" not in result
+        assert "**/secrets/README" not in result

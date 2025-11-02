@@ -81,6 +81,7 @@ class KBConfig:
     concurrency: int = 3
     per_session_spend_cap_usd: float = 10.0
     ignore: list[str] = field(default_factory=lambda: list(DEFAULT_IGNORE_PATTERNS))
+    ignore_exceptions: list[str] = field(default_factory=list)
     
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
     
@@ -136,6 +137,7 @@ class KBConfig:
             concurrency=_get_value(embedding_data, "concurrency", 3, int),
             per_session_spend_cap_usd=_get_value(data, "per_session_spend_cap_usd", 10.0, float),
             ignore=data.get("ignore", DEFAULT_IGNORE_PATTERNS),
+            ignore_exceptions=data.get("exceptions", data.get("ignore_exceptions", [])),
             retrieval=retrieval_config,
             embedding_provider=_get_value(embedding_data, "provider", "stub", str),
             embedding_batch_size=_get_value(embedding_data, "batch_size", 100, int),

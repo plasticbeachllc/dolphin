@@ -182,18 +182,21 @@ def prune_ignored(
         "**/*service_account.json",
         "**/*auth.json",
     }
-    ignore_patterns = build_ignore_set(config.ignore)
-    repo_level = load_repo_ignores(repo_root)
+    ignore_patterns = build_ignore_set(config.ignore, config.ignore_exceptions)
+    repo_level_patterns, repo_level_exceptions = load_repo_ignores(repo_root)
     if dry_run:
-        typer.echo(f"Debug: repo_level ignores loaded: {len(repo_level)} patterns", err=True)
+        typer.echo(f"Debug: repo_level ignores loaded: {len(repo_level_patterns)} patterns", err=True)
         # Check if bun.lock patterns are in repo_level
-        bun_in_repo = [p for p in repo_level if "bun" in p.lower()]
+        bun_in_repo = [p for p in repo_level_patterns if "bun" in p.lower()]
         if bun_in_repo:
             typer.echo(f"Debug: bun patterns in repo_level: {bun_in_repo}", err=True)
         else:
             typer.echo(f"Debug: NO bun patterns in repo_level", err=True)
-    if repo_level:
-        ignore_patterns.update(repo_level)
+    if repo_level_patterns:
+        ignore_patterns.update(repo_level_patterns)
+    # Apply repo-level exceptions
+    if repo_level_exceptions:
+        ignore_patterns = build_ignore_set(ignore_patterns, repo_level_exceptions)
     ignore_patterns.update(extra_security)
     
     # Manually add bun.lock patterns to test
