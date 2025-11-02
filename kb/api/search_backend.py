@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Sequence
+from typing import Optional, Sequence
 
 from ..embeddings.provider import EmbeddingProvider, create_provider
 from ..store.lancedb_store import LanceDBStore
 from ..store.sqlite_meta import SQLiteMetadataStore
+from ..cache import QueryCache, create_cache
 from .app import SearchRequest
 
 
@@ -19,6 +20,7 @@ class KnowledgeSearchBackend:
         embedding_provider: EmbeddingProvider,
         lance_store: LanceDBStore,
         sql_store: SQLiteMetadataStore,
+        cache: Optional[QueryCache] = None,
     ):
         """Initialize search backend with required stores.
 
@@ -26,10 +28,12 @@ class KnowledgeSearchBackend:
             embedding_provider: Provider for generating query embeddings
             lance_store: LanceDB vector store for KNN search
             sql_store: SQLite store for metadata hydration
+            cache: Optional QueryCache for caching query results
         """
         self.embedding_provider = embedding_provider
         self.lance_store = lance_store
         self.sql_store = sql_store
+        self.cache = cache
 
     def search(self, request: SearchRequest) -> Sequence[dict[str, object]]:
         """Execute search request and return results.
@@ -40,6 +44,19 @@ class KnowledgeSearchBackend:
         Returns:
             List of search results with content and metadata
         """
+        # Check cache first
+        if self.cache:
+            cache_params = {
+                "embed_model": request.embed_model,
+                "repos": request.repos,
+                "top_k": request.top_k,
+                "score_cutoff": request.score_cutoff,
+                "path_prefix": request.path_prefix,
+            }
+            cached_results = self.cache.get_results(request.query, **cache_params)
+            if cached_results is not None:
+                return cached_results
+        
         # Step 1: Embed the query
         query_embedding = self.embedding_provider.embed_texts(
             request.embed_model, [request.query]
@@ -93,6 +110,17 @@ class KnowledgeSearchBackend:
 
             hits.append(hit)
 
+        # Cache the results before returning
+        if self.cache:
+            cache_params = {
+                "embed_model": request.embed_model,
+                "repos": request.repos,
+                "top_k": request.top_k,
+                "score_cutoff": request.score_cutoff,
+                "path_prefix": request.path_prefix,
+            }
+            self.cache.set_results(request.query, hits, **cache_params)
+
         return hits
 
     @staticmethod
@@ -113,6 +141,8 @@ class KnowledgeSearchBackend:
 def create_search_backend(
     store_root: Path,
     embedding_provider_type: str = "stub",
+    cache_enabled: bool = True,
+    redis_url: Optional[str] = None,
     **embedding_kwargs
 ) -> KnowledgeSearchBackend:
     """Factory function to create a search backend.
@@ -120,11 +150,20 @@ def create_search_backend(
     Args:
         store_root: Root directory for knowledge store
         embedding_provider_type: Type of embedding provider ('stub' or 'openai')
+        cache_enabled: Whether to enable query caching (default: True)
+        redis_url: Redis URL for caching (if None, uses in-memory cache)
         **embedding_kwargs: Additional kwargs for embedding provider (e.g., api_key)
 
     Returns:
         Configured KnowledgeSearchBackend instance
     """
+    # Create cache
+    cache = create_cache(redis_url=redis_url, enabled=cache_enabled)
+    
+    # Pass cache to embedding provider if it's OpenAI
+    if embedding_provider_type == "openai":
+        embedding_kwargs["cache"] = cache
+    
     # Create embedding provider
     embedding_provider = create_provider(embedding_provider_type, **embedding_kwargs)
 
@@ -140,4 +179,6 @@ def create_search_backend(
     sql_store.initialize()
     lance_store.initialize_collections()
 
-    return KnowledgeSearchBackend(embedding_provider, lance_store, sql_store)
+    return KnowledgeSearchBackend(
+        embedding_provider, lance_store, sql_store, cache=cache
+    )

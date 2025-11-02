@@ -383,12 +383,12 @@ deploy-check: build
 # Build and upload to PyPI in one command
 deploy-prod: build
 	@echo "Checking packages and uploading to PyPI..."
-	@uv run twine check dist/* && twine upload dist/*
+	@uv run twine check dist/* && uv run twine upload dist/pb_dolphin-0.1.6*
 
 # Build and upload to Test PyPI in one command
 deploy-test: build
 	@echo "Checking packages and uploading to Test PyPI..."
-	@uv run twine check dist/* && twine upload --repository testpypi dist/*
+	@uv run twine check dist/* && uv run twine upload --repository testpypi dist/pb_dolphin-0.1.6*
 
 # Clean build artifacts
 clean-build:

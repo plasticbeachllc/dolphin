@@ -10,6 +10,7 @@ import os
 from typing import List, Optional
 
 from ..ingest.error_logging import with_retry
+from ..cache import QueryCache
 
 SUPPORTED_MODELS = {
     'small': 1536,
@@ -56,17 +57,26 @@ class EmbeddingProvider:
 class OpenAIEmbeddingProvider(EmbeddingProvider):
     """OpenAI API-based embedding provider with retry logic."""
 
-    def __init__(self, api_key: Optional[str] = None, batch_size: int = 100):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        batch_size: int = 100,
+        cache: Optional[QueryCache] = None,
+    ):
         """Initialize OpenAI embedding provider.
 
         Args:
             api_key: OpenAI API key. If None, reads from OPENAI_API_KEY env var.
             batch_size: Maximum number of texts to embed in a single API call.
+            cache: Optional QueryCache instance for caching embeddings.
 
         Raises:
             ValueError: If no API key is provided or found in environment.
         """
         super().__init__()
+        
+        # Cache instance
+        self.cache = cache
 
         # Lazy import to avoid requiring openai if using stub provider
         try:
@@ -112,22 +122,50 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         # Get OpenAI model name
         openai_model = OPENAI_MODEL_MAP[model]
 
-        # Process in batches to respect API limits
-        all_embeddings = []
-        for i in range(0, len(texts), self.batch_size):
-            batch = texts[i:i + self.batch_size]
+        # Check cache for each text and collect uncached texts
+        all_embeddings: List[Optional[List[float]]] = [None] * len(texts)
+        uncached_indices: List[int] = []
+        uncached_texts: List[str] = []
+        
+        for i, text in enumerate(texts):
+            if self.cache:
+                cached = self.cache.get_embedding(text, model)
+                if cached is not None:
+                    all_embeddings[i] = cached
+                else:
+                    uncached_indices.append(i)
+                    uncached_texts.append(text)
+            else:
+                uncached_indices.append(i)
+                uncached_texts.append(text)
+        
+        # Process uncached texts in batches
+        if uncached_texts:
+            for batch_start in range(0, len(uncached_texts), self.batch_size):
+                batch = uncached_texts[batch_start:batch_start + self.batch_size]
+                batch_indices = uncached_indices[batch_start:batch_start + self.batch_size]
 
-            # Call OpenAI API
-            response = self.client.embeddings.create(
-                input=batch,
-                model=openai_model
-            )
+                # Call OpenAI API
+                response = self.client.embeddings.create(
+                    input=batch,
+                    model=openai_model
+                )
 
-            # Extract embeddings in order
-            batch_embeddings = [item.embedding for item in response.data]
-            all_embeddings.extend(batch_embeddings)
+                # Extract embeddings and cache them
+                for j, item in enumerate(response.data):
+                    embedding = item.embedding
+                    original_idx = batch_indices[j]
+                    all_embeddings[original_idx] = embedding
+                    
+                    # Cache the embedding
+                    if self.cache:
+                        self.cache.set_embedding(
+                            uncached_texts[batch_start + j],
+                            model,
+                            embedding
+                        )
 
-        return all_embeddings
+        return all_embeddings  # type: ignore
 
 
 # Global instance for convenience - starts with stub provider

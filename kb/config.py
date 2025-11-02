@@ -73,6 +73,11 @@ class KBConfig:
     embedding_provider: str = "stub"  # 'stub' or 'openai'
     embedding_batch_size: int = 100
     openai_api_key_env: str = "OPENAI_API_KEY"
+    # Cache configuration
+    cache_enabled: bool = True
+    redis_url: str | None = None  # e.g., "redis://localhost:6379/0"
+    embedding_cache_ttl: int = 3600  # 1 hour
+    result_cache_ttl: int = 900  # 15 minutes
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "KBConfig":
@@ -80,6 +85,7 @@ class KBConfig:
         ignore_values = data.get("ignore") or DEFAULT_IGNORE_PATTERNS
         retrieval = data.get("retrieval") or {}
         embedding = data.get("embedding") or {}
+        cache = data.get("cache") or {}
         return cls(
             store_root=_to_path(data.get("store_root", CONFIG_ROOT)),
             endpoint=str(data.get("endpoint", "127.0.0.1:7777")),
@@ -111,6 +117,16 @@ class KBConfig:
             ),
             openai_api_key_env=str(
                 embedding.get("api_key_env", data.get("openai_api_key_env", "OPENAI_API_KEY"))
+            ),
+            cache_enabled=bool(
+                cache.get("enabled", data.get("cache_enabled", True))
+            ),
+            redis_url=cache.get("redis_url", data.get("redis_url")),
+            embedding_cache_ttl=int(
+                cache.get("embedding_ttl", data.get("embedding_cache_ttl", 3600))
+            ),
+            result_cache_ttl=int(
+                cache.get("result_ttl", data.get("result_cache_ttl", 900))
             ),
         )
 

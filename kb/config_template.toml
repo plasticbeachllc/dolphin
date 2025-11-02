@@ -80,6 +80,22 @@ per_session_spend_cap_usd = 10.0
 # Environment variable name containing the OpenAI API key
 api_key_env = "OPENAI_API_KEY"
 
+[cache]
+# Enable query caching for performance and cost savings
+enabled = true
+
+# Redis connection URL (if None, uses in-memory cache)
+# Example: "redis://localhost:6379/0"
+redis_url = ""
+
+# Time-to-live for cached embeddings (seconds)
+# Default: 3600 (1 hour)
+embedding_ttl = 3600
+
+# Time-to-live for cached search results (seconds)
+# Default: 900 (15 minutes)
+result_ttl = 900
+
 [tokenizer]
 encoding = "cl100k_base"
 
