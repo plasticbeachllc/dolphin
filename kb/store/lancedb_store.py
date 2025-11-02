@@ -149,18 +149,25 @@ class LanceDBStore:
         model: str = "small",
         repo: str | None = None,
         top_k: int = 8,
+        ann_params: "ANNParams | None" = None,
     ) -> list[dict[str, Any]]:
-        """Execute KNN search against the vector store.
+        """Execute KNN search against the vector store with configurable ANN parameters.
 
         Args:
             query_vector: The query embedding vector
             model: Model type ('small' or 'large') determines which table to search
             repo: Optional repository filter (exact match on 'repo' field)
             top_k: Number of nearest neighbors to return
+            ann_params: ANN configuration (uses defaults if None)
 
         Returns:
             List of matching chunks with metadata, sorted by similarity (closest first)
         """
+        from kb.retrieval.ann_tuning import ANNParams
+        
+        # Use default params if not provided
+        if ann_params is None:
+            ann_params = ANNParams()  # Default configuration
         import lancedb
 
         # Map model to table name and expected dimension
@@ -195,8 +202,24 @@ class LanceDBStore:
             # Table doesn't exist yet
             return []
 
-        # Build search query - explicitly specify vector column name
+        # Build search query with ANN parameters - explicitly specify vector column name
         search_query = table.search(list(query_vector), vector_column_name="vector").limit(top_k)
+        
+        # Apply ANN parameters to LanceDB query
+        # LanceDB API: https://lancedb.github.io/lancedb/search/
+        lance_params = ann_params.to_lancedb_params()
+        
+        # Apply metric if supported
+        if hasattr(search_query, 'metric'):
+            search_query = search_query.metric(lance_params["metric"])
+        
+        # Apply nprobes if using index
+        if lance_params["use_index"] and hasattr(search_query, 'nprobes'):
+            search_query = search_query.nprobes(lance_params["nprobes"])
+        
+        # Apply refine_factor if using index
+        if lance_params["use_index"] and hasattr(search_query, 'refine_factor'):
+            search_query = search_query.refine_factor(lance_params["refine_factor"])
 
         # Add repository filter if specified
         if repo is not None:

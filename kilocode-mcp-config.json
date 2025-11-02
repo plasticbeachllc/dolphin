@@ -1,0 +1,116 @@
+{
+  "name": "Dolphin-KB",
+  "description": "Dolphin AI semantic code search and retrieval",
+  "server": {
+    "command": "bun",
+    "args": [
+      "run",
+      "/Users/tdc/worktable/dolphin/mcp-bridge/src/index.ts"
+    ],
+    "env": {
+      "DOLPHIN_API_URL": "http://127.0.0.1:7777",
+      "LOG_LEVEL": "info"
+    }
+  },
+  "tools": [
+    {
+      "name": "search_knowledge",
+      "description": "Search codebase semantically using AI embeddings",
+      "parameters": {
+        "query": {
+          "type": "string",
+          "description": "Search query",
+          "required": true
+        },
+        "repos": {
+          "type": "array",
+          "description": "Optional repository filters",
+          "items": {"type": "string"}
+        },
+        "top_k": {
+          "type": "number",
+          "description": "Number of results",
+          "default": 8
+        }
+      }
+    },
+    {
+      "name": "fetch_chunk",
+      "description": "Get detailed chunk content by ID",
+      "parameters": {
+        "chunk_id": {
+          "type": "string",
+          "description": "Chunk identifier",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "fetch_lines",
+      "description": "Get specific file lines by range",
+      "parameters": {
+        "repo": {
+          "type": "string",
+          "description": "Repository name",
+          "required": true
+        },
+        "path": {
+          "type": "string",
+          "description": "File path",
+          "required": true
+        },
+        "start": {
+          "type": "number",
+          "description": "Start line (1-indexed)",
+          "required": true
+        },
+        "end": {
+          "type": "number",
+          "description": "End line (inclusive)",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "get_vector_store_info",
+      "description": "Get knowledge base statistics and repository info"
+    },
+    {
+      "name": "open_in_editor",
+      "description": "Generate VS Code URI for opening files",
+      "parameters": {
+        "repo": {
+          "type": "string",
+          "description": "Repository name",
+          "required": true
+        },
+        "path": {
+          "type": "string",
+          "description": "File path",
+          "required": true
+        },
+        "start_line": {
+          "type": "number",
+          "description": "Start line",
+          "default": 1
+        }
+      }
+    }
+  ],
+  "setup_instructions": {
+    "prerequisites": [
+      "Install Bun: curl -fsSL https://bun.sh/install | bash",
+      "Dolphin API server running on http://127.0.0.1:7777"
+    ],
+    "configuration": [
+      "1. Start Dolphin API: just api (from dolphin directory)",
+      "2. Index repositories: just add-repo my-repo /path/to/repo",
+      "3. Update MCP config path to your dolphin directory",
+      "4. Configure Kilocode to use this MCP server"
+    ],
+    "troubleshooting": [
+      "Check API health: curl http://127.0.0.1:7777/health",
+      "View MCP logs: tail -f mcp-bridge/logs/mcp.log"
+    ]
+  }
+}

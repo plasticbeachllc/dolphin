@@ -323,12 +323,15 @@ class IngestionPipeline:
 
                     # Persist vectors to LanceDB (per occurrence)
                     payload = []
+                    fts_chunks = []  # For FTS5 indexing
                     for h, occs in desired.items():
                         vec = hash_to_vec.get(h)
                         if vec is None:
                             continue  # unchanged hash
                         for occ in occs:
                             row_id = f"{repo_id}:{file_id}:{embed_model}:{h}:{occ['start_line']}:{occ['end_line']}"
+                            content_id = mapping.get(h)
+                            
                             payload.append({
                                 'id': row_id,
                                 'vector': vec,
@@ -350,9 +353,32 @@ class IngestionPipeline:
                                 'token_count': occ_token_counts.get((occ['start_line'], occ['end_line']), 0),
                                 'created_at': None,  # Will be set by LanceDB
                             })
+                            
+                            # Prepare chunk for FTS5 indexing (only for first occurrence per hash)
+                            if content_id and occ == occs[0]:  # First occurrence only
+                                # Find the chunk text for this hash
+                                chunk_text = None
+                                for chunk in chunks:
+                                    if chunk.text_hash == h:
+                                        chunk_text = chunk.text
+                                        break
+                                
+                                if chunk_text:
+                                    fts_chunks.append({
+                                        'content_id': content_id,
+                                        'repo': repo_name,
+                                        'path': path,
+                                        'content': chunk_text,
+                                        'symbol_name': occ.get('symbol_name'),
+                                        'symbol_path': occ.get('symbol_path'),
+                                    })
                     
                     if payload:
                         self.lancedb.upsert_chunks(repo_name, payload, model=embed_model)
+                    
+                    # Index chunks in FTS5 for BM25 search
+                    if fts_chunks and not dry_run:
+                        self.metadata.bulk_index_chunks_for_fts(fts_chunks)
 
                 # Update counters
                 files_done += 1

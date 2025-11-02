@@ -34,7 +34,7 @@ class TestHealthEndpoint:
     def test_health_shallow_check(self):
         """Test shallow health check returns ok."""
         client = TestClient(app)
-        response = client.get("/v1/health")
+        response = client.get("/health")
 
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
@@ -42,7 +42,7 @@ class TestHealthEndpoint:
     def test_health_shallow_check_explicit(self):
         """Test shallow check with explicit query param."""
         client = TestClient(app)
-        response = client.get("/v1/health?check=shallow")
+        response = client.get("/health?check=shallow")
 
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
@@ -50,7 +50,7 @@ class TestHealthEndpoint:
     def test_health_deep_check_no_stores(self):
         """Test deep health check without stores configured."""
         client = TestClient(app)
-        response = client.get("/v1/health?check=deep")
+        response = client.get("/health?check=deep")
 
         assert response.status_code == 200
         data = response.json()
@@ -73,7 +73,7 @@ class TestSearchEndpoint:
     def test_search_basic_query(self):
         """Test basic search query."""
         client = TestClient(app)
-        response = client.post("/v1/search", json={"query": "test function"})
+        response = client.post("/search", json={"query": "test function"})
 
         assert response.status_code == 200
         data = response.json()
@@ -84,7 +84,7 @@ class TestSearchEndpoint:
         """Test search with repos filter."""
         client = TestClient(app)
         response = client.post(
-            "/v1/search",
+            "/search",
             json={"query": "test", "repos": ["repo1", "repo2"]}
         )
 
@@ -94,7 +94,7 @@ class TestSearchEndpoint:
         """Test search with custom top_k."""
         client = TestClient(app)
         response = client.post(
-            "/v1/search",
+            "/search",
             json={"query": "test", "top_k": 20}
         )
 
@@ -104,7 +104,7 @@ class TestSearchEndpoint:
         """Test search with path_prefix filter."""
         client = TestClient(app)
         response = client.post(
-            "/v1/search",
+            "/search",
             json={"query": "test", "path_prefix": ["src/", "lib/"]}
         )
 
@@ -113,7 +113,7 @@ class TestSearchEndpoint:
     def test_search_missing_query_fails(self):
         """Test that missing query field fails validation."""
         client = TestClient(app)
-        response = client.post("/v1/search", json={})
+        response = client.post("/search", json={})
 
         assert response.status_code == 422  # Validation error
 
@@ -128,7 +128,7 @@ class TestReposEndpoint:
     def test_repos_endpoint_exists(self):
         """Test /v1/repos endpoint exists."""
         client = TestClient(app)
-        response = client.get("/v1/repos")
+        response = client.get("/repos")
 
         # Should work even without stores, or return 404/503 if not configured
         assert response.status_code in [200, 404, 500, 503]
@@ -140,7 +140,7 @@ class TestChunkEndpoint:
     def test_chunk_endpoint_exists(self):
         """Test /v1/chunks/{id} endpoint exists."""
         client = TestClient(app)
-        response = client.get("/v1/chunks/123")
+        response = client.get("/chunks/123")
 
         # Should exist, may error without data or return 404/503 if not configured
         assert response.status_code in [200, 404, 422, 500, 503]
@@ -152,8 +152,8 @@ class TestFileEndpoint:
     def test_file_endpoint_requires_params(self):
         """Test /v1/file endpoint requires parameters."""
         client = TestClient(app)
-        response = client.get("/v1/file")
-
+        response = client.get("/file")
+    
         # Should require repo and path params
         assert response.status_code == 422
 

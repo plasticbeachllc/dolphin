@@ -48,6 +48,28 @@ class SQLiteMetadataStore:
                 cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
                 if cur.fetchone() is None:
                     raise RuntimeError(f"Database initialization failed: '{table}' table missing.")
+            
+            # Create FTS5 virtual table for BM25 full-text search
+            cur.execute("""
+                SELECT name FROM sqlite_master
+                WHERE type='table' AND name='chunks_fts'
+            """)
+            
+            if not cur.fetchone():
+                # Create FTS5 index with BM25 ranking
+                cur.execute("""
+                    CREATE VIRTUAL TABLE chunks_fts USING fts5(
+                        content_id UNINDEXED,
+                        repo UNINDEXED,
+                        path UNINDEXED,
+                        content,
+                        symbol_name,
+                        symbol_path,
+                        tokenize='porter unicode61'
+                    )
+                """)
+                
+                conn.commit()
 
     def record_repo(self, name: str, path: Path, *, default_embed_model: str = "small") -> None:
         """Insert or update a repo registration.
@@ -645,3 +667,207 @@ class SQLiteMetadataStore:
             )
             rows = cur.fetchall() or []
             return [{"id": str(r[0])} for r in rows] if rows else None
+
+    def bm25_search(
+        self,
+        query: str,
+        *,
+        repo: str | None = None,
+        path_prefix: list[str] | None = None,
+        top_k: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Execute BM25 full-text search on indexed chunks.
+        
+        Args:
+            query: Search query (plain text, not SQL)
+            repo: Optional repository filter
+            path_prefix: Optional path prefix filters
+            top_k: Number of results to return
+        
+        Returns:
+            List of results with BM25 scores
+        
+        FTS5 Query Syntax:
+            - Simple: "authentication login"
+            - Phrase: '"user controller"'
+            - Boolean: "auth AND login NOT test"
+            - Near: "NEAR(user controller, 5)"
+        """
+        
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            # Build FTS5 query with filters
+            conditions = ["chunks_fts MATCH ?"]
+            params = [query]
+            
+            if repo:
+                conditions.append("repo = ?")
+                params.append(repo)
+            
+            if path_prefix:
+                # Add path prefix filters
+                path_conditions = []
+                for prefix in path_prefix:
+                    path_conditions.append("path LIKE ?")
+                    params.append(f"{prefix}%")
+                conditions.append(f"({' OR '.join(path_conditions)})")
+            
+            where_clause = " AND ".join(conditions)
+            
+            # FTS5 BM25 scoring:
+            # - bm25(chunks_fts): Overall BM25 score (lower is better!)
+            # - rank: Pre-computed relevance rank (also lower is better!)
+            #
+            # Note: FTS5 returns negative BM25 scores, where more negative = more relevant
+            # We negate to get positive scores for easier interpretation
+            
+            sql = f"""
+                SELECT
+                    content_id,
+                    repo,
+                    path,
+                    -bm25(chunks_fts) as bm25_score,
+                    rank
+                FROM chunks_fts
+                WHERE {where_clause}
+                ORDER BY rank
+                LIMIT ?
+            """
+            params.append(top_k)
+            
+            cur.execute(sql, tuple(params))
+            rows = cur.fetchall() or []
+            
+            # Convert to list of dicts
+            results = []
+            for row in rows:
+                results.append({
+                    "chunk_id": str(row[0]),
+                    "repo": str(row[1]),
+                    "path": str(row[2]),
+                    "score": float(row[3]),  # Positive BM25 score
+                    "rank": int(row[4]),
+                })
+            
+            return results
+
+    def index_chunk_for_fts(
+        self,
+        content_id: str,
+        repo: str,
+        path: str,
+        content: str,
+        symbol_name: str | None = None,
+        symbol_path: str | None = None,
+    ) -> None:
+        """Index a chunk in the FTS5 table for BM25 search.
+        
+        Args:
+            content_id: Unique chunk identifier
+            repo: Repository name
+            path: File path
+            content: Chunk text content (will be tokenized and stemmed)
+            symbol_name: Optional symbol name for exact matching
+            symbol_path: Optional fully qualified symbol path
+        """
+        
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            # Upsert: replace if exists, insert if new
+            cur.execute("""
+                INSERT OR REPLACE INTO chunks_fts
+                (content_id, repo, path, content, symbol_name, symbol_path)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (content_id, repo, path, content, symbol_name, symbol_path))
+            conn.commit()
+
+    def bulk_index_chunks_for_fts(
+        self,
+        chunks: list[dict[str, Any]],
+    ) -> int:
+        """Bulk index multiple chunks for better performance.
+        
+        Args:
+            chunks: List of chunk dicts with keys:
+                - content_id, repo, path, content, symbol_name, symbol_path
+        
+        Returns:
+            Number of chunks indexed
+        """
+        if not chunks:
+            return 0
+        
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.executemany("""
+                INSERT OR REPLACE INTO chunks_fts
+                (content_id, repo, path, content, symbol_name, symbol_path)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, [
+                (c["content_id"], c["repo"], c["path"],
+                 c["content"], c.get("symbol_name"), c.get("symbol_path"))
+                for c in chunks
+            ])
+            conn.commit()
+            return len(chunks)
+
+    def get_chunk_by_id(self, chunk_id: str) -> dict[str, Any] | None:
+        """Get full chunk metadata by content_id.
+        
+        Returns:
+            Dict with chunk metadata or None if not found
+        """
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute("""
+                SELECT
+                    cc.id,
+                    cc.text_hash,
+                    cc.embed_model,
+                    cc.first_indexed_at,
+                    cc.last_indexed_at,
+                    f.path,
+                    f.language,
+                    cl.start_line,
+                    cl.end_line,
+                    cl.symbol_kind,
+                    cl.symbol_name,
+                    cl.symbol_path
+                FROM chunk_content cc
+                JOIN files f ON cc.file_id = f.id
+                LEFT JOIN chunk_locations cl ON cc.id = cl.content_id
+                WHERE cc.id = ?
+            """, (chunk_id,))
+            
+            row = cur.fetchone()
+            if not row:
+                return None
+            
+            return {
+                "chunk_id": str(row[0]),
+                "text_hash": str(row[1]),
+                "embed_model": str(row[2]),
+                "first_indexed_at": row[3],
+                "last_indexed_at": row[4],
+                "path": str(row[5]),
+                "language": row[6],
+                "start_line": int(row[7]) if row[7] else None,
+                "end_line": int(row[8]) if row[8] else None,
+                "symbol_kind": row[9],
+                "symbol_name": row[10],
+                "symbol_path": row[11],
+            }
+
+    def get_chunk_contents(self, chunk_ids: list[str]) -> dict[str, str]:
+        """Get a mapping of chunk_id to its content."""
+        if not chunk_ids:
+            return {}
+        
+        placeholders = ",".join(["?"] * len(chunk_ids))
+        query = f"""
+            SELECT c.id, fts.content
+            FROM chunk_content c
+            JOIN chunks_fts fts ON c.id = fts.content_id
+            WHERE c.id IN ({placeholders})
+        """
+        
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute(query, chunk_ids)
+            rows = cur.fetchall()
+            return {str(row[0]): str(row[1]) for row in rows}

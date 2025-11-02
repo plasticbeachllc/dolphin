@@ -36,6 +36,8 @@ class SearchRequest(BaseModel):
     max_snippet_tokens: int = 240
     embed_model: str = "large"
     score_cutoff: float | None = 0.0
+    mmr_enabled: bool | None = False
+    mmr_lambda: float | None = 0.7
 
 
 class SearchBackend(Protocol):
@@ -77,7 +79,7 @@ def reset_search_backend() -> None:
     set_search_backend(None)
 
 
-@app.get("/v1/health")
+@app.get("/health")
 async def health(check: str = Query(default="shallow")) -> dict[str, object]:
     """Health check endpoint with optional deep checks."""
     if check == "shallow":
@@ -107,7 +109,7 @@ async def health(check: str = Query(default="shallow")) -> dict[str, object]:
     return {"status": "ok", "checks": checks}
 
 
-@app.post("/v1/search")
+@app.post("/search")
 async def search(request: SearchRequest) -> dict[str, object]:
     """Dispatch the search request to the configured backend."""
     backend = get_search_backend()
@@ -127,11 +129,13 @@ async def search(request: SearchRequest) -> dict[str, object]:
             "model": request.embed_model,
             "latency_ms": latency_ms,
             "max_snippet_tokens": request.max_snippet_tokens,
+            "mmr_enabled": request.mmr_enabled,
+            "mmr_lambda": request.mmr_lambda,
         },
     }
 
 
-@app.get("/v1/repos")
+@app.get("/repos")
 async def list_repos() -> dict[str, list[dict[str, object]]]:
     """List all registered repositories with metadata."""
     if _sql_store is None:
@@ -173,7 +177,7 @@ async def list_repos() -> dict[str, list[dict[str, object]]]:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
-@app.get("/v1/chunks/{chunk_id}")
+@app.get("/chunks/{chunk_id}")
 async def fetch_chunk(chunk_id: str) -> dict[str, object]:
     """Fetch a specific chunk by ID."""
     if _lance_store is None:
@@ -221,7 +225,7 @@ async def fetch_chunk(chunk_id: str) -> dict[str, object]:
         raise HTTPException(status_code=500, detail=f"Error fetching chunk: {str(e)}")
 
 
-@app.get("/v1/file")
+@app.get("/file")
 async def fetch_file_slice(
     repo: str = Query(..., description="Repository name"),
     path: str = Query(..., description="File path relative to repo root"),

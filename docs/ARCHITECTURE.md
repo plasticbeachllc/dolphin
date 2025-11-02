@@ -110,7 +110,7 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 |----------|--------|---------|--------|
 | `/v1/health` | GET | Health check (shallow/deep) | ✅ |
 | `/v1/repos` | GET | List indexed repositories | ✅ |
-| `/v1/search` | POST | Semantic code search | ✅ |
+| `/v1/search` | POST | Semantic code search with MMR | ✅ |
 | `/v1/chunks/{id}` | GET | Fetch chunk by ID | ✅ |
 | `/v1/file` | GET | Fetch file slice by line range | ✅ |
 
@@ -118,6 +118,8 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 - Automatic backend initialization on startup
 - OpenAI + Stub embedding providers
 - LanceDB vector search with fixed-size vectors
+- **Maximal Marginal Relevance (MMR)** for result diversity
+- Multi-level caching (Redis + in-memory) for performance
 - Path traversal security protection
 - Comprehensive error handling
 - Session spend cap enforcement
@@ -125,7 +127,7 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 **Files**:
 - `kb/api/app.py` - FastAPI endpoints
 - `kb/api/server.py` - Server initialization
-- `kb/api/search_backend.py` - Search pipeline
+- `kb/api/search_backend.py` - Search pipeline with MMR integration
 
 ### 2. MCP Bridge (TypeScript/Bun)
 
@@ -392,10 +394,12 @@ Columns:
 4. Re-rank (if enabled)
    ├─ Reciprocal Rank Fusion
    ├─ Weighted score fusion
+   ├─ **Maximal Marginal Relevance (MMR)** for result diversity
    └─ Sort by final score
 
 5. Post-process
    ├─ Apply score_cutoff filter
+   ├─ Apply MMR reranking (if enabled)
    ├─ Truncate snippets to max_snippet_tokens
    ├─ Fetch metadata from SQLite
    └─ Build response

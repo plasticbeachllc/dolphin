@@ -49,6 +49,8 @@ dependencies = [
     "python-dotenv",
     "sqlite-utils",
     "tomli ; python_full_version < '3.11'",
+    "torch>=2.2.0",
+    "sentence-transformers>=2.3.0",
 ]
 
 [project.optional-dependencies]
@@ -121,5 +123,7 @@ markers = [
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
     "asyncio: marks tests as async tests",
+    "performance: marks tests as performance tests",
+    "scenario: marks tests as scenario tests",
 ]
 asyncio_mode = "auto"

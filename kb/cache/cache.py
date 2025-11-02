@@ -152,7 +152,7 @@ class QueryCache:
             return None
             
         # Create stable hash from query + sorted params
-        param_str = json.dumps(params, sort_keys=True)
+        param_str = json.dumps(params, sort_keys=True, separators=(",", ":"))
         cache_key = f"results:{self._hash_key(query, param_str)}"
         
         try:
@@ -188,7 +188,7 @@ class QueryCache:
         if not self.enabled:
             return
             
-        param_str = json.dumps(params, sort_keys=True)
+        param_str = json.dumps(params, sort_keys=True, separators=(",", ":"))
         cache_key = f"results:{self._hash_key(query, param_str)}"
         
         try:

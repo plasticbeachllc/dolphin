@@ -15,7 +15,7 @@ import typer
 # Import subcommand apps
 from kb.ingest.cli import app as kb_app
 from personas.src.personas import app as personas_app
-from kb.api.server import main as api_main
+from kb.api.server import app_with_lifespan
 
 # Import kb CLI functions for top-level commands
 from kb.ingest.cli import (
@@ -107,10 +107,8 @@ def serve(
     port: int = typer.Option(7777, "--port", help="Port to bind to"),
 ) -> None:
     """Start the Dolphin API server."""
-    import os
-    os.environ["HOST"] = host
-    os.environ["PORT"] = str(port)
-    api_main()
+    import uvicorn
+    uvicorn.run("kb.api.server:app_with_lifespan", host=host, port=port, reload=False)
 
 
 @app.command()

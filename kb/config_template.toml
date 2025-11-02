@@ -40,95 +40,87 @@ c = "c"
 h = "c"
 cpp = "cpp"
 cxx = "cpp"
-cc = "cpp"
 hpp = "cpp"
 hxx = "cpp"
-hh = "cpp"
-java = "java"
-kt = "kotlin"
 go = "go"
-rs = "rust"
+java = "java"
 rb = "ruby"
+rs = "rust"
+sh = "bash"
+swift = "swift"
+kt = "kotlin"
+kts = "kotlin"
+scala = "scala"
+hs = "haskell"
+pl = "perl"
+pm = "perl"
 php = "php"
-sh = "shell"
-bash = "shell"
-zsh = "shell"
-txt = "text"
-log = "text"
+html = "html"
+css = "css"
 json = "json"
-jsonc = "json"
-json5 = "json"
+sql = "sql"
+dockerfile = "dockerfile"
+docker = "dockerfile"
+ipynb = "json"
 
-[embedding]
-# Provider type: "stub" (zero-vectors for testing) or "openai" (real embeddings)
-provider = "stub"
 
-# Default embedding model preference (small|large)
-# - small: text-embedding-3-small (1536 dimensions)
-# - large: text-embedding-3-large (3072 dimensions)
-default_embed_model = "large"
+[embeddings]
+default_provider = "openai"
+default_small_model = "text-embedding-3-small"
+default_large_model = "text-embedding-3-large"
+# Session spend cap in USD (0 = no limit)
+session_spend_cap = 5.00
 
-# Batch size for API calls (only used with "openai" provider)
-batch_size = 100
-
-# Concurrency for embedding API calls
-concurrency = 3
-
-# Per-session spend cap in USD
-per_session_spend_cap_usd = 10.0
-
-# Environment variable name containing the OpenAI API key
-api_key_env = "OPENAI_API_KEY"
-
-[cache]
-# Enable query caching for performance and cost savings
-enabled = true
-
-# Redis connection URL (if None, uses in-memory cache)
-# Example: "redis://localhost:6379/0"
-redis_url = ""
-
-# Time-to-live for cached embeddings (seconds)
-# Default: 3600 (1 hour)
-embedding_ttl = 3600
-
-# Time-to-live for cached search results (seconds)
-# Default: 900 (15 minutes)
-result_ttl = 900
-
-[tokenizer]
-encoding = "cl100k_base"
+# Patterns that will always be ignored, overriding any repo-level settings.
+# Supports gitignore-style glob patterns.
+[ignore]
+patterns = [
+    ".git/",
+    ".idea/",
+    ".vscode/",
+    "__pycache__/",
+    "node_modules/",
+    "*.pyc",
+    "*.log",
+    "*.tmp",
+    "*.swp",
+    ".DS_Store",
+    "*.db",
+    "*.sqlite",
+    "*.sqlite3",
+]
 
 [retrieval]
-top_k = 8
-max_snippet_tokens = 240
-score_cutoff = 0.15
+# Settings for Approximate Nearest Neighbor (ANN) search
+# These parameters control the speed-accuracy tradeoff for vector search.
+[retrieval.ann]
+# Strategy: "speed", "accuracy", "adaptive", or "custom"
+# - speed: Optimizes for latency (95% recall, ~2x faster)
+# - accuracy: Optimizes for recall (99% recall, default speed)
+# - adaptive: Dynamically adjusts params based on query type and dataset size
+# - custom: Use the specific values provided below
+strategy = "adaptive"
 
-ignore = [
-    ".env",
-    ".env.*",
-    ".secrets",
-    "node_modules/**",
-    ".npm",
-    ".pnpm-store",
-    ".yarn",
-    ".yarn/cache",
-    "dist/**",
-    "build/**",
-    "coverage/**",
-    ".cache/**",
-    "target/**",
-    "vendor/**",
-    ".svelte-kit/**",
-    ".vercel/**",
-    ".vite/**",
-    ".next/**",
-    ".venv/**",
-    ".mypy_cache/**",
-    ".pytest_cache/**",
-    ".DS_Store",
-]
+# Custom parameters (only used if strategy = "custom")
+# metric: Distance metric for similarity - "cosine", "L2", or "dot"
+metric = "cosine"
+# nprobes: Number of IVF clusters to probe (1-50)
+nprobes = 20
+# refine_factor: Post-filtering factor to improve precision (1-100)
+refine_factor = 10
 
-except = [
-    ".env.example"
-]
+# Adaptive strategy configuration (only used if strategy = "adaptive")
+[retrieval.ann.adaptive]
+# Estimated number of vectors in the dataset; used for tuning nprobes
+estimated_dataset_size = 100000
+# Default query type for adaptive logic if not specified in the query
+# Options: "identifier", "concept", "example"
+default_query_type = "concept"
+
+[retrieval.reranking]
+# Enable or disable cross-encoder reranking
+enabled = true
+# Model name from HuggingFace model hub
+model = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+# Device to run on: "cpu", "cuda", or an empty string for auto-detection
+device = ""

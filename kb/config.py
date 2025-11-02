@@ -57,6 +57,21 @@ def _ensure_user_config() -> Path:
 
 
 @dataclass
+class RerankingConfig:
+    enabled: bool = False
+    model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    device: Optional[str] = None
+
+@dataclass
+class RetrievalConfig:
+    reranking: RerankingConfig = field(default_factory=RerankingConfig)
+    score_cutoff: float = 0.15
+    top_k: int = 8
+    max_snippet_tokens: int = 240
+    mmr_enabled: bool = False
+    mmr_lambda: float = 0.7
+
+@dataclass
 class KBConfig:
     """Runtime configuration for the knowledge store components."""
 
@@ -66,68 +81,69 @@ class KBConfig:
     concurrency: int = 3
     per_session_spend_cap_usd: float = 10.0
     ignore: list[str] = field(default_factory=lambda: list(DEFAULT_IGNORE_PATTERNS))
-    score_cutoff: float = 0.15
-    top_k: int = 8
-    max_snippet_tokens: int = 240
-    # Embedding provider configuration
-    embedding_provider: str = "stub"  # 'stub' or 'openai'
+    
+    retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
+    
+    embedding_provider: str = "stub"
     embedding_batch_size: int = 100
     openai_api_key_env: str = "OPENAI_API_KEY"
-    # Cache configuration
     cache_enabled: bool = True
-    redis_url: str | None = None  # e.g., "redis://localhost:6379/0"
-    embedding_cache_ttl: int = 3600  # 1 hour
-    result_cache_ttl: int = 900  # 15 minutes
+    redis_url: str | None = None
+    embedding_cache_ttl: int = 3600
+    result_cache_ttl: int = 900
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "KBConfig":
-        """Create a configuration object from a mapping."""
-        ignore_values = data.get("ignore") or DEFAULT_IGNORE_PATTERNS
-        retrieval = data.get("retrieval") or {}
-        embedding = data.get("embedding") or {}
-        cache = data.get("cache") or {}
+        """Create a configuration object from a mapping, handling nested sections."""
+        
+        def _get_value(source, key, default, target_type):
+            value = source.get(key, default)
+            if value is None:
+                return None
+            try:
+                if target_type is bool and isinstance(value, str):
+                    return value.lower() in ("true", "1", "yes")
+                return target_type(value)
+            except (ValueError, TypeError):
+                return default
+
+        # Extract nested sections, falling back to empty dicts
+        retrieval_data = data.get("retrieval", {})
+        reranking_data = retrieval_data.get("reranking", {}) if isinstance(retrieval_data, dict) else {}
+        embedding_data = data.get("embedding", {})
+        cache_data = data.get("cache", {})
+
+        # Build nested dataclasses first
+        reranking_config = RerankingConfig(
+            enabled=_get_value(reranking_data, "enabled", False, bool),
+            model=_get_value(reranking_data, "model", "cross-encoder/ms-marco-MiniLM-L-6-v2", str),
+            device=_get_value(reranking_data, "device", None, str)
+        )
+        
+        retrieval_config = RetrievalConfig(
+            reranking=reranking_config,
+            score_cutoff=_get_value(retrieval_data, "score_cutoff", 0.15, float),
+            top_k=_get_value(retrieval_data, "top_k", 8, int),
+            max_snippet_tokens=_get_value(retrieval_data, "max_snippet_tokens", 240, int),
+            mmr_enabled=_get_value(retrieval_data, "mmr_enabled", False, bool),
+            mmr_lambda=_get_value(retrieval_data, "mmr_lambda", 0.7, float)
+        )
+
         return cls(
             store_root=_to_path(data.get("store_root", CONFIG_ROOT)),
-            endpoint=str(data.get("endpoint", "127.0.0.1:7777")),
-            default_embed_model=str(
-                embedding.get("default_embed_model",
-                             data.get("default_embed_model", "small"))
-            ),
-            concurrency=int(
-                embedding.get("concurrency",
-                             data.get("concurrency", 3))
-            ),
-            per_session_spend_cap_usd=float(
-                embedding.get("per_session_spend_cap_usd",
-                             data.get("per_session_spend_cap_usd", 10.0))
-            ),
-            ignore=list(ignore_values),
-            score_cutoff=float(
-                retrieval.get("score_cutoff", data.get("score_cutoff", 0.15))
-            ),
-            top_k=int(retrieval.get("top_k", data.get("top_k", 8))),
-            max_snippet_tokens=int(
-                retrieval.get("max_snippet_tokens", data.get("max_snippet_tokens", 240))
-            ),
-            embedding_provider=str(
-                embedding.get("provider", data.get("embedding_provider", "stub"))
-            ),
-            embedding_batch_size=int(
-                embedding.get("batch_size", data.get("embedding_batch_size", 100))
-            ),
-            openai_api_key_env=str(
-                embedding.get("api_key_env", data.get("openai_api_key_env", "OPENAI_API_KEY"))
-            ),
-            cache_enabled=bool(
-                cache.get("enabled", data.get("cache_enabled", True))
-            ),
-            redis_url=cache.get("redis_url", data.get("redis_url")),
-            embedding_cache_ttl=int(
-                cache.get("embedding_ttl", data.get("embedding_cache_ttl", 3600))
-            ),
-            result_cache_ttl=int(
-                cache.get("result_ttl", data.get("result_cache_ttl", 900))
-            ),
+            endpoint=_get_value(data, "endpoint", "127.0.0.1:7777", str),
+            default_embed_model=_get_value(embedding_data, "default_embed_model", "large", str),
+            concurrency=_get_value(embedding_data, "concurrency", 3, int),
+            per_session_spend_cap_usd=_get_value(data, "per_session_spend_cap_usd", 10.0, float),
+            ignore=data.get("ignore", DEFAULT_IGNORE_PATTERNS),
+            retrieval=retrieval_config,
+            embedding_provider=_get_value(embedding_data, "provider", "stub", str),
+            embedding_batch_size=_get_value(embedding_data, "batch_size", 100, int),
+            openai_api_key_env=_get_value(embedding_data, "api_key_env", "OPENAI_API_KEY", str),
+            cache_enabled=_get_value(cache_data, "enabled", True, bool),
+            redis_url=_get_value(cache_data, "redis_url", None, str),
+            embedding_cache_ttl=_get_value(cache_data, "embedding_ttl", 3600, int),
+            result_cache_ttl=_get_value(cache_data, "result_ttl", 900, int),
         )
 
     def resolved_store_root(self) -> Path:
