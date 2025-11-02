@@ -7,7 +7,7 @@ store_root = "~/.dolphin/knowledge_store"
 endpoint = "127.0.0.1:7777"
 
 # Top-level settings
-default_embed_model = "large"
+# (embedding model preferences moved to [embeddings] section)
 
 [chunking]
 default_window_size = 350
@@ -63,17 +63,22 @@ json5 = "json"
 # Provider type: "stub" (zero-vectors for testing) or "openai" (real embeddings)
 provider = "stub"
 
+# Default embedding model preference (small|large)
+# - small: text-embedding-3-small (1536 dimensions)
+# - large: text-embedding-3-large (3072 dimensions)
+default_embed_model = "large"
+
 # Batch size for API calls (only used with "openai" provider)
 batch_size = 100
 
+# Concurrency for embedding API calls
+concurrency = 3
+
+# Per-session spend cap in USD
+per_session_spend_cap_usd = 10.0
+
 # Environment variable name containing the OpenAI API key
 api_key_env = "OPENAI_API_KEY"
-
-[embeddings]
-model = "text-embedding-3-large"
-default_embed_model = "large"
-concurrency = 3
-per_session_spend_cap_usd = 10.0
 
 [tokenizer]
 encoding = "cl100k_base"

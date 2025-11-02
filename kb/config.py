@@ -83,10 +83,17 @@ class KBConfig:
         return cls(
             store_root=_to_path(data.get("store_root", CONFIG_ROOT)),
             endpoint=str(data.get("endpoint", "127.0.0.1:7777")),
-            default_embed_model=str(data.get("default_embed_model", "small")),
-            concurrency=int(data.get("concurrency", 3)),
+            default_embed_model=str(
+                embedding.get("default_embed_model",
+                             data.get("default_embed_model", "small"))
+            ),
+            concurrency=int(
+                embedding.get("concurrency",
+                             data.get("concurrency", 3))
+            ),
             per_session_spend_cap_usd=float(
-                data.get("per_session_spend_cap_usd", 10.0)
+                embedding.get("per_session_spend_cap_usd",
+                             data.get("per_session_spend_cap_usd", 10.0))
             ),
             ignore=list(ignore_values),
             score_cutoff=float(

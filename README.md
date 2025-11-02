@@ -12,19 +12,18 @@ A semantic code search and knowledge management system with AI-native interfaces
 # Install from PyPI
 pip install pb-dolphin
 
-# ⚠️ IMPORTANT: You'll need to set up environment variables
-# See the "Environment Variables" section below for details
+# ⚠️ IMPORTANT: Ensure OPENAI_API_KEY is set as env var
 ```
 
 ### Basic Usage
 
 ```bash
-# Initialize and index a repository
+# Initialize global knowledge store and index a repository
 dolphin init
 dolphin add-repo my-project /path/to/project
 dolphin index my-project
 
-# Search your code
+# Search your indexed code
 dolphin search "authentication logic"
 
 # Start API server
@@ -87,17 +86,6 @@ Dolphin requires the following environment variables depending on your usage:
 export OPENAI_API_KEY="sk-your-openai-api-key-here"
 ```
 
-### Optional Variables
-
-```bash
-# Custom environment variable name for OpenAI API key (default: OPENAI_API_KEY)
-# Only needed if you want to use a different variable name
-export OPENAI_API_KEY_ALT="sk-your-openai-api-key-here"
-
-# GitHub token for enhanced repository scanning (optional)
-export GITHUB_PERSONAL_ACCESS_TOKEN="ghp_your_token_here"
-```
-
 ### Setting Environment Variables
 
 **macOS/Linux (bash/zsh):**
@@ -129,15 +117,12 @@ setx OPENAI_API_KEY "sk-your-key-here"
 4. Click "Create new secret key"
 5. Copy the key and set it as `OPENAI_API_KEY`
 
-**⚠️ Security Note**: Never commit your API keys to version control. Use environment variables or a secure secrets manager.
-
 ## Configuration
 
 Dolphin uses a multi-level configuration system:
 
 1. **Repo-specific** (`./.dolphin/config.toml`) - Per-repository chunking settings
 2. **User-global** (`~/.dolphin/config.toml`) - Auto-created on first use
-3. **Built-in defaults** - Sensible defaults for all settings
 
 ### Example Config
 
