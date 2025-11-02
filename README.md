@@ -10,7 +10,7 @@ A semantic code search and knowledge management system with AI-native interfaces
 
 ```bash
 # Install from PyPI
-pip install pb-dolphin
+uvx install pb-dolphin
 
 # ⚠️ IMPORTANT: Ensure OPENAI_API_KEY is set as env var
 ```
@@ -84,29 +84,6 @@ Dolphin requires the following environment variables depending on your usage:
 ```bash
 # Required when using OpenAI embeddings (recommended for production)
 export OPENAI_API_KEY="sk-your-openai-api-key-here"
-```
-
-### Setting Environment Variables
-
-**macOS/Linux (bash/zsh):**
-```bash
-echo 'export OPENAI_API_KEY="sk-your-key-here"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-**macOS/Linux (fish):**
-```bash
-set -Ux OPENAI_API_KEY "sk-your-key-here"
-```
-
-**Windows (Command Prompt):**
-```cmd
-setx OPENAI_API_KEY "sk-your-key-here"
-```
-
-**Windows (PowerShell):**
-```powershell
-[System.Environment]::SetEnvironmentVariable('OPENAI_API_KEY', 'sk-your-key-here', 'User')
 ```
 
 ### Getting Your OpenAI API Key

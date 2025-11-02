@@ -313,13 +313,13 @@ install-cli-tools:
 build-cli-tools:
 	@echo "Building all CLI tools..."
 	@echo "📦 Building Dolphin CLI..."
-	@uv run build --wheel dist/dolphin
-	@echo "📦 Building KB CLI..."  
-	@uv run build --wheel dist/kb
+	@uv run build --wheel dist/pb_dolphin-{{VERSION}}
+	@echo "📦 Building KB CLI..."
+	@uv run build --wheel dist/pb_dolphin-{{VERSION}}
 	@echo "📦 Building KB API CLI..."
-	@uv run build --wheel dist/kb-api
+	@uv run build --wheel dist/pb_dolphin-{{VERSION}}
 	@echo "📦 Building Personas CLI..."
-	@uv run build --wheel dist/personas
+	@uv run build --wheel dist/pb_dolphin-{{VERSION}}
 	@echo "✅ All CLI tools built successfully"
 
 # Create standalone scripts for local development
@@ -383,12 +383,16 @@ deploy-check: build
 # Build and upload to PyPI in one command
 deploy-prod: build
 	@echo "Checking packages and uploading to PyPI..."
-	@uv run twine check dist/* && uv run twine upload dist/pb_dolphin-0.1.6*
+	@VERSION=$$(grep version pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
+	echo "Deploying version: $$VERSION"; \
+	uv run twine check dist/* && uv run twine upload dist/pb_dolphin-$$VERSION*
 
 # Build and upload to Test PyPI in one command
 deploy-test: build
 	@echo "Checking packages and uploading to Test PyPI..."
-	@uv run twine check dist/* && uv run twine upload --repository testpypi dist/pb_dolphin-0.1.6*
+	@VERSION=$$(grep version pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'); \
+	echo "Deploying version: $$VERSION"; \
+	uv run twine check dist/* && uv run twine upload --repository testpypi dist/pb_dolphin-$$VERSION*
 
 # Clean build artifacts
 clean-build:
@@ -406,9 +410,22 @@ clean-all: clean clean-build
 # Defaults and Variables
 # ==============================================================================
 
+# Extract version from pyproject.toml
+VERSION := `grep version pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/'`
+
 # Defaults (override on CLI: just NAME=myrepo ...)
 NAME := "dolphin"
 REPO_PATH := "$(pwd)"
+
+# Show current version
+version:
+	@echo "Current version: {{VERSION}}"
+
+# Deploy with explicit version confirmation
+deploy-prod-with-version: version
+	@echo "Are you sure you want to deploy version {{VERSION}} to PyPI? (Ctrl+C to cancel)"
+	@sleep 3
+	@just deploy-prod
 
 default:
   @just --list
