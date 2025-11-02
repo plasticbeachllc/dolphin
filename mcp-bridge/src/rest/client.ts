@@ -78,34 +78,67 @@ const BASE_URL = 'http://127.0.0.1:7777'
 async function doFetch<T> (path: string, init?: RequestInit, signal?: AbortSignal): Promise<T> {
   const headers = new Headers(init?.headers)
   headers.set('Content-Type', 'application/json')
+  headers.set('Accept', 'application/json')
   headers.set('X-Client', 'mcp')
 
   const res = await fetch(BASE_URL + path, { ...init, headers, signal })
   const text = await res.text()
-  const json = text ? JSON.parse(text) : {}
+
+  // Be robust to non-JSON upstream responses (e.g., "Internal Server Error")
+  let json: any = {}
+  try {
+    json = text ? JSON.parse(text) : {}
+  } catch (parseErr: any) {
+    const snippet = text?.slice(0, 200) ?? ''
+    const rawMsg = parseErr?.message ?? String(parseErr)
+    const normalizedMsg = typeof rawMsg === 'string' ? rawMsg.replace(/^JSON Parse error:\s*/i, '') : String(rawMsg)
+    const err: RestError = {
+      error: {
+        code: 'invalid_json',
+        message: `JSON parse error: ${normalizedMsg}`,
+        remediation: 'Upstream returned non-JSON. Inspect server logs, verify endpoints and filters, or increase deadline_ms/top_k.',
+        details: { status: res.status, statusText: res.statusText, body_snippet: snippet }
+      }
+    }
+    throw err
+  }
+
   if (!res.ok) {
+    // Ensure a structured error even if upstream returned plain text
+    if (!(json as any)?.error) {
+      const err: RestError = {
+        error: {
+          code: 'upstream_error',
+          message: `HTTP ${res.status} ${res.statusText}`,
+          remediation: 'Check repo names with /repos, adjust filters, or increase deadline_ms/top_k. See server logs.',
+          details: { body_snippet: (text || '').slice(0, 200) }
+        }
+      }
+      throw err
+    }
     throw json as RestError
   }
+
   return json as T
 }
 
 export async function restSearch (body: SearchRequestBody, signal?: AbortSignal): Promise<SearchResponse> {
-  return await doFetch<SearchResponse>('/v1/search', {
+  return await doFetch<SearchResponse>('/search', {
     method: 'POST',
     body: JSON.stringify(body)
   }, signal)
 }
 
 export async function restGetChunk (id: string, signal?: AbortSignal): Promise<ChunkResponse> {
-  return await doFetch<ChunkResponse>(`/v1/chunks/${encodeURIComponent(id)}`, { method: 'GET' }, signal)
+  return await doFetch<ChunkResponse>(`/chunks/${encodeURIComponent(id)}`, { method: 'GET' }, signal)
 }
 
 export async function restGetFileSlice (repo: string, path: string, start: number, end: number, signal?: AbortSignal): Promise<FileSliceResponse> {
   const q = new URLSearchParams({ repo, path, start: String(start), end: String(end) })
-  return await doFetch<FileSliceResponse>(`/v1/file?${q.toString()}`, { method: 'GET' }, signal)
+  return await doFetch<FileSliceResponse>(`/file?${q.toString()}`, { method: 'GET' }, signal)
 }
 
 export interface RepoInfo { name: string, path: string, default_embed_model?: string, files?: number, chunks?: number }
 export async function restListRepos (signal?: AbortSignal): Promise<{ repos: RepoInfo[] }> {
-  return await doFetch<{ repos: RepoInfo[] }>('/v1/repos', { method: 'GET' }, signal)
+  return await doFetch<{ repos: RepoInfo[] }>('/repos', { method: 'GET' }, signal)
 }

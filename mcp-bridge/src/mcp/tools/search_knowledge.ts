@@ -81,7 +81,7 @@ function buildPromptReady (res: SearchResponse): string {
 export function makeSearchKnowledge (): { definition: Tool, handler: any, inputSchema: typeof INPUT_SHAPE } {
   const definition: Tool = {
     name: 'search_knowledge',
-    description: 'Query code and docs across indexed repositories and return ranked snippets with citations.',
+    description: 'Semantically query code and docs across indexed repositories and return ranked snippets with citations.',
     inputSchema: zodToJsonSchema(INPUT) as any,
     annotations: {
       title: 'Search Knowledge Base',
@@ -300,7 +300,12 @@ export function makeSearchKnowledge (): { definition: Tool, handler: any, inputS
     } catch (e: any) {
       const err = e?.error ? e : { error: { code: 'unexpected_error', message: e?.message ?? String(e) } }
       await logError('search', 'search_knowledge error', { error_code: err.error.code, message: err.error.message })
-      const message = `${err.error.message} Remediation: check repo names with /v1/repos, adjust filters, or increase deadline_ms/top_k.`
+      const remediation =
+        err.error?.remediation ??
+        (err.error?.code === 'invalid_json'
+          ? 'Upstream returned non-JSON (e.g., "Internal Server Error"). Inspect server logs, verify endpoints and filters, or increase deadline_ms/top_k.'
+          : 'Check repo names with /repos, adjust filters, or increase deadline_ms/top_k.')
+      const message = `${err.error.message}${remediation ? ' Remediation: ' + remediation : ''}`
       const content: CallToolResult['content'] = [{ type: 'text', text: message }]
       return { content, isError: true, _meta: { upstream: err } }
     }
