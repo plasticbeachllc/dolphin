@@ -10,7 +10,7 @@ A semantic code search and knowledge management system with AI-native interfaces
 
 ```bash
 # Install from PyPI
-uvx install pb-dolphin
+pip install pb-dolphin
 
 # ⚠️ IMPORTANT: Ensure OPENAI_API_KEY is set as env var
 ```
