@@ -174,7 +174,8 @@ test-file: setup-python
 # Run tests with detailed output
 test-verbose: setup-python
 	@echo "🧪 Running tests with verbose output..."
-	@uv run pytest -v
+	@
+	uv run pytest -v
 
 # ==============================================================================
 # MCP(o)
@@ -212,15 +213,33 @@ clean-mcpo-config:
 # Personas CLI
 # ==============================================================================
 
-# Wrap the Typer CLI commands from personas/scripts/personas.py
-personas-preview:
-	uv run python -m personas.scripts.personas preview $*
-
-personas-generate:
-	uv run python -m personas.scripts.personas generate $*
-
+# List all available personas
 personas-list:
-	uv run python -m personas.scripts.personas preview --list
+	uv run personas preview --list
+
+# Preview a specific persona
+personas-preview id:
+	uv run personas preview --id {{id}} --verbose
+
+# Generate KiloCode configuration (dry-run preview)
+personas-generate-kilocode-preview:
+	uv run personas generate --kilocode --dry-run --verbose
+
+# Generate KiloCode configuration
+personas-generate-kilocode:
+	uv run personas generate --kilocode --verbose
+
+# Generate Continue configuration (dry-run preview)
+personas-generate-continue-preview:
+	uv run personas generate --continue --dry-run --verbose
+
+# Generate Continue configuration
+personas-generate-continue:
+	uv run personas generate --continue --verbose
+
+# Generate KiloCode config with manifest
+personas-generate-kilocode-manifest:
+	uv run personas generate --kilocode --manifest ./personas-manifest.json --verbose
 
 # ==============================================================================
 # KB Pipeline Development

@@ -61,62 +61,13 @@ _BUILTIN_CHUNKERS: Dict[str, ChunkerFunction] = {
     "markdown": chunk_markdown,
 }
 
-# Default extension-to-language mapping (fallback if config not available)
-_DEFAULT_EXTENSION_MAP: Dict[str, str] = {
-    # Python
-    "py": "python",
-    "pyw": "python",
-    "pyi": "python",
-    # JavaScript / TypeScript
-    "js": "javascript",
-    "mjs": "javascript",
-    "cjs": "javascript",
-    "jsx": "javascriptreact",
-    "ts": "typescript",
-    "tsx": "typescriptreact",
-    "mts": "typescript",
-    "cts": "typescript",
-    # Markdown
-    "md": "markdown",
-    "markdown": "markdown",
-    "mdx": "markdown",
-    # Data formats
-    "json": "json",
-    "jsonc": "json",
-    "json5": "json",
-    "toml": "toml",
-    "yaml": "yaml",
-    "yml": "yaml",
-    # C/C++
-    "c": "c",
-    "h": "c",
-    "cpp": "cpp",
-    "cxx": "cpp",
-    "cc": "cpp",
-    "hpp": "cpp",
-    "hxx": "cpp",
-    "hh": "cpp",
-    # Other languages
-    "java": "java",
-    "kt": "kotlin",
-    "go": "go",
-    "rs": "rust",
-    "rb": "ruby",
-    "php": "php",
-    "sh": "shell",
-    "bash": "shell",
-    "zsh": "shell",
-    "txt": "text",
-    "log": "text",
-}
-
 
 @lru_cache(maxsize=1)
 def _load_global_extension_map() -> Dict[str, str]:
     """Load the global extension-to-language mapping from .dolphin/config.toml.
     
     This is cached since the config file rarely changes during a session.
-    Falls back to default mapping if config file doesn't exist.
+    Returns an empty map if config file or [languages] section is missing.
     """
     try:
         # Import TOML library (Python 3.11+ has tomllib, else use tomli)
@@ -126,8 +77,8 @@ def _load_global_extension_map() -> Dict[str, str]:
             try:
                 import tomli as tomllib  # type: ignore[import-not-found, no-redef]
             except ImportError:
-                _log.debug("No TOML library available, using default extension map")
-                return _DEFAULT_EXTENSION_MAP.copy()
+                _log.warning("No TOML library (tomli) available. Language detection will be disabled.")
+                return {}
         
         # Look for config in dolphin repo root
         from pathlib import Path as PathLib
@@ -140,16 +91,16 @@ def _load_global_extension_map() -> Dict[str, str]:
         
         # If we still don't find it, error
         if not config_path.exists():
-            _log.debug("No global config at %s, using defaults", config_path)
-            return _DEFAULT_EXTENSION_MAP.copy()
+            _log.warning("No global config at %s. Language detection will be disabled.", config_path)
+            return {}
         
         with config_path.open("rb") as f:
             data = tomllib.load(f)
         
         lang_section = data.get("languages", {})
         if not lang_section:
-            _log.debug("No [languages] section in config, using defaults")
-            return _DEFAULT_EXTENSION_MAP.copy()
+            _log.warning("No [languages] section in config. Language detection will be disabled.")
+            return {}
         
         # Build extension map from config
         ext_map = {}
@@ -161,8 +112,8 @@ def _load_global_extension_map() -> Dict[str, str]:
         return ext_map
         
     except Exception as e:
-        _log.warning("Failed to load global config: %s. Using defaults.", e)
-        return _DEFAULT_EXTENSION_MAP.copy()
+        _log.warning("Failed to load global config: %s. Language detection will be disabled.", e)
+        return {}
 
 
 def detect_language_from_extension(file_path: Path) -> Optional[str]:

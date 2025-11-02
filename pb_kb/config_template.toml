@@ -17,11 +17,19 @@ markdown = 256
 
 [languages]
 py = "python"
+pyw = "python"
+pyi = "python"
 ts = "typescript"
+tsx = "typescriptreact"
+mts = "typescript"
+cts = "typescript"
+js = "javascript"
+jsx = "javascriptreact"
+mjs = "javascript"
+cjs = "javascript"
 md = "markdown"
-json = "json"
-jsonc = "json"
-json5 = "json"
+markdown = "markdown"
+mdx = "markdown"
 toml = "toml"
 yaml = "yaml"
 yml = "yaml"
@@ -44,6 +52,9 @@ bash = "shell"
 zsh = "shell"
 txt = "text"
 log = "text"
+json = "json"
+jsonc = "json"
+json5 = "json"
 
 [embedding]
 # Provider type: "stub" (zero-vectors for testing) or "openai" (real embeddings)
