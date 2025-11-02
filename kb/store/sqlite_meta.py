@@ -693,62 +693,74 @@ class SQLiteMetadataStore:
             - Boolean: "auth AND login NOT test"
             - Near: "NEAR(user controller, 5)"
         """
+        # Input validation
+        if not query or not query.strip():
+            return []
         
-        with self._connect() as conn, closing(conn.cursor()) as cur:
-            # Build FTS5 query with filters
-            conditions = ["chunks_fts MATCH ?"]
-            params = [query]
-            
-            if repo:
-                conditions.append("repo = ?")
-                params.append(repo)
-            
-            if path_prefix:
-                # Add path prefix filters
-                path_conditions = []
-                for prefix in path_prefix:
-                    path_conditions.append("path LIKE ?")
-                    params.append(f"{prefix}%")
-                conditions.append(f"({' OR '.join(path_conditions)})")
-            
-            where_clause = " AND ".join(conditions)
-            
-            # FTS5 BM25 scoring:
-            # - bm25(chunks_fts): Overall BM25 score (lower is better!)
-            # - rank: Pre-computed relevance rank (also lower is better!)
-            #
-            # Note: FTS5 returns negative BM25 scores, where more negative = more relevant
-            # We negate to get positive scores for easier interpretation
-            
-            sql = f"""
-                SELECT
-                    content_id,
-                    repo,
-                    path,
-                    -bm25(chunks_fts) as bm25_score,
-                    rank
-                FROM chunks_fts
-                WHERE {where_clause}
-                ORDER BY rank
-                LIMIT ?
-            """
-            params.append(top_k)
-            
-            cur.execute(sql, tuple(params))
-            rows = cur.fetchall() or []
-            
-            # Convert to list of dicts
-            results = []
-            for row in rows:
-                results.append({
-                    "chunk_id": str(row[0]),
-                    "repo": str(row[1]),
-                    "path": str(row[2]),
-                    "score": float(row[3]),  # Positive BM25 score
-                    "rank": int(row[4]),
-                })
-            
-            return results
+        # Basic FTS5 safety: escape potentially dangerous characters
+        # FTS5 uses MATCH syntax, so we need to be careful about quotes and operators
+        if any(char in query for char in [';', '\\', '\x00']):
+            return []
+        
+        try:
+            with self._connect() as conn, closing(conn.cursor()) as cur:
+                # Build FTS5 query with filters
+                conditions = ["chunks_fts MATCH ?"]
+                params = [query]
+                
+                if repo:
+                    conditions.append("repo = ?")
+                    params.append(repo)
+                
+                if path_prefix:
+                    # Add path prefix filters
+                    path_conditions = []
+                    for prefix in path_prefix:
+                        path_conditions.append("path LIKE ?")
+                        params.append(f"{prefix}%")
+                    conditions.append(f"({' OR '.join(path_conditions)})")
+                
+                where_clause = " AND ".join(conditions)
+                
+                # FTS5 BM25 scoring:
+                # - bm25(chunks_fts): Overall BM25 score (lower is better!)
+                # - rank: Pre-computed relevance rank (also lower is better!)
+                #
+                # Note: FTS5 returns negative BM25 scores, where more negative = more relevant
+                # We negate to get positive scores for easier interpretation
+                
+                sql = f"""
+                    SELECT
+                        content_id,
+                        repo,
+                        path,
+                        -bm25(chunks_fts) as bm25_score,
+                        rank
+                    FROM chunks_fts
+                    WHERE {where_clause}
+                    ORDER BY rank
+                    LIMIT ?
+                """
+                params.append(top_k)
+                
+                cur.execute(sql, tuple(params))
+                rows = cur.fetchall() or []
+                
+                # Convert to list of dicts
+                results = []
+                for row in rows:
+                    results.append({
+                        "chunk_id": str(row[0]),
+                        "repo": str(row[1]),
+                        "path": str(row[2]),
+                        "score": float(row[3]),  # Positive BM25 score
+                        "rank": int(row[4]),
+                    })
+                
+                return results
+        except sqlite3.Error:
+            # Return empty results on any FTS5 error
+            return []
 
     def index_chunk_for_fts(
         self,

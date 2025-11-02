@@ -38,6 +38,9 @@ class SearchRequest(BaseModel):
     score_cutoff: float | None = 0.0
     mmr_enabled: bool | None = False
     mmr_lambda: float | None = 0.7
+    ann_strategy: str | None = None
+    ann_nprobes: int | None = None
+    ann_refine_factor: int | None = None
 
 
 class SearchBackend(Protocol):
@@ -113,6 +116,22 @@ async def health(check: str = Query(default="shallow")) -> dict[str, object]:
 async def search(request: SearchRequest) -> dict[str, object]:
     """Dispatch the search request to the configured backend."""
     backend = get_search_backend()
+    
+    # Extract ANN configuration from request if provided
+    if hasattr(request, 'ann_strategy') and request.ann_strategy:
+        # Create temporary config for this request
+        temp_config_data = {}
+        if request.ann_strategy:
+            temp_config_data['ann_strategy'] = request.ann_strategy
+        if request.ann_nprobes:
+            temp_config_data['ann_nprobes'] = request.ann_nprobes
+        if request.ann_refine_factor:
+            temp_config_data['ann_refine_factor'] = request.ann_refine_factor
+        
+        # Set on backend temporarily if it supports per-request config
+        if hasattr(backend, 'set_request_ann_config'):
+            backend.set_request_ann_config(temp_config_data)
+    
     started = perf_counter()
     raw_hits = backend.search(request)
     hits: Iterable[dict[str, object]]
@@ -122,16 +141,27 @@ async def search(request: SearchRequest) -> dict[str, object]:
         hits = raw_hits
     hits_list = list(hits)
     latency_ms = int((perf_counter() - started) * 1000)
+    
+    # Include ANN config in response meta if it was used
+    meta = {
+        "top_k": request.top_k,
+        "model": request.embed_model,
+        "latency_ms": latency_ms,
+        "max_snippet_tokens": request.max_snippet_tokens,
+        "mmr_enabled": request.mmr_enabled,
+        "mmr_lambda": request.mmr_lambda,
+    }
+    
+    if request.ann_strategy:
+        meta["ann_strategy"] = request.ann_strategy
+        if request.ann_nprobes:
+            meta["ann_nprobes"] = request.ann_nprobes
+        if request.ann_refine_factor:
+            meta["ann_refine_factor"] = request.ann_refine_factor
+    
     return {
         "hits": hits_list,
-        "meta": {
-            "top_k": request.top_k,
-            "model": request.embed_model,
-            "latency_ms": latency_ms,
-            "max_snippet_tokens": request.max_snippet_tokens,
-            "mmr_enabled": request.mmr_enabled,
-            "mmr_lambda": request.mmr_lambda,
-        },
+        "meta": meta,
     }
 
 

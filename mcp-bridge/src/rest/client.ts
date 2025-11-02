@@ -18,6 +18,9 @@ export interface SearchRequestBody {
   score_cutoff?: number
   cursor?: string
   include_prompt_ready?: boolean
+  ann_strategy?: 'speed' | 'accuracy' | 'adaptive' | 'custom'
+  ann_nprobes?: number
+  ann_refine_factor?: number
 }
 
 export interface SearchHit {

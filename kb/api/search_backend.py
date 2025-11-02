@@ -13,6 +13,7 @@ from ..cache import QueryCache, create_cache
 from ..retrieval.rankers import reciprocal_rank_fusion
 from ..retrieval.cross_encoder_rerank import CrossEncoderReranker
 from ..retrieval.types import Document
+from ..retrieval.ann_tuning import ANNParams
 from .app import SearchRequest
 
 class KnowledgeSearchBackend:
@@ -24,6 +25,7 @@ class KnowledgeSearchBackend:
         cache: Optional[QueryCache] = None,
         hybrid_search_enabled: bool = True,
         reranker: Optional[CrossEncoderReranker] = None,
+        config: Optional[KBConfig] = None,
     ):
         self.embedding_provider = embedding_provider
         self.lance_store = lance_store
@@ -31,6 +33,8 @@ class KnowledgeSearchBackend:
         self.cache = cache
         self.hybrid_search_enabled = hybrid_search_enabled
         self.reranker = reranker
+        self.config = config
+        self._request_ann_config = None  # Per-request ANN configuration overrides
 
     def search(self, request: SearchRequest) -> Sequence[dict[str, object]]:
         # ... (caching logic) ...
@@ -38,7 +42,15 @@ class KnowledgeSearchBackend:
         query_embedding = self.embedding_provider.embed_texts(request.embed_model, [request.query])[0]
         num_candidates = request.top_k * 4 # Fetch more candidates for reranking
 
-        vector_results = self.lance_store.query(query_embedding, model=request.embed_model, top_k=num_candidates)
+        # Get ANN parameters from config or use defaults
+        ann_params = self._get_ann_params(request)
+
+        vector_results = self.lance_store.query(
+            query_embedding,
+            model=request.embed_model,
+            top_k=num_candidates,
+            ann_params=ann_params
+        )
         vector_formatted = self._format_vector_results(vector_results)
         
         bm25_hydrated = []
@@ -70,8 +82,43 @@ class KnowledgeSearchBackend:
         return [{**r, 'chunk_id': r.get('id'), 'score': 1 / (1 + r.get('_distance', 1.0))} for r in vector_results]
 
     def _hydrate_bm25_results(self, bm25_results: list[dict], sql_store: SQLiteMetadataStore) -> list[dict[str, object]]:
-        # ... (implementation unchanged) ...
-        return bm25_results
+        """Hydrate BM25 results with full chunk metadata from LanceDB.
+        
+        BM25 search returns minimal metadata (content_id, repo, path, score).
+        We need to fetch full chunk data including embeddings, line numbers,
+        symbol info, etc. from LanceDB for proper result formatting.
+        """
+        if not bm25_results:
+            return []
+        
+        hydrated = []
+        for result in bm25_results:
+            # Fetch full chunk metadata from SQLiteMetadataStore
+            chunk_data = sql_store.get_chunk_by_id(result["chunk_id"])
+            if chunk_data:
+                # Normalize BM25 score to [0, 1] range for fusion
+                # BM25 scores are unbounded, use sigmoid normalization
+                bm25_score = result["score"]
+                normalized_score = 1 / (1 + math.exp(-bm25_score / 10))
+                
+                hydrated.append({
+                    "chunk_id": result["chunk_id"],
+                    "repo": result["repo"],
+                    "path": result["path"],
+                    "score": normalized_score,
+                    # Add remaining metadata from chunk_data
+                    "id": result["chunk_id"],  # For compatibility with vector results
+                    "text_hash": chunk_data.get("text_hash"),
+                    "embed_model": chunk_data.get("embed_model"),
+                    "language": chunk_data.get("language"),
+                    "start_line": chunk_data.get("start_line"),
+                    "end_line": chunk_data.get("end_line"),
+                    "symbol_kind": chunk_data.get("symbol_kind"),
+                    "symbol_name": chunk_data.get("symbol_name"),
+                    "symbol_path": chunk_data.get("symbol_path"),
+                })
+        
+        return hydrated
         
     def _hydrate_docs_for_reranking(self, hits: List[Dict], sql_store: SQLiteMetadataStore) -> List[Dict]:
         ids_to_fetch = [h['chunk_id'] for h in hits if 'content' not in h]
@@ -83,6 +130,120 @@ class KnowledgeSearchBackend:
             if hit['chunk_id'] in contents:
                 hit['content'] = contents[hit['chunk_id']]
         return hits
+    
+    def set_request_ann_config(self, config: Dict[str, Any]) -> None:
+        """Set per-request ANN configuration overrides.
+        
+        Args:
+            config: Dictionary containing ANN configuration overrides
+        """
+        self._request_ann_config = config
+    
+    def _get_ann_params(self, request: SearchRequest) -> ANNParams:
+        """Get ANN parameters based on configuration and request characteristics.
+        
+        Args:
+            request: Search request containing query type and parameters
+            
+        Returns:
+            ANNParams instance configured for this search
+        """
+        # Check for per-request overrides first
+        if self._request_ann_config:
+            strategy = self._request_ann_config.get('ann_strategy')
+            nprobes = self._request_ann_config.get('ann_nprobes')
+            refine_factor = self._request_ann_config.get('ann_refine_factor')
+            
+            if strategy == 'speed':
+                params = ANNParams.for_speed()
+            elif strategy == 'accuracy':
+                params = ANNParams.for_accuracy()
+            elif strategy == 'development':
+                params = ANNParams.for_development()
+            elif strategy == 'custom' and nprobes and refine_factor:
+                params = ANNParams(
+                    metric="cosine",
+                    nprobes=nprobes,
+                    refine_factor=refine_factor,
+                    use_index=True
+                )
+            else:
+                # Fallback to adaptive with overrides
+                params = ANNParams.adaptive(top_k=request.top_k)
+                if nprobes:
+                    params.nprobes = nprobes
+                if refine_factor:
+                    params.refine_factor = refine_factor
+            
+            # Clear the override after use
+            self._request_ann_config = None
+            return params
+        
+        # Use global config if no per-request overrides
+        if self.config is None:
+            # Default to adaptive if no config available
+            return ANNParams.adaptive(top_k=request.top_k)
+        
+        # Use config to create ANN params
+        ann_params = ANNParams.from_config(self.config)
+        
+        # If adaptive strategy, adjust based on request characteristics
+        if hasattr(self.config.retrieval.ann, 'strategy') and self.config.retrieval.ann.strategy == 'adaptive':
+            # Determine query type based on query characteristics
+            query_type = self._classify_query_type(request.query)
+            
+            # Estimate dataset size for adaptive tuning
+            estimated_size = 100000  # Default, could be made configurable
+            if hasattr(self.config.retrieval.ann, 'adaptive'):
+                adaptive_config = self.config.retrieval.ann.adaptive
+                if hasattr(adaptive_config, 'estimated_dataset_size'):
+                    estimated_size = adaptive_config.estimated_dataset_size
+            
+            return ANNParams.adaptive(
+                query_type=query_type,
+                top_k=request.top_k,
+                dataset_size=estimated_size
+            )
+        
+        # For non-adaptive strategies, return the configured params
+        return ann_params
+    
+    def _classify_query_type(self, query: str) -> str:
+        """Classify query type based on query text characteristics.
+        
+        Args:
+            query: The search query text
+            
+        Returns:
+            Query type: "identifier", "concept", or "example"
+        """
+        query_lower = query.lower()
+        
+        # Identifier patterns (exact matches, code elements)
+        identifier_patterns = [
+            'class ', 'def ', 'function ', 'variable ', 'const ', 'let ',
+            'import ', 'from ', 'module ', 'package ',
+            'usercontroller', 'authenticationflow', 'main.py'
+        ]
+        
+        # Example patterns (how-to questions)
+        example_patterns = [
+            'how to', 'example', 'tutorial', 'how do i', 'show me',
+            'demo', 'sample code', 'walkthrough'
+        ]
+        
+        # Check for identifier patterns
+        for pattern in identifier_patterns:
+            if pattern in query_lower:
+                return "identifier"
+        
+        # Check for example patterns
+        for pattern in example_patterns:
+            if pattern in query_lower:
+                return "example"
+        
+        # Default to concept for semantic queries
+        return "concept"
 
 
 def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
@@ -112,6 +273,21 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
             }
         }
         config_data["retrieval"] = retrieval_data
+    
+    # Handle ANN configuration (ann_config kwarg or default adaptive config)
+    ann_config = kwargs.get("ann_config", {})
+    retrieval_data = config_data.get("retrieval", {})
+    retrieval_data["ann"] = {
+        "strategy": ann_config.get("strategy", "adaptive"),
+        "metric": ann_config.get("metric", "cosine"),
+        "nprobes": ann_config.get("nprobes", 20),
+        "refine_factor": ann_config.get("refine_factor", 10),
+        "adaptive": {
+            "estimated_dataset_size": ann_config.get("estimated_dataset_size", 100000),
+            "default_query_type": ann_config.get("default_query_type", "concept")
+        }
+    }
+    config_data["retrieval"] = retrieval_data
     
     # Handle API key and batch size for OpenAI provider
     if config_data.get("embedding_provider") == "openai":
@@ -159,5 +335,6 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
         sql_store=sql_store,
         cache=cache,
         hybrid_search_enabled=hybrid_search_enabled,
-        reranker=reranker
+        reranker=reranker,
+        config=config
     )

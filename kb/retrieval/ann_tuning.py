@@ -188,3 +188,46 @@ class ANNParams:
             "refine_factor": self.refine_factor,
             "use_index": self.use_index,
         }
+    
+    @classmethod
+    def from_config(cls, config) -> "ANNParams":
+        """Create ANNParams from configuration.
+        
+        Args:
+            config: Configuration object with [retrieval.ann] section
+            
+        Returns:
+            ANNParams instance based on config strategy
+        """
+        # Get strategy and custom params from config
+        strategy = getattr(config.retrieval.ann, 'strategy', 'adaptive')
+        custom_metric = getattr(config.retrieval.ann, 'metric', None)
+        custom_nprobes = getattr(config.retrieval.ann, 'nprobes', None)
+        custom_refine_factor = getattr(config.retrieval.ann, 'refine_factor', None)
+        
+        if strategy == 'speed':
+            return cls.for_speed()
+        elif strategy == 'accuracy':
+            return cls.for_accuracy()
+        elif strategy == 'development':
+            return cls.for_development()
+        elif strategy == 'custom' and custom_metric and custom_nprobes and custom_refine_factor:
+            return cls(
+                metric=custom_metric,
+                nprobes=custom_nprobes,
+                refine_factor=custom_refine_factor,
+                use_index=True
+            )
+        else:
+            # Default to adaptive with config values if available
+            adaptive_config = getattr(config.retrieval.ann, 'adaptive', None)
+            if adaptive_config:
+                estimated_size = getattr(adaptive_config, 'estimated_dataset_size', 100000)
+                default_query_type = getattr(adaptive_config, 'default_query_type', 'concept')
+                return cls.adaptive(
+                    query_type=default_query_type,
+                    top_k=10,  # Default, will be overridden in actual queries
+                    dataset_size=estimated_size
+                )
+            else:
+                return cls.adaptive()

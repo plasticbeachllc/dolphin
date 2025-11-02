@@ -24,7 +24,7 @@ def _read_config_template() -> str:
 
 def _build_pipeline(config: KBConfig) -> IngestionPipeline:
     lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "knowledge.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
     metadata.initialize()  # Ensure schema (and migrations) are applied before use
 
     # Configure embedding provider for ingestion pipeline
@@ -66,7 +66,7 @@ def init(config_path: Path | None = typer.Option(None, help="Optional config pat
     store_root = config.resolved_store_root()
     store_root.mkdir(parents=True, exist_ok=True)
 
-    metadata = SQLiteMetadataStore(store_root / "knowledge.db")
+    metadata = SQLiteMetadataStore(store_root / "metadata.db")
     metadata.initialize()
     typer.echo(f"SQLite initialized at {metadata.db_path}")
 
@@ -100,7 +100,7 @@ def add_repo(
         raise typer.Exit(code=2)
 
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "knowledge.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
     metadata.initialize()
     metadata.record_repo(name=name, path=repo_path, default_embed_model=model)
 
@@ -135,7 +135,7 @@ def index(
 def status(name: str | None = typer.Argument(None, help="Optional repo name.")) -> None:
     """Report knowledge store status."""
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "knowledge.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
     # Ensure DB and schema exist before summarizing.
     metadata.initialize()
     summary = metadata.summarize()
@@ -156,7 +156,7 @@ def prune_ignored(
     config = load_config()
     repo = config.resolved_store_root()
     
-    metadata = SQLiteMetadataStore(repo / "knowledge.db")
+    metadata = SQLiteMetadataStore(repo / "metadata.db")
     metadata.initialize()
     
     lancedb = LanceDBStore(repo / "lancedb")
@@ -278,7 +278,7 @@ def list_files(
     Output is one file path per line for easy grepping.
     """
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "knowledge.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
     metadata.initialize()
 
     # Resolve repo

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 try:
     import tomllib
@@ -61,10 +61,28 @@ class RerankingConfig:
     enabled: bool = False
     model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     device: Optional[str] = None
+    batch_size: int = 32
+    candidate_multiplier: int = 4
+    score_threshold: float = 0.3
+
+@dataclass
+class HybridSearchConfig:
+    enabled: bool = True
+    fusion_method: str = "rrf"
+    fusion_k: int = 60
+
+@dataclass
+class ANNConfig:
+    strategy: str = "adaptive"
+    metric: str = "cosine"
+    estimated_dataset_size: int = 100000
+    default_query_type: str = "concept"
 
 @dataclass
 class RetrievalConfig:
     reranking: RerankingConfig = field(default_factory=RerankingConfig)
+    hybrid_search: HybridSearchConfig = field(default_factory=HybridSearchConfig)
+    ann: ANNConfig = field(default_factory=ANNConfig)
     score_cutoff: float = 0.15
     top_k: int = 8
     max_snippet_tokens: int = 240
@@ -111,6 +129,8 @@ class KBConfig:
         # Extract nested sections, falling back to empty dicts
         retrieval_data = data.get("retrieval", {})
         reranking_data = retrieval_data.get("reranking", {}) if isinstance(retrieval_data, dict) else {}
+        hybrid_search_data = retrieval_data.get("hybrid_search", {}) if isinstance(retrieval_data, dict) else {}
+        ann_data = retrieval_data.get("ann", {}) if isinstance(retrieval_data, dict) else {}
         embedding_data = data.get("embedding", {})
         cache_data = data.get("cache", {})
 
@@ -118,11 +138,29 @@ class KBConfig:
         reranking_config = RerankingConfig(
             enabled=_get_value(reranking_data, "enabled", False, bool),
             model=_get_value(reranking_data, "model", "cross-encoder/ms-marco-MiniLM-L-6-v2", str),
-            device=_get_value(reranking_data, "device", None, str)
+            device=_get_value(reranking_data, "device", None, str),
+            batch_size=_get_value(reranking_data, "batch_size", 32, int),
+            candidate_multiplier=_get_value(reranking_data, "candidate_multiplier", 4, int),
+            score_threshold=_get_value(reranking_data, "score_threshold", 0.3, float)
+        )
+        
+        hybrid_search_config = HybridSearchConfig(
+            enabled=_get_value(hybrid_search_data, "enabled", True, bool),
+            fusion_method=_get_value(hybrid_search_data, "fusion_method", "rrf", str),
+            fusion_k=_get_value(hybrid_search_data, "fusion_k", 60, int)
+        )
+        
+        ann_config = ANNConfig(
+            strategy=_get_value(ann_data, "strategy", "adaptive", str),
+            metric=_get_value(ann_data, "metric", "cosine", str),
+            estimated_dataset_size=_get_value(ann_data, "estimated_dataset_size", 100000, int),
+            default_query_type=_get_value(ann_data, "default_query_type", "concept", str)
         )
         
         retrieval_config = RetrievalConfig(
             reranking=reranking_config,
+            hybrid_search=hybrid_search_config,
+            ann=ann_config,
             score_cutoff=_get_value(retrieval_data, "score_cutoff", 0.15, float),
             top_k=_get_value(retrieval_data, "top_k", 8, int),
             max_snippet_tokens=_get_value(retrieval_data, "max_snippet_tokens", 240, int),

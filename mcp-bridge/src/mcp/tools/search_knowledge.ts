@@ -45,7 +45,10 @@ const INPUT_SHAPE = {
   deadline_ms: z.number().int().min(50).optional(),
   embed_model: z.enum(['small', 'large']).optional().default('large'),
   score_cutoff: z.number().optional(),
-  cursor: z.string().optional()
+  cursor: z.string().optional(),
+  ann_strategy: z.enum(['speed', 'accuracy', 'adaptive', 'custom']).optional(),
+  ann_nprobes: z.number().int().min(1).max(50).optional(),
+  ann_refine_factor: z.number().int().min(1).max(100).optional()
 }
 
 const INPUT = z.object(INPUT_SHAPE)
@@ -108,7 +111,10 @@ export function makeSearchKnowledge (): { definition: Tool, handler: any, inputS
         embed_model: input.embed_model,
         score_cutoff: input.score_cutoff,
         cursor: input.cursor,
-        include_prompt_ready: false
+        include_prompt_ready: false,
+        ann_strategy: input.ann_strategy,
+        ann_nprobes: input.ann_nprobes,
+        ann_refine_factor: input.ann_refine_factor
       }
 
       const res: SearchResponse = await restSearch(body, signal)
