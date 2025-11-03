@@ -1,6 +1,6 @@
 """Unit tests for the CrossEncoderReranker."""
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
 from kb.retrieval.cross_encoder_rerank import CrossEncoderReranker
 
 class TestCrossEncoderReranker:
@@ -9,6 +9,10 @@ class TestCrossEncoderReranker:
     @patch("sentence_transformers.CrossEncoder")
     def test_initialization_success(self, mock_cross_encoder):
         """Test successful initialization of the reranker."""
+        mock_model = MagicMock()
+        mock_model.device = "cpu"
+        mock_cross_encoder.return_value = mock_model
+        
         reranker = CrossEncoderReranker()
         assert reranker.enabled
         mock_cross_encoder.assert_called_once()
@@ -29,8 +33,10 @@ class TestCrossEncoderReranker:
     @patch("sentence_transformers.CrossEncoder")
     def test_rerank_logic(self, mock_cross_encoder):
         """Test the core reranking logic."""
-        mock_model = mock_cross_encoder.return_value
+        mock_model = MagicMock()
+        mock_model.device = "cpu"
         mock_model.predict.return_value = [0.9, 0.1, 0.5]
+        mock_cross_encoder.return_value = mock_model
 
         reranker = CrossEncoderReranker()
         
@@ -50,8 +56,10 @@ class TestCrossEncoderReranker:
     @patch("sentence_transformers.CrossEncoder")
     def test_rerank_with_score_threshold(self, mock_cross_encoder):
         """Test reranking with a score threshold."""
-        mock_model = mock_cross_encoder.return_value
+        mock_model = MagicMock()
+        mock_model.device = "cpu"
         mock_model.predict.return_value = [0.9, 0.4, 0.7]
+        mock_cross_encoder.return_value = mock_model
 
         reranker = CrossEncoderReranker()
         
@@ -69,6 +77,10 @@ class TestCrossEncoderReranker:
     @patch("sentence_transformers.CrossEncoder")
     def test_rerank_disabled(self, mock_cross_encoder):
         """Test that reranking returns original order when disabled."""
+        mock_model = MagicMock()
+        mock_model.device = "cpu"
+        mock_cross_encoder.return_value = mock_model
+        
         reranker = CrossEncoderReranker()
         reranker.enabled = False
         
@@ -76,4 +88,4 @@ class TestCrossEncoderReranker:
         reranked = reranker.rerank("query", results, top_k=1)
         
         assert reranked == [{"text": "a"}]
-        mock_cross_encoder.return_value.predict.assert_not_called()
+        mock_model.predict.assert_not_called()

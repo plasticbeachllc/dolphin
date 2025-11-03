@@ -48,6 +48,65 @@ class IngestionPipeline:
         except subprocess.CalledProcessError:
             raise RuntimeError("Working tree has tracked changes; commit or stash before indexing.")
 
+    def _drop_repo_index(self, repo_id: int, repo_name: str) -> None:
+        """Drop all indexed data for a repository (vectors and metadata).
+        
+        This clears:
+        - All chunk content and locations from metadata
+        - All vectors from LanceDB (both small and large models)
+        - All FTS5 index entries
+        
+        Args:
+            repo_id: Repository ID
+            repo_name: Repository name
+        """
+        # Delete from LanceDB (both models)
+        print(f"  Clearing vectors from LanceDB...")
+        for model in ["small", "large"]:
+            try:
+                self.lancedb.delete_repo(repo_name, model=model)
+            except Exception as e:
+                print(f"  Warning: Could not delete {model} vectors: {e}")
+        
+        # Delete from metadata database
+        print(f"  Clearing metadata...")
+        with self.metadata._connect() as conn:
+            from contextlib import closing
+            cur = conn.cursor()
+            
+            try:
+                # Get all file IDs for this repo
+                cur.execute("SELECT id FROM files WHERE repo_id = ?", (repo_id,))
+                file_ids = [row[0] for row in cur.fetchall()]
+                
+                # Delete chunk locations for these files
+                for file_id in file_ids:
+                    cur.execute("""
+                        DELETE FROM chunk_locations
+                        WHERE content_id IN (
+                            SELECT id FROM chunk_content WHERE file_id = ?
+                        )
+                    """, (file_id,))
+                
+                # Delete chunk content
+                cur.execute("DELETE FROM chunk_content WHERE repo_id = ?", (repo_id,))
+                
+                # Delete from FTS5
+                cur.execute("DELETE FROM chunks_fts WHERE repo = ?", (repo_name,))
+                
+                # Delete files
+                cur.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
+                
+                # Delete sessions
+                cur.execute("DELETE FROM sessions WHERE repo_id = ?", (repo_id,))
+                
+                conn.commit()
+                print(f"  Metadata cleared successfully")
+            except Exception as e:
+                conn.rollback()
+                print(f"  Error clearing metadata: {e}")
+                raise
+
     def scan(self, repo_name: str, *, dry_run: bool = False, force: bool = False) -> dict:
         """Perform scanning for the named repository and persist file catalog.
 
@@ -138,11 +197,11 @@ class IngestionPipeline:
         print(f"Scan complete for {repo_name}: files_kept={result['files_kept']}, session={result['session_id']}")
 
     def index(
-        self, 
-        repo_name: str, 
-        *, 
-        dry_run: bool = False, 
-        force: bool = False, 
+        self,
+        repo_name: str,
+        *,
+        dry_run: bool = False,
+        force: bool = False,
         full_reindex: bool = False
     ) -> Dict[str, Any]:
         """Perform full indexing pipeline for the named repository.
@@ -158,7 +217,7 @@ class IngestionPipeline:
             repo_name: Name of the repository to index
             dry_run: If True, don't persist changes
             force: If True, skip clean working tree check
-            full_reindex: If True, ignore last success and process all files
+            full_reindex: If True, drop existing index and process all files
             
         Returns:
             Dictionary with session summary and counters
@@ -184,6 +243,11 @@ class IngestionPipeline:
         
         commit_sha = self._git(root, "rev-parse", "HEAD").strip()
         branch = self._git(root, "rev-parse", "--abbrev-ref", "HEAD").strip()
+
+        # Drop existing index if full_reindex is requested
+        if full_reindex and not dry_run:
+            print(f"Full reindex requested: dropping existing index for {repo_name}...")
+            self._drop_repo_index(repo_id, repo_name)
 
         # Get last successful commit
         last_success = self.metadata.get_last_successful_commit(repo_id)
