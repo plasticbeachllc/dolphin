@@ -1,6 +1,7 @@
 # from __future__ import annotations
 from pathlib import Path
 import os
+from typing import cast
 
 import typer
 
@@ -116,8 +117,25 @@ def index(
     force: bool = typer.Option(False, "--force", help="Bypass clean working tree check."),
     full: bool = typer.Option(False, "--full", help="Process all files instead of incremental diff."),
 ) -> None:
-    """Run the full indexing pipeline for the specified repository."""
+    """Run the full indexing pipeline for the specified repository.
+
+    Requirements:
+      - The repository MUST already be registered in the metadata store.
+        Register once with: uv run dolphin add-repo <name> <abs/repo/path>
+    """
     config = load_config()
+
+    # Require repo to be pre-registered via: uv run dolphin add-repo <name> <abs/repo/path>
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata.initialize()
+    repo_record = metadata.get_repo_by_name(name)
+    if not repo_record:
+        typer.echo(
+            "Error: Repository not registered. Register once with: uv run dolphin add-repo <name> <abs/repo/path>",
+            err=True
+        )
+        raise typer.Exit(code=2)
+
     pipeline = _build_pipeline(config)
     try:
         result = pipeline.index(name, dry_run=dry_run, force=force, full_reindex=full)
@@ -169,7 +187,7 @@ def prune_ignored(
         raise typer.Exit(code=1)
     
     repo_id = int(repo_record["id"])
-    repo_root = Path(repo_record["root_path"])
+    repo_root = Path(str(repo_record["root_path"]))
     
     # Build ignore spec
     extra_security = {
@@ -219,8 +237,8 @@ def prune_ignored(
     total_chunks_pruned = 0
     pruned_files = []
     for file_record in files:
-        file_path = file_record["path"]
-        file_id = file_record["id"]
+        file_path = cast(str, file_record["path"])
+        file_id = cast(int, file_record["id"])
         
         # Check if file matches ignore patterns
         matches = ignore_spec.match_file(file_path)
@@ -349,6 +367,94 @@ def rm_repo(
     
     typer.echo(f"✓ Repository '{name}' removed successfully.")
 
+@app.command("reset-repo")
+def reset_repo(
+    name: str = typer.Argument(..., help="Repository name to reset."),
+    path: Path = typer.Argument(..., help="Absolute path to the repository root."),
+    default_embed_model: str = typer.Option(
+        "large", "--default-embed-model", help="Default embedding model for the Repo (small|large)."
+    ),
+) -> None:
+    """Wipe all stores for the repo and re-register it in one step.
+
+    This will:
+      - Delete all vectors (small and large) from LanceDB
+      - Delete all metadata rows (files, chunk_content, chunk_locations, sessions, FTS)
+      - Delete the repo row
+      - Re-register the repo with the provided path and embed model
+    """
+    # Validate embed model
+    model = default_embed_model.strip().lower()
+    if model not in {"small", "large"}:
+        typer.echo("Error: --default-embed-model must be 'small' or 'large'.")
+        raise typer.Exit(code=2)
+
+    # Validate path
+    repo_path = path.expanduser().resolve()
+    if not repo_path.exists() or not repo_path.is_dir():
+        typer.echo(f"Error: path does not exist or is not a directory: {repo_path}")
+        raise typer.Exit(code=2)
+
+    # Load config and stores
+    config = load_config()
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata.initialize()
+    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+
+    # If repo exists, wipe it (no confirmation)
+    repo = metadata.get_repo_by_name(name)
+    if repo:
+        repo_id = int(repo["id"])
+
+        # Delete from metadata database (mirror [Python.rm_repo()](kb/ingest/cli.py:296))
+        with metadata._connect() as conn:
+            cur = conn.cursor()
+
+            # Get file IDs
+            cur.execute("SELECT id FROM files WHERE repo_id = ?", (repo_id,))
+            file_ids = [row[0] for row in cur.fetchall()]
+
+            # Delete chunk locations for these files
+            for file_id in file_ids:
+                cur.execute("""
+                    DELETE FROM chunk_locations
+                    WHERE content_id IN (
+                        SELECT id FROM chunk_content WHERE file_id = ?
+                    )
+                """, (file_id,))
+
+            # Delete chunk content
+            cur.execute("DELETE FROM chunk_content WHERE repo_id = ?", (repo_id,))
+
+            # Delete from FTS
+            cur.execute("DELETE FROM chunks_fts WHERE repo = ?", (name,))
+
+            # Delete files
+            cur.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
+
+            # Delete sessions
+            cur.execute("DELETE FROM sessions WHERE repo_id = ?", (repo_id,))
+
+            # Delete repo row
+            cur.execute("DELETE FROM repos WHERE id = ?", (repo_id,))
+
+            conn.commit()
+
+        # Delete from LanceDB (both models)
+        for m in ["small", "large"]:
+            try:
+                lancedb.delete_repo(name, model=m)
+            except Exception as e:
+                typer.echo(f"  Warning: Could not delete {m} vectors: {e}", err=True)
+
+        typer.echo(f"Removed all data for '{name}'.")
+
+    # Re-register repo
+    metadata.record_repo(name=name, path=repo_path, default_embed_model=model)
+    typer.echo(
+        f"✓ Repository '{name}' re-registered: path='{repo_path}', default_embed_model='{model}'"
+    )
+
 
 @app.command()
 def prune(
@@ -466,10 +572,14 @@ def search(
                 chunk_id = hit.get("chunk_id")
                 content = hit.get("content")
                 
-                # Fetch content if not present
-                if not content and chunk_id:
+                # Normalize types
+                if not isinstance(content, str):
+                    content = ""
+                
+                # Fetch content if not present and we have a string chunk_id
+                if not content and isinstance(chunk_id, str):
                     content_map = backend.sql_store.get_chunk_contents([chunk_id])
-                    content = content_map.get(chunk_id, "")
+                    content = content_map.get(chunk_id, "") or ""
                 
                 if content:
                     typer.echo("\n   " + "─" * 70)
