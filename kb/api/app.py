@@ -301,8 +301,9 @@ async def fetch_file_slice(
             raise HTTPException(status_code=400, detail=f"Not a file: {path}")
 
         # Detect language from file extension
-        from ..ingest.lang import detect_language
-        lang = detect_language(path)
+        from ..chunkers.registry import detect_language_from_extension
+
+        lang = detect_language_from_extension(Path(path)) or "text"
 
         # Read file and extract lines
         try:
