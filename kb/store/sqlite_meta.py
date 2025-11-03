@@ -504,6 +504,11 @@ class SQLiteMetadataStore:
         """Delete content (and locations) not present in current_hashes. Returns count deleted."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
+                # First, get the file path for FTS5 cleanup
+                cur.execute("SELECT path FROM files WHERE id = ?", (int(file_id),))
+                file_row = cur.fetchone()
+                file_path = str(file_row[0]) if file_row else None
+                
                 if current_hashes:
                     placeholders = ",".join(["?"] * len(current_hashes))
                     params = (int(repo_id), int(file_id), embed_model, *list(current_hashes))
@@ -528,11 +533,14 @@ class SQLiteMetadataStore:
                 if not to_delete_ids:
                     return 0
                 placeholders = ",".join(["?"] * len(to_delete_ids))
-                # Delete from FTS5 index first
+                # Delete from FTS5 index first (by content_id and also by file path as fallback)
                 cur.execute(
                     f"DELETE FROM chunks_fts WHERE content_id IN ({placeholders})",
                     tuple(to_delete_ids),
                 )
+                # Also delete any orphaned FTS5 entries for this file
+                if file_path:
+                    cur.execute("DELETE FROM chunks_fts WHERE path = ?", (file_path,))
                 # Delete locations (FK cascade may do this, but be explicit)
                 cur.execute(
                     f"DELETE FROM chunk_locations WHERE content_id IN ({placeholders})",
