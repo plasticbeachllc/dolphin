@@ -416,6 +416,26 @@ class IngestionPipeline:
                 print(f"Error processing deleted file {path}: {e}")
                 continue
 
+        # Prune any ignored files that were previously indexed
+        # This handles files that were committed before being added to .gitignore
+        if not dry_run:
+            print(f"\nPruning previously-indexed ignored files for {repo_name}...")
+            all_files = self.metadata.get_all_files_for_repo(repo_id)
+            for file_record in all_files:
+                file_path = file_record["path"]
+                file_id = file_record["id"]
+                
+                # Check if file matches ignore patterns
+                if ignore_spec.match_file(file_path):
+                    # Prune all content for this file across all embedding models
+                    for model in ["small", "large"]:
+                        pruned_count = self.metadata.prune_invalidated_content_for_file(
+                            repo_id, file_id, embed_model=model, current_hashes=set()
+                        )
+                        if pruned_count > 0:
+                            chunks_pruned += pruned_count
+                            print(f"  {file_path}: pruned {pruned_count} ignored chunks (model={model})")
+        
         # Update session counters
         if not dry_run:
             self.metadata.bump_session_counters(

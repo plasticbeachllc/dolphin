@@ -33,7 +33,18 @@ def _git(root: Path, *args: str) -> bytes:
 
 
 def _list_tracked(root: Path) -> list[str]:
-    out = _git(root, "ls-files", "-z")
+    """List files respecting .gitignore patterns.
+    
+    Uses git ls-files with:
+    - --cached: Include tracked files
+    - --others: Include untracked files
+    - --exclude-standard: Respect .gitignore, .git/info/exclude, and global excludes
+    - -z: NUL-separated output for safe parsing
+    
+    This ensures we respect .gitignore even for files that were previously committed
+    but are now in .gitignore.
+    """
+    out = _git(root, "ls-files", "--cached", "--others", "--exclude-standard", "-z")
     items = [p for p in out.split(b"\x00") if p]
     return [PurePosixPath(p.decode("utf-8")).as_posix() for p in items]
 

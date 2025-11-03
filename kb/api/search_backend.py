@@ -265,28 +265,29 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     # Map reranker_config to retrieval.reranking
     if "reranker_config" in kwargs:
         reranker_data = kwargs["reranker_config"]
-        retrieval_data = {
-            "reranking": {
-                "enabled": reranker_data.get("enabled", False),
-                "model": reranker_data.get("model", "cross-encoder/ms-marco-MiniLM-L-6-v2"),
-                "device": reranker_data.get("device")
-            }
+        # Initialize retrieval_data if it doesn't exist, or preserve existing config
+        retrieval_data = config_data.get("retrieval", {})
+        reranking_data = {
+            "enabled": reranker_data.get("enabled", False),
+            "model": reranker_data.get("model", "cross-encoder/ms-marco-MiniLM-L-6-v2"),
+            "device": reranker_data.get("device"),
+            "batch_size": reranker_data.get("batch_size", 32),
+            "candidate_multiplier": reranker_data.get("candidate_multiplier", 4),
+            "score_threshold": reranker_data.get("score_threshold", 0.3)
         }
+        retrieval_data["reranking"] = reranking_data
         config_data["retrieval"] = retrieval_data
     
     # Handle ANN configuration (ann_config kwarg or default adaptive config)
     ann_config = kwargs.get("ann_config", {})
     retrieval_data = config_data.get("retrieval", {})
-    retrieval_data["ann"] = {
+    ann_data = {
         "strategy": ann_config.get("strategy", "adaptive"),
         "metric": ann_config.get("metric", "cosine"),
-        "nprobes": ann_config.get("nprobes", 20),
-        "refine_factor": ann_config.get("refine_factor", 10),
-        "adaptive": {
-            "estimated_dataset_size": ann_config.get("estimated_dataset_size", 100000),
-            "default_query_type": ann_config.get("default_query_type", "concept")
-        }
+        "estimated_dataset_size": ann_config.get("estimated_dataset_size", 100000),
+        "default_query_type": ann_config.get("default_query_type", "concept")
     }
+    retrieval_data["ann"] = ann_data
     config_data["retrieval"] = retrieval_data
     
     # Handle API key and batch size for OpenAI provider
@@ -304,8 +305,8 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     hybrid_search_enabled = kwargs.get("hybrid_search_enabled", True)
     
     # Create stores
-    sql_store = SQLiteMetadataStore(config.resolved_store_root())
-    lance_store = LanceDBStore(config.resolved_store_root())
+    sql_store = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    lance_store = LanceDBStore(config.resolved_store_root() / "lancedb")
     
     # Create embedding provider
     provider = create_provider(

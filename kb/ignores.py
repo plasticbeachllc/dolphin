@@ -52,6 +52,10 @@ DEFAULT_IGNORE_PATTERNS: tuple[str, ...] = (
     ".pytest_cache/**",
     ".DS_Store",
     "**/.DS_Store",
+    ".continue",
+    ".continue/**",
+    ".continue-config",
+    ".continue-config/**",
 )
 
 
