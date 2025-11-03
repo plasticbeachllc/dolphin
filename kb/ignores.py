@@ -56,6 +56,8 @@ DEFAULT_IGNORE_PATTERNS: tuple[str, ...] = (
     ".continue/**",
     ".continue-config",
     ".continue-config/**",
+    ".kilocode-config",
+    ".kilocode-config/**",
 )
 
 

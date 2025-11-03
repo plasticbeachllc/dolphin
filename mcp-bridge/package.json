@@ -11,7 +11,7 @@
     "start": "bun run src/index.ts",
     "dev": "bun run --hot src/index.ts",
     "lint": "bun x eslint .",
-    "test": "bun test"
+    "test": "bun test --serial ./src/tests"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

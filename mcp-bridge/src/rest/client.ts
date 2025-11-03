@@ -76,7 +76,12 @@ export interface FileSliceResponse {
   _meta?: { warnings?: string[] }
 }
 
-const BASE_URL = 'http://127.0.0.1:7777'
+function getBaseUrl (): string {
+  const env = (typeof process !== 'undefined' && process.env && process.env.KB_REST_BASE_URL)
+    ? process.env.KB_REST_BASE_URL
+    : undefined
+  return (env && env.trim().length > 0) ? env : 'http://127.0.0.1:7777'
+}
 
 async function doFetch<T> (path: string, init?: RequestInit, signal?: AbortSignal): Promise<T> {
   const headers = new Headers(init?.headers)
@@ -84,7 +89,7 @@ async function doFetch<T> (path: string, init?: RequestInit, signal?: AbortSigna
   headers.set('Accept', 'application/json')
   headers.set('X-Client', 'mcp')
 
-  const res = await fetch(BASE_URL + path, { ...init, headers, signal })
+  const res = await fetch(getBaseUrl() + path, { ...init, headers, signal })
   const text = await res.text()
 
   // Be robust to non-JSON upstream responses (e.g., "Internal Server Error")

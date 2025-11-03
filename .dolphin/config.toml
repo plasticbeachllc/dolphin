@@ -191,6 +191,11 @@ ignore = [
     "*~",
     ".DS_Store",
     
+    # Configuration directories (contain secrets/private data)
+    ".continue/**",
+    ".continue-config/**",
+    ".kilocode-config/**",
+    
     # Caches
     ".cache/**",
     ".pytest_cache/**",

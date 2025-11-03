@@ -29,7 +29,11 @@ class CrossEncoderReranker:
         try:
             from sentence_transformers import CrossEncoder
             _log.info(f"Loading cross-encoder model: {model_name}")
-            self.model = CrossEncoder(model_name, device=device)
+            # Only pass device parameter if explicitly set (avoid empty string error)
+            if device:
+                self.model = CrossEncoder(model_name, device=device)
+            else:
+                self.model = CrossEncoder(model_name)
             self.enabled = True
             _log.info(f"Cross-encoder loaded successfully on {self.model.device}")
         except ImportError:

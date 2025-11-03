@@ -105,8 +105,8 @@ def check_repository_status():
         if chunk_count > 0:
             # Sample some chunks
             cursor.execute("""
-                SELECT cc.content_id, r.name, cc.path, length(cc.content) as content_length
-                FROM chunk_content cc 
+                SELECT cc.id, r.name, cc.path, length(cc.content) as content_length
+                FROM chunk_content cc
                 JOIN repos r ON cc.repo_id = r.id
                 LIMIT 5
             """)
@@ -253,20 +253,22 @@ def simulate_indexing_step():
         sql_store = SQLiteMetadataStore(store_root / "metadata.db")
         
         # Check if we can create a test session
-        repo_info = sql_store.get_repo_by_name("test-repo") or {"id": 999, "root_path": "/tmp"}
-        
-        print(f"Creating test session for repo {repo_info['id']}...")
-        session_id = sql_store.begin_session(
-            repo_id=repo_info['id'],
-            commit_sha="test123",
-            branch="main", 
-            embed_model="small"
-        )
-        print(f"✅ Test session created: {session_id}")
-        
-        # Clean up
-        sql_store.set_session_status(session_id, "aborted", "Test session")
-        print("✅ Test session cleaned up")
+        repo_info = sql_store.get_repo_by_name("dolphin")  # Use existing repo
+        if repo_info:
+            print(f"Creating test session for repo {repo_info['id']}...")
+            session_id = sql_store.begin_session(
+                repo_id=repo_info['id'],
+                commit_sha="test123",
+                branch="main",
+                embed_model="small"
+            )
+            print(f"✅ Test session created: {session_id}")
+            
+            # Clean up
+            sql_store.set_session_status(session_id, "aborted", "Test session")
+            print("✅ Test session cleaned up")
+        else:
+            print("⚠️  No existing repositories found for testing")
         
     except Exception as e:
         print(f"❌ Error in session simulation: {e}")

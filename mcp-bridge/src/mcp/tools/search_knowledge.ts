@@ -118,7 +118,7 @@ export function makeSearchKnowledge (): { definition: Tool, handler: any, inputS
       }
 
       const res: SearchResponse = await restSearch(body, signal)
-
+      
       // Transform API response to match expected format
       const transformedHits = await Promise.all(
         (res.hits as any[]).map(async (hit: any) => {

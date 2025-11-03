@@ -55,10 +55,18 @@ class KnowledgeSearchBackend:
         
         bm25_hydrated = []
         if self.hybrid_search_enabled and hasattr(self.sql_store, 'bm25_search'):
-            bm25_results = self.sql_store.bm25_search(request.query, top_k=num_candidates)
+            bm25_results = self.sql_store.bm25_search(
+                request.query,
+                repo=request.repos[0] if request.repos else None,
+                path_prefix=request.path_prefix,
+                top_k=num_candidates
+            )
             bm25_hydrated = self._hydrate_bm25_results(bm25_results, self.sql_store)
 
-        hits = reciprocal_rank_fusion([vector_formatted, bm25_hydrated])
+        # Apply request filters to vector results
+        vector_filtered = self._apply_request_filters(vector_formatted, request)
+        
+        hits = reciprocal_rank_fusion([vector_filtered, bm25_hydrated])
         for hit in hits:
             hit['score'] = hit.pop('rrf_score', 0.0)
         
@@ -80,6 +88,32 @@ class KnowledgeSearchBackend:
 
     def _format_vector_results(self, vector_results: list[dict]) -> list[dict[str, object]]:
         return [{**r, 'chunk_id': r.get('id'), 'score': 1 / (1 + r.get('_distance', 1.0))} for r in vector_results]
+    
+    def _apply_request_filters(self, results: list[dict[str, object]], request: SearchRequest) -> list[dict[str, object]]:
+        """Apply repo and path_prefix filters to results."""
+        filtered = results
+        
+        # Filter by repos if specified
+        if request.repos:
+            repo_set = set(request.repos)
+            filtered = [r for r in filtered if r.get('repo') in repo_set]
+        
+        # Filter by path_prefix if specified
+        if request.path_prefix:
+            def matches_prefix(path: str) -> bool:
+                # Normalize path (remove leading ./ or /)
+                normalized = path.lstrip('./')
+                for prefix in request.path_prefix:
+                    # Normalize prefix
+                    norm_prefix = prefix.lstrip('./')
+                    # Match if path equals prefix or starts with prefix/
+                    if normalized == norm_prefix or normalized.startswith(norm_prefix + '/'):
+                        return True
+                return False
+            
+            filtered = [r for r in filtered if matches_prefix(r.get('path', ''))]
+        
+        return filtered
 
     def _hydrate_bm25_results(self, bm25_results: list[dict], sql_store: SQLiteMetadataStore) -> list[dict[str, object]]:
         """Hydrate BM25 results with full chunk metadata from LanceDB.
