@@ -239,6 +239,12 @@ def prune_ignored(
                     )
                     total_chunks_pruned += pruned_count
                     lancedb.prune_file_rows(name, file_path, model=embed_model)
+                
+                # Also delete any orphaned FTS5 entries for this file
+                with metadata._connect() as conn:
+                    cur = conn.cursor()
+                    cur.execute("DELETE FROM chunks_fts WHERE path = ?", (file_path,))
+                    conn.commit()
             else:
                 # In dry-run, just count what would be pruned
                 file_chunks = metadata.get_chunks_for_file(file_id)
