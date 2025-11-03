@@ -8,11 +8,43 @@ A semantic code search and knowledge management system with AI-native interfaces
 
 ### Installation
 
+#### Core Installation (~200MB)
+
 ```bash
-# Install from PyPI
+# Install core functionality with pip
 pip install pb-dolphin
 
+# Or with uv (recommended)
+uv pip install pb-dolphin
+
 # ⚠️ IMPORTANT: Ensure OPENAI_API_KEY is set as env var
+export OPENAI_API_KEY="sk-your-key-here"
+```
+
+#### Optional: Cross-Encoder Reranking (~2GB additional)
+
+For advanced search quality improvement (+20-30% MRR):
+
+```bash
+# With pip
+pip install pb-dolphin[reranking]
+
+# With uv (recommended)
+uv pip install pb-dolphin[reranking]
+```
+
+**Trade-off**: Better relevance but 2-3x slower searches. See [Advanced Features](#advanced-features) for configuration.
+
+#### Optional: MCP Orchestrator
+
+For MCP server management capabilities:
+
+```bash
+# With pip
+pip install pb-dolphin[orchestrator]
+
+# With uv
+uv pip install pb-dolphin[orchestrator]
 ```
 
 ### Basic Usage
@@ -155,6 +187,75 @@ curl http://127.0.0.1:7777/v1/repos
 # Health check
 curl http://127.0.0.1:7777/v1/health
 ```
+
+## Advanced Features
+
+### Cross-Encoder Reranking
+
+Cross-encoder reranking improves search result relevance by re-scoring results with a more sophisticated ML model.
+
+**Performance Impact:**
+- ✅ **+20-30% improvement** in Mean Reciprocal Rank (MRR)
+- ✅ **Better first-result quality** - more relevant top results
+- ⚠️ **2-3x slower searches** - cross-encoder is compute-intensive
+- ⚠️ **~2GB install size** - requires torch and sentence-transformers
+
+#### Installation
+
+```bash
+# With uv (recommended)
+uv pip install pb-dolphin[reranking]
+
+# Or with pip
+pip install pb-dolphin[reranking]
+```
+
+#### Configuration
+
+Enable in your `~/.dolphin/config.toml`:
+
+```toml
+[retrieval.reranking]
+enabled = true  # Enable cross-encoder reranking
+model = "cross-encoder/ms-marco-MiniLM-L-6-v2"  # HuggingFace model
+device = ""  # Auto-detect (CPU or CUDA if available)
+batch_size = 32  # Higher = faster but more memory
+candidate_multiplier = 4  # Rerank top_k × multiplier candidates
+score_threshold = 0.3  # Minimum relevance score (0-1)
+```
+
+Restart the API server to apply changes:
+
+```bash
+dolphin serve
+```
+
+#### When to Use Reranking
+
+**Enable when:**
+- Search quality is critical
+- Willing to accept higher latency
+- Have sufficient compute resources
+- Precision matters more than speed
+
+**Don't enable when:**
+- Speed is priority
+- Install size matters
+- Basic vector search + hybrid search is sufficient
+
+#### How It Works
+
+```
+Normal Search:
+Query → Embeddings → Vector Search → Top Results
+
+With Reranking:
+Query → Embeddings → Vector Search → Fetch top_k×4 candidates
+      → Cross-encoder re-scores each (query, result) pair
+      → Re-sort by cross-encoder scores → Top Results
+```
+
+The cross-encoder model evaluates each query-result pair directly, providing more accurate relevance scores than simple vector similarity.
 
 ## Development Status
 

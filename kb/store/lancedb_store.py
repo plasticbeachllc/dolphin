@@ -182,6 +182,39 @@ class LanceDBStore:
             # If deletion fails (e.g., because no matching rows), ignore silently.
             return
 
+    def delete_repo(self, repo: str, *, model: str) -> None:
+        """Delete all vectors for a given repository.
+        
+        Args:
+            repo: Repository name
+            model: Embedding model ('small' or 'large')
+        """
+        import lancedb
+
+        model_to_table = {
+            'small': 'chunks_small',
+            'large': 'chunks_large'
+        }
+
+        if model not in model_to_table:
+            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
+
+        db = lancedb.connect(self.root.as_posix())
+        try:
+            table = db.open_table(model_to_table[model])
+        except Exception:
+            # Nothing to delete if the table does not exist yet
+            return
+
+        repo_expr = repr(repo)
+        filter_expr = f"repo = {repo_expr}"
+
+        try:
+            table.delete(filter_expr)
+        except Exception:
+            # If deletion fails (e.g., because no matching rows), ignore silently.
+            return
+
     def query(
         self,
         query_vector: Sequence[float],

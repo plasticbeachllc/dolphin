@@ -1494,24 +1494,17 @@ name = "pb-dolphin"
 version = "0.1.9"
 source = { editable = "." }
 dependencies = [
-    { name = "docker" },
     { name = "fastapi" },
     { name = "lancedb" },
     { name = "markdown-it-py" },
-    { name = "mcp-server-git" },
-    { name = "mcp-server-time" },
-    { name = "mcpo" },
     { name = "openai" },
     { name = "pathspec" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
-    { name = "requests" },
-    { name = "sentence-transformers" },
     { name = "sqlite-utils" },
     { name = "sqlmodel" },
     { name = "tiktoken" },
-    { name = "torch" },
     { name = "tree-sitter" },
     { name = "tree-sitter-javascript" },
     { name = "tree-sitter-python" },
@@ -1526,6 +1519,17 @@ dev = [
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "ruff" },
+]
+orchestrator = [
+    { name = "docker" },
+    { name = "mcp-server-git" },
+    { name = "mcp-server-time" },
+    { name = "mcpo" },
+    { name = "requests" },
+]
+reranking = [
+    { name = "sentence-transformers" },
+    { name = "torch" },
 ]
 test = [
     { name = "fakeredis" },
@@ -1561,7 +1565,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
-    { name = "docker", specifier = ">=7.1.0" },
+    { name = "docker", marker = "extra == 'orchestrator'", specifier = ">=7.1.0" },
     { name = "fakeredis", marker = "extra == 'test'", specifier = ">=2.18.0" },
     { name = "fastapi" },
     { name = "freezegun", marker = "extra == 'test'", specifier = ">=1.2.0" },
@@ -1569,9 +1573,9 @@ requires-dist = [
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.12.0" },
     { name = "lancedb" },
     { name = "markdown-it-py" },
-    { name = "mcp-server-git", specifier = ">=0.0.1" },
-    { name = "mcp-server-time", specifier = ">=0.1.0" },
-    { name = "mcpo", specifier = ">=0.0.19" },
+    { name = "mcp-server-git", marker = "extra == 'orchestrator'", specifier = ">=0.0.1" },
+    { name = "mcp-server-time", marker = "extra == 'orchestrator'", specifier = ">=0.1.0" },
+    { name = "mcpo", marker = "extra == 'orchestrator'", specifier = ">=0.0.19" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "openai" },
     { name = "pathspec" },
@@ -1584,22 +1588,22 @@ requires-dist = [
     { name = "pytest-xdist", marker = "extra == 'test'", specifier = ">=3.3.0" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
-    { name = "requests", specifier = ">=2.32.4" },
+    { name = "requests", marker = "extra == 'orchestrator'", specifier = ">=2.32.4" },
     { name = "responses", marker = "extra == 'test'", specifier = ">=0.24.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
-    { name = "sentence-transformers", specifier = ">=2.3.0" },
+    { name = "sentence-transformers", marker = "extra == 'reranking'", specifier = ">=2.3.0" },
     { name = "sqlite-utils" },
     { name = "sqlmodel" },
     { name = "tiktoken" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
-    { name = "torch", specifier = ">=2.2.0" },
+    { name = "torch", marker = "extra == 'reranking'", specifier = ">=2.2.0" },
     { name = "tree-sitter", specifier = ">=0.25.0" },
     { name = "tree-sitter-javascript", specifier = ">=0.25.0" },
     { name = "tree-sitter-python", specifier = ">=0.25.0" },
     { name = "typer" },
     { name = "uvicorn" },
 ]
-provides-extras = ["test", "dev"]
+provides-extras = ["reranking", "orchestrator", "test", "dev"]
 
 [package.metadata.requires-dev]
 dev = [

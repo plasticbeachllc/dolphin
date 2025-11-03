@@ -36,8 +36,14 @@ class CrossEncoderReranker:
                 self.model = CrossEncoder(model_name)
             self.enabled = True
             _log.info(f"Cross-encoder loaded successfully on {self.model.device}")
-        except ImportError:
-            _log.warning("sentence-transformers not installed. Reranking disabled.")
+        except ImportError as e:
+            _log.error(
+                "⚠️  Cross-encoder reranking is enabled in config but dependencies are missing!\n"
+                "   Required: torch and sentence-transformers (~2GB install)\n"
+                "   Install with: pip install pb-dolphin[reranking]\n"
+                "   Or with uv: uv pip install pb-dolphin[reranking]\n"
+                "   Reranking will be disabled until dependencies are installed."
+            )
         except Exception as e:
             _log.error(f"Failed to load cross-encoder model: {e}. Reranking disabled.")
 

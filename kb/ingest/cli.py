@@ -258,6 +258,92 @@ def prune_ignored(
         typer.echo(f"  Chunks: {total_chunks_pruned}")
 
 
+@app.command("rm-repo")
+def rm_repo(
+    name: str = typer.Argument(..., help="Repository name to remove."),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt."),
+) -> None:
+    """Remove a repository and all its data from the knowledge store.
+    
+    This will delete:
+    - Repository registration
+    - All indexed files metadata
+    - All chunk content and locations
+    - All vectors (embeddings)
+    - All indexing sessions
+    """
+    config = load_config()
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata.initialize()
+    
+    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+    
+    # Get repo info
+    repo = metadata.get_repo_by_name(name)
+    if not repo:
+        typer.echo(f"Error: Repository '{name}' not found.", err=True)
+        raise typer.Exit(code=1)
+    
+    repo_id = int(repo["id"])
+    repo_path = repo["root_path"]
+    
+    # Confirm deletion unless --force
+    if not force:
+        typer.echo(f"This will remove repository '{name}' and all its data:")
+        typer.echo(f"  Path: {repo_path}")
+        typer.echo(f"  Repo ID: {repo_id}")
+        typer.echo()
+        confirm = typer.confirm("Are you sure you want to continue?")
+        if not confirm:
+            typer.echo("Aborted.")
+            raise typer.Exit(code=0)
+    
+    # Delete from metadata database
+    typer.echo(f"Removing metadata for '{name}'...")
+    with metadata._connect() as conn:
+        cur = conn.cursor()
+        
+        # Get file IDs
+        cur.execute("SELECT id FROM files WHERE repo_id = ?", (repo_id,))
+        file_ids = [row[0] for row in cur.fetchall()]
+        
+        # Delete chunk locations for these files
+        for file_id in file_ids:
+            cur.execute("""
+                DELETE FROM chunk_locations
+                WHERE content_id IN (
+                    SELECT id FROM chunk_content WHERE file_id = ?
+                )
+            """, (file_id,))
+        
+        # Delete chunk content
+        cur.execute("DELETE FROM chunk_content WHERE repo_id = ?", (repo_id,))
+        
+        # Delete from FTS
+        cur.execute("DELETE FROM chunks_fts WHERE repo = ?", (name,))
+        
+        # Delete files
+        cur.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
+        
+        # Delete sessions
+        cur.execute("DELETE FROM sessions WHERE repo_id = ?", (repo_id,))
+        
+        # Delete repo
+        cur.execute("DELETE FROM repos WHERE id = ?", (repo_id,))
+        
+        conn.commit()
+    
+    # Delete from LanceDB (both models)
+    typer.echo(f"Removing vectors for '{name}'...")
+    for model in ["small", "large"]:
+        try:
+            lancedb.delete_repo(name, model=model)
+        except Exception as e:
+            typer.echo(f"  Warning: Could not delete {model} vectors: {e}", err=True)
+    
+    typer.echo(f"✓ Repository '{name}' removed successfully.")
+
+
 @app.command()
 def prune(
     name: str = typer.Argument(..., help="Repository name to prune."),
