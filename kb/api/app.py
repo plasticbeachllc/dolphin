@@ -210,8 +210,8 @@ async def list_repos() -> dict[str, list[dict[str, object]]]:
 @app.get("/chunks/{chunk_id}")
 async def fetch_chunk(chunk_id: str) -> dict[str, object]:
     """Fetch a specific chunk by ID."""
-    if _lance_store is None:
-        raise HTTPException(status_code=503, detail="Vector store not initialized")
+    if _sql_store is None or _lance_store is None:
+        raise HTTPException(status_code=503, detail="Stores not initialized")
 
     try:
         import lancedb
@@ -220,6 +220,7 @@ async def fetch_chunk(chunk_id: str) -> dict[str, object]:
         db = lancedb.connect(_lance_store.root.as_posix())
 
         # Try both small and large tables
+        metadata = None
         for table_name in ["chunks_small", "chunks_large"]:
             try:
                 table = db.open_table(table_name)
@@ -227,27 +228,35 @@ async def fetch_chunk(chunk_id: str) -> dict[str, object]:
                 results = table.search().where(f"id = '{chunk_id}'").limit(1).to_list()
 
                 if results:
-                    result = results[0]
-                    return {
-                        "chunk_id": result.get("id"),
-                        "repo": result.get("repo"),
-                        "path": result.get("path"),
-                        "start_line": result.get("start_line"),
-                        "end_line": result.get("end_line"),
-                        "text_hash": result.get("text_hash"),
-                        "commit": result.get("commit"),
-                        "branch": result.get("branch"),
-                        "language": result.get("language"),
-                        "symbol_kind": result.get("symbol_kind"),
-                        "symbol_name": result.get("symbol_name"),
-                        "symbol_path": result.get("symbol_path"),
-                        "token_count": result.get("token_count"),
-                    }
+                    metadata = results[0]
+                    break
             except Exception:
                 continue
 
-        # Not found in any table
-        raise HTTPException(status_code=404, detail=f"Chunk not found: {chunk_id}")
+        if not metadata:
+            raise HTTPException(status_code=404, detail=f"Chunk not found: {chunk_id}")
+
+        # Fetch content from FTS table via SQL store
+        content_map = _sql_store.get_chunk_contents([chunk_id])
+        content = content_map.get(chunk_id, "")
+
+        return {
+            "chunk_id": metadata.get("id"),
+            "repo": metadata.get("repo"),
+            "path": metadata.get("path"),
+            "start_line": metadata.get("start_line"),
+            "end_line": metadata.get("end_line"),
+            "content": content,
+            "lang": metadata.get("language"),
+            "text_hash": metadata.get("text_hash"),
+            "commit": metadata.get("commit"),
+            "branch": metadata.get("branch"),
+            "symbol_kind": metadata.get("symbol_kind"),
+            "symbol_name": metadata.get("symbol_name"),
+            "symbol_path": metadata.get("symbol_path"),
+            "token_count": metadata.get("token_count"),
+            "resource_link": f"kb://{metadata.get('repo')}/{metadata.get('path')}#L{metadata.get('start_line')}-L{metadata.get('end_line')}"
+        }
 
     except HTTPException:
         raise
@@ -291,6 +300,10 @@ async def fetch_file_slice(
         if not full_path.is_file():
             raise HTTPException(status_code=400, detail=f"Not a file: {path}")
 
+        # Detect language from file extension
+        from ..ingest.lang import detect_language
+        lang = detect_language(path)
+
         # Read file and extract lines
         try:
             with open(full_path, 'r', encoding='utf-8') as f:
@@ -314,6 +327,8 @@ async def fetch_file_slice(
                 "start_line": start,
                 "end_line": end,
                 "content": content,
+                "lang": lang,
+                "source": "disk",
                 "total_lines": len(all_lines)
             }
 
