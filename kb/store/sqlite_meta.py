@@ -528,7 +528,12 @@ class SQLiteMetadataStore:
                 if not to_delete_ids:
                     return 0
                 placeholders = ",".join(["?"] * len(to_delete_ids))
-                # Delete locations first (FK cascade may do this, but be explicit)
+                # Delete from FTS5 index first
+                cur.execute(
+                    f"DELETE FROM chunks_fts WHERE content_id IN ({placeholders})",
+                    tuple(to_delete_ids),
+                )
+                # Delete locations (FK cascade may do this, but be explicit)
                 cur.execute(
                     f"DELETE FROM chunk_locations WHERE content_id IN ({placeholders})",
                     tuple(to_delete_ids),
