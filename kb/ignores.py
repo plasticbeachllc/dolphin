@@ -89,7 +89,9 @@ def load_repo_ignores(repo_root: Path) -> tuple[set[str], set[str]]:
     """Load repo-level ignore patterns from .dolphin/config.toml if present.
 
     Looks for patterns in:
-    - `ignore.patterns = [..]` or `ignore.patterns = [..]`
+    - `ignore = [..]` (top-level array)
+    - `ignore_patterns = [..]` (top-level array)
+    - `[ignore] patterns = [..]` (section with patterns key)
     - `ignore_exceptions = [..]` or `[ignore] exceptions = [..]`
     - `[indexing] ignore_patterns = [..]`
     - `[indexing] ignore_exceptions = [..]`
@@ -108,17 +110,20 @@ def load_repo_ignores(repo_root: Path) -> tuple[set[str], set[str]]:
         exceptions: list[str] = []
         
         # Check top-level arrays first
+        if isinstance(data.get("ignore"), list):
+            patterns.extend([str(x) for x in data.get("ignore", [])])
         if isinstance(data.get("ignore_patterns"), list):
             patterns.extend([str(x) for x in data.get("ignore_patterns", [])])
         if isinstance(data.get("ignore_exceptions"), list):
             exceptions.extend([str(x) for x in data.get("ignore_exceptions", [])])
             
-        # Check for [ignore] section
-        ignore_section = data.get("ignore") or {}
-        if isinstance(ignore_section.get("patterns"), list):
-            patterns.extend([str(x) for x in ignore_section.get("patterns", [])])
-        if isinstance(ignore_section.get("exceptions"), list):
-            exceptions.extend([str(x) for x in ignore_section.get("exceptions", [])])
+        # Check for [ignore] section (only if it's a dict, not an array)
+        ignore_section = data.get("ignore")
+        if isinstance(ignore_section, dict):
+            if isinstance(ignore_section.get("patterns"), list):
+                patterns.extend([str(x) for x in ignore_section.get("patterns", [])])
+            if isinstance(ignore_section.get("exceptions"), list):
+                exceptions.extend([str(x) for x in ignore_section.get("exceptions", [])])
             
         # Check indexing section
         indexing = data.get("indexing") or {}

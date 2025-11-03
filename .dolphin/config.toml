@@ -202,6 +202,11 @@ ignore = [
     ".mypy_cache/**",
     ".ruff_cache/**",
     
+    # Test and config files
+    "pytest.ini",
+    "chunking_config.toml",
+    ".dolphin/**",
+    
     # Lock files
     "package-lock.json",
     "yarn.lock",
