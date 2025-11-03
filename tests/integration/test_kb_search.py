@@ -21,7 +21,7 @@ def test_search_returns_provenance_rich_snippets():
             "top_k": 3,
             "max_snippet_tokens": 12,
         }
-        response = client.post("/v1/search", json=payload)
+        response = client.post("/search", json=payload)
         assert response.status_code == 200, f"Unexpected status: {response.status_code}"
         data = response.json()
 

@@ -195,10 +195,11 @@ def load_config(path: Path | None = None, repo_path: Path | None = None) -> KBCo
     """Load configuration with multi-level hierarchy.
     
     Priority order (highest to lowest):
-    1. Explicitly provided path (if exists, otherwise use defaults - no auto-create)
-    2. Repo-specific config (./.dolphin/config.toml)
-    3. User config (~/.dolphin/config.toml, auto-created if missing)
-    4. Built-in defaults
+    1. DOLPHIN_STORE_ROOT environment variable (overrides store_root only)
+    2. Explicitly provided path (if exists, otherwise use defaults - no auto-create)
+    3. Repo-specific config (./.dolphin/config.toml)
+    4. User config (~/.dolphin/config.toml, auto-created if missing)
+    5. Built-in defaults
     
     Args:
         path: Explicit config file path (highest priority, won't auto-create)
@@ -207,6 +208,8 @@ def load_config(path: Path | None = None, repo_path: Path | None = None) -> KBCo
     Returns:
         KBConfig instance with merged configuration
     """
+    import os
+    
     config_data: dict[str, Any] = {}
     
     # Try explicit path first - if provided but doesn't exist, return defaults (no auto-create)
@@ -241,9 +244,16 @@ def load_config(path: Path | None = None, repo_path: Path | None = None) -> KBCo
     # If still no config, use defaults
     if not config_data:
         _log.debug("No config found, using built-in defaults")
-        return KBConfig()
+        config_data = {}
     
-    if not isinstance(config_data, Mapping):
+    if config_data and not isinstance(config_data, Mapping):
         raise ValueError(f"Config must contain a mapping")
+    
+    # Apply environment variable overrides BEFORE creating KBConfig
+    # This ensures DOLPHIN_STORE_ROOT takes precedence
+    env_store_root = os.environ.get("DOLPHIN_STORE_ROOT")
+    if env_store_root:
+        _log.debug("Overriding store_root with DOLPHIN_STORE_ROOT: %s", env_store_root)
+        config_data["store_root"] = env_store_root
     
     return KBConfig.from_mapping(config_data)

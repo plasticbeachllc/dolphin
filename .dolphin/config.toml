@@ -148,7 +148,7 @@ encoding = "cl100k_base"
 [retrieval]
 # Minimum similarity score threshold (0.0-1.0)
 # Higher values = more precise but fewer results
-score_cutoff = 0.15
+score_cutoff = 0.0
 
 # Maximum number of results to return
 top_k = 8

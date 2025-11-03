@@ -258,45 +258,120 @@ def test_repository_indexing(repo_path: Path, store_root: Path) -> bool:
     
     return True
 
-def test_search_functionality(store_root: Path) -> bool:
-    """Test search functionality."""
-    log_step("Testing search functionality...")
+def test_search_and_api(store_root: Path, port: int) -> tuple[bool, bool]:
+    """Test search functionality and API endpoints with a single server instance.
     
+    Returns:
+        tuple[bool, bool]: (search_passed, api_passed)
+    """
     # Set up environment with custom store root
     env = os.environ.copy()
     env["DOLPHIN_STORE_ROOT"] = str(store_root)
     
-    # Try a simple search query
-    test_queries = [
-        "calculate sum",
-        "Calculator class",
-        "greeting function"
-    ]
+    # Update config to use the test server port
+    config_path = Path.home() / ".dolphin" / "config.toml"
+    original_config = None
+    if config_path.exists():
+        config_content = config_path.read_text()
+        original_config = config_content
+        # Replace endpoint port
+        config_content = config_content.replace(
+            'endpoint = "127.0.0.1:7777"',
+            f'endpoint = "127.0.0.1:{port}"'
+        )
+        config_path.write_text(config_content)
     
-    for query in test_queries:
-        log_step(f"  Searching for: '{query}'")
-        success, stdout, stderr = run_command([
-            "uv", "run", "dolphin", "search",
-            query,
-            "--top-k", "3"
-        ], env=env)
+    try:
+        # ============================================================
+        # Test 1: Search Functionality
+        # ============================================================
+        print(f"\n{BLUE}{'─'*70}{RESET}")
+        log_step("Test 3: Search Functionality")
+        print(f"{BLUE}{'─'*70}{RESET}")
         
-        if not success:
-            log_warning(f"  Search failed for '{query}': {stderr}")
-            continue
+        test_queries = [
+            "calculate sum",
+            "Calculator class",
+            "greeting function"
+        ]
         
-        # Check if results were returned
-        if "No results" in stdout or len(stdout.strip()) < 10:
-            log_warning(f"  No results for '{query}'")
+        search_passed = False
+        for query in test_queries:
+            log_step(f"  Searching for: '{query}'")
+            # Use CLI command with correct embed model
+            success, stdout, stderr = run_command([
+                "uv", "run", "dolphin", "search",
+                query,
+                "--top-k", "3",
+                "--embed-model", "small",  # Match the indexing model
+                "--score-cutoff", "0.0"    # RRF scores are small (~0.01-0.03)
+            ], env=env)
+            
+            if not success:
+                log_error(f"  Search command failed: {stderr}")
+                continue
+            
+            # Check if results were returned
+            if "No results found" in stdout or len(stdout.strip()) < 10:
+                log_warning(f"  No results for '{query}'")
+            else:
+                log_success(f"  Found results for '{query}'")
+                search_passed = True
+                # Print first result summary (first 3 lines of output)
+                lines = stdout.split('\n')[:4]
+                for line in lines:
+                    if line.strip():
+                        print(f"      {line.strip()}")
+        
+        if search_passed:
+            log_success("Search functionality test PASSED")
         else:
-            log_success(f"  Found results for '{query}'")
-            # Print first result summary
-            lines = stdout.split('\n')[:5]
-            for line in lines:
-                if line.strip():
-                    log_step(f"    {line.strip()}")
-    
-    return True
+            log_error("Search functionality test FAILED - no results returned")
+        
+        # ============================================================
+        # Test 2: API Endpoints
+        # ============================================================
+        print(f"\n{BLUE}{'─'*70}{RESET}")
+        log_step("Test 4: API Endpoints")
+        print(f"{BLUE}{'─'*70}{RESET}")
+        
+        api_passed = True
+        
+        # Test health endpoint
+        log_step("  Testing /health endpoint...")
+        success, stdout, stderr = run_command([
+            "curl", "-s", f"http://127.0.0.1:{port}/health"
+        ])
+        
+        if success and "ok" in stdout.lower():
+            log_success("  Health endpoint OK")
+        else:
+            log_error(f"  Health endpoint failed: {stdout}")
+            api_passed = False
+        
+        # Test repos endpoint
+        log_step("  Testing /repos endpoint...")
+        success, stdout, stderr = run_command([
+            "curl", "-s", f"http://127.0.0.1:{port}/repos"
+        ])
+        
+        if success and "test_repo" in stdout:
+            log_success("  Repos endpoint OK")
+        else:
+            log_error(f"  Repos endpoint failed: {stdout[:100]}")
+            api_passed = False
+        
+        if api_passed:
+            log_success("API endpoints test PASSED")
+        else:
+            log_error("API endpoints test FAILED")
+        
+        return search_passed, api_passed
+        
+    finally:
+        # Restore original config
+        if original_config and config_path.exists():
+            config_path.write_text(original_config)
 
 def test_reranking_if_available(store_root: Path) -> bool:
     """Test reranking if dependencies are installed (optional)."""
@@ -382,92 +457,37 @@ def find_free_port() -> int:
         port = s.getsockname()[1]
     return port
 
-def test_api_server(store_root: Path) -> bool:
-    """Test API server startup and basic endpoints."""
-    log_step("Testing API server...")
-    
-    # Set up environment with custom store root
+def start_api_server(store_root: Path, port: int) -> subprocess.Popen:
+    """Start the API server and return the process handle."""
     env = os.environ.copy()
     env["DOLPHIN_STORE_ROOT"] = str(store_root)
     
-    # Find a free port to avoid conflicts
-    port = find_free_port()
-    log_step(f"  Using port {port} for test server...")
+    log_step(f"  Debug: Setting DOLPHIN_STORE_ROOT={store_root}")
     
-    # Start API server in background with custom port
-    log_step("  Starting API server...")
     server_process = subprocess.Popen(
         ["uv", "run", "dolphin", "serve", "--port", str(port)],
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,  # Capture stderr to stdout so we can see server messages
         text=True,
         env=env
     )
     
-    # Wait for server to start
-    time.sleep(3)
-    
-    try:
-        # Check if server is running
-        if server_process.poll() is not None:
-            _, stderr = server_process.communicate()
-            log_error(f"  Server failed to start: {stderr}")
-            return False
-        
-        log_success("  API server started")
-        
-        # Test health endpoint
-        log_step("  Testing health endpoint...")
-        success, stdout, stderr = run_command([
-            "curl", "-s", f"http://127.0.0.1:{port}/health"
-        ])
-        
-        if success and "ok" in stdout.lower():
-            log_success("  Health endpoint OK")
-        else:
-            log_warning(f"  Health endpoint returned: {stdout}")
-        
-        # Test repos endpoint
-        log_step("  Testing repos endpoint...")
-        success, stdout, stderr = run_command([
-            "curl", "-s", f"http://127.0.0.1:{port}/repos"
-        ])
-        
-        if success and "test_repo" in stdout:
-            log_success("  Repos endpoint OK")
-        else:
-            log_warning(f"  Repos endpoint returned: {stdout[:100]}")
-        
-        return True
-        
-    finally:
-        # Stop server
-        log_step("  Stopping API server...")
-        server_process.terminate()
-        try:
-            server_process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            server_process.kill()
-        log_success("  API server stopped")
+    return server_process
 
-def estimate_cost() -> None:
-    """Estimate the cost of running this test."""
-    log_step("\nCost Estimate:")
-    log_step("  Test repository: ~80 lines of code")
-    log_step("  Estimated chunks: ~5-8 chunks")
-    log_step("  Embedding model: text-embedding-3-small")
-    log_step("  Estimated tokens: ~500-1000 tokens")
-    log_step("  OpenAI pricing: $0.00002 / 1K tokens")
-    log_step("  Estimated cost: $0.00001 - $0.00002 (~$0.00 USD)")
-    print()
+def stop_api_server(server_process: subprocess.Popen) -> None:
+    """Stop the API server process."""
+    server_process.terminate()
+    try:
+        server_process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        server_process.kill()
 
 def main():
     """Run all end-to-end tests."""
     print(f"\n{BLUE}{'='*70}{RESET}")
     print(f"{BLUE}Dolphin End-to-End Live Integration Test{RESET}")
     print(f"{BLUE}{'='*70}{RESET}\n")
-    
-    estimate_cost()
+
     
     # Check prerequisites
     if not check_prerequisites():
@@ -482,34 +502,149 @@ def main():
         log_step(f"Using temporary directory: {temp_dir}")
         log_step(f"Store root: {store_root}\n")
         
+        server_process = None
         try:
             # Create test repository
             repo_path = create_test_repository(temp_path)
             
-            # Run tests
-            tests_passed = 0
-            tests_total = 5  # Added reranking test
+            # Track test results
+            test_results = {}
             
-            if test_initialization(store_root):
-                tests_passed += 1
+            # ============================================================
+            # Test 1: Initialization
+            # ============================================================
+            print(f"\n{BLUE}{'─'*70}{RESET}")
+            log_step("Test 1: Dolphin Initialization")
+            print(f"{BLUE}{'─'*70}{RESET}")
+            test_results["initialization"] = test_initialization(store_root)
+            if test_results["initialization"]:
+                log_success("Initialization test PASSED")
+            else:
+                log_error("Initialization test FAILED")
             
-            if test_repository_indexing(repo_path, store_root):
-                tests_passed += 1
+            # ============================================================
+            # Test 2: Repository Indexing
+            # ============================================================
+            print(f"\n{BLUE}{'─'*70}{RESET}")
+            log_step("Test 2: Repository Indexing")
+            print(f"{BLUE}{'─'*70}{RESET}")
+            test_results["indexing"] = test_repository_indexing(repo_path, store_root)
+            if test_results["indexing"]:
+                log_success("Indexing test PASSED")
+            else:
+                log_error("Indexing test FAILED")
             
-            if test_search_functionality(store_root):
-                tests_passed += 1
+            # ============================================================
+            # Start API Server (for tests 3 & 4)
+            # ============================================================
+            print(f"\n{BLUE}{'─'*70}{RESET}")
+            log_step("Starting API Server for Search and API Tests")
+            print(f"{BLUE}{'─'*70}{RESET}")
             
-            if test_reranking_if_available(store_root):
-                tests_passed += 1
+            port = find_free_port()
+            log_step(f"  Using port {port} for API server...")
+            server_process = start_api_server(store_root, port)
             
-            if test_api_server(store_root):
-                tests_passed += 1
+            # Wait longer for server to fully start and load indexes
+            log_step("  Waiting for server to start (5 seconds)...")
+            time.sleep(5)
             
+            # Check if server is running
+            if server_process.poll() is not None:
+                _, stderr = server_process.communicate()
+                log_error(f"  Server failed to start: {stderr}")
+                test_results["search"] = False
+                test_results["api"] = False
+            else:
+                log_success("  API server started successfully")
+                
+                # Run tests 3 & 4 with the running server
+                search_passed, api_passed = test_search_and_api(store_root, port)
+                test_results["search"] = search_passed
+                test_results["api"] = api_passed
+            
+            # Check database before stopping server
+            log_step("\n  Verifying indexed data in database...")
+            from kb.store import SQLiteMetadataStore
+            import os
+            
+            # Temporarily set env var for this check
+            old_env = os.environ.get("DOLPHIN_STORE_ROOT")
+            os.environ["DOLPHIN_STORE_ROOT"] = str(store_root)
+            
+            db_path = store_root / "metadata.db"
+            if db_path.exists():
+                sql_store = SQLiteMetadataStore(db_path)
+                with sql_store._connect() as conn:
+                    cur = conn.cursor()
+                    cur.execute("SELECT COUNT(*) FROM repos")
+                    repo_count = cur.fetchone()[0]
+                    cur.execute("SELECT COUNT(*) FROM chunk_content")
+                    chunk_count = cur.fetchone()[0]
+                    cur.execute("SELECT name, default_embed_model FROM repos")
+                    repos = cur.fetchall()
+                    
+                log_success(f"  Found {repo_count} repo(s), {chunk_count} chunk(s)")
+                for repo_name, model in repos:
+                    log_step(f"    Repo '{repo_name}' uses model '{model}'")
+                
+                # Check LanceDB vector data
+                lancedb_path = store_root / "lancedb"
+                if lancedb_path.exists():
+                    import lancedb
+                    try:
+                        db = lancedb.connect(str(lancedb_path))
+                        tables = db.table_names()
+                        log_step(f"  LanceDB tables: {tables}")
+                        
+                        # Check chunks_small table
+                        if "chunks_small" in tables:
+                            table = db.open_table("chunks_small")
+                            count = table.count_rows()
+                            log_step(f"    chunks_small: {count} vectors")
+                        else:
+                            log_warning("    chunks_small table not found!")
+                    except Exception as e:
+                        log_error(f"  LanceDB error: {e}")
+                else:
+                    log_error(f"  LanceDB directory not found at {lancedb_path}")
+            else:
+                log_error(f"  Database not found at {db_path}")
+            
+            if old_env:
+                os.environ["DOLPHIN_STORE_ROOT"] = old_env
+            
+            # Stop server and capture any output
+            log_step("\n  Stopping API server...")
+            stop_api_server(server_process)
+            log_success("  API server stopped")
+            server_process = None
+            
+            # ============================================================
+            # Test 5: Reranking (Optional)
+            # ============================================================
+            print(f"\n{BLUE}{'─'*70}{RESET}")
+            log_step("Test 5: Reranking (Optional)")
+            print(f"{BLUE}{'─'*70}{RESET}")
+            test_results["reranking"] = test_reranking_if_available(store_root)
+            if test_results["reranking"]:
+                log_success("Reranking test PASSED")
+            
+            # ============================================================
             # Summary
+            # ============================================================
             print(f"\n{BLUE}{'='*70}{RESET}")
             print(f"{BLUE}Test Summary{RESET}")
             print(f"{BLUE}{'='*70}{RESET}\n")
             
+            for test_name, passed in test_results.items():
+                status = f"{GREEN}✓ PASSED{RESET}" if passed else f"{RED}✗ FAILED{RESET}"
+                print(f"  {test_name.capitalize():20s} {status}")
+            
+            tests_passed = sum(test_results.values())
+            tests_total = len(test_results)
+            
+            print()
             if tests_passed == tests_total:
                 log_success(f"All {tests_total} tests passed! ✨")
                 print(f"\n{GREEN}Dolphin is ready for PyPI deployment.{RESET}\n")
@@ -521,11 +656,15 @@ def main():
                 
         except KeyboardInterrupt:
             log_warning("\nTest interrupted by user")
+            if server_process:
+                stop_api_server(server_process)
             return 130
         except Exception as e:
             log_error(f"Unexpected error: {e}")
             import traceback
             traceback.print_exc()
+            if server_process:
+                stop_api_server(server_process)
             return 1
 
 if __name__ == "__main__":

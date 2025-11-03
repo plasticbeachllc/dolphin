@@ -113,6 +113,7 @@ def search(
     repos: Optional[list[str]] = typer.Option(None, "--repos", help="Repository names to search (comma-separated)."),
     top_k: int = typer.Option(8, "--top-k", help="Number of results to return."),
     score_cutoff: float = typer.Option(0.15, "--score-cutoff", help="Minimum similarity score."),
+    embed_model: str = typer.Option("large", "--embed-model", help="Embedding model to use (small|large)."),
 ) -> None:
     """Search indexed code semantically."""
     import requests
@@ -127,6 +128,7 @@ def search(
         "query": query,
         "top_k": top_k,
         "score_cutoff": score_cutoff,
+        "embed_model": embed_model,
     }
     
     if repos:

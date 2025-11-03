@@ -7,10 +7,16 @@ from pathlib import Path
 
 _EXT_TO_LANG: dict[str, str] = {
     ".py": "python",
+    ".pyw": "python",
+    ".pyi": "python",
     ".ts": "typescript",
     ".tsx": "typescriptreact",
+    ".mts": "typescript",
+    ".cts": "typescript",
     ".js": "javascript",
     ".jsx": "javascriptreact",
+    ".cjs": "javascript",
+    ".mjs": "javascript",
     ".md": "markdown",
     ".markdown": "markdown",
     ".mdx": "markdown",

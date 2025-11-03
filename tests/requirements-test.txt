@@ -13,6 +13,9 @@ freezegun>=1.2.0
 fakeredis>=2.18.0
 httpx>=0.25.0
 
+# System utilities
+psutil>=5.9.0
+
 # Development tools (for code quality)
 black>=23.0.0
 isort>=5.12.0

@@ -150,8 +150,19 @@ def detect_language_from_extension(file_path: Path) -> Optional[str]:
     if not ext:
         return None
     
+    # Try to load from config first
     ext_map = _load_global_extension_map()
-    return ext_map.get(ext)
+    if ext_map:
+        result = ext_map.get(ext)
+        if result:
+            return result
+    
+    # Fallback to hardcoded mappings from kb.ingest.lang
+    from ..ingest.lang import classify_language
+    _, language = classify_language(file_path)
+    
+    # classify_language returns "text" as default, we return None for unknown
+    return language if language != "text" else None
 
 
 def get_chunker_for_file(file_path: Path) -> Optional[ChunkerFunction]:

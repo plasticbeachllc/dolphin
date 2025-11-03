@@ -44,21 +44,28 @@ class TestKnowledgeSearchBackend:
         assert results[0]['score'] > 0
 
     def test_search_with_score_cutoff(self, basic_backend):
-        """Test that the score_cutoff is applied after score normalization and fusion."""
+        """Test that the score_cutoff is applied after RRF fusion."""
         embedding_provider, lance_store, sql_store = basic_backend.embedding_provider, basic_backend.lance_store, basic_backend.sql_store
         
         embedding_provider.embed_texts.return_value = [[0.1] * 1536]
-        # This result will have a similarity score of 1 / (1 + 0.1) = ~0.9, so it should be kept.
+        # Vector search result will rank at position 1, giving RRF score ~0.016
         lance_store.query.return_value = [{"id": "chunk1", "_distance": 0.1, "repo": "repo", "path": "test.py"}]
-        # This result has a negative score, its normalized score will be very low and it should be filtered.
-        sql_store.bm25_search.return_value = [{"chunk_id": "chunk2", "score": -10.0, "repo": "repo", "path": "test.py"}]
+        # BM25 result will rank at position 2, giving RRF score ~0.016 (similar rank)
+        sql_store.bm25_search.return_value = [{"chunk_id": "chunk2", "score": 5.0, "repo": "repo", "path": "test.py"}]
         sql_store.get_chunk_by_id.return_value = {"path": "test.py", "chunk_id": "chunk2"}
 
-        request = SearchRequest(query="test", score_cutoff=0.5)
+        # Use low cutoff (0.0) to accept RRF scores (~0.016)
+        request = SearchRequest(query="test", score_cutoff=0.0)
         results = basic_backend.search(request)
         
-        assert len(results) == 1
-        assert results[0]['chunk_id'] == 'chunk1'
+        assert len(results) == 2  # Both should pass with RRF scores
+        
+        # Test high cutoff that filters out results
+        request_high_cutoff = SearchRequest(query="test", score_cutoff=0.5)
+        results_high = basic_backend.search(request_high_cutoff)
+        
+        # RRF scores (~0.016) should be below 0.5 cutoff, so no results
+        assert len(results_high) == 0
 
 @pytest.fixture
 def real_backend(tmp_path: Path):
@@ -68,6 +75,9 @@ def real_backend(tmp_path: Path):
 class TestSearchBackendIntegration:
     def test_end_to_end_search_flow(self, real_backend: KnowledgeSearchBackend):
         """Test a full search cycle from indexing to retrieval."""
+        # Initialize the database schema first (includes FTS table)
+        real_backend.sql_store.initialize()
+        
         chunks_to_upsert = [{"id": "chunk1", "vector": [0.1] * 1536, "repo": "test-repo", "path": "test.py"}]
         real_backend.lance_store.upsert_chunks("test-repo", chunks_to_upsert, model="small")
         real_backend.sql_store.index_chunk_for_fts(

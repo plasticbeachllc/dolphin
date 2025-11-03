@@ -178,7 +178,7 @@ class TestBM25Integration:
 
     def test_bm25_search_filters_by_repo(self, populated_backend):
         """Test BM25 search respects repository filters."""
-        request = SearchRequest(query="authentication", repo_filter="test-repo", top_k=5)
+        request = SearchRequest(query="authentication", repos=["test-repo"], top_k=5)
         
         # Mock vector search
         mock_vector_results = [

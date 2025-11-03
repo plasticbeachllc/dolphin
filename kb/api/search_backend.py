@@ -37,7 +37,19 @@ class KnowledgeSearchBackend:
         self._request_ann_config = None  # Per-request ANN configuration overrides
 
     def search(self, request: SearchRequest) -> Sequence[dict[str, object]]:
-        # ... (caching logic) ...
+        # Check cache first if available
+        if self.cache:
+            # Create cache key from request parameters
+            cache_params = {
+                'top_k': request.top_k,
+                'score_cutoff': request.score_cutoff,
+                'embed_model': request.embed_model,
+                'repos': request.repos,
+                'path_prefix': request.path_prefix,
+            }
+            cached_results = self.cache.get_results(request.query, **cache_params)
+            if cached_results is not None:
+                return cached_results
 
         query_embedding = self.embedding_provider.embed_texts(request.embed_model, [request.query])[0]
         num_candidates = request.top_k * 4 # Fetch more candidates for reranking
@@ -45,23 +57,36 @@ class KnowledgeSearchBackend:
         # Get ANN parameters from config or use defaults
         ann_params = self._get_ann_params(request)
 
-        vector_results = self.lance_store.query(
-            query_embedding,
-            model=request.embed_model,
-            top_k=num_candidates,
-            ann_params=ann_params
-        )
-        vector_formatted = self._format_vector_results(vector_results)
+        # Vector search with error handling
+        vector_formatted = []
+        try:
+            vector_results = self.lance_store.query(
+                query_embedding,
+                model=request.embed_model,
+                top_k=num_candidates,
+                ann_params=ann_params
+            )
+            vector_formatted = self._format_vector_results(vector_results)
+        except Exception as e:
+            # Log error but continue with empty vector results
+            import logging
+            logging.warning(f"Vector search failed: {e}")
         
+        # BM25 search with error handling
         bm25_hydrated = []
         if self.hybrid_search_enabled and hasattr(self.sql_store, 'bm25_search'):
-            bm25_results = self.sql_store.bm25_search(
-                request.query,
-                repo=request.repos[0] if request.repos else None,
-                path_prefix=request.path_prefix,
-                top_k=num_candidates
-            )
-            bm25_hydrated = self._hydrate_bm25_results(bm25_results, self.sql_store)
+            try:
+                bm25_results = self.sql_store.bm25_search(
+                    request.query,
+                    repo=request.repos[0] if request.repos else None,
+                    path_prefix=request.path_prefix,
+                    top_k=num_candidates
+                )
+                bm25_hydrated = self._hydrate_bm25_results(bm25_results, self.sql_store)
+            except Exception as e:
+                # Log error but continue with empty BM25 results
+                import logging
+                logging.warning(f"BM25 search failed: {e}")
 
         # Apply request filters to vector results
         vector_filtered = self._apply_request_filters(vector_formatted, request)
@@ -82,7 +107,9 @@ class KnowledgeSearchBackend:
 
         final_results = [h for h in hits if h.get("score", 0.0) >= (request.score_cutoff or 0.0)][:request.top_k]
         
-        # ... (caching results) ...
+        # Cache results if cache is available
+        if self.cache:
+            self.cache.set_results(request.query, list(final_results), **cache_params)
             
         return final_results
 
@@ -121,6 +148,9 @@ class KnowledgeSearchBackend:
         BM25 search returns minimal metadata (content_id, repo, path, score).
         We need to fetch full chunk data including embeddings, line numbers,
         symbol info, etc. from LanceDB for proper result formatting.
+        
+        If chunk data is not available (e.g., test data only in FTS),
+        use the minimal data from BM25 results with normalized scores.
         """
         if not bm25_results:
             return []
@@ -129,19 +159,24 @@ class KnowledgeSearchBackend:
         for result in bm25_results:
             # Fetch full chunk metadata from SQLiteMetadataStore
             chunk_data = sql_store.get_chunk_by_id(result["chunk_id"])
+            
+            # Normalize BM25 score to [0, 1] range for fusion
+            # BM25 scores are unbounded, use sigmoid normalization
+            bm25_score = result["score"]
+            normalized_score = 1 / (1 + math.exp(-bm25_score / 10))
+            
+            # Create result dict with available data
+            hydrated_result = {
+                "chunk_id": result["chunk_id"],
+                "repo": result["repo"],
+                "path": result["path"],
+                "score": normalized_score,
+                "id": result["chunk_id"],  # For compatibility with vector results
+            }
+            
+            # Add metadata from chunk_data if available
             if chunk_data:
-                # Normalize BM25 score to [0, 1] range for fusion
-                # BM25 scores are unbounded, use sigmoid normalization
-                bm25_score = result["score"]
-                normalized_score = 1 / (1 + math.exp(-bm25_score / 10))
-                
-                hydrated.append({
-                    "chunk_id": result["chunk_id"],
-                    "repo": result["repo"],
-                    "path": result["path"],
-                    "score": normalized_score,
-                    # Add remaining metadata from chunk_data
-                    "id": result["chunk_id"],  # For compatibility with vector results
+                hydrated_result.update({
                     "text_hash": chunk_data.get("text_hash"),
                     "embed_model": chunk_data.get("embed_model"),
                     "language": chunk_data.get("language"),
@@ -151,6 +186,8 @@ class KnowledgeSearchBackend:
                     "symbol_name": chunk_data.get("symbol_name"),
                     "symbol_path": chunk_data.get("symbol_path"),
                 })
+            
+            hydrated.append(hydrated_result)
         
         return hydrated
         
