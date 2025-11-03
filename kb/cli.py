@@ -238,7 +238,7 @@ def _display_results(hits: list, show_content: bool, sql_store=None) -> None:
         
         # Header
         typer.secho(f"\n{i}. {repo}/{path}:{start_line}-{end_line}", fg="cyan", bold=True)
-        typer.echo(f"   Score: {score:.3f}")
+        typer.echo(f"   Score: {score:.10f}")
         
         # Symbol info
         symbol_name = hit.get("symbol_name")

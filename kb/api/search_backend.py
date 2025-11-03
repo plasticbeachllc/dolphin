@@ -95,8 +95,16 @@ class KnowledgeSearchBackend:
         vector_filtered = self._apply_file_type_scoring(vector_filtered)
         bm25_hydrated = self._apply_file_type_scoring(bm25_hydrated)
         
+        import logging
+        logging.debug(f"Vector results before RRF: {len(vector_filtered)}")
+        logging.debug(f"BM25 results before RRF: {len(bm25_hydrated)}")
+        
         hits = reciprocal_rank_fusion([vector_filtered, bm25_hydrated])
+        
+        logging.debug(f"RRF results: {len(hits)}")
         for hit in hits:
+            rrf_score = hit.get('rrf_score', 0.0)
+            logging.debug(f"Hit {hit.get('chunk_id')}: rrf_score={rrf_score}")
             hit['score'] = hit.pop('rrf_score', 0.0)
         
         # UNCOMMENTED AND CORRECTED RERANKING LOGIC
@@ -118,7 +126,14 @@ class KnowledgeSearchBackend:
         return final_results
 
     def _format_vector_results(self, vector_results: list[dict]) -> list[dict[str, object]]:
-        return [{**r, 'chunk_id': r.get('id'), 'score': 1 / (1 + r.get('_distance', 1.0))} for r in vector_results]
+        import logging
+        formatted = []
+        for r in vector_results:
+            distance = r.get('_distance', 1.0)
+            score = 1 / (1 + distance)
+            logging.debug(f"Vector result: id={r.get('id')}, _distance={distance}, score={score}")
+            formatted.append({**r, 'chunk_id': r.get('id'), 'score': score})
+        return formatted
     
     def _apply_request_filters(self, results: list[dict[str, object]], request: SearchRequest) -> list[dict[str, object]]:
         """Apply repo and path_prefix filters to results."""
@@ -356,9 +371,12 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     # Map kwargs to KBConfig fields and create config
     config_data = {"store_root": store_root}
     
-    # Map embedding_provider_type to embedding_provider
+    # Initialize embedding section for nested config
+    embedding_data = {}
+    
+    # Map embedding_provider_type to embedding_provider (nested under "embedding")
     if "embedding_provider_type" in kwargs:
-        config_data["embedding_provider"] = kwargs["embedding_provider_type"]
+        embedding_data["provider"] = kwargs["embedding_provider_type"]
     
     # Map cache_enabled
     if "cache_enabled" in kwargs:
@@ -396,13 +414,19 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     retrieval_data["ann"] = ann_data
     config_data["retrieval"] = retrieval_data
     
-    # Handle API key and batch size for OpenAI provider
-    if config_data.get("embedding_provider") == "openai":
+    # Handle batch size for embedding provider (nested under "embedding")
+    if "batch_size" in kwargs:
+        embedding_data["batch_size"] = kwargs["batch_size"]
+    
+    # Add embedding section to config_data if it has any values
+    if embedding_data:
+        config_data["embedding"] = embedding_data
+    
+    # Handle API key for OpenAI provider
+    if embedding_data.get("provider") == "openai":
         if "api_key" in kwargs:
             import os
             os.environ["OPENAI_API_KEY"] = kwargs["api_key"]
-        if "batch_size" in kwargs:
-            config_data["embedding_batch_size"] = kwargs["batch_size"]
     
     # Create config with the mapped data
     config = KBConfig.from_mapping(config_data)
@@ -415,11 +439,18 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     lance_store = LanceDBStore(config.resolved_store_root() / "lancedb")
     
     # Create embedding provider
+    # Note: Only pass cache and redis_url if cache is enabled
+    provider_kwargs = {
+        'batch_size': config.embedding_batch_size,
+    }
+    
+    if config.cache_enabled:
+        cache_instance = create_cache(config.redis_url, config.result_cache_ttl)
+        provider_kwargs['cache'] = cache_instance
+    
     provider = create_provider(
         config.embedding_provider,
-        batch_size=config.embedding_batch_size,
-        cache_enabled=config.cache_enabled,
-        redis_url=config.redis_url
+        **provider_kwargs
     )
     
     # Create cache if enabled
