@@ -2,6 +2,93 @@
 # This file consolidates all kb-related settings in TOML format
 
 # ======================================================================
+# IGNORE PATTERNS
+# ======================================================================
+# Files and directories to ignore during indexing (glob patterns)
+ignore = [
+    # Version control
+    ".git/**",
+    ".svn/**",
+    ".hg/**",
+    
+    # Dependencies
+    "node_modules/**",
+    "venv/**",
+    ".venv/**",
+    "env/**",
+    "__pycache__/**",
+    "*.pyc",
+    "*.pyo",
+
+    # Build artifacts
+    "dist/**",
+    "build/**",
+    "target/**",
+    "out/**",
+    ".next/**",
+    ".nuxt/**",
+    
+    # IDE / Editor
+    ".vscode/**",
+    ".idea/**",
+    "*.swp",
+    "*.swo",
+    "*~",
+    ".DS_Store",
+    
+    # Configuration directories (contain secrets/private data)
+    ".continue/**",
+    ".continue-config/**",
+    ".kilocode-config/**",
+    
+    # Caches
+    ".cache/**",
+    ".pytest_cache/**",
+    ".mypy_cache/**",
+    ".ruff_cache/**",
+    
+    # Test and config files
+    "pytest.ini",
+    "chunking_config.toml",
+    ".dolphin/**",
+    
+    # Lock files
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "poetry.lock",
+    "Pipfile.lock",
+    "Cargo.lock",
+    "bun.lock",
+    
+    # Compiled / Binary
+    "*.so",
+    "*.dylib",
+    "*.dll",
+    "*.exe",
+    "*.o",
+    "*.a",
+    
+    # Archives
+    "*.zip",
+    "*.tar.gz",
+    "*.rar",
+    "*.7z",
+    
+    # Media
+    "*.jpg",
+    "*.jpeg",
+    "*.png",
+    "*.gif",
+    "*.ico",
+    "*.svg",
+    "*.pdf",
+    "*.mp3",
+    "*.mp4",
+    "*.avi",
+]
+
+# ======================================================================
 # STORAGE AND DATA PATHS
 # ======================================================================
 [storage]
@@ -155,90 +242,3 @@ top_k = 8
 
 # Maximum tokens per snippet in search results
 max_snippet_tokens = 240
-
-# ======================================================================
-# IGNORE PATTERNS
-# ======================================================================
-# Files and directories to ignore during indexing (glob patterns)
-ignore = [
-    # Version control
-    ".git/**",
-    ".svn/**",
-    ".hg/**",
-    
-    # Dependencies
-    "node_modules/**",
-    "venv/**",
-    ".venv/**",
-    "env/**",
-    "__pycache__/**",
-    "*.pyc",
-    "*.pyo",
-
-    # Build artifacts
-    "dist/**",
-    "build/**",
-    "target/**",
-    "out/**",
-    ".next/**",
-    ".nuxt/**",
-    
-    # IDE / Editor
-    ".vscode/**",
-    ".idea/**",
-    "*.swp",
-    "*.swo",
-    "*~",
-    ".DS_Store",
-    
-    # Configuration directories (contain secrets/private data)
-    ".continue/**",
-    ".continue-config/**",
-    ".kilocode-config/**",
-    
-    # Caches
-    ".cache/**",
-    ".pytest_cache/**",
-    ".mypy_cache/**",
-    ".ruff_cache/**",
-    
-    # Test and config files
-    "pytest.ini",
-    "chunking_config.toml",
-    ".dolphin/**",
-    
-    # Lock files
-    "package-lock.json",
-    "yarn.lock",
-    "pnpm-lock.yaml",
-    "poetry.lock",
-    "Pipfile.lock",
-    "Cargo.lock",
-    "bun.lock",
-    
-    # Compiled / Binary
-    "*.so",
-    "*.dylib",
-    "*.dll",
-    "*.exe",
-    "*.o",
-    "*.a",
-    
-    # Archives
-    "*.zip",
-    "*.tar.gz",
-    "*.rar",
-    "*.7z",
-    
-    # Media
-    "*.jpg",
-    "*.jpeg",
-    "*.png",
-    "*.gif",
-    "*.ico",
-    "*.svg",
-    "*.pdf",
-    "*.mp3",
-    "*.mp4",
-    "*.avi",
-]
