@@ -142,6 +142,46 @@ class LanceDBStore:
             table = db.open_table(table_name)
             table.add(chunks_list)
 
+    def prune_file_rows(
+        self,
+        repo: str,
+        path: str,
+        *,
+        model: str,
+        keep_ids: set[str] | None = None,
+    ) -> None:
+        """Remove vectors for a given repo/path, optionally preserving specific row IDs."""
+        import lancedb
+
+        model_to_table = {
+            'small': 'chunks_small',
+            'large': 'chunks_large'
+        }
+
+        if model not in model_to_table:
+            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
+
+        db = lancedb.connect(self.root.as_posix())
+        try:
+            table = db.open_table(model_to_table[model])
+        except Exception:
+            # Nothing to prune if the table does not exist yet
+            return
+
+        repo_expr = repr(repo)
+        path_expr = repr(path)
+        if keep_ids:
+            id_list = ", ".join(repr(_id) for _id in sorted(keep_ids))
+            filter_expr = f"repo = {repo_expr} AND path = {path_expr} AND id NOT IN ({id_list})"
+        else:
+            filter_expr = f"repo = {repo_expr} AND path = {path_expr}"
+
+        try:
+            table.delete(filter_expr)
+        except Exception:
+            # If deletion fails (e.g., because no matching rows), ignore silently.
+            return
+
     def query(
         self,
         query_vector: Sequence[float],

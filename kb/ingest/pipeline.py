@@ -236,11 +236,13 @@ class IngestionPipeline:
                     if not dry_run:
                         file_id = self.metadata.get_file_id(repo_id, path)
                         if file_id:
-                            pruned = self.metadata.prune_invalidated_content_for_file(
-                                repo_id, file_id, embed_model, current_hashes=set()
-                            )
-                            if pruned:
-                                chunks_pruned += pruned
+                            for model_name in ("small", "large"):
+                                pruned = self.metadata.prune_invalidated_content_for_file(
+                                    repo_id, file_id, model_name, current_hashes=set()
+                                )
+                                if pruned:
+                                    chunks_pruned += pruned
+                                self.lancedb.prune_file_rows(repo_name, path, model=model_name)
                     continue
                 # Skip binary files and files that don't exist
                 file_path = root / path
@@ -283,6 +285,7 @@ class IngestionPipeline:
 
                 # Build desired map
                 desired = build_desired_map(chunks)
+                desired_row_ids: set[str] = set()
 
                 # Deduplicate by text_hash
                 dedup = ChunkDeduplicator(self.metadata)
@@ -331,13 +334,13 @@ class IngestionPipeline:
                     payload = []
                     fts_chunks = []  # For FTS5 indexing
                     for h, occs in desired.items():
+                        content_id = mapping.get(h)
                         vec = hash_to_vec.get(h)
-                        if vec is None:
-                            continue  # unchanged hash
-                        for occ in occs:
+                        for idx, occ in enumerate(occs):
                             row_id = f"{repo_id}:{file_id}:{embed_model}:{h}:{occ['start_line']}:{occ['end_line']}"
-                            content_id = mapping.get(h)
-                            
+                            desired_row_ids.add(row_id)
+                            if vec is None:
+                                continue  # unchanged hash
                             payload.append({
                                 'id': row_id,
                                 'vector': vec,
@@ -361,7 +364,7 @@ class IngestionPipeline:
                             })
                             
                             # Prepare chunk for FTS5 indexing (only for first occurrence per hash)
-                            if content_id and occ == occs[0]:  # First occurrence only
+                            if content_id and idx == 0:  # First occurrence only
                                 # Find the chunk text for this hash
                                 chunk_text = None
                                 for chunk in chunks:
@@ -386,6 +389,12 @@ class IngestionPipeline:
                     if fts_chunks and not dry_run:
                         self.metadata.bulk_index_chunks_for_fts(fts_chunks)
 
+                    # Prune any stale vectors for this file/model
+                    if desired_row_ids:
+                        self.lancedb.prune_file_rows(repo_name, path, model=embed_model, keep_ids=desired_row_ids)
+                    else:
+                        self.lancedb.prune_file_rows(repo_name, path, model=embed_model)
+
                 # Update counters
                 files_done += 1
                 chunks_indexed += len(new_hashes)
@@ -405,12 +414,17 @@ class IngestionPipeline:
             try:
                 file_id = self.metadata.get_file_id(repo_id, path)
                 if file_id:
-                    pruned_count = self.metadata.prune_invalidated_content_for_file(
-                        repo_id, file_id, embed_model, current_hashes=set()
-                    )
+                    total_pruned = 0
+                    for model_name in ("small", "large"):
+                        pruned_count = self.metadata.prune_invalidated_content_for_file(
+                            repo_id, file_id, embed_model=model_name, current_hashes=set()
+                        )
+                        if pruned_count:
+                            total_pruned += pruned_count
+                        self.lancedb.prune_file_rows(repo_name, path, model=model_name)
                     files_done += 1
-                    chunks_pruned += pruned_count
-                    print(f"  {path}: deleted, {pruned_count} chunks pruned")
+                    chunks_pruned += total_pruned
+                    print(f"  {path}: deleted, {total_pruned} chunks pruned")
             except Exception as e:
                 error_logger.log_file_error(f"deleted: {path}", e)
                 print(f"Error processing deleted file {path}: {e}")
@@ -435,6 +449,7 @@ class IngestionPipeline:
                         if pruned_count > 0:
                             chunks_pruned += pruned_count
                             print(f"  {file_path}: pruned {pruned_count} ignored chunks (model={model})")
+                        self.lancedb.prune_file_rows(repo_name, file_path, model=model)
         
         # Update session counters
         if not dry_run:

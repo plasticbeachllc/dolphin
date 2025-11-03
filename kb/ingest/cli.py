@@ -238,6 +238,7 @@ def prune_ignored(
                         repo_id, file_id, embed_model=embed_model, current_hashes=set()
                     )
                     total_chunks_pruned += pruned_count
+                    lancedb.prune_file_rows(name, file_path, model=embed_model)
             else:
                 # In dry-run, just count what would be pruned
                 file_chunks = metadata.get_chunks_for_file(file_id)
@@ -307,4 +308,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
