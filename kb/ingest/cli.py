@@ -388,6 +388,98 @@ def list_files(
         typer.echo(file_record["path"])
 
 
+@app.command()
+def search(
+    query: str = typer.Argument(..., help="Search query."),
+    repos: list[str] | None = typer.Option(None, "--repo", "-r", help="Repository name(s) to search."),
+    path_prefix: list[str] | None = typer.Option(None, "--path", "-p", help="Filter by path prefix."),
+    top_k: int = typer.Option(8, "--top-k", "-k", help="Number of results to return."),
+    score_cutoff: float = typer.Option(0.0, "--score-cutoff", "-s", help="Minimum similarity score."),
+    embed_model: str = typer.Option("large", "--embed-model", "-m", help="Embedding model to use (small|large)."),
+    show_content: bool = typer.Option(False, "--show-content", "-c", help="Display code snippets."),
+) -> None:
+    """Search indexed code semantically (local backend).
+    
+    Examples:
+        dolphin kb search "authentication logic" --repo myapp
+        dolphin kb search "database migration" --path src/db --top-k 5
+        dolphin kb search "error handling" --show-content
+    """
+    from ..api.search_backend import create_search_backend
+    from ..api.app import SearchRequest
+    
+    config = load_config()
+    
+    try:
+        # Create search backend
+        backend = create_search_backend(
+            store_root=config.resolved_store_root(),
+            embedding_provider_type=config.embedding_provider,
+            hybrid_search_enabled=True,
+        )
+        
+        # Create search request
+        request = SearchRequest(
+            query=query,
+            repos=repos,
+            path_prefix=path_prefix,
+            top_k=top_k,
+            score_cutoff=score_cutoff,
+            embed_model=embed_model,
+        )
+        
+        # Execute search
+        hits = list(backend.search(request))
+        
+        # Display results
+        if not hits:
+            typer.echo("No results found.")
+            return
+        
+        typer.echo(f"\n🔍 Found {len(hits)} result(s):\n")
+        
+        for i, hit in enumerate(hits, 1):
+            score = hit.get("score", 0.0)
+            repo = hit.get("repo", "unknown")
+            path = hit.get("path", "unknown")
+            start_line = hit.get("start_line", 0)
+            end_line = hit.get("end_line", 0)
+            
+            # Header
+            typer.secho(f"\n{i}. {repo}/{path}:{start_line}-{end_line}", fg="cyan", bold=True)
+            typer.echo(f"   Score: {score:.3f}")
+            
+            # Symbol info
+            symbol_name = hit.get("symbol_name")
+            symbol_kind = hit.get("symbol_kind")
+            if symbol_name and symbol_kind:
+                typer.secho(f"   {symbol_kind}: {symbol_name}", fg="green")
+            
+            # Show content if requested
+            if show_content:
+                chunk_id = hit.get("chunk_id")
+                content = hit.get("content")
+                
+                # Fetch content if not present
+                if not content and chunk_id:
+                    content_map = backend.sql_store.get_chunk_contents([chunk_id])
+                    content = content_map.get(chunk_id, "")
+                
+                if content:
+                    typer.echo("\n   " + "─" * 70)
+                    for line in content.splitlines()[:10]:  # Show first 10 lines
+                        typer.echo(f"   {line}")
+                    if len(content.splitlines()) > 10:
+                        typer.secho(f"   ... ({len(content.splitlines()) - 10} more lines)", fg="yellow")
+                    typer.echo("   " + "─" * 70)
+        
+        typer.echo()
+        
+    except Exception as e:
+        typer.echo(f"Error: Search failed: {e}", err=True)
+        raise typer.Exit(1)
+
+
 def main() -> None:
     app()
 

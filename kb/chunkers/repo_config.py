@@ -28,6 +28,8 @@ DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 DEFAULT_TOKENIZER_ENCODING = "cl100k_base"
 
 # Per-language window size defaults (in tokens)
+# Larger window sizes for config files reduce over-chunking and prevent
+# them from dominating search results via BM25 inflation
 DEFAULT_PER_LANGUAGE = {
     "python": 512,
     "javascript": 350,
@@ -40,9 +42,9 @@ DEFAULT_PER_LANGUAGE = {
     "rust": 400,
     "markdown": 256,
     "text": 256,
-    "json": 128,
-    "toml": 128,
-    "yaml": 128,
+    "json": 400,      # Increased from 128 to reduce config file chunk count
+    "toml": 512,      # Increased from 128 to reduce config file chunk count
+    "yaml": 400,      # Increased from 128 to reduce config file chunk count
 }
 
 

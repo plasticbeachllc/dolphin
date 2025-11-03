@@ -110,20 +110,87 @@ def list_files(
 @app.command()
 def search(
     query: str = typer.Argument(..., help="Search query."),
-    repos: Optional[list[str]] = typer.Option(None, "--repos", help="Repository names to search (comma-separated)."),
-    top_k: int = typer.Option(8, "--top-k", help="Number of results to return."),
-    score_cutoff: float = typer.Option(0.15, "--score-cutoff", help="Minimum similarity score."),
-    embed_model: str = typer.Option("large", "--embed-model", help="Embedding model to use (small|large)."),
+    repos: Optional[list[str]] = typer.Option(None, "--repo", "-r", help="Repository name(s) to search."),
+    path_prefix: Optional[list[str]] = typer.Option(None, "--path", "-p", help="Filter by path prefix."),
+    top_k: int = typer.Option(8, "--top-k", "-k", help="Number of results to return."),
+    score_cutoff: float = typer.Option(0.0, "--score-cutoff", "-s", help="Minimum similarity score."),
+    embed_model: str = typer.Option("large", "--embed-model", "-m", help="Embedding model to use (small|large)."),
+    local: bool = typer.Option(False, "--local", "-l", help="Use local backend (no server required)."),
+    show_content: bool = typer.Option(False, "--show-content", "-c", help="Display code snippets."),
 ) -> None:
-    """Search indexed code semantically."""
+    """Search indexed code semantically.
+    
+    Examples:
+        dolphin search "authentication logic" --repo myapp
+        dolphin search "database migration" --path src/db --top-k 5
+        dolphin search "error handling" --local --show-content
+    """
+    if local:
+        _search_local(query, repos, path_prefix, top_k, score_cutoff, embed_model, show_content)
+    else:
+        _search_remote(query, repos, path_prefix, top_k, score_cutoff, embed_model, show_content)
+
+
+def _search_local(
+    query: str,
+    repos: Optional[list[str]],
+    path_prefix: Optional[list[str]],
+    top_k: int,
+    score_cutoff: float,
+    embed_model: str,
+    show_content: bool,
+) -> None:
+    """Search using local backend without API server."""
+    from kb.config import load_config
+    from kb.api.search_backend import create_search_backend
+    from kb.api.app import SearchRequest
+    
+    config = load_config()
+    
+    try:
+        # Create search backend
+        backend = create_search_backend(
+            store_root=config.resolved_store_root(),
+            embedding_provider_type=config.embedding_provider,
+            hybrid_search_enabled=True,
+        )
+        
+        # Create search request
+        request = SearchRequest(
+            query=query,
+            repos=repos,
+            path_prefix=path_prefix,
+            top_k=top_k,
+            score_cutoff=score_cutoff,
+            embed_model=embed_model,
+        )
+        
+        # Execute search
+        hits = list(backend.search(request))
+        
+        _display_results(hits, show_content, backend.sql_store)
+        
+    except Exception as e:
+        typer.echo(f"Error: Local search failed: {e}", err=True)
+        raise typer.Exit(1)
+
+
+def _search_remote(
+    query: str,
+    repos: Optional[list[str]],
+    path_prefix: Optional[list[str]],
+    top_k: int,
+    score_cutoff: float,
+    embed_model: str,
+    show_content: bool,
+) -> None:
+    """Search using remote API server."""
     import requests
     from kb.config import load_config
     
-    # Load config to get endpoint
     config = load_config()
     endpoint = f"http://{config.endpoint}/search"
     
-    # Build request
     payload = {
         "query": query,
         "top_k": top_k,
@@ -133,6 +200,8 @@ def search(
     
     if repos:
         payload["repos"] = repos
+    if path_prefix:
+        payload["path_prefix"] = path_prefix
     
     try:
         response = requests.post(endpoint, json=payload, timeout=30)
@@ -141,37 +210,61 @@ def search(
         result = response.json()
         hits = result.get("hits", [])
         
-        if not hits:
-            typer.echo("No results found.")
-            return
+        _display_results(hits, show_content, None)
         
-        typer.echo(f"\nFound {len(hits)} result(s):\n")
-        
-        for i, hit in enumerate(hits, 1):
-            score = hit.get("score", 0.0)
-            repo = hit.get("repo", "unknown")
-            path = hit.get("path", "unknown")
-            start_line = hit.get("start_line", 0)
-            end_line = hit.get("end_line", 0)
-            
-            typer.echo(f"{i}. {path}:{start_line}-{end_line} (score: {score:.2f})")
-            typer.echo(f"   Repo: {repo}")
-            
-            # Show symbol info if available
-            symbol_name = hit.get("symbol_name")
-            symbol_kind = hit.get("symbol_kind")
-            if symbol_name and symbol_kind:
-                typer.echo(f"   {symbol_kind}: {symbol_name}")
-            
-            typer.echo()
-            
     except requests.exceptions.ConnectionError:
         typer.echo("Error: Could not connect to Dolphin API server.", err=True)
-        typer.echo("Please ensure the server is running: dolphin serve", err=True)
+        typer.echo("Tip: Use --local flag to search without server, or start server with: dolphin serve", err=True)
         raise typer.Exit(1)
     except requests.exceptions.RequestException as e:
         typer.echo(f"Error: Search request failed: {e}", err=True)
         raise typer.Exit(1)
+
+
+def _display_results(hits: list, show_content: bool, sql_store=None) -> None:
+    """Display search results with optional content."""
+    if not hits:
+        typer.echo("No results found.")
+        return
+    
+    typer.echo(f"\n🔍 Found {len(hits)} result(s):\n")
+    
+    for i, hit in enumerate(hits, 1):
+        score = hit.get("score", 0.0)
+        repo = hit.get("repo", "unknown")
+        path = hit.get("path", "unknown")
+        start_line = hit.get("start_line", 0)
+        end_line = hit.get("end_line", 0)
+        
+        # Header
+        typer.secho(f"\n{i}. {repo}/{path}:{start_line}-{end_line}", fg="cyan", bold=True)
+        typer.echo(f"   Score: {score:.3f}")
+        
+        # Symbol info
+        symbol_name = hit.get("symbol_name")
+        symbol_kind = hit.get("symbol_kind")
+        if symbol_name and symbol_kind:
+            typer.secho(f"   {symbol_kind}: {symbol_name}", fg="green")
+        
+        # Show content if requested
+        if show_content:
+            chunk_id = hit.get("chunk_id")
+            content = hit.get("content")
+            
+            # Fetch content if not present and sql_store is available
+            if not content and chunk_id and sql_store:
+                content_map = sql_store.get_chunk_contents([chunk_id])
+                content = content_map.get(chunk_id, "")
+            
+            if content:
+                typer.echo("\n   " + "─" * 70)
+                for line in content.splitlines()[:10]:  # Show first 10 lines
+                    typer.echo(f"   {line}")
+                if len(content.splitlines()) > 10:
+                    typer.secho(f"   ... ({len(content.splitlines()) - 10} more lines)", fg="yellow")
+                typer.echo("   " + "─" * 70)
+    
+    typer.echo()
 
 
 # ==============================================================================

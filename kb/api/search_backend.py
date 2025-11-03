@@ -91,6 +91,10 @@ class KnowledgeSearchBackend:
         # Apply request filters to vector results
         vector_filtered = self._apply_request_filters(vector_formatted, request)
         
+        # Apply file type scoring adjustments to deprioritize config files
+        vector_filtered = self._apply_file_type_scoring(vector_filtered)
+        bm25_hydrated = self._apply_file_type_scoring(bm25_hydrated)
+        
         hits = reciprocal_rank_fusion([vector_filtered, bm25_hydrated])
         for hit in hits:
             hit['score'] = hit.pop('rrf_score', 0.0)
@@ -141,6 +145,37 @@ class KnowledgeSearchBackend:
             filtered = [r for r in filtered if matches_prefix(r.get('path', ''))]
         
         return filtered
+    
+    def _apply_file_type_scoring(self, results: list[dict[str, object]]) -> list[dict[str, object]]:
+        """Apply scoring adjustments based on file type to deprioritize config files.
+        
+        Config files (TOML, JSON, YAML) are penalized to prevent them from
+        dominating search results, especially when they contain many chunks.
+        """
+        CONFIG_FILE_PENALTY = 0.5  # Reduce score by 50% for config files
+        
+        adjusted = []
+        for result in results:
+            path = result.get('path', '')
+            score = result.get('score', 0.0)
+            
+            # Check if this is a config file
+            is_config = (
+                path.endswith('.toml') or
+                path.endswith('.json') or
+                path.endswith('.yaml') or
+                path.endswith('.yml') or
+                'config.toml' in path.lower() or
+                'package.json' in path.lower() or
+                'tsconfig.json' in path.lower()
+            )
+            
+            if is_config:
+                result = {**result, 'score': score * CONFIG_FILE_PENALTY}
+            
+            adjusted.append(result)
+        
+        return adjusted
 
     def _hydrate_bm25_results(self, bm25_results: list[dict], sql_store: SQLiteMetadataStore) -> list[dict[str, object]]:
         """Hydrate BM25 results with full chunk metadata from LanceDB.
