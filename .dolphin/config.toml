@@ -60,6 +60,7 @@ ignore = [
     "Pipfile.lock",
     "Cargo.lock",
     "bun.lock",
+    "uv.lock",
     
     # Compiled / Binary
     "*.so",
