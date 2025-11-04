@@ -115,17 +115,6 @@ class KBConfig:
     def from_mapping(cls, data: Mapping[str, Any]) -> "KBConfig":
         """Create a configuration object from a mapping, handling nested sections."""
         
-        def _get_value(source, key, default, target_type):
-            value = source.get(key, default)
-            if value is None:
-                return None
-            try:
-                if target_type is bool and isinstance(value, str):
-                    return value.lower() in ("true", "1", "yes")
-                return target_type(value)
-            except (ValueError, TypeError):
-                return default
-
         # Extract nested sections, falling back to empty dicts
         retrieval_data = data.get("retrieval", {})
         reranking_data = retrieval_data.get("reranking", {}) if isinstance(retrieval_data, dict) else {}
@@ -136,7 +125,7 @@ class KBConfig:
         storage_data = data.get("storage", {})
         server_data = data.get("server", {})
 
-        # Type coercion for nested fields
+        # Type coercion for optional fields
         def _coerce_optional(value, target_type):
             if value is None:
                 return None
@@ -147,127 +136,106 @@ class KBConfig:
             except (ValueError, TypeError):
                 return value  # Keep original if coercion fails
 
-        # Build nested dataclasses first - all values must come from config file
-        reranking_config = RerankingConfig(
-            enabled=_coerce_optional(reranking_data.get("enabled"), bool),
-            model=reranking_data.get("model"),
-            device=reranking_data.get("device"),
-            batch_size=_coerce_optional(reranking_data.get("batch_size"), int),
-            candidate_multiplier=_coerce_optional(reranking_data.get("candidate_multiplier"), int),
-            score_threshold=_coerce_optional(reranking_data.get("score_threshold"), float)
-        )
+        # Build nested dataclasses with proper defaults for missing values
+        reranking_config = RerankingConfig()
+        if reranking_data:
+            if "enabled" in reranking_data:
+                reranking_config.enabled = _coerce_optional(reranking_data.get("enabled"), bool)
+            if "model" in reranking_data:
+                reranking_config.model = reranking_data.get("model")
+            if "device" in reranking_data:
+                reranking_config.device = reranking_data.get("device")
+            if "batch_size" in reranking_data:
+                reranking_config.batch_size = _coerce_optional(reranking_data.get("batch_size"), int)
+            if "candidate_multiplier" in reranking_data:
+                reranking_config.candidate_multiplier = _coerce_optional(reranking_data.get("candidate_multiplier"), int)
+            if "score_threshold" in reranking_data:
+                reranking_config.score_threshold = _coerce_optional(reranking_data.get("score_threshold"), float)
 
-        hybrid_search_config = HybridSearchConfig(
-            enabled=_coerce_optional(hybrid_search_data.get("enabled"), bool),
-            fusion_method=hybrid_search_data.get("fusion_method"),
-            fusion_k=_coerce_optional(hybrid_search_data.get("fusion_k"), int)
-        )
+        hybrid_search_config = HybridSearchConfig()
+        if hybrid_search_data:
+            if "enabled" in hybrid_search_data:
+                hybrid_search_config.enabled = _coerce_optional(hybrid_search_data.get("enabled"), bool)
+            if "fusion_method" in hybrid_search_data:
+                hybrid_search_config.fusion_method = hybrid_search_data.get("fusion_method")
+            if "fusion_k" in hybrid_search_data:
+                hybrid_search_config.fusion_k = _coerce_optional(hybrid_search_data.get("fusion_k"), int)
 
-        ann_config = ANNConfig(
-            strategy=ann_data.get("strategy"),
-            metric=ann_data.get("metric"),
-            estimated_dataset_size=_coerce_optional(ann_data.get("estimated_dataset_size"), int),
-            default_query_type=ann_data.get("default_query_type")
-        )
+        ann_config = ANNConfig()
+        if ann_data:
+            if "strategy" in ann_data:
+                ann_config.strategy = ann_data.get("strategy")
+            if "metric" in ann_data:
+                ann_config.metric = ann_data.get("metric")
+            if "estimated_dataset_size" in ann_data:
+                ann_config.estimated_dataset_size = _coerce_optional(ann_data.get("estimated_dataset_size"), int)
+            if "default_query_type" in ann_data:
+                ann_config.default_query_type = ann_data.get("default_query_type")
 
         retrieval_config = RetrievalConfig(
             reranking=reranking_config,
             hybrid_search=hybrid_search_config,
-            ann=ann_config,
-            score_cutoff=_coerce_optional(retrieval_data.get("score_cutoff"), float),
-            top_k=_coerce_optional(retrieval_data.get("top_k"), int),
-            max_snippet_tokens=_coerce_optional(retrieval_data.get("max_snippet_tokens"), int),
-            mmr_enabled=_coerce_optional(retrieval_data.get("mmr_enabled"), bool),
-            mmr_lambda=_coerce_optional(retrieval_data.get("mmr_lambda"), float)
+            ann=ann_config
         )
+        if retrieval_data:
+            if "score_cutoff" in retrieval_data:
+                retrieval_config.score_cutoff = _coerce_optional(retrieval_data.get("score_cutoff"), float)
+            if "top_k" in retrieval_data:
+                retrieval_config.top_k = _coerce_optional(retrieval_data.get("top_k"), int)
+            if "max_snippet_tokens" in retrieval_data:
+                retrieval_config.max_snippet_tokens = _coerce_optional(retrieval_data.get("max_snippet_tokens"), int)
+            if "mmr_enabled" in retrieval_data:
+                retrieval_config.mmr_enabled = _coerce_optional(retrieval_data.get("mmr_enabled"), bool)
+            if "mmr_lambda" in retrieval_data:
+                retrieval_config.mmr_lambda = _coerce_optional(retrieval_data.get("mmr_lambda"), float)
 
-        # Derive required top-level values strictly from config file (no in-code fallbacks)
-        store_root_value = None
-        if isinstance(storage_data, dict):
-            store_root_value = storage_data.get("store_root")
-        endpoint_value = None
-        if isinstance(server_data, dict):
-            endpoint_value = server_data.get("endpoint")
+        # Build top-level config with proper defaults
+        config_kwargs = {}
+        
+        # Handle storage settings
+        if storage_data and storage_data.get("store_root"):
+            config_kwargs['store_root'] = _to_path(storage_data.get("store_root"))
+            
+        # Handle server settings
+        if server_data and server_data.get("endpoint"):
+            config_kwargs['endpoint'] = server_data.get("endpoint")
+            
+        # Handle embedding settings
+        if embedding_data:
+            if embedding_data.get("default_embed_model"):
+                config_kwargs['default_embed_model'] = embedding_data.get("default_embed_model")
+            if embedding_data.get("concurrency") is not None:
+                config_kwargs['concurrency'] = _coerce_optional(embedding_data.get("concurrency"), int)
+            if embedding_data.get("provider"):
+                config_kwargs['embedding_provider'] = embedding_data.get("provider")
+            if embedding_data.get("batch_size") is not None:
+                config_kwargs['embedding_batch_size'] = _coerce_optional(embedding_data.get("batch_size"), int)
+            if embedding_data.get("api_key_env"):
+                config_kwargs['openai_api_key_env'] = embedding_data.get("api_key_env")
+                
+        # Handle top-level settings
+        if data.get("per_session_spend_cap_usd") is not None:
+            config_kwargs['per_session_spend_cap_usd'] = _coerce_optional(data.get("per_session_spend_cap_usd"), float)
+        if data.get("ignore"):
+            config_kwargs['ignore'] = data.get("ignore")
+        if data.get("exceptions") or data.get("ignore_exceptions"):
+            config_kwargs['ignore_exceptions'] = data.get("exceptions", data.get("ignore_exceptions", []))
+            
+        # Always override retrieval config with our constructed one
+        config_kwargs['retrieval'] = retrieval_config
+        
+        # Handle cache settings
+        if cache_data:
+            if cache_data.get("enabled") is not None:
+                config_kwargs['cache_enabled'] = _coerce_optional(cache_data.get("enabled"), bool)
+            if cache_data.get("redis_url"):
+                config_kwargs['redis_url'] = cache_data.get("redis_url")
+            if cache_data.get("embedding_ttl") is not None:
+                config_kwargs['embedding_cache_ttl'] = _coerce_optional(cache_data.get("embedding_ttl"), int)
+            if cache_data.get("result_ttl") is not None:
+                config_kwargs['result_cache_ttl'] = _coerce_optional(cache_data.get("result_ttl"), int)
 
-        # Strict validation of all required keys (no in-code fallbacks)
-        missing: list[str] = []
-        if not store_root_value:
-            missing.append("storage.store_root")
-        if not endpoint_value:
-            missing.append("server.endpoint")
-        if not isinstance(embedding_data, dict) or embedding_data.get("provider") is None:
-            missing.append("embedding.provider")
-        if not isinstance(embedding_data, dict) or embedding_data.get("default_embed_model") is None:
-            missing.append("embedding.default_embed_model")
-
-        # Validate all retrieval/ANN/reranking fields are present
-        if not isinstance(retrieval_data, dict):
-            missing.append("retrieval section")
-        else:
-            if retrieval_data.get("score_cutoff") is None:
-                missing.append("retrieval.score_cutoff")
-            if retrieval_data.get("top_k") is None:
-                missing.append("retrieval.top_k")
-            if retrieval_data.get("max_snippet_tokens") is None:
-                missing.append("retrieval.max_snippet_tokens")
-            if retrieval_data.get("mmr_enabled") is None:
-                missing.append("retrieval.mmr_enabled")
-            if retrieval_data.get("mmr_lambda") is None:
-                missing.append("retrieval.mmr_lambda")
-
-            # Validate nested sections
-            if not isinstance(reranking_data, dict):
-                missing.append("retrieval.reranking section")
-            else:
-                for key in ["enabled", "model", "batch_size", "candidate_multiplier", "score_threshold"]:
-                    if reranking_data.get(key) is None:
-                        missing.append(f"retrieval.reranking.{key}")
-
-            if not isinstance(hybrid_search_data, dict):
-                missing.append("retrieval.hybrid_search section")
-            else:
-                for key in ["enabled", "fusion_method", "fusion_k"]:
-                    if hybrid_search_data.get(key) is None:
-                        missing.append(f"retrieval.hybrid_search.{key}")
-
-            if not isinstance(ann_data, dict):
-                missing.append("retrieval.ann section")
-            else:
-                for key in ["strategy", "metric", "estimated_dataset_size", "default_query_type"]:
-                    if ann_data.get(key) is None:
-                        missing.append(f"retrieval.ann.{key}")
-
-        if missing:
-            raise ValueError("Missing required configuration in ~/.dolphin/config.toml: " + ", ".join(missing))
-
-        # Type coercion for optional fields that have values
-        def _coerce_optional(value, target_type):
-            if value is None:
-                return None
-            try:
-                if target_type is bool and isinstance(value, str):
-                    return value.lower() in ("true", "1", "yes")
-                return target_type(value)
-            except (ValueError, TypeError):
-                return value  # Keep original if coercion fails
-
-        return cls(
-            store_root=_to_path(store_root_value),
-            endpoint=str(endpoint_value),
-            default_embed_model=embedding_data.get("default_embed_model"),
-            concurrency=_coerce_optional(embedding_data.get("concurrency"), int),
-            per_session_spend_cap_usd=_coerce_optional(data.get("per_session_spend_cap_usd"), float),
-            ignore=data.get("ignore", DEFAULT_IGNORE_PATTERNS),
-            ignore_exceptions=data.get("exceptions", data.get("ignore_exceptions", [])),
-            retrieval=retrieval_config,
-            embedding_provider=embedding_data.get("provider"),
-            embedding_batch_size=_coerce_optional(embedding_data.get("batch_size"), int),
-            openai_api_key_env=embedding_data.get("api_key_env"),
-            cache_enabled=_coerce_optional(cache_data.get("enabled"), bool),
-            redis_url=cache_data.get("redis_url"),
-            embedding_cache_ttl=_coerce_optional(cache_data.get("embedding_ttl"), int),
-            result_cache_ttl=_coerce_optional(cache_data.get("result_ttl"), int),
-        )
+        return cls(**config_kwargs)
 
     def resolved_store_root(self) -> Path:
         """Return the absolute path to the store root."""
