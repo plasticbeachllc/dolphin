@@ -7,10 +7,14 @@ export async function createServer (): Promise<void> {
   // Initialize file logger (no stdout pollution)
   await initLogger()
 
+  // Get server info from environment or package defaults
+  const SERVER_NAME = process.env.SERVER_NAME || 'dolphin-mcp'
+  const SERVER_VERSION = process.env.SERVER_VERSION || '1.0.0'
+
   const server = new McpServer(
     {
-      name: 'pb-kb-mcp',
-      version: '0.2.0'
+      name: SERVER_NAME,
+      version: SERVER_VERSION
     },
     {
       capabilities: {

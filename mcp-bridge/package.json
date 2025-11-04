@@ -1,17 +1,20 @@
 {
-  "name": "pb-kb-mcp-bridge",
-  "version": "0.2.0",
-  "private": true,
+  "name": "dolphin-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Dolphin semantic code search - works with Continue.dev, Claude Desktop, and other MCP clients",
+  "author": "tdc93",
+  "private": false,
   "type": "module",
   "bin": {
-    "pb-kb-mcp": "./dist/cli.js"
+    "dolphin-mcp": "./dist/cli.js"
   },
   "scripts": {
     "build": "bun x tsc -p tsconfig.json",
-    "start": "bun run src/index.ts",
+    "start": "bun run dist/cli.js",
     "dev": "bun run --hot src/index.ts",
     "lint": "bun x eslint .",
-    "test": "bun test --serial ./src/tests"
+    "test": "bun test --serial ./src/tests",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
@@ -28,5 +31,35 @@
     "@typescript-eslint/eslint-plugin": "^7.17.0",
     "@typescript-eslint/parser": "^7.17.0",
     "typescript": "^5.4.5"
-  }
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server", 
+    "code-search",
+    "ai",
+    "continue-dev",
+    "semantic-search",
+    "anthropic",
+    "claude",
+    "vscode"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tdc93/dolphin-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tdc93/dolphin-mcp/issues"
+  },
+  "homepage": "https://github.com/tdc93/dolphin-mcp#readme",
+  "license": "MIT",
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "files": [
+    "dist/",
+    "src/",
+    "README.md",
+    "package.json",
+    "tsconfig.json"
+  ]
 }

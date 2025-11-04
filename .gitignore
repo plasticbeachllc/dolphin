@@ -23,6 +23,7 @@ kilocode-config/
 __pycache__/
 
 # test artifacts
+htmlcov/
 tests/**/test-results.xml
 tests/**/coverage.xml
 tests/reports/*

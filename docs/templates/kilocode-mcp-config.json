@@ -1,12 +1,9 @@
 {
   "name": "Dolphin-KB",
-  "description": "Dolphin AI semantic code search and retrieval",
+  "description": "Dolphin semantic code search",
   "server": {
-    "command": "bun",
-    "args": [
-      "run",
-      "/Users/tdc/worktable/dolphin/mcp-bridge/src/index.ts"
-    ],
+    "command": "bunx",
+    "args": ["dolphin-mcp"],
     "env": {
       "DOLPHIN_API_URL": "http://127.0.0.1:7777",
       "LOG_LEVEL": "info"
@@ -15,7 +12,7 @@
   "tools": [
     {
       "name": "search_knowledge",
-      "description": "Search codebase semantically using AI embeddings",
+      "description": "Semantic code search",
       "parameters": {
         "query": {
           "type": "string",
@@ -24,7 +21,7 @@
         },
         "repos": {
           "type": "array",
-          "description": "Optional repository filters",
+          "description": "Repository filters",
           "items": {"type": "string"}
         },
         "top_k": {
@@ -36,7 +33,7 @@
     },
     {
       "name": "fetch_chunk",
-      "description": "Get detailed chunk content by ID",
+      "description": "Get chunk content by ID",
       "parameters": {
         "chunk_id": {
           "type": "string",
@@ -47,7 +44,7 @@
     },
     {
       "name": "fetch_lines",
-      "description": "Get specific file lines by range",
+      "description": "Get file lines by range",
       "parameters": {
         "repo": {
           "type": "string",
@@ -73,11 +70,11 @@
     },
     {
       "name": "get_vector_store_info",
-      "description": "Get knowledge base statistics and repository info"
+      "description": "Get KB statistics"
     },
     {
       "name": "open_in_editor",
-      "description": "Generate VS Code URI for opening files",
+      "description": "Generate VS Code URI",
       "parameters": {
         "repo": {
           "type": "string",
@@ -96,21 +93,5 @@
         }
       }
     }
-  ],
-  "setup_instructions": {
-    "prerequisites": [
-      "Install Bun: curl -fsSL https://bun.sh/install | bash",
-      "Dolphin API server running on http://127.0.0.1:7777"
-    ],
-    "configuration": [
-      "1. Start Dolphin API: just api (from dolphin directory)",
-      "2. Index repositories: just add-repo my-repo /path/to/repo",
-      "3. Update MCP config path to your dolphin directory",
-      "4. Configure Kilocode to use this MCP server"
-    ],
-    "troubleshooting": [
-      "Check API health: curl http://127.0.0.1:7777/health",
-      "View MCP logs: tail -f mcp-bridge/logs/mcp.log"
-    ]
-  }
+  ]
 }
