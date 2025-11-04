@@ -11,6 +11,10 @@ mcpServers:
     env:
       DOLPHIN_API_URL: "http://127.0.0.1:7777"
       LOG_LEVEL: "info"
+      # Optional: Performance optimization for parallel snippet fetching
+      MAX_CONCURRENT_SNIPPET_FETCH: "8"
+      SNIPPET_FETCH_TIMEOUT_MS: "2000"
+      SNIPPET_FETCH_RETRY_ATTEMPTS: "1"
     connectionTimeout: 30000
 
 # Alternative: If you installed globally (bun install -g dolphin-mcp)

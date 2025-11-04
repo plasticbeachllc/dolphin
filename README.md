@@ -11,10 +11,7 @@ A semantic code search and knowledge management system with AI-native interfaces
 #### Core Installation (~200MB)
 
 ```bash
-# Install core functionality with pip
-pip install pb-dolphin
-
-# Or with uv (recommended)
+# install with uv (recommended)
 uv pip install pb-dolphin
 
 # ⚠️ IMPORTANT: Ensure OPENAI_API_KEY is set as env var
@@ -26,26 +23,11 @@ export OPENAI_API_KEY="sk-your-key-here"
 For advanced search quality improvement (+20-30% MRR):
 
 ```bash
-# With pip
-pip install pb-dolphin[reranking]
-
-# With uv (recommended)
 uv pip install pb-dolphin[reranking]
 ```
 
 **Trade-off**: Better relevance but 2-3x slower searches. See [Advanced Features](#advanced-features) for configuration.
 
-#### Optional: MCP Orchestrator
-
-For MCP server management capabilities:
-
-```bash
-# With pip
-pip install pb-dolphin[orchestrator]
-
-# With uv
-uv pip install pb-dolphin[orchestrator]
-```
 
 ### Basic Usage
 
@@ -100,12 +82,12 @@ dolphin serve
 
 ### Key Features
 
-- **Language-Aware Chunking** - Intelligent code parsing for Python, TypeScript, JavaScript, Markdown
+- **Language-Aware Chunking** - Code parsing for Python, TypeScript, JavaScript, Markdown
 - **Semantic Search** - OpenAI embeddings with LanceDB vector storage
-- **MCP Support** - Native Model Context Protocol integration for Claude Desktop
 - **REST API** - FastAPI server with search, retrieval, and metadata endpoints
 - **Unified CLI** - Single `dolphin` command for all operations
-- **Auto-Configuration** - Smart config hierarchy (repo → user → defaults)
+- **Configuration** - Per-repo chunking and ignore configuration
+- **MCP Support** - MCP server implementation availableat `bunx dolphin-mcp`
 
 ## Environment Variables
 
@@ -118,19 +100,11 @@ Dolphin requires the following environment variables depending on your usage:
 export OPENAI_API_KEY="sk-your-openai-api-key-here"
 ```
 
-### Getting Your OpenAI API Key
-
-1. Visit [OpenAI Platform](https://platform.openai.com/)
-2. Sign up or log in to your account
-3. Navigate to [API Keys](https://platform.openai.com/api-keys)
-4. Click "Create new secret key"
-5. Copy the key and set it as `OPENAI_API_KEY`
-
 ## Configuration
 
 Dolphin uses a multi-level configuration system:
 
-1. **Repo-specific** (`./.dolphin/config.toml`) - Per-repository chunking settings
+1. **Repo-specific** (`./.dolphin/config.toml`) - Optional per-repository chunking settings
 2. **User-global** (`~/.dolphin/config.toml`) - Auto-created on first use
 
 ### Example Config
@@ -148,25 +122,22 @@ top_k = 8
 score_cutoff = 0.15
 ```
 
-## Claude Desktop Integration (MCP)
+## MCP Configuration
 
-Add to your `claude_desktop_config.json`:
+Add to your favorite AI application's config:
 
 ```json
 {
   "mcpServers": {
     "dolphin": {
-      "command": "bun",
-      "args": ["run", "/path/to/dolphin/mcp-bridge/src/index.ts"],
-      "env": {
-        "OPENAI_API_KEY": "sk-..."
-      }
+      "command": "bunx",
+      "args": ["dolphin-mcp"]
     }
   }
 }
 ```
 
-Start the server: `dolphin serve`
+Make sure you are running the HTTP retrieval server: `uv run dolphin serve`
 
 Available MCP tools: `search_knowledge`, `fetch_chunk`, `fetch_lines`, `get_vector_store_info`
 
@@ -190,24 +161,19 @@ curl http://127.0.0.1:7777/v1/health
 
 ## Advanced Features
 
-### Cross-Encoder Reranking
+### Cross-Encoder Reranking (Recommended)
 
 Cross-encoder reranking improves search result relevance by re-scoring results with a more sophisticated ML model.
 
 **Performance Impact:**
-- ✅ **+20-30% improvement** in Mean Reciprocal Rank (MRR)
-- ✅ **Better first-result quality** - more relevant top results
+- ✅ **~20-30% improvement** in search ranking accuracy
 - ⚠️ **2-3x slower searches** - cross-encoder is compute-intensive
 - ⚠️ **~2GB install size** - requires torch and sentence-transformers
 
 #### Installation
 
 ```bash
-# With uv (recommended)
 uv pip install pb-dolphin[reranking]
-
-# Or with pip
-pip install pb-dolphin[reranking]
 ```
 
 #### Configuration
@@ -221,41 +187,14 @@ model = "cross-encoder/ms-marco-MiniLM-L-6-v2"  # HuggingFace model
 device = ""  # Auto-detect (CPU or CUDA if available)
 batch_size = 32  # Higher = faster but more memory
 candidate_multiplier = 4  # Rerank top_k × multiplier candidates
-score_threshold = 0.3  # Minimum relevance score (0-1)
+score_threshold = 0.0  # Minimum relevance score (0-1)
 ```
 
 Restart the API server to apply changes:
 
 ```bash
-dolphin serve
+uv run dolphin serve
 ```
-
-#### When to Use Reranking
-
-**Enable when:**
-- Search quality is critical
-- Willing to accept higher latency
-- Have sufficient compute resources
-- Precision matters more than speed
-
-**Don't enable when:**
-- Speed is priority
-- Install size matters
-- Basic vector search + hybrid search is sufficient
-
-#### How It Works
-
-```
-Normal Search:
-Query → Embeddings → Vector Search → Top Results
-
-With Reranking:
-Query → Embeddings → Vector Search → Fetch top_k×4 candidates
-      → Cross-encoder re-scores each (query, result) pair
-      → Re-sort by cross-encoder scores → Top Results
-```
-
-The cross-encoder model evaluates each query-result pair directly, providing more accurate relevance scores than simple vector similarity.
 
 ## Development Status
 
@@ -263,7 +202,7 @@ The cross-encoder model evaluates each query-result pair directly, providing mor
 
 - ✅ Core indexing and search pipeline
 - ✅ Language-aware chunking (Python, TS, JS, Markdown)
-- ✅ REST API with MCP bridge
+- ✅ REST API with MCP bridge available at `bunx dolphin-mcp`
 - ⚠️ Developmental stage
 
 **Upcoming**:

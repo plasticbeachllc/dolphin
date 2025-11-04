@@ -1,6 +1,6 @@
-"""Unified Dolphin CLI - Main entry point for all Dolphin commands.
+"""Unified Dolphin CLI - Main entry point for all dolphin commands.
 
-This module provides a single entry point for all Dolphin functionality,
+This module provides a single entry point for all dolphin functionality,
 including knowledge base management, API serving, and persona management.
 """
 
@@ -28,12 +28,33 @@ from kb.ingest.cli import (
     list_files as kb_list_files,
 )
 
+def get_version() -> str:
+    """Read version from pyproject.toml."""
+    import tomllib
+    try:
+        with open("pyproject.toml", "rb") as f:
+            pyproject = tomllib.load(f)
+        return pyproject["project"]["version"]
+    except Exception:
+        return "unknown"
+
+def version_callback(version: bool = False) -> None:
+    """Show the dolphin version."""
+    if version:
+        typer.echo(f"🐬 dolphin version {get_version()}")
+        raise typer.Exit()
+
 # Create main Dolphin app
 app = typer.Typer(
     name="dolphin",
-    help="Unified CLI for 🐬 Dolphin knowledge base and AI tools",
+    help="Unified CLI for 🐬 dolphin knowledge base and AI tools",
     add_completion=False,
+    pretty_exceptions_enable=False,
 )
+
+@app.callback(invoke_without_command=True)
+def dolphin_callback(version: bool = typer.Option(False, "--version", "-v", help="Show version and exit")):
+    version_callback(version)
 
 # Add subcommand apps
 app.add_typer(kb_app, name="kb", help="Knowledge base management commands")
@@ -213,7 +234,7 @@ def _search_remote(
         _display_results(hits, show_content, None)
         
     except requests.exceptions.ConnectionError:
-        typer.echo("Error: Could not connect to Dolphin API server.", err=True)
+        typer.echo("Error: Could not connect to dolphin API server.", err=True)
         typer.echo("Tip: Use --local flag to search without server, or start server with: dolphin serve", err=True)
         raise typer.Exit(1)
     except requests.exceptions.RequestException as e:
@@ -276,7 +297,7 @@ def serve(
     host: str = typer.Option("127.0.0.1", "--host", help="Host to bind to"),
     port: int = typer.Option(7777, "--port", help="Port to bind to"),
 ) -> None:
-    """Start the Dolphin API server."""
+    """Start the dolphin API server."""
     import uvicorn
     uvicorn.run("kb.api.server:app_with_lifespan", host=host, port=port, reload=False)
 
@@ -285,7 +306,7 @@ def serve(
 def config(
     show: bool = typer.Option(False, "--show", help="Show current configuration"),
 ) -> None:
-    """Manage Dolphin configuration."""
+    """Manage dolphin configuration."""
     if show:
         from kb.config import load_config
         config = load_config()
