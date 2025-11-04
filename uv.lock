@@ -1491,7 +1491,7 @@ wheels = [
 
 [[package]]
 name = "pb-dolphin"
-version = "0.1.10"
+version = "0.1.11"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
