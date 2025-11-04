@@ -29,14 +29,12 @@ from kb.ingest.cli import (
 )
 
 def get_version() -> str:
-    """Read version from pyproject.toml."""
-    import tomllib
+    """Get installed package version."""
     try:
-        with open("pyproject.toml", "rb") as f:
-            pyproject = tomllib.load(f)
-        return pyproject["project"]["version"]
+        from importlib.metadata import version
+        return version("pb-dolphin")
     except Exception:
-        return "unknown"
+        return "unkown"  # Fallback version
 
 def version_callback(version: bool = False) -> None:
     """Show the dolphin version."""
