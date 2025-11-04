@@ -1,12 +1,10 @@
-# justfile for building and running OpenWebUI and MCP servers with Python, Docker, and uv
+# justfile for Dolphin AI knowledge base with Python, Docker, and uv
 
 # Load environment variables from .env file
 set dotenv-load
 
 # Variables
 HOME := env('HOME')
-OPENWEBUI_PORT := "3010"
-OPENWEBUI_DOCKER_PORT := "8080"
 MCP_PORT := "8010"
 
 list:
@@ -17,12 +15,12 @@ list:
 # ==============================================================================
 
 # Clean generated files
-clean: stop clean-openwebui clean-mcpo-config
+clean: stop
 
 # Start all services
 run: start
 
-# Start all services (Ollama, OpenWebUI, MCP) and wait for readiness
+# Start all services (Ollama, MCP bridge) and wait for readiness
 start:
 	@echo "Starting all services..."
 	@just --quiet ollama-start
@@ -31,31 +29,22 @@ start:
 		sleep 1; TIMEOUT=$((TIMEOUT-1)); \
 		if [ $TIMEOUT -le 0 ]; then echo "❌ Timed out waiting for Ollama"; exit 1; fi; \
 	done
-	@just --quiet start-openwebui
-	@echo "Waiting for OpenWebUI to become ready on port {{OPENWEBUI_PORT}}..."
-	@TIMEOUT=60; while ! just --quiet openwebui-check >/dev/null 2>&1; do \
-		sleep 2; TIMEOUT=$((TIMEOUT-1)); \
-		if [ $TIMEOUT -le 0 ]; then echo "❌ Timed out waiting for OpenWebUI"; exit 1; fi; \
-	done
-	@just --quiet start-mcpo
-	@echo "Waiting for MCP to listen on port {{MCP_PORT}}..."
-	@TIMEOUT=30; while ! just --quiet mcp-check >/dev/null 2>&1; do \
+	@just --quiet start-mcp-bridge
+	@echo "Waiting for MCP Bridge to listen on port 7777..."
+	@TIMEOUT=30; while ! just --quiet mcp-bridge-check >/dev/null 2>&1; do \
 		sleep 1; TIMEOUT=$((TIMEOUT-1)); \
-		if [ $TIMEOUT -le 0 ]; then echo "❌ Timed out waiting for MCP"; exit 1; fi; \
+		if [ $TIMEOUT -le 0 ]; then echo "❌ Timed out waiting for MCP Bridge"; exit 1; fi; \
 	done
 	@echo "✅ All services are up:"
 	@echo " - Ollama API:       http://localhost:11434"
-	@echo " - OpenWebUI:        http://localhost:{{OPENWEBUI_PORT}}"
-	@echo " - MCP Orchestrator: http://localhost:{{MCP_PORT}}"
+	@echo " - Dolphin API:      http://localhost:7777"
+	@echo " - MCP Bridge:       http://localhost:8010"
 
 # Set up the entire project
-setup: setup-env setup-python setup-openwebui
-
-# Development setup (without OpenWebUI)
-setup-dev: setup-env setup-python
+setup: setup-env setup-python
 
 # Stop all services
-stop: stop-mcpo stop-openwebui ollama-stop
+stop: ollama-stop mcp-bridge-stop
 
 # ==============================================================================
 # Environment Management
@@ -73,38 +62,6 @@ setup-env:
 # Install Python dependencies from pyproject.toml
 setup-python:
 	uv sync --group test
-
-# ==============================================================================
-# OpenWebUI Management
-# ==============================================================================
-
-# Pull OpenWebUI Docker image
-pull-openwebui:
-	docker pull ghcr.io/open-webui/open-webui:main
-
-# Start OpenWebUI container
-start-openwebui:
-	@echo "Starting OpenWebUI..."
-	docker run -d -p {{OPENWEBUI_PORT}}:{{OPENWEBUI_DOCKER_PORT}} --add-host=host.docker.internal:host-gateway -e WEBUI_AUTH=False -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:main
-	@echo "✅ OpenWebUI started and available at http://localhost:{{OPENWEBUI_PORT}}"
-
-# Stop and remove OpenWebUI container if running
-stop-openwebui:
-	@echo "Stopping OpenWebUI..."
-	docker stop open-webui || true
-	docker rm open-webui || true
-
-# Set up OpenWebUI (pull, build, start)
-setup-openwebui: stop-openwebui pull-openwebui start-openwebui
-
-# Clean all OpenWebUI images and volumes
-clean-openwebui:
-	docker image rm ghcr.io/open-webui/open-webui:main || true
-	docker volume rm open-webui || true
-
-# Health check for OpenWebUI
-openwebui-check:
-	@curl -sSf http://localhost:{{OPENWEBUI_PORT}}/ >/dev/null
 
 # ==============================================================================
 # Ollama (Homebrew Services) Management
@@ -137,6 +94,26 @@ ollama-check:
 	@echo "Checking Ollama API at http://localhost:11434 ..."
 	@curl -sSf http://localhost:11434/api/tags >/dev/null && echo "API reachable" || (echo "API not reachable"; exit 1)
 
+# ==============================================================================
+# MCP Bridge Management
+# ==============================================================================
+
+# MCP Bridge readiness check
+mcp-bridge-check:
+	@lsof -nP -iTCP:7777 -sTCP:LISTEN >/dev/null 2>&1
+
+# Start the MCP bridge
+start-mcp-bridge:
+	@echo "Starting MCP Bridge..."
+	cd mcp-bridge && bun run src/index.ts &
+
+# Stop the MCP bridge
+mcp-bridge-stop:
+	@pkill -f "bun run src/index.ts" || true
+
+# Show MCP bridge status
+show-mcp-bridge:
+	lsof -i :7777
 
 # ==============================================================================
 # Testing
@@ -171,38 +148,6 @@ test-file: setup-python
 test-verbose: setup-python
 	@echo "🧪 Running tests with verbose output..."
 	@uv run pytest -v
-
-# ==============================================================================
-# MCP(o)
-# ==============================================================================
-
-# MCP readiness check
-mcpo-check:
-	@lsof -nP -iTCP:{{MCP_PORT}} -sTCP:LISTEN >/dev/null 2>&1
-
-# Start the MCP server orchestrator
-start-mcpo:
-	@echo "Generating MCP config from template..."
-	@# Using '|' as a separator for sed to avoid issues with paths containing '/'
-	@sed 's|__HOME__|{{HOME}}|g' mcpo_config.template.json > mcpo_config.json
-	@echo "Starting MCP servers..."
-	@rm -f .mcpo.pid
-	uv run mcpo --config ./mcpo_config.json --port {{MCP_PORT}} & echo $! > .mcpo.pid
-
-# Stop the MCP server orchestrator
-stop-mcpo:
-	@if [ -f .mcpo.pid ]; then \
-		echo "Stopping MCP servers..."; \
-		kill $(cat .mcpo.pid) || true; \
-		rm -f .mcpo.pid; \
-	fi
-
-show-mcpo:
-	lsof -i :{{MCP_PORT}}
-
-clean-mcpo-config: 
-	rm -f .mcpo.pid
-	rm -f mcpo_config.json
 
 # ==============================================================================
 # Centralized Dolphin CLI
@@ -277,11 +222,6 @@ api:
 # Health check for API server
 health:
 	curl -s http://127.0.0.1:7777/v1/health || echo "API server not running"
-
-# --- MCP Bridge ---
-
-mcp:
-	cd mcp-bridge && bun run src/index.ts
 
 # ==============================================================================
 # Logs & Development

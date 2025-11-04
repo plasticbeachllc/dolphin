@@ -1,22 +1,20 @@
-# Generated configuration file
-mcpo_config.json
-.mcpo.pid
-
-# Local environment variables
+# local environment variables
 .env
 .env.*
-!.env.example
 
-# continue configs (contain secrets)
-.continue/*
-.continue/**/*
+# user configs
+.continue/
+.claude/
 
-# generated persona configs (contain secrets and are private)
-.continue-config/
-.kilocode-config/
+# private dirs
+docs/private/
+docs/ignore/
+.scratch/
+scratch/
 
-# output dirs
-kilocode-config/*
+# generated configs
+continue-config/
+kilocode-config/
 
 # logs
 *.log
@@ -24,12 +22,12 @@ kilocode-config/*
 # Python cache
 __pycache__/
 
-.coverage
-.scratch/*
-docs/ignore/*
-tests/reports/*
-
 # test artifacts
 tests/**/test-results.xml
 tests/**/coverage.xml
+tests/reports/*
+.coverage
+
+# misc
 .DS_Store
+!*.example

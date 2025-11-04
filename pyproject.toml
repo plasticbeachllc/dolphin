@@ -60,14 +60,7 @@ reranking = [
     "torch>=2.2.0",
     "sentence-transformers>=2.3.0",
 ]
-# MCP orchestrator support
-orchestrator = [
-    "docker>=7.1.0",
-    "requests>=2.32.4",
-    "mcpo>=0.0.19",
-    "mcp-server-time>=0.1.0",
-    "mcp-server-git>=0.0.1",
-]
+
 test = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
