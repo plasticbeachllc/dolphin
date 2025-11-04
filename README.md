@@ -97,12 +97,7 @@ dolphin serve
   * MCP server implementation available at `bunx dolphin-mcp`
 - **Configuration** - Per-repo chunking and ignore configuration
 
-## Environment Variables
 
-```bash
-# Required when using OpenAI embeddings (recommended for production)
-export OPENAI_API_KEY="sk-your-openai-api-key-here"
-```
 
 ## Configuration
 
@@ -111,9 +106,9 @@ Dolphin uses a multi-level configuration system:
 1. **Repo-specific** (`./.dolphin/config.toml`) - Optional per-repository chunking settings
 2. **User-global** (`~/.dolphin/config.toml`) - Auto-created on first use
 
-### Configuration
+### Configuration TOMLs
 
-You can use `dolphin init` to initialize your config and edit from there.
+You can use `dolphin init` to initialize your global config and edit from there.
 
 ```toml
 # ~/.dolphin/config.toml
@@ -127,6 +122,25 @@ batch_size = 100
 top_k = 8
 score_cutoff = 0.0
 ```
+
+To generate a repo-specific config, use `dolphin init --repo`:
+
+### Environment Variables
+
+```bash
+# Required when using OpenAI embeddings (recommended for production)
+export OPENAI_API_KEY="sk-your-openai-api-key-here"
+```
+
+### Post-Commit Hook (recommended)
+
+Add this line to the repo's `.git/postcommit` file, inserting the actual repo name.
+
+```
+uv run dolphin index {repo-name}
+```
+
+Since the indexer walks the git diff, your repository index will always remain fresh.
 
 ## MCP Configuration
 
