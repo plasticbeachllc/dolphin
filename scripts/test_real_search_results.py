@@ -56,18 +56,14 @@ def test_real_search():
         for i, result in enumerate(hybrid_results):
             print(f"  {i+1}. {result.get('path', 'unknown')}")
         
-        if len(vector_results) > 0 or len(bm25_results) > 0 or len(hybrid_results) > 0:
-            print("\n✅ SUCCESS: Search is returning actual results!")
-            return True
-        else:
-            print("\n⚠️  WARNING: Search returned no results")
-            return False
+        assert len(vector_results) > 0 or len(bm25_results) > 0 or len(hybrid_results) > 0, "Search returned no results"
+        print("\n✅ SUCCESS: Search is returning actual results!")
             
     except Exception as e:
         print(f"❌ Error during search: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise AssertionError(f"Search failed: {e}")
 
 
 def test_embedding_generation():
@@ -94,11 +90,9 @@ def test_embedding_generation():
         embeddings = provider.embed_texts("large", [query])
         print(f"✅ Generated embedding with {len(embeddings[0])} dimensions")
         
-        return True
-        
     except Exception as e:
         print(f"❌ Error generating embeddings: {e}")
-        return False
+        raise AssertionError(f"Embedding generation failed: {e}")
 
 
 def main():

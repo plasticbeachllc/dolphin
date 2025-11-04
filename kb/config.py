@@ -86,7 +86,7 @@ class RetrievalConfig:
     score_cutoff: float = 0.15
     top_k: int = 8
     max_snippet_tokens: int = 240
-    mmr_enabled: bool = False
+    mmr_enabled: bool = True
     mmr_lambda: float = 0.7
 
 @dataclass
@@ -164,7 +164,7 @@ class KBConfig:
             score_cutoff=_get_value(retrieval_data, "score_cutoff", 0.15, float),
             top_k=_get_value(retrieval_data, "top_k", 8, int),
             max_snippet_tokens=_get_value(retrieval_data, "max_snippet_tokens", 240, int),
-            mmr_enabled=_get_value(retrieval_data, "mmr_enabled", False, bool),
+            mmr_enabled=_get_value(retrieval_data, "mmr_enabled", True, bool),
             mmr_lambda=_get_value(retrieval_data, "mmr_lambda", 0.7, float)
         )
 

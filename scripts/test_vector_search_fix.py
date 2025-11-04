@@ -16,7 +16,7 @@ def test_vector_search_with_populated_data():
     
     if not store_root.exists():
         print("❌ Knowledge store doesn't exist. Index a repository first.")
-        return False
+        raise AssertionError("Knowledge store doesn't exist")
     
     # Check if we can find the metadata store and see if there's any data
     from kb.store.sqlite_meta import SQLiteMetadataStore
@@ -27,14 +27,13 @@ def test_vector_search_with_populated_data():
         counts = sql_store.summarize()
         print(f"Database summary: {counts}")
         
-        if counts['chunks'] == 0:
-            print("❌ No chunks found in database. Index a repository first.")
-            return False
+        assert counts['chunks'] > 0, "No chunks found in database"
+        print(f"✅ Found {counts['chunks']} chunks in database")
         
         print(f"✅ Found {counts['chunks']} chunks in database")
     except Exception as e:
         print(f"❌ Error checking database: {e}")
-        return False
+        raise AssertionError(f"Database check failed: {e}")
     
     # Test backend creation
     try:
@@ -42,7 +41,7 @@ def test_vector_search_with_populated_data():
         print("✅ SearchBackend created successfully")
     except Exception as e:
         print(f"❌ Error creating search backend: {e}")
-        return False
+        raise AssertionError(f"Search backend creation failed: {e}")
     
     # Test with a simple query
     try:
@@ -51,19 +50,12 @@ def test_vector_search_with_populated_data():
         
         print(f"Vector search returned {len(results)} results")
         
-        if len(results) == 0:
-            print("⚠️  Vector search returned no results. This might indicate:")
-            print("   - Embeddings are not being created properly")
-            print("   - There's a mismatch between indexed vectors and query embeddings")
-            print("   - The LanceDB tables are empty despite SQLite having metadata")
-            return False
-        else:
-            print(f"✅ Vector search working! Sample result: {results[0]}")
-            return True
+        assert len(results) > 0, "Vector search returned no results"
+        print(f"✅ Vector search working! Sample result: {results[0]}")
             
     except Exception as e:
         print(f"❌ Error during vector search: {e}")
-        return False
+        raise AssertionError(f"Vector search failed: {e}")
 
 
 def test_hybrid_search_comparison():

@@ -63,7 +63,7 @@ ignore = [
 
 # Exceptions to ignore patterns - files matching these will NOT be ignored
 ignore_exceptions = [
-    ".env.example",
+    "*.example",
 ]
 
 # ======================================================================
@@ -71,13 +71,14 @@ ignore_exceptions = [
 # ======================================================================
 [retrieval]
 # Minimum similarity score threshold (0.0-1.0)
-score_cutoff = 0.15
+# This is the final cutoff applied before results
+score_cutoff = 0.005
 
 # Maximum number of results to return
 top_k = 8
 
 # Maximum tokens per snippet in search results
-max_snippet_tokens = 240
+max_snippet_tokens = 300
 
 # Enable Maximal Marginal Relevance for result diversity
 mmr_enabled = false

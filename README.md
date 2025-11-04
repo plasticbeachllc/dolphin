@@ -1,5 +1,8 @@
 # 🐬 dolphin
 
+[![PyPi Version](https://img.shields.io/pypi/v/pb-dolphin.svg)](https://pypi.org/project/pb-dolphin/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 **⚠️ EXPERIMENTAL - This is a developmental library under active development. APIs and interfaces are unstable and subject to change without notice.**
 
 A semantic code search and knowledge management system with AI-native interfaces (MCP, REST API, CLI).
@@ -66,8 +69,8 @@ dolphin serve
                ▼
 ┌──────────────────────────────────────────┐
 │          Dolphin Knowledge Base          │
-│  ┌─────────────┐    ┌────────────────┐  │
-│  │ MCP Bridge  │◄──►│ REST API       │  │
+│  ┌─────────────┐    ┌────────────────-┐  │
+│  │ MCP Bridge  │◄──►│ REST API        │  │
 │  │ (TypeScript)│    │ (Python/FastAPI)│  │
 │  └─────────────┘    └────────┬────────┘  │
 └──────────────────────────────┼───────────┘
@@ -87,13 +90,9 @@ dolphin serve
 - **REST API** - FastAPI server with search, retrieval, and metadata endpoints
 - **Unified CLI** - Single `dolphin` command for all operations
 - **Configuration** - Per-repo chunking and ignore configuration
-- **MCP Support** - MCP server implementation availableat `bunx dolphin-mcp`
+- **MCP Support** - MCP server implementation available at `bunx dolphin-mcp`
 
 ## Environment Variables
-
-Dolphin requires the following environment variables depending on your usage:
-
-### Required for OpenAI Embeddings
 
 ```bash
 # Required when using OpenAI embeddings (recommended for production)
@@ -107,7 +106,9 @@ Dolphin uses a multi-level configuration system:
 1. **Repo-specific** (`./.dolphin/config.toml`) - Optional per-repository chunking settings
 2. **User-global** (`~/.dolphin/config.toml`) - Auto-created on first use
 
-### Example Config
+### Configuration
+
+You can use `dolphin init` to initialize your config and edit from there.
 
 ```toml
 # ~/.dolphin/config.toml
@@ -119,12 +120,12 @@ batch_size = 100
 
 [retrieval]
 top_k = 8
-score_cutoff = 0.15
+score_cutoff = 0.0
 ```
 
 ## MCP Configuration
 
-Add to your favorite AI application's config:
+The small companion MCP interface can be run via `bun` without install. Add to your favorite AI application's config:
 
 ```json
 {
@@ -161,12 +162,11 @@ curl http://127.0.0.1:7777/v1/health
 
 ## Advanced Features
 
-### Cross-Encoder Reranking (Recommended)
+### Cross-Encoder Reranking
 
-Cross-encoder reranking improves search result relevance by re-scoring results with a more sophisticated ML model.
+Cross-encoder reranking improves search result relevance by re-scoring each result pairwise against the query using an ML model, leading to 20-30% improvements in search result ranking quality ([Nogueira & Cho, 2019](https://arxiv.org/abs/1901.04085)).
 
 **Performance Impact:**
-- ✅ **~20-30% improvement** in search ranking accuracy
 - ⚠️ **2-3x slower searches** - cross-encoder is compute-intensive
 - ⚠️ **~2GB install size** - requires torch and sentence-transformers
 

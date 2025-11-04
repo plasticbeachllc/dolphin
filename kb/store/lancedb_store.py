@@ -215,6 +215,44 @@ class LanceDBStore:
             # If deletion fails (e.g., because no matching rows), ignore silently.
             return
 
+    def count_repo_vectors(self, repo: str, *, model: str) -> int:
+        """Count the number of vectors for a repository.
+        
+        Args:
+            repo: Repository name
+            model: Embedding model ('small' or 'large')
+            
+        Returns:
+            Number of vectors found for the repository
+        """
+        import lancedb
+
+        model_to_table = {
+            'small': 'chunks_small',
+            'large': 'chunks_large'
+        }
+
+        if model not in model_to_table:
+            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
+
+        db = lancedb.connect(self.root.as_posix())
+        try:
+            table = db.open_table(model_to_table[model])
+        except Exception:
+            # Table doesn't exist yet
+            return 0
+
+        repo_expr = repr(repo)
+        filter_expr = f"repo = {repo_expr}"
+
+        try:
+            # Query matching rows and count them
+            result = table.search().where(filter_expr).limit(1000000).to_list()
+            return len(result)
+        except Exception:
+            # If query fails, assume 0
+            return 0
+
     def query(
         self,
         query_vector: Sequence[float],

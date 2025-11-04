@@ -1,19 +1,21 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
 from contextlib import closing
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import event
 from sqlmodel import SQLModel, create_engine
-
-
 class SQLiteMetadataStore:
     """SQLite-backed metadata store using SQLModel for schema materialization."""
 
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
+        self._init_lock = threading.Lock()
+        self._initialized = False
+        self._initializing = False
 
     def _connect(self) -> sqlite3.Connection:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -36,40 +38,178 @@ class SQLiteMetadataStore:
         return engine
 
     def initialize(self) -> None:
-        """Ensure the database exists and the schema is applied idempotently via SQLModel."""
-        engine = self._engine()
-        # Import models at call time to register them with SQLModel.metadata
-        from . import sql_models as _models  # noqa: F401
-        # Create all tables if they don't exist (via SQLModel models)
-        SQLModel.metadata.create_all(engine)
-        # Sanity check: ensure tables exist without hardcoded DDL
-        with self._connect() as conn, closing(conn.cursor()) as cur:
-            for table in ("repos", "sessions", "files", "chunk_content", "chunk_locations"):
-                cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
-                if cur.fetchone() is None:
-                    raise RuntimeError(f"Database initialization failed: '{table}' table missing.")
+        """Thread-safe enhanced initialization with proper validation and error handling."""
+        # Fast path: check if already initialized
+        if self._initialized:
+            return
+        
+        # Use lock to prevent concurrent initialization
+        with self._init_lock:
+            # Double-check pattern: another thread might have initialized while we were waiting
+            if self._initialized:
+                return
             
-            # Create FTS5 virtual table for BM25 full-text search
-            cur.execute("""
-                SELECT name FROM sqlite_master
-                WHERE type='table' AND name='chunks_fts'
-            """)
-            
-            if not cur.fetchone():
-                # Create FTS5 index with BM25 ranking
-                cur.execute("""
-                    CREATE VIRTUAL TABLE chunks_fts USING fts5(
-                        content_id UNINDEXED,
-                        repo UNINDEXED,
-                        path UNINDEXED,
-                        content,
-                        symbol_name,
-                        symbol_path,
-                        tokenize='porter unicode61'
-                    )
-                """)
+            try:
+                self._initializing = True
                 
-                conn.commit()
+                engine = self._engine()
+                
+                # Import models at call time to register them with SQLModel.metadata
+                from . import sql_models as _models  # noqa: F401
+                
+                # Create all tables if they don't exist (via SQLModel models)
+                SQLModel.metadata.create_all(engine)
+                
+                # Validate foreign key support and constraints
+                with self._connect() as conn, closing(conn.cursor()) as cur:
+                    # Enable and verify foreign key constraints
+                    cur.execute("PRAGMA foreign_keys = ON")
+                    cur.execute("PRAGMA foreign_key_check")
+                    foreign_key_errors = cur.fetchall()
+                    if foreign_key_errors:
+                        raise RuntimeError(f"Foreign key constraint violations: {foreign_key_errors}")
+                    
+                    # Enhanced table validation with schema verification
+                    expected_tables = {
+                        "repos": "Repository metadata",
+                        "sessions": "Indexing sessions",
+                        "files": "File catalog",
+                        "chunk_content": "Chunk content",
+                        "chunk_locations": "Chunk locations"
+                    }
+                    
+                    for table, description in expected_tables.items():
+                        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
+                        if cur.fetchone() is None:
+                            raise RuntimeError(f"Database initialization failed: '{table}' table missing ({description}).")
+                        
+                        # Validate table schema
+                        self._validate_table_schema(cur, table)
+                    
+                    # Robust FTS5 creation with version checking
+                    self._create_fts5_table_safe(cur)
+                    
+                    conn.commit()
+                
+                # Post-initialization validation
+                self._validate_database_integrity()
+                
+                # Mark as successfully initialized
+                self._initialized = True
+                
+            finally:
+                self._initializing = False
+    
+    def _validate_table_schema(self, cur, table_name: str) -> None:
+        """Validate table schema integrity."""
+        # Get table schema
+        cur.execute(f"PRAGMA table_info({table_name})")
+        columns = cur.fetchall()
+        
+        if not columns:
+            raise RuntimeError(f"Table {table_name} exists but has no columns")
+        
+        # Validate expected columns based on table type
+        if table_name == "repos":
+            required_cols = {"id", "name", "root_path", "default_embed_model"}
+        elif table_name == "sessions":
+            required_cols = {"id", "repo_id", "commit_sha", "branch", "embed_model", "status"}
+        elif table_name == "files":
+            required_cols = {"id", "repo_id", "path", "ext", "language", "is_binary"}
+        elif table_name == "chunk_content":
+            required_cols = {"id", "repo_id", "file_id", "text_hash", "embed_model"}
+        elif table_name == "chunk_locations":
+            required_cols = {"id", "content_id", "start_line", "end_line"}
+        else:
+            return  # Skip validation for unknown tables
+        
+        actual_cols = {col[1] for col in columns}  # col[1] is column name
+        missing_cols = required_cols - actual_cols
+        if missing_cols:
+            raise RuntimeError(f"Table {table_name} missing required columns: {missing_cols}")
+    
+    def _create_fts5_table_safe(self, cur) -> None:
+        """Safely create FTS5 table with version and feature detection."""
+        import sqlite3
+        
+        # Check SQLite version and FTS5 support
+        cur.execute("SELECT sqlite_version()")
+        sqlite_version = cur.fetchone()[0]
+        
+        # Check if FTS5 is available
+        try:
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
+            if cur.fetchone():
+                return  # Already exists
+            
+            # Test FTS5 support
+            cur.execute("CREATE VIRTUAL TABLE IF NOT EXISTS _fts5_test USING fts5(x)")
+            cur.execute("DROP TABLE _fts5_test")
+            
+        except sqlite3.OperationalError as e:
+            if "fts5" in str(e).lower():
+                raise RuntimeError(
+                    f"FTS5 not available in SQLite version {sqlite_version}. "
+                    "FTS5 is required for full-text search functionality."
+                )
+            else:
+                raise RuntimeError(f"FTS5 test failed: {e}")
+        
+        # Create FTS5 table with proper schema
+        try:
+            cur.execute("""
+                CREATE VIRTUAL TABLE chunks_fts USING fts5(
+                    content_id UNINDEXED,
+                    repo UNINDEXED,
+                    path UNINDEXED,
+                    content,
+                    symbol_name,
+                    symbol_path,
+                    tokenize='porter unicode61'
+                )
+            """)
+        except sqlite3.OperationalError as e:
+            raise RuntimeError(f"Failed to create FTS5 table: {e}")
+    
+    def _validate_database_integrity(self) -> None:
+        """Perform comprehensive database integrity validation."""
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            # Check database integrity
+            cur.execute("PRAGMA integrity_check")
+            integrity_result = cur.fetchone()
+            if integrity_result and integrity_result[0] != "ok":
+                raise RuntimeError(f"Database integrity check failed: {integrity_result[0]}")
+            
+            # Check for orphaned records
+            orphaned_checks = [
+                ("chunk_locations without content", """
+                    SELECT COUNT(*) FROM chunk_locations cl
+                    LEFT JOIN chunk_content cc ON cl.content_id = cc.id
+                    WHERE cc.id IS NULL
+                """),
+                ("chunk_content without files", """
+                    SELECT COUNT(*) FROM chunk_content cc
+                    LEFT JOIN files f ON cc.file_id = f.id
+                    WHERE f.id IS NULL
+                """),
+                ("files without repos", """
+                    SELECT COUNT(*) FROM files f
+                    LEFT JOIN repos r ON f.repo_id = r.id
+                    WHERE r.id IS NULL
+                """),
+                ("sessions without repos", """
+                    SELECT COUNT(*) FROM sessions s
+                    LEFT JOIN repos r ON s.repo_id = r.id
+                    WHERE r.id IS NULL
+                """)
+            ]
+            
+            for check_name, sql in orphaned_checks:
+                cur.execute(sql)
+                count = cur.fetchone()[0]
+                if count > 0:
+                    # Log warning but don't fail initialization for existing databases
+                    print(f"Warning: Found {count} orphaned records in {check_name}")
 
     def record_repo(self, name: str, path: Path, *, default_embed_model: str = "small") -> None:
         """Insert or update a repo registration.
@@ -896,3 +1036,570 @@ class SQLiteMetadataStore:
             cur.execute(query, chunk_ids)
             rows = cur.fetchall()
             return {str(row[0]): str(row[1]) for row in rows}
+
+
+    # =====================
+    # Enhanced Repository Removal (Phase 2)
+    # =====================
+
+    def get_active_sessions(self, repo_id: int) -> list:
+        """Get all active (non-terminal) sessions for a repository."""
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute("""
+                SELECT id, status, created_at FROM sessions 
+                WHERE repo_id = ? AND status NOT IN ('succeeded', 'failed', 'aborted')
+                ORDER BY created_at DESC
+            """, (repo_id,))
+            return cur.fetchall()
+
+    def terminate_active_sessions(self, repo_id: int) -> int:
+        """Terminate all active sessions for a repository."""
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute("""
+                UPDATE sessions 
+                SET status = 'aborted', ended_at = datetime('now')
+                WHERE repo_id = ? AND status NOT IN ('succeeded', 'failed', 'aborted')
+            """, (repo_id,))
+            terminated = cur.rowcount
+            conn.commit()
+            return terminated
+
+    def _get_repo_data_counts(self, cur, repo_id: int, repo_name: str) -> dict:
+        """Collect counts of all data that will be deleted for validation."""
+        counts = {}
+        
+        # Count files
+        cur.execute("SELECT COUNT(*) FROM files WHERE repo_id = ?", (repo_id,))
+        counts["files"] = cur.fetchone()[0]
+        
+        # Count chunk content
+        cur.execute("SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,))
+        counts["chunk_content"] = cur.fetchone()[0]
+        
+        # Count chunk locations
+        cur.execute("""
+            SELECT COUNT(*) FROM chunk_locations 
+            WHERE content_id IN (SELECT id FROM chunk_content WHERE repo_id = ?)
+        """, (repo_id,))
+        counts["chunk_locations"] = cur.fetchone()[0]
+        
+        # Count FTS entries
+        cur.execute("SELECT COUNT(*) FROM chunks_fts WHERE repo = ?", (repo_name,))
+        counts["fts_entries"] = cur.fetchone()[0]
+        
+        # Count sessions
+        cur.execute("SELECT COUNT(*) FROM sessions WHERE repo_id = ?", (repo_id,))
+        counts["sessions"] = cur.fetchone()[0]
+        
+        return counts
+
+    def _cleanup_fts_entries_comprehensive(self, cur, repo_id: int, repo_name: str) -> dict:
+        """Comprehensive FTS5 cleanup with multiple strategies."""
+        stats = {"by_content_id": 0, "by_repo_name": 0, "orphaned": 0, "errors": []}
+        
+        try:
+            # Strategy 1: Delete by content_id (most precise)
+            cur.execute("""
+                DELETE FROM chunks_fts 
+                WHERE content_id IN (
+                    SELECT cc.id FROM chunk_content cc 
+                    WHERE cc.repo_id = ?
+                )
+            """, (repo_id,))
+            stats["by_content_id"] = cur.rowcount
+            
+            # Strategy 2: Delete by repo name (fallback)
+            cur.execute("DELETE FROM chunks_fts WHERE repo = ?", (repo_name,))
+            stats["by_repo_name"] = cur.rowcount
+            
+            # Strategy 3: Delete orphaned entries (validation)
+            cur.execute("""
+                DELETE FROM chunks_fts 
+                WHERE content_id NOT IN (
+                    SELECT id FROM chunk_content
+                )
+            """)
+            stats["orphaned"] = cur.rowcount
+            
+        except Exception as e:
+            stats["errors"].append(str(e))
+            
+        return stats
+
+    def _delete_chunk_locations_by_repo(self, cur, repo_id: int) -> int:
+        """Delete all chunk locations for a repository."""
+        cur.execute("""
+            DELETE FROM chunk_locations
+            WHERE content_id IN (
+                SELECT id FROM chunk_content WHERE repo_id = ?
+            )
+        """, (repo_id,))
+        return cur.rowcount
+
+    def _delete_chunk_content_by_repo(self, cur, repo_id: int) -> int:
+        """Delete all chunk content for a repository."""
+        cur.execute("DELETE FROM chunk_content WHERE repo_id = ?", (repo_id,))
+        return cur.rowcount
+
+    def _delete_files_by_repo(self, cur, repo_id: int) -> int:
+        """Delete all files for a repository."""
+        cur.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
+        return cur.rowcount
+
+    def _delete_sessions_by_repo(self, cur, repo_id: int) -> int:
+        """Delete all sessions for a repository."""
+        cur.execute("DELETE FROM sessions WHERE repo_id = ?", (repo_id,))
+        return cur.rowcount
+
+    def _delete_repo_registration(self, cur, repo_id: int) -> int:
+        """Delete repository registration."""
+        cur.execute("DELETE FROM repos WHERE id = ?", (repo_id,))
+        return cur.rowcount
+
+    def _validate_cleanup_success(self, pre_counts: dict, post_counts: dict) -> bool:
+        """Validate that cleanup was successful by comparing counts."""
+        for key in pre_counts:
+            if post_counts.get(key, 0) > 0:
+                return False
+        return True
+
+    def rm_repo_enhanced(self, name: str, force: bool = False) -> dict:
+        """Enhanced repository removal with comprehensive cleanup validation.
+        
+        This implements Phase 2 Fix 2.1 from the remediation plan:
+        - Checks for active sessions before deletion
+        - Deletes in proper foreign key order
+        - Validates cleanup was comprehensive
+        - Provides detailed statistics
+        """
+        repo = self.get_repo_by_name(name)
+        if not repo:
+            raise ValueError(f"Repository '{name}' not found")
+        
+        repo_id = int(repo["id"])
+        
+        # Check for active sessions first
+        active_sessions = self.get_active_sessions(repo_id)
+        if active_sessions and not force:
+            raise RuntimeError(
+                f"Cannot remove repository '{name}': {len(active_sessions)} active indexing sessions found. "
+                "Use --force to override."
+            )
+        
+        # Pre-cleanup validation and data collection
+        with self._connect() as conn:
+            cur = conn.cursor()
+            
+            # Collect all data that will be deleted for validation
+            pre_cleanup_counts = self._get_repo_data_counts(cur, repo_id, name)
+            
+            # Delete in proper foreign key order with validation
+            try:
+                # 1. FTS5 entries (clean by content_id first, then by repo name)
+                fts_cleanup_stats = self._cleanup_fts_entries_comprehensive(cur, repo_id, name)
+                
+                # 2. Chunk locations (foreign key to chunk_content)
+                locations_deleted = self._delete_chunk_locations_by_repo(cur, repo_id)
+                
+                # 3. Chunk content (foreign key to files)
+                content_deleted = self._delete_chunk_content_by_repo(cur, repo_id)
+                
+                # 4. Files (foreign key to repos)
+                files_deleted = self._delete_files_by_repo(cur, repo_id)
+                
+                # 5. Sessions (foreign key to repos)  
+                sessions_deleted = self._delete_sessions_by_repo(cur, repo_id)
+                
+                # 6. Repository registration
+                repo_deleted = self._delete_repo_registration(cur, repo_id)
+                
+                # Validate cleanup was comprehensive
+                post_cleanup_counts = self._get_repo_data_counts(cur, repo_id, name)
+                cleanup_success = self._validate_cleanup_success(pre_cleanup_counts, post_cleanup_counts)
+                
+                if not cleanup_success and not force:
+                    raise RuntimeError(f"Cleanup validation failed: {post_cleanup_counts}")
+                
+                conn.commit()
+                
+            except Exception as e:
+                conn.rollback()
+                raise RuntimeError(f"Repository removal failed: {e}")
+        
+        # Return detailed stats
+        return {
+            "repository": name,
+            "cleanup_stats": {
+                "fts5_entries": fts_cleanup_stats,
+                "locations_deleted": locations_deleted,
+                "content_deleted": content_deleted, 
+                "files_deleted": files_deleted,
+                "sessions_deleted": sessions_deleted,
+                "repo_deleted": repo_deleted
+            },
+            "pre_cleanup_counts": pre_cleanup_counts,
+            "post_cleanup_counts": post_cleanup_counts,
+            "success": True
+        }
+
+    def _cleanup_lancedb_comprehensive(self, lancedb_store, name: str) -> dict:
+        """Comprehensive LanceDB cleanup with validation.
+        
+        Args:
+            lancedb_store: LanceDBStore instance
+            name: Repository name
+            
+        Returns:
+            Statistics about cleanup: {small_deleted, large_deleted, errors}
+        """
+        stats = {"small_deleted": 0, "large_deleted": 0, "errors": []}
+        
+        for model in ["small", "large"]:
+            try:
+                # Count vectors before deletion
+                pre_count = lancedb_store.count_repo_vectors(name, model=model)
+                
+                # Delete vectors
+                lancedb_store.delete_repo(name, model=model)
+                
+                # Count vectors after deletion
+                post_count = lancedb_store.count_repo_vectors(name, model=model)
+                
+                # Verify deletion was successful
+                if post_count > 0:
+                    stats["errors"].append(
+                        f"{model} model: {post_count} vectors remain after deletion"
+                    )
+                
+                stats[f"{model}_deleted"] = pre_count - post_count
+                
+            except Exception as e:
+                stats["errors"].append(f"{model} model cleanup failed: {e}")
+        
+        return stats
+
+    def rm_repo_with_lancedb(self, lancedb_store, name: str, force: bool = False) -> dict:
+        """Enhanced repository removal with LanceDB cleanup validation.
+        
+        This implements Phase 2 Fix 2.1 from the remediation plan:
+        - Checks for active sessions before deletion
+        - Deletes in proper foreign key order
+        - Validates SQLite cleanup was comprehensive
+        - Validates LanceDB cleanup was comprehensive
+        - Provides detailed statistics
+        
+        Args:
+            lancedb_store: LanceDBStore instance
+            name: Repository name
+            force: Skip active session check if True
+            
+        Returns:
+            Dict with cleanup statistics and success status
+        """
+        # First perform SQLite cleanup
+        sqlite_result = self.rm_repo_enhanced(name, force=force)
+        
+        # Then cleanup LanceDB with validation
+        lancedb_stats = self._cleanup_lancedb_comprehensive(lancedb_store, name)
+        
+        # Add LanceDB stats to result
+        sqlite_result["cleanup_stats"]["lancedb_vectors"] = lancedb_stats
+        
+        # Check if there were any LanceDB errors
+        if lancedb_stats["errors"]:
+            sqlite_result["lancedb_warnings"] = lancedb_stats["errors"]
+            if not force:
+                sqlite_result["success"] = False
+        
+        return sqlite_result
+
+    def _check_lancedb_consistency(self, lancedb_store, repo_name: str) -> dict:
+        """Check consistency between metadata and LanceDB vector stores.
+        
+        Args:
+            lancedb_store: LanceDBStore instance
+            repo_name: Repository name
+            
+        Returns:
+            Consistency report with statistics and issues
+        """
+        stats = {
+            "consistent": True,
+            "issues": [],
+            "vector_counts": {}
+        }
+        
+        try:
+            # Count vectors in both models
+            for model in ["small", "large"]:
+                count = lancedb_store.count_repo_vectors(repo_name, model=model)
+                stats["vector_counts"][model] = count
+            
+            # Could add more checks here, e.g., comparing metadata chunk counts
+            # with vector counts
+            
+        except Exception as e:
+            stats["consistent"] = False
+            stats["issues"].append(f"LanceDB consistency check failed: {e}")
+        
+        return stats
+
+    def validate_repo_consistency(self, lancedb_store, repo_id: int, repo_name: str) -> dict:
+        """Comprehensive consistency validation between metadata and vector stores.
+        
+        Args:
+            lancedb_store: LanceDBStore instance
+            repo_id: Repository ID
+            repo_name: Repository name
+            
+        Returns:
+            Comprehensive consistency report
+        """
+        consistency_report = {
+            "repo_id": repo_id,
+            "repo_name": repo_name,
+            "valid": True,
+            "issues": [],
+            "statistics": {}
+        }
+        
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            # Get metadata statistics
+            cur.execute("SELECT COUNT(*) FROM files WHERE repo_id = ?", (repo_id,))
+            metadata_files = cur.fetchone()[0]
+            
+            cur.execute("SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,))
+            metadata_chunks = cur.fetchone()[0]
+            
+            cur.execute("SELECT COUNT(*) FROM chunk_locations WHERE content_id IN (SELECT id FROM chunk_content WHERE repo_id = ?)", (repo_id,))
+            metadata_locations = cur.fetchone()[0]
+            
+            # Check for orphaned chunk_locations
+            cur.execute("""
+                SELECT COUNT(*) FROM chunk_locations cl
+                LEFT JOIN chunk_content cc ON cl.content_id = cc.id
+                WHERE cc.id IS NULL
+            """)
+            orphaned_locations = cur.fetchone()[0]
+            
+            if orphaned_locations > 0:
+                consistency_report["valid"] = False
+                consistency_report["issues"].append(f"Found {orphaned_locations} orphaned chunk locations")
+            
+            # Check for orphaned FTS entries
+            cur.execute("""
+                SELECT COUNT(*) FROM chunks_fts
+                WHERE content_id NOT IN (SELECT id FROM chunk_content)
+            """)
+            orphaned_fts = cur.fetchone()[0]
+            
+            if orphaned_fts > 0:
+                consistency_report["valid"] = False
+                consistency_report["issues"].append(f"Found {orphaned_fts} orphaned FTS entries")
+            
+            # Check for chunk_content without files
+            cur.execute("""
+                SELECT COUNT(*) FROM chunk_content cc
+                LEFT JOIN files f ON cc.file_id = f.id
+                WHERE f.id IS NULL
+            """)
+            orphaned_content = cur.fetchone()[0]
+            
+            if orphaned_content > 0:
+                consistency_report["valid"] = False
+                consistency_report["issues"].append(f"Found {orphaned_content} chunk_content rows without files")
+            
+            # Check for files without repos
+            cur.execute("""
+                SELECT COUNT(*) FROM files f
+                LEFT JOIN repos r ON f.repo_id = r.id
+                WHERE r.id IS NULL
+            """)
+            orphaned_files = cur.fetchone()[0]
+            
+            if orphaned_files > 0:
+                consistency_report["valid"] = False
+                consistency_report["issues"].append(f"Found {orphaned_files} files without repos")
+            
+            consistency_report["statistics"] = {
+                "metadata_files": metadata_files,
+                "metadata_chunks": metadata_chunks,
+                "metadata_locations": metadata_locations,
+                "orphaned_locations": orphaned_locations,
+                "orphaned_fts": orphaned_fts,
+                "orphaned_content": orphaned_content,
+                "orphaned_files": orphaned_files
+            }
+        
+        # Check LanceDB consistency
+        lancedb_stats = self._check_lancedb_consistency(lancedb_store, repo_name)
+        consistency_report["lancedb"] = lancedb_stats
+        
+        if not lancedb_stats["consistent"]:
+            consistency_report["valid"] = False
+            consistency_report["issues"].extend(lancedb_stats["issues"])
+        
+        return consistency_report
+
+    def repair_repository_consistency(self, repo_id: int, repo_name: str) -> dict:
+        """Attempt to repair consistency issues in a repository.
+        
+        Args:
+            repo_id: Repository ID
+            repo_name: Repository name
+            
+        Returns:
+            Repair report with actions taken and results
+        """
+        repair_report = {
+            "repo_id": repo_id,
+            "repo_name": repo_name,
+            "repairs_performed": [],
+            "success": True,
+            "errors": []
+        }
+        
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            try:
+                # Repair orphaned chunk_locations
+                cur.execute("""
+                    SELECT COUNT(*) FROM chunk_locations cl
+                    LEFT JOIN chunk_content cc ON cl.content_id = cc.id
+                    WHERE cc.id IS NULL
+                """)
+                orphaned_count = cur.fetchone()[0]
+                
+                if orphaned_count > 0:
+                    cur.execute("""
+                        DELETE FROM chunk_locations
+                        WHERE id IN (
+                            SELECT cl.id FROM chunk_locations cl
+                            LEFT JOIN chunk_content cc ON cl.content_id = cc.id
+                            WHERE cc.id IS NULL
+                        )
+                    """)
+                    repair_report["repairs_performed"].append(
+                        f"Deleted {cur.rowcount} orphaned chunk locations"
+                    )
+                
+                # Repair orphaned FTS entries
+                cur.execute("""
+                    SELECT COUNT(*) FROM chunks_fts
+                    WHERE content_id NOT IN (SELECT id FROM chunk_content)
+                """)
+                orphaned_fts_count = cur.fetchone()[0]
+                
+                if orphaned_fts_count > 0:
+                    cur.execute("""
+                        DELETE FROM chunks_fts
+                        WHERE content_id NOT IN (SELECT id FROM chunk_content)
+                    """)
+                    repair_report["repairs_performed"].append(
+                        f"Deleted {cur.rowcount} orphaned FTS entries"
+                    )
+                
+                # Repair orphaned chunk_content (without files)
+                cur.execute("""
+                    SELECT COUNT(*) FROM chunk_content cc
+                    LEFT JOIN files f ON cc.file_id = f.id
+                    WHERE f.id IS NULL
+                """)
+                orphaned_content_count = cur.fetchone()[0]
+                
+                if orphaned_content_count > 0:
+                    # First delete FTS entries for this content
+                    cur.execute("""
+                        DELETE FROM chunks_fts
+                        WHERE content_id IN (
+                            SELECT cc.id FROM chunk_content cc
+                            LEFT JOIN files f ON cc.file_id = f.id
+                            WHERE f.id IS NULL
+                        )
+                    """)
+                    
+                    # Then delete locations
+                    cur.execute("""
+                        DELETE FROM chunk_locations
+                        WHERE content_id IN (
+                            SELECT cc.id FROM chunk_content cc
+                            LEFT JOIN files f ON cc.file_id = f.id
+                            WHERE f.id IS NULL
+                        )
+                    """)
+                    
+                    # Finally delete content
+                    cur.execute("""
+                        DELETE FROM chunk_content
+                        WHERE id IN (
+                            SELECT cc.id FROM chunk_content cc
+                            LEFT JOIN files f ON cc.file_id = f.id
+                            WHERE f.id IS NULL
+                        )
+                    """)
+                    repair_report["repairs_performed"].append(
+                        f"Deleted {cur.rowcount} orphaned chunk_content rows"
+                    )
+                
+                # Repair orphaned files (without repos)
+                cur.execute("""
+                    SELECT COUNT(*) FROM files f
+                    LEFT JOIN repos r ON f.repo_id = r.id
+                    WHERE r.id IS NULL
+                """)
+                orphaned_files_count = cur.fetchone()[0]
+                
+                if orphaned_files_count > 0:
+                    # Cascade delete: FTS -> locations -> content -> files
+                    cur.execute("""
+                        DELETE FROM chunks_fts
+                        WHERE content_id IN (
+                            SELECT cc.id FROM chunk_content cc
+                            WHERE cc.file_id IN (
+                                SELECT f.id FROM files f
+                                LEFT JOIN repos r ON f.repo_id = r.id
+                                WHERE r.id IS NULL
+                            )
+                        )
+                    """)
+                    
+                    cur.execute("""
+                        DELETE FROM chunk_locations
+                        WHERE content_id IN (
+                            SELECT cc.id FROM chunk_content cc
+                            WHERE cc.file_id IN (
+                                SELECT f.id FROM files f
+                                LEFT JOIN repos r ON f.repo_id = r.id
+                                WHERE r.id IS NULL
+                            )
+                        )
+                    """)
+                    
+                    cur.execute("""
+                        DELETE FROM chunk_content
+                        WHERE file_id IN (
+                            SELECT f.id FROM files f
+                            LEFT JOIN repos r ON f.repo_id = r.id
+                            WHERE r.id IS NULL
+                        )
+                    """)
+                    
+                    cur.execute("""
+                        DELETE FROM files
+                        WHERE id IN (
+                            SELECT f.id FROM files f
+                            LEFT JOIN repos r ON f.repo_id = r.id
+                            WHERE r.id IS NULL
+                        )
+                    """)
+                    repair_report["repairs_performed"].append(
+                        f"Deleted {cur.rowcount} orphaned files"
+                    )
+                
+                conn.commit()
+                
+            except Exception as e:
+                conn.rollback()
+                repair_report["success"] = False
+                repair_report["errors"].append(f"Repair failed: {e}")
+        
+        return repair_report

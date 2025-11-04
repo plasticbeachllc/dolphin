@@ -1,9 +1,48 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+## [0.1.12] - 2025-11-04
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+### Added
+
+- **Repository Management**
+  - `rm-repo` command with cleanup and validation
+  - Pre-deletion session validation
+  - Fixed deletion order and cascade behavior
+  - Improved DB cleanups
+  - `validate-repo` command
+  - `repair-repo` command with `--dry-run` support
+
+### Changed
+
+- **`rm-repo` CLI Command**
+  - Now requires confirmation unless `--force` is used
+  - Validates complete cleanup and reports warnings
+- **`reset-repo` CLI Command**
+  - Uses enhanced cleanup with comprehensive validation
+  - Automatically aborts active sessions for clean reset
+- **Database Error Handling**
+  - All operations now use proper transaction rollback
+  - Clear error messages with actionable guidance
+  - Non-blocking warnings for non-critical issues
+
+### Fixed
+
+- **Repository Tracking Issues**
+  - Foreign key validation during initialization
+  - Proper cascade deletion order in rm-repo operations
+  - Silent LanceDB cleanup failures now reported with warnings
+  - Incomplete FTS5 cleanup with multi-strategy approach
+- **Data Integrity Risks**
+  - FTS5 entries now validated after deletion
+  - Orphaned data detection and repair mechanisms
+  - Active session validation prevents mid-operation deletions
+  - All cleanup operations validated for completeness
+
+## [0.1.11] - 2025-11-03  
+
+### Fixed
+
+- **Documentation Issues**
 
 ## [0.1.10] - 2025-11-03
 
