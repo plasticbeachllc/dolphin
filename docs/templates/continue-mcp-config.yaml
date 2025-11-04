@@ -1,0 +1,63 @@
+# Continue.dev MCP Server Configuration Template
+# 
+# This is the mcpServers section for your config.yaml file
+# Copy the mcpServers section below into your Continue.dev config.yaml
+#
+# See the full config.yaml reference at:
+# https://docs.continue.dev/reference/config-yaml
+
+mcpServers:
+  - name: Dolphin-KB
+    description: "Dolphin AI semantic code search and retrieval"
+    # Option 1: Run directly from source (development)
+    command: bun
+    args:
+      - run
+      - /path/to/dolphin/mcp-bridge/src/index.ts
+    cwd: "/path/to/dolphin"
+    
+    # Option 2: Run from published package (recommended for distribution)
+    # Uncomment and modify when the package is published
+    # command: bunx
+    # args:
+    #   - plastic-beach/dolphin-kb-mcp
+    # env:
+    #   DOLPHIN_API_URL: "http://127.0.0.1:7777"
+    #   LOG_LEVEL: "info"
+    
+    # Optional: Connection timeout for initial server connection
+    connectionTimeout: 30000
+    # Optional: HTTP request options for SSE/streamable-http servers
+    # requestOptions:
+    #   timeout: 60000
+    #   headers:
+    #     Authorization: "Bearer your-token"
+
+# Configuration Notes:
+# 
+# Required Properties:
+# - name: Unique identifier for your MCP server
+# - command: Executable command to start the server
+#
+# Optional Properties:
+# - description: Human-readable description of the server
+# - args: Array of command-line arguments
+# - env: Environment variables for the server process
+# - cwd: Working directory (absolute or relative path)
+# - requestOptions: HTTP options for SSE/streamable-http servers
+# - connectionTimeout: Timeout for initial connection (milliseconds)
+#
+# Setup Instructions:
+# 1. Development: Update the path in 'args' to point to your Dolphin installation
+# 2. Development: Update the 'cwd' path to your Dolphin directory
+# 3. Production: Uncomment the 'bunx' version after publishing the package
+# 4. Ensure Dolphin API server is running on http://127.0.0.1:7777
+# 5. Install Bun if not already installed: curl -fsSL https://bun.sh/install | bash
+# 6. Copy this mcpServers section into your Continue.dev config.yaml
+#
+# Available Tools:
+# - search_knowledge: Search codebase semantically using AI embeddings
+# - fetch_chunk: Get detailed chunk content by ID
+# - fetch_lines: Get specific file lines by range
+# - get_vector_store_info: Get knowledge base statistics and repository info
+# - open_in_editor: Generate VS Code URI for opening files
