@@ -86,11 +86,16 @@ dolphin serve
 ### Key Features
 
 - **Language-Aware Chunking** - Code parsing for Python, TypeScript, JavaScript, Markdown
-- **Semantic Search** - OpenAI embeddings with LanceDB vector storage
-- **REST API** - FastAPI server with search, retrieval, and metadata endpoints
-- **Unified CLI** - Single `dolphin` command for all operations
+- **Semantic Search**
+  * OpenAI embeddings with LanceDB vector storage
+  * Hybrid approximate nn vector + BM25 keyword search with RRF scoring
+  * Re-ranking with cross-encoder
+  * MMR relevancy enhancement
+- **Interfaces**
+  * `dolphin` CLI app
+  * FastAPI server with search, retrieval, and metadata endpoints
+  * MCP server implementation available at `bunx dolphin-mcp`
 - **Configuration** - Per-repo chunking and ignore configuration
-- **MCP Support** - MCP server implementation available at `bunx dolphin-mcp`
 
 ## Environment Variables
 
@@ -148,16 +153,16 @@ Available MCP tools: `search_knowledge`, `fetch_chunk`, `fetch_lines`, `get_vect
 # Start server
 dolphin serve
 
-# Search
-curl -X POST http://127.0.0.1:7777/v1/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "authentication", "top_k": 5}'
+# Health check
+curl http://127.0.0.1:7777/health
 
 # List repositories
-curl http://127.0.0.1:7777/v1/repos
+curl http://127.0.0.1:7777/repos
 
-# Health check
-curl http://127.0.0.1:7777/v1/health
+# Search "authentication"
+curl -X POST http://127.0.0.1:7777/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "authentication", "top_k": 5}'
 ```
 
 ## Advanced Features
@@ -173,7 +178,7 @@ Cross-encoder reranking improves search result relevance by re-scoring each resu
 #### Installation
 
 ```bash
-uv pip install pb-dolphin[reranking]
+uv pip install "pb-dolphin[reranking]"
 ```
 
 #### Configuration
@@ -235,7 +240,7 @@ MIT License
 
 ## Acknowledgments
 
-Built with [LanceDB](https://lancedb.com/), [OpenAI](https://openai.com/), [FastAPI](https://fastapi.tiangolo.com/), and [Bun](https://bun.sh/)
+Built with [LanceDB](https://lancedb.com/), [OpenAI](https://openai.com/), [FastAPI](https://fastapi.tiangolo.com/), [Bun](https://bun.sh/), and lots of other tech.
 
 ---
 

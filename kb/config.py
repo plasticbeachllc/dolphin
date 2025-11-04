@@ -133,57 +133,140 @@ class KBConfig:
         ann_data = retrieval_data.get("ann", {}) if isinstance(retrieval_data, dict) else {}
         embedding_data = data.get("embedding", {})
         cache_data = data.get("cache", {})
+        storage_data = data.get("storage", {})
+        server_data = data.get("server", {})
 
-        # Build nested dataclasses first
+        # Type coercion for nested fields
+        def _coerce_optional(value, target_type):
+            if value is None:
+                return None
+            try:
+                if target_type is bool and isinstance(value, str):
+                    return value.lower() in ("true", "1", "yes")
+                return target_type(value)
+            except (ValueError, TypeError):
+                return value  # Keep original if coercion fails
+
+        # Build nested dataclasses first - all values must come from config file
         reranking_config = RerankingConfig(
-            enabled=_get_value(reranking_data, "enabled", False, bool),
-            model=_get_value(reranking_data, "model", "cross-encoder/ms-marco-MiniLM-L-6-v2", str),
-            device=_get_value(reranking_data, "device", None, str),
-            batch_size=_get_value(reranking_data, "batch_size", 32, int),
-            candidate_multiplier=_get_value(reranking_data, "candidate_multiplier", 4, int),
-            score_threshold=_get_value(reranking_data, "score_threshold", 0.3, float)
+            enabled=_coerce_optional(reranking_data.get("enabled"), bool),
+            model=reranking_data.get("model"),
+            device=reranking_data.get("device"),
+            batch_size=_coerce_optional(reranking_data.get("batch_size"), int),
+            candidate_multiplier=_coerce_optional(reranking_data.get("candidate_multiplier"), int),
+            score_threshold=_coerce_optional(reranking_data.get("score_threshold"), float)
         )
-        
+
         hybrid_search_config = HybridSearchConfig(
-            enabled=_get_value(hybrid_search_data, "enabled", True, bool),
-            fusion_method=_get_value(hybrid_search_data, "fusion_method", "rrf", str),
-            fusion_k=_get_value(hybrid_search_data, "fusion_k", 60, int)
+            enabled=_coerce_optional(hybrid_search_data.get("enabled"), bool),
+            fusion_method=hybrid_search_data.get("fusion_method"),
+            fusion_k=_coerce_optional(hybrid_search_data.get("fusion_k"), int)
         )
-        
+
         ann_config = ANNConfig(
-            strategy=_get_value(ann_data, "strategy", "adaptive", str),
-            metric=_get_value(ann_data, "metric", "cosine", str),
-            estimated_dataset_size=_get_value(ann_data, "estimated_dataset_size", 100000, int),
-            default_query_type=_get_value(ann_data, "default_query_type", "concept", str)
+            strategy=ann_data.get("strategy"),
+            metric=ann_data.get("metric"),
+            estimated_dataset_size=_coerce_optional(ann_data.get("estimated_dataset_size"), int),
+            default_query_type=ann_data.get("default_query_type")
         )
-        
+
         retrieval_config = RetrievalConfig(
             reranking=reranking_config,
             hybrid_search=hybrid_search_config,
             ann=ann_config,
-            score_cutoff=_get_value(retrieval_data, "score_cutoff", 0.15, float),
-            top_k=_get_value(retrieval_data, "top_k", 8, int),
-            max_snippet_tokens=_get_value(retrieval_data, "max_snippet_tokens", 240, int),
-            mmr_enabled=_get_value(retrieval_data, "mmr_enabled", True, bool),
-            mmr_lambda=_get_value(retrieval_data, "mmr_lambda", 0.7, float)
+            score_cutoff=_coerce_optional(retrieval_data.get("score_cutoff"), float),
+            top_k=_coerce_optional(retrieval_data.get("top_k"), int),
+            max_snippet_tokens=_coerce_optional(retrieval_data.get("max_snippet_tokens"), int),
+            mmr_enabled=_coerce_optional(retrieval_data.get("mmr_enabled"), bool),
+            mmr_lambda=_coerce_optional(retrieval_data.get("mmr_lambda"), float)
         )
 
+        # Derive required top-level values strictly from config file (no in-code fallbacks)
+        store_root_value = None
+        if isinstance(storage_data, dict):
+            store_root_value = storage_data.get("store_root")
+        endpoint_value = None
+        if isinstance(server_data, dict):
+            endpoint_value = server_data.get("endpoint")
+
+        # Strict validation of all required keys (no in-code fallbacks)
+        missing: list[str] = []
+        if not store_root_value:
+            missing.append("storage.store_root")
+        if not endpoint_value:
+            missing.append("server.endpoint")
+        if not isinstance(embedding_data, dict) or embedding_data.get("provider") is None:
+            missing.append("embedding.provider")
+        if not isinstance(embedding_data, dict) or embedding_data.get("default_embed_model") is None:
+            missing.append("embedding.default_embed_model")
+
+        # Validate all retrieval/ANN/reranking fields are present
+        if not isinstance(retrieval_data, dict):
+            missing.append("retrieval section")
+        else:
+            if retrieval_data.get("score_cutoff") is None:
+                missing.append("retrieval.score_cutoff")
+            if retrieval_data.get("top_k") is None:
+                missing.append("retrieval.top_k")
+            if retrieval_data.get("max_snippet_tokens") is None:
+                missing.append("retrieval.max_snippet_tokens")
+            if retrieval_data.get("mmr_enabled") is None:
+                missing.append("retrieval.mmr_enabled")
+            if retrieval_data.get("mmr_lambda") is None:
+                missing.append("retrieval.mmr_lambda")
+
+            # Validate nested sections
+            if not isinstance(reranking_data, dict):
+                missing.append("retrieval.reranking section")
+            else:
+                for key in ["enabled", "model", "batch_size", "candidate_multiplier", "score_threshold"]:
+                    if reranking_data.get(key) is None:
+                        missing.append(f"retrieval.reranking.{key}")
+
+            if not isinstance(hybrid_search_data, dict):
+                missing.append("retrieval.hybrid_search section")
+            else:
+                for key in ["enabled", "fusion_method", "fusion_k"]:
+                    if hybrid_search_data.get(key) is None:
+                        missing.append(f"retrieval.hybrid_search.{key}")
+
+            if not isinstance(ann_data, dict):
+                missing.append("retrieval.ann section")
+            else:
+                for key in ["strategy", "metric", "estimated_dataset_size", "default_query_type"]:
+                    if ann_data.get(key) is None:
+                        missing.append(f"retrieval.ann.{key}")
+
+        if missing:
+            raise ValueError("Missing required configuration in ~/.dolphin/config.toml: " + ", ".join(missing))
+
+        # Type coercion for optional fields that have values
+        def _coerce_optional(value, target_type):
+            if value is None:
+                return None
+            try:
+                if target_type is bool and isinstance(value, str):
+                    return value.lower() in ("true", "1", "yes")
+                return target_type(value)
+            except (ValueError, TypeError):
+                return value  # Keep original if coercion fails
+
         return cls(
-            store_root=_to_path(data.get("store_root", CONFIG_ROOT)),
-            endpoint=_get_value(data, "endpoint", "127.0.0.1:7777", str),
-            default_embed_model=_get_value(embedding_data, "default_embed_model", "large", str),
-            concurrency=_get_value(embedding_data, "concurrency", 3, int),
-            per_session_spend_cap_usd=_get_value(data, "per_session_spend_cap_usd", 10.0, float),
+            store_root=_to_path(store_root_value),
+            endpoint=str(endpoint_value),
+            default_embed_model=embedding_data.get("default_embed_model"),
+            concurrency=_coerce_optional(embedding_data.get("concurrency"), int),
+            per_session_spend_cap_usd=_coerce_optional(data.get("per_session_spend_cap_usd"), float),
             ignore=data.get("ignore", DEFAULT_IGNORE_PATTERNS),
             ignore_exceptions=data.get("exceptions", data.get("ignore_exceptions", [])),
             retrieval=retrieval_config,
-            embedding_provider=_get_value(embedding_data, "provider", "stub", str),
-            embedding_batch_size=_get_value(embedding_data, "batch_size", 100, int),
-            openai_api_key_env=_get_value(embedding_data, "api_key_env", "OPENAI_API_KEY", str),
-            cache_enabled=_get_value(cache_data, "enabled", True, bool),
-            redis_url=_get_value(cache_data, "redis_url", None, str),
-            embedding_cache_ttl=_get_value(cache_data, "embedding_ttl", 3600, int),
-            result_cache_ttl=_get_value(cache_data, "result_ttl", 900, int),
+            embedding_provider=embedding_data.get("provider"),
+            embedding_batch_size=_coerce_optional(embedding_data.get("batch_size"), int),
+            openai_api_key_env=embedding_data.get("api_key_env"),
+            cache_enabled=_coerce_optional(cache_data.get("enabled"), bool),
+            redis_url=cache_data.get("redis_url"),
+            embedding_cache_ttl=_coerce_optional(cache_data.get("embedding_ttl"), int),
+            result_cache_ttl=_coerce_optional(cache_data.get("result_ttl"), int),
         )
 
     def resolved_store_root(self) -> Path:
@@ -192,68 +275,45 @@ class KBConfig:
 
 
 def load_config(path: Path | None = None, repo_path: Path | None = None) -> KBConfig:
-    """Load configuration with multi-level hierarchy.
-    
-    Priority order (highest to lowest):
-    1. DOLPHIN_STORE_ROOT environment variable (overrides store_root only)
-    2. Explicitly provided path (if exists, otherwise use defaults - no auto-create)
-    3. Repo-specific config (./.dolphin/config.toml)
-    4. User config (~/.dolphin/config.toml, auto-created if missing)
-    5. Built-in defaults
-    
-    Args:
-        path: Explicit config file path (highest priority, won't auto-create)
-        repo_path: Path to repository root for repo-specific config lookup
-        
-    Returns:
-        KBConfig instance with merged configuration
+    """Load configuration strictly from file (no in-code fallbacks or env overrides).
+
+    Resolution order (highest to lowest):
+    1. Explicit path (must exist)
+    2. Repo-specific config at ./.dolphin/config.toml (when repo_path is provided)
+    3. User config at ~/.dolphin/config.toml (must exist)
+
+    Raises:
+        FileNotFoundError: when no configuration file is found.
+        ValueError: when the loaded file is not a TOML mapping.
     """
-    import os
-    
     config_data: dict[str, Any] = {}
-    
-    # Try explicit path first - if provided but doesn't exist, return defaults (no auto-create)
+
+    # 1) Explicit path
     if path is not None:
-        if path.exists():
-            _log.debug("Loading config from explicit path: %s", path)
-            with path.open("rb") as f:
-                config_data = tomllib.load(f) or {}
-        else:
-            _log.debug("Explicit path %s doesn't exist, using defaults", path)
-            return KBConfig()
-    
-    # Try repo-specific config
+        if not path.exists():
+            raise FileNotFoundError(f"Config not found at {path}. Run 'dolphin init' to create one.")
+        _log.debug("Loading config from explicit path: %s", path)
+        with path.open("rb") as f:
+            config_data = tomllib.load(f) or {}
+
+    # 2) Repo-specific config
     elif repo_path:
         repo_config_path = repo_path / ".dolphin" / "config.toml"
         if repo_config_path.exists():
             _log.debug("Loading repo config: %s", repo_config_path)
             with repo_config_path.open("rb") as f:
                 config_data = tomllib.load(f) or {}
-        else:
-            # Fall through to user config
-            _log.debug("No repo config at %s, trying user config", repo_config_path)
-    
-    # If no explicit path and no config loaded yet, try user config (auto-create if needed)
+
+    # 3) User config
     if not config_data and path is None:
-        user_config = _ensure_user_config()
-        if user_config.exists():
-            _log.debug("Loading user config: %s", user_config)
-            with user_config.open("rb") as f:
-                config_data = tomllib.load(f) or {}
-    
-    # If still no config, use defaults
-    if not config_data:
-        _log.debug("No config found, using built-in defaults")
-        config_data = {}
-    
-    if config_data and not isinstance(config_data, Mapping):
-        raise ValueError(f"Config must contain a mapping")
-    
-    # Apply environment variable overrides BEFORE creating KBConfig
-    # This ensures DOLPHIN_STORE_ROOT takes precedence
-    env_store_root = os.environ.get("DOLPHIN_STORE_ROOT")
-    if env_store_root:
-        _log.debug("Overriding store_root with DOLPHIN_STORE_ROOT: %s", env_store_root)
-        config_data["store_root"] = env_store_root
-    
+        user_config = USER_CONFIG_PATH
+        if not user_config.exists():
+            raise FileNotFoundError("No configuration found. Create one with 'dolphin init' or provide --config path.")
+        _log.debug("Loading user config: %s", user_config)
+        with user_config.open("rb") as f:
+            config_data = tomllib.load(f) or {}
+
+    if not isinstance(config_data, Mapping):
+        raise ValueError("Config must contain a mapping at the top level")
+
     return KBConfig.from_mapping(config_data)
