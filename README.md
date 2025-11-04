@@ -5,7 +5,7 @@
 
 **⚠️ EXPERIMENTAL - This is a developmental library under active development. APIs and interfaces are unstable and subject to change without notice.**
 
-A semantic code search and knowledge management system for AI interface. The package includes an indexing program managed by the user and an HTTP retrieval server. The companion MCP server is available at `bunx dolphin-mcp`.
+A semantic code search and knowledge management system for AI interface. This package includes an indexing program managed by the user and an HTTP retrieval server. The companion MCP server is available at `bunx dolphin-mcp`.
 
 ## Quick Start
 
