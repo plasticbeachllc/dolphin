@@ -6,6 +6,14 @@ import numpy as np
 
 _log = logging.getLogger(__name__)
 
+# Try to import sentence_transformers at module level for easier mocking
+try:
+    from sentence_transformers import CrossEncoder as _CrossEncoder
+    _SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    _CrossEncoder = None
+    _SENTENCE_TRANSFORMERS_AVAILABLE = False
+
 class CrossEncoderReranker:
     """Rerank search results using a cross-encoder model."""
 
@@ -26,17 +34,7 @@ class CrossEncoderReranker:
             _log.info("Cross-encoder running in test mode.")
             return
 
-        try:
-            from sentence_transformers import CrossEncoder
-            _log.info(f"Loading cross-encoder model: {model_name}")
-            # Only pass device parameter if explicitly set (avoid empty string error)
-            if device:
-                self.model = CrossEncoder(model_name, device=device)
-            else:
-                self.model = CrossEncoder(model_name)
-            self.enabled = True
-            _log.info(f"Cross-encoder loaded successfully on {self.model.device}")
-        except ImportError as e:
+        if not _SENTENCE_TRANSFORMERS_AVAILABLE:
             _log.error(
                 "⚠️  Cross-encoder reranking is enabled in config but dependencies are missing!\n"
                 "   Required: torch and sentence-transformers (~2GB install)\n"
@@ -44,6 +42,17 @@ class CrossEncoderReranker:
                 "   Or with uv: uv pip install pb-dolphin[reranking]\n"
                 "   Reranking will be disabled until dependencies are installed."
             )
+            return
+        
+        try:
+            _log.info(f"Loading cross-encoder model: {model_name}")
+            # Only pass device parameter if explicitly set (avoid empty string error)
+            if device:
+                self.model = _CrossEncoder(model_name, device=device)
+            else:
+                self.model = _CrossEncoder(model_name)
+            self.enabled = True
+            _log.info(f"Cross-encoder loaded successfully on {self.model.device}")
         except Exception as e:
             _log.error(f"Failed to load cross-encoder model: {e}. Reranking disabled.")
 

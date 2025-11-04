@@ -6,7 +6,8 @@ from kb.retrieval.cross_encoder_rerank import CrossEncoderReranker
 class TestCrossEncoderReranker:
     """Test cases for the CrossEncoderReranker."""
 
-    @patch("sentence_transformers.CrossEncoder")
+    @patch("kb.retrieval.cross_encoder_rerank._SENTENCE_TRANSFORMERS_AVAILABLE", True)
+    @patch("kb.retrieval.cross_encoder_rerank._CrossEncoder")
     def test_initialization_success(self, mock_cross_encoder):
         """Test successful initialization of the reranker."""
         mock_model = MagicMock()
@@ -17,8 +18,8 @@ class TestCrossEncoderReranker:
         assert reranker.enabled
         mock_cross_encoder.assert_called_once()
 
-    @patch("sentence_transformers.CrossEncoder", side_effect=ImportError)
-    def test_initialization_import_error(self, mock_cross_encoder):
+    @patch("kb.retrieval.cross_encoder_rerank._SENTENCE_TRANSFORMERS_AVAILABLE", False)
+    def test_initialization_import_error(self):
         """Test initialization failure due to ImportError."""
         reranker = CrossEncoderReranker()
         assert not reranker.enabled
@@ -30,7 +31,8 @@ class TestCrossEncoderReranker:
         results = reranker.rerank("query", [])
         assert results == []
 
-    @patch("sentence_transformers.CrossEncoder")
+    @patch("kb.retrieval.cross_encoder_rerank._SENTENCE_TRANSFORMERS_AVAILABLE", True)
+    @patch("kb.retrieval.cross_encoder_rerank._CrossEncoder")
     def test_rerank_logic(self, mock_cross_encoder):
         """Test the core reranking logic."""
         mock_model = MagicMock()
@@ -53,7 +55,8 @@ class TestCrossEncoderReranker:
         assert reranked[1]["rerank_score"] == 0.5
         mock_model.predict.assert_called_once()
 
-    @patch("sentence_transformers.CrossEncoder")
+    @patch("kb.retrieval.cross_encoder_rerank._SENTENCE_TRANSFORMERS_AVAILABLE", True)
+    @patch("kb.retrieval.cross_encoder_rerank._CrossEncoder")
     def test_rerank_with_score_threshold(self, mock_cross_encoder):
         """Test reranking with a score threshold."""
         mock_model = MagicMock()
@@ -74,7 +77,8 @@ class TestCrossEncoderReranker:
         assert len(reranked) == 2
         assert all(r["rerank_score"] >= 0.5 for r in reranked)
 
-    @patch("sentence_transformers.CrossEncoder")
+    @patch("kb.retrieval.cross_encoder_rerank._SENTENCE_TRANSFORMERS_AVAILABLE", True)
+    @patch("kb.retrieval.cross_encoder_rerank._CrossEncoder")
     def test_rerank_disabled(self, mock_cross_encoder):
         """Test that reranking returns original order when disabled."""
         mock_model = MagicMock()
@@ -89,3 +93,10 @@ class TestCrossEncoderReranker:
         
         assert reranked == [{"text": "a"}]
         mock_model.predict.assert_not_called()
+
+    def test_initialization_test_model(self):
+        """Test initialization with test model (no external dependencies)."""
+        reranker = CrossEncoderReranker(model_name="test-model")
+        assert reranker.enabled
+        assert reranker.model is not None
+        assert reranker.model.device == "cpu"

@@ -187,7 +187,7 @@ model = "cross-encoder/ms-marco-MiniLM-L-6-v2"  # HuggingFace model
 device = ""  # Auto-detect (CPU or CUDA if available)
 batch_size = 32  # Higher = faster but more memory
 candidate_multiplier = 4  # Rerank top_k × multiplier candidates
-score_threshold = 0.0  # Minimum relevance score (0-1)
+score_threshold = 0.3  # Minimum relevance score (0-1)
 ```
 
 Restart the API server to apply changes:
@@ -198,7 +198,7 @@ uv run dolphin serve
 
 ## Development Status
 
-**Current**: Pre-alpha (0.1.x)
+**Current**: Beta (0.1.x)
 
 - ✅ Core indexing and search pipeline
 - ✅ Language-aware chunking (Python, TS, JS, Markdown)
