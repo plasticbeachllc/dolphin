@@ -36,8 +36,9 @@ class SearchRequest(BaseModel):
     max_snippet_tokens: int = 240
     embed_model: str = "large"
     score_cutoff: float | None = 0.0
-    mmr_enabled: bool | None = False
-    mmr_lambda: float | None = 0.7
+    # Defaults set to None so backend can fall back to global config when unspecified
+    mmr_enabled: bool | None = None
+    mmr_lambda: float | None = None
     ann_strategy: str | None = None
     ann_nprobes: int | None = None
     ann_refine_factor: int | None = None

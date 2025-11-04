@@ -10,7 +10,7 @@ from ..embeddings.provider import EmbeddingProvider, create_provider
 from ..store.lancedb_store import LanceDBStore
 from ..store.sqlite_meta import SQLiteMetadataStore
 from ..cache import QueryCache, create_cache
-from ..retrieval.rankers import reciprocal_rank_fusion
+from ..retrieval.rankers import reciprocal_rank_fusion, maximal_marginal_relevance
 from ..retrieval.cross_encoder_rerank import CrossEncoderReranker
 from ..retrieval.types import Document
 from ..retrieval.ann_tuning import ANNParams
@@ -116,6 +116,47 @@ class KnowledgeSearchBackend:
             reranked_ids = {doc['chunk_id'] for doc in reranked_docs}
             final_hits = reranked_docs + [h for h in hits if h['chunk_id'] not in reranked_ids]
             hits = final_hits
+
+        # Optional MMR diversification (applied after fusion/reranking, before cutoff/limit)
+        # Use request overrides when provided, otherwise fall back to global config.
+        try:
+            cfg_mmr_enabled = bool(self.config and getattr(self.config.retrieval, "mmr_enabled", False))
+            cfg_mmr_lambda = (self.config.retrieval.mmr_lambda if self.config else 0.7)
+        except Exception:
+            cfg_mmr_enabled = False
+            cfg_mmr_lambda = 0.7
+
+        mmr_enabled = request.mmr_enabled if request.mmr_enabled is not None else cfg_mmr_enabled
+        mmr_lambda = request.mmr_lambda if request.mmr_lambda is not None else cfg_mmr_lambda
+
+        if mmr_enabled and hits:
+            try:
+                # Provide per-candidate vectors for diversity if available (fallback handled in ranker)
+                for h in hits:
+                    if "query_vector" not in h:
+                        vec = h.get("vector")
+                        if isinstance(vec, list) and vec:
+                            h["query_vector"] = vec
+
+                hits = maximal_marginal_relevance(
+                    query_vector=query_embedding,  # computed earlier
+                    candidates=hits,
+                    top_k=request.top_k,
+                    lambda_param=mmr_lambda,
+                    id_field='chunk_id',
+                )
+
+                # Remove temporary fields to avoid inflating payload
+                for h in hits:
+                    if "query_vector" in h:
+                        try:
+                            del h["query_vector"]
+                        except Exception:
+                            pass
+            except Exception as e:
+                # Fall back gracefully if MMR fails for any reason
+                import logging
+                logging.warning(f"MMR diversification failed: {e}")
 
         final_results = [h for h in hits if h.get("score", 0.0) >= (request.score_cutoff or 0.0)][:request.top_k]
         
