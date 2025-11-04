@@ -123,7 +123,7 @@ top_k = 8
 score_cutoff = 0.0
 ```
 
-To generate a repo-specific config, use `dolphin init --repo`:
+To generate a repo-specific config, use `dolphin init --repo` at the repository root. 
 
 ### Environment Variables
 
