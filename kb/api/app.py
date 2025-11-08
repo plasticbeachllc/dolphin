@@ -32,6 +32,8 @@ class SearchRequest(BaseModel):
     query: str
     repos: list[str] | None = None
     path_prefix: list[str] | None = None
+    exclude_paths: list[str] | None = None
+    exclude_patterns: list[str] | None = None
     top_k: int = 8
     max_snippet_tokens: int = 240
     embed_model: str = "large"

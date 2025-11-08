@@ -88,18 +88,19 @@ class KnowledgeSearchBackend:
                 import logging
                 logging.warning(f"BM25 search failed: {e}")
 
-        # Apply request filters to vector results
+        # Apply request filters to both vector and BM25 results
         vector_filtered = self._apply_request_filters(vector_formatted, request)
+        bm25_filtered = self._apply_request_filters(bm25_hydrated, request)
         
         # Apply file type scoring adjustments to deprioritize config files
         vector_filtered = self._apply_file_type_scoring(vector_filtered)
-        bm25_hydrated = self._apply_file_type_scoring(bm25_hydrated)
+        bm25_filtered = self._apply_file_type_scoring(bm25_filtered)
         
         import logging
         logging.debug(f"Vector results before RRF: {len(vector_filtered)}")
-        logging.debug(f"BM25 results before RRF: {len(bm25_hydrated)}")
+        logging.debug(f"BM25 results before RRF: {len(bm25_filtered)}")
         
-        hits = reciprocal_rank_fusion([vector_filtered, bm25_hydrated])
+        hits = reciprocal_rank_fusion([vector_filtered, bm25_filtered])
         
         logging.debug(f"RRF results: {len(hits)}")
         for hit in hits:
@@ -177,7 +178,15 @@ class KnowledgeSearchBackend:
         return formatted
     
     def _apply_request_filters(self, results: list[dict[str, object]], request: SearchRequest) -> list[dict[str, object]]:
-        """Apply repo and path_prefix filters to results."""
+        """Apply repo, path_prefix, and negative filters to results."""
+        from pathlib import PurePosixPath
+        
+        def normalize_path(path_str: str) -> PurePosixPath:
+            """Normalize a path by removing leading ./ and / characters."""
+            path_str = path_str.lstrip('./')
+            path_str = path_str.lstrip('/')
+            return PurePosixPath(path_str)
+        
         filtered = results
         
         # Filter by repos if specified
@@ -185,20 +194,54 @@ class KnowledgeSearchBackend:
             repo_set = set(request.repos)
             filtered = [r for r in filtered if r.get('repo') in repo_set]
         
-        # Filter by path_prefix if specified
+        # Filter by path_prefix if specified (positive filtering)
         if request.path_prefix:
-            def matches_prefix(path: str) -> bool:
-                # Normalize path (remove leading ./ or /)
-                normalized = path.lstrip('./')
-                for prefix in request.path_prefix:
-                    # Normalize prefix
-                    norm_prefix = prefix.lstrip('./')
-                    # Match if path equals prefix or starts with prefix/
-                    if normalized == norm_prefix or normalized.startswith(norm_prefix + '/'):
+            def matches_prefix(path_str: str) -> bool:
+                path = normalize_path(path_str)
+                for prefix_str in request.path_prefix:
+                    prefix = normalize_path(prefix_str)
+                    try:
+                        # Check if path is relative to prefix
+                        path.relative_to(prefix)
                         return True
+                    except ValueError:
+                        # Not relative to this prefix
+                        continue
                 return False
             
             filtered = [r for r in filtered if matches_prefix(r.get('path', ''))]
+        
+        # Negative filtering: exclude_paths (exact path prefix exclusions)
+        if request.exclude_paths:
+            def matches_excluded_path(path_str: str) -> bool:
+                path = normalize_path(path_str)
+                for excl_str in request.exclude_paths:
+                    excl = normalize_path(excl_str)
+                    try:
+                        # Check if path is relative to excluded prefix
+                        path.relative_to(excl)
+                        return True
+                    except ValueError:
+                        # Not relative to this exclusion
+                        continue
+                return False
+            
+            filtered = [r for r in filtered if not matches_excluded_path(r.get('path', ''))]
+        
+        # Negative filtering: exclude_patterns (glob/fnmatch pattern exclusions)
+        if request.exclude_patterns:
+            import fnmatch
+            
+            def matches_excluded_pattern(path_str: str) -> bool:
+                path = normalize_path(path_str)
+                
+                for pattern in request.exclude_patterns:
+                    # Match against both full path and basename
+                    if fnmatch.fnmatch(str(path), pattern) or fnmatch.fnmatch(path.name, pattern):
+                        return True
+                return False
+            
+            filtered = [r for r in filtered if not matches_excluded_pattern(r.get('path', ''))]
         
         return filtered
     
