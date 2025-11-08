@@ -159,3 +159,58 @@ embedding_ttl = 3600
 
 # Search result cache TTL in seconds (0 = no expiration)
 result_ttl = 900
+
+# ======================================================================
+# LANGUAGE MAPPINGS
+# ======================================================================
+# File extension to language mappings for chunking and syntax highlighting
+# These are used to route files to the appropriate chunker and for graph extraction
+[languages]
+# Python
+py = "python"
+pyw = "python"
+pyi = "python"
+
+# TypeScript / JavaScript
+ts = "typescript"
+tsx = "typescriptreact"
+js = "javascript"
+jsx = "javascriptreact"
+mjs = "javascript"
+cjs = "javascript"
+
+# Markdown
+md = "markdown"
+markdown = "markdown"
+
+# SQL
+sql = "sql"
+
+# Svelte
+svelte = "svelte"
+
+# Configuration files (treated as text)
+json = "json"
+yaml = "yaml"
+yml = "yaml"
+toml = "toml"
+xml = "xml"
+
+# Shell scripts
+sh = "shell"
+bash = "shell"
+zsh = "shell"
+
+# Other common languages (fallback to text chunking)
+c = "c"
+cpp = "cpp"
+h = "c"
+hpp = "cpp"
+go = "go"
+rs = "rust"
+java = "java"
+rb = "ruby"
+php = "php"
+cs = "csharp"
+swift = "swift"
+kt = "kotlin"

@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+/* Optional: Add official plugins */
+@plugin '@tailwindcss/forms';
+@plugin '@tailwindcss/typography';
+
+/* Optional: Class-based dark mode */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Your custom CSS goes here */

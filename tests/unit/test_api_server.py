@@ -35,9 +35,9 @@ class TestServerInitialization:
             with patch.dict("os.environ", {"TEST_OPENAI_KEY": "test-key"}), \
                  patch("kb.api.server.load_config", return_value=config), \
                  patch("kb.api.search_backend.create_provider") as mock_create:
-                # Mock the create_provider to return OpenAIEmbeddingProvider
+                # Mock the create_provider to return OpenAIEmbeddingProvider without validation
                 from kb.embeddings.provider import OpenAIEmbeddingProvider
-                mock_provider = OpenAIEmbeddingProvider(api_key="test-key")
+                mock_provider = OpenAIEmbeddingProvider(api_key="test-key", validate_key=False)
                 mock_create.return_value = mock_provider
                 
                 initialize_search_backend()

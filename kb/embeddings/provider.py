@@ -62,6 +62,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         api_key: Optional[str] = None,
         batch_size: int = 100,
         cache: Optional[QueryCache] = None,
+        validate_key: bool = True,
     ):
         """Initialize OpenAI embedding provider.
 
@@ -69,6 +70,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             api_key: OpenAI API key. If None, reads from OPENAI_API_KEY env var.
             batch_size: Maximum number of texts to embed in a single API call.
             cache: Optional QueryCache instance for caching embeddings.
+            validate_key: Whether to validate the API key on initialization (default: True).
+                         Set to False for testing with mocked clients.
 
         Raises:
             ValueError: If no API key is provided or found in environment.
@@ -99,8 +102,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         self.batch_size = batch_size
         self.client = self._openai_module(api_key=self.api_key)
         
-        # Validate API key immediately with a minimal test request
-        self._validate_api_key()
+        # Validate API key immediately with a minimal test request (unless disabled for testing)
+        if validate_key:
+            self._validate_api_key()
 
     def _validate_api_key(self) -> None:
         """Validate API key by making a minimal test request.

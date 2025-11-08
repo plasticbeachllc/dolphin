@@ -81,7 +81,7 @@ class TestOpenAIEmbeddingProvider:
             mock_client.embeddings.create.return_value = mock_response
             mock_openai_class.return_value = mock_client
 
-            provider = OpenAIEmbeddingProvider(api_key="test-key")
+            provider = OpenAIEmbeddingProvider(api_key="test-key", validate_key=False)
             result = provider.embed_texts("small", ["text1", "text2"])
 
             assert len(result) == 2
@@ -118,7 +118,7 @@ class TestOpenAIEmbeddingProvider:
             ]
             mock_openai_class.return_value = mock_client
 
-            provider = OpenAIEmbeddingProvider(api_key="test-key", batch_size=100)
+            provider = OpenAIEmbeddingProvider(api_key="test-key", batch_size=100, validate_key=False)
             result = provider.embed_texts("small", texts)
 
             assert len(result) == 250
@@ -134,7 +134,7 @@ class TestOpenAIEmbeddingProvider:
             mock_client.embeddings.create.return_value = mock_response
             mock_openai_class.return_value = mock_client
 
-            provider = OpenAIEmbeddingProvider(api_key="test-key")
+            provider = OpenAIEmbeddingProvider(api_key="test-key", validate_key=False)
             result = provider.embed_texts("large", ["test"])
 
             assert len(result[0]) == 3072
@@ -149,7 +149,7 @@ class TestOpenAIEmbeddingProvider:
             mock_client = Mock()
             mock_openai_class.return_value = mock_client
 
-            provider = OpenAIEmbeddingProvider(api_key="test-key")
+            provider = OpenAIEmbeddingProvider(api_key="test-key", validate_key=False)
             result = provider.embed_texts("small", [])
 
             assert result == []
@@ -170,7 +170,7 @@ class TestOpenAIEmbeddingProvider:
             ]
             mock_openai_class.return_value = mock_client
 
-            provider = OpenAIEmbeddingProvider(api_key="test-key")
+            provider = OpenAIEmbeddingProvider(api_key="test-key", validate_key=False)
             result = provider.embed_texts("small", ["test"])
 
             assert len(result) == 1

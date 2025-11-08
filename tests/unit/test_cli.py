@@ -333,6 +333,9 @@ class TestBuildPipeline:
 
     def test_build_pipeline_with_openai_and_api_key(self, tmp_path, monkeypatch):
         """Test building pipeline with OpenAI provider and API key."""
+        from unittest.mock import patch
+        from kb.embeddings.provider import OpenAIEmbeddingProvider
+        
         config = KBConfig(
             store_root=tmp_path,
             embedding_provider="openai",
@@ -341,9 +344,15 @@ class TestBuildPipeline:
 
         monkeypatch.setenv("TEST_API_KEY", "test-key-12345")
 
-        pipeline = _build_pipeline(config)
+        # Mock create_provider to avoid real API validation
+        with patch('kb.ingest.cli.create_provider') as mock_create:
+            mock_provider = OpenAIEmbeddingProvider(api_key="test-key-12345", validate_key=False)
+            mock_create.return_value = mock_provider
+            
+            pipeline = _build_pipeline(config)
 
-        assert pipeline is not None
+            assert pipeline is not None
+            mock_create.assert_called_once_with("openai", api_key="test-key-12345", batch_size=100)
 
 
 class TestConfigTemplate:

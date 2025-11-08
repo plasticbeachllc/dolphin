@@ -62,21 +62,26 @@ def indexed_repo(sample_python_file: Path, tmp_path: Path):
     graph_store = GraphStore(store_root / "metadata.db")
     
     # Initialize database
-    sql_store._ensure_schema()
+    sql_store.initialize()
     
     # Create repository record
-    repo_info = sql_store.get_or_create_repo("test_repo", str(sample_python_file))
+    sql_store.record_repo("test_repo", sample_python_file)
+    repo_info = sql_store.get_repo_by_name("test_repo")
     
     # Process the file to extract graph data
     file_path = sample_python_file / "calculator.py"
     from kb.ingest.graph_helpers import extract_graph_from_file, store_graph_data
     from kb.chunkers.repo_config import RepoChunkingConfig
     
-    file_info = sql_store.get_or_create_file(
+    file_info_id = sql_store.upsert_file(
         repo_id=repo_info["id"],
         path="calculator.py",
-        language="python"
+        ext=".py",
+        language="python",
+        is_binary=False,
+        size_bytes=len(file_path.read_text())
     )
+    file_info = {"id": file_info_id}
     
     # Extract and store graph data
     try:
@@ -289,15 +294,20 @@ def test_graph_context_no_graph_data(tmp_path: Path):
     
     sql_store = SQLiteMetadataStore(store_root / "metadata.db")
     graph_store = GraphStore(store_root / "metadata.db")
-    sql_store._ensure_schema()
+    sql_store.initialize()
     
     # Create repo without graph data
-    repo_info = sql_store.get_or_create_repo("empty_repo", str(tmp_path))
-    file_info = sql_store.get_or_create_file(
+    sql_store.record_repo("empty_repo", tmp_path)
+    repo_info = sql_store.get_repo_by_name("empty_repo")
+    file_info_id = sql_store.upsert_file(
         repo_id=repo_info["id"],
         path="test.py",
-        language="python"
+        ext=".py",
+        language="python",
+        is_binary=False,
+        size_bytes=0
     )
+    file_info = {"id": file_info_id}
     
     enricher = GraphContextEnricher(
         graph_store=graph_store,

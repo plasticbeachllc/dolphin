@@ -17,6 +17,7 @@ from functools import lru_cache
 from typing import List, Optional, Tuple
 
 import tree_sitter_javascript as tsjs
+import tree_sitter_typescript as tsts
 from tree_sitter import Language, Parser
 
 from .token_utils import get_tokenizer, window_text_by_tokens, count_tokens
@@ -36,11 +37,16 @@ def _get_parser(lang: str) -> Parser:
     """Return a cached Tree-sitter parser for TypeScript/TSX/JavaScript.
     
     Uses tree-sitter 0.25+ API with Language wrapper.
-    All three languages (typescript, tsx, javascript) use the same parser.
+    TypeScript files use the TypeScript parser, JavaScript files use JavaScript parser.
     """
-    # tree-sitter-javascript handles all JS/TS variants
-    JS_LANGUAGE = Language(tsjs.language())
-    return Parser(JS_LANGUAGE)
+    if lang in ("typescript", "tsx"):
+        # Use TypeScript parser for .ts and .tsx files
+        TS_LANGUAGE = Language(tsts.language_typescript())
+        return Parser(TS_LANGUAGE)
+    else:
+        # Use JavaScript parser for .js files
+        JS_LANGUAGE = Language(tsjs.language())
+        return Parser(JS_LANGUAGE)
 
 
 @dataclass(frozen=True)

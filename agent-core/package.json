@@ -1,0 +1,22 @@
+{
+    "name": "@dolphin/agent-core",
+    "version": "0.1.0",
+    "type": "module",
+    "main": "src/main.ts",
+    "scripts": {
+        "dev": "bun run src/main.ts",
+        "build": "bun build src/main.ts --outdir dist --target bun",
+        "test": "bun test",
+        "test:watch": "bun test --watch"
+    },
+    "dependencies": {
+        "@anthropic-ai/sdk": "^0.32.1",
+        "zod": "^3.23.8",
+        "@iarna/toml": "^2.2.5",
+        "uuid": "^11.0.3"
+    },
+    "devDependencies": {
+        "@types/uuid": "^10.0.0",
+        "bun-types": "^1.1.38"
+    }
+}

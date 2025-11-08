@@ -16,8 +16,6 @@ scratch/
 continue-config/
 kilocode-config/
 
-# logs
-*.log
 
 # Python cache
 __pycache__/
@@ -33,3 +31,32 @@ coverage.xml
 # misc
 .DS_Store
 !*.example
+
+# VS Code Extension
+vscode-extension/out/
+vscode-extension/dist/
+vscode-extension/*.vsix
+vscode-extension/webview/build/
+vscode-extension/webview/.svelte-kit/
+vscode-extension/webview/node_modules/
+
+# Agent Core
+agent-core/dist/
+agent-core/node_modules/
+
+# Shared
+shared/node_modules/
+
+# Golden Scenarios
+golden-scenarios/node_modules/
+golden-scenarios/results/
+
+# State files
+.dolphin/state/
+
+# Node
+node_modules/
+*.log
+
+# TypeScript
+*.tsbuildinfo

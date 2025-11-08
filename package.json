@@ -1,0 +1,30 @@
+{
+  "name": "pb-dolphin",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "vscode-extension",
+    "vscode-extension/webview",
+    "agent-core",
+    "mcp-bridge",
+    "shared",
+    "golden-scenarios"
+  ],
+  "scripts": {
+    "setup": "npm install && cd vscode-extension/webview && bun install && cd ../.. && cd agent-core && bun install && cd .. && cd mcp-bridge && bun install",
+    "build:extension": "cd vscode-extension && npm run compile",
+    "build:webview": "cd vscode-extension/webview && bun run build",
+    "build:agent": "cd agent-core && bun run build",
+    "build:all": "npm run build:extension && npm run build:webview && npm run build:agent",
+    "test:agent": "cd agent-core && bun test",
+    "test:mcp": "cd mcp-bridge && npm run test:clean",
+    "test:kb": "cd kb && pytest tests/",
+    "test:all": "npm run test:agent && npm run test:mcp && npm run test:kb",
+    "clean": "rm -rf vscode-extension/out vscode-extension/webview/build agent-core/dist",
+    "dev:extension": "cd vscode-extension && npm run watch",
+    "dev:webview": "cd vscode-extension/webview && bun run dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

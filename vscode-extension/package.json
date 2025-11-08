@@ -1,0 +1,70 @@
+{
+    "name": "dolphin",
+    "displayName": "Dolphin AI Coding Assistant",
+    "description": "AI coding assistant with semantic code search",
+    "version": "0.1.0",
+    "publisher": "pb",
+    "engines": {
+        "vscode": "^1.96.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onStartupFinished"
+    ],
+    "main": "./out/extension.js",
+    "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "dolphin",
+                    "title": "Dolphin",
+                    "icon": "resources/transparent-dolphin.png"
+                }
+            ]
+        },
+        "views": {
+            "dolphin": [
+                {
+                    "type": "webview",
+                    "id": "dolphin.chatView",
+                    "name": "Chat"
+                }
+            ]
+        },
+        "commands": [
+            {
+                "command": "dolphin.focusInput",
+                "title": "Dolphin: Focus Input"
+            },
+            {
+                "command": "dolphin.newConversation",
+                "title": "Dolphin: New Conversation"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "dolphin.focusInput",
+                "key": "cmd+l",
+                "when": "dolphin.chatViewVisible"
+            }
+        ]
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "pretest": "npm run compile",
+        "test": "node ./out/test/runTest.js",
+        "package": "vsce package"
+    },
+    "devDependencies": {
+        "@types/node": "^22.10.0",
+        "@types/vscode": "^1.96.0",
+        "@vscode/test-electron": "^2.4.1",
+        "typescript": "^5.7.2",
+        "@vscode/vsce": "^3.2.1"
+    },
+    "dependencies": {}
+}
