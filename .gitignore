@@ -43,6 +43,7 @@ vscode-extension/webview/node_modules/
 # Agent Core
 agent-core/dist/
 agent-core/node_modules/
+agent-core/.dolphin/
 
 # Shared
 shared/node_modules/
