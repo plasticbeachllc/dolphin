@@ -46,6 +46,9 @@ class SearchRequest(BaseModel):
     ann_refine_factor: int | None = None
     # Graph context enrichment (enabled by default for better context)
     include_graph_context: bool = True
+    # Leading/trailing line context (disabled by default for backwards compatibility)
+    context_lines_before: int = 0
+    context_lines_after: int = 0
 
 
 class SearchBackend(Protocol):
