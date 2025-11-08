@@ -126,9 +126,9 @@ go = 400
 rust = 400
 markdown = 256
 text = 256
-json = 128
-toml = 128
-yaml = 128
+json = 512
+toml = 512
+yaml = 512
 
 # ======================================================================
 # LANGUAGE DETECTION: FILE EXTENSION -> LANGUAGE MAPPING
