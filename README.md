@@ -26,7 +26,7 @@ export OPENAI_API_KEY="sk-your-key-here"
 For advanced search quality improvement (+20-30% MRR):
 
 ```bash
-uv pip install pb-dolphin[reranking]
+uv pip install "pb-dolphin[reranking]"
 ```
 
 **Trade-off**: Better relevance but 2-3x slower searches. See [Advanced Features](#advanced-features) for configuration.

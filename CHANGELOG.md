@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.13] - 2025-11-08
+
+### Fixed
+
+- **MCP Bridge Testing Infrastructure**
+  - Fixed REST client base URL resolution for test mock server compatibility
+  - All parallel snippet fetching tests now passing (36/36)
+  - Dynamic environment variable reading enables proper test isolation
+
+### Changed
+
+- **MCP Bridge Version** bumped to 0.1.2
+  - REST client now reads `KB_REST_BASE_URL` dynamically during runtime
+  - Maintains backward compatibility with production configurations
+
 ## [0.1.12] - 2025-11-04
 
 ### Added
