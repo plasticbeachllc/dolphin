@@ -17,7 +17,7 @@ A semantic code search and knowledge management system for AI interface. This pa
 # install with uv (recommended)
 uv pip install pb-dolphin
 
-# ⚠️ IMPORTANT: Ensure OPENAI_API_KEY is set as env var
+# ensure OPENAI_API_KEY is set as env var
 export OPENAI_API_KEY="sk-your-key-here"
 ```
 
