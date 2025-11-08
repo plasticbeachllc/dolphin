@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import bisect
 import logging
+import re
 from typing import List, Optional, Tuple, NamedTuple
 
 import tree_sitter_python as tspython
@@ -9,8 +10,11 @@ from tree_sitter import Language, Parser
 
 from .token_utils import get_tokenizer, window_text_by_tokens, count_tokens
 from .types import Chunk
+from .graph_types import GraphNode, GraphEdge
 
 _log = logging.getLogger(__name__)
+
+__all__ = ["chunk_source", "extract_graph_data"]
 
 # Cache the Python parser so we don't reinitialize it per call
 _PY_PARSER: Optional[Parser] = None
@@ -262,3 +266,179 @@ def _extract_symbols(root, source: str) -> List[Symbol]:
 
     visit(root)
     return results
+
+
+
+def extract_graph_data(source: str) -> Tuple[List[GraphNode], List[GraphEdge]]:
+    """Extract graph nodes and edges from Python source for code graph.
+    
+    Nodes:
+    - Classes, functions, methods
+    
+    Edges:
+    - Imports (from X import Y, import X)
+    - Function calls
+    - Class inheritance
+    - Decorator usage
+    
+    Args:
+        source: Python source code
+        
+    Returns:
+        Tuple of (nodes, edges) for graph database insertion
+    """
+    nodes = []
+    edges = []
+    
+    try:
+        source_bytes = source.encode("utf-8")
+        parser = _get_python_parser()
+        parse_fn = getattr(parser, "parse", None)
+        if callable(parse_fn):
+            tree = parse_fn(source_bytes)
+        else:
+            tree = parser.parse_bytes(source_bytes)  # type: ignore[attr-defined]
+        root = tree.root_node
+    except Exception as e:
+        _log.warning("Tree-sitter parse failed for graph extraction: %s", e)
+        return [], []
+    
+    # Extract symbols as nodes
+    symbols = list(_extract_symbols(root, source))
+    for sym in symbols:
+        nodes.append(GraphNode(
+            node_type=sym.kind,
+            name=sym.name or "",
+            qualified_name=sym.path or sym.name or "",
+            start_line=sym.start_row + 1,
+            end_line=sym.end_row + 1
+        ))
+    
+    # Extract edges (imports, calls, inheritance)
+    _extract_edges(root, source, edges)
+    
+    _log.debug("Extracted %d graph nodes and %d edges from Python", len(nodes), len(edges))
+    return nodes, edges
+
+
+def _extract_edges(root, source: str, edges: List[GraphEdge]):
+    """Extract graph edges (imports, calls, inheritance) from Python AST."""
+    
+    def node_text(n) -> str:
+        if n is None:
+            return ""
+        return source[n.start_byte:n.end_byte]
+    
+    def visit(node, current_context: Optional[str] = None):
+        """Visit nodes and extract edges."""
+        ntype = node.type
+        
+        # Track current class/function context
+        if ntype == "class_definition":
+            name_node = node.child_by_field_name("name")
+            class_name = node_text(name_node) if name_node else None
+            
+            # Extract base classes (inheritance)
+            arg_list = node.child_by_field_name("superclasses")
+            if arg_list:
+                for child in arg_list.children:
+                    if child.type == "identifier" or child.type == "attribute":
+                        base_class = node_text(child)
+                        if base_class and class_name:
+                            edges.append(GraphEdge(
+                                source_name=class_name,
+                                target_name=base_class,
+                                edge_type="inherits",
+                                line_number=node.start_point[0] + 1
+                            ))
+            
+            # Recurse with new context
+            for child in node.children:
+                visit(child, class_name)
+            return
+        
+        if ntype == "function_definition":
+            name_node = node.child_by_field_name("name")
+            func_name = node_text(name_node) if name_node else None
+            if current_context:
+                qualified = f"{current_context}.{func_name}" if func_name else current_context
+            else:
+                qualified = func_name
+            
+            # Extract decorators
+            for child in node.children:
+                if child.type == "decorator":
+                    # decorator node has a child that's the decorator name
+                    for dec_child in child.children:
+                        if dec_child.type in ("identifier", "attribute"):
+                            decorator_name = node_text(dec_child)
+                            if decorator_name and qualified:
+                                edges.append(GraphEdge(
+                                    source_name=qualified,
+                                    target_name=decorator_name,
+                                    edge_type="decorated_by",
+                                    line_number=child.start_point[0] + 1
+                                ))
+            
+            # Recurse to find calls within function
+            for child in node.children:
+                visit(child, qualified)
+            return
+        
+        # Import statements
+        if ntype == "import_statement":
+            # import X, Y, Z
+            for child in node.children:
+                if child.type == "dotted_name" or child.type == "identifier":
+                    module_name = node_text(child)
+                    edges.append(GraphEdge(
+                        source_name="<module>",
+                        target_name=module_name,
+                        edge_type="imports",
+                        line_number=node.start_point[0] + 1
+                    ))
+            for child in node.children:
+                visit(child, current_context)
+            return
+        
+        if ntype == "import_from_statement":
+            # from X import Y, Z
+            module_node = node.child_by_field_name("module_name")
+            module_name = node_text(module_node) if module_node else None
+            
+            # Extract imported names
+            for child in node.children:
+                if child.type == "dotted_name" or child.type == "identifier":
+                    imported = node_text(child)
+                    if module_name and imported != module_name:
+                        edges.append(GraphEdge(
+                            source_name="<module>",
+                            target_name=f"{module_name}.{imported}",
+                            edge_type="imports",
+                            line_number=node.start_point[0] + 1
+                        ))
+            for child in node.children:
+                visit(child, current_context)
+            return
+        
+        # Function/method calls
+        if ntype == "call":
+            func_node = node.child_by_field_name("function")
+            if func_node:
+                called_name = node_text(func_node)
+                if called_name and current_context:
+                    edges.append(GraphEdge(
+                        source_name=current_context,
+                        target_name=called_name,
+                        edge_type="calls",
+                        line_number=node.start_point[0] + 1
+                    ))
+            for child in node.children:
+                visit(child, current_context)
+            return
+        
+        # Generic recursion
+        for child in node.children:
+            visit(child, current_context)
+    
+    visit(root)

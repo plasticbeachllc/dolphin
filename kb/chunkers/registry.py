@@ -35,6 +35,8 @@ from .fallback_chunker import chunk_text
 from .md_chunker import chunk_markdown
 from .py_chunker import chunk_source as chunk_python
 from .repo_config import RepoChunkingConfig
+from .sql_chunker import chunk_source as chunk_sql
+from .svelte_chunker import chunk_source as chunk_svelte
 from .ts_chunker import chunk_source as chunk_typescript
 from .types import Chunk
 
@@ -59,6 +61,8 @@ _BUILTIN_CHUNKERS: Dict[str, ChunkerFunction] = {
     "javascript": lambda text, **kwargs: chunk_typescript(text, lang="javascript", **kwargs),
     "javascriptreact": lambda text, **kwargs: chunk_typescript(text, lang="javascript", **kwargs),
     "markdown": chunk_markdown,
+    "sql": chunk_sql,
+    "svelte": chunk_svelte,
 }
 
 
