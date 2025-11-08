@@ -24,9 +24,12 @@ def temp_dir() -> Generator[Path, None, None]:
 
 
 @pytest.fixture
-def temp_db_path(temp_dir: Path) -> Path:
-    """Temporary database path for isolated tests."""
-    return temp_dir / "test_metadata.db"
+def temp_db_path(temp_dir: Path) -> Generator[Path, None, None]:
+    """Temporary database path for isolated tests with cleanup."""
+    db_path = temp_dir / "test_metadata.db"
+    yield db_path
+    # Cleanup: Ensure database is closed and removed
+    # The temp_dir context manager will handle file deletion
 
 
 @pytest.fixture
@@ -70,12 +73,13 @@ def init_test_git_repo(repo_path: Path) -> None:
 
 
 @pytest.fixture
-def git_repo(temp_dir: Path) -> Path:
-    """Create a git repository for testing."""
+def git_repo(temp_dir: Path) -> Generator[Path, None, None]:
+    """Create a git repository for testing with proper cleanup."""
     repo_path = temp_dir / "test_repo"
     repo_path.mkdir()
     init_test_git_repo(repo_path)
-    return repo_path
+    yield repo_path
+    # Cleanup is handled by temp_dir context manager
 
 
 class MockTiktokenEncoding:
@@ -350,6 +354,44 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "integration: mark test as an integration test (uses real dependencies)"
     )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_repos():
+    """Clean up any leftover test repositories from previous test runs."""
+    yield
+    
+    # After all tests complete, clean up any test repositories
+    try:
+        from pathlib import Path
+        from kb.config import CONFIG_ROOT
+        from kb.store.sqlite_meta import SQLiteMetadataStore
+        
+        # Check if the default database exists
+        db_path = CONFIG_ROOT / "metadata.db"
+        if db_path.exists():
+            store = SQLiteMetadataStore(db_path)
+            store.initialize()
+            
+            # Get all repos
+            with store._get_connection() as conn:
+                cursor = conn.execute("SELECT id, name FROM repos")
+                repos = cursor.fetchall()
+                
+                # Delete test repositories (those with test-related names)
+                test_repo_patterns = ["test", "test_repo", "test-repo", "repo-1", "repo-2", "my-repo", "integration-test"]
+                for repo_id, repo_name in repos:
+                    if any(pattern in repo_name.lower() for pattern in test_repo_patterns):
+                        # Delete all data associated with this test repo
+                        conn.execute("DELETE FROM chunks WHERE repo_id = ?", (repo_id,))
+                        conn.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
+                        conn.execute("DELETE FROM scan_sessions WHERE repo_id = ?", (repo_id,))
+                        conn.execute("DELETE FROM repos WHERE id = ?", (repo_id,))
+                
+                conn.commit()
+    except Exception:
+        # Silently ignore cleanup failures - they shouldn't break tests
+        pass
 
 
 def pytest_collection_modifyitems(config, items):

@@ -150,17 +150,22 @@ class BrokenClass
 
 
 @pytest.fixture
-
 def integration_backend_config(
     sample_repo_path: Path,
     temp_db_path: Path,
-    mock_embedding_service
+    mock_embedding_service,
+    temp_dir: Path
 ):
-    """Provide a complete backend configuration for integration testing."""
+    """Provide a complete backend configuration for integration testing with isolated storage."""
     from kb.config import KBConfig
     from kb.store import LanceDBStore, SQLiteMetadataStore
     
+    # Use temp_dir to ensure isolated storage for each test
+    store_root = temp_dir / "kb_store"
+    store_root.mkdir(parents=True, exist_ok=True)
+    
     config = KBConfig(
+        store_root=store_root,
         default_embed_model="small",
         ignore=["*.pyc", "__pycache__/*", "*.bin"],
         max_file_size=1024 * 1024,  # 1MB
@@ -168,23 +173,39 @@ def integration_backend_config(
         chunk_overlap=200
     )
     
+    # Use isolated database and vector store paths
     metadata_store = SQLiteMetadataStore(temp_db_path)
-    lancedb_store = LanceDBStore("memory://integration_test_db")
+    metadata_store.initialize()
     
-    return {
+    # Use a unique in-memory LanceDB instance for each test
+    import uuid
+    lancedb_store = LanceDBStore(f"memory://integration_test_{uuid.uuid4().hex}")
+    
+    backend_config = {
         "config": config,
         "metadata_store": metadata_store,
         "lancedb_store": lancedb_store,
         "repo_path": sample_repo_path,
         "embedding_service": mock_embedding_service
     }
+    
+    yield backend_config
+    
+    # Cleanup: Close connections
+    try:
+        metadata_store.close()
+    except Exception:
+        pass
 
 
 @pytest.fixture
 def registered_test_repo(integration_backend_config):
-    """Register a test repository in the metadata store."""
+    """Register a test repository in the metadata store with cleanup."""
     metadata_store = integration_backend_config["metadata_store"]
     repo_path = integration_backend_config["repo_path"]
+    
+    # Initialize the metadata store to ensure tables exist
+    metadata_store.initialize()
     
     metadata_store.record_repo(
         name="integration-test-repo",
@@ -194,11 +215,29 @@ def registered_test_repo(integration_backend_config):
     repo = metadata_store.get_repo_by_name("integration-test-repo")
     repo_id = int(repo["id"]) if repo else 0
     
-    return {
+    repo_data = {
         "repo_id": repo_id,
         "repo_name": "integration-test-repo",
         "repo_path": repo_path
     }
+    
+    yield repo_data
+    
+    # Cleanup: Remove the test repository from the database
+    try:
+        # Delete all data associated with this repo
+        if repo_id:
+            with metadata_store._get_connection() as conn:
+                # Delete in order to respect foreign key constraints
+                conn.execute("DELETE FROM chunks WHERE repo_id = ?", (repo_id,))
+                conn.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
+                conn.execute("DELETE FROM scan_sessions WHERE repo_id = ?", (repo_id,))
+                conn.execute("DELETE FROM repos WHERE id = ?", (repo_id,))
+                conn.commit()
+    except Exception as e:
+        # Log cleanup failures but don't fail the test
+        import logging
+        logging.warning(f"Failed to cleanup test repo {repo_id}: {e}")
 
 
 @pytest.fixture

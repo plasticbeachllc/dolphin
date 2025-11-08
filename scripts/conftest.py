@@ -9,15 +9,18 @@ import socket
 def store_root():
     """Provide a temporary store root directory for tests."""
     with tempfile.TemporaryDirectory() as temp_dir:
-        yield Path(temp_dir) / "dolphin_store"
+        store_path = Path(temp_dir) / "dolphin_store"
+        store_path.mkdir(parents=True, exist_ok=True)
+        yield store_path
 
 
 @pytest.fixture
-def repo_path(store_root):
-    """Provide a temporary repository path for tests."""
-    repo_dir = store_root.parent / "test_repo"
-    repo_dir.mkdir(parents=True, exist_ok=True)
-    yield repo_dir
+def repo_path():
+    """Provide a temporary repository path for tests that self-cleans."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        repo_dir = Path(temp_dir) / "test_repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        yield repo_dir
 
 
 @pytest.fixture

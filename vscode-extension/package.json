@@ -1,6 +1,6 @@
 {
     "name": "dolphin",
-    "displayName": "Dolphin AI Coding Assistant",
+    "displayName": "Dolphin AI",
     "description": "AI coding assistant with semantic code search",
     "version": "0.1.0",
     "publisher": "pb",
@@ -20,7 +20,7 @@
                 {
                     "id": "dolphin",
                     "title": "Dolphin",
-                    "icon": "resources/transparent-dolphin.png"
+                    "icon": "resources/dolphin.svg"
                 }
             ]
         },
@@ -41,6 +41,10 @@
             {
                 "command": "dolphin.newConversation",
                 "title": "Dolphin: New Conversation"
+            },
+            {
+                "command": "dolphin.test",
+                "title": "Dolphin: Test"
             }
         ],
         "keybindings": [
