@@ -275,6 +275,31 @@ class SQLiteMetadataStore:
             pass
         return counts
 
+    def list_all_repos(self) -> list[dict[str, Any]]:
+        """List all registered repositories with their metadata.
+        
+        Returns:
+            List of repo dicts with id, name, root_path, default_embed_model
+        """
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute("""
+                SELECT id, name, root_path, default_embed_model, created_at, updated_at
+                FROM repos
+                ORDER BY name
+            """)
+            rows = cur.fetchall() or []
+            return [
+                {
+                    "id": int(row[0]),
+                    "name": str(row[1]),
+                    "root_path": str(row[2]),
+                    "default_embed_model": str(row[3]),
+                    "created_at": row[4],
+                    "updated_at": row[5],
+                }
+                for row in rows
+            ]
+
     def get_repo_by_name(self, name: str) -> dict[str, str | int] | None:
         """Return repo record by name or None if not found."""
         with self._connect() as conn, closing(conn.cursor()) as cur:

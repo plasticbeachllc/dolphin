@@ -191,9 +191,17 @@ reset name:
 	uv run dolphin kb add-repo {{name}} $(pwd) --default-embed-model large
 	uv run dolphin kb index {{name}} --full --force
 
-# Show knowledge base status
+# Show knowledge base status (with detailed repo listing)
 kb-status:
 	uv run dolphin kb status
+
+# List all registered repositories
+kb-list-repos:
+	uv run dolphin kb list-repos
+
+# Full system reset (removes ALL repos and data)
+kb-reset-all:
+	uv run dolphin kb reset-all
 
 # --- Persona Management (via dolphin personas) ---
 
@@ -231,14 +239,30 @@ tail-mcp:
   tail -f mcp-bridge/logs/mcp.log
 
 # ==============================================================================
-# Cleanup (dangerous)
+# Cleanup Commands
 # ==============================================================================
 
+# Clean all repositories and data (preserves config)
+reset-all:
+	@echo "⚠️  This will remove ALL repositories and data from the knowledge store."
+	@echo "Configuration will be preserved."
+	@echo ""
+	uv run dolphin kb reset-all
+
+# Force reset without confirmation (dangerous!)
+reset-all-force:
+	@echo "🔥 Force resetting ALL repositories..."
+	uv run dolphin kb reset-all --force
+
+# Nuclear option: Delete entire knowledge store directory
 store-clean:
-  @echo "This will DELETE ~/.dolphin/knowledge_store"
-  @echo "Press Ctrl-C to abort or wait 5 seconds to continue..."
-  sleep 5
-  rm -rf ~/.dolphin/knowledge_store
+	@echo "💣 This will DELETE ~/.dolphin/knowledge_store"
+	@echo "This removes EVERYTHING including configuration!"
+	@echo "Press Ctrl-C to abort or wait 5 seconds to continue..."
+	sleep 5
+	rm -rf ~/.dolphin/knowledge_store
+	@echo "✅ Knowledge store directory deleted."
+	@echo "Run 'just init' to reinitialize."
 
 # ==============================================================================
 # CLI Tool Development & Building

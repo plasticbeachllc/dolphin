@@ -151,14 +151,32 @@ def index(
 
 @app.command()
 def status(name: str | None = typer.Argument(None, help="Optional repo name.")) -> None:
-    """Report knowledge store status."""
+    """Report knowledge store status with detailed repository listing."""
     config = load_config()
     metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
     # Ensure DB and schema exist before summarizing.
     metadata.initialize()
+    
+    # Get aggregate counts
     summary = metadata.summarize()
-    _ = name
-    typer.echo(f"Knowledge store summary: {summary}")
+    typer.echo(f"\n📊 Knowledge Store Summary:")
+    typer.echo(f"  Total repositories: {summary['repos']}")
+    typer.echo(f"  Total files: {summary['files']}")
+    typer.echo(f"  Total chunks: {summary['chunks']}")
+    
+    # List all registered repositories
+    repos = metadata.list_all_repos()
+    if repos:
+        typer.echo(f"\n📚 Registered Repositories:")
+        for repo in repos:
+            typer.echo(f"\n  • {repo['name']}")
+            typer.echo(f"    Path: {repo['root_path']}")
+            typer.echo(f"    Embed Model: {repo['default_embed_model']}")
+            typer.echo(f"    Created: {repo['created_at']}")
+    else:
+        typer.echo(f"\n  No repositories registered.")
+    
+    typer.echo()
 
 
 @app.command("prune-ignored")
@@ -718,6 +736,129 @@ def repair_repo(
     except Exception as e:
         typer.echo(f"Error: Repair failed: {e}", err=True)
         raise typer.Exit(code=1)
+
+
+@app.command("list-repos")
+def list_repos() -> None:
+    """List all registered repositories."""
+    config = load_config()
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata.initialize()
+    
+    repos = metadata.list_all_repos()
+    if not repos:
+        typer.echo("No repositories registered.")
+        return
+    
+    typer.echo(f"\n📚 Registered Repositories ({len(repos)}):\n")
+    for repo in repos:
+        typer.echo(f"  • {repo['name']}")
+        typer.echo(f"    Path: {repo['root_path']}")
+        typer.echo(f"    Model: {repo['default_embed_model']}")
+        typer.echo(f"    ID: {repo['id']}")
+        typer.echo()
+
+
+@app.command("reset-all")
+def reset_all(
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt."),
+) -> None:
+    """Reset the entire knowledge store (delete everything).
+    
+    WARNING: This will:
+    - Remove ALL repositories
+    - Delete ALL metadata (files, chunks, locations, sessions, FTS)
+    - Delete ALL vectors from LanceDB
+    - Preserve configuration
+    
+    This is a nuclear option for complete cleanup.
+    """
+    config = load_config()
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata.initialize()
+    
+    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+    
+    # Get all repos for cleanup
+    repos = metadata.list_all_repos()
+    
+    if not repos:
+        typer.echo("No repositories to clean up.")
+        return
+    
+    # Show what will be deleted
+    summary = metadata.summarize()
+    typer.echo(f"\n⚠️  WARNING: This will delete EVERYTHING:")
+    typer.echo(f"  • {len(repos)} repositories")
+    typer.echo(f"  • {summary['files']} files")
+    typer.echo(f"  • {summary['chunks']} chunks")
+    typer.echo(f"\nRepositories to be removed:")
+    for repo in repos:
+        typer.echo(f"  - {repo['name']} ({repo['root_path']})")
+    
+    # Confirm unless --force
+    if not force:
+        typer.echo()
+        confirm = typer.confirm("Are you absolutely sure you want to delete everything?")
+        if not confirm:
+            typer.echo("Aborted.")
+            raise typer.Exit(code=0)
+    
+    # Remove all repos using enhanced cleanup
+    typer.echo(f"\n🧹 Removing all repositories with comprehensive cleanup...")
+    total_stats = {
+        "repos_removed": 0,
+        "files_deleted": 0,
+        "content_deleted": 0,
+        "locations_deleted": 0,
+        "sessions_deleted": 0,
+        "vectors_deleted": 0,
+        "errors": []
+    }
+    
+    for repo in repos:
+        try:
+            result = metadata.rm_repo_with_lancedb(lancedb, repo['name'], force=True)
+            stats = result["cleanup_stats"]
+            
+            total_stats["repos_removed"] += 1
+            total_stats["files_deleted"] += stats["files_deleted"]
+            total_stats["content_deleted"] += stats["content_deleted"]
+            total_stats["locations_deleted"] += stats["locations_deleted"]
+            total_stats["sessions_deleted"] += stats["sessions_deleted"]
+            total_stats["vectors_deleted"] += (
+                stats["lancedb_vectors"]["small_deleted"] +
+                stats["lancedb_vectors"]["large_deleted"]
+            )
+            
+            typer.echo(f"  ✓ Removed {repo['name']}")
+            
+            # Capture any warnings
+            if "lancedb_warnings" in result:
+                total_stats["errors"].extend(result["lancedb_warnings"])
+                
+        except Exception as e:
+            error_msg = f"Failed to remove {repo['name']}: {e}"
+            total_stats["errors"].append(error_msg)
+            typer.echo(f"  ✗ {error_msg}", err=True)
+    
+    # Display final summary
+    typer.echo(f"\n✅ Reset complete!")
+    typer.echo(f"\nCleanup Statistics:")
+    typer.echo(f"  Repositories removed: {total_stats['repos_removed']}")
+    typer.echo(f"  Files deleted: {total_stats['files_deleted']}")
+    typer.echo(f"  Chunks deleted: {total_stats['content_deleted']}")
+    typer.echo(f"  Locations deleted: {total_stats['locations_deleted']}")
+    typer.echo(f"  Sessions deleted: {total_stats['sessions_deleted']}")
+    typer.echo(f"  Vectors deleted: {total_stats['vectors_deleted']}")
+    
+    if total_stats["errors"]:
+        typer.echo(f"\n⚠️  Warnings ({len(total_stats['errors'])}):")
+        for error in total_stats["errors"]:
+            typer.echo(f"  - {error}", err=True)
+    
+    typer.echo(f"\nConfiguration preserved at: {config.resolved_store_root()}")
+    typer.echo(f"You can now run 'dolphin kb add-repo' to register new repositories.")
 
 
 def main() -> None:

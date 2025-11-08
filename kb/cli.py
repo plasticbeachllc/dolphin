@@ -105,7 +105,7 @@ def index(
 def status(
     name: Optional[str] = typer.Argument(None, help="Optional repository name."),
 ) -> None:
-    """Report knowledge store status."""
+    """Report knowledge store status with detailed repository listing."""
     kb_status(name)
 
 
@@ -284,6 +284,26 @@ def _display_results(hits: list, show_content: bool, sql_store=None) -> None:
                 typer.echo("   " + "─" * 70)
     
     typer.echo()
+
+
+@app.command()
+def list_repos() -> None:
+    """List all registered repositories."""
+    from kb.ingest.cli import list_repos as kb_list_repos
+    kb_list_repos()
+
+
+@app.command()
+def reset_all(
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt."),
+) -> None:
+    """Reset the entire knowledge store (delete everything).
+    
+    WARNING: This will remove ALL repositories and data.
+    Configuration will be preserved.
+    """
+    from kb.ingest.cli import reset_all as kb_reset_all
+    kb_reset_all(force=force)
 
 
 # ==============================================================================
