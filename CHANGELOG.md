@@ -3,11 +3,8 @@
 ## [0.1.13] - 2025-11-08
 
 ### Fixed
-
-- **MCP Bridge Testing Infrastructure**
-  - Fixed REST client base URL resolution for test mock server compatibility
-  - All parallel snippet fetching tests now passing (36/36)
-  - Dynamic environment variable reading enables proper test isolation
+- **MMR Relevance Selection**
+  - Configured to work properly
 
 ### Changed
 
