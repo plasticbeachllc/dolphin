@@ -75,7 +75,11 @@ class SQLiteMetadataStore:
                         "sessions": "Indexing sessions",
                         "files": "File catalog",
                         "chunk_content": "Chunk content",
-                        "chunk_locations": "Chunk locations"
+                        "chunk_locations": "Chunk locations",
+                        "code_nodes": "Code graph nodes",
+                        "code_edges": "Code graph edges",
+                        "node_aliases": "Code graph aliases",
+                        "cross_repo_references": "Cross-repo references"
                     }
                     
                     for table, description in expected_tables.items():
@@ -88,6 +92,9 @@ class SQLiteMetadataStore:
                     
                     # Robust FTS5 creation with version checking
                     self._create_fts5_table_safe(cur)
+                    
+                    # Create code graph FTS5 index for symbol search
+                    self._create_code_graph_fts5_safe(cur)
                     
                     conn.commit()
                 
@@ -170,6 +177,30 @@ class SQLiteMetadataStore:
             """)
         except sqlite3.OperationalError as e:
             raise RuntimeError(f"Failed to create FTS5 table: {e}")
+    
+    def _create_code_graph_fts5_safe(self, cur) -> None:
+        """Safely create FTS5 table for code graph symbol search."""
+        import sqlite3
+        
+        try:
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='code_nodes_fts'")
+            if cur.fetchone():
+                return  # Already exists
+            
+            # Create FTS5 table for code node symbol search
+            cur.execute("""
+                CREATE VIRTUAL TABLE code_nodes_fts USING fts5(
+                    node_id UNINDEXED,
+                    qualified_name,
+                    name,
+                    signature,
+                    docstring,
+                    tokenize='porter unicode61'
+                )
+            """)
+        except sqlite3.OperationalError as e:
+            # FTS5 support already checked, so this is a different error
+            raise RuntimeError(f"Failed to create code_nodes_fts table: {e}")
     
     def _validate_database_integrity(self) -> None:
         """Perform comprehensive database integrity validation."""

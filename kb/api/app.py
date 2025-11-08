@@ -44,6 +44,8 @@ class SearchRequest(BaseModel):
     ann_strategy: str | None = None
     ann_nprobes: int | None = None
     ann_refine_factor: int | None = None
+    # Graph context enrichment (enabled by default for better context)
+    include_graph_context: bool = True
 
 
 class SearchBackend(Protocol):

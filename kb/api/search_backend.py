@@ -9,11 +9,13 @@ from ..config import KBConfig
 from ..embeddings.provider import EmbeddingProvider, create_provider
 from ..store.lancedb_store import LanceDBStore
 from ..store.sqlite_meta import SQLiteMetadataStore
+from ..store.graph_store import GraphStore
 from ..cache import QueryCache, create_cache
 from ..retrieval.rankers import reciprocal_rank_fusion, maximal_marginal_relevance
 from ..retrieval.cross_encoder_rerank import CrossEncoderReranker
 from ..retrieval.types import Document
 from ..retrieval.ann_tuning import ANNParams
+from ..retrieval.graph_context import GraphContextEnricher
 from .app import SearchRequest
 
 class KnowledgeSearchBackend:
@@ -26,6 +28,7 @@ class KnowledgeSearchBackend:
         hybrid_search_enabled: bool = True,
         reranker: Optional[CrossEncoderReranker] = None,
         config: Optional[KBConfig] = None,
+        graph_store: Optional[GraphStore] = None,
     ):
         self.embedding_provider = embedding_provider
         self.lance_store = lance_store
@@ -34,7 +37,18 @@ class KnowledgeSearchBackend:
         self.hybrid_search_enabled = hybrid_search_enabled
         self.reranker = reranker
         self.config = config
+        self.graph_store = graph_store
         self._request_ann_config = None  # Per-request ANN configuration overrides
+        
+        # Initialize graph enricher if graph store is available
+        self.graph_enricher = None
+        if self.graph_store:
+            self.graph_enricher = GraphContextEnricher(
+                graph_store=self.graph_store,
+                sql_store=self.sql_store,
+                max_related_nodes=10,
+                max_edges_per_node=5
+            )
 
     def search(self, request: SearchRequest) -> Sequence[dict[str, object]]:
         # Check cache first if available
@@ -160,6 +174,21 @@ class KnowledgeSearchBackend:
                 logging.warning(f"MMR diversification failed: {e}")
 
         final_results = [h for h in hits if h.get("score", 0.0) >= (request.score_cutoff or 0.0)][:request.top_k]
+        
+        # Enrich with graph context if requested and available
+        include_graph = getattr(request, 'include_graph_context', False)
+        if include_graph and self.graph_enricher:
+            try:
+                final_results = self.graph_enricher.enrich_search_results(
+                    final_results,
+                    include_callsites=True,
+                    include_implementations=True,
+                    include_dependencies=True
+                )
+            except Exception as e:
+                # Log error but don't fail the search
+                import logging
+                logging.warning(f"Graph enrichment failed: {e}")
         
         # Cache results if cache is available
         if self.cache:
@@ -550,6 +579,15 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
             device=config.retrieval.reranking.device
         )
     
+    # Create graph store
+    graph_store = None
+    try:
+        graph_store = GraphStore(config.resolved_store_root() / "metadata.db")
+    except Exception:
+        # Graph store is optional
+        import logging
+        logging.debug("Graph store not available")
+    
     # Create and return the search backend
     return KnowledgeSearchBackend(
         embedding_provider=provider,
@@ -558,5 +596,6 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
         cache=cache,
         hybrid_search_enabled=hybrid_search_enabled,
         reranker=reranker,
-        config=config
+        config=config,
+        graph_store=graph_store
     )

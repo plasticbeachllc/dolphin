@@ -9,17 +9,24 @@ from pathspec import PathSpec
 
 from ..config import KBConfig
 from ..store import LanceDBStore, SQLiteMetadataStore
+from ..store.graph_store import GraphStore
 from ..ingest.scanner import FileCandidate, scan_repo
 from ..ignores import build_ignore_set, load_repo_ignores
 from ..ingest.dedup import ChunkDeduplicator
 from ..ingest._helpers import (
-    build_desired_map, 
-    git_changed_files_modified_added, 
+    build_desired_map,
+    git_changed_files_modified_added,
     git_changed_files_deleted,
     get_all_tracked_files,
     representative_text_for_hash
 )
 from ..ingest.error_logging import ErrorLogger
+from ..ingest.graph_helpers import (
+    extract_graph_from_file,
+    store_graph_data,
+    cleanup_graph_for_file,
+    cleanup_graph_for_repo,
+)
 from ..embeddings.provider import embed_texts_with_retry
 from ..chunkers.registry import get_chunker_for_file, detect_language_from_extension, chunk_file as chunk_file_with_config
 from ..hashing import hash_text
@@ -32,6 +39,12 @@ class IngestionPipeline:
     config: KBConfig
     lancedb: LanceDBStore
     metadata: SQLiteMetadataStore
+    graph_store: GraphStore | None = None
+    
+    def __post_init__(self):
+        """Initialize graph store if not provided."""
+        if self.graph_store is None:
+            self.graph_store = GraphStore(self.metadata.db_path)
 
     def _git(self, root: Path, *args: str) -> str:
         try:
@@ -55,6 +68,7 @@ class IngestionPipeline:
         - All chunk content and locations from metadata
         - All vectors from LanceDB (both small and large models)
         - All FTS5 index entries
+        - All code graph data (nodes and edges)
         
         Args:
             repo_id: Repository ID
@@ -67,6 +81,15 @@ class IngestionPipeline:
                 self.lancedb.delete_repo(repo_name, model=model)
             except Exception as e:
                 print(f"  Warning: Could not delete {model} vectors: {e}")
+        
+        # Delete code graph data
+        if self.graph_store:
+            print(f"  Clearing code graph data...")
+            try:
+                nodes_deleted = cleanup_graph_for_repo(self.graph_store, repo_id)
+                print(f"  Deleted {nodes_deleted} graph nodes and associated edges")
+            except Exception as e:
+                print(f"  Warning: Could not delete graph data: {e}")
         
         # Delete from metadata database
         print(f"  Clearing metadata...")
@@ -291,6 +314,7 @@ class IngestionPipeline:
 
         # Initialize counters
         files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
+        graph_nodes_created = graph_edges_created = 0
 
         # Process modified/added files
         for path in changed_files:
@@ -346,6 +370,30 @@ class IngestionPipeline:
                 # Compute text_hash for each chunk
                 for chunk in chunks:
                     chunk.text_hash = hash_text(chunk.text)
+                
+                # Extract and store code graph data
+                if self.graph_store and not dry_run:
+                    try:
+                        nodes, edges = extract_graph_from_file(
+                            file_path, language, text, repo_config
+                        )
+                        if nodes or edges:
+                            graph_stats = store_graph_data(
+                                self.graph_store,
+                                nodes,
+                                edges,
+                                repo_id=repo_id,
+                                file_id=file_id,
+                                language=language,
+                                commit_sha=commit_sha,
+                                branch=branch,
+                            )
+                            graph_nodes_created += graph_stats["nodes_created"]
+                            graph_edges_created += graph_stats["edges_created"]
+                    except Exception as e:
+                        error_logger.log_file_error(f"graph: {path}", e)
+                        # Don't fail the entire file if graph extraction fails
+                        pass
 
                 # Build desired map
                 desired = build_desired_map(chunks)
@@ -486,6 +534,11 @@ class IngestionPipeline:
                         if pruned_count:
                             total_pruned += pruned_count
                         self.lancedb.prune_file_rows(repo_name, path, model=model_name)
+                    
+                    # Clean up graph data for deleted file
+                    if self.graph_store:
+                        cleanup_graph_for_file(self.graph_store, file_id)
+                    
                     files_done += 1
                     chunks_pruned += total_pruned
                     print(f"  {path}: deleted, {total_pruned} chunks pruned")
@@ -514,6 +567,10 @@ class IngestionPipeline:
                             chunks_pruned += pruned_count
                             print(f"  {file_path}: pruned {pruned_count} ignored chunks (model={model})")
                         self.lancedb.prune_file_rows(repo_name, file_path, model=model)
+                    
+                    # Clean up graph data for ignored file
+                    if self.graph_store:
+                        cleanup_graph_for_file(self.graph_store, file_id)
         
         # Update session counters
         if not dry_run:
@@ -536,6 +593,9 @@ class IngestionPipeline:
         print(f"  Chunks skipped (dedup): {chunks_skipped}")
         print(f"  Chunks pruned (deleted): {chunks_pruned}")
         print(f"  Vectors written: {vectors_written}")
+        if graph_nodes_created > 0 or graph_edges_created > 0:
+            print(f"  Graph nodes created: {graph_nodes_created}")
+            print(f"  Graph edges created: {graph_edges_created}")
         print(f"  Session: {session_id}")
         
         # Only mention error log if something was actually written
@@ -558,5 +618,7 @@ class IngestionPipeline:
             "chunks_skipped": chunks_skipped,
             "vectors_written": vectors_written,
             "chunks_pruned": chunks_pruned,
+            "graph_nodes_created": graph_nodes_created,
+            "graph_edges_created": graph_edges_created,
             "dry_run": dry_run
         }
