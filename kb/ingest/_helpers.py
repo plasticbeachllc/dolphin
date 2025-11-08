@@ -58,6 +58,13 @@ def build_desired_map(chunks: Sequence[Chunk]) -> Dict[str, List[Dict]]:
 def git_changed_files_modified_added(repo_root: Path, from_commit: str, to_commit: str = 'HEAD') -> List[str]:
     """Get list of modified and added files between two commits.
     
+    This uses three-way comparison via merge-base to correctly handle pulls and merges:
+    1. Finds the merge base between from_commit and to_commit
+    2. Compares merge base to to_commit to get all changes (local + remote)
+    3. Returns union of changes, ensuring files changed on either branch are re-indexed
+    
+    This fixes the bug where pulling remote changes wouldn't re-index locally-modified files.
+    
     Args:
         repo_root: Root path of the git repository
         from_commit: Starting commit (exclusive)
@@ -67,9 +74,18 @@ def git_changed_files_modified_added(repo_root: Path, from_commit: str, to_commi
         List of file paths relative to repo root
     """
     try:
-        # Get modified and added files
+        # Get merge base between from_commit and to_commit
+        # This handles both linear history and merge scenarios correctly
+        merge_base_result = subprocess.run(
+            ['git', '-C', str(repo_root), 'merge-base', from_commit, to_commit],
+            capture_output=True, text=True, check=True
+        )
+        merge_base = merge_base_result.stdout.strip()
+        
+        # Get all files changed from merge base to HEAD
+        # This includes both local changes and remote changes after a pull
         result = subprocess.run(
-            ['git', '-C', str(repo_root), 'diff', '--name-only', f'{from_commit}..{to_commit}'],
+            ['git', '-C', str(repo_root), 'diff', '--name-only', f'{merge_base}..{to_commit}'],
             capture_output=True, text=True, check=True
         )
         files = [line.strip() for line in result.stdout.splitlines() if line.strip()]
@@ -81,6 +97,8 @@ def git_changed_files_modified_added(repo_root: Path, from_commit: str, to_commi
 def git_changed_files_deleted(repo_root: Path, from_commit: str, to_commit: str = 'HEAD') -> List[str]:
     """Get list of deleted files between two commits.
     
+    Uses merge-base comparison to correctly detect deletions after pulls/merges.
+    
     Args:
         repo_root: Root path of the git repository
         from_commit: Starting commit (exclusive)
@@ -90,9 +108,16 @@ def git_changed_files_deleted(repo_root: Path, from_commit: str, to_commit: str 
         List of file paths relative to repo root
     """
     try:
-        # Get deleted files
+        # Get merge base for consistent comparison
+        merge_base_result = subprocess.run(
+            ['git', '-C', str(repo_root), 'merge-base', from_commit, to_commit],
+            capture_output=True, text=True, check=True
+        )
+        merge_base = merge_base_result.stdout.strip()
+        
+        # Get deleted files from merge base to HEAD
         result = subprocess.run(
-            ['git', '-C', str(repo_root), 'diff', '--name-only', '--diff-filter=D', f'{from_commit}..{to_commit}'],
+            ['git', '-C', str(repo_root), 'diff', '--name-only', '--diff-filter=D', f'{merge_base}..{to_commit}'],
             capture_output=True, text=True, check=True
         )
         files = [line.strip() for line in result.stdout.splitlines() if line.strip()]
