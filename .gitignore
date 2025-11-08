@@ -28,6 +28,7 @@ tests/**/test-results.xml
 tests/**/coverage.xml
 tests/reports/*
 .coverage
+coverage.xml
 
 # misc
 .DS_Store

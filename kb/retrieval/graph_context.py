@@ -105,11 +105,9 @@ class GraphContextEnricher:
             return None
         
         repo_id = repo_info["id"]
-        file_info = self.sql_store.get_file_by_path(repo_id, path)
-        if not file_info:
+        file_id = self.sql_store.get_file_id(repo_id, path)
+        if not file_id:
             return None
-        
-        file_id = file_info["id"]
         
         # Get all nodes for this file
         all_nodes = self.graph_store.get_nodes_for_file(file_id)
