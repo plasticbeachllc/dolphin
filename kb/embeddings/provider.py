@@ -98,6 +98,41 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
         self.batch_size = batch_size
         self.client = self._openai_module(api_key=self.api_key)
+        
+        # Validate API key immediately with a minimal test request
+        self._validate_api_key()
+
+    def _validate_api_key(self) -> None:
+        """Validate API key by making a minimal test request.
+        
+        Raises:
+            RuntimeError: If API key is invalid or authentication fails
+        """
+        try:
+            # Make a minimal test request with a tiny payload
+            self.client.embeddings.create(
+                input=["test"],
+                model="text-embedding-3-small"
+            )
+            # If we get here, the API key is valid
+        except Exception as e:
+            error_msg = str(e)
+            if "401" in error_msg or "invalid" in error_msg.lower() or "incorrect" in error_msg.lower():
+                raise RuntimeError(
+                    f"\n{'='*70}\n"
+                    f"OPENAI API KEY VALIDATION FAILED\n"
+                    f"{'='*70}\n"
+                    f"The OpenAI API key is invalid or has expired.\n\n"
+                    f"To fix this:\n"
+                    f"  1. Get a valid API key from: https://platform.openai.com/account/api-keys\n"
+                    f"  2. Set it in your environment:\n"
+                    f"     export OPENAI_API_KEY=\"sk-your-actual-key-here\"\n"
+                    f"  3. Or add to your shell profile (~/.zshrc or ~/.bashrc)\n\n"
+                    f"Original error: {error_msg}\n"
+                    f"{'='*70}\n"
+                )
+            # For other errors, raise the original exception
+            raise
 
     @with_retry(max_attempts=3, delays=(1.0, 2.0, 4.0))
     def embed_texts(self, model: str, texts: List[str]) -> List[List[float]]:
