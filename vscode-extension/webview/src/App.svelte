@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { MessageList, ChatInput } from '$lib/components/chat';
+  import { MessageList, ChatInput, ChatHeader } from '$lib/components/chat';
   import AppNavigation from '$lib/components/navigation/AppNavigation.svelte';
-  import { sendMessage, onMessage, abortGeneration } from '$lib/api/vscode';
+  import { sendMessage, onMessage, abortGeneration, saveState, getState } from '$lib/api/vscode';
   import type { AgentEvent } from '../../../shared/types/events';
   import SettingsPage from './routes/settings/+page.svelte';
   import ProfilePage from './routes/profile/+page.svelte';
@@ -53,16 +53,46 @@
   let startupTimer: number | null = null;
   let showLogo = $state(true);
   let hasUserSentMessage = $state(false);
-  
+
   let messages = $state<Message[]>([]);
 
   let isProcessing = $state(false);
 
+  // Agent configuration
+  let agentVersion = $state<string | undefined>(undefined);
+  let model = $state<string>('claude-sonnet-4');
+  let temperature = $state<number>(0.7);
+  let toolsEnabled = $state<boolean>(true);
+
   // Reference to ChatInput component to programmatically focus it
   let chatInputRef: any = null;
 
+  // Auto-save state whenever messages change
+  $effect(() => {
+    // Trigger when messages or hasUserSentMessage change
+    const state = {
+      messages,
+      hasUserSentMessage
+    };
+    saveState(state);
+    console.log('[App] Saved state with', messages.length, 'messages');
+  });
+
   // Set up message listener from VS Code extension
   onMount(() => {
+    // Restore saved state
+    const savedState = getState();
+    if (savedState) {
+      console.log('[App] Restoring saved state:', savedState);
+      if (savedState.messages) {
+        messages = savedState.messages;
+      }
+      if (savedState.hasUserSentMessage !== undefined) {
+        hasUserSentMessage = savedState.hasUserSentMessage;
+        showLogo = !savedState.hasUserSentMessage;
+      }
+    }
+
     // Start tracking startup time
     startupTimer = window.setInterval(() => {
       if (!agentReady) {
@@ -77,6 +107,7 @@
         case 'agent_ready':
           console.log('[App] Agent ready:', event.version);
           agentReady = true;
+          agentVersion = event.version;
           if (startupTimer !== null) {
             clearInterval(startupTimer);
             startupTimer = null;
@@ -239,12 +270,21 @@
   
   {#if currentView === '/'}
     <div class="chat-page">
+      {#if agentReady}
+        <ChatHeader
+          {model}
+          {temperature}
+          {toolsEnabled}
+          {agentVersion}
+        />
+      {/if}
+
       {#if showLogo && messages.length === 0 && agentReady}
         <div class="logo-container" transition:fade={{ duration: 600 }}>
           <div class="dolphin-logo">🐬</div>
         </div>
       {/if}
-      
+
       <div class="messages-container">
         <MessageList {messages} />
       </div>

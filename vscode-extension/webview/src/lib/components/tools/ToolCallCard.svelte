@@ -21,9 +21,24 @@
 	export let diff: FileDiff | undefined = undefined;
 
 	let expanded = !collapsed;
-	
+
 	// Detect if this is a file editing tool
 	const isFileEditTool = ['apply_diff', 'write_to_file', 'file_write', 'search_and_replace', 'insert_content'].includes(tool);
+
+	// Extract file path from input for peek action
+	function getFilePath(): string | null {
+		if (!input) return null;
+		return input.file_path || input.path || input.filename || null;
+	}
+
+	function handlePeekFile(e: Event) {
+		e.stopPropagation();
+		const filePath = getFilePath();
+		if (filePath) {
+			// TODO: Send message to extension to open file
+			console.log('[ToolCallCard] Peek file:', filePath);
+		}
+	}
 
 	const toolIcons: Record<string, string> = {
 		search_knowledge: '🔍',
@@ -71,6 +86,17 @@
 			</div>
 
 			<div class="flex items-center gap-2 shrink-0">
+				{#if isFileEditTool && getFilePath() && status === 'success'}
+					<button
+						class="peek-button text-xs"
+						onclick={handlePeekFile}
+						aria-label="View file {getFilePath()}"
+						title="View file"
+					>
+						👁️ View
+					</button>
+				{/if}
+
 				{#if executionTime}
 					<Badge variant="outline" class="text-xs">{executionTime}ms</Badge>
 				{/if}
@@ -134,14 +160,35 @@
 	}
 
 	:global(.tool-call-card[data-status='running']) {
-		border-left-color: hsl(var(--primary));
+		border-left-color: var(--vscode-charts-blue, hsl(var(--primary)));
 	}
 
 	:global(.tool-call-card[data-status='success']) {
-		border-left-color: rgb(34, 197, 94);
+		border-left-color: var(--vscode-charts-green, hsl(142 76% 36%));
 	}
 
 	:global(.tool-call-card[data-status='error']) {
-		border-left-color: rgb(239, 68, 68);
+		border-left-color: var(--vscode-charts-red, hsl(0 84% 60%));
+	}
+
+	.peek-button {
+		padding: 0.25rem 0.5rem;
+		border-radius: 0.25rem;
+		background: hsl(var(--muted));
+		color: hsl(var(--foreground));
+		border: 1px solid hsl(var(--border));
+		cursor: pointer;
+		transition: all 0.2s;
+		font-family: inherit;
+	}
+
+	.peek-button:hover {
+		background: hsl(var(--accent));
+		border-color: hsl(var(--primary));
+	}
+
+	.peek-button:focus-visible {
+		outline: 2px solid hsl(var(--primary));
+		outline-offset: 2px;
 	}
 </style>
