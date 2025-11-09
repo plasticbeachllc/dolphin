@@ -98,6 +98,49 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 
 ---
 
+## KB Lifecycle Management
+
+### Production Deployment Strategy
+
+**Current State (Development):**
+- KB server runs separately (`uv run dolphin serve`)
+- Extension connects to existing KB on localhost:8000
+- Manual two-step startup process
+
+**Target State (Production):**
+- KB server auto-starts when extension activates
+- Zero-configuration user experience
+- Automatic process lifecycle management
+
+**Implementation:** See [`KB-LIFECYCLE-MANAGEMENT.md`](KB-LIFECYCLE-MANAGEMENT.md) for detailed implementation plan.
+
+### KBManager Enhancement
+
+**Location:** [`agent-core/src/kb/manager.ts`](../agent-core/src/kb/manager.ts)
+
+**New Capabilities:**
+- **Health Check:** Detect KB server on localhost:8000
+- **Auto-Start:** Spawn KB subprocess if not running
+- **Lifecycle Management:** Track and cleanup KB process
+- **Error Recovery:** Graceful degradation and restart logic
+
+**Startup Flow:**
+```
+Extension Activation
+  ↓
+KBManager.start()
+  ↓
+Check localhost:8000/health
+  ├─ Running? → Use existing
+  └─ Not running? → Spawn subprocess
+      ↓
+  Poll /health (500ms, max 30s)
+      ↓
+  KB Ready ✅
+```
+
+---
+
 ## Components
 
 ### 1. REST API Backend (Python/FastAPI)

@@ -3,6 +3,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Settings, Zap, Database, Bell } from 'lucide-svelte';
+	import AuthStatus from '$lib/components/AuthStatus.svelte';
 	
 	let apiKey = $state('');
 	let model = $state('claude-sonnet-4');
@@ -19,6 +20,9 @@
 		</div>
 
 		<div class="space-y-6">
+			<!-- Authentication Status -->
+			<AuthStatus />
+			
 			<Card>
 				<CardHeader>
 					<CardTitle class="flex items-center gap-2">

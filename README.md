@@ -157,7 +157,9 @@ The small companion MCP interface can be run via `bun` without install. Add to y
 }
 ```
 
-Make sure you are running the HTTP retrieval server: `uv run dolphin serve`
+**Note:** In development, make sure you are running the HTTP retrieval server: `uv run dolphin serve`
+
+In production deployments (e.g., VSCode extension), the KB server lifecycle is managed automatically.
 
 Available MCP tools: `search_knowledge`, `fetch_chunk`, `fetch_lines`, `get_vector_store_info`
 

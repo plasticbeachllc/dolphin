@@ -323,6 +323,61 @@ reinstall-all: install-cli-tools create-scripts install-mcp-bridge build-mcp-bri
 	@echo "✅ All CLI tools and MCP bridge reinstalled"
 
 # ==============================================================================
+# VSCode Extension Building
+# ==============================================================================
+
+# Build webview UI
+ext-build-webview:
+	@echo "🎨 Building webview UI..."
+	@cd vscode-extension/webview && bun run build
+
+# Compile extension TypeScript
+ext-compile:
+	@echo "📦 Compiling extension TypeScript..."
+	@cd vscode-extension && npm run compile
+
+# Bundle uv binaries for all platforms
+ext-bundle-uv:
+	@echo "🐍 Bundling uv binaries..."
+	@bash scripts/bundle-uv.sh
+
+# Build extension (webview + compile)
+ext-build: ext-build-webview ext-compile
+	@echo "✅ Extension built successfully"
+
+# Build extension for production (includes bundled uv)
+ext-build-prod: ext-bundle-uv ext-build
+	@echo "✅ Extension built for production with bundled uv"
+
+# Package extension for all platforms
+ext-package: ext-build-prod
+	@echo "📦 Packaging extension for all platforms..."
+	@cd vscode-extension && npm run package
+
+# Package extension for specific platform (darwin-arm64, darwin-x64, linux-x64, win32-x64)
+ext-package-platform platform: ext-build-prod
+	@echo "📦 Packaging extension for {{platform}}..."
+	@cd vscode-extension && vsce package --target {{platform}}
+
+# Clean extension build artifacts
+ext-clean:
+	@echo "🧹 Cleaning extension build artifacts..."
+	@rm -rf vscode-extension/out
+	@rm -rf vscode-extension/webview/build
+	@rm -rf vscode-extension/dist/uv
+	@rm -f vscode-extension/*.vsix
+
+# Install extension dependencies
+ext-install:
+	@echo "📥 Installing extension dependencies..."
+	@cd vscode-extension && npm install
+	@cd vscode-extension/webview && bun install
+
+# Full extension setup (install + build)
+ext-setup: ext-install ext-build
+	@echo "✅ Extension setup complete"
+
+# ==============================================================================
 # Deployment
 # ==============================================================================
 
