@@ -9,6 +9,7 @@
 	import PlanTimeline from '$lib/components/PlanTimeline.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import ErrorAlert from '$lib/components/ErrorAlert.svelte';
+	import AuthStatus from '$lib/components/AuthStatus.svelte';
 	
 	// Sample data
 	let showConfirmDialog = $state(false);
@@ -245,9 +246,28 @@ index 1234567..abcdefg 100644
 					</Card>
 				</div>
 			</section>
-
+	
 			<Separator />
-
+	
+			<!-- Settings Components Section -->
+			<section>
+				<h2 class="text-2xl font-bold mb-6">Settings Components</h2>
+				
+				<div class="space-y-6">
+					<Card>
+						<CardHeader>
+							<CardTitle>AuthStatus - Subscription Active</CardTitle>
+							<CardDescription>Authentication status showing active Claude subscription</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<AuthStatus />
+						</CardContent>
+					</Card>
+				</div>
+			</section>
+	
+			<Separator />
+	
 			<!-- Theme Testing Section -->
 			<section>
 				<h2 class="text-2xl font-bold mb-6">Theme & Styling</h2>

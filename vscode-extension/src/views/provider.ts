@@ -71,6 +71,54 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             });
           }
           break;
+        
+        case "get_auth_status":
+          this.outputChannel.appendLine(`[DolphinViewProvider] Processing get_auth_status request`);
+          if (this.agentBridge) {
+            try {
+              // Request auth status from agent via JSON-RPC
+              this.outputChannel.appendLine(`[DolphinViewProvider] Requesting auth status from agent`);
+              
+              // Use the new getAuthStatus method on AgentBridge
+              const status = await this.agentBridge.getAuthStatus();
+              
+              this.outputChannel.appendLine(`[DolphinViewProvider] Received auth status: ${JSON.stringify(status)}`);
+              
+              // Send status to webview
+              webviewView.webview.postMessage({
+                type: 'auth_status',
+                status: status
+              });
+            } catch (error: any) {
+              this.outputChannel.appendLine(`[DolphinViewProvider] Error getting auth status: ${error.message}`);
+              // Send error state
+              webviewView.webview.postMessage({
+                type: 'auth_status',
+                status: {
+                  mode: 'auto',
+                  cliInstalled: false,
+                  cliAuthenticated: false,
+                  apiKeySet: false,
+                  willUseSubscription: false
+                }
+              });
+            }
+          } else {
+            // Mock auth status when agent not connected
+            this.outputChannel.appendLine(`[DolphinViewProvider] Agent not connected, using mock data`);
+            webviewView.webview.postMessage({
+              type: 'auth_status',
+              status: {
+                mode: 'auto',
+                cliInstalled: false,
+                cliAuthenticated: false,
+                apiKeySet: false,
+                willUseSubscription: false
+              }
+            });
+          }
+          break;
+        
         default:
           this.outputChannel.appendLine(`[DolphinViewProvider] Unknown message type: ${message.type}`);
       }
@@ -104,7 +152,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
       let htmlContent = fs.readFileSync(indexPath, "utf8");
       this.outputChannel.appendLine(`[DolphinViewProvider] Original HTML length: ${htmlContent.length}`);
       
-      // Replace /assets/ paths with webview URIs
+      // Replace /assets/ paths (legacy Vite build) with webview URIs
       let replacementCount = 0;
       htmlContent = htmlContent.replace(
         /(href|src)="\/assets\/([^"]+)"/g,
@@ -125,7 +173,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
       this.outputChannel.appendLine(`[DolphinViewProvider] Removed crossorigin attribute`);
       
       // Add CSP meta tag
-      const cspTag = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource}; img-src ${webview.cspSource} data:; font-src ${webview.cspSource};">`;
+      const cspTag = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource}; connect-src ${webview.cspSource};">`;
       htmlContent = htmlContent.replace(
         /<meta charset="UTF-8" \/>/,
         `<meta charset="UTF-8" />\n\t${cspTag}`
