@@ -4,7 +4,7 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Collapsible from '$lib/components/ui/collapsible';
-	import { ChevronDown, ChevronRight, FileCode, Info } from 'lucide-svelte';
+	import { ChevronDown, ChevronRight, FileCode, Info, MessageSquare, ArrowRight } from 'lucide-svelte';
 	import MessageCard from '$lib/components/chat/MessageCard.svelte';
 	import ChatInput from '$lib/components/chat/ChatInput.svelte';
 	import ToolCallCard from '$lib/components/tools/ToolCallCard.svelte';
@@ -93,6 +93,30 @@
 				Visual showcase of all Dolphin UI components with interactive examples
 			</p>
 		</div>
+
+		<!-- Featured Section: Conversation Persistence Mockups -->
+		<Card class="bg-primary/5 border-primary/20 mb-8">
+			<CardContent class="p-6">
+				<div class="flex items-center justify-between">
+					<div class="space-y-2">
+						<div class="flex items-center gap-2">
+							<MessageSquare class="h-6 w-6 text-primary" />
+							<h3 class="text-xl font-bold">Conversation Persistence Mockups</h3>
+							<Badge variant="default">Phase 5</Badge>
+						</div>
+						<p class="text-sm text-muted-foreground">
+							Interactive prototypes for conversation management UI patterns. Explore Card Grid, Compact List, and Timeline views with full session management features.
+						</p>
+					</div>
+					<Button size="lg" onclick={() => window.location.href = '/gallery/conversations'}>
+						View Mockups
+						<ArrowRight class="h-4 w-4 ml-2" />
+					</Button>
+				</div>
+			</CardContent>
+		</Card>
+
+		<Separator class="mb-12" />
 
 		<div class="space-y-12">
 			<!-- Chat Components Section -->
