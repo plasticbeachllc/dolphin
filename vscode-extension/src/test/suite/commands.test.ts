@@ -2,14 +2,14 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { waitForExtensionActivation, sleep } from '../helpers/test-utils';
 
-suite('Command Tests', () => {
-  suiteSetup(async function () {
+describe('Command Tests', () => {
+  before(async function () {
     this.timeout(15000);
     await waitForExtensionActivation();
     await sleep(1000);
   });
 
-  test('Should execute dolphin.focusInput command', async function () {
+  it('Should execute dolphin.focusInput command', async function () {
     this.timeout(10000);
 
     try {
@@ -30,7 +30,7 @@ suite('Command Tests', () => {
     }
   });
 
-  test('Should execute dolphin.newConversation command', async function () {
+  it('Should execute dolphin.newConversation command', async function () {
     this.timeout(10000);
 
     try {
@@ -50,7 +50,7 @@ suite('Command Tests', () => {
     }
   });
 
-  test('Should execute dolphin.test command', async function () {
+  it('Should execute dolphin.test command', async function () {
     this.timeout(10000);
 
     try {
@@ -67,7 +67,7 @@ suite('Command Tests', () => {
     }
   });
 
-  test('All registered Dolphin commands should be executable', async function () {
+  it('All registered Dolphin commands should be executable', async function () {
     this.timeout(15000);
 
     const allCommands = await vscode.commands.getCommands(true);

@@ -2,14 +2,14 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { waitForExtensionActivation, sleep } from '../helpers/test-utils';
 
-suite('Webview Tests', () => {
-  suiteSetup(async function () {
+describe('Webview Tests', () => {
+  before(async function () {
     this.timeout(15000);
     await waitForExtensionActivation();
     await sleep(1000);
   });
 
-  test('Should be able to focus Dolphin chat view', async function () {
+  it('Should be able to focus Dolphin chat view', async function () {
     this.timeout(10000);
 
     try {
@@ -29,7 +29,7 @@ suite('Webview Tests', () => {
     }
   });
 
-  test('Should have Dolphin activity bar contribution', async function () {
+  it('Should have Dolphin activity bar contribution', async function () {
     this.timeout(5000);
 
     const extension = vscode.extensions.getExtension('pb.dolphin');
@@ -62,7 +62,7 @@ suite('Webview Tests', () => {
     );
   });
 
-  test('Should have chat view contribution', async function () {
+  it('Should have chat view contribution', async function () {
     this.timeout(5000);
 
     const extension = vscode.extensions.getExtension('pb.dolphin');
@@ -87,7 +87,7 @@ suite('Webview Tests', () => {
     );
   });
 
-  test('Should have correct keybindings', async function () {
+  it('Should have correct keybindings', async function () {
     this.timeout(5000);
 
     const extension = vscode.extensions.getExtension('pb.dolphin');

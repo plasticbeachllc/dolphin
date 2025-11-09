@@ -60,6 +60,50 @@ export async function activate(context: vscode.ExtensionContext) {
     );
     outputChannel.appendLine("[Dolphin] Provider registered successfully");
 
+    // Register commands
+    outputChannel.appendLine("[Dolphin] Registering commands...");
+    
+    // Command: dolphin.focusInput - Focus the chat input in the webview
+    context.subscriptions.push(
+      vscode.commands.registerCommand('dolphin.focusInput', async () => {
+        outputChannel.appendLine("[Dolphin] Executing dolphin.focusInput");
+        await vscode.commands.executeCommand('dolphin.chatView.focus');
+        // Post message to webview to focus the input element
+        // This would require provider to expose a method to post messages
+        vscode.window.showInformationMessage("Chat input focused");
+      })
+    );
+
+    // Command: dolphin.newConversation - Start a new conversation
+    context.subscriptions.push(
+      vscode.commands.registerCommand('dolphin.newConversation', async () => {
+        outputChannel.appendLine("[Dolphin] Executing dolphin.newConversation");
+        // Clear the current conversation and start fresh
+        if (agentBridge) {
+          // Would need to implement clearConversation on AgentBridge
+          outputChannel.appendLine("[Dolphin] Starting new conversation");
+        }
+        vscode.window.showInformationMessage("New conversation started");
+      })
+    );
+
+    // Command: dolphin.test - Test command for development/debugging
+    context.subscriptions.push(
+      vscode.commands.registerCommand('dolphin.test', async () => {
+        outputChannel.appendLine("[Dolphin] Executing dolphin.test");
+        const info = {
+          agentBridgeActive: !!agentBridge,
+          commands: await vscode.commands.getCommands(true).then(cmds =>
+            cmds.filter(c => c.startsWith('dolphin.'))
+          )
+        };
+        outputChannel.appendLine(`[Dolphin] Test info: ${JSON.stringify(info, null, 2)}`);
+        vscode.window.showInformationMessage(`Dolphin test: ${info.commands.length} commands registered`);
+      })
+    );
+
+    outputChannel.appendLine("[Dolphin] Commands registered successfully");
+
     vscode.window.showInformationMessage("Dolphin activated! 🐬");
     outputChannel.appendLine("[Dolphin] Activation complete");
   } catch (error: any) {

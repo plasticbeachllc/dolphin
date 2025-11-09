@@ -3,10 +3,10 @@ import * as vscode from 'vscode';
 import { waitForExtensionActivation, sleep } from '../helpers/test-utils';
 import { MockKBServer } from '../helpers/mock-services';
 
-suite('Integration Tests', () => {
+describe('Integration Tests', () => {
   let mockServer: MockKBServer;
 
-  suiteSetup(async function () {
+  before(async function () {
     this.timeout(20000);
 
     // Start mock KB API server
@@ -17,14 +17,14 @@ suite('Integration Tests', () => {
     await sleep(1000);
   });
 
-  suiteTeardown(async function () {
+  after(async function () {
     this.timeout(5000);
     if (mockServer) {
       await mockServer.stop();
     }
   });
 
-  test('Mock KB API server should be running', async function () {
+  it('Mock KB API server should be running', async function () {
     this.timeout(5000);
 
     assert.ok(mockServer, 'Mock server should be initialized');
@@ -56,7 +56,7 @@ suite('Integration Tests', () => {
     );
   });
 
-  test('Extension should activate in workspace with mock server', async function () {
+  it('Extension should activate in workspace with mock server', async function () {
     this.timeout(10000);
 
     const extension = vscode.extensions.getExtension('pb.dolphin');
@@ -64,7 +64,7 @@ suite('Integration Tests', () => {
     assert.ok(extension.isActive, 'Extension should be active');
   });
 
-  test('Mock KB API should handle search requests', async function () {
+  it('Mock KB API should handle search requests', async function () {
     this.timeout(5000);
 
     const http = require('http');
@@ -111,7 +111,7 @@ suite('Integration Tests', () => {
     );
   });
 
-  test('Complete workflow: Extension activation → Webview → Commands', async function () {
+  it('Complete workflow: Extension activation → Webview → Commands', async function () {
     this.timeout(15000);
 
     // 1. Verify extension is active

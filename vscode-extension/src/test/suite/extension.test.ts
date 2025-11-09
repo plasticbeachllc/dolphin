@@ -6,13 +6,13 @@ import {
   sleep,
 } from '../helpers/test-utils';
 
-suite('Extension Activation Tests', () => {
-  test('Extension should be present', () => {
+describe('Extension Activation Tests', () => {
+  it('Extension should be present', () => {
     const extension = getDolphinExtension();
     assert.ok(extension, 'Extension should be present');
   });
 
-  test('Extension should activate successfully', async function () {
+  it('Extension should activate successfully', async function () {
     this.timeout(15000); // Give extension time to activate
 
     const extension = await waitForExtensionActivation();
@@ -25,7 +25,7 @@ suite('Extension Activation Tests', () => {
     );
   });
 
-  test('Extension should register commands', async function () {
+  it('Extension should register commands', async function () {
     this.timeout(15000);
 
     await waitForExtensionActivation();
@@ -46,7 +46,7 @@ suite('Extension Activation Tests', () => {
     }
   });
 
-  test('Extension should create output channel', async function () {
+  it('Extension should create output channel', async function () {
     this.timeout(15000);
 
     await waitForExtensionActivation();
@@ -56,7 +56,7 @@ suite('Extension Activation Tests', () => {
     assert.ok(true, 'Extension activated without throwing errors');
   });
 
-  test('Extension should register webview view provider', async function () {
+  it('Extension should register webview view provider', async function () {
     this.timeout(15000);
 
     await waitForExtensionActivation();

@@ -39,6 +39,9 @@ vscode-extension/*.vsix
 vscode-extension/webview/build/
 vscode-extension/webview/.svelte-kit/
 vscode-extension/webview/node_modules/
+vscode-extension/.vscode-test/
+vscode-extension/test-workspace/
+vscode-extension/test-output.log
 
 # Agent Core
 agent-core/dist/

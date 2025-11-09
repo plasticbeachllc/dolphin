@@ -15,15 +15,21 @@ async function main() {
     console.log('Starting E2E tests...');
     console.log('Extension path:', extensionDevelopmentPath);
     console.log('Tests path:', extensionTestsPath);
+    console.log('Using VS Code 1.85.0 (last version with working test args)');
 
     await runTests({
       extensionDevelopmentPath,
       extensionTestsPath,
+      version: '1.85.0', // Last stable version that works with @vscode/test-electron args
       launchArgs: [
-        '--disable-extensions', // Disable other extensions for isolated testing
-        '--disable-gpu',        // Better for CI environments
-        '--no-sandbox',         // Required for some CI environments
+        '--disable-extensions', // Disable other extensions
+        '--verbose', // Enable verbose logging
+        '--log', 'trace', // Enable trace logging
       ],
+      extensionTestsEnv: {
+        ELECTRON_ENABLE_LOGGING: '1',
+        VSCODE_LOG_LEVEL: 'trace',
+      },
     });
 
     console.log('All tests passed!');
