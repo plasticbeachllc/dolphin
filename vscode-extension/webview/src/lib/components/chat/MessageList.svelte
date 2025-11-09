@@ -35,7 +35,7 @@
   });
 </script>
 
-<ScrollArea class="h-full w-full">
+<ScrollArea class="h-full w-full" role="log" aria-label="Chat messages" aria-live="polite">
   <div class="p-2 space-y-2">
     {#each messages as message, i (i)}
       {#if message.type === "tool_call"}
@@ -56,6 +56,6 @@
         />
       {/if}
     {/each}
-    <div bind:this={messagesEndRef}></div>
+    <div bind:this={messagesEndRef} aria-hidden="true"></div>
   </div>
 </ScrollArea>

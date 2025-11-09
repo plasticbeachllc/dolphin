@@ -43,8 +43,11 @@ export type AgentEvent =
       options: string[];
       requestId?: string;
     }
-  | { type: "task_completed"; success: boolean; result?: any; error?: any; requestId?: string }
-  | { type: "error"; error: AgentError; requestId?: string };
+  | { type: "task_completed"; success: boolean; result?: any; error?: any }
+  | { type: "error"; error: AgentError }
+  | { type: "focus_input" }
+  | { type: "clear_conversation" }
+  | { type: "prefill_input"; text: string };
 
 export interface Plan {
   id: string;

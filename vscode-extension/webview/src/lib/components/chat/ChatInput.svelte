@@ -46,6 +46,12 @@
   export function focus() {
     textareaRef?.focus();
   }
+
+  // Export a prefill method that can be called by parent
+  export function prefill(text: string) {
+    message = text;
+    textareaRef?.focus();
+  }
 </script>
 
 <div class="input-wrapper">

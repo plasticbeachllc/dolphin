@@ -54,6 +54,13 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
     this.postMessage({ type: 'focus_input' });
   }
 
+  /**
+   * Prefill the chat input with text
+   */
+  public prefillInput(text: string): void {
+    this.postMessage({ type: 'prefill_input', text });
+  }
+
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     // Store webview reference
     this.webviewView = webviewView;
@@ -183,6 +190,17 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           }
           break;
         
+        case "apply_diff":
+          this.outputChannel.appendLine(`[DolphinViewProvider] Processing apply_diff for ${message.diff?.filePath}`);
+          if (message.diff) {
+            try {
+              await vscode.commands.executeCommand('dolphin.applyDiff', message.diff);
+            } catch (error: any) {
+              this.outputChannel.appendLine(`[DolphinViewProvider] Error applying diff: ${error.message}`);
+            }
+          }
+          break;
+
         default:
           this.outputChannel.appendLine(`[DolphinViewProvider] Unknown message type: ${message.type}`);
       }
@@ -283,15 +301,26 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
 
   private sendTheme(webview: vscode.Webview): void {
     const theme = vscode.window.activeColorTheme;
+
+    // Get actual VS Code theme colors
+    const getColor = (key: string, fallback: string): string => {
+      return new vscode.ThemeColor(key).toString() || fallback;
+    };
+
     webview.postMessage({
       type: "theme_update",
       theme: {
         kind: theme.kind === vscode.ColorThemeKind.Dark ? "dark" : "light",
         colors: {
-          background: "#1e1e1e",
-          foreground: "#d4d4d4",
-          primary: "#007acc",
-          border: "#454545"
+          background: getColor("editor.background", "#1e1e1e"),
+          foreground: getColor("editor.foreground", "#d4d4d4"),
+          primary: getColor("focusBorder", "#007acc"),
+          border: getColor("panel.border", "#454545"),
+          // Additional theme colors for better fidelity
+          sidebarBackground: getColor("sideBar.background", "#252526"),
+          inputBackground: getColor("input.background", "#3c3c3c"),
+          buttonBackground: getColor("button.background", "#0e639c"),
+          buttonForeground: getColor("button.foreground", "#ffffff")
         }
       }
     });
