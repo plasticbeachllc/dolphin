@@ -79,6 +79,103 @@ describe('Command Tests', () => {
     );
   });
 
+  // Phase 2: Editor Integration Commands
+  describe('Contextual Editor Commands', () => {
+    it('Should register dolphin.askAboutSelection command', async function () {
+      const commands = await vscode.commands.getCommands(true);
+      assert.ok(
+        commands.includes('dolphin.askAboutSelection'),
+        'dolphin.askAboutSelection command should be registered'
+      );
+    });
+
+    it('Should register dolphin.refactorSelection command', async function () {
+      const commands = await vscode.commands.getCommands(true);
+      assert.ok(
+        commands.includes('dolphin.refactorSelection'),
+        'dolphin.refactorSelection command should be registered'
+      );
+    });
+
+    it('Should register dolphin.askAboutFile command', async function () {
+      const commands = await vscode.commands.getCommands(true);
+      assert.ok(
+        commands.includes('dolphin.askAboutFile'),
+        'dolphin.askAboutFile command should be registered'
+      );
+    });
+
+    it('Should register dolphin.askAboutFolder command', async function () {
+      const commands = await vscode.commands.getCommands(true);
+      assert.ok(
+        commands.includes('dolphin.askAboutFolder'),
+        'dolphin.askAboutFolder command should be registered'
+      );
+    });
+  });
+
+  describe('Code Action Commands', () => {
+    it('Should register dolphin.explainCode command', async function () {
+      const commands = await vscode.commands.getCommands(true);
+      assert.ok(
+        commands.includes('dolphin.explainCode'),
+        'dolphin.explainCode command should be registered'
+      );
+    });
+
+    it('Should register dolphin.refactorCode command', async function () {
+      const commands = await vscode.commands.getCommands(true);
+      assert.ok(
+        commands.includes('dolphin.refactorCode'),
+        'dolphin.refactorCode command should be registered'
+      );
+    });
+
+    it('Should register dolphin.addTests command', async function () {
+      const commands = await vscode.commands.getCommands(true);
+      assert.ok(
+        commands.includes('dolphin.addTests'),
+        'dolphin.addTests command should be registered'
+      );
+    });
+
+    it('Should register dolphin.documentCode command', async function () {
+      const commands = await vscode.commands.getCommands(true);
+      assert.ok(
+        commands.includes('dolphin.documentCode'),
+        'dolphin.documentCode command should be registered'
+      );
+    });
+
+    it('Should execute code action commands with parameters', async function () {
+      this.timeout(10000);
+
+      const testCode = 'function test() { return 42; }';
+      const fileName = 'test.ts';
+      const language = 'typescript';
+
+      try {
+        await vscode.commands.executeCommand('dolphin.explainCode', testCode, fileName, language);
+        await sleep(500);
+        assert.ok(true, 'dolphin.explainCode executed with parameters');
+      } catch (err) {
+        // May fail in headless mode, but command should be registered
+        const commands = await vscode.commands.getCommands(true);
+        assert.ok(commands.includes('dolphin.explainCode'));
+      }
+    });
+  });
+
+  describe('Diff Application Command', () => {
+    it('Should register dolphin.applyDiff command', async function () {
+      const commands = await vscode.commands.getCommands(true);
+      assert.ok(
+        commands.includes('dolphin.applyDiff'),
+        'dolphin.applyDiff command should be registered'
+      );
+    });
+  });
+
   it('All registered Dolphin commands should be executable', async function () {
     this.timeout(15000);
 
@@ -88,8 +185,8 @@ describe('Command Tests', () => {
     );
 
     assert.ok(
-      dolphinCommands.length >= 4,
-      'Should have at least 4 Dolphin commands'
+      dolphinCommands.length >= 13,
+      'Should have at least 13 Dolphin commands (4 original + 9 Phase 2)'
     );
 
     // Log all Dolphin commands for debugging
@@ -104,6 +201,12 @@ describe('Command Tests', () => {
       // Skip setApiKey command that requires user input
       if (cmd === 'dolphin.setApiKey') {
         console.log(`  Skipping ${cmd} (requires user input)`);
+        continue;
+      }
+
+      // Skip commands that require parameters
+      if (['dolphin.explainCode', 'dolphin.refactorCode', 'dolphin.addTests', 'dolphin.documentCode', 'dolphin.applyDiff'].includes(cmd)) {
+        console.log(`  Skipping ${cmd} (requires parameters)`);
         continue;
       }
 

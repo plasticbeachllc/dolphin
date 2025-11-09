@@ -16,7 +16,11 @@
         "onCommand:dolphin.focusInput",
         "onCommand:dolphin.newConversation",
         "onCommand:dolphin.setApiKey",
-        "onCommand:dolphin.test"
+        "onCommand:dolphin.test",
+        "onCommand:dolphin.askAboutSelection",
+        "onCommand:dolphin.refactorSelection",
+        "onCommand:dolphin.askAboutFile",
+        "onCommand:dolphin.askAboutFolder"
     ],
     "main": "./out/extension.js",
     "contributes": {
@@ -62,6 +66,26 @@
             {
                 "command": "dolphin.kb.restart",
                 "title": "Dolphin: Restart Knowledge Base"
+            },
+            {
+                "command": "dolphin.askAboutSelection",
+                "title": "Dolphin: Ask About Selection"
+            },
+            {
+                "command": "dolphin.refactorSelection",
+                "title": "Dolphin: Refactor Selection"
+            },
+            {
+                "command": "dolphin.askAboutFile",
+                "title": "Dolphin: Ask About This File"
+            },
+            {
+                "command": "dolphin.askAboutFolder",
+                "title": "Dolphin: Ask About This Folder"
+            },
+            {
+                "command": "dolphin.applyDiff",
+                "title": "Dolphin: Apply Diff"
             }
         ],
         "configuration": {
@@ -131,6 +155,32 @@
                     "description": "Logging verbosity level"
                 }
             }
+        },
+        "menus": {
+            "editor/context": [
+                {
+                    "command": "dolphin.askAboutSelection",
+                    "when": "editorHasSelection",
+                    "group": "dolphin@1"
+                },
+                {
+                    "command": "dolphin.refactorSelection",
+                    "when": "editorHasSelection",
+                    "group": "dolphin@2"
+                }
+            ],
+            "explorer/context": [
+                {
+                    "command": "dolphin.askAboutFile",
+                    "when": "!explorerResourceIsFolder",
+                    "group": "dolphin@1"
+                },
+                {
+                    "command": "dolphin.askAboutFolder",
+                    "when": "explorerResourceIsFolder",
+                    "group": "dolphin@1"
+                }
+            ]
         },
         "keybindings": [
             {

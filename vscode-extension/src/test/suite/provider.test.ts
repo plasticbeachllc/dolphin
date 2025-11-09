@@ -121,6 +121,98 @@ describe('DolphinViewProvider Unit Tests', () => {
     });
   });
 
+  describe('prefillInput (Phase 2)', () => {
+    it('Should send prefill_input message with text to webview', () => {
+      let sentMessage: any = null;
+
+      const mockWebviewView = {
+        webview: {
+          postMessage: (message: any) => {
+            sentMessage = message;
+            return Promise.resolve(true);
+          },
+        },
+      } as any;
+
+      (provider as any).webviewView = mockWebviewView;
+
+      const testText = 'Can you explain this code?';
+      provider.prefillInput(testText);
+
+      assert.ok(sentMessage, 'Message should have been sent');
+      assert.strictEqual(sentMessage.type, 'prefill_input', 'Should send prefill_input message');
+      assert.strictEqual(sentMessage.text, testText, 'Should include the text in the message');
+    });
+
+    it('Should handle empty string', () => {
+      let sentMessage: any = null;
+
+      const mockWebviewView = {
+        webview: {
+          postMessage: (message: any) => {
+            sentMessage = message;
+            return Promise.resolve(true);
+          },
+        },
+      } as any;
+
+      (provider as any).webviewView = mockWebviewView;
+
+      provider.prefillInput('');
+
+      assert.ok(sentMessage, 'Message should have been sent');
+      assert.strictEqual(sentMessage.text, '', 'Should handle empty string');
+    });
+
+    it('Should handle multi-line text with code blocks', () => {
+      let sentMessage: any = null;
+
+      const mockWebviewView = {
+        webview: {
+          postMessage: (message: any) => {
+            sentMessage = message;
+            return Promise.resolve(true);
+          },
+        },
+      } as any;
+
+      (provider as any).webviewView = mockWebviewView;
+
+      const multiLineText = 'Explain this code:\n\n```typescript\nconst x = 1;\n```';
+      provider.prefillInput(multiLineText);
+
+      assert.ok(sentMessage, 'Message should have been sent');
+      assert.strictEqual(sentMessage.text, multiLineText, 'Should preserve multi-line text');
+    });
+
+    it('Should handle special characters', () => {
+      let sentMessage: any = null;
+
+      const mockWebviewView = {
+        webview: {
+          postMessage: (message: any) => {
+            sentMessage = message;
+            return Promise.resolve(true);
+          },
+        },
+      } as any;
+
+      (provider as any).webviewView = mockWebviewView;
+
+      const specialText = 'Text with "quotes" and \'apostrophes\' and <html> & more';
+      provider.prefillInput(specialText);
+
+      assert.ok(sentMessage, 'Message should have been sent');
+      assert.strictEqual(sentMessage.text, specialText, 'Should preserve special characters');
+    });
+
+    it('Should handle missing webview gracefully', () => {
+      assert.doesNotThrow(() => {
+        provider.prefillInput('test text');
+      }, 'Should not throw when webview is not ready');
+    });
+  });
+
   describe('getNonce', () => {
     it('Should generate unique nonces', () => {
       const nonce1 = (provider as any).getNonce();

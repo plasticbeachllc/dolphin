@@ -16,19 +16,25 @@
   const avatarFallback = isUser ? "U" : "A";
 </script>
 
-<Card.Root class="mb-2 {isUser ? 'ml-auto' : 'mr-auto'} max-w-[85%]">
+<Card.Root
+  class="mb-2 {isUser ? 'ml-auto' : 'mr-auto'} max-w-[85%]"
+  role="article"
+  aria-label="{isUser ? 'User' : 'Assistant'} message{timestamp ? ' at ' + timestamp : ''}"
+>
   <Card.Header class="flex flex-row items-center gap-2 pb-2">
-    <Avatar.Root class="h-8 w-8">
+    <Avatar.Root class="h-8 w-8" aria-hidden="true">
       <Avatar.Fallback class={isUser ? "bg-blue-500" : "bg-purple-500"}>
         {avatarFallback}
       </Avatar.Fallback>
     </Avatar.Root>
     <div class="flex flex-1 items-center justify-between">
-      <Badge variant={isUser ? "secondary" : "default"}>
+      <Badge variant={isUser ? "secondary" : "default"} aria-label="Message from {isUser ? 'You' : 'Assistant'}">
         {isUser ? "You" : "Assistant"}
       </Badge>
       {#if timestamp}
-        <span class="text-xs text-muted-foreground">{timestamp}</span>
+        <span class="text-xs text-muted-foreground" aria-label="Sent at {timestamp}">
+          {timestamp}
+        </span>
       {/if}
     </div>
   </Card.Header>
