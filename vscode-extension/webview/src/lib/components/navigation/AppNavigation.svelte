@@ -15,7 +15,7 @@
   }
 </script>
 
-<div class="sticky top-0 z-50 w-full border-b bg-card backdrop-blur">
+<div class="sticky top-0 z-50 w-full border-b bg-card backdrop-blur" role="navigation" aria-label="Main navigation">
   <div class="flex h-10 items-center justify-between px-3">
     <!-- Left side: Logo and main navigation -->
     <div class="flex items-center gap-2">
@@ -25,6 +25,8 @@
         class="inline-flex items-center justify-center rounded-md text-base font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground h-8 w-8 p-0"
         onclick={() => handleNavigation("/")}
         title="Home"
+        aria-label="Home"
+        aria-current={currentPath === "/" ? "page" : undefined}
       >
         🐬
       </a>
@@ -110,8 +112,10 @@
               class="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground h-8 w-8 p-0"
               onclick={() => handleNavigation("/settings")}
               title="Settings"
+              aria-label="Settings"
+              aria-current={currentPath === "/settings" ? "page" : undefined}
             >
-              <Settings class="size-3.5" />
+              <Settings class="size-3.5" aria-hidden="true" />
             </a>
           {/snippet}
         </NavigationMenu.Link>
@@ -126,8 +130,10 @@
               class="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground h-8 w-8 p-0"
               onclick={() => handleNavigation("/profile")}
               title="Profile"
+              aria-label="Profile"
+              aria-current={currentPath === "/profile" ? "page" : undefined}
             >
-              <User class="size-3.5" />
+              <User class="size-3.5" aria-hidden="true" />
             </a>
           {/snippet}
         </NavigationMenu.Link>
