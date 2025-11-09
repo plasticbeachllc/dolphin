@@ -8,6 +8,8 @@
 	import X from '@lucide/svelte/icons/x';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import { slide } from 'svelte/transition';
+	import DiffViewer from './DiffViewer.svelte';
+	import type { FileDiff } from '../../../../../shared/types/events';
 
 	export let tool: string;
 	export let input: Record<string, any>;
@@ -16,8 +18,12 @@
 	export let status: 'running' | 'success' | 'error' = 'running';
 	export let executionTime: number | null = null;
 	export let collapsed = true;
+	export let diff: FileDiff | undefined = undefined;
 
 	let expanded = !collapsed;
+	
+	// Detect if this is a file editing tool
+	const isFileEditTool = ['apply_diff', 'write_to_file', 'file_write', 'search_and_replace', 'insert_content'].includes(tool);
 
 	const toolIcons: Record<string, string> = {
 		search_knowledge: '🔍',
@@ -84,32 +90,38 @@
 		<div transition:slide={{ duration: 200 }}>
 			<CardContent class="!px-2 !pb-2 !pt-0">
 				<div class="space-y-2">
-				<div>
-					<div class="text-xs font-semibold mb-0.5 text-muted-foreground">Input</div>
-					<pre
-						class="text-xs bg-muted p-1.5 rounded overflow-x-auto">{JSON.stringify(
-							input,
-							null,
-							2
-						)}</pre>
-				</div>
-
-
-				{#if error}
-					<div class="bg-destructive/10 p-1.5 rounded text-xs text-destructive">
-						{error}
-					</div>
-				{:else if result}
+					<!-- Show diff viewer for file editing tools if diff data is available -->
+					{#if isFileEditTool && diff}
+						<div class="mb-2">
+							<DiffViewer {diff} defaultExpanded={true} />
+						</div>
+					{/if}
+					
 					<div>
-						<div class="text-xs font-semibold mb-0.5 text-muted-foreground">Result</div>
+						<div class="text-xs font-semibold mb-0.5 text-muted-foreground">Input</div>
 						<pre
 							class="text-xs bg-muted p-1.5 rounded overflow-x-auto">{JSON.stringify(
-								result,
+								input,
 								null,
 								2
 							)}</pre>
 					</div>
-				{/if}
+
+					{#if error}
+						<div class="bg-destructive/10 p-1.5 rounded text-xs text-destructive">
+							{error}
+						</div>
+					{:else if result}
+						<div>
+							<div class="text-xs font-semibold mb-0.5 text-muted-foreground">Result</div>
+							<pre
+								class="text-xs bg-muted p-1.5 rounded overflow-x-auto">{JSON.stringify(
+									result,
+									null,
+									2
+								)}</pre>
+						</div>
+					{/if}
 				</div>
 			</CardContent>
 		</div>

@@ -21,6 +21,23 @@
     status?: "running" | "success" | "error";
     executionTime?: number;
     toolId?: string;
+    diff?: FileDiff;
+  }
+  
+  interface FileDiff {
+    oldFileName: string;
+    newFileName: string;
+    additions: number;
+    deletions: number;
+    hunks: DiffHunk[];
+  }
+  
+  interface DiffHunk {
+    oldStart: number;
+    oldLines: number;
+    newStart: number;
+    newLines: number;
+    lines: string[];
   }
   
   let currentView = $state('/');
@@ -106,7 +123,8 @@
                 error: event.error,
                 status: newStatus,
                 executionTime: event.executionTime,
-                toolId: msg.toolId
+                toolId: msg.toolId,
+                diff: event.diff
               };
               return updatedMsg;
             }

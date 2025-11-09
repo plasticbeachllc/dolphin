@@ -244,25 +244,19 @@
 													<!-- Diff Stats -->
 													<div class="flex items-center gap-3 text-xs font-mono">
 														<div class="flex items-center gap-1">
-															<div class="w-2 h-2 rounded-full bg-green-500"></div>
-															<span class="text-green-500 font-semibold">+{additions}</span>
+															<div class="w-2 h-2 rounded-full bg-emerald-500/40 border border-emerald-500/60"></div>
+															<span class="text-emerald-600 dark:text-emerald-400 font-semibold">+{additions}</span>
 														</div>
 														<div class="flex items-center gap-1">
-															<div class="w-2 h-2 rounded-full bg-red-500"></div>
-															<span class="text-red-500 font-semibold">-{deletions}</span>
+															<div class="w-2 h-2 rounded-full bg-rose-500/40 border border-rose-500/60"></div>
+															<span class="text-rose-600 dark:text-rose-400 font-semibold">-{deletions}</span>
 														</div>
 													</div>
 													
 													<!-- Visual diff bar -->
-													<div class="h-2 w-32 rounded-full overflow-hidden bg-muted flex">
-														<div
-															class="bg-green-500 transition-all"
-															style="width: {additions / (additions + deletions) * 100}%"
-														></div>
-														<div
-															class="bg-red-500 transition-all"
-															style="width: {deletions / (additions + deletions) * 100}%"
-														></div>
+													<div class="h-2 w-32 rounded-full overflow-hidden border border-border bg-background flex">
+														<div class="bg-emerald-500/50 transition-all" style="width: {additions / (additions + deletions) * 100}%"></div>
+														<div class="bg-rose-500/50 transition-all" style="width: {deletions / (additions + deletions) * 100}%"></div>
 													</div>
 												</div>
 												</button>
@@ -347,123 +341,6 @@
 									<li>File metadata and change summary</li>
 									<li>Sticky hunk headers for context</li>
 								</ul>
-							</div>
-						</CardContent>
-					</Card>
-			
-					<Card>
-						<CardHeader>
-							<CardTitle>Diff Progress Bar Variations</CardTitle>
-							<CardDescription>Different styling options for the lines changed indicator</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<div class="space-y-6">
-								<!-- Variation 1: Current (Bright) -->
-								<div>
-									<p class="text-sm font-medium mb-2">Current - Bright Colors</p>
-									<div class="flex items-center gap-4">
-										<div class="flex items-center gap-3 text-xs font-mono">
-											<div class="flex items-center gap-1">
-												<div class="w-2 h-2 rounded-full bg-green-500"></div>
-												<span class="text-green-500 font-semibold">+{additions}</span>
-											</div>
-											<div class="flex items-center gap-1">
-												<div class="w-2 h-2 rounded-full bg-red-500"></div>
-												<span class="text-red-500 font-semibold">-{deletions}</span>
-											</div>
-										</div>
-										<div class="h-2 w-32 rounded-full overflow-hidden bg-muted flex">
-											<div class="bg-green-500 transition-all" style="width: {additions / (additions + deletions) * 100}%"></div>
-											<div class="bg-red-500 transition-all" style="width: {deletions / (additions + deletions) * 100}%"></div>
-										</div>
-									</div>
-								</div>
-			
-								<!-- Variation 2: Muted Colors -->
-								<div>
-									<p class="text-sm font-medium mb-2">Muted Colors</p>
-									<div class="flex items-center gap-4">
-										<div class="flex items-center gap-3 text-xs font-mono">
-											<div class="flex items-center gap-1">
-												<div class="w-2 h-2 rounded-full bg-green-600/60"></div>
-												<span class="text-green-600/80 font-semibold">+{additions}</span>
-											</div>
-											<div class="flex items-center gap-1">
-												<div class="w-2 h-2 rounded-full bg-red-600/60"></div>
-												<span class="text-red-600/80 font-semibold">-{deletions}</span>
-											</div>
-										</div>
-										<div class="h-2 w-32 rounded-full overflow-hidden bg-muted flex">
-											<div class="bg-green-600/60 transition-all" style="width: {additions / (additions + deletions) * 100}%"></div>
-											<div class="bg-red-600/60 transition-all" style="width: {deletions / (additions + deletions) * 100}%"></div>
-										</div>
-									</div>
-								</div>
-			
-								<!-- Variation 3: Subtle with Border -->
-								<div>
-									<p class="text-sm font-medium mb-2">Subtle with Border</p>
-									<div class="flex items-center gap-4">
-										<div class="flex items-center gap-3 text-xs font-mono">
-											<div class="flex items-center gap-1">
-												<div class="w-2 h-2 rounded-full bg-emerald-500/40 border border-emerald-500/60"></div>
-												<span class="text-emerald-600 dark:text-emerald-400 font-semibold">+{additions}</span>
-											</div>
-											<div class="flex items-center gap-1">
-												<div class="w-2 h-2 rounded-full bg-rose-500/40 border border-rose-500/60"></div>
-												<span class="text-rose-600 dark:text-rose-400 font-semibold">-{deletions}</span>
-											</div>
-										</div>
-										<div class="h-2 w-32 rounded-full overflow-hidden border border-border bg-background flex">
-											<div class="bg-emerald-500/50 transition-all" style="width: {additions / (additions + deletions) * 100}%"></div>
-											<div class="bg-rose-500/50 transition-all" style="width: {deletions / (additions + deletions) * 100}%"></div>
-										</div>
-									</div>
-								</div>
-			
-								<!-- Variation 4: Very Subtle Foreground Colors -->
-								<div>
-									<p class="text-sm font-medium mb-2">Very Subtle - Foreground Based</p>
-									<div class="flex items-center gap-4">
-										<div class="flex items-center gap-3 text-xs font-mono text-muted-foreground">
-											<div class="flex items-center gap-1">
-												<div class="w-2 h-2 rounded-full bg-green-700/40 dark:bg-green-500/30"></div>
-												<span class="font-semibold">+{additions}</span>
-											</div>
-											<div class="flex items-center gap-1">
-												<div class="w-2 h-2 rounded-full bg-red-700/40 dark:bg-red-500/30"></div>
-												<span class="font-semibold">-{deletions}</span>
-											</div>
-										</div>
-										<div class="h-2 w-32 rounded-full overflow-hidden bg-muted/50 flex">
-											<div class="bg-green-700/30 dark:bg-green-500/25 transition-all" style="width: {additions / (additions + deletions) * 100}%"></div>
-											<div class="bg-red-700/30 dark:bg-red-500/25 transition-all" style="width: {deletions / (additions + deletions) * 100}%"></div>
-										</div>
-									</div>
-								</div>
-			
-								<!-- Variation 5: Minimal Dots Only -->
-								<div>
-									<p class="text-sm font-medium mb-2">Minimal - Dots Only</p>
-									<div class="flex items-center gap-4">
-										<div class="flex items-center gap-3 text-xs font-mono text-muted-foreground">
-											<div class="flex items-center gap-1">
-												<span class="font-semibold">+{additions}</span>
-											</div>
-											<div class="flex items-center gap-1">
-												<span class="font-semibold">-{deletions}</span>
-											</div>
-										</div>
-										<div class="flex items-center gap-0.5">
-											{#each Array(additions) as _, i}
-												<div class="w-1 h-1 rounded-sm bg-green-600/50"></div>
-											{/each}
-											{#each Array(deletions) as _, i}
-												<div class="w-1 h-1 rounded-sm bg-red-600/50"></div>
-											{/each}
-										</div>
-									</div>
-								</div>
 							</div>
 						</CardContent>
 					</Card>
