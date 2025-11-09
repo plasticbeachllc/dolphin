@@ -10,6 +10,7 @@
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import ErrorAlert from '$lib/components/ErrorAlert.svelte';
 	import AuthStatus from '$lib/components/AuthStatus.svelte';
+	import GalleryShowcase from '$lib/components/GalleryShowcase.svelte';
 	
 	// Sample data
 	let showConfirmDialog = $state(false);
@@ -252,85 +253,67 @@ index 1234567..abcdefg 100644
 			<!-- Agentic Animations Section -->
 			<section>
 				<h2 class="text-2xl font-bold mb-6">Agentic Animations</h2>
-
+	
 				<div class="space-y-6">
-					<Card>
-						<CardHeader>
-							<CardTitle>Thinking Indicator</CardTitle>
-							<CardDescription>Shows when the agent is processing</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<div class="flex items-center gap-3 p-4 bg-muted rounded-lg">
-								<div class="w-8 h-8 rounded-full bg-primary animate-pulse-glow flex items-center justify-center text-primary-foreground text-xs">
-									AI
-								</div>
-								<div class="flex gap-1">
-									<div class="w-2 h-2 rounded-full bg-foreground animate-typing-dot"></div>
-									<div class="w-2 h-2 rounded-full bg-foreground animate-typing-dot"></div>
-									<div class="w-2 h-2 rounded-full bg-foreground animate-typing-dot"></div>
-								</div>
+					<GalleryShowcase
+						title="Thinking Indicator"
+						description="Shows when the agent is processing"
+					>
+						<div class="flex items-center gap-3 p-4 bg-muted rounded-lg">
+							<div class="w-8 h-8 rounded-full bg-primary animate-pulse-glow flex items-center justify-center text-primary-foreground text-xs">
+								AI
 							</div>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>Message Slide In</CardTitle>
-							<CardDescription>Smooth entrance animation for new messages</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<div class="p-4 bg-card border rounded-lg animate-slide-in-up">
-								<p class="text-sm">This message slides in smoothly from below</p>
+							<div class="flex gap-1">
+								<div class="w-2 h-2 rounded-full bg-foreground animate-typing-dot"></div>
+								<div class="w-2 h-2 rounded-full bg-foreground animate-typing-dot"></div>
+								<div class="w-2 h-2 rounded-full bg-foreground animate-typing-dot"></div>
 							</div>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>Loading Shimmer</CardTitle>
-							<CardDescription>Skeleton loading state</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<div class="h-16 rounded-lg animate-shimmer"></div>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>Active Status</CardTitle>
-							<CardDescription>Breathing indicator for active agents</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<div class="flex items-center gap-2">
-								<div class="w-3 h-3 rounded-full bg-green-500 animate-breathe"></div>
-								<p class="text-sm text-muted-foreground">Agent is active</p>
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>Fade In</CardTitle>
-							<CardDescription>Gentle reveal animation</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<div class="p-4 bg-accent rounded-lg animate-fade-in">
-								<p class="text-sm">This content fades in gracefully</p>
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>Attention Bounce</CardTitle>
-							<CardDescription>Subtle bounce for notifications</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<span class="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-primary text-primary-foreground animate-bounce-subtle">
-								New
-							</span>
-						</CardContent>
-					</Card>
+						</div>
+					</GalleryShowcase>
+	
+					<GalleryShowcase
+						title="Message Slide In"
+						description="Smooth entrance animation for new messages"
+					>
+						<div class="p-4 bg-card border rounded-lg animate-slide-in-up">
+							<p class="text-sm">This message slides in smoothly from below</p>
+						</div>
+					</GalleryShowcase>
+	
+					<GalleryShowcase
+						title="Loading Shimmer"
+						description="Skeleton loading state"
+					>
+						<div class="h-16 rounded-lg animate-shimmer"></div>
+					</GalleryShowcase>
+	
+					<GalleryShowcase
+						title="Active Status"
+						description="Breathing indicator for active agents"
+					>
+						<div class="flex items-center gap-2">
+							<div class="w-3 h-3 rounded-full bg-green-500 animate-breathe"></div>
+							<p class="text-sm text-muted-foreground">Agent is active</p>
+						</div>
+					</GalleryShowcase>
+	
+					<GalleryShowcase
+						title="Fade In"
+						description="Gentle reveal animation"
+					>
+						<div class="p-4 bg-accent rounded-lg animate-fade-in">
+							<p class="text-sm">This content fades in gracefully</p>
+						</div>
+					</GalleryShowcase>
+	
+					<GalleryShowcase
+						title="Attention Bounce"
+						description="Subtle bounce for notifications"
+					>
+						<span class="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-primary text-primary-foreground animate-bounce-subtle">
+							New
+						</span>
+					</GalleryShowcase>
 				</div>
 			</section>
 
