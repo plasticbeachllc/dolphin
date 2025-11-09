@@ -163,6 +163,54 @@ In production deployments (e.g., VSCode extension), the KB server lifecycle is m
 
 Available MCP tools: `search_knowledge`, `fetch_chunk`, `fetch_lines`, `get_vector_store_info`
 
+## VSCode Extension
+
+Dolphin includes a VSCode extension that provides an AI coding assistant with semantic code search integration.
+
+### Features
+
+- **AI Chat Interface**: Interact with Claude AI directly in VSCode
+- **Knowledge Bank Integration**: Automatically searches your indexed codebase for context
+- **Dual Authentication**: Supports both Claude CLI (subscription) and API key modes
+- **Real-time Streaming**: See AI responses as they're generated
+- **Tool Call Visualization**: Monitor Knowledge Bank searches and other tool executions
+
+### Installation (Development)
+
+```bash
+# 1. Build the extension
+cd vscode-extension
+npm install
+npm run compile
+
+# 2. Build the webview
+cd webview
+bun install
+bun run build
+cd ../..
+
+# 3. Launch Extension Development Host
+# Open vscode-extension folder in VSCode and press F5
+```
+
+### Authentication
+
+The extension supports two authentication modes:
+
+**Option A: Claude CLI (No API Costs)**
+```bash
+npm install -g @anthropic-ai/claude-code
+claude
+# Select: "1. Claude account with subscription"
+```
+
+**Option B: API Key**
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+See [TESTING-GUIDE.md](docs/TESTING-GUIDE.md) for complete setup instructions.
+
 ## REST API
 
 ```bash
@@ -219,11 +267,14 @@ uv run dolphin serve
 
 ## Development Status
 
-**Current**: Beta (0.1.x)
+**Current**: Beta (0.1.13)
 
 - ✅ Core indexing and search pipeline
 - ✅ Language-aware chunking (Python, TS, JS, Markdown)
 - ✅ REST API with MCP bridge available at `bunx dolphin-mcp`
+- ✅ VSCode extension with AI coding assistant
+- ✅ Cross-encoder reranking support
+- ✅ Hybrid search (BM25 + Vector)
 - ⚠️ Developmental stage
 
 **Upcoming**:
