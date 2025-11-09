@@ -4,7 +4,7 @@
     "description": "AI coding assistant with semantic code search",
     "version": "0.1.0",
     "publisher": "pb",
-    "icon": "resources/extension-icon.png",
+    "icon": "resources/dolphin_vscode.png",
     "engines": {
         "vscode": "^1.96.0"
     },
@@ -12,7 +12,11 @@
         "Other"
     ],
     "activationEvents": [
-        "onStartupFinished"
+        "onView:dolphin.chatView",
+        "onCommand:dolphin.focusInput",
+        "onCommand:dolphin.newConversation",
+        "onCommand:dolphin.setApiKey",
+        "onCommand:dolphin.test"
     ],
     "main": "./out/extension.js",
     "contributes": {
@@ -44,10 +48,90 @@
                 "title": "Dolphin: New Conversation"
             },
             {
+                "command": "dolphin.setApiKey",
+                "title": "Dolphin: Set API Key"
+            },
+            {
                 "command": "dolphin.test",
                 "title": "Dolphin: Test"
+            },
+            {
+                "command": "dolphin.kb.showStatus",
+                "title": "Dolphin: Show KB Status"
+            },
+            {
+                "command": "dolphin.kb.restart",
+                "title": "Dolphin: Restart Knowledge Base"
             }
         ],
+        "configuration": {
+            "title": "Dolphin",
+            "properties": {
+                "dolphin.kb.debounceMs": {
+                    "type": "number",
+                    "default": 2000,
+                    "description": "Milliseconds to wait after file change before indexing"
+                },
+                "dolphin.kb.batchIntervalMs": {
+                    "type": "number",
+                    "default": 5000,
+                    "description": "Milliseconds between batch processing intervals"
+                },
+                "dolphin.kb.excludePatterns": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                        "**/node_modules/**",
+                        "**/dist/**",
+                        "**/build/**",
+                        "**/.git/**",
+                        "**/out/**",
+                        "**/*.min.js"
+                    ],
+                    "description": "Patterns to exclude from automatic indexing"
+                },
+                "dolphin.model": {
+                    "type": "string",
+                    "default": "claude-sonnet-4-5-20250929",
+                    "description": "Claude model to use for chat"
+                },
+                "dolphin.maxTokens": {
+                    "type": "number",
+                    "default": 8192,
+                    "description": "Maximum tokens for responses"
+                },
+                "dolphin.temperature": {
+                    "type": "number",
+                    "default": 1.0,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Temperature for response generation (0-1)"
+                },
+                "dolphin.useTools": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable tool use (file operations, search, etc.)"
+                },
+                "dolphin.enableTelemetry": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable anonymous usage telemetry"
+                },
+                "dolphin.logLevel": {
+                    "type": "string",
+                    "enum": [
+                        "error",
+                        "warn",
+                        "info",
+                        "debug"
+                    ],
+                    "default": "info",
+                    "description": "Logging verbosity level"
+                }
+            }
+        },
         "keybindings": [
             {
                 "command": "dolphin.focusInput",

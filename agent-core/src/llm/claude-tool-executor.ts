@@ -12,6 +12,7 @@ import {
   type ToolCall,
   type ToolResult,
 } from "./tool-utils";
+import { generateFileWriteDiff } from "./diff-generator";
 
 export interface ToolExecutorConfig {
   claudeClient: ClaudeClient;
@@ -150,18 +151,19 @@ export class ClaudeToolExecutor {
       // Extract tool calls from response
       const toolCalls = extractToolCalls(response.content);
 
+      // Add Claude's response to conversation (before checking for no tools)
+      // This ensures we preserve the final assistant message even when no tools are called
+      messages.push({
+        role: "assistant",
+        content: response.content,
+      });
+
       if (toolCalls.length === 0) {
         console.error("[ToolExecutor] No tools called, ending loop");
         break;
       }
 
       console.error(`[ToolExecutor] Claude requested ${toolCalls.length} tool(s)`);
-
-      // Add Claude's response to conversation
-      messages.push({
-        role: "assistant",
-        content: response.content,
-      });
 
       // Execute tools in parallel
       const toolResults = await this.executeToolCalls(toolCalls);
@@ -459,12 +461,52 @@ export class ClaudeToolExecutor {
             `[ToolExecutor] Tool ${toolCall.name} completed in ${executionTime}ms`
           );
 
+          // Generate diff for file editing tools
+          let diff = undefined;
+          if (toolName === 'file_write' && mcpResult && !mcpResult.isError) {
+            try {
+              // Parse the result to get file info
+              const resultText = mcpResult.content?.[0]?.text;
+              if (resultText) {
+                const parsedResult = JSON.parse(resultText);
+                const generatedDiff = await generateFileWriteDiff(
+                  processedInput,
+                  parsedResult,
+                  process.cwd()
+                );
+                // Convert null to undefined for type safety
+                diff = generatedDiff ?? undefined;
+              }
+            } catch (error) {
+              console.warn('[ToolExecutor] Failed to generate diff:', error);
+            }
+          }
+
+          // Check if MCP returned an error result
+          if (mcpResult.isError) {
+            // Extract error message from MCP result
+            const errorMessage = mcpResult.content?.[0]?.text || 'Tool execution failed';
+            
+            // Emit error event
+            this.config.onEvent({
+              type: "tool_call_completed",
+              toolId: toolCall.id,
+              result: null,
+              error: errorMessage,
+              executionTime,
+            });
+            
+            // Return error result to Claude
+            return createErrorResult(toolCall.id, new Error(errorMessage));
+          }
+
           // Emit success event
           this.config.onEvent({
             type: "tool_call_completed",
             toolId: toolCall.id,
             result: mcpResult,
             executionTime,
+            diff,
           });
 
           // Convert to Anthropic format
