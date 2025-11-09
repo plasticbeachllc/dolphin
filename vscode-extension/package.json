@@ -4,6 +4,7 @@
     "description": "AI coding assistant with semantic code search",
     "version": "0.1.0",
     "publisher": "pb",
+    "icon": "resources/extension-icon.png",
     "engines": {
         "vscode": "^1.96.0"
     },
@@ -20,7 +21,7 @@
                 {
                     "id": "dolphin",
                     "title": "Dolphin",
-                    "icon": "resources/transparent_dolphin_small.png"
+                    "icon": "resources/dolphin-activity-bar.svg"
                 }
             ]
         },
