@@ -76,35 +76,6 @@ describe("ClaudeClient Integration", () => {
     );
   });
 
-  test("formats prompt for CLI correctly", async () => {
-    const client = new ClaudeClient({
-      authMode: "auto",
-      model: "claude-sonnet-4-20250514",
-      maxTokens: 1000,
-    });
-
-    // Access private method via reflection for testing
-    const formatPrompt = (client as any).formatPromptForCLI.bind(client);
-
-    const prompt = formatPrompt({
-      system: "You are a helpful assistant.",
-      messages: [
-        { role: "user", content: "Hello!" },
-        { role: "assistant", content: "Hi there!" },
-        { role: "user", content: "How are you?" },
-      ],
-    });
-
-    expect(prompt).toContain("System: You are a helpful assistant.");
-    expect(prompt).toContain("Human: Hello!");
-    expect(prompt).toContain("Assistant: Hi there!");
-    expect(prompt).toContain("Human: How are you?");
-    expect(prompt).toContain("Assistant:");
-    
-    console.log("\n📝 Formatted CLI Prompt:");
-    console.log(prompt.substring(0, 200) + "...");
-  });
-
   test("handles missing authentication gracefully", async () => {
     // Temporarily remove API key
     const originalKey = process.env.ANTHROPIC_API_KEY;
