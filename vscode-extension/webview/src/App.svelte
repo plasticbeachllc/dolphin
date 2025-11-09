@@ -38,9 +38,12 @@
   let hasUserSentMessage = $state(false);
   
   let messages = $state<Message[]>([]);
-  
+
   let isProcessing = $state(false);
-  
+
+  // Reference to ChatInput component to programmatically focus it
+  let chatInputRef: any = null;
+
   // Set up message listener from VS Code extension
   onMount(() => {
     // Start tracking startup time
@@ -126,6 +129,21 @@
             content: `**Error:** ${event.error.message}`,
             timestamp: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
           }];
+          break;
+
+        case 'focus_input':
+          // Focus the chat input
+          console.log('[App] Received focus_input event');
+          chatInputRef?.focus();
+          break;
+
+        case 'clear_conversation':
+          // Clear all messages and reset state
+          console.log('[App] Received clear_conversation event');
+          messages = [];
+          isProcessing = false;
+          showLogo = true;
+          hasUserSentMessage = false;
           break;
       }
     });
@@ -215,6 +233,7 @@
       
       <div class="input-container">
         <ChatInput
+          bind:this={chatInputRef}
           onSend={handleSend}
           onStop={handleStop}
           disabled={!agentReady}

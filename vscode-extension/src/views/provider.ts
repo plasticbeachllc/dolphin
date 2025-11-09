@@ -28,6 +28,31 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /**
+   * Post a message to the webview
+   */
+  public postMessage(message: any): void {
+    if (this.webviewView) {
+      this.webviewView.webview.postMessage(message);
+    } else {
+      this.outputChannel.appendLine(`[DolphinViewProvider] Cannot post message - webview not ready`);
+    }
+  }
+
+  /**
+   * Clear the conversation in the webview
+   */
+  public clearConversation(): void {
+    this.postMessage({ type: 'clear_conversation' });
+  }
+
+  /**
+   * Focus the chat input in the webview
+   */
+  public focusInput(): void {
+    this.postMessage({ type: 'focus_input' });
+  }
+
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     // Store webview reference
     this.webviewView = webviewView;
@@ -177,15 +202,19 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
   private getHtml(webview: vscode.Webview): string {
     const buildPath = vscode.Uri.joinPath(this.extensionUri, "webview", "build");
     const indexPath = path.join(this.extensionUri.fsPath, "webview", "build", "index.html");
-    
+
     this.outputChannel.appendLine(`[DolphinViewProvider] Loading HTML from: ${indexPath}`);
     this.outputChannel.appendLine(`[DolphinViewProvider] Build path: ${buildPath.fsPath}`);
-    
+
     try {
       // Read the built index.html
       let htmlContent = fs.readFileSync(indexPath, "utf8");
       this.outputChannel.appendLine(`[DolphinViewProvider] Original HTML length: ${htmlContent.length}`);
-      
+
+      // Generate a nonce for scripts and styles
+      const nonce = this.getNonce();
+      this.outputChannel.appendLine(`[DolphinViewProvider] Generated nonce: ${nonce}`);
+
       // Replace /assets/ paths (legacy Vite build) with webview URIs
       let replacementCount = 0;
       htmlContent = htmlContent.replace(
@@ -199,24 +228,36 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           return `${attr}="${assetUri}"`;
         }
       );
-      
+
       this.outputChannel.appendLine(`[DolphinViewProvider] Made ${replacementCount} path replacements`);
-      
+
       // Remove crossorigin attribute (not needed for webview URIs)
       htmlContent = htmlContent.replace(/\s+crossorigin/g, '');
       this.outputChannel.appendLine(`[DolphinViewProvider] Removed crossorigin attribute`);
-      
-      // Add CSP meta tag
-      const cspTag = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource}; connect-src ${webview.cspSource};">`;
+
+      // Add nonce to script tags
+      htmlContent = htmlContent.replace(
+        /<script/g,
+        `<script nonce="${nonce}"`
+      );
+
+      // Add nonce to inline style tags
+      htmlContent = htmlContent.replace(
+        /<style/g,
+        `<style nonce="${nonce}"`
+      );
+
+      // Add CSP meta tag with nonce
+      const cspTag = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${nonce}'; script-src ${webview.cspSource} 'nonce-${nonce}'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource}; connect-src ${webview.cspSource};">`;
       htmlContent = htmlContent.replace(
         /<meta charset="UTF-8" \/>/,
         `<meta charset="UTF-8" />\n\t${cspTag}`
       );
-      
+
       this.outputChannel.appendLine(`[DolphinViewProvider] CSP tag added: ${htmlContent.includes('Content-Security-Policy')}`);
-      
+
       this.outputChannel.appendLine(`[DolphinViewProvider] Final HTML length: ${htmlContent.length}`);
-      
+
       return htmlContent;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -253,5 +294,13 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
         }
       }
     });
+  }
+
+  /**
+   * Generate a cryptographically secure nonce for CSP
+   */
+  private getNonce(): string {
+    const crypto = require('crypto');
+    return crypto.randomBytes(16).toString('base64');
   }
 }

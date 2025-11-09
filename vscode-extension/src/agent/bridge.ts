@@ -29,7 +29,7 @@ export class AgentBridge {
     this.outputChannel = vscode.window.createOutputChannel("Dolphin Agent");
   }
 
-  async start(agentCorePath: string, extensionPath: string): Promise<void> {
+  async start(agentCorePath: string, extensionPath: string, apiKey?: string): Promise<void> {
     this.outputChannel.appendLine("[AgentBridge] Starting Agent Core...");
 
     // Find Bun
@@ -48,9 +48,17 @@ export class AgentBridge {
 
     // Spawn Agent Core with workspace root and extension path
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
+    const env = { ...process.env };
+
+    // Add API key to environment if provided
+    if (apiKey) {
+      env.ANTHROPIC_API_KEY = apiKey;
+      this.outputChannel.appendLine("[AgentBridge] API key provided via SecretStorage");
+    }
+
     this.process = spawn(bunPath, ["run", agentCorePath, workspaceRoot, extensionPath], {
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env },
+      env,
     });
 
     // Set up stdout handling (JSON-RPC messages)
@@ -246,6 +254,24 @@ export class AgentBridge {
 
     const json = JSON.stringify(message) + "\n";
     this.outputChannel.appendLine(`[AgentBridge] Sending abort_generation`);
+
+    this.process.stdin?.write(json);
+  }
+
+  async clearConversation(): Promise<void> {
+    if (!this.process || this.process.exitCode !== null) {
+      throw new Error("Agent process not running");
+    }
+
+    const message = {
+      jsonrpc: "2.0",
+      id: ++this.messageId,
+      method: "clear_conversation",
+      params: {}
+    };
+
+    const json = JSON.stringify(message) + "\n";
+    this.outputChannel.appendLine(`[AgentBridge] Sending clear_conversation`);
 
     this.process.stdin?.write(json);
   }
