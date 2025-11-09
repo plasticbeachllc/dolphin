@@ -1,6 +1,5 @@
 <script lang="ts">
-  import * as Card from "$lib/components/ui/card";
-  import { Input } from "$lib/components/ui/input";
+  import { Textarea } from "$lib/components/ui/textarea";
   import { Button } from "$lib/components/ui/button";
   import { SendHorizontal, Square } from "lucide-svelte";
   
@@ -23,7 +22,7 @@
   let message = $state("");
   
   function handleKeyDown(event: KeyboardEvent) {
-    // Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux)
+    // Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux) to send
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
       handleAction();
@@ -43,29 +42,36 @@
   }
 </script>
 
-<Card.Root class="sticky bottom-0 border-t">
-  <Card.Content class="flex gap-2 p-4">
-    <Input
-      type="text"
-      bind:value={message}
-      {placeholder}
-      disabled={disabled || isProcessing}
-      onkeydown={handleKeyDown}
-      class="flex-1"
-    />
-    <Button
-      onclick={handleAction}
-      disabled={disabled && !isProcessing}
-      variant={isProcessing ? "destructive" : "default"}
-      size="icon"
-      class="shrink-0"
-      aria-label={isProcessing ? "Stop" : "Send"}
-    >
-      {#if isProcessing}
-        <Square class="h-4 w-4" />
-      {:else}
-        <SendHorizontal class="h-4 w-4" />
-      {/if}
-    </Button>
-  </Card.Content>
-</Card.Root>
+<div class="input-wrapper">
+  <Textarea
+    bind:value={message}
+    {placeholder}
+    disabled={disabled || isProcessing}
+    onkeydown={handleKeyDown}
+    rows={3}
+    class="flex-1 min-h-[4.5rem] max-h-48 resize-none"
+  />
+  <Button
+    onclick={handleAction}
+    disabled={disabled && !isProcessing}
+    variant={isProcessing ? "destructive" : "default"}
+    size="icon"
+    class="shrink-0 self-end"
+    aria-label={isProcessing ? "Stop" : "Send"}
+  >
+    {#if isProcessing}
+      <Square class="h-4 w-4" />
+    {:else}
+      <SendHorizontal class="h-4 w-4" />
+    {/if}
+  </Button>
+</div>
+
+<style>
+  .input-wrapper {
+    display: flex;
+    gap: 0.75rem;
+    width: 100%;
+    align-items: flex-end;
+  }
+</style>

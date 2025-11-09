@@ -323,7 +323,7 @@
   }
   
   .input-container {
-    padding: 0.5rem;
+    padding: 0.75rem;
     border-top: 1px solid var(--vscode-border);
     background: var(--vscode-background);
   }
