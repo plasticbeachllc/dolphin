@@ -2,11 +2,17 @@
 import type { AgentEvent, ExtensionRequest } from "../../shared/types/events";
 import { MCPClient } from "./mcp/client";
 import { KBManager } from "./kb/manager";
+import { IndexQueue } from "./kb/index-queue";
 import { ClaudeClient } from "./llm/claude-client";
 import { ClaudeToolExecutor } from "./llm/claude-tool-executor";
 import { BasicPlanner } from "./planner/basic-planner";
 import * as path from "path";
+import * as fs from "fs";
+import { exec } from "child_process";
+import { promisify } from "util";
 import type { Message } from "./llm/claude-tool-executor";
+
+const execAsync = promisify(exec);
 
 interface Message {
   jsonrpc: "2.0";
@@ -19,15 +25,17 @@ interface Message {
 
 class AgentCore {
   private version = "0.1.0";
-  private capabilities = ["kb_search", "file_operations", "planning", "claude_auth", "agentic_tools"];
+  private capabilities = ["kb_search", "file_operations", "planning", "claude_auth", "agentic_tools", "kb_auto_sync"];
   private mcpClient: MCPClient;
   private kbManager: KBManager;
+  private indexQueue: IndexQueue | null = null;
   private claudeClient: ClaudeClient;
   private toolExecutor: ClaudeToolExecutor;
   private planner: BasicPlanner;
   private conversationHistory: Message[] = [];
   private workspaceRoot: string;
   private extensionPath?: string;
+  private repoName: string | null = null;
 
   constructor(workspaceRoot: string, extensionPath?: string) {
     this.workspaceRoot = workspaceRoot;
@@ -62,6 +70,9 @@ class AgentCore {
 
     // Start KB API first
     await this.kbManager.start(this.workspaceRoot, this.extensionPath);
+
+    // Initialize KB workspace and index queue
+    await this.initializeKBWorkspace();
 
     // Start MCP Bridge
     const mcpBridgePath = path.join(__dirname, "../../mcp-bridge/src/index.ts");
@@ -106,6 +117,91 @@ class AgentCore {
     console.error("[Agent Core] Ready and listening on stdin");
   }
 
+  private async initializeKBWorkspace() {
+    try {
+      console.error("[Agent Core] Initializing KB workspace...");
+
+      // Detect workspace name from git
+      this.repoName = await this.detectWorkspaceName();
+      console.error(`[Agent Core] Workspace name: ${this.repoName}`);
+
+      // Register workspace with KB API
+      const KB_URL = "http://127.0.0.1:7777";
+      const registerResponse = await fetch(`${KB_URL}/v1/repos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: this.repoName,
+          path: this.workspaceRoot,
+          default_embed_model: "large",
+        }),
+      });
+
+      if (!registerResponse.ok) {
+        const errorText = await registerResponse.text();
+        console.error(`[Agent Core] Failed to register workspace: ${errorText}`);
+        // Continue anyway - repo might already be registered
+      } else {
+        const result = await registerResponse.json();
+        console.error(`[Agent Core] ${result.message}`);
+      }
+
+      // Initialize index queue
+      this.indexQueue = new IndexQueue(KB_URL, this.repoName);
+
+      // Listen to indexing events
+      this.indexQueue.on("progress", (count: number) => {
+        console.error(`[Agent Core] Indexed ${count} files`);
+        this.sendEvent({
+          type: "kb_progress",
+          data: { indexed: count },
+        });
+      });
+
+      this.indexQueue.on("complete", () => {
+        console.error("[Agent Core] Index queue complete");
+        this.sendEvent({
+          type: "kb_complete",
+          data: {},
+        });
+      });
+
+      this.indexQueue.on("error", (error: Error) => {
+        console.error(`[Agent Core] Index queue error: ${error.message}`);
+      });
+
+      console.error("[Agent Core] KB workspace initialized");
+    } catch (error: any) {
+      console.error(`[Agent Core] KB workspace initialization failed: ${error.message}`);
+      // Continue without KB indexing
+    }
+  }
+
+  private async detectWorkspaceName(): Promise<string> {
+    // Try to get workspace name from git remote URL
+    try {
+      const { stdout } = await execAsync("git remote get-url origin", {
+        cwd: this.workspaceRoot,
+      });
+
+      const remoteUrl = stdout.trim();
+
+      // Extract repo name from git URL
+      // Examples:
+      //   git@github.com:user/repo.git -> repo
+      //   https://github.com/user/repo.git -> repo
+      const match = remoteUrl.match(/\/([^/]+?)(?:\.git)?$/);
+      if (match && match[1]) {
+        return match[1];
+      }
+    } catch {
+      // Git not available or not a git repo
+    }
+
+    // Fallback to directory name
+    return path.basename(this.workspaceRoot);
+  }
+
   private async checkClaudeAuth() {
     try {
       const authStatus = await this.claudeClient.getAuthStatus();
@@ -146,6 +242,10 @@ class AgentCore {
         this.handleClearConversation();
       } else if (message.method === "abort_generation") {
         this.handleAbortGeneration();
+      } else if (message.method === "queue_files") {
+        this.handleQueueFiles(message);
+      } else if (message.method === "get_kb_status") {
+        this.handleGetKBStatus(message);
       }
     } catch (error) {
       console.error("[Agent Core] Parse error:", error);
@@ -293,16 +393,103 @@ class AgentCore {
   
   private handleAbortGeneration() {
     console.error("[Agent Core] Abort generation requested");
-    
+
     // Call abort on tool executor
     this.toolExecutor.abort();
-    
+
     // Send task completed with abort status
     this.sendEvent({
       type: "task_completed",
       success: false,
       result: { message: "Generation aborted by user" },
     });
+  }
+
+  private async handleQueueFiles(message: Message) {
+    try {
+      const { files, priority = 5 } = message.params || {};
+
+      if (!this.indexQueue) {
+        const response: Message = {
+          jsonrpc: "2.0",
+          id: message.id,
+          error: {
+            code: -32603,
+            message: "Index queue not initialized",
+          },
+        };
+        process.stdout.write(JSON.stringify(response) + "\n");
+        return;
+      }
+
+      if (!files || !Array.isArray(files)) {
+        const response: Message = {
+          jsonrpc: "2.0",
+          id: message.id,
+          error: {
+            code: -32602,
+            message: "Invalid params: files array required",
+          },
+        };
+        process.stdout.write(JSON.stringify(response) + "\n");
+        return;
+      }
+
+      // Queue the files
+      this.indexQueue.enqueueBatch(files, priority);
+
+      const response: Message = {
+        jsonrpc: "2.0",
+        id: message.id,
+        result: {
+          queued: files.length,
+          queueDepth: this.indexQueue.getQueueDepth(),
+        },
+      };
+
+      process.stdout.write(JSON.stringify(response) + "\n");
+    } catch (error: any) {
+      const response: Message = {
+        jsonrpc: "2.0",
+        id: message.id,
+        error: {
+          code: -32603,
+          message: error.message,
+        },
+      };
+
+      process.stdout.write(JSON.stringify(response) + "\n");
+    }
+  }
+
+  private async handleGetKBStatus(message: Message) {
+    try {
+      const status = {
+        initialized: this.indexQueue !== null,
+        repoName: this.repoName,
+        queueDepth: this.indexQueue?.getQueueDepth() || 0,
+        isIndexing: this.indexQueue?.isIndexing() || false,
+      };
+
+      const response: Message = {
+        jsonrpc: "2.0",
+        id: message.id,
+        result: status,
+      };
+
+      process.stdout.write(JSON.stringify(response) + "\n");
+    } catch (error: any) {
+      const response: Message = {
+        jsonrpc: "2.0",
+        id: message.id,
+        error: {
+          code: -32603,
+          message: error.message,
+        },
+      };
+
+      process.stdout.write(JSON.stringify(response) + "\n");
+    }
   }
 
   private sendEvent(event: AgentEvent) {
