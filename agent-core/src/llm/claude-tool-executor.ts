@@ -12,6 +12,7 @@ import {
   type ToolCall,
   type ToolResult,
 } from "./tool-utils";
+import { generateFileWriteDiff } from "./diff-generator";
 
 export interface ToolExecutorConfig {
   claudeClient: ClaudeClient;
@@ -459,12 +460,34 @@ export class ClaudeToolExecutor {
             `[ToolExecutor] Tool ${toolCall.name} completed in ${executionTime}ms`
           );
 
+          // Generate diff for file editing tools
+          let diff = undefined;
+          if (toolName === 'file_write' && mcpResult && !mcpResult.isError) {
+            try {
+              // Parse the result to get file info
+              const resultText = mcpResult.content?.[0]?.text;
+              if (resultText) {
+                const parsedResult = JSON.parse(resultText);
+                const generatedDiff = await generateFileWriteDiff(
+                  processedInput,
+                  parsedResult,
+                  process.cwd()
+                );
+                // Convert null to undefined for type safety
+                diff = generatedDiff ?? undefined;
+              }
+            } catch (error) {
+              console.warn('[ToolExecutor] Failed to generate diff:', error);
+            }
+          }
+
           // Emit success event
           this.config.onEvent({
             type: "tool_call_completed",
             toolId: toolCall.id,
             result: mcpResult,
             executionTime,
+            diff,
           });
 
           // Convert to Anthropic format

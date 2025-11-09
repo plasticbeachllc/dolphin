@@ -55,6 +55,7 @@ export type AgentEvent = {
     result: any;
     error?: any;
     executionTime?: number;
+    diff?: FileDiff;
 } | {
     type: "require_confirmation";
     confirmId: string;
@@ -99,3 +100,17 @@ export interface AgentError {
     recoverable: boolean;
 }
 export type ErrorCode = "FILE_NOT_FOUND" | "PERMISSION_DENIED" | "RATE_LIMIT_EXCEEDED" | "COMMAND_NOT_ALLOWED" | "DIFF_APPLY_FAILED" | "CONTEXT_OVERFLOW" | "PLAN_BLOCKED" | "SERVICE_UNAVAILABLE";
+export interface FileDiff {
+    oldFileName: string;
+    newFileName: string;
+    additions: number;
+    deletions: number;
+    hunks: DiffHunk[];
+}
+export interface DiffHunk {
+    oldStart: number;
+    oldLines: number;
+    newStart: number;
+    newLines: number;
+    lines: string[];
+}
