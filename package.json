@@ -19,7 +19,8 @@
     "test:agent": "cd agent-core && bun test",
     "test:mcp": "cd mcp-bridge && npm run test:clean",
     "test:kb": "cd kb && pytest tests/",
-    "test:all": "npm run test:agent && npm run test:mcp && npm run test:kb",
+    "test:e2e": "cd vscode-extension && npm run test",
+    "test:all": "npm run test:agent && npm run test:mcp && npm run test:kb && npm run test:e2e",
     "clean": "rm -rf vscode-extension/out vscode-extension/webview/build agent-core/dist",
     "dev:extension": "cd vscode-extension && npm run watch",
     "dev:webview": "cd vscode-extension/webview && bun run dev"

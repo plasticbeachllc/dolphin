@@ -64,9 +64,12 @@
         "package": "vsce package"
     },
     "devDependencies": {
+        "@types/mocha": "^10.0.10",
         "@types/node": "^22.10.0",
         "@types/vscode": "^1.96.0",
         "@vscode/test-electron": "^2.4.1",
+        "glob": "^11.0.0",
+        "mocha": "^10.8.2",
         "typescript": "^5.7.2",
         "@vscode/vsce": "^3.2.1"
     },
