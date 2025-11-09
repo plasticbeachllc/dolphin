@@ -54,6 +54,49 @@ function createNewFileDiff(filePath: string, content: string): FileDiff {
 }
 
 /**
+ * Creates a FileDiff indicating that a new binary file was created
+ */
+function createBinaryNewFileDiff(filePath: string, newSize: number): FileDiff {
+  const message = `Binary file created: ${formatBytes(newSize)}`;
+
+  return {
+    oldFileName: '/dev/null',
+    newFileName: filePath,
+    additions: 0,
+    deletions: 0,
+    hunks: [{
+      oldStart: 1,
+      oldLines: 0,
+      newStart: 1,
+      newLines: 0,
+      lines: [` ${message}`]
+    }]
+  };
+}
+
+/**
+ * Creates a FileDiff for large newly created files that were truncated
+ */
+function createTruncatedNewFileDiff(filePath: string, fileSize: number): FileDiff {
+  const message = `⚠️ Diff preview unavailable: New file size (${formatBytes(fileSize)}) exceeds 1MB limit`;
+  const subMessage = `   The file was created successfully, but the diff is too large to display.`;
+
+  return {
+    oldFileName: '/dev/null',
+    newFileName: filePath,
+    additions: 0,
+    deletions: 0,
+    hunks: [{
+      oldStart: 1,
+      oldLines: 0,
+      newStart: 1,
+      newLines: 0,
+      lines: [` ${message}`, ` ${subMessage}`]
+    }]
+  };
+}
+
+/**
  * Creates a FileDiff for binary files showing size change
  */
 function createBinaryFileDiff(filePath: string, oldSize: number, newSize: number): FileDiff {
@@ -173,6 +216,17 @@ export async function generateFileDiff(
   try {
     // Handle new file creation
     if (oldContent === null) {
+      const newBuffer = Buffer.from(newContent, 'utf-8');
+      const newSize = newBuffer.byteLength;
+
+      if (isBinaryFile(filePath, newBuffer)) {
+        return createBinaryNewFileDiff(filePath, newSize);
+      }
+
+      if (newSize > MAX_FILE_SIZE) {
+        return createTruncatedNewFileDiff(filePath, newSize);
+      }
+
       return createNewFileDiff(filePath, newContent);
     }
 
