@@ -35,6 +35,7 @@ describe('Extension Activation Tests', () => {
     const dolphinCommands = [
       'dolphin.focusInput',
       'dolphin.newConversation',
+      'dolphin.setApiKey',
       'dolphin.test',
     ];
 

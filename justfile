@@ -149,6 +149,101 @@ test-verbose: setup-python
 	@echo "🧪 Running tests with verbose output..."
 	@uv run pytest -v
 
+# Run end-to-end tests across all platform domains
+test-e2e:
+	@echo "🚀 Running end-to-end platform tests across all domains..."
+	@echo ""
+	@echo "📋 Testing Domains:"
+	@echo "  1. Python Backend (KB, API, Personas)"
+	@echo "  2. TypeScript Agent Core"
+	@echo "  3. MCP Bridge"
+	@echo "  4. VSCode Extension"
+	@echo "  5. Webview UI"
+	@echo ""
+	@just test-e2e-python
+	@just test-e2e-agent-core
+	@just test-e2e-mcp-bridge
+	@just test-e2e-extension
+	@just test-e2e-webview
+	@echo ""
+	@echo "✅ All end-to-end tests passed!"
+
+# Run end-to-end tests with lenient mode (skip flaky tests)
+test-e2e-lenient:
+	@echo "🚀 Running end-to-end platform tests (lenient mode - skips flaky tests)..."
+	@echo ""
+	@echo "📋 Testing Domains:"
+	@echo "  1. Python Backend (KB, API, Personas)"
+	@echo "  2. TypeScript Agent Core (unit tests)"
+	@echo "  3. MCP Bridge"
+	@echo "  4. VSCode Extension"
+	@echo "  5. Webview UI"
+	@echo ""
+	@just test-e2e-python
+	@just test-e2e-agent-core-unit
+	@just test-e2e-mcp-bridge
+	@just test-e2e-extension
+	@just test-e2e-webview
+	@echo ""
+	@echo "✅ All end-to-end tests passed (lenient mode)!"
+
+# Test Python backend (KB, API, Personas)
+test-e2e-python:
+	@echo "🐍 [1/5] Testing Python Backend..."
+	@uv run pytest tests/ -q --tb=short || (echo "   ❌ Python backend tests failed"; exit 1)
+	@echo "   ✅ Python backend tests passed"
+
+# Test Agent Core (TypeScript)
+test-e2e-agent-core:
+	@echo "🤖 [2/5] Testing Agent Core..."
+	@cd agent-core && bun test --bail || (echo "   ❌ Agent core tests failed"; exit 1)
+	@echo "   ✅ Agent core tests passed"
+
+# Test Agent Core excluding flaky integration tests
+test-e2e-agent-core-unit:
+	@echo "🤖 [2/5] Testing Agent Core (unit tests only)..."
+	@cd agent-core && bun test tests/ --exclude "**/llm/claude-client.test.ts" || (echo "   ❌ Agent core tests failed"; exit 1)
+	@echo "   ✅ Agent core tests passed"
+
+# Test MCP Bridge
+test-e2e-mcp-bridge:
+	@echo "🌉 [3/5] Testing MCP Bridge..."
+	@cd mcp-bridge && bun test || (echo "   ❌ MCP bridge tests failed"; exit 1)
+	@echo "   ✅ MCP bridge tests passed"
+
+# Test VSCode Extension
+test-e2e-extension:
+	@echo "📦 [4/5] Testing VSCode Extension..."
+	@cd vscode-extension && npm test || (echo "   ❌ Extension tests failed"; exit 1)
+	@echo "   ✅ Extension tests passed"
+
+# Test Webview UI
+test-e2e-webview:
+	@echo "🎨 [5/5] Testing Webview UI..."
+	@cd vscode-extension/webview && bun test || (echo "   ❌ Webview tests failed"; exit 1)
+	@echo "   ✅ Webview tests passed"
+
+# Run end-to-end tests with coverage
+test-e2e-coverage:
+	@echo "🚀 Running end-to-end platform tests with coverage..."
+	@echo ""
+	@echo "🐍 Python Backend (with coverage)..."
+	@uv run pytest tests/ --cov=kb --cov-report=html --cov-report=term-missing
+	@echo ""
+	@echo "🤖 Agent Core..."
+	@cd agent-core && bun test --coverage
+	@echo ""
+	@echo "🌉 MCP Bridge..."
+	@cd mcp-bridge && bun test --coverage
+	@echo ""
+	@echo "📦 VSCode Extension..."
+	@cd vscode-extension && npm test -- --coverage
+	@echo ""
+	@echo "🎨 Webview UI..."
+	@cd vscode-extension/webview && bun test --coverage
+	@echo ""
+	@echo "✅ All tests completed with coverage reports!"
+
 # ==============================================================================
 # Centralized Dolphin CLI
 # ==============================================================================

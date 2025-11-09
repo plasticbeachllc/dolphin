@@ -14,6 +14,7 @@
     error?: string;
     status?: "running" | "success" | "error";
     executionTime?: number;
+    diff?: any;
   }
   
   interface Props {
@@ -45,6 +46,7 @@
           error={message.error}
           status={message.status || "running"}
           executionTime={message.executionTime}
+          diff={message.diff}
         />
       {:else}
         <MessageCard

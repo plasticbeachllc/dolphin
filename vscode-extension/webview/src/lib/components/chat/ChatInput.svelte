@@ -2,7 +2,7 @@
   import { Textarea } from "$lib/components/ui/textarea";
   import { Button } from "$lib/components/ui/button";
   import { SendHorizontal, Square } from "lucide-svelte";
-  
+
   interface Props {
     onSend?: (message: string) => void;
     onStop?: () => void;
@@ -10,7 +10,7 @@
     disabled?: boolean;
     isProcessing?: boolean;
   }
-  
+
   let {
     onSend,
     onStop,
@@ -18,9 +18,10 @@
     disabled = false,
     isProcessing = false
   }: Props = $props();
-  
+
   let message = $state("");
-  
+  let textareaRef: HTMLTextAreaElement | null = $state(null);
+
   function handleKeyDown(event: KeyboardEvent) {
     // Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux) to send
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
@@ -28,7 +29,7 @@
       handleAction();
     }
   }
-  
+
   function handleAction() {
     if (isProcessing) {
       // Stop current operation
@@ -40,10 +41,16 @@
       message = "";
     }
   }
+
+  // Export a focus method that can be called by parent
+  export function focus() {
+    textareaRef?.focus();
+  }
 </script>
 
 <div class="input-wrapper">
   <Textarea
+    bind:ref={textareaRef}
     bind:value={message}
     {placeholder}
     disabled={disabled || isProcessing}

@@ -11,16 +11,25 @@ let agentBridge: AgentBridge | null = null;
 let outputChannel: vscode.OutputChannel;
 let fileWatcher: FileWatcher | null = null;
 let statusBar: KBStatusBar | null = null;
+import { Logger } from "./utils/logger";
+
+let agentBridge: AgentBridge | null = null;
+let outputChannel: vscode.OutputChannel;
+let viewProvider: DolphinViewProvider | null = null;
+let logger: Logger;
 
 export async function activate(context: vscode.ExtensionContext) {
   // Create output channel for logging
   outputChannel = vscode.window.createOutputChannel("Dolphin");
   outputChannel.show();
-  outputChannel.appendLine("[Dolphin] Activating...");
+
+  // Create logger
+  logger = new Logger(outputChannel, "Extension");
+  logger.info("Activating Dolphin extension...");
 
   try {
     // Initialize AgentBridge
-    outputChannel.appendLine("[Dolphin] Initializing AgentBridge...");
+    logger.info("Initializing AgentBridge...");
     agentBridge = new AgentBridge();
 
     const agentCorePath = context.asAbsolutePath(
@@ -28,15 +37,23 @@ export async function activate(context: vscode.ExtensionContext) {
     );
     const extensionPath = context.extensionPath;
 
-    outputChannel.appendLine(`[Dolphin] Agent Core path: ${agentCorePath}`);
-    outputChannel.appendLine(`[Dolphin] Extension path: ${extensionPath}`);
-    
+    logger.debug(`Agent Core path: ${agentCorePath}`);
+    logger.debug(`Extension path: ${extensionPath}`);
+
+    // Retrieve API key from SecretStorage
+    const apiKey = await context.secrets.get('dolphin.apiKey');
+    if (apiKey) {
+      logger.info("API key found in SecretStorage");
+    } else {
+      logger.info("No API key found in SecretStorage - will use CLI or env");
+    }
+
     try {
-      await agentBridge.start(agentCorePath, extensionPath);
-      outputChannel.appendLine("[Dolphin] AgentBridge.start() returned successfully");
+      await agentBridge.start(agentCorePath, extensionPath, apiKey);
+      logger.info("AgentBridge started successfully");
     } catch (startError: any) {
-      outputChannel.appendLine(`[Dolphin] ERROR in AgentBridge.start(): ${startError.message}`);
-      outputChannel.appendLine(`[Dolphin] Stack: ${startError.stack}`);
+      logger.error(`AgentBridge.start() failed: ${startError.message}`);
+      logger.debug(`Stack: ${startError.stack}`);
       throw startError;
     }
 
@@ -91,29 +108,29 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     // Register webview provider with AgentBridge
-    outputChannel.appendLine("[Dolphin] Creating DolphinViewProvider with AgentBridge...");
-    const provider = new DolphinViewProvider(context.extensionUri, outputChannel, agentBridge);
-    outputChannel.appendLine("[Dolphin] Registering webview view provider for 'dolphin.chatView'...");
+    logger.info("Creating DolphinViewProvider with AgentBridge...");
+    viewProvider = new DolphinViewProvider(context.extensionUri, outputChannel, agentBridge);
+    logger.debug("Registering webview view provider for 'dolphin.chatView'...");
     context.subscriptions.push(
-      vscode.window.registerWebviewViewProvider("dolphin.chatView", provider, {
+      vscode.window.registerWebviewViewProvider("dolphin.chatView", viewProvider, {
         webviewOptions: {
           retainContextWhenHidden: true
         }
       })
     );
-    outputChannel.appendLine("[Dolphin] Provider registered successfully");
+    logger.info("Webview provider registered successfully");
 
     // Register commands
-    outputChannel.appendLine("[Dolphin] Registering commands...");
+    logger.info("Registering commands...");
     
     // Command: dolphin.focusInput - Focus the chat input in the webview
     context.subscriptions.push(
       vscode.commands.registerCommand('dolphin.focusInput', async () => {
         outputChannel.appendLine("[Dolphin] Executing dolphin.focusInput");
         await vscode.commands.executeCommand('dolphin.chatView.focus');
-        // Post message to webview to focus the input element
-        // This would require provider to expose a method to post messages
-        vscode.window.showInformationMessage("Chat input focused");
+        if (viewProvider) {
+          viewProvider.focusInput();
+        }
       })
     );
 
@@ -121,12 +138,32 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
       vscode.commands.registerCommand('dolphin.newConversation', async () => {
         outputChannel.appendLine("[Dolphin] Executing dolphin.newConversation");
-        // Clear the current conversation and start fresh
         if (agentBridge) {
-          // Would need to implement clearConversation on AgentBridge
-          outputChannel.appendLine("[Dolphin] Starting new conversation");
+          await agentBridge.clearConversation();
+        }
+        if (viewProvider) {
+          viewProvider.clearConversation();
         }
         vscode.window.showInformationMessage("New conversation started");
+      })
+    );
+
+    // Command: dolphin.setApiKey - Set the Anthropic API key
+    context.subscriptions.push(
+      vscode.commands.registerCommand('dolphin.setApiKey', async () => {
+        outputChannel.appendLine("[Dolphin] Executing dolphin.setApiKey");
+        const apiKey = await vscode.window.showInputBox({
+          prompt: "Enter your Anthropic API Key",
+          password: true,
+          placeHolder: "sk-ant-...",
+          ignoreFocusOut: true
+        });
+
+        if (apiKey) {
+          await context.secrets.store('dolphin.apiKey', apiKey);
+          vscode.window.showInformationMessage("API key stored securely");
+          outputChannel.appendLine("[Dolphin] API key stored in SecretStorage");
+        }
       })
     );
 
@@ -174,13 +211,14 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 
     outputChannel.appendLine("[Dolphin] Commands registered successfully");
+    logger.info("Commands registered successfully");
 
     vscode.window.showInformationMessage("Dolphin activated! 🐬");
-    outputChannel.appendLine("[Dolphin] Activation complete");
+    logger.info("Activation complete");
   } catch (error: any) {
     const errorMsg = `Dolphin activation failed: ${error.message}`;
-    outputChannel.appendLine(`[ERROR] ${errorMsg}`);
-    outputChannel.appendLine(`[ERROR] Stack: ${error.stack}`);
+    logger.error(errorMsg);
+    logger.debug(`Stack: ${error.stack}`);
     vscode.window.showErrorMessage(errorMsg);
     throw error;
   }
