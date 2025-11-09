@@ -15,14 +15,15 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
     // Set up event forwarding immediately when AgentBridge is available
     if (this.agentBridge) {
       this.agentBridge.onEvent((event) => {
-        this.outputChannel.appendLine(`[DolphinViewProvider] Received event from agent: ${event.type}`);
-        
+        const requestId = (event as any).requestId || 'unknown';
+        this.outputChannel.appendLine(`[DolphinViewProvider] Received event from agent: ${event.type} (requestId: ${requestId})`);
+
         // Forward to webview if it's available
         if (this.webviewView) {
-          this.outputChannel.appendLine(`[DolphinViewProvider] Forwarding event to webview: ${event.type}`);
+          this.outputChannel.appendLine(`[DolphinViewProvider] Forwarding event to webview: ${event.type} (requestId: ${requestId})`);
           this.webviewView.webview.postMessage(event);
         } else {
-          this.outputChannel.appendLine(`[DolphinViewProvider] Webview not ready yet, event will be queued`);
+          this.outputChannel.appendLine(`[DolphinViewProvider] Webview not ready yet, event will be queued (requestId: ${requestId})`);
         }
       });
     }

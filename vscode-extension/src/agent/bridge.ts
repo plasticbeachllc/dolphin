@@ -2,6 +2,14 @@
 import { ChildProcess, spawn } from "child_process";
 import * as vscode from "vscode";
 import type { AgentEvent, ExtensionRequest } from "../types/events";
+import {
+  StreamMessageReader,
+  StreamMessageWriter,
+  createMessageConnection,
+  MessageConnection,
+  NotificationType,
+  RequestType,
+} from "vscode-jsonrpc/node";
 
 interface Message {
   jsonrpc: "2.0";
@@ -16,12 +24,25 @@ interface Message {
   };
 }
 
+interface WriteQueueItem {
+  data: string;
+  resolve: () => void;
+  reject: (error: Error) => void;
+}
+
 export class AgentBridge {
   private process: ChildProcess | null = null;
   private messageId = 0;
   private eventEmitter = new vscode.EventEmitter<AgentEvent>();
   private outputChannel: vscode.OutputChannel;
-  private pendingRequests: Map<number, { resolve: (value: any) => void; reject: (error: any) => void }> = new Map();
+  private pendingRequests: Map<number, { resolve: (value: any) => void; reject: (error: any) => void; timeout?: NodeJS.Timeout }> = new Map();
+  private connection: MessageConnection | null = null;
+  private writeQueue: WriteQueueItem[] = [];
+  private isWriting = false;
+  private restartAttempts = 0;
+  private maxRestartAttempts = 3;
+  private restartBackoffs = [1000, 3000, 10000]; // 1s, 3s, 10s
+  private isShuttingDown = false;
 
   public readonly onEvent = this.eventEmitter.event;
 
@@ -31,6 +52,7 @@ export class AgentBridge {
 
   async start(agentCorePath: string, extensionPath: string, apiKey?: string): Promise<void> {
     this.outputChannel.appendLine("[AgentBridge] Starting Agent Core...");
+    this.isShuttingDown = false;
 
     // Find Bun
     const bunPath = await this.findBun();
@@ -61,20 +83,34 @@ export class AgentBridge {
       env,
     });
 
-    // Set up stdout handling (JSON-RPC messages)
-    this.process.stdout?.setEncoding("utf-8");
-    let buffer = "";
-    this.process.stdout?.on("data", (chunk: string) => {
-      buffer += chunk;
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
+    // Set up JSON-RPC connection using vscode-jsonrpc
+    if (this.process.stdout && this.process.stdin) {
+      const reader = new StreamMessageReader(this.process.stdout);
+      const writer = new StreamMessageWriter(this.process.stdin);
+      this.connection = createMessageConnection(reader, writer);
 
-      for (const line of lines) {
-        if (line.trim()) {
-          this.handleOutput(line);
-        }
-      }
-    });
+      // Set up notification handler for agent events
+      this.connection.onNotification("notify", (params: AgentEvent) => {
+        const requestId = (params as any).requestId || "unknown";
+        this.outputChannel.appendLine(`[AgentBridge] Event: ${params.type} (requestId: ${requestId})`);
+        this.eventEmitter.fire(params);
+      });
+
+      // Set up error handler
+      this.connection.onError((error) => {
+        this.outputChannel.appendLine(`[AgentBridge] Connection error: ${error[0]}`);
+      });
+
+      // Set up close handler
+      this.connection.onClose(() => {
+        this.outputChannel.appendLine("[AgentBridge] Connection closed");
+        this.connection = null;
+      });
+
+      // Start listening
+      this.connection.listen();
+      this.outputChannel.appendLine("[AgentBridge] JSON-RPC connection established");
+    }
 
     // Set up stderr handling (logs)
     this.process.stderr?.setEncoding("utf-8");
@@ -82,24 +118,39 @@ export class AgentBridge {
       this.outputChannel.append(chunk);
     });
 
-    // Handle errors
+    // Handle errors with auto-recovery
     this.process.on("error", (error) => {
       this.outputChannel.appendLine(
         `[AgentBridge] Process error: ${error.message}`
       );
-      vscode.window.showErrorMessage(`Dolphin Agent error: ${error.message}`);
+      if (!this.isShuttingDown) {
+        this.handleCrash(agentCorePath, extensionPath, apiKey);
+      }
     });
 
-    // Handle exit
+    // Handle exit with auto-recovery
     this.process.on("exit", (code, signal) => {
       this.outputChannel.appendLine(
         `[AgentBridge] Process exited: code=${code}, signal=${signal}`
       );
 
-      if (code !== 0 && code !== null) {
-        vscode.window.showErrorMessage(
-          `Dolphin Agent crashed (exit code ${code}). Check Output > Dolphin Agent for details.`
-        );
+      // Clean up connection
+      if (this.connection) {
+        this.connection.dispose();
+        this.connection = null;
+      }
+
+      // Reject all pending requests
+      for (const [id, pending] of this.pendingRequests.entries()) {
+        if (pending.timeout) {
+          clearTimeout(pending.timeout);
+        }
+        pending.reject(new Error("Agent process exited"));
+      }
+      this.pendingRequests.clear();
+
+      if (code !== 0 && code !== null && !this.isShuttingDown) {
+        this.handleCrash(agentCorePath, extensionPath, apiKey);
       }
     });
 
@@ -107,13 +158,49 @@ export class AgentBridge {
     this.outputChannel.appendLine(
       "[AgentBridge] Agent Core spawned, starting in background..."
     );
-    
+
     // Start listening for ready signal (non-blocking)
     this.waitForReady().then(() => {
       this.outputChannel.appendLine("[AgentBridge] Agent Core ready!");
+      // Reset restart attempts on successful start
+      this.restartAttempts = 0;
     }).catch((error) => {
       this.outputChannel.appendLine(`[AgentBridge] Agent startup error: ${error.message}`);
     });
+  }
+
+  private async handleCrash(agentCorePath: string, extensionPath: string, apiKey?: string): Promise<void> {
+    if (this.restartAttempts >= this.maxRestartAttempts) {
+      this.outputChannel.appendLine(
+        `[AgentBridge] Maximum restart attempts (${this.maxRestartAttempts}) reached. Not restarting.`
+      );
+      const action = await vscode.window.showErrorMessage(
+        `Dolphin Agent crashed ${this.maxRestartAttempts} times and will not restart automatically. Check Output > Dolphin Agent for details.`,
+        "Retry",
+        "Cancel"
+      );
+
+      if (action === "Retry") {
+        this.restartAttempts = 0;
+        this.start(agentCorePath, extensionPath, apiKey);
+      }
+      return;
+    }
+
+    const backoff = this.restartBackoffs[this.restartAttempts];
+    this.restartAttempts++;
+
+    this.outputChannel.appendLine(
+      `[AgentBridge] Attempting restart ${this.restartAttempts}/${this.maxRestartAttempts} in ${backoff}ms...`
+    );
+
+    vscode.window.showWarningMessage(
+      `Dolphin Agent crashed. Restarting (attempt ${this.restartAttempts}/${this.maxRestartAttempts})...`
+    );
+
+    setTimeout(() => {
+      this.start(agentCorePath, extensionPath, apiKey);
+    }, backoff);
   }
 
   private async findBun(): Promise<string | null> {
@@ -122,16 +209,23 @@ export class AgentBridge {
     const execAsync = promisify(exec);
 
     try {
-      const { stdout } = await execAsync("which bun");
-      return stdout.trim();
+      // On Windows, use 'where' instead of 'which'
+      const command = process.platform === "win32" ? "where bun" : "which bun";
+      const { stdout } = await execAsync(command);
+      return stdout.trim().split(/\r?\n/)[0]; // Take first result on Windows
     } catch {
       // Try common locations
       const fs = require("fs");
-      const locations = [
-        "/usr/local/bin/bun",
-        "/opt/homebrew/bin/bun",
-        `${process.env.HOME}/.bun/bin/bun`,
-      ];
+      const locations = process.platform === "win32"
+        ? [
+            `${process.env.LOCALAPPDATA}\\bun\\bin\\bun.exe`,
+            `${process.env.USERPROFILE}\\.bun\\bin\\bun.exe`,
+          ]
+        : [
+            "/usr/local/bin/bun",
+            "/opt/homebrew/bin/bun",
+            `${process.env.HOME}/.bun/bin/bun`,
+          ];
 
       for (const loc of locations) {
         try {
@@ -145,135 +239,80 @@ export class AgentBridge {
     return null;
   }
 
-  private handleOutput(data: string) {
-    try {
-      const message: Message = JSON.parse(data);
-
-      // Handle JSON-RPC responses (with id)
-      if (message.id !== undefined && message.result !== undefined) {
-        const pending = this.pendingRequests.get(message.id);
-        if (pending) {
-          pending.resolve(message.result);
-          this.pendingRequests.delete(message.id);
-        }
-        return;
-      }
-
-      // Handle JSON-RPC errors
-      if (message.id !== undefined && message.error !== undefined) {
-        const pending = this.pendingRequests.get(message.id);
-        if (pending) {
-          pending.reject(new Error(message.error.message || "Unknown error"));
-          this.pendingRequests.delete(message.id);
-        }
-        return;
-      }
-
-      // Handle notifications (events)
-      if (message.method === "notify" && message.params) {
-        const event = message.params as AgentEvent;
-        this.outputChannel.appendLine(`[AgentBridge] Event: ${event.type}`);
-        this.eventEmitter.fire(event);
-      }
-    } catch (error) {
-      this.outputChannel.appendLine(
-        `[AgentBridge] Failed to parse message: ${data}`
-      );
-    }
-  }
-
-  async sendMessage(content: string): Promise<void> {
-    if (!this.process || this.process.exitCode !== null) {
-      throw new Error("Agent process not running");
-    }
-
-    const request: ExtensionRequest = {
-      type: "send_message",
-      messageId: `msg-${this.messageId++}`,
-      content,
-    };
-
-    const message: Message = {
-      jsonrpc: "2.0",
-      id: this.messageId,
-      method: "send_message",
-      params: request,
-    };
-
-    const json = JSON.stringify(message) + "\n";
-    this.outputChannel.appendLine(`[AgentBridge] Sending: ${message.method}`);
-
-    this.process.stdin?.write(json);
-  }
-
-  async getAuthStatus(): Promise<any> {
-    if (!this.process || this.process.exitCode !== null) {
-      throw new Error("Agent process not running");
+  private async sendRequest(method: string, params?: any, timeout = 30000): Promise<any> {
+    if (!this.connection) {
+      throw new Error("JSON-RPC connection not established");
     }
 
     const id = ++this.messageId;
-    const message: Message = {
-      jsonrpc: "2.0",
-      id,
-      method: "get_auth_status",
+    this.outputChannel.appendLine(`[AgentBridge] Sending request: ${method} (id: ${id})`);
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const pending = this.pendingRequests.get(id);
+        if (pending) {
+          this.pendingRequests.delete(id);
+          reject(new Error(`Request timeout: ${method}`));
+        }
+      }, timeout);
+
+      this.pendingRequests.set(id, { resolve, reject, timeout: timer });
+
+      // Send via connection (vscode-jsonrpc handles backpressure internally)
+      this.connection!.sendRequest(method, params)
+        .then((result) => {
+          const pending = this.pendingRequests.get(id);
+          if (pending) {
+            if (pending.timeout) {
+              clearTimeout(pending.timeout);
+            }
+            this.pendingRequests.delete(id);
+            resolve(result);
+          }
+        })
+        .catch((error) => {
+          const pending = this.pendingRequests.get(id);
+          if (pending) {
+            if (pending.timeout) {
+              clearTimeout(pending.timeout);
+            }
+            this.pendingRequests.delete(id);
+            reject(error);
+          }
+        });
+    });
+  }
+
+  private async sendNotification(method: string, params?: any): Promise<void> {
+    if (!this.connection) {
+      throw new Error("JSON-RPC connection not established");
+    }
+
+    this.outputChannel.appendLine(`[AgentBridge] Sending notification: ${method}`);
+    // vscode-jsonrpc handles backpressure and queuing internally
+    this.connection.sendNotification(method, params);
+  }
+
+  async sendMessage(content: string): Promise<void> {
+    const request: ExtensionRequest = {
+      type: "send_message",
+      messageId: `msg-${this.messageId}`,
+      content,
     };
 
-    const json = JSON.stringify(message) + "\n";
-    this.outputChannel.appendLine(`[AgentBridge] Requesting auth status (id: ${id})`);
+    await this.sendNotification("send_message", request);
+  }
 
-    // Create promise for response
-    const promise = new Promise<any>((resolve, reject) => {
-      this.pendingRequests.set(id, { resolve, reject });
-
-      // Timeout after 5 seconds
-      setTimeout(() => {
-        if (this.pendingRequests.has(id)) {
-          this.pendingRequests.delete(id);
-          reject(new Error("Auth status request timeout"));
-        }
-      }, 5000);
-    });
-
-    // Send request
-    this.process.stdin?.write(json);
-
-    return promise;
+  async getAuthStatus(): Promise<any> {
+    return this.sendRequest("get_auth_status", undefined, 5000);
   }
 
   async abortGeneration(): Promise<void> {
-    if (!this.process || this.process.exitCode !== null) {
-      throw new Error("Agent process not running");
-    }
-
-    const message = {
-      jsonrpc: "2.0",
-      id: ++this.messageId,
-      method: "abort_generation",
-      params: {}
-    };
-
-    const json = JSON.stringify(message) + "\n";
-    this.outputChannel.appendLine(`[AgentBridge] Sending abort_generation`);
-
-    this.process.stdin?.write(json);
+    await this.sendNotification("abort_generation");
   }
 
   async clearConversation(): Promise<void> {
-    if (!this.process || this.process.exitCode !== null) {
-      throw new Error("Agent process not running");
-    }
-
-    const message = {
-      jsonrpc: "2.0",
-      id: ++this.messageId,
-      method: "clear_conversation",
-      params: {}
-    };
-
-    const json = JSON.stringify(message) + "\n";
-    this.outputChannel.appendLine(`[AgentBridge] Sending clear_conversation`);
-
-    this.process.stdin?.write(json);
+    await this.sendNotification("clear_conversation");
   }
 
   private async waitForReady(timeout = 60000): Promise<void> {
@@ -294,6 +333,24 @@ export class AgentBridge {
 
   shutdown(): void {
     this.outputChannel.appendLine("[AgentBridge] Shutting down...");
+    this.isShuttingDown = true;
+
+    // Dispose connection first
+    if (this.connection) {
+      this.connection.dispose();
+      this.connection = null;
+    }
+
+    // Clean up all pending requests
+    for (const [id, pending] of this.pendingRequests.entries()) {
+      if (pending.timeout) {
+        clearTimeout(pending.timeout);
+      }
+      pending.reject(new Error("Agent bridge is shutting down"));
+    }
+    this.pendingRequests.clear();
+
+    // Kill the process
     this.process?.kill("SIGTERM");
     this.process = null;
   }
