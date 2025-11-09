@@ -58,6 +58,9 @@
 
   let isProcessing = $state(false);
 
+  // Track when persisted state has been restored to avoid overwriting it
+  let hasRestoredState = $state(false);
+
   // Agent configuration
   let agentVersion = $state<string | undefined>(undefined);
   let model = $state<string>('claude-sonnet-4');
@@ -69,6 +72,10 @@
 
   // Auto-save state whenever messages change
   $effect(() => {
+    if (!hasRestoredState) {
+      return;
+    }
+
     // Trigger when messages or hasUserSentMessage change
     const state = {
       messages,
@@ -92,6 +99,8 @@
         showLogo = !savedState.hasUserSentMessage;
       }
     }
+
+    hasRestoredState = true;
 
     // Start tracking startup time
     startupTimer = window.setInterval(() => {
