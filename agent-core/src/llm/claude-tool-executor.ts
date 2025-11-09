@@ -151,18 +151,19 @@ export class ClaudeToolExecutor {
       // Extract tool calls from response
       const toolCalls = extractToolCalls(response.content);
 
+      // Add Claude's response to conversation (before checking for no tools)
+      // This ensures we preserve the final assistant message even when no tools are called
+      messages.push({
+        role: "assistant",
+        content: response.content,
+      });
+
       if (toolCalls.length === 0) {
         console.error("[ToolExecutor] No tools called, ending loop");
         break;
       }
 
       console.error(`[ToolExecutor] Claude requested ${toolCalls.length} tool(s)`);
-
-      // Add Claude's response to conversation
-      messages.push({
-        role: "assistant",
-        content: response.content,
-      });
 
       // Execute tools in parallel
       const toolResults = await this.executeToolCalls(toolCalls);

@@ -67,6 +67,18 @@ describe('Command Tests', () => {
     }
   });
 
+  it('Should execute dolphin.setApiKey command', async function () {
+    this.timeout(10000);
+
+    // Note: We can't fully test this in automated tests because it requires user input
+    // But we can verify the command is registered
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(
+      commands.includes('dolphin.setApiKey'),
+      'dolphin.setApiKey command should be registered'
+    );
+  });
+
   it('All registered Dolphin commands should be executable', async function () {
     this.timeout(15000);
 
@@ -76,8 +88,8 @@ describe('Command Tests', () => {
     );
 
     assert.ok(
-      dolphinCommands.length >= 3,
-      'Should have at least 3 Dolphin commands'
+      dolphinCommands.length >= 4,
+      'Should have at least 4 Dolphin commands'
     );
 
     // Log all Dolphin commands for debugging
@@ -86,6 +98,12 @@ describe('Command Tests', () => {
     for (const cmd of dolphinCommands) {
       // Skip focus commands that require visible webview
       if (cmd.includes('focus') || cmd.includes('Focus')) {
+        continue;
+      }
+
+      // Skip setApiKey command that requires user input
+      if (cmd === 'dolphin.setApiKey') {
+        console.log(`  Skipping ${cmd} (requires user input)`);
         continue;
       }
 
