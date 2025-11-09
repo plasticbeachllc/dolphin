@@ -15,8 +15,8 @@
   const avatarFallback = isUser ? "U" : "A";
 </script>
 
-<Card.Root class="mb-4 {isUser ? 'ml-auto' : 'mr-auto'} max-w-[85%]">
-  <Card.Header class="flex flex-row items-center gap-3 pb-3">
+<Card.Root class="mb-2 {isUser ? 'ml-auto' : 'mr-auto'} max-w-[85%]">
+  <Card.Header class="flex flex-row items-center gap-2 pb-2">
     <Avatar.Root class="h-8 w-8">
       <Avatar.Fallback class={isUser ? "bg-blue-500" : "bg-purple-500"}>
         {avatarFallback}
@@ -31,7 +31,7 @@
       {/if}
     </div>
   </Card.Header>
-  <Card.Content class="whitespace-pre-wrap break-words">
-    {content}
+  <Card.Content class="whitespace-pre-wrap break-words prose prose-sm max-w-none dark:prose-invert">
+    {@html content}
   </Card.Content>
 </Card.Root>

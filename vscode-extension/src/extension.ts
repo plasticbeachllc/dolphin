@@ -5,11 +5,19 @@ import { AgentBridge } from "./agent/bridge";
 import { DolphinViewProvider } from "./views/provider";
 
 let agentBridge: AgentBridge | null = null;
+let outputChannel: vscode.OutputChannel;
 
 export async function activate(context: vscode.ExtensionContext) {
-  console.log("[Dolphin] Activating...");
+  // Create output channel for logging
+  outputChannel = vscode.window.createOutputChannel("Dolphin");
+  outputChannel.show();
+  outputChannel.appendLine("[Dolphin] Activating...");
 
   try {
+    // For UI testing, we'll skip Agent Core initialization
+    // Uncomment the lines below when you have the Knowledge Bank installed
+    
+    /*
     // Initialize AgentBridge
     agentBridge = new AgentBridge();
 
@@ -38,34 +46,28 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage(`Agent error: ${event.error.message}`);
       }
     });
+    */
 
-    // Register webview provider (placeholder for now)
-    const provider = new DolphinViewProvider(context.extensionUri);
+    // Register webview provider (without AgentBridge for UI testing)
+    outputChannel.appendLine("[Dolphin] Creating DolphinViewProvider...");
+    const provider = new DolphinViewProvider(context.extensionUri, outputChannel);
+    outputChannel.appendLine("[Dolphin] Registering webview view provider for 'dolphin.chatView'...");
     context.subscriptions.push(
-      vscode.window.registerWebviewViewProvider("dolphin.chatView", provider)
-    );
-
-    // Register test command
-    const testCmd = vscode.commands.registerCommand(
-      "dolphin.test",
-      async () => {
-        try {
-          await agentBridge?.sendMessage("Hello from VS Code!");
-        } catch (error: any) {
-          vscode.window.showErrorMessage(
-            `Failed to send message: ${error.message}`
-          );
+      vscode.window.registerWebviewViewProvider("dolphin.chatView", provider, {
+        webviewOptions: {
+          retainContextWhenHidden: true
         }
-      }
+      })
     );
+    outputChannel.appendLine("[Dolphin] Provider registered successfully");
 
-    context.subscriptions.push(testCmd);
-
-    vscode.window.showInformationMessage("Dolphin activated! 🐬");
+    vscode.window.showInformationMessage("Dolphin activated! 🐬 (UI-only mode)");
+    outputChannel.appendLine("[Dolphin] Activation complete");
   } catch (error: any) {
-    vscode.window.showErrorMessage(
-      `Dolphin activation failed: ${error.message}`
-    );
+    const errorMsg = `Dolphin activation failed: ${error.message}`;
+    outputChannel.appendLine(`[ERROR] ${errorMsg}`);
+    outputChannel.appendLine(`[ERROR] Stack: ${error.stack}`);
+    vscode.window.showErrorMessage(errorMsg);
     throw error;
   }
 }
