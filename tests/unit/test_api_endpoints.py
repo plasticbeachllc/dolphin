@@ -512,8 +512,8 @@ class TestIndexTasksEndpoint:
         workspace2 = temp_dir / "workspace2"
         workspace2.mkdir()
 
-        repo1 = sql_store.add_repo(name="repo1", path=str(workspace1), default_embed_model="large")
-        repo2 = sql_store.add_repo(name="repo2", path=str(workspace2), default_embed_model="large")
+        sql_store.record_repo(name="repo1", path=workspace1, default_embed_model="large")
+        sql_store.record_repo(name="repo2", path=workspace2, default_embed_model="large")
 
         # Queue tasks for each repo
         kb_api_client.post("/v1/index", json={"repo": "repo1", "files": ["a.py"]})

@@ -410,7 +410,7 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
     if existing:
         return RegisterRepoResponse(
             repo_id=existing["id"],
-            name=existing["name"],
+            name=request.name,
             path=existing["root_path"],
             message=f"Repository '{request.name}' already registered"
         )
@@ -425,18 +425,25 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
 
     # Register the repository
     try:
-        repo_id = _sql_store.upsert_repo(
+        _sql_store.record_repo(
             name=request.name,
-            root_path=str(repo_path.resolve()),
+            path=repo_path.resolve(),
             default_embed_model=request.default_embed_model
         )
 
+        # Get the registered repo to retrieve its ID
+        repo = _sql_store.get_repo_by_name(request.name)
+        if not repo:
+            raise HTTPException(status_code=500, detail="Failed to retrieve registered repository")
+
         return RegisterRepoResponse(
-            repo_id=repo_id,
+            repo_id=repo["id"],
             name=request.name,
             path=str(repo_path.resolve()),
             message=f"Repository '{request.name}' registered successfully"
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to register repository: {str(e)}")
 

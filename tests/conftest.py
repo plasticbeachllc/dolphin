@@ -432,8 +432,7 @@ def mock_kb_stores(temp_db_path):
 
     yield sql_store, lance_store
 
-    # Cleanup
-    sql_store.close()
+    # Cleanup - no explicit close method needed, db connections are auto-closed
 
 
 @pytest.fixture
@@ -449,15 +448,18 @@ def registered_test_repo(mock_kb_stores, temp_dir):
     workspace_path.mkdir()
 
     # Register repo
-    repo = sql_store.add_repo(
+    sql_store.record_repo(
         name="test-repo",
-        path=str(workspace_path),
+        path=workspace_path,
         default_embed_model="large"
     )
 
+    # Get repo info
+    repo = sql_store.get_repo_by_name("test-repo")
+
     yield {
-        "repo_id": repo.id,
-        "name": repo.name,
+        "repo_id": repo["id"],
+        "name": "test-repo",  # name not returned by get_repo_by_name
         "path": str(workspace_path),
         "workspace": workspace_path
     }

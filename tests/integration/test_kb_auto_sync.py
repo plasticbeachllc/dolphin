@@ -73,7 +73,7 @@ class TestRepositoryRegistration:
 
         # Cleanup
         reset_stores()
-        sql_store.close()
+        # Cleanup - no explicit close needed
 
     def test_register_workspace_idempotent(self, temp_dir, temp_db_path):
         """Test that registering same workspace twice is idempotent."""
@@ -110,7 +110,7 @@ class TestRepositoryRegistration:
 
         # Cleanup
         reset_stores()
-        sql_store.close()
+        # Cleanup - no explicit close needed
 
 
 @pytest.mark.integration
@@ -137,11 +137,12 @@ class TestAsyncIndexingFlow:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        repo = sql_store.add_repo(
+        sql_store.record_repo(
             name="test-repo",
-            path=str(workspace),
+            path=workspace,
             default_embed_model="large"
         )
+        repo = sql_store.get_repo_by_name("test-repo")
 
         # Create test file
         test_file = workspace / "hello.py"
@@ -191,13 +192,13 @@ def goodbye():
         assert final_status["total"] == 1
 
         # Verify chunks were created
-        chunks = sql_store.get_chunks_for_file(repo.id, "hello.py")
+        chunks = sql_store.get_chunks_for_file(repo["id"], "hello.py")
         assert len(chunks) > 0
 
         # Cleanup
         reset_pipeline()
         reset_stores()
-        sql_store.close()
+        # Cleanup - no explicit close needed
 
     def test_multiple_files_batch_indexing(self, temp_dir, temp_db_path):
         """Test indexing multiple files in a batch."""
@@ -219,11 +220,8 @@ def goodbye():
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        repo = sql_store.add_repo(
-            name="test-repo",
-            path=str(workspace),
-            default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        repo = sql_store.get_repo_by_name("test-repo")
 
         # Create multiple test files
         files = []
@@ -272,13 +270,13 @@ def function_{i}():
 
         # Verify all files were indexed
         for filename in files:
-            chunks = sql_store.get_chunks_for_file(repo.id, filename)
+            chunks = sql_store.get_chunks_for_file(repo["id"], filename)
             assert len(chunks) > 0, f"No chunks found for {filename}"
 
         # Cleanup
         reset_pipeline()
         reset_stores()
-        sql_store.close()
+        # Cleanup - no explicit close needed
 
     def test_incremental_indexing_deduplication(self, temp_dir, temp_db_path):
         """Test that incremental indexing skips unchanged files."""
@@ -300,11 +298,8 @@ def function_{i}():
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        repo = sql_store.add_repo(
-            name="test-repo",
-            path=str(workspace),
-            default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        repo = sql_store.get_repo_by_name("test-repo")
 
         # Create test file
         test_file = workspace / "test.py"
@@ -328,7 +323,7 @@ def function_{i}():
             time.sleep(1)
 
         assert status["status"] == "completed"
-        first_indexed_count = len(sql_store.get_chunks_for_file(repo.id, "test.py"))
+        first_indexed_count = len(sql_store.get_chunks_for_file(repo["id"], "test.py"))
 
         # Index again without changing file (incremental should skip)
         response2 = client.post(
@@ -345,7 +340,7 @@ def function_{i}():
             time.sleep(1)
 
         assert status["status"] == "completed"
-        second_indexed_count = len(sql_store.get_chunks_for_file(repo.id, "test.py"))
+        second_indexed_count = len(sql_store.get_chunks_for_file(repo["id"], "test.py"))
 
         # Should have same number of chunks (deduplication worked)
         assert second_indexed_count == first_indexed_count
@@ -353,7 +348,7 @@ def function_{i}():
         # Cleanup
         reset_pipeline()
         reset_stores()
-        sql_store.close()
+        # Cleanup - no explicit close needed
 
 
 @pytest.mark.integration
@@ -380,11 +375,8 @@ class TestTaskStatusTracking:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        repo = sql_store.add_repo(
-            name="test-repo",
-            path=str(workspace),
-            default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        repo = sql_store.get_repo_by_name("test-repo")
 
         # Create test file
         (workspace / "test.py").write_text("def test(): pass")
@@ -417,7 +409,7 @@ class TestTaskStatusTracking:
         # Cleanup
         reset_pipeline()
         reset_stores()
-        sql_store.close()
+        # Cleanup - no explicit close needed
 
     def test_task_list_filtering(self, temp_dir, temp_db_path):
         """Test listing and filtering tasks by repository."""
@@ -441,8 +433,13 @@ class TestTaskStatusTracking:
         workspace2 = temp_dir / "workspace2"
         workspace2.mkdir()
 
-        repo1 = sql_store.add_repo(name="repo1", path=str(workspace1), default_embed_model="large")
-        repo2 = sql_store.add_repo(name="repo2", path=str(workspace2), default_embed_model="large")
+        sql_store.record_repo(name="repo1", path=workspace1, default_embed_model="large")
+
+
+        repo1 = sql_store.get_repo_by_name("repo1")
+        sql_store.record_repo(name="repo2", path=workspace2, default_embed_model="large")
+
+        repo2 = sql_store.get_repo_by_name("repo2")
 
         # Create test files
         (workspace1 / "test1.py").write_text("def test1(): pass")
@@ -472,7 +469,7 @@ class TestTaskStatusTracking:
         # Cleanup
         reset_pipeline()
         reset_stores()
-        sql_store.close()
+        # Cleanup - no explicit close needed
 
 
 @pytest.mark.integration
@@ -499,11 +496,8 @@ class TestErrorHandling:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        repo = sql_store.add_repo(
-            name="test-repo",
-            path=str(workspace),
-            default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        repo = sql_store.get_repo_by_name("test-repo")
 
         client = TestClient(app)
 
@@ -530,7 +524,7 @@ class TestErrorHandling:
         # Cleanup
         reset_pipeline()
         reset_stores()
-        sql_store.close()
+        # Cleanup - no explicit close needed
 
     def test_index_invalid_repository(self, temp_dir, temp_db_path):
         """Test indexing with invalid repository name."""
@@ -556,7 +550,7 @@ class TestErrorHandling:
 
         # Cleanup
         reset_stores()
-        sql_store.close()
+        # Cleanup - no explicit close needed
 
 
 @pytest.mark.integration
@@ -667,4 +661,4 @@ class APIEndpoint:
         # Cleanup
         reset_pipeline()
         reset_stores()
-        sql_store.close()
+        # Cleanup - no explicit close needed
