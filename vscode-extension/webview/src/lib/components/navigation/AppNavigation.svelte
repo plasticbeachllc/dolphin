@@ -38,7 +38,7 @@
               <span class="sr-only">Functions</span>
             </NavigationMenu.Trigger>
             <NavigationMenu.Content>
-              <ul class="grid w-[280px] gap-1 p-2">
+              <ul class="grid w-[200px] gap-1 p-2">
                 <li>
                   <NavigationMenu.Link
                     href="/functions/code-review"
@@ -47,7 +47,7 @@
                   >
                     <div class="text-sm font-medium">Code Review</div>
                     <p class="text-xs text-muted-foreground">
-                      AI-powered code review with analysis
+                      AI code review
                     </p>
                   </NavigationMenu.Link>
                 </li>
@@ -59,7 +59,7 @@
                   >
                     <div class="text-sm font-medium">Architect</div>
                     <p class="text-xs text-muted-foreground">
-                      Generate design specifications
+                      Design specs
                     </p>
                   </NavigationMenu.Link>
                 </li>
@@ -78,7 +78,7 @@
               <span class="sr-only">MCP Providers</span>
             </NavigationMenu.Trigger>
             <NavigationMenu.Content>
-              <ul class="grid w-[180px] gap-1 p-2">
+              <ul class="grid w-[150px] gap-1 p-2">
                 <li>
                   <NavigationMenu.Link
                     href="#"
@@ -86,7 +86,7 @@
                   >
                     <div class="text-sm font-medium leading-none">Coming soon</div>
                     <p class="line-clamp-2 text-xs leading-snug text-muted-foreground">
-                      Provider management
+                      Providers
                     </p>
                   </NavigationMenu.Link>
                 </li>
