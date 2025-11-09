@@ -168,6 +168,66 @@
 			</Card>
 		</div>
 
+		<!-- Agentic Animations -->
+		<Card class="md:col-span-2">
+			<CardHeader>
+				<CardTitle>Agentic Animations</CardTitle>
+			</CardHeader>
+			<CardContent class="space-y-6">
+				<!-- Thinking/Processing -->
+				<div class="space-y-2">
+					<p class="text-sm font-medium">Thinking Indicator</p>
+					<div class="flex items-center gap-3 p-4 bg-muted rounded-lg">
+						<div class="w-8 h-8 rounded-full bg-primary animate-pulse-glow flex items-center justify-center text-primary-foreground text-xs">
+							AI
+						</div>
+						<div class="flex gap-1">
+							<div class="w-2 h-2 rounded-full bg-foreground animate-typing-dot"></div>
+							<div class="w-2 h-2 rounded-full bg-foreground animate-typing-dot"></div>
+							<div class="w-2 h-2 rounded-full bg-foreground animate-typing-dot"></div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Message Slide In -->
+				<div class="space-y-2">
+					<p class="text-sm font-medium">Message Slide In</p>
+					<div class="p-4 bg-card border rounded-lg animate-slide-in-up">
+						<p class="text-sm">This message slides in smoothly</p>
+					</div>
+				</div>
+
+				<!-- Shimmer Loading -->
+				<div class="space-y-2">
+					<p class="text-sm font-medium">Loading Shimmer</p>
+					<div class="h-16 rounded-lg animate-shimmer"></div>
+				</div>
+
+				<!-- Breathing Status -->
+				<div class="space-y-2">
+					<p class="text-sm font-medium">Active Status</p>
+					<div class="flex items-center gap-2">
+						<div class="w-3 h-3 rounded-full bg-green-500 animate-breathe"></div>
+						<p class="text-sm text-muted-foreground">Agent is active</p>
+					</div>
+				</div>
+
+				<!-- Fade In -->
+				<div class="space-y-2">
+					<p class="text-sm font-medium">Fade In</p>
+					<div class="p-4 bg-accent rounded-lg animate-fade-in">
+						<p class="text-sm">Gentle fade in effect</p>
+					</div>
+				</div>
+
+				<!-- Bounce Attention -->
+				<div class="space-y-2">
+					<p class="text-sm font-medium">Attention Bounce</p>
+					<Badge class="animate-bounce-subtle">New</Badge>
+				</div>
+			</CardContent>
+		</Card>
+
 		<!-- CSS Variables Reference -->
 		<Card>
 			<CardHeader>
