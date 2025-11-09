@@ -279,5 +279,132 @@ describe('DolphinViewProvider Unit Tests', () => {
         done();
       }, 50);
     });
+
+    it('Should forward events with requestId for correlation', (done) => {
+      let forwardedEvent: any = null;
+      const loggedMessages: string[] = [];
+
+      // Capture log messages
+      const originalAppendLine = outputChannel.appendLine;
+      outputChannel.appendLine = (message: string) => {
+        loggedMessages.push(message);
+        return originalAppendLine.call(outputChannel, message);
+      };
+
+      const mockWebviewView = {
+        webview: {
+          postMessage: (message: any) => {
+            forwardedEvent = message;
+            return Promise.resolve(true);
+          },
+        },
+      } as any;
+
+      (provider as any).webviewView = mockWebviewView;
+
+      const mockEvent = {
+        type: 'tool_call_started',
+        toolId: 'tool-1',
+        tool: 'test_tool',
+        input: {},
+        requestId: 'req-1234567890-1',
+      };
+
+      (mockAgentBridge as any).eventEmitter.fire(mockEvent);
+
+      setTimeout(() => {
+        assert.ok(forwardedEvent, 'Event should have been forwarded');
+        assert.strictEqual(forwardedEvent.requestId, 'req-1234567890-1', 'RequestId should be preserved');
+
+        // Check that requestId was logged
+        const hasRequestIdLog = loggedMessages.some(m => m.includes('req-1234567890-1'));
+        assert.ok(hasRequestIdLog, 'RequestId should be logged');
+
+        outputChannel.appendLine = originalAppendLine;
+        done();
+      }, 50);
+    });
+
+    it('Should log correlation ID when forwarding events', (done) => {
+      const loggedMessages: string[] = [];
+
+      const originalAppendLine = outputChannel.appendLine;
+      outputChannel.appendLine = (message: string) => {
+        loggedMessages.push(message);
+        return originalAppendLine.call(outputChannel, message);
+      };
+
+      const mockWebviewView = {
+        webview: {
+          postMessage: () => Promise.resolve(true),
+        },
+      } as any;
+
+      (provider as any).webviewView = mockWebviewView;
+
+      const mockEvent = {
+        type: 'agent_ready',
+        version: '0.1.0',
+        capabilities: [],
+        requestId: 'req-9999-42',
+      };
+
+      (mockAgentBridge as any).eventEmitter.fire(mockEvent);
+
+      setTimeout(() => {
+        // Check logs include requestId
+        const receivedLog = loggedMessages.find(m => m.includes('Received event from agent'));
+        const forwardedLog = loggedMessages.find(m => m.includes('Forwarding event to webview'));
+
+        assert.ok(receivedLog, 'Should log received event');
+        assert.ok(receivedLog?.includes('req-9999-42'), 'Received log should include requestId');
+        assert.ok(forwardedLog, 'Should log forwarded event');
+        assert.ok(forwardedLog?.includes('req-9999-42'), 'Forwarded log should include requestId');
+
+        outputChannel.appendLine = originalAppendLine;
+        done();
+      }, 50);
+    });
+
+    it('Should handle events without requestId gracefully', (done) => {
+      let forwardedEvent: any = null;
+      const loggedMessages: string[] = [];
+
+      const originalAppendLine = outputChannel.appendLine;
+      outputChannel.appendLine = (message: string) => {
+        loggedMessages.push(message);
+        return originalAppendLine.call(outputChannel, message);
+      };
+
+      const mockWebviewView = {
+        webview: {
+          postMessage: (message: any) => {
+            forwardedEvent = message;
+            return Promise.resolve(true);
+          },
+        },
+      } as any;
+
+      (provider as any).webviewView = mockWebviewView;
+
+      // Event without requestId
+      const mockEvent = {
+        type: 'content_delta',
+        delta: 'test',
+      };
+
+      (mockAgentBridge as any).eventEmitter.fire(mockEvent);
+
+      setTimeout(() => {
+        assert.ok(forwardedEvent, 'Event should still be forwarded');
+
+        // Should log 'unknown' as requestId
+        const hasUnknownLog = loggedMessages.some(m => m.includes('requestId: unknown'));
+        assert.ok(hasUnknownLog, 'Should log "unknown" for missing requestId');
+
+        outputChannel.appendLine = originalAppendLine;
+        done();
+      }, 50);
+    });
   });
 });
