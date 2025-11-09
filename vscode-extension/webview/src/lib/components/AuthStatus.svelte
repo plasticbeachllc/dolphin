@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { Badge } from '$lib/components/ui/badge';
   import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
+  import { getVSCodeAPI } from '$lib/api/vscode';
   
   interface AuthStatusData {
     mode: 'claude_cli' | 'api_key' | 'auto';
@@ -24,45 +25,31 @@
       loading = true;
       error = null;
       
-      // Request auth status from extension
-      // @ts-ignore - acquireVsCodeApi is injected by VS Code
-      if (typeof acquireVsCodeApi !== 'undefined') {
-        // @ts-ignore
-        const vscode = acquireVsCodeApi();
-        vscode.postMessage({
-          type: 'get_auth_status'
-        });
-        
-        // Listen for response
-        const handleMessage = (event: MessageEvent) => {
-          const message = event.data;
-          if (message.type === 'auth_status') {
-            authStatus = message.status;
-            loading = false;
-            window.removeEventListener('message', handleMessage);
-          }
-        };
-        
-        window.addEventListener('message', handleMessage);
-        
-        // Timeout after 5 seconds
-        setTimeout(() => {
-          if (loading) {
-            error = 'Failed to fetch auth status';
-            loading = false;
-          }
-        }, 5000);
-      } else {
-        // Mock data for browser development
-        authStatus = {
-          mode: 'claude_cli',
-          cliInstalled: true,
-          cliAuthenticated: true,
-          apiKeySet: false,
-          willUseSubscription: true
-        };
-        loading = false;
-      }
+      // Use the singleton VSCode API
+      const vscode = getVSCodeAPI();
+      vscode.postMessage({
+        type: 'get_auth_status'
+      });
+      
+      // Listen for response
+      const handleMessage = (event: MessageEvent) => {
+        const message = event.data;
+        if (message.type === 'auth_status') {
+          authStatus = message.status;
+          loading = false;
+          window.removeEventListener('message', handleMessage);
+        }
+      };
+      
+      window.addEventListener('message', handleMessage);
+      
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        if (loading) {
+          error = 'Failed to fetch auth status';
+          loading = false;
+        }
+      }, 5000);
     } catch (err: any) {
       error = err.message;
       loading = false;

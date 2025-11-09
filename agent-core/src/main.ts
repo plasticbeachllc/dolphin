@@ -144,6 +144,8 @@ class AgentCore {
         this.handleGetAuthStatus(message);
       } else if (message.method === "clear_conversation") {
         this.handleClearConversation();
+      } else if (message.method === "abort_generation") {
+        this.handleAbortGeneration();
       }
     } catch (error) {
       console.error("[Agent Core] Parse error:", error);
@@ -287,6 +289,20 @@ class AgentCore {
       result: { message: "Conversation cleared" },
     });
     console.error("[Agent Core] Conversation cleared");
+  }
+  
+  private handleAbortGeneration() {
+    console.error("[Agent Core] Abort generation requested");
+    
+    // Call abort on tool executor
+    this.toolExecutor.abort();
+    
+    // Send task completed with abort status
+    this.sendEvent({
+      type: "task_completed",
+      success: false,
+      result: { message: "Generation aborted by user" },
+    });
   }
 
   private sendEvent(event: AgentEvent) {

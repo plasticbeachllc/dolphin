@@ -50,9 +50,24 @@ export class ClaudeToolExecutor {
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
   };
+  private abortController: AbortController | null = null;
+  private isAborted = false;
 
   constructor(config: ToolExecutorConfig) {
     this.config = config;
+  }
+  
+  /**
+   * Abort current generation
+   */
+  abort() {
+    console.error("[ToolExecutor] Abort requested");
+    this.isAborted = true;
+    
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
+    }
   }
 
   /**
@@ -84,6 +99,10 @@ export class ClaudeToolExecutor {
     userMessage: string,
     conversationHistory: Message[] = []
   ): Promise<ExecutionResult> {
+    // Reset abort state
+    this.isAborted = false;
+    this.abortController = new AbortController();
+    
     const messages: Message[] = [
       ...conversationHistory,
       { role: "user", content: userMessage },
@@ -99,10 +118,22 @@ export class ClaudeToolExecutor {
     };
 
     while (toolRound < this.config.maxToolRounds) {
+      // Check if aborted
+      if (this.isAborted) {
+        console.error("[ToolExecutor] Generation aborted by user");
+        throw new Error("Generation aborted by user");
+      }
+      
       console.error(`[ToolExecutor] Round ${toolRound + 1}`);
 
       // Call Claude with tools
       const response = await this.callClaudeWithTools(messages);
+      
+      // Check if aborted during call
+      if (this.isAborted) {
+        console.error("[ToolExecutor] Generation aborted during API call");
+        throw new Error("Generation aborted by user");
+      }
 
       // Accumulate usage
       totalUsage.inputTokens += response.usage.input_tokens;
@@ -134,6 +165,12 @@ export class ClaudeToolExecutor {
 
       // Execute tools in parallel
       const toolResults = await this.executeToolCalls(toolCalls);
+      
+      // Check if aborted after tool execution
+      if (this.isAborted) {
+        console.error("[ToolExecutor] Generation aborted after tool execution");
+        throw new Error("Generation aborted by user");
+      }
 
       // Add tool results as user message
       messages.push({
@@ -147,6 +184,9 @@ export class ClaudeToolExecutor {
     if (toolRound >= this.config.maxToolRounds) {
       console.warn("[ToolExecutor] WARNING: Max tool rounds reached");
     }
+    
+    // Clean up abort controller
+    this.abortController = null;
 
     return {
       messages,
@@ -404,10 +444,13 @@ export class ClaudeToolExecutor {
           const toolName = toolCall.name.replace(/^mcp__[^_]+__/, "");
           console.error(`[ToolExecutor] Calling MCP tool: ${toolName} (original: ${toolCall.name})`);
 
+          // Preprocess input to handle Claude's JSON string serialization quirk
+          const processedInput = this.preprocessToolInput(toolCall.input);
+
           // Call MCP
           const mcpResult = await this.config.mcpClient.callTool(
             toolName,
-            toolCall.input
+            processedInput
           );
 
           const executionTime = Date.now() - startTime;
@@ -450,6 +493,33 @@ export class ClaudeToolExecutor {
     );
 
     return results;
+  }
+
+  /**
+   * Preprocess tool input to fix Claude's JSON string serialization
+   *
+   * Claude sometimes serializes arrays/objects as JSON strings, e.g.:
+   *   { "paths": "[\"file.ts\"]" }  -> { "paths": ["file.ts"] }
+   */
+  private preprocessToolInput(input: Record<string, any>): Record<string, any> {
+    const processed: Record<string, any> = {};
+    
+    for (const [key, value] of Object.entries(input)) {
+      if (typeof value === 'string' && (value.startsWith('[') || value.startsWith('{'))) {
+        // Looks like a JSON string, try to parse it
+        try {
+          processed[key] = JSON.parse(value);
+          console.error(`[ToolExecutor] Preprocessed ${key}: parsed JSON string to native type`);
+        } catch {
+          // Not valid JSON, keep as string
+          processed[key] = value;
+        }
+      } else {
+        processed[key] = value;
+      }
+    }
+    
+    return processed;
   }
 
   /**

@@ -232,6 +232,24 @@ export class AgentBridge {
     return promise;
   }
 
+  async abortGeneration(): Promise<void> {
+    if (!this.process || this.process.exitCode !== null) {
+      throw new Error("Agent process not running");
+    }
+
+    const message = {
+      jsonrpc: "2.0",
+      id: ++this.messageId,
+      method: "abort_generation",
+      params: {}
+    };
+
+    const json = JSON.stringify(message) + "\n";
+    this.outputChannel.appendLine(`[AgentBridge] Sending abort_generation`);
+
+    this.process.stdin?.write(json);
+  }
+
   private async waitForReady(timeout = 60000): Promise<void> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {

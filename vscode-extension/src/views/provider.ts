@@ -5,13 +5,32 @@ import * as fs from "fs";
 import { AgentBridge } from "../agent/bridge";
 
 export class DolphinViewProvider implements vscode.WebviewViewProvider {
+  private webviewView?: vscode.WebviewView;
+
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly outputChannel: vscode.OutputChannel,
     private readonly agentBridge?: AgentBridge
-  ) {}
+  ) {
+    // Set up event forwarding immediately when AgentBridge is available
+    if (this.agentBridge) {
+      this.agentBridge.onEvent((event) => {
+        this.outputChannel.appendLine(`[DolphinViewProvider] Received event from agent: ${event.type}`);
+        
+        // Forward to webview if it's available
+        if (this.webviewView) {
+          this.outputChannel.appendLine(`[DolphinViewProvider] Forwarding event to webview: ${event.type}`);
+          this.webviewView.webview.postMessage(event);
+        } else {
+          this.outputChannel.appendLine(`[DolphinViewProvider] Webview not ready yet, event will be queued`);
+        }
+      });
+    }
+  }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
+    // Store webview reference
+    this.webviewView = webviewView;
     this.outputChannel.appendLine("[DolphinViewProvider] resolveWebviewView called!");
     
     try {
@@ -54,6 +73,18 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
       this.outputChannel.appendLine(`[DolphinViewProvider] Received message from webview: ${JSON.stringify(message)}`);
       
       switch (message.type) {
+        case "webview_loaded":
+          // Webview JavaScript has loaded and is ready to receive messages
+          this.outputChannel.appendLine(`[DolphinViewProvider] ✅ Webview confirmed loaded, sending agent_ready event`);
+          if (this.agentBridge) {
+            webviewView.webview.postMessage({
+              type: 'agent_ready',
+              version: '0.1.0',
+              capabilities: ['kb_search', 'file_operations', 'planning', 'claude_auth', 'agentic_tools']
+            });
+          }
+          break;
+          
         case "send_message":
           this.outputChannel.appendLine(`[DolphinViewProvider] Processing send_message: ${message.content}`);
           if (this.agentBridge) {
@@ -69,6 +100,13 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               type: 'task_completed',
               success: true
             });
+          }
+          break;
+        
+        case "abort_generation":
+          this.outputChannel.appendLine(`[DolphinViewProvider] Processing abort_generation`);
+          if (this.agentBridge) {
+            await this.agentBridge.abortGeneration();
           }
           break;
         
@@ -124,12 +162,8 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
       }
     });
 
-    // Forward agent events to webview
-    if (this.agentBridge) {
-      this.agentBridge.onEvent((event) => {
-        webviewView.webview.postMessage(event);
-      });
-    }
+    // Webview will send "webview_loaded" message when ready
+    // We'll respond with agent_ready event at that point
 
     // Send theme on load
     this.sendTheme(webviewView.webview);

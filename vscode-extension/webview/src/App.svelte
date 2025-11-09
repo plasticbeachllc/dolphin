@@ -1,11 +1,27 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { fade } from 'svelte/transition';
   import { MessageList, ChatInput } from '$lib/components/chat';
   import AppNavigation from '$lib/components/navigation/AppNavigation.svelte';
-  import { sendMessage, onMessage } from '$lib/api/vscode';
+  import { sendMessage, onMessage, abortGeneration } from '$lib/api/vscode';
   import type { AgentEvent } from '../../../shared/types/events';
   import SettingsPage from './routes/settings/+page.svelte';
   import ProfilePage from './routes/profile/+page.svelte';
+  
+  // Message type matching MessageList expectations
+  interface Message {
+    type?: "tool_call";
+    role?: "user" | "assistant";
+    content?: string;
+    timestamp?: string;
+    tool?: string;
+    input?: Record<string, any>;
+    result?: Record<string, any>;
+    error?: string;
+    status?: "running" | "success" | "error";
+    executionTime?: number;
+    toolId?: string;
+  }
   
   let currentView = $state('/');
   
@@ -18,14 +34,10 @@
   let agentReady = $state(false);
   let agentStartupTime = $state(0);
   let startupTimer: number | null = null;
+  let showLogo = $state(true);
+  let hasUserSentMessage = $state(false);
   
-  let messages = $state([
-    {
-      role: "assistant",
-      content: `<p>Hi! I'm <strong>Dolphin</strong>, your AI coding assistant. 🐬</p><p>I can help you with:</p><ul class="list-disc list-inside mt-2"><li>Searching your codebase for relevant code</li><li>Reading and analyzing files</li><li>Writing new code or modifying existing files</li><li>Running commands and reviewing output</li></ul><p class="mt-3">Try asking me to:</p><ul class="list-disc list-inside mt-2"><li>"Search for authentication code"</li><li>"Read the main configuration file"</li><li>"Help me refactor this component"</li></ul>`,
-      timestamp: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-    }
-  ]);
+  let messages = $state<Message[]>([]);
   
   let isProcessing = $state(false);
   
@@ -57,11 +69,11 @@
           if (lastMsg && lastMsg.role === 'assistant') {
             messages = [...messages.slice(0, -1), {
               ...lastMsg,
-              content: lastMsg.content + event.delta
+              content: (lastMsg.content || '') + event.delta
             }];
           } else {
             messages = [...messages, {
-              role: 'assistant',
+              role: 'assistant' as const,
               content: event.delta,
               timestamp: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
             }];
@@ -70,27 +82,36 @@
           
         case 'tool_call_started':
           messages = [...messages, {
-            type: 'tool_call',
+            type: 'tool_call' as const,
             tool: event.tool,
             input: event.input,
-            status: 'running',
+            status: 'running' as const,
             toolId: event.toolId
           }];
           break;
           
         case 'tool_call_completed':
           // Find and update the tool call message
-          messages = messages.map(msg =>
-            msg.toolId === event.toolId
-              ? {
-                  ...msg,
-                  status: event.error ? 'error' : 'success',
-                  result: event.result,
-                  error: event.error,
-                  executionTime: event.executionTime
-                }
-              : msg
-          );
+          messages = messages.map(msg => {
+            if (msg.toolId === event.toolId) {
+              const newStatus: "success" | "error" = event.error ? 'error' : 'success';
+              const updatedMsg: Message = {
+                type: msg.type,
+                role: msg.role,
+                content: msg.content,
+                timestamp: msg.timestamp,
+                tool: msg.tool,
+                input: msg.input,
+                result: event.result,
+                error: event.error,
+                status: newStatus,
+                executionTime: event.executionTime,
+                toolId: msg.toolId
+              };
+              return updatedMsg;
+            }
+            return msg;
+          });
           break;
           
         case 'task_completed':
@@ -101,8 +122,8 @@
         case 'error':
           isProcessing = false;
           messages = [...messages, {
-            role: 'assistant',
-            content: `<p class="text-destructive"><strong>Error:</strong> ${event.error.message}</p>`,
+            role: 'assistant' as const,
+            content: `**Error:** ${event.error.message}`,
             timestamp: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
           }];
           break;
@@ -120,9 +141,15 @@
   async function handleSend(message: string) {
     if (isProcessing) return;
     
+    // Hide logo on first message send
+    if (!hasUserSentMessage) {
+      hasUserSentMessage = true;
+      showLogo = false;
+    }
+    
     // Add user message
     messages = [...messages, {
-      role: "user",
+      role: "user" as const,
       content: message,
       timestamp: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
     }];
@@ -131,6 +158,22 @@
     
     // Send to VS Code extension
     sendMessage(message);
+  }
+  
+  function handleStop() {
+    if (!isProcessing) return;
+    
+    // Send abort signal to extension
+    abortGeneration();
+    
+    isProcessing = false;
+    
+    // Add system message
+    messages = [...messages, {
+      role: 'assistant' as const,
+      content: '⏹️ **Generation stopped by user**',
+      timestamp: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    }];
   }
 </script>
 
@@ -160,12 +203,23 @@
   
   {#if currentView === '/'}
     <div class="chat-page">
+      {#if showLogo && messages.length === 0 && agentReady}
+        <div class="logo-container" transition:fade={{ duration: 600 }}>
+          <div class="dolphin-logo">🐬</div>
+        </div>
+      {/if}
+      
       <div class="messages-container">
         <MessageList {messages} />
       </div>
       
       <div class="input-container">
-        <ChatInput onSend={handleSend} disabled={isProcessing} />
+        <ChatInput
+          onSend={handleSend}
+          onStop={handleStop}
+          disabled={!agentReady}
+          isProcessing={isProcessing}
+        />
       </div>
     </div>
   {:else if currentView === '/settings'}
@@ -201,7 +255,10 @@
   .loading-banner {
     background: var(--vscode-editorInfo-background);
     border-bottom: 1px solid var(--vscode-editorInfo-border);
-    padding: 0.75rem 1rem;
+    padding: 0.375rem 0.75rem;
+    height: 2.5rem;
+    display: flex;
+    align-items: center;
     animation: slideDown 0.3s ease-out;
   }
   
@@ -219,18 +276,17 @@
   .loading-content {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    max-width: 800px;
-    margin: 0 auto;
+    gap: 0.5rem;
   }
   
   .loading-spinner {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     border: 2px solid var(--vscode-editorInfo-foreground);
     border-top-color: transparent;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
   }
   
   @keyframes spin {
@@ -239,18 +295,21 @@
   
   .loading-text {
     display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
+    align-items: center;
+    gap: 0.5rem;
     color: var(--vscode-editorInfo-foreground);
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
+    white-space: nowrap;
   }
   
   .loading-subtext {
     font-size: 0.75rem;
     opacity: 0.8;
+    font-weight: normal;
   }
   
   .chat-page {
+    position: relative;
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -287,5 +346,21 @@
   
   .placeholder-view p {
     color: var(--vscode-descriptionForeground);
+  }
+  
+  .logo-container {
+    position: absolute;
+    top: 35%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+  }
+  
+  .dolphin-logo {
+    font-size: 6rem;
+    text-align: center;
+    opacity: 0.3;
+    filter: grayscale(0.3);
+    user-select: none;
   }
 </style>

@@ -4,6 +4,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Collapsible from '$lib/components/ui/collapsible';
 	import { Input } from '$lib/components/ui/input';
+	import { SendHorizontal, Square } from 'lucide-svelte';
 
 	let themes = [
 		{ name: 'Neutral (Default)', class: '' },
@@ -15,10 +16,15 @@
 	];
 
 	let selectedTheme = $state('dark');
+	let isProcessing = $state(false);
 
 	function applyTheme(themeClass: string) {
 		document.documentElement.className = themeClass;
 		selectedTheme = themeClass;
+	}
+	
+	function toggleProcessing() {
+		isProcessing = !isProcessing;
 	}
 </script>
 
@@ -103,11 +109,27 @@
 			<!-- Input Component -->
 			<Card>
 				<CardHeader>
-					<CardTitle>Input Field</CardTitle>
+					<CardTitle>Chat Input with Send/Stop Button</CardTitle>
 				</CardHeader>
 				<CardContent class="space-y-4">
-					<Input placeholder="Type your message..." />
-					<Button class="w-full">Send Message</Button>
+					<div class="flex gap-2">
+						<Input placeholder="Type your message..." class="flex-1" disabled={isProcessing} />
+						<Button
+							onclick={toggleProcessing}
+							variant={isProcessing ? 'destructive' : 'default'}
+							size="icon"
+							aria-label={isProcessing ? 'Stop' : 'Send'}
+						>
+							{#if isProcessing}
+								<Square class="h-4 w-4" />
+							{:else}
+								<SendHorizontal class="h-4 w-4" />
+							{/if}
+						</Button>
+					</div>
+					<p class="text-xs text-muted-foreground">
+						{isProcessing ? 'Click square to stop generation' : 'Click arrow to send message'}
+					</p>
 				</CardContent>
 			</Card>
 
