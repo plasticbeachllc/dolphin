@@ -3,6 +3,7 @@
 // Extension → Agent Core
 export type ExtensionRequest =
   | { type: "send_message"; messageId: string; content: string; context?: any }
+  | { type: "abort_generation" }
   | { type: "approve_plan"; planId: string }
   | { type: "reject_plan"; planId: string; feedback?: string }
   | { type: "approve_diff"; diffId: string }

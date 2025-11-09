@@ -5,13 +5,32 @@ import * as fs from "fs";
 import { AgentBridge } from "../agent/bridge";
 
 export class DolphinViewProvider implements vscode.WebviewViewProvider {
+  private webviewView?: vscode.WebviewView;
+
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly outputChannel: vscode.OutputChannel,
     private readonly agentBridge?: AgentBridge
-  ) {}
+  ) {
+    // Set up event forwarding immediately when AgentBridge is available
+    if (this.agentBridge) {
+      this.agentBridge.onEvent((event) => {
+        this.outputChannel.appendLine(`[DolphinViewProvider] Received event from agent: ${event.type}`);
+        
+        // Forward to webview if it's available
+        if (this.webviewView) {
+          this.outputChannel.appendLine(`[DolphinViewProvider] Forwarding event to webview: ${event.type}`);
+          this.webviewView.webview.postMessage(event);
+        } else {
+          this.outputChannel.appendLine(`[DolphinViewProvider] Webview not ready yet, event will be queued`);
+        }
+      });
+    }
+  }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
+    // Store webview reference
+    this.webviewView = webviewView;
     this.outputChannel.appendLine("[DolphinViewProvider] resolveWebviewView called!");
     
     try {
@@ -54,6 +73,18 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
       this.outputChannel.appendLine(`[DolphinViewProvider] Received message from webview: ${JSON.stringify(message)}`);
       
       switch (message.type) {
+        case "webview_loaded":
+          // Webview JavaScript has loaded and is ready to receive messages
+          this.outputChannel.appendLine(`[DolphinViewProvider] ✅ Webview confirmed loaded, sending agent_ready event`);
+          if (this.agentBridge) {
+            webviewView.webview.postMessage({
+              type: 'agent_ready',
+              version: '0.1.0',
+              capabilities: ['kb_search', 'file_operations', 'planning', 'claude_auth', 'agentic_tools']
+            });
+          }
+          break;
+          
         case "send_message":
           this.outputChannel.appendLine(`[DolphinViewProvider] Processing send_message: ${message.content}`);
           if (this.agentBridge) {
@@ -71,17 +102,68 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             });
           }
           break;
+        
+        case "abort_generation":
+          this.outputChannel.appendLine(`[DolphinViewProvider] Processing abort_generation`);
+          if (this.agentBridge) {
+            await this.agentBridge.abortGeneration();
+          }
+          break;
+        
+        case "get_auth_status":
+          this.outputChannel.appendLine(`[DolphinViewProvider] Processing get_auth_status request`);
+          if (this.agentBridge) {
+            try {
+              // Request auth status from agent via JSON-RPC
+              this.outputChannel.appendLine(`[DolphinViewProvider] Requesting auth status from agent`);
+              
+              // Use the new getAuthStatus method on AgentBridge
+              const status = await this.agentBridge.getAuthStatus();
+              
+              this.outputChannel.appendLine(`[DolphinViewProvider] Received auth status: ${JSON.stringify(status)}`);
+              
+              // Send status to webview
+              webviewView.webview.postMessage({
+                type: 'auth_status',
+                status: status
+              });
+            } catch (error: any) {
+              this.outputChannel.appendLine(`[DolphinViewProvider] Error getting auth status: ${error.message}`);
+              // Send error state
+              webviewView.webview.postMessage({
+                type: 'auth_status',
+                status: {
+                  mode: 'auto',
+                  cliInstalled: false,
+                  cliAuthenticated: false,
+                  apiKeySet: false,
+                  willUseSubscription: false
+                }
+              });
+            }
+          } else {
+            // Mock auth status when agent not connected
+            this.outputChannel.appendLine(`[DolphinViewProvider] Agent not connected, using mock data`);
+            webviewView.webview.postMessage({
+              type: 'auth_status',
+              status: {
+                mode: 'auto',
+                cliInstalled: false,
+                cliAuthenticated: false,
+                apiKeySet: false,
+                willUseSubscription: false
+              }
+            });
+          }
+          break;
+        
         default:
           this.outputChannel.appendLine(`[DolphinViewProvider] Unknown message type: ${message.type}`);
       }
     });
 
-    // Forward agent events to webview
-    if (this.agentBridge) {
-      this.agentBridge.onEvent((event) => {
-        webviewView.webview.postMessage(event);
-      });
-    }
+    // Webview will send "webview_loaded" message when ready
+    // We'll respond with agent_ready event at that point
 
     // Send theme on load
     this.sendTheme(webviewView.webview);
@@ -104,7 +186,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
       let htmlContent = fs.readFileSync(indexPath, "utf8");
       this.outputChannel.appendLine(`[DolphinViewProvider] Original HTML length: ${htmlContent.length}`);
       
-      // Replace /assets/ paths with webview URIs
+      // Replace /assets/ paths (legacy Vite build) with webview URIs
       let replacementCount = 0;
       htmlContent = htmlContent.replace(
         /(href|src)="\/assets\/([^"]+)"/g,
@@ -125,7 +207,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
       this.outputChannel.appendLine(`[DolphinViewProvider] Removed crossorigin attribute`);
       
       // Add CSP meta tag
-      const cspTag = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource}; img-src ${webview.cspSource} data:; font-src ${webview.cspSource};">`;
+      const cspTag = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource}; connect-src ${webview.cspSource};">`;
       htmlContent = htmlContent.replace(
         /<meta charset="UTF-8" \/>/,
         `<meta charset="UTF-8" />\n\t${cspTag}`

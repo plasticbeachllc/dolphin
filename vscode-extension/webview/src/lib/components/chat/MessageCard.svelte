@@ -2,6 +2,7 @@
   import * as Card from "$lib/components/ui/card";
   import * as Avatar from "$lib/components/ui/avatar";
   import { Badge } from "$lib/components/ui/badge";
+  import MarkdownContent from "./MarkdownContent.svelte";
   
   interface Props {
     role: "user" | "assistant";
@@ -31,7 +32,13 @@
       {/if}
     </div>
   </Card.Header>
-  <Card.Content class="whitespace-pre-wrap break-words prose prose-sm max-w-none dark:prose-invert">
-    {@html content}
+  <Card.Content class="prose prose-sm max-w-none dark:prose-invert">
+    {#if isUser}
+      <div class="whitespace-pre-wrap break-words">
+        {content}
+      </div>
+    {:else}
+      <MarkdownContent content={content} />
+    {/if}
   </Card.Content>
 </Card.Root>

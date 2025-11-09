@@ -4,7 +4,7 @@ Technical architecture and implementation status for the Dolphin AI enablement p
 
 **Version**: 1.0.0
 **Status**: Production Ready
-**Last Updated**: 2025-10-30
+**Last Updated**: 2025-11-09
 
 ---
 
@@ -94,6 +94,49 @@ Repository → Scanner → Chunker → Deduplicator → Embedder → Storage
 Query → Embed → Vector Search → Re-rank → Snippet → Response
          │          │              │          │         │
      OpenAI    LanceDB KNN    Fusion     Truncate   JSON/MCP
+```
+
+---
+
+## KB Lifecycle Management
+
+### Production Deployment Strategy
+
+**Current State (Development):**
+- KB server runs separately (`uv run dolphin serve`)
+- Extension connects to existing KB on localhost:8000
+- Manual two-step startup process
+
+**Target State (Production):**
+- KB server auto-starts when extension activates
+- Zero-configuration user experience
+- Automatic process lifecycle management
+
+**Implementation:** See [`KB-LIFECYCLE-MANAGEMENT.md`](KB-LIFECYCLE-MANAGEMENT.md) for detailed implementation plan.
+
+### KBManager Enhancement
+
+**Location:** [`agent-core/src/kb/manager.ts`](../agent-core/src/kb/manager.ts)
+
+**New Capabilities:**
+- **Health Check:** Detect KB server on localhost:8000
+- **Auto-Start:** Spawn KB subprocess if not running
+- **Lifecycle Management:** Track and cleanup KB process
+- **Error Recovery:** Graceful degradation and restart logic
+
+**Startup Flow:**
+```
+Extension Activation
+  ↓
+KBManager.start()
+  ↓
+Check localhost:8000/health
+  ├─ Running? → Use existing
+  └─ Not running? → Spawn subprocess
+      ↓
+  Poll /health (500ms, max 30s)
+      ↓
+  KB Ready ✅
 ```
 
 ---
@@ -667,4 +710,4 @@ cd mcp-bridge && bun run test-integration.ts
 **Status**: ✅ Production Ready
 **Test Coverage**: 243/243 tests passing
 **Version**: 1.0.0
-**Date**: 2025-10-30
+**Date**: 2025-11-09

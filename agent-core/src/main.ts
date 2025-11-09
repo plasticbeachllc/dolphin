@@ -2,7 +2,11 @@
 import type { AgentEvent, ExtensionRequest } from "../../shared/types/events";
 import { MCPClient } from "./mcp/client";
 import { KBManager } from "./kb/manager";
+import { ClaudeClient } from "./llm/claude-client";
+import { ClaudeToolExecutor } from "./llm/claude-tool-executor";
+import { BasicPlanner } from "./planner/basic-planner";
 import * as path from "path";
+import type { Message } from "./llm/claude-tool-executor";
 
 interface Message {
   jsonrpc: "2.0";
@@ -15,27 +19,56 @@ interface Message {
 
 class AgentCore {
   private version = "0.1.0";
-  private capabilities = ["kb_search", "file_operations", "planning"];
+  private capabilities = ["kb_search", "file_operations", "planning", "claude_auth", "agentic_tools"];
   private mcpClient: MCPClient;
   private kbManager: KBManager;
+  private claudeClient: ClaudeClient;
+  private toolExecutor: ClaudeToolExecutor;
+  private planner: BasicPlanner;
+  private conversationHistory: Message[] = [];
   private workspaceRoot: string;
+  private extensionPath?: string;
 
-  constructor(workspaceRoot: string) {
+  constructor(workspaceRoot: string, extensionPath?: string) {
     this.workspaceRoot = workspaceRoot;
+    this.extensionPath = extensionPath;
     this.mcpClient = new MCPClient();
     this.kbManager = new KBManager();
+    this.claudeClient = new ClaudeClient({
+      authMode: "auto",
+      model: "claude-sonnet-4-20250514",
+      maxTokens: 8000,
+      temperature: 1.0,
+    });
+    this.toolExecutor = new ClaudeToolExecutor({
+      claudeClient: this.claudeClient,
+      mcpClient: this.mcpClient,
+      maxToolRounds: 10,
+      onEvent: (event) => this.sendEvent(event),
+    });
+    this.planner = new BasicPlanner(this.claudeClient, {
+      enableStreaming: true,
+      maxTokens: 8000,
+      temperature: 1.0,
+    });
   }
 
   async start() {
     console.error("[Agent Core] Starting...");
     console.error(`[Agent Core] Version: ${this.version}`);
 
+    // Check Claude authentication
+    await this.checkClaudeAuth();
+
     // Start KB API first
-    await this.kbManager.start(this.workspaceRoot);
+    await this.kbManager.start(this.workspaceRoot, this.extensionPath);
 
     // Start MCP Bridge
     const mcpBridgePath = path.join(__dirname, "../../mcp-bridge/src/index.ts");
     await this.mcpClient.start(mcpBridgePath);
+
+    // Initialize tool executor with MCP tools
+    await this.toolExecutor.initialize();
 
     // List available tools
     const tools = await this.mcpClient.listTools();
@@ -73,6 +106,33 @@ class AgentCore {
     console.error("[Agent Core] Ready and listening on stdin");
   }
 
+  private async checkClaudeAuth() {
+    try {
+      const authStatus = await this.claudeClient.getAuthStatus();
+      
+      console.error("\n📊 Claude Authentication Status:");
+      console.error(`  Mode: ${authStatus.mode}`);
+      console.error(`  CLI Installed: ${authStatus.cliInstalled}`);
+      console.error(`  CLI Authenticated: ${authStatus.cliAuthenticated}`);
+      console.error(`  API Key Set: ${authStatus.apiKeySet}`);
+      console.error(`  Will Use Subscription: ${authStatus.willUseSubscription}`);
+      console.error("");
+      
+      if (authStatus.willUseSubscription) {
+        console.error("✅ Using Claude subscription (no API costs)");
+      } else if (authStatus.apiKeySet) {
+        console.error("💳 Using API key (pay-per-token billing)");
+      } else {
+        console.error("⚠️  No authentication configured");
+        console.error("   Install Claude CLI or set ANTHROPIC_API_KEY");
+      }
+      console.error("");
+    } catch (error: any) {
+      console.error("⚠️  Claude authentication check failed:", error.message);
+      console.error("   Agent will continue without Claude integration");
+    }
+  }
+
   private handleMessage(data: string) {
     try {
       const message: Message = JSON.parse(data);
@@ -80,6 +140,12 @@ class AgentCore {
 
       if (message.method === "send_message") {
         this.handleSendMessage(message.params as ExtensionRequest);
+      } else if (message.method === "get_auth_status") {
+        this.handleGetAuthStatus(message);
+      } else if (message.method === "clear_conversation") {
+        this.handleClearConversation();
+      } else if (message.method === "abort_generation") {
+        this.handleAbortGeneration();
       }
     } catch (error) {
       console.error("[Agent Core] Parse error:", error);
@@ -95,69 +161,107 @@ class AgentCore {
     }
   }
 
+  private async handleGetAuthStatus(message: Message) {
+    try {
+      const status = await this.claudeClient.getAuthStatus();
+      
+      const response: Message = {
+        jsonrpc: "2.0",
+        id: message.id,
+        result: status,
+      };
+      
+      process.stdout.write(JSON.stringify(response) + "\n");
+    } catch (error: any) {
+      const response: Message = {
+        jsonrpc: "2.0",
+        id: message.id,
+        error: {
+          code: -32603,
+          message: error.message,
+        },
+      };
+      
+      process.stdout.write(JSON.stringify(response) + "\n");
+    }
+  }
+
   private async handleSendMessage(request: ExtensionRequest) {
     if (request.type === "send_message") {
       try {
-        // Test KB search
-        this.sendEvent({
-          type: "tool_call_started",
-          toolId: "tool-1",
-          tool: "search_knowledge",
-          input: { query: request.content, top_k: 3 },
-        });
+        // Check if we can use agentic tools (works with both API key and CLI subscription)
+        const authStatus = await this.claudeClient.getAuthStatus();
+        
+        if (authStatus.mode === "api_key" || authStatus.mode === "claude_cli") {
+          // Use agentic tool loop - Claude decides which tools to use
+          console.error(`[Agent Core] Using agentic tool execution mode (${authStatus.mode})`);
+          
+          const result = await this.toolExecutor.executeWithTools(
+            request.content,
+            this.conversationHistory
+          );
 
-        const result = await this.mcpClient.callTool("search_knowledge", {
-          query: request.content,
-          top_k: 3,
-        });
+          // Update conversation history
+          this.conversationHistory = result.messages;
 
-        this.sendEvent({
-          type: "tool_call_completed",
-          toolId: "tool-1",
-          result,
-          executionTime: 247,
-        });
+          // Log usage
+          console.error(`[Agent Core] Completed in ${result.toolRounds} tool rounds`);
+          console.error("[Agent Core] Tokens:", result.usage);
 
-        // Parse the result - handle MCP response structure
-        if (!result.content || !Array.isArray(result.content) || result.content.length === 0) {
-          throw new Error("Invalid MCP response: no content");
-        }
+          // Send completion event
+          this.sendEvent({
+            type: "task_completed",
+            success: true,
+            result: {
+              toolRounds: result.toolRounds,
+              stopReason: result.stopReason,
+              usage: result.usage,
+            },
+          });
+        } else {
+          // Fallback to manual orchestration only if no auth configured
+          console.error("[Agent Core] No authentication configured, using manual orchestration");
+          
+          // Step 1: Search Knowledge Bank for context
+          this.sendEvent({
+            type: "tool_call_started",
+            toolId: "kb-search-1",
+            tool: "search_knowledge",
+            input: { query: request.content, top_k: 3 },
+          });
 
-        // MCP returns content blocks - find the text block with search results
-        const textBlock = result.content.find((block: any) => block.type === "text");
-        if (!textBlock || !textBlock.text) {
-          throw new Error("Invalid MCP response: no text content");
-        }
+          const kbResult = await this.mcpClient.callTool("search_knowledge", {
+            query: request.content,
+            top_k: 3,
+          });
 
-        // The text block contains a summary, not the full results
-        // Use _meta for structured data if available
-        let hitCount = 0;
-        let hits: any[] = [];
+          this.sendEvent({
+            type: "tool_call_completed",
+            toolId: "kb-search-1",
+            result: kbResult,
+            executionTime: 247,
+          });
 
-        if (result._meta && result._meta.hits) {
-          hits = result._meta.hits;
-          hitCount = hits.length;
-        }
-
-        this.sendEvent({
-          type: "content_delta",
-          delta: `I found ${hitCount} relevant code snippets. Here's what I learned:\n\n`,
-        });
-
-        if (hitCount > 0) {
-          for (const hit of hits) {
-            this.sendEvent({
-              type: "content_delta",
-              delta: `- ${hit.path} (lines ${hit.start_line}-${hit.end_line}, score: ${hit.score.toFixed(2)})\n`,
-            });
+          // Parse KB results
+          let kbContext = "";
+          if (kbResult.content && Array.isArray(kbResult.content)) {
+            const textBlock = kbResult.content.find((block: any) => block.type === "text");
+            if (textBlock && textBlock.text) {
+              kbContext = textBlock.text;
+            }
           }
-        }
 
-        this.sendEvent({
-          type: "task_completed",
-          success: true,
-          result: { hits: hitCount },
-        });
+          // Step 2: Use planner to generate Claude response with KB context
+          await this.planner.processMessage(
+            {
+              userMessage: request.content,
+              kbResults: kbContext,
+            },
+            (event: AgentEvent) => {
+              this.sendEvent(event);
+            }
+          );
+        }
       } catch (error: any) {
         console.error("[Agent Core] Error handling message:", error);
         this.sendEvent({
@@ -165,12 +269,40 @@ class AgentCore {
           error: {
             code: "SERVICE_UNAVAILABLE",
             message: error.message,
-            suggestions: ["Check KB is running", "Try a different query"],
+            suggestions: [
+              "Check Claude authentication (requires API key for tool use)",
+              "Check KB is running",
+              "Try a different query",
+            ],
             recoverable: true,
           },
         });
       }
     }
+  }
+
+  private handleClearConversation() {
+    this.conversationHistory = [];
+    this.sendEvent({
+      type: "task_completed",
+      success: true,
+      result: { message: "Conversation cleared" },
+    });
+    console.error("[Agent Core] Conversation cleared");
+  }
+  
+  private handleAbortGeneration() {
+    console.error("[Agent Core] Abort generation requested");
+    
+    // Call abort on tool executor
+    this.toolExecutor.abort();
+    
+    // Send task completed with abort status
+    this.sendEvent({
+      type: "task_completed",
+      success: false,
+      result: { message: "Generation aborted by user" },
+    });
   }
 
   private sendEvent(event: AgentEvent) {
@@ -191,9 +323,10 @@ class AgentCore {
   }
 }
 
-// Get workspace root from command line arg or current directory
+// Get workspace root and extension path from command line args
 const workspaceRoot = process.argv[2] || process.cwd();
-const agent = new AgentCore(workspaceRoot);
+const extensionPath = process.argv[3]; // Optional - only provided in production
+const agent = new AgentCore(workspaceRoot, extensionPath);
 agent.start().catch((error) => {
   console.error("[Agent Core] Fatal error:", error);
   process.exit(1);

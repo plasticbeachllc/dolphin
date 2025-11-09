@@ -7,7 +7,7 @@ import type { AgentEvent } from '../../../../../shared/types/events';
 let vscodeApi: any = null;
 
 // Get or initialize VS Code API
-function getVSCodeAPI() {
+export function getVSCodeAPI() {
 	if (vscodeApi) return vscodeApi;
 	
 	// @ts-ignore - acquireVsCodeApi is injected by VS Code
@@ -44,6 +44,15 @@ export function sendMessage(message: string) {
 	});
 }
 
+// Abort current generation
+export function abortGeneration() {
+	const api = getVSCodeAPI();
+	api.postMessage({
+		type: 'abort_generation',
+		timestamp: Date.now()
+	});
+}
+
 // Save webview state
 export function saveState(state: any) {
 	const api = getVSCodeAPI();
@@ -74,8 +83,17 @@ export function onMessage(handler: MessageHandler) {
 
 // Set up global message listener (called once on init)
 if (typeof window !== 'undefined') {
+	console.log('[VSCode API] Setting up global message listener');
+	
+	// CRITICAL: Post a message back to extension to confirm webview is loaded
+	const vscode = getVSCodeAPI();
+	vscode.postMessage({ type: 'webview_loaded' });
+	console.log('[VSCode API] Sent webview_loaded confirmation to extension');
+	
 	window.addEventListener('message', (event) => {
 		const message = event.data;
+		console.log('[VSCode API] Received message:', message);
+		console.log('[VSCode API] Current handlers count:', messageHandlers.length);
 		
 		// Dispatch to all handlers
 		messageHandlers.forEach(handler => {
@@ -86,4 +104,5 @@ if (typeof window !== 'undefined') {
 			}
 		});
 	});
+	console.log('[VSCode API] Global message listener registered');
 }

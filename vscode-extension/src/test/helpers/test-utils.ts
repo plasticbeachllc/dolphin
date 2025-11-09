@@ -1,0 +1,122 @@
+import * as vscode from 'vscode';
+
+/**
+ * Wait for a condition to be true with timeout
+ */
+export async function waitFor(
+  condition: () => boolean,
+  timeout = 5000,
+  interval = 100
+): Promise<void> {
+  const startTime = Date.now();
+
+  while (!condition()) {
+    if (Date.now() - startTime > timeout) {
+      throw new Error(`Timeout waiting for condition after ${timeout}ms`);
+    }
+    await sleep(interval);
+  }
+}
+
+/**
+ * Sleep for a given number of milliseconds
+ */
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Get the Dolphin extension
+ */
+export function getDolphinExtension(): vscode.Extension<any> | undefined {
+  return vscode.extensions.getExtension('pb.dolphin');
+}
+
+/**
+ * Wait for extension to be activated
+ */
+export async function waitForExtensionActivation(
+  timeout = 10000
+): Promise<vscode.Extension<any>> {
+  const extension = getDolphinExtension();
+
+  if (!extension) {
+    throw new Error('Dolphin extension not found');
+  }
+
+  if (!extension.isActive) {
+    await extension.activate();
+  }
+
+  await waitFor(() => extension.isActive, timeout);
+
+  return extension;
+}
+
+/**
+ * Get a webview by view ID
+ */
+export async function getWebview(viewId: string, timeout = 5000): Promise<void> {
+  // Execute command to focus the webview, which will cause it to load
+  await vscode.commands.executeCommand(`${viewId}.focus`);
+  await sleep(500); // Give it time to render
+}
+
+/**
+ * Create a temporary workspace folder for testing
+ */
+export async function createTestWorkspace(): Promise<vscode.Uri> {
+  const tmpDir = require('os').tmpdir();
+  const testDir = require('path').join(
+    tmpDir,
+    `dolphin-test-${Date.now()}`
+  );
+  const fs = require('fs').promises;
+
+  await fs.mkdir(testDir, { recursive: true });
+
+  return vscode.Uri.file(testDir);
+}
+
+/**
+ * Clean up test workspace
+ */
+export async function cleanupTestWorkspace(uri: vscode.Uri): Promise<void> {
+  const fs = require('fs').promises;
+  try {
+    await fs.rm(uri.fsPath, { recursive: true, force: true });
+  } catch (err) {
+    console.warn('Failed to cleanup test workspace:', err);
+  }
+}
+
+/**
+ * Assert that a value is defined (TypeScript type guard)
+ */
+export function assertDefined<T>(
+  value: T | undefined | null,
+  message?: string
+): asserts value is T {
+  if (value === undefined || value === null) {
+    throw new Error(message || 'Expected value to be defined');
+  }
+}
+
+/**
+ * Get output channel content
+ */
+export function captureOutputChannel(name: string): {
+  getContent: () => string;
+  dispose: () => void;
+} {
+  const content: string[] = [];
+  const originalAppendLine = vscode.window.createOutputChannel(name).appendLine;
+
+  // Note: This is a simplified version. In real implementation,
+  // you'd need to hook into the actual output channel.
+
+  return {
+    getContent: () => content.join('\n'),
+    dispose: () => {},
+  };
+}

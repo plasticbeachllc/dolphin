@@ -9,6 +9,8 @@
 	import PlanTimeline from '$lib/components/PlanTimeline.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import ErrorAlert from '$lib/components/ErrorAlert.svelte';
+	import AuthStatus from '$lib/components/AuthStatus.svelte';
+	import GalleryShowcase from '$lib/components/GalleryShowcase.svelte';
 	
 	// Sample data
 	let showConfirmDialog = $state(false);
@@ -334,7 +336,7 @@ index 1234567..abcdefg 100644
 			</section>
 
 			<Separator />
-
+	
 			<!-- Theme Testing Section -->
 			<section>
 				<h2 class="text-2xl font-bold mb-6">Theme & Styling</h2>
