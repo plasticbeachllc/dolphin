@@ -8,6 +8,7 @@ export interface IndexProgress {
   total: number;
   indexed: number;
   skipped: number;
+  error?: string;
 }
 
 /**

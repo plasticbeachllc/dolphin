@@ -30,6 +30,12 @@ def set_pipeline(pipeline):
     _pipeline = pipeline
 
 
+def reset_pipeline():
+    """Reset the ingestion pipeline to None (for testing)."""
+    global _pipeline
+    _pipeline = None
+
+
 def reset_stores():
     """Reset stores to None (for testing)."""
     global _sql_store, _lance_store, _pipeline
@@ -448,14 +454,13 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
         raise HTTPException(status_code=500, detail=f"Failed to register repository: {str(e)}")
 
 
-def _process_index_task(task_id: str, repo_name: str, files: list[str]):
+async def _process_index_task(task_id: str, repo_name: str, files: list[str]):
     """Background task to process file indexing."""
     task_queue = get_task_queue()
 
     try:
         # Update task to processing
-        import asyncio
-        asyncio.run(task_queue.update_task(task_id, status=TaskStatus.PROCESSING))
+        await task_queue.update_task(task_id, status=TaskStatus.PROCESSING)
 
         if _sql_store is None or _lance_store is None:
             raise Exception("Stores not initialized")
@@ -486,11 +491,11 @@ def _process_index_task(task_id: str, repo_name: str, files: list[str]):
                 valid_files.append(filepath)
 
         if not valid_files:
-            asyncio.run(task_queue.update_task(
+            await task_queue.update_task(
                 task_id,
                 status=TaskStatus.COMPLETED,
                 result={"indexed": 0, "skipped": len(files), "message": "No valid files to index"}
-            ))
+            )
             return
 
         # Process files
@@ -525,7 +530,7 @@ def _process_index_task(task_id: str, repo_name: str, files: list[str]):
 
         for idx, filepath in enumerate(valid_files, 1):
             # Update progress
-            asyncio.run(task_queue.update_task(task_id, progress=idx))
+            await task_queue.update_task(task_id, progress=idx)
 
             file_path = root / filepath
 
@@ -684,7 +689,7 @@ def _process_index_task(task_id: str, repo_name: str, files: list[str]):
         _sql_store.set_session_status(session_id, "succeeded")
 
         # Mark task complete
-        asyncio.run(task_queue.update_task(
+        await task_queue.update_task(
             task_id,
             status=TaskStatus.COMPLETED,
             result={
@@ -693,16 +698,16 @@ def _process_index_task(task_id: str, repo_name: str, files: list[str]):
                 "files_processed": len(valid_files),
                 "message": f"Indexed {len(valid_files)} files: {chunks_indexed} new chunks, {chunks_skipped} skipped"
             }
-        ))
+        )
 
     except Exception as e:
         import traceback
         error_msg = f"{str(e)}\n{traceback.format_exc()}"
-        asyncio.run(task_queue.update_task(
+        await task_queue.update_task(
             task_id,
             status=TaskStatus.FAILED,
             error=error_msg
-        ))
+        )
 
 
 @app.post("/v1/index")
@@ -788,7 +793,7 @@ async def index_files_sync(request: IndexRequest):
     task_queue = get_task_queue()
     task = task_queue.create_task(request.repo, request.files)
 
-    _process_index_task(task.task_id, request.repo, request.files)
+    await _process_index_task(task.task_id, request.repo, request.files)
 
     # Get final result
     final_task = task_queue.get_task(task.task_id)
