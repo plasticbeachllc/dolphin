@@ -90,12 +90,16 @@ export async function* runClaudeCode(
     args.push("--model", model);
   }
 
-  // Spawn Claude process
+  // Spawn Claude process without ANTHROPIC_API_KEY
+  // (Let CLI use subscription mode)
+  const env = { ...process.env };
+  delete env.ANTHROPIC_API_KEY; // Remove API key to force subscription mode
+  
   const child = spawn("claude", args, {
     stdio: ["pipe", "pipe", "pipe"],
     cwd: cwd || process.cwd(),
     env: {
-      ...process.env,
+      ...env,
       CLAUDE_CODE_MAX_OUTPUT_TOKENS: maxOutputTokens.toString(),
     },
   });

@@ -3,8 +3,10 @@ import type { AgentEvent, ExtensionRequest } from "../../shared/types/events";
 import { MCPClient } from "./mcp/client";
 import { KBManager } from "./kb/manager";
 import { ClaudeClient } from "./llm/claude-client";
+import { ClaudeToolExecutor } from "./llm/claude-tool-executor";
 import { BasicPlanner } from "./planner/basic-planner";
 import * as path from "path";
+import type { Message } from "./llm/claude-tool-executor";
 
 interface Message {
   jsonrpc: "2.0";
@@ -17,11 +19,13 @@ interface Message {
 
 class AgentCore {
   private version = "0.1.0";
-  private capabilities = ["kb_search", "file_operations", "planning", "claude_auth"];
+  private capabilities = ["kb_search", "file_operations", "planning", "claude_auth", "agentic_tools"];
   private mcpClient: MCPClient;
   private kbManager: KBManager;
   private claudeClient: ClaudeClient;
+  private toolExecutor: ClaudeToolExecutor;
   private planner: BasicPlanner;
+  private conversationHistory: Message[] = [];
   private workspaceRoot: string;
   private extensionPath?: string;
 
@@ -35,6 +39,12 @@ class AgentCore {
       model: "claude-sonnet-4-20250514",
       maxTokens: 8000,
       temperature: 1.0,
+    });
+    this.toolExecutor = new ClaudeToolExecutor({
+      claudeClient: this.claudeClient,
+      mcpClient: this.mcpClient,
+      maxToolRounds: 10,
+      onEvent: (event) => this.sendEvent(event),
     });
     this.planner = new BasicPlanner(this.claudeClient, {
       enableStreaming: true,
@@ -56,6 +66,9 @@ class AgentCore {
     // Start MCP Bridge
     const mcpBridgePath = path.join(__dirname, "../../mcp-bridge/src/index.ts");
     await this.mcpClient.start(mcpBridgePath);
+
+    // Initialize tool executor with MCP tools
+    await this.toolExecutor.initialize();
 
     // List available tools
     const tools = await this.mcpClient.listTools();
@@ -129,6 +142,8 @@ class AgentCore {
         this.handleSendMessage(message.params as ExtensionRequest);
       } else if (message.method === "get_auth_status") {
         this.handleGetAuthStatus(message);
+      } else if (message.method === "clear_conversation") {
+        this.handleClearConversation();
       }
     } catch (error) {
       console.error("[Agent Core] Parse error:", error);
@@ -172,45 +187,79 @@ class AgentCore {
   private async handleSendMessage(request: ExtensionRequest) {
     if (request.type === "send_message") {
       try {
-        // Step 1: Search Knowledge Bank for context
-        this.sendEvent({
-          type: "tool_call_started",
-          toolId: "kb-search-1",
-          tool: "search_knowledge",
-          input: { query: request.content, top_k: 3 },
-        });
+        // Check if we can use agentic tools (works with both API key and CLI subscription)
+        const authStatus = await this.claudeClient.getAuthStatus();
+        
+        if (authStatus.mode === "api_key" || authStatus.mode === "claude_cli") {
+          // Use agentic tool loop - Claude decides which tools to use
+          console.error(`[Agent Core] Using agentic tool execution mode (${authStatus.mode})`);
+          
+          const result = await this.toolExecutor.executeWithTools(
+            request.content,
+            this.conversationHistory
+          );
 
-        const kbResult = await this.mcpClient.callTool("search_knowledge", {
-          query: request.content,
-          top_k: 3,
-        });
+          // Update conversation history
+          this.conversationHistory = result.messages;
 
-        this.sendEvent({
-          type: "tool_call_completed",
-          toolId: "kb-search-1",
-          result: kbResult,
-          executionTime: 247,
-        });
+          // Log usage
+          console.error(`[Agent Core] Completed in ${result.toolRounds} tool rounds`);
+          console.error("[Agent Core] Tokens:", result.usage);
 
-        // Parse KB results
-        let kbContext = "";
-        if (kbResult.content && Array.isArray(kbResult.content)) {
-          const textBlock = kbResult.content.find((block: any) => block.type === "text");
-          if (textBlock && textBlock.text) {
-            kbContext = textBlock.text;
+          // Send completion event
+          this.sendEvent({
+            type: "task_completed",
+            success: true,
+            result: {
+              toolRounds: result.toolRounds,
+              stopReason: result.stopReason,
+              usage: result.usage,
+            },
+          });
+        } else {
+          // Fallback to manual orchestration only if no auth configured
+          console.error("[Agent Core] No authentication configured, using manual orchestration");
+          
+          // Step 1: Search Knowledge Bank for context
+          this.sendEvent({
+            type: "tool_call_started",
+            toolId: "kb-search-1",
+            tool: "search_knowledge",
+            input: { query: request.content, top_k: 3 },
+          });
+
+          const kbResult = await this.mcpClient.callTool("search_knowledge", {
+            query: request.content,
+            top_k: 3,
+          });
+
+          this.sendEvent({
+            type: "tool_call_completed",
+            toolId: "kb-search-1",
+            result: kbResult,
+            executionTime: 247,
+          });
+
+          // Parse KB results
+          let kbContext = "";
+          if (kbResult.content && Array.isArray(kbResult.content)) {
+            const textBlock = kbResult.content.find((block: any) => block.type === "text");
+            if (textBlock && textBlock.text) {
+              kbContext = textBlock.text;
+            }
           }
+
+          // Step 2: Use planner to generate Claude response with KB context
+          await this.planner.processMessage(
+            {
+              userMessage: request.content,
+              kbResults: kbContext,
+            },
+            (event: AgentEvent) => {
+              this.sendEvent(event);
+            }
+          );
         }
-
-        // Step 2: Use planner to generate Claude response with KB context
-        await this.planner.processMessage(
-          {
-            userMessage: request.content,
-            kbResults: kbContext,
-          },
-          (event: AgentEvent) => {
-            this.sendEvent(event);
-          }
-        );
       } catch (error: any) {
         console.error("[Agent Core] Error handling message:", error);
         this.sendEvent({
@@ -219,7 +268,7 @@ class AgentCore {
             code: "SERVICE_UNAVAILABLE",
             message: error.message,
             suggestions: [
-              "Check Claude authentication",
+              "Check Claude authentication (requires API key for tool use)",
               "Check KB is running",
               "Try a different query",
             ],
@@ -228,6 +277,16 @@ class AgentCore {
         });
       }
     }
+  }
+
+  private handleClearConversation() {
+    this.conversationHistory = [];
+    this.sendEvent({
+      type: "task_completed",
+      success: true,
+      result: { message: "Conversation cleared" },
+    });
+    console.error("[Agent Core] Conversation cleared");
   }
 
   private sendEvent(event: AgentEvent) {

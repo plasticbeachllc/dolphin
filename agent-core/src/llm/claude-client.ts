@@ -43,7 +43,7 @@ export interface CompletionResult {
  */
 export class ClaudeClient {
   private authMode: AuthMode;
-  private apiClient: Anthropic | null = null;
+  public apiClient: Anthropic | null = null; // Exposed for tool executor
   private cliDetector: ClaudeCLIDetector;
   private config: ClaudeConfig;
 
@@ -52,9 +52,11 @@ export class ClaudeClient {
     this.authMode = config.authMode || "auto";
     this.cliDetector = new ClaudeCLIDetector();
 
-    // Initialize API client if API key provided
-    if (config.apiKey) {
-      this.apiClient = new Anthropic({ apiKey: config.apiKey });
+    // Initialize API client if API key provided or in environment
+    if (config.apiKey || process.env.ANTHROPIC_API_KEY) {
+      this.apiClient = new Anthropic({
+        apiKey: config.apiKey || process.env.ANTHROPIC_API_KEY
+      });
     }
   }
 
