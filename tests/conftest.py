@@ -410,3 +410,103 @@ def pytest_collection_modifyitems(config, items):
         elif "tests/integration" in str(item.fspath):
             # Integration tests use real tiktoken (validated by setup_tiktoken fixture)
             item.add_marker(pytest.mark.integration)
+
+
+# ============================================================================
+# KB Auto-Sync Specific Fixtures
+# ============================================================================
+
+@pytest.fixture
+def mock_kb_stores(temp_db_path):
+    """Mock KB stores (SQLite + LanceDB) for testing."""
+    from kb.store.sqlite_meta import SQLiteMetadataStore
+    from unittest.mock import MagicMock
+
+    # Create real SQLite store for metadata
+    sql_store = SQLiteMetadataStore(temp_db_path)
+    sql_store.initialize()
+
+    # Mock LanceDB store (we don't need real vector ops for most tests)
+    lance_store = MagicMock()
+    lance_store.get_table.return_value = MagicMock()
+
+    yield sql_store, lance_store
+
+    # Cleanup
+    sql_store.close()
+
+
+@pytest.fixture
+def registered_test_repo(mock_kb_stores, temp_dir):
+    """Create a registered test repository."""
+    from kb.api.app import set_stores
+
+    sql_store, lance_store = mock_kb_stores
+    set_stores(sql_store, lance_store)
+
+    # Create test workspace
+    workspace_path = temp_dir / "test_workspace"
+    workspace_path.mkdir()
+
+    # Register repo
+    repo = sql_store.add_repo(
+        name="test-repo",
+        path=str(workspace_path),
+        default_embed_model="large"
+    )
+
+    yield {
+        "repo_id": repo.id,
+        "name": repo.name,
+        "path": str(workspace_path),
+        "workspace": workspace_path
+    }
+
+    # Cleanup handled by fixtures
+
+
+@pytest.fixture
+def kb_api_client(mock_kb_stores):
+    """FastAPI TestClient with mocked stores."""
+    from fastapi.testclient import TestClient
+    from kb.api.app import app, set_stores, reset_stores
+
+    sql_store, lance_store = mock_kb_stores
+    set_stores(sql_store, lance_store)
+
+    client = TestClient(app)
+    yield client
+
+    reset_stores()
+
+
+@pytest.fixture
+def mock_pipeline():
+    """Mock KB pipeline for testing indexing without real embedding calls."""
+    from unittest.mock import MagicMock, AsyncMock
+
+    pipeline = MagicMock()
+
+    # Mock process_repo to return fake results
+    async def mock_process_repo(repo_path, file_paths=None, incremental=False):
+        return {
+            "indexed": len(file_paths) if file_paths else 0,
+            "skipped": 0,
+            "errors": []
+        }
+
+    pipeline.process_repo = AsyncMock(side_effect=mock_process_repo)
+
+    return pipeline
+
+
+@pytest.fixture
+def task_queue_instance():
+    """Fresh TaskQueue instance for testing."""
+    from kb.api.task_queue import TaskQueue
+
+    queue = TaskQueue()
+    yield queue
+
+    # Cleanup - clear all tasks
+    queue.tasks.clear()

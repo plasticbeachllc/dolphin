@@ -832,202 +832,199 @@ async def index_files_old(request: IndexRequest):
         raise HTTPException(status_code=400, detail="No valid files to index")
 
     # Old sync implementation follows...
-        import subprocess
-        from ..ingest.dedup import ChunkDeduplicator
-        from ..chunkers.registry import detect_language_from_extension, chunk_file as chunk_file_with_config
-        from ..chunkers.repo_config import load_repo_chunking_config
-        from ..hashing import hash_text
-        from ..embeddings.provider import embed_texts_with_retry
-        from ..ingest._helpers import build_desired_map, representative_text_for_hash
+    import subprocess
+    from ..ingest.dedup import ChunkDeduplicator
+    from ..chunkers.registry import detect_language_from_extension, chunk_file as chunk_file_with_config
+    from ..chunkers.repo_config import load_repo_chunking_config
+    from ..hashing import hash_text
+    from ..embeddings.provider import embed_texts_with_retry
+    from ..ingest._helpers import build_desired_map, representative_text_for_hash
 
-        # Get commit info for provenance
+    # Get commit info for provenance
+    try:
+        commit_sha = subprocess.check_output(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            stderr=subprocess.STDOUT
+        ).decode("utf-8").strip()
+        branch = subprocess.check_output(
+            ["git", "-C", str(root), "rev-parse", "--abbrev-ref", "HEAD"],
+            stderr=subprocess.STDOUT
+        ).decode("utf-8").strip()
+    except Exception:
+        # Non-git repo or git not available
+        commit_sha = "unknown"
+        branch = "unknown"
+
+    # Start session
+    session_id = _sql_store.begin_session(repo_id, commit_sha, branch, embed_model)
+
+    chunks_indexed = chunks_skipped = 0
+    repo_config = load_repo_chunking_config(root)
+
+    for filepath in valid_files:
+        file_path = root / filepath
+
+        # Resolve or upsert file_id
+        file_id = _sql_store.upsert_file(
+            repo_id=repo_id,
+            path=filepath,
+            ext=file_path.suffix,
+            language=None,  # Will be detected by chunker
+            is_binary=False,
+            size_bytes=file_path.stat().st_size
+        )
+
+        # Determine language and chunk the file
+        language = detect_language_from_extension(file_path) or "text"
         try:
-            commit_sha = subprocess.check_output(
-                ["git", "-C", str(root), "rev-parse", "HEAD"],
-                stderr=subprocess.STDOUT
-            ).decode("utf-8").strip()
-            branch = subprocess.check_output(
-                ["git", "-C", str(root), "rev-parse", "--abbrev-ref", "HEAD"],
-                stderr=subprocess.STDOUT
-            ).decode("utf-8").strip()
+            text = file_path.read_text(encoding="utf-8", errors="ignore")
         except Exception:
-            # Non-git repo or git not available
-            commit_sha = "unknown"
-            branch = "unknown"
+            continue
 
-        # Start session
-        session_id = _sql_store.begin_session(repo_id, commit_sha, branch, embed_model)
-
-        chunks_indexed = chunks_skipped = 0
-        repo_config = load_repo_chunking_config(root)
-
-        for filepath in valid_files:
-            file_path = root / filepath
-
-            # Resolve or upsert file_id
-            file_id = _sql_store.upsert_file(
-                repo_id=repo_id,
-                path=filepath,
-                ext=file_path.suffix,
-                language=None,  # Will be detected by chunker
-                is_binary=False,
-                size_bytes=file_path.stat().st_size
-            )
-
-            # Determine language and chunk the file
-            language = detect_language_from_extension(file_path) or "text"
-            try:
-                text = file_path.read_text(encoding="utf-8", errors="ignore")
-            except Exception:
-                continue
-
-            chunks = chunk_file_with_config(
-                abs_path=file_path,
-                rel_path=filepath,
-                language=language,
-                text=text,
-                repo_config=repo_config,
-            )
-
-            # Compute text_hash for each chunk
-            for chunk in chunks:
-                chunk.text_hash = hash_text(chunk.text)
-
-            # Build desired map
-            desired = build_desired_map(chunks)
-            desired_row_ids: set[str] = set()
-
-            # Deduplicate by text_hash
-            dedup = ChunkDeduplicator(_sql_store)
-            changed_chunks, unchanged_chunks = dedup.filter_unchanged_chunks(
-                chunks, repo_id, file_id, embed_model
-            )
-            new_hashes = {c.text_hash for c in changed_chunks}
-            skipped_occurrences = len(unchanged_chunks)
-
-            # Embed only new hashes (batched)
-            hash_to_vec: dict = {}
-            if new_hashes:
-                hashes_list = sorted(new_hashes)
-                batch_size = 128
-                for i in range(0, len(hashes_list), batch_size):
-                    batch_hashes = hashes_list[i:i+batch_size]
-                    texts_to_embed = [
-                        representative_text_for_hash(h, chunks) for h in batch_hashes
-                    ]
-                    if not texts_to_embed:
-                        continue
-                    vectors = embed_texts_with_retry(embed_model, texts_to_embed)
-                    hash_to_vec.update(dict(zip(batch_hashes, vectors)))
-
-            # Upsert metadata and locations
-            mapping = _sql_store.ensure_content_rows_for_file(
-                repo_id, file_id, embed_model, list(desired.keys())
-            )
-
-            for h, occs in desired.items():
-                cid = mapping.get(h)
-                if cid:
-                    _sql_store.sync_locations_for_content_row(cid, occs)
-
-            _sql_store.prune_invalidated_content_for_file(
-                repo_id, file_id, embed_model, set(desired.keys())
-            )
-
-            # Build token count lookup
-            occ_token_counts = {
-                (ch.start_line, ch.end_line): getattr(ch, 'token_count', 0) for ch in chunks
-            }
-
-            # Persist vectors to LanceDB
-            payload = []
-            fts_chunks = []
-            for h, occs in desired.items():
-                content_id = mapping.get(h)
-                vec = hash_to_vec.get(h)
-                for idx, occ in enumerate(occs):
-                    row_id = f"{repo_id}:{file_id}:{embed_model}:{h}:{occ['start_line']}:{occ['end_line']}"
-                    desired_row_ids.add(row_id)
-                    if vec is None:
-                        continue  # unchanged hash
-                    payload.append({
-                        'id': row_id,
-                        'vector': vec,
-                        'repo': request.repo,
-                        'path': filepath,
-                        'start_line': occ['start_line'],
-                        'end_line': occ['end_line'],
-                        'text_hash': h,
-                        'commit': commit_sha,
-                        'branch': branch,
-                        'embed_model': embed_model,
-                        'language': language,
-                        'symbol_kind': occ.get('symbol_kind'),
-                        'symbol_name': occ.get('symbol_name'),
-                        'symbol_path': occ.get('symbol_path'),
-                        'heading_h1': occ.get('heading_h1'),
-                        'heading_h2': occ.get('heading_h2'),
-                        'heading_h3': occ.get('heading_h3'),
-                        'token_count': occ_token_counts.get((occ['start_line'], occ['end_line']), 0),
-                        'created_at': None,
-                    })
-
-                    # Prepare chunk for FTS5 indexing (first occurrence only)
-                    if content_id and idx == 0:
-                        chunk_text = None
-                        for chunk in chunks:
-                            if chunk.text_hash == h:
-                                chunk_text = chunk.text
-                                break
-
-                        if chunk_text:
-                            fts_chunks.append({
-                                'content_id': content_id,
-                                'repo': request.repo,
-                                'path': filepath,
-                                'content': chunk_text,
-                                'symbol_name': occ.get('symbol_name'),
-                                'symbol_path': occ.get('symbol_path'),
-                            })
-
-            if payload:
-                _lance_store.upsert_chunks(request.repo, payload, model=embed_model)
-
-            # Index chunks in FTS5 for BM25 search
-            if fts_chunks:
-                _sql_store.bulk_index_chunks_for_fts(fts_chunks)
-
-            # Prune any stale vectors for this file/model
-            if desired_row_ids:
-                _lance_store.prune_file_rows(request.repo, filepath, model=embed_model, keep_ids=desired_row_ids)
-            else:
-                _lance_store.prune_file_rows(request.repo, filepath, model=embed_model)
-
-            # Update counters
-            chunks_indexed += len(new_hashes)
-            chunks_skipped += skipped_occurrences
-
-        # Update session
-        _sql_store.bump_session_counters(
-            session_id,
-            files_indexed=len(valid_files),
-            chunks_indexed=chunks_indexed,
-            chunks_skipped=chunks_skipped,
-            vectors_written=chunks_indexed,
-            chunks_pruned=0
-        )
-        _sql_store.set_session_status(session_id, "succeeded")
-
-        return IndexResponse(
-            indexed=chunks_indexed,
-            skipped=chunks_skipped,
-            tokens_used=0,  # TODO: Track token usage
-            cost_usd=0.0,   # TODO: Calculate cost
-            message=f"Indexed {len(valid_files)} files: {chunks_indexed} new chunks, {chunks_skipped} skipped"
+        chunks = chunk_file_with_config(
+            abs_path=file_path,
+            rel_path=filepath,
+            language=language,
+            text=text,
+            repo_config=repo_config,
         )
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Indexing failed: {str(e)}")
+        # Compute text_hash for each chunk
+        for chunk in chunks:
+            chunk.text_hash = hash_text(chunk.text)
+
+        # Build desired map
+        desired = build_desired_map(chunks)
+        desired_row_ids: set[str] = set()
+
+        # Deduplicate by text_hash
+        dedup = ChunkDeduplicator(_sql_store)
+        changed_chunks, unchanged_chunks = dedup.filter_unchanged_chunks(
+            chunks, repo_id, file_id, embed_model
+        )
+        new_hashes = {c.text_hash for c in changed_chunks}
+        skipped_occurrences = len(unchanged_chunks)
+
+        # Embed only new hashes (batched)
+        hash_to_vec: dict = {}
+        if new_hashes:
+            hashes_list = sorted(new_hashes)
+            batch_size = 128
+            for i in range(0, len(hashes_list), batch_size):
+                batch_hashes = hashes_list[i:i+batch_size]
+                texts_to_embed = [
+                    representative_text_for_hash(h, chunks) for h in batch_hashes
+                ]
+                if not texts_to_embed:
+                    continue
+                vectors = embed_texts_with_retry(embed_model, texts_to_embed)
+                hash_to_vec.update(dict(zip(batch_hashes, vectors)))
+
+        # Upsert metadata and locations
+        mapping = _sql_store.ensure_content_rows_for_file(
+            repo_id, file_id, embed_model, list(desired.keys())
+        )
+
+        for h, occs in desired.items():
+            cid = mapping.get(h)
+            if cid:
+                _sql_store.sync_locations_for_content_row(cid, occs)
+
+        _sql_store.prune_invalidated_content_for_file(
+            repo_id, file_id, embed_model, set(desired.keys())
+        )
+
+        # Build token count lookup
+        occ_token_counts = {
+            (ch.start_line, ch.end_line): getattr(ch, 'token_count', 0) for ch in chunks
+        }
+
+        # Persist vectors to LanceDB
+        payload = []
+        fts_chunks = []
+        for h, occs in desired.items():
+            content_id = mapping.get(h)
+            vec = hash_to_vec.get(h)
+            for idx, occ in enumerate(occs):
+                row_id = f"{repo_id}:{file_id}:{embed_model}:{h}:{occ['start_line']}:{occ['end_line']}"
+                desired_row_ids.add(row_id)
+                if vec is None:
+                    continue  # unchanged hash
+                payload.append({
+                    'id': row_id,
+                    'vector': vec,
+                    'repo': request.repo,
+                    'path': filepath,
+                    'start_line': occ['start_line'],
+                    'end_line': occ['end_line'],
+                    'text_hash': h,
+                    'commit': commit_sha,
+                    'branch': branch,
+                    'embed_model': embed_model,
+                    'language': language,
+                    'symbol_kind': occ.get('symbol_kind'),
+                    'symbol_name': occ.get('symbol_name'),
+                    'symbol_path': occ.get('symbol_path'),
+                    'heading_h1': occ.get('heading_h1'),
+                    'heading_h2': occ.get('heading_h2'),
+                    'heading_h3': occ.get('heading_h3'),
+                    'token_count': occ_token_counts.get((occ['start_line'], occ['end_line']), 0),
+                    'created_at': None,
+                })
+
+                # Prepare chunk for FTS5 indexing (first occurrence only)
+                if content_id and idx == 0:
+                    chunk_text = None
+                    for chunk in chunks:
+                        if chunk.text_hash == h:
+                            chunk_text = chunk.text
+                            break
+
+                    if chunk_text:
+                        fts_chunks.append({
+                            'content_id': content_id,
+                            'repo': request.repo,
+                            'path': filepath,
+                            'content': chunk_text,
+                            'symbol_name': occ.get('symbol_name'),
+                            'symbol_path': occ.get('symbol_path'),
+                        })
+
+        if payload:
+            _lance_store.upsert_chunks(request.repo, payload, model=embed_model)
+
+        # Index chunks in FTS5 for BM25 search
+        if fts_chunks:
+            _sql_store.bulk_index_chunks_for_fts(fts_chunks)
+
+        # Prune any stale vectors for this file/model
+        if desired_row_ids:
+            _lance_store.prune_file_rows(request.repo, filepath, model=embed_model, keep_ids=desired_row_ids)
+        else:
+            _lance_store.prune_file_rows(request.repo, filepath, model=embed_model)
+
+        # Update counters
+        chunks_indexed += len(new_hashes)
+        chunks_skipped += skipped_occurrences
+
+    # Update session
+    _sql_store.bump_session_counters(
+        session_id,
+        files_indexed=len(valid_files),
+        chunks_indexed=chunks_indexed,
+        chunks_skipped=chunks_skipped,
+        vectors_written=chunks_indexed,
+        chunks_pruned=0
+    )
+    _sql_store.set_session_status(session_id, "succeeded")
+
+    return IndexResponse(
+        indexed=chunks_indexed,
+        skipped=chunks_skipped,
+        tokens_used=0,  # TODO: Track token usage
+        cost_usd=0.0,   # TODO: Calculate cost
+        message=f"Indexed {len(valid_files)} files: {chunks_indexed} new chunks, {chunks_skipped} skipped"
+    )
 
 
 def main() -> None:
