@@ -21,7 +21,7 @@
                 {
                     "id": "dolphin",
                     "title": "Dolphin",
-                    "icon": "resources/dolphin-activity-bar.svg"
+                    "icon": "resources/dolphin_vscode.png"
                 }
             ]
         },

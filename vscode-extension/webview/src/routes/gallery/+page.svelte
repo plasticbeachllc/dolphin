@@ -2,10 +2,12 @@
 	import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
+	import { Badge } from '$lib/components/ui/badge';
+	import * as Collapsible from '$lib/components/ui/collapsible';
+	import { ChevronDown, ChevronRight, FileCode, Info } from 'lucide-svelte';
 	import MessageCard from '$lib/components/chat/MessageCard.svelte';
 	import ChatInput from '$lib/components/chat/ChatInput.svelte';
 	import ToolCallCard from '$lib/components/tools/ToolCallCard.svelte';
-	import DiffViewer from '$lib/components/DiffViewer.svelte';
 	import PlanTimeline from '$lib/components/PlanTimeline.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import ErrorAlert from '$lib/components/ErrorAlert.svelte';
@@ -15,17 +17,39 @@
 	// Sample data
 	let showConfirmDialog = $state(false);
 	let showErrorAlert = $state(true);
+	let diffExpanded = $state(true);
 	
-	const sampleDiff = `diff --git a/src/example.ts b/src/example.ts
-index 1234567..abcdefg 100644
---- a/src/example.ts
-+++ b/src/example.ts
-@@ -1,3 +1,4 @@
- function hello(name: string) {
--  console.log("Hello " + name);
-+  console.log(\`Hello \${name}\`);
-+  return \`Greeting: \${name}\`;
- }`;
+
+	// Mock parsed diff data - skip the parser to avoid formatting issues
+	const patch = {
+		oldFileName: 'src/components/utils.ts',
+		newFileName: 'src/components/utils.ts',
+		hunks: [{
+			oldStart: 1,
+			oldLines: 8,
+			newStart: 1,
+			newLines: 13,
+			lines: [
+				' export function formatNumber(num: number) {',
+				'-  return num.toLocaleString();',
+				'+  return new Intl.NumberFormat("en-US").format(num);',
+				' }',
+				' ',
+				' export function cn(...inputs: string[]) {',
+				'   return inputs.filter(Boolean).join(" ");',
+				'+}',
+				'+',
+				'+export function debounce(func: Function, wait: number) {',
+				'+  let timeout: NodeJS.Timeout;',
+				'+  return (...args: any[]) => clearTimeout(timeout) || (timeout = setTimeout(() => func(...args), wait));',
+				' }'
+			]
+		}]
+	};
+	
+	const additions = 6;
+	const deletions = 1;
+	const fileChanges = 1;
 
 	const planSteps = [
 		{ id: '1', description: 'Analyze requirements', status: 'completed' as const },
@@ -49,14 +73,6 @@ index 1234567..abcdefg 100644
 	
 	function handleSend(message: string) {
 		console.log('Message sent:', message);
-	}
-	
-	function handleDiffApprove() {
-		console.log('Diff approved');
-	}
-	
-	function handleDiffReject(feedback?: string) {
-		console.log('Diff rejected:', feedback);
 	}
 	
 	function handleConfirmSelect(choice: string) {
@@ -192,17 +208,266 @@ index 1234567..abcdefg 100644
 					<Card>
 						<CardHeader>
 							<CardTitle>DiffViewer</CardTitle>
-							<CardDescription>Code diff viewer with approve/reject actions</CardDescription>
+							<CardDescription>Collapsible diff viewer with rich visual information</CardDescription>
 						</CardHeader>
 						<CardContent>
-							<DiffViewer
-								diffContent={sampleDiff}
-								onApprove={handleDiffApprove}
-								onReject={handleDiffReject}
-							/>
+							<div class="diff-container">
+								<Collapsible.Root bind:open={diffExpanded}>
+									<div class="rounded-lg border border-border bg-card overflow-hidden">
+										<!-- Collapsible Header -->
+										<Collapsible.Trigger>
+											{#snippet child({ props })}
+												<button
+													{...props}
+													class="w-full px-4 py-3 flex items-center justify-between hover:bg-muted/50 transition-colors"
+												>
+												<div class="flex items-center gap-3">
+													<div class="flex items-center gap-2">
+														{#if diffExpanded}
+															<ChevronDown class="h-4 w-4 text-muted-foreground" />
+														{:else}
+															<ChevronRight class="h-4 w-4 text-muted-foreground" />
+														{/if}
+														<FileCode class="h-5 w-5 text-primary" />
+													</div>
+													<div class="flex flex-col items-start">
+														<span class="font-mono text-sm font-semibold text-foreground">
+															{patch.newFileName}
+														</span>
+														<span class="text-xs text-muted-foreground">
+															Modified • {fileChanges} file{fileChanges !== 1 ? 's' : ''} changed
+														</span>
+													</div>
+												</div>
+												
+												<div class="flex items-center gap-4">
+													<!-- Diff Stats -->
+													<div class="flex items-center gap-3 text-xs font-mono">
+														<div class="flex items-center gap-1">
+															<div class="w-2 h-2 rounded-full bg-green-500"></div>
+															<span class="text-green-500 font-semibold">+{additions}</span>
+														</div>
+														<div class="flex items-center gap-1">
+															<div class="w-2 h-2 rounded-full bg-red-500"></div>
+															<span class="text-red-500 font-semibold">-{deletions}</span>
+														</div>
+													</div>
+													
+													<!-- Visual diff bar -->
+													<div class="h-2 w-32 rounded-full overflow-hidden bg-muted flex">
+														<div
+															class="bg-green-500 transition-all"
+															style="width: {additions / (additions + deletions) * 100}%"
+														></div>
+														<div
+															class="bg-red-500 transition-all"
+															style="width: {deletions / (additions + deletions) * 100}%"
+														></div>
+													</div>
+												</div>
+												</button>
+											{/snippet}
+										</Collapsible.Trigger>
+	
+										<!-- Collapsible Content -->
+										<Collapsible.Content>
+											<div class="border-t border-border">
+												<!-- Info Banner -->
+												<!-- <div class="px-4 py-2 bg-muted/30 border-b border-border flex items-center gap-2">
+													<Info class="h-4 w-4 text-primary" />
+													<span class="text-xs text-muted-foreground">
+														Preview of changes
+													</span>
+												</div> -->
+	
+												<!-- Diff Content -->
+												<div class="bg-muted/20 font-mono text-xs max-h-96 overflow-auto">
+													{#if patch}
+														{#each patch.hunks as hunk, hunkIdx}
+															<div class="hunk">
+																<!-- Hunk Header -->
+																<div class="sticky top-0 px-4 py-1.5 bg-primary/10 border-y border-border/50 text-primary font-semibold">
+																	@@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@
+																</div>
+																
+																<!-- Diff Lines -->
+																{#each hunk.lines as line, lineIdx}
+																	{@const lineType = line[0] === '+' ? 'add' : line[0] === '-' ? 'del' : 'ctx'}
+																	<div class="diff-line {lineType}">
+																		<!-- Line Number Gutter -->
+																		<div class="line-numbers select-none flex">
+																			<span class="line-num old-line {lineType === 'add' ? 'opacity-30' : ''}">
+																				{lineType !== 'add' ? (hunk.oldStart + lineIdx) : ''}
+																			</span>
+																			<span class="line-num new-line {lineType === 'del' ? 'opacity-30' : ''}">
+																				{lineType !== 'del' ? (hunk.newStart + lineIdx) : ''}
+																			</span>
+																		</div>
+																		
+																		<!-- Change Marker -->
+																		<span class="marker select-none font-bold">
+																			{line[0]}
+																		</span>
+																		
+																		<!-- Code Content -->
+																		<span class="code-content flex-1">
+																			{line.slice(1)}
+																		</span>
+																	</div>
+																{/each}
+															</div>
+														{/each}
+													{/if}
+												</div>
+	
+												<!-- Metadata Footer -->
+												<div class="px-4 py-3 bg-card border-t border-border flex items-center gap-2">
+													<Badge variant="outline" class="text-xs">
+														<FileCode class="h-3 w-3 mr-1" />
+														TypeScript
+													</Badge>
+													<Badge variant="outline" class="text-xs">
+														{additions + deletions} lines changed
+													</Badge>
+												</div>
+											</div>
+										</Collapsible.Content>
+									</div>
+								</Collapsible.Root>
+							</div>
+							
+							<!-- Features List -->
+							<div class="mt-6 text-sm text-muted-foreground space-y-2">
+								<p class="font-semibold text-foreground">Features:</p>
+								<ul class="list-disc list-inside space-y-1 text-xs">
+									<li>Collapsible diff view with smooth animations</li>
+									<li>Visual statistics bar showing additions vs deletions</li>
+									<li>Dual line numbers (old/new) for precise navigation</li>
+									<li>Syntax-aware highlighting for added/removed/context lines</li>
+									<li>File metadata and change summary</li>
+									<li>Sticky hunk headers for context</li>
+								</ul>
+							</div>
 						</CardContent>
 					</Card>
-
+			
+					<Card>
+						<CardHeader>
+							<CardTitle>Diff Progress Bar Variations</CardTitle>
+							<CardDescription>Different styling options for the lines changed indicator</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<div class="space-y-6">
+								<!-- Variation 1: Current (Bright) -->
+								<div>
+									<p class="text-sm font-medium mb-2">Current - Bright Colors</p>
+									<div class="flex items-center gap-4">
+										<div class="flex items-center gap-3 text-xs font-mono">
+											<div class="flex items-center gap-1">
+												<div class="w-2 h-2 rounded-full bg-green-500"></div>
+												<span class="text-green-500 font-semibold">+{additions}</span>
+											</div>
+											<div class="flex items-center gap-1">
+												<div class="w-2 h-2 rounded-full bg-red-500"></div>
+												<span class="text-red-500 font-semibold">-{deletions}</span>
+											</div>
+										</div>
+										<div class="h-2 w-32 rounded-full overflow-hidden bg-muted flex">
+											<div class="bg-green-500 transition-all" style="width: {additions / (additions + deletions) * 100}%"></div>
+											<div class="bg-red-500 transition-all" style="width: {deletions / (additions + deletions) * 100}%"></div>
+										</div>
+									</div>
+								</div>
+			
+								<!-- Variation 2: Muted Colors -->
+								<div>
+									<p class="text-sm font-medium mb-2">Muted Colors</p>
+									<div class="flex items-center gap-4">
+										<div class="flex items-center gap-3 text-xs font-mono">
+											<div class="flex items-center gap-1">
+												<div class="w-2 h-2 rounded-full bg-green-600/60"></div>
+												<span class="text-green-600/80 font-semibold">+{additions}</span>
+											</div>
+											<div class="flex items-center gap-1">
+												<div class="w-2 h-2 rounded-full bg-red-600/60"></div>
+												<span class="text-red-600/80 font-semibold">-{deletions}</span>
+											</div>
+										</div>
+										<div class="h-2 w-32 rounded-full overflow-hidden bg-muted flex">
+											<div class="bg-green-600/60 transition-all" style="width: {additions / (additions + deletions) * 100}%"></div>
+											<div class="bg-red-600/60 transition-all" style="width: {deletions / (additions + deletions) * 100}%"></div>
+										</div>
+									</div>
+								</div>
+			
+								<!-- Variation 3: Subtle with Border -->
+								<div>
+									<p class="text-sm font-medium mb-2">Subtle with Border</p>
+									<div class="flex items-center gap-4">
+										<div class="flex items-center gap-3 text-xs font-mono">
+											<div class="flex items-center gap-1">
+												<div class="w-2 h-2 rounded-full bg-emerald-500/40 border border-emerald-500/60"></div>
+												<span class="text-emerald-600 dark:text-emerald-400 font-semibold">+{additions}</span>
+											</div>
+											<div class="flex items-center gap-1">
+												<div class="w-2 h-2 rounded-full bg-rose-500/40 border border-rose-500/60"></div>
+												<span class="text-rose-600 dark:text-rose-400 font-semibold">-{deletions}</span>
+											</div>
+										</div>
+										<div class="h-2 w-32 rounded-full overflow-hidden border border-border bg-background flex">
+											<div class="bg-emerald-500/50 transition-all" style="width: {additions / (additions + deletions) * 100}%"></div>
+											<div class="bg-rose-500/50 transition-all" style="width: {deletions / (additions + deletions) * 100}%"></div>
+										</div>
+									</div>
+								</div>
+			
+								<!-- Variation 4: Very Subtle Foreground Colors -->
+								<div>
+									<p class="text-sm font-medium mb-2">Very Subtle - Foreground Based</p>
+									<div class="flex items-center gap-4">
+										<div class="flex items-center gap-3 text-xs font-mono text-muted-foreground">
+											<div class="flex items-center gap-1">
+												<div class="w-2 h-2 rounded-full bg-green-700/40 dark:bg-green-500/30"></div>
+												<span class="font-semibold">+{additions}</span>
+											</div>
+											<div class="flex items-center gap-1">
+												<div class="w-2 h-2 rounded-full bg-red-700/40 dark:bg-red-500/30"></div>
+												<span class="font-semibold">-{deletions}</span>
+											</div>
+										</div>
+										<div class="h-2 w-32 rounded-full overflow-hidden bg-muted/50 flex">
+											<div class="bg-green-700/30 dark:bg-green-500/25 transition-all" style="width: {additions / (additions + deletions) * 100}%"></div>
+											<div class="bg-red-700/30 dark:bg-red-500/25 transition-all" style="width: {deletions / (additions + deletions) * 100}%"></div>
+										</div>
+									</div>
+								</div>
+			
+								<!-- Variation 5: Minimal Dots Only -->
+								<div>
+									<p class="text-sm font-medium mb-2">Minimal - Dots Only</p>
+									<div class="flex items-center gap-4">
+										<div class="flex items-center gap-3 text-xs font-mono text-muted-foreground">
+											<div class="flex items-center gap-1">
+												<span class="font-semibold">+{additions}</span>
+											</div>
+											<div class="flex items-center gap-1">
+												<span class="font-semibold">-{deletions}</span>
+											</div>
+										</div>
+										<div class="flex items-center gap-0.5">
+											{#each Array(additions) as _, i}
+												<div class="w-1 h-1 rounded-sm bg-green-600/50"></div>
+											{/each}
+											{#each Array(deletions) as _, i}
+												<div class="w-1 h-1 rounded-sm bg-red-600/50"></div>
+											{/each}
+										</div>
+									</div>
+								</div>
+							</div>
+						</CardContent>
+					</Card>
+			
 					<Card>
 						<CardHeader>
 							<CardTitle>PlanTimeline</CardTitle>
@@ -387,3 +652,86 @@ index 1234567..abcdefg 100644
 		</div>
 	</div>
 </div>
+
+<style>
+	.diff-line {
+		display: flex;
+		align-items: center;
+		padding: 0.125rem 1rem;
+		line-height: 1.5;
+		min-height: 1.5rem;
+	}
+	
+	.diff-line.add {
+		background: rgba(34, 197, 94, 0.12);
+	}
+	
+	.diff-line.add .marker {
+		color: rgb(34, 197, 94);
+	}
+	
+	.diff-line.del {
+		background: rgba(239, 68, 68, 0.12);
+	}
+	
+	.diff-line.del .marker {
+		color: rgb(239, 68, 68);
+	}
+	
+	.diff-line.ctx {
+		color: var(--foreground);
+		opacity: 0.8;
+	}
+	
+	.line-numbers {
+		display: flex;
+		gap: 0.75rem;
+		margin-right: 1rem;
+		min-width: 4rem;
+	}
+	
+	.line-num {
+		display: inline-block;
+		width: 2rem;
+		text-align: right;
+		color: var(--muted-foreground);
+		user-select: none;
+	}
+	
+	.marker {
+		display: inline-block;
+		width: 1ch;
+		margin-right: 1ch;
+		text-align: center;
+	}
+	
+	.code-content {
+		white-space: pre;
+		overflow-x: auto;
+	}
+	
+	.line-actions {
+		margin-left: auto;
+		padding-left: 0.5rem;
+	}
+	
+	/* Scrollbar styling */
+	.diff-container ::-webkit-scrollbar {
+		width: 8px;
+		height: 8px;
+	}
+	
+	.diff-container ::-webkit-scrollbar-track {
+		background: var(--muted);
+		border-radius: 4px;
+	}
+	
+	.diff-container ::-webkit-scrollbar-thumb {
+		background: var(--muted-foreground);
+		border-radius: 4px;
+	}
+	
+	.diff-container ::-webkit-scrollbar-thumb:hover {
+		background: var(--foreground);
+	}
+</style>
