@@ -62,11 +62,13 @@ export class DiffHandler {
 
         // Read current file content
         let currentContent = '';
+        let fileExists = true;
         try {
           const fileContent = await vscode.workspace.fs.readFile(fileUri);
           currentContent = Buffer.from(fileContent).toString('utf8');
         } catch (error) {
           // File might not exist yet, that's ok
+          fileExists = false;
         }
 
         // Replace entire file content
@@ -75,7 +77,7 @@ export class DiffHandler {
           new vscode.Position(Number.MAX_SAFE_INTEGER, 0)
         );
 
-        if (currentContent) {
+        if (fileExists) {
           edit.replace(fileUri, fullRange, diff.newContent);
         } else {
           edit.createFile(fileUri, { overwrite: false });
