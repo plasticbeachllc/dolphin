@@ -11,18 +11,20 @@ export type ExtensionRequest =
   | { type: "cancel_operation"; operationId: string };
 
 // Agent Core → Extension
+// All events include an optional requestId for correlation/logging
 export type AgentEvent =
-  | { type: "agent_ready"; version: string; capabilities: string[] }
-  | { type: "content_delta"; delta: string }
-  | { type: "plan_generated"; plan: Plan }
-  | { type: "plan_step_started"; stepId: string; description: string }
-  | { type: "plan_step_completed"; stepId: string; result: any }
-  | { type: "tool_call_started"; toolId: string; tool: string; input: any }
+  | { type: "agent_ready"; version: string; capabilities: string[]; requestId?: string }
+  | { type: "content_delta"; delta: string; requestId?: string }
+  | { type: "plan_generated"; plan: Plan; requestId?: string }
+  | { type: "plan_step_started"; stepId: string; description: string; requestId?: string }
+  | { type: "plan_step_completed"; stepId: string; result: any; requestId?: string }
+  | { type: "tool_call_started"; toolId: string; tool: string; input: any; requestId?: string }
   | {
       type: "tool_call_progress";
       toolId: string;
       chunk?: string;
       bytes?: number;
+      requestId?: string;
     }
   | {
       type: "tool_call_completed";
@@ -31,6 +33,7 @@ export type AgentEvent =
       error?: any;
       executionTime?: number;
       diff?: FileDiff;
+      requestId?: string;
     }
   | {
       type: "require_confirmation";
@@ -38,9 +41,10 @@ export type AgentEvent =
       title: string;
       message: string;
       options: string[];
+      requestId?: string;
     }
-  | { type: "task_completed"; success: boolean; result?: any; error?: any }
-  | { type: "error"; error: AgentError };
+  | { type: "task_completed"; success: boolean; result?: any; error?: any; requestId?: string }
+  | { type: "error"; error: AgentError; requestId?: string };
 
 export interface Plan {
   id: string;

@@ -22,106 +22,69 @@ describe('AgentBridge Unit Tests', () => {
   });
 
   describe('clearConversation', () => {
-    it('Should send clear_conversation JSON-RPC message', async () => {
-      // Mock the process
-      const mockProcess = new EventEmitter() as any;
-      mockProcess.stdin = {
-        write: (data: string) => {
-          const message = JSON.parse(data);
-          assert.strictEqual(message.jsonrpc, '2.0', 'Should be JSON-RPC 2.0');
-          assert.strictEqual(message.method, 'clear_conversation', 'Method should be clear_conversation');
-          assert.ok(message.id !== undefined, 'Should have an ID');
-          assert.deepStrictEqual(message.params, {}, 'Params should be empty object');
-          return true;
+    it('Should send clear_conversation notification via JSON-RPC connection', async () => {
+      // Mock the connection
+      const mockConnection = {
+        sendNotification: (method: string, params?: any) => {
+          assert.strictEqual(method, 'clear_conversation', 'Method should be clear_conversation');
         },
+        dispose: () => {},
       };
-      mockProcess.stdout = new EventEmitter();
-      mockProcess.stderr = new EventEmitter();
-      mockProcess.exitCode = null;
 
-      // Inject mock process
-      (agentBridge as any).process = mockProcess;
+      // Inject mock connection
+      (agentBridge as any).connection = mockConnection;
 
       // Call clearConversation
       await agentBridge.clearConversation();
     });
 
-    it('Should throw error when agent process is not running', async () => {
-      // Don't set up a process
-      (agentBridge as any).process = null;
+    it('Should throw error when JSON-RPC connection is not established', async () => {
+      // Don't set up a connection
+      (agentBridge as any).connection = null;
 
       try {
         await agentBridge.clearConversation();
         assert.fail('Should have thrown an error');
       } catch (error: any) {
-        assert.ok(error.message.includes('not running'), 'Error should mention process not running');
-      }
-    });
-
-    it('Should throw error when agent process has exited', async () => {
-      const mockProcess = new EventEmitter() as any;
-      mockProcess.stdin = { write: () => true };
-      mockProcess.stdout = new EventEmitter();
-      mockProcess.stderr = new EventEmitter();
-      mockProcess.exitCode = 1; // Process has exited
-
-      (agentBridge as any).process = mockProcess;
-
-      try {
-        await agentBridge.clearConversation();
-        assert.fail('Should have thrown an error');
-      } catch (error: any) {
-        assert.ok(error.message.includes('not running'), 'Error should mention process not running');
+        assert.ok(error.message.includes('not established'), 'Error should mention connection not established');
       }
     });
   });
 
   describe('abortGeneration', () => {
-    it('Should send abort_generation JSON-RPC message', async () => {
-      const mockProcess = new EventEmitter() as any;
-      mockProcess.stdin = {
-        write: (data: string) => {
-          const message = JSON.parse(data);
-          assert.strictEqual(message.jsonrpc, '2.0', 'Should be JSON-RPC 2.0');
-          assert.strictEqual(message.method, 'abort_generation', 'Method should be abort_generation');
-          assert.ok(message.id !== undefined, 'Should have an ID');
-          return true;
+    it('Should send abort_generation notification via JSON-RPC connection', async () => {
+      const mockConnection = {
+        sendNotification: (method: string, params?: any) => {
+          assert.strictEqual(method, 'abort_generation', 'Method should be abort_generation');
         },
+        dispose: () => {},
       };
-      mockProcess.stdout = new EventEmitter();
-      mockProcess.stderr = new EventEmitter();
-      mockProcess.exitCode = null;
 
-      (agentBridge as any).process = mockProcess;
+      (agentBridge as any).connection = mockConnection;
 
       await agentBridge.abortGeneration();
     });
   });
 
   describe('sendMessage', () => {
-    it('Should send send_message JSON-RPC with content', async () => {
+    it('Should send send_message notification with content via JSON-RPC connection', async () => {
       const testContent = 'Test message content';
-      let sentMessage: any;
+      let receivedParams: any;
 
-      const mockProcess = new EventEmitter() as any;
-      mockProcess.stdin = {
-        write: (data: string) => {
-          sentMessage = JSON.parse(data);
-          return true;
+      const mockConnection = {
+        sendNotification: (method: string, params?: any) => {
+          assert.strictEqual(method, 'send_message', 'Method should be send_message');
+          receivedParams = params;
         },
+        dispose: () => {},
       };
-      mockProcess.stdout = new EventEmitter();
-      mockProcess.stderr = new EventEmitter();
-      mockProcess.exitCode = null;
 
-      (agentBridge as any).process = mockProcess;
+      (agentBridge as any).connection = mockConnection;
 
       await agentBridge.sendMessage(testContent);
 
-      assert.strictEqual(sentMessage.jsonrpc, '2.0', 'Should be JSON-RPC 2.0');
-      assert.strictEqual(sentMessage.method, 'send_message', 'Method should be send_message');
-      assert.strictEqual(sentMessage.params.content, testContent, 'Should include message content');
-      assert.ok(sentMessage.params.messageId, 'Should include message ID');
+      assert.strictEqual(receivedParams.content, testContent, 'Should include message content');
+      assert.ok(receivedParams.messageId, 'Should include message ID');
     });
   });
 

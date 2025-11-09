@@ -36,6 +36,7 @@ class AgentCore {
   private workspaceRoot: string;
   private extensionPath?: string;
   private repoName: string | null = null;
+  private requestIdCounter = 0;
 
   constructor(workspaceRoot: string, extensionPath?: string) {
     this.workspaceRoot = workspaceRoot;
@@ -492,11 +493,21 @@ class AgentCore {
     }
   }
 
+  private generateRequestId(): string {
+    return `req-${Date.now()}-${++this.requestIdCounter}`;
+  }
+
   private sendEvent(event: AgentEvent) {
+    // Add requestId if not already present for correlation/logging
+    const eventWithId = {
+      ...event,
+      requestId: (event as any).requestId || this.generateRequestId(),
+    };
+
     const message: Message = {
       jsonrpc: "2.0",
       method: "notify",
-      params: event,
+      params: eventWithId,
     };
 
     process.stdout.write(JSON.stringify(message) + "\n");
