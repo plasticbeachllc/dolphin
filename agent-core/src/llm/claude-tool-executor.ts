@@ -482,6 +482,24 @@ export class ClaudeToolExecutor {
             }
           }
 
+          // Check if MCP returned an error result
+          if (mcpResult.isError) {
+            // Extract error message from MCP result
+            const errorMessage = mcpResult.content?.[0]?.text || 'Tool execution failed';
+            
+            // Emit error event
+            this.config.onEvent({
+              type: "tool_call_completed",
+              toolId: toolCall.id,
+              result: null,
+              error: errorMessage,
+              executionTime,
+            });
+            
+            // Return error result to Claude
+            return createErrorResult(toolCall.id, new Error(errorMessage));
+          }
+
           // Emit success event
           this.config.onEvent({
             type: "tool_call_completed",

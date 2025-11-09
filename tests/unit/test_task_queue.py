@@ -2,7 +2,7 @@
 
 import pytest
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from kb.api.task_queue import TaskQueue, TaskStatus, IndexTask
 
 
@@ -258,7 +258,7 @@ class TestTaskQueueCleanup:
         await queue.update_task(task.task_id, status=TaskStatus.COMPLETED)
 
         # Manually set completed_at to 2 hours ago
-        task.completed_at = datetime.utcnow() - timedelta(hours=2)
+        task.completed_at = datetime.now(UTC) - timedelta(hours=2)
 
         # Cleanup tasks older than 1 hour
         removed = await queue.cleanup_old_tasks(max_age_seconds=3600)
@@ -276,7 +276,7 @@ class TestTaskQueueCleanup:
         await queue.update_task(task.task_id, status=TaskStatus.FAILED, error="Test error")
 
         # Manually set completed_at to 2 hours ago
-        task.completed_at = datetime.utcnow() - timedelta(hours=2)
+        task.completed_at = datetime.now(UTC) - timedelta(hours=2)
 
         # Cleanup tasks older than 1 hour
         removed = await queue.cleanup_old_tasks(max_age_seconds=3600)
@@ -308,7 +308,7 @@ class TestTaskQueueCleanup:
         task = queue.create_task(repo="test-repo", files=["file.py"])
 
         # Manually set created_at to 2 hours ago
-        task.created_at = datetime.utcnow() - timedelta(hours=2)
+        task.created_at = datetime.now(UTC) - timedelta(hours=2)
 
         # Cleanup
         removed = await queue.cleanup_old_tasks(max_age_seconds=3600)
@@ -326,7 +326,7 @@ class TestTaskQueueCleanup:
         await queue.update_task(task.task_id, status=TaskStatus.PROCESSING)
 
         # Manually set started_at to 2 hours ago
-        task.started_at = datetime.utcnow() - timedelta(hours=2)
+        task.started_at = datetime.now(UTC) - timedelta(hours=2)
 
         # Cleanup
         removed = await queue.cleanup_old_tasks(max_age_seconds=3600)
@@ -342,7 +342,7 @@ class TestTaskQueueCleanup:
         # Old completed task (should be removed)
         task1 = queue.create_task(repo="repo1", files=["a.py"])
         await queue.update_task(task1.task_id, status=TaskStatus.COMPLETED)
-        task1.completed_at = datetime.utcnow() - timedelta(hours=2)
+        task1.completed_at = datetime.now(UTC) - timedelta(hours=2)
 
         # Recent completed task (should be kept)
         task2 = queue.create_task(repo="repo2", files=["b.py"])
@@ -355,7 +355,7 @@ class TestTaskQueueCleanup:
         # Old failed task (should be removed)
         task4 = queue.create_task(repo="repo4", files=["d.py"])
         await queue.update_task(task4.task_id, status=TaskStatus.FAILED)
-        task4.completed_at = datetime.utcnow() - timedelta(hours=3)
+        task4.completed_at = datetime.now(UTC) - timedelta(hours=3)
 
         # Cleanup
         removed = await queue.cleanup_old_tasks(max_age_seconds=3600)

@@ -1,8 +1,37 @@
 import * as path from 'path';
+import * as vscode from 'vscode';
 import Mocha from 'mocha';
 import { glob } from 'glob';
 
+/**
+ * Wait for VSCode's configuration system to be ready
+ */
+async function waitForConfigSystem(): Promise<void> {
+  const maxAttempts = 10;
+  const delayMs = 500;
+  
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      // Try to access configuration
+      vscode.workspace.getConfiguration('dolphin');
+      console.log('Configuration system is ready');
+      return;
+    } catch (error) {
+      console.log(`Config not ready (attempt ${attempt + 1}/${maxAttempts}), waiting...`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+  
+  console.warn('Configuration system may not be fully ready, proceeding with tests');
+}
+
 export async function run(): Promise<void> {
+  // Wait for VSCode's configuration system to be ready
+  // This prevents "Exit prior to config file resolving" errors
+  console.log('Waiting for VSCode configuration system to initialize...');
+  await waitForConfigSystem();
+  console.log('Configuration system ready, loading tests...');
+
   // Create the mocha test runner
   const mocha = new Mocha({
     ui: 'bdd',

@@ -6,7 +6,7 @@ export default defineConfig({
   workspaceFolder: './test-workspace',
   mocha: {
     ui: 'bdd',
-    timeout: 10000,
+    timeout: 20000, // Increased timeout to allow for config initialization
     globals: ['suite', 'test', 'suiteSetup', 'suiteTeardown', 'setup', 'teardown'],
   },
 });

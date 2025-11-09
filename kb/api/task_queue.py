@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 from enum import Enum
 from typing import Dict, List, Optional
 from dataclasses import dataclass, field
@@ -26,7 +26,7 @@ class IndexTask:
     progress: int = 0
     total: int = 0
     error: Optional[str] = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     result: Optional[Dict] = None
@@ -68,9 +68,9 @@ class TaskQueue:
             if status:
                 task.status = status
                 if status == TaskStatus.PROCESSING and not task.started_at:
-                    task.started_at = datetime.utcnow()
+                    task.started_at = datetime.now(UTC)
                 elif status in (TaskStatus.COMPLETED, TaskStatus.FAILED):
-                    task.completed_at = datetime.utcnow()
+                    task.completed_at = datetime.now(UTC)
 
             if progress is not None:
                 task.progress = progress
@@ -95,7 +95,7 @@ class TaskQueue:
     async def cleanup_old_tasks(self, max_age_seconds: int = 3600):
         """Remove completed/failed tasks older than max_age."""
         async with self._lock:
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
             to_remove = []
 
             for task_id, task in self.tasks.items():

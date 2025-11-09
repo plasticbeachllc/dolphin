@@ -431,9 +431,12 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
 
     # Register the repository
     try:
+        # Resolve and normalize path (macOS /var -> /private/var handling)
+        resolved_path = repo_path.resolve()
+        
         _sql_store.record_repo(
             name=request.name,
-            path=repo_path.resolve(),
+            path=resolved_path,
             default_embed_model=request.default_embed_model
         )
 
@@ -442,10 +445,11 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
         if not repo:
             raise HTTPException(status_code=500, detail="Failed to retrieve registered repository")
 
+        # Return normalized path from database to ensure consistency
         return RegisterRepoResponse(
             repo_id=repo["id"],
             name=request.name,
-            path=str(repo_path.resolve()),
+            path=repo["root_path"],
             message=f"Repository '{request.name}' registered successfully"
         )
     except HTTPException:

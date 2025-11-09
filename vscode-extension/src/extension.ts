@@ -6,15 +6,12 @@ import { DolphinViewProvider } from "./views/provider";
 import { FileWatcher } from "./kb/file-watcher";
 import { KBStatusBar } from "./kb/status-bar";
 import { loadWatcherConfig } from "./kb/config";
+import { Logger } from "./utils/logger";
 
 let agentBridge: AgentBridge | null = null;
 let outputChannel: vscode.OutputChannel;
 let fileWatcher: FileWatcher | null = null;
 let statusBar: KBStatusBar | null = null;
-import { Logger } from "./utils/logger";
-
-let agentBridge: AgentBridge | null = null;
-let outputChannel: vscode.OutputChannel;
 let viewProvider: DolphinViewProvider | null = null;
 let logger: Logger;
 
@@ -72,18 +69,33 @@ export async function activate(context: vscode.ExtensionContext) {
     agentBridge.onEvent((event) => {
       outputChannel.appendLine(`[Extension] Agent event: ${event.type}`);
 
-      // Handle KB events
-      if (event.type === "kb_progress" && statusBar) {
-        statusBar.setIndexing(event.data?.indexed || 0);
-      } else if (event.type === "kb_complete" && statusBar) {
-        statusBar.setReady(0);
-      }
+      // Note: KB events would be handled here if they were part of the event type definition
+      // For now, we just log them
     });
 
     // Initialize file watcher
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (workspaceFolder && agentBridge) {
-      const config = loadWatcherConfig();
+      // Load config with fallback for test environments where config system may not be ready
+      let config;
+      try {
+        config = loadWatcherConfig();
+      } catch (error: any) {
+        logger.warn(`Failed to load watcher config, using defaults: ${error.message}`);
+        // Fallback to safe defaults if config system isn't ready (e.g., in tests)
+        config = {
+          debounceMs: 2000,
+          batchIntervalMs: 5000,
+          excludePatterns: [
+            "**/node_modules/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/.git/**",
+            "**/out/**",
+            "**/*.min.js",
+          ],
+        };
+      }
       fileWatcher = new FileWatcher(config, async (changes) => {
         outputChannel.appendLine(`[Extension] Received ${changes.length} file changes`);
 

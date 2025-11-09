@@ -1,6 +1,7 @@
 """Unit tests for FastAPI endpoints."""
 
 import pytest
+from pathlib import Path
 from fastapi.testclient import TestClient
 from kb.api.app import app, SearchRequest, set_search_backend, reset_search_backend, set_stores, reset_stores
 
@@ -232,7 +233,8 @@ class TestRegisterRepoEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["name"] == "test-repo"
-        assert data["path"] == str(workspace)
+        # Normalize paths for comparison (macOS /var -> /private/var)
+        assert Path(data["path"]).resolve() == workspace.resolve()
         assert "repo_id" in data
 
     def test_register_repo_missing_name(self, kb_api_client, temp_dir):

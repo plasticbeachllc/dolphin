@@ -864,11 +864,20 @@ class SQLiteMetadataStore:
                 for r in rows
             ]
 
-    def get_chunks_for_file(self, file_id: int) -> list[dict[str, object]] | None:
-        """Get all chunks (content rows) for a file.
+    def get_chunks_for_file(self, repo_id: int, path: str) -> list[dict[str, object]] | None:
+        """Get all chunks (content rows) for a file by repo_id and path.
         
+        Args:
+            repo_id: Repository ID
+            path: File path relative to repo root
+            
         Returns list of dicts or None if no chunks found.
         """
+        # First get the file_id
+        file_id = self.get_file_id(repo_id, path)
+        if file_id is None:
+            return None
+            
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 "SELECT id FROM chunk_content WHERE file_id = ?",

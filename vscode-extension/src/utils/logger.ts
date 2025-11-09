@@ -22,9 +22,14 @@ export class Logger {
   ) {}
 
   private getLogLevel(): LogLevel {
-    const config = vscode.workspace.getConfiguration("dolphin");
-    const levelStr = config.get<string>("logLevel", "info");
-    return Logger.logLevelMap[levelStr] ?? LogLevel.INFO;
+    try {
+      const config = vscode.workspace.getConfiguration("dolphin");
+      const levelStr = config.get<string>("logLevel", "info");
+      return Logger.logLevelMap[levelStr] ?? LogLevel.INFO;
+    } catch (error) {
+      // Config not ready yet (e.g., during test initialization)
+      return LogLevel.INFO;
+    }
   }
 
   private shouldLog(level: LogLevel): boolean {

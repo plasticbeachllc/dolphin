@@ -65,7 +65,7 @@
             }
         ],
         "configuration": {
-            "title": "Dolphin Knowledge Base",
+            "title": "Dolphin",
             "properties": {
                 "dolphin.kb.debounceMs": {
                     "type": "number",
@@ -91,8 +91,7 @@
                         "**/*.min.js"
                     ],
                     "description": "Patterns to exclude from automatic indexing"
-            "title": "Dolphin",
-            "properties": {
+                },
                 "dolphin.model": {
                     "type": "string",
                     "default": "claude-sonnet-4-5-20250929",
