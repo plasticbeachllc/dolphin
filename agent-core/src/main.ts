@@ -88,18 +88,61 @@ class AgentCore {
       `[Agent Core] Available tools: ${tools.map((t: any) => t.name).join(", ")}`
     );
 
-    // Set up stdio communication
-    process.stdin.setEncoding("utf-8");
+    // Set up stdio communication using JSON-RPC framing
+    let buffer = Buffer.alloc(0);
+    process.stdin.on("data", (chunk: Buffer) => {
+      buffer = Buffer.concat([buffer, chunk]);
 
-    let buffer = "";
-    process.stdin.on("data", (chunk: string) => {
-      buffer += chunk;
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
+      while (true) {
+        const crlfDelimiterIndex = buffer.indexOf("\r\n\r\n");
+        const lfDelimiterIndex = buffer.indexOf("\n\n");
 
-      for (const line of lines) {
-        if (line.trim()) {
-          this.handleMessage(line);
+        let headerEndIndex = -1;
+        let delimiterLength = 0;
+
+        if (crlfDelimiterIndex !== -1 && (lfDelimiterIndex === -1 || crlfDelimiterIndex <= lfDelimiterIndex)) {
+          headerEndIndex = crlfDelimiterIndex;
+          delimiterLength = 4;
+        } else if (lfDelimiterIndex !== -1) {
+          headerEndIndex = lfDelimiterIndex;
+          delimiterLength = 2;
+        }
+
+        if (headerEndIndex === -1) {
+          break;
+        }
+
+        const header = buffer.slice(0, headerEndIndex).toString("utf-8");
+        const headers = header.split(/\r?\n/);
+        let contentLength: number | undefined;
+
+        for (const line of headers) {
+          const match = line.match(/^Content-Length:\s*(\d+)/i);
+          if (match) {
+            contentLength = Number.parseInt(match[1], 10);
+            break;
+          }
+        }
+
+        if (contentLength === undefined || Number.isNaN(contentLength)) {
+          console.error(`[Agent Core] Missing Content-Length header: ${header}`);
+          buffer = buffer.slice(headerEndIndex + delimiterLength);
+          continue;
+        }
+
+        const messageStartIndex = headerEndIndex + delimiterLength;
+        const messageEndIndex = messageStartIndex + contentLength;
+
+        if (buffer.length < messageEndIndex) {
+          // Wait for the rest of the message to arrive
+          break;
+        }
+
+        const messageBuffer = buffer.slice(messageStartIndex, messageEndIndex);
+        buffer = buffer.slice(messageEndIndex);
+
+        if (messageBuffer.length > 0) {
+          this.handleMessage(messageBuffer.toString("utf-8"));
         }
       }
     });
@@ -272,7 +315,7 @@ class AgentCore {
         result: status,
       };
       
-      process.stdout.write(JSON.stringify(response) + "\n");
+      this.sendRPCMessage(response);
     } catch (error: any) {
       const response: Message = {
         jsonrpc: "2.0",
@@ -283,7 +326,7 @@ class AgentCore {
         },
       };
       
-      process.stdout.write(JSON.stringify(response) + "\n");
+      this.sendRPCMessage(response);
     }
   }
 
@@ -419,7 +462,7 @@ class AgentCore {
             message: "Index queue not initialized",
           },
         };
-        process.stdout.write(JSON.stringify(response) + "\n");
+        this.sendRPCMessage(response);
         return;
       }
 
@@ -432,7 +475,7 @@ class AgentCore {
             message: "Invalid params: files array required",
           },
         };
-        process.stdout.write(JSON.stringify(response) + "\n");
+        this.sendRPCMessage(response);
         return;
       }
 
@@ -448,7 +491,7 @@ class AgentCore {
         },
       };
 
-      process.stdout.write(JSON.stringify(response) + "\n");
+      this.sendRPCMessage(response);
     } catch (error: any) {
       const response: Message = {
         jsonrpc: "2.0",
@@ -459,7 +502,7 @@ class AgentCore {
         },
       };
 
-      process.stdout.write(JSON.stringify(response) + "\n");
+      this.sendRPCMessage(response);
     }
   }
 
@@ -478,7 +521,7 @@ class AgentCore {
         result: status,
       };
 
-      process.stdout.write(JSON.stringify(response) + "\n");
+      this.sendRPCMessage(response);
     } catch (error: any) {
       const response: Message = {
         jsonrpc: "2.0",
@@ -489,7 +532,7 @@ class AgentCore {
         },
       };
 
-      process.stdout.write(JSON.stringify(response) + "\n");
+      this.sendRPCMessage(response);
     }
   }
 
@@ -510,7 +553,14 @@ class AgentCore {
       params: eventWithId,
     };
 
-    process.stdout.write(JSON.stringify(message) + "\n");
+    this.sendRPCMessage(message);
+  }
+
+  private sendRPCMessage(message: Message) {
+    const payload = JSON.stringify(message);
+    const contentLength = Buffer.byteLength(payload, "utf-8");
+    const framedMessage = `Content-Length: ${contentLength}\r\n\r\n${payload}`;
+    process.stdout.write(framedMessage);
   }
 
   private shutdown() {
