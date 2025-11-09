@@ -7,6 +7,8 @@ import { FileWatcher } from "./kb/file-watcher";
 import { KBStatusBar } from "./kb/status-bar";
 import { loadWatcherConfig } from "./kb/config";
 import { Logger } from "./utils/logger";
+import { DolphinCodeActionProvider } from "./editor/code-actions";
+import { DiffHandler, DiffChange } from "./editor/diff-handler";
 
 let agentBridge: AgentBridge | null = null;
 let outputChannel: vscode.OutputChannel;
@@ -220,6 +222,149 @@ export async function activate(context: vscode.ExtensionContext) {
           "KB restart not yet implemented. Please restart VSCode to restart KB."
         );
       })
+    );
+
+    // Register contextual editor commands
+    context.subscriptions.push(
+      // Ask about selection - opens chat with selected code as context
+      vscode.commands.registerCommand("dolphin.askAboutSelection", async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+          return;
+        }
+
+        const selection = editor.document.getText(editor.selection);
+        const fileName = path.basename(editor.document.fileName);
+        const language = editor.document.languageId;
+
+        // Open the chat view first
+        await vscode.commands.executeCommand('dolphin.chatView.focus');
+
+        // Prefill the input with context
+        if (viewProvider) {
+          const prompt = `Can you explain this code from ${fileName}?\n\n\`\`\`${language}\n${selection}\n\`\`\``;
+          viewProvider.prefillInput(prompt);
+        }
+      }),
+
+      // Refactor selection - opens chat with refactoring request
+      vscode.commands.registerCommand("dolphin.refactorSelection", async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+          return;
+        }
+
+        const selection = editor.document.getText(editor.selection);
+        const fileName = path.basename(editor.document.fileName);
+        const language = editor.document.languageId;
+
+        // Open the chat view first
+        await vscode.commands.executeCommand('dolphin.chatView.focus');
+
+        // Prefill the input with refactoring request
+        if (viewProvider) {
+          const prompt = `Please refactor this code from ${fileName}:\n\n\`\`\`${language}\n${selection}\n\`\`\``;
+          viewProvider.prefillInput(prompt);
+        }
+      }),
+
+      // Ask about file - opens chat with file path as context
+      vscode.commands.registerCommand("dolphin.askAboutFile", async (uri: vscode.Uri) => {
+        const filePath = vscode.workspace.asRelativePath(uri);
+
+        // Open the chat view first
+        await vscode.commands.executeCommand('dolphin.chatView.focus');
+
+        // Prefill the input with file context
+        if (viewProvider) {
+          const prompt = `Can you help me understand the file: ${filePath}`;
+          viewProvider.prefillInput(prompt);
+        }
+      }),
+
+      // Ask about folder - opens chat with folder path as context
+      vscode.commands.registerCommand("dolphin.askAboutFolder", async (uri: vscode.Uri) => {
+        const folderPath = vscode.workspace.asRelativePath(uri);
+
+        // Open the chat view first
+        await vscode.commands.executeCommand('dolphin.chatView.focus');
+
+        // Prefill the input with folder context
+        if (viewProvider) {
+          const prompt = `Can you help me understand the folder: ${folderPath}`;
+          viewProvider.prefillInput(prompt);
+        }
+      })
+    );
+
+    // Register code action commands
+    context.subscriptions.push(
+      // Explain code
+      vscode.commands.registerCommand("dolphin.explainCode", async (selection: string, fileName: string, language: string) => {
+        await vscode.commands.executeCommand('dolphin.chatView.focus');
+        if (viewProvider) {
+          const prompt = `Can you explain this code from ${fileName}?\n\n\`\`\`${language}\n${selection}\n\`\`\``;
+          viewProvider.prefillInput(prompt);
+        }
+      }),
+
+      // Refactor code
+      vscode.commands.registerCommand("dolphin.refactorCode", async (selection: string, fileName: string, language: string) => {
+        await vscode.commands.executeCommand('dolphin.chatView.focus');
+        if (viewProvider) {
+          const prompt = `Please refactor this code from ${fileName}:\n\n\`\`\`${language}\n${selection}\n\`\`\``;
+          viewProvider.prefillInput(prompt);
+        }
+      }),
+
+      // Add tests
+      vscode.commands.registerCommand("dolphin.addTests", async (selection: string, fileName: string, language: string) => {
+        await vscode.commands.executeCommand('dolphin.chatView.focus');
+        if (viewProvider) {
+          const prompt = `Please write tests for this code from ${fileName}:\n\n\`\`\`${language}\n${selection}\n\`\`\``;
+          viewProvider.prefillInput(prompt);
+        }
+      }),
+
+      // Document code
+      vscode.commands.registerCommand("dolphin.documentCode", async (selection: string, fileName: string, language: string) => {
+        await vscode.commands.executeCommand('dolphin.chatView.focus');
+        if (viewProvider) {
+          const prompt = `Please add documentation to this code from ${fileName}:\n\n\`\`\`${language}\n${selection}\n\`\`\``;
+          viewProvider.prefillInput(prompt);
+        }
+      }),
+
+      // Apply diff
+      vscode.commands.registerCommand("dolphin.applyDiff", async (diff: DiffChange) => {
+        outputChannel.appendLine(`[Dolphin] Applying diff for ${diff.filePath}`);
+        try {
+          const success = await DiffHandler.applyDiff(diff);
+          if (success) {
+            outputChannel.appendLine(`[Dolphin] Successfully applied diff to ${diff.filePath}`);
+          } else {
+            outputChannel.appendLine(`[Dolphin] User cancelled or failed to apply diff to ${diff.filePath}`);
+          }
+        } catch (error: any) {
+          outputChannel.appendLine(`[Dolphin] Error applying diff: ${error.message}`);
+          vscode.window.showErrorMessage(`Failed to apply diff: ${error.message}`);
+        }
+      })
+    );
+
+    // Register CodeActionProvider for all languages
+    const codeActionProvider = new DolphinCodeActionProvider(viewProvider);
+    context.subscriptions.push(
+      vscode.languages.registerCodeActionsProvider(
+        { scheme: 'file' },
+        codeActionProvider,
+        {
+          providedCodeActionKinds: [
+            vscode.CodeActionKind.QuickFix,
+            vscode.CodeActionKind.RefactorRewrite
+          ]
+        }
+      )
     );
 
     outputChannel.appendLine("[Dolphin] Commands registered successfully");

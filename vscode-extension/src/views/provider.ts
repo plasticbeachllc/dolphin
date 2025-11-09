@@ -53,6 +53,13 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
     this.postMessage({ type: 'focus_input' });
   }
 
+  /**
+   * Prefill the chat input with text
+   */
+  public prefillInput(text: string): void {
+    this.postMessage({ type: 'prefill_input', text });
+  }
+
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     // Store webview reference
     this.webviewView = webviewView;
@@ -182,6 +189,17 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           }
           break;
         
+        case "apply_diff":
+          this.outputChannel.appendLine(`[DolphinViewProvider] Processing apply_diff for ${message.diff?.filePath}`);
+          if (message.diff) {
+            try {
+              await vscode.commands.executeCommand('dolphin.applyDiff', message.diff);
+            } catch (error: any) {
+              this.outputChannel.appendLine(`[DolphinViewProvider] Error applying diff: ${error.message}`);
+            }
+          }
+          break;
+
         default:
           this.outputChannel.appendLine(`[DolphinViewProvider] Unknown message type: ${message.type}`);
       }

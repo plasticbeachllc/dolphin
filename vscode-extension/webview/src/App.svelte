@@ -163,6 +163,12 @@
           showLogo = true;
           hasUserSentMessage = false;
           break;
+
+        case 'prefill_input':
+          // Prefill the chat input with text
+          console.log('[App] Received prefill_input event with text:', event.text);
+          chatInputRef?.prefill(event.text);
+          break;
       }
     });
     
