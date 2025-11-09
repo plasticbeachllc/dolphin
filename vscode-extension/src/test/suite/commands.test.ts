@@ -101,6 +101,12 @@ describe('Command Tests', () => {
         continue;
       }
 
+      // Skip setApiKey command that requires user input
+      if (cmd === 'dolphin.setApiKey') {
+        console.log(`  Skipping ${cmd} (requires user input)`);
+        continue;
+      }
+
       try {
         await vscode.commands.executeCommand(cmd);
         console.log(`✓ Command ${cmd} executed successfully`);
