@@ -46,8 +46,46 @@
             {
                 "command": "dolphin.test",
                 "title": "Dolphin: Test"
+            },
+            {
+                "command": "dolphin.kb.showStatus",
+                "title": "Dolphin: Show KB Status"
+            },
+            {
+                "command": "dolphin.kb.restart",
+                "title": "Dolphin: Restart Knowledge Base"
             }
         ],
+        "configuration": {
+            "title": "Dolphin Knowledge Base",
+            "properties": {
+                "dolphin.kb.debounceMs": {
+                    "type": "number",
+                    "default": 2000,
+                    "description": "Milliseconds to wait after file change before indexing"
+                },
+                "dolphin.kb.batchIntervalMs": {
+                    "type": "number",
+                    "default": 5000,
+                    "description": "Milliseconds between batch processing intervals"
+                },
+                "dolphin.kb.excludePatterns": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                        "**/node_modules/**",
+                        "**/dist/**",
+                        "**/build/**",
+                        "**/.git/**",
+                        "**/out/**",
+                        "**/*.min.js"
+                    ],
+                    "description": "Patterns to exclude from automatic indexing"
+                }
+            }
+        },
         "keybindings": [
             {
                 "command": "dolphin.focusInput",
