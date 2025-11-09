@@ -2,7 +2,7 @@
 
 Complete guide for using the Dolphin AI enablement platform for semantic code search and retrieval.
 
-**Version**: 0.1.7
+**Version**: 0.1.13
 **Status**: Production Ready
 **PyPI**: `pip install pb-dolphin`
 
