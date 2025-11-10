@@ -8,6 +8,8 @@
   import SettingsPage from './routes/settings/+page.svelte';
   import ProfilePage from './routes/profile/+page.svelte';
   import ConversationsGallery from './routes/gallery/conversations/+page.svelte';
+  import KBPage from './routes/kb/+page.svelte';
+  import { kbActions } from '$lib/stores/kb-store';
   
   // Message type matching MessageList expectations
   interface Message {
@@ -104,9 +106,17 @@
           agentReady = true;
           agentVersion = event.version;
           const eventHasWorkspace = (event as any).hasWorkspace;
+          const workspaceName = (event as any).workspaceName;
           console.log('[App] Received hasWorkspace value:', eventHasWorkspace);
+          console.log('[App] Received workspaceName:', workspaceName);
           hasWorkspace = eventHasWorkspace ?? true; // Default to true to be safe
           console.log('[App] Final workspace status:', hasWorkspace ? 'Open' : 'None');
+          
+          // Initialize KB store with workspace name if available
+          if (workspaceName) {
+            kbActions.initialize(workspaceName, {});
+          }
+          
           if (startupTimer !== null) {
             clearInterval(startupTimer);
             startupTimer = null;
@@ -226,14 +236,23 @@
         case 'workspace_changed':
           // Handle workspace changes (open/close folder)
           const newWorkspaceStatus = (event as any).hasWorkspace;
+          const newWorkspaceName = (event as any).workspaceName;
           console.log('[App] Workspace changed event:', event);
           console.log('[App] New workspace status:', newWorkspaceStatus ? 'Open' : 'Closed');
+          console.log('[App] New workspace name:', newWorkspaceName);
           console.log('[App] Current workspace status before change:', hasWorkspace ? 'Open' : 'Closed');
           
           // Only update if the status actually changed
           if (newWorkspaceStatus !== undefined && newWorkspaceStatus !== hasWorkspace) {
             hasWorkspace = newWorkspaceStatus;
             console.log('[App] Workspace status updated to:', hasWorkspace ? 'Open' : 'Closed');
+            
+            // Update KB store with new workspace name
+            if (newWorkspaceName) {
+              kbActions.initialize(newWorkspaceName, {});
+            } else {
+              kbActions.reset();
+            }
             
             // If workspace was closed and user is on gallery, navigate to home
             if (!hasWorkspace && currentView === '/gallery/conversations') {
@@ -356,6 +375,8 @@
     <ProfilePage />
   {:else if currentView === '/gallery/conversations'}
     <ConversationsGallery onNavigate={handleNavigate} />
+  {:else if currentView === '/kb'}
+    <KBPage />
   {:else if currentView === '/functions/architect'}
     <div class="placeholder-view">
       <h2>Architect Mode</h2>

@@ -1,5 +1,4 @@
 // vscode-extension/webview/src/lib/api/kb-api.ts
-import { vscode } from './vscode';
 
 export interface RepoStats {
   name: string;

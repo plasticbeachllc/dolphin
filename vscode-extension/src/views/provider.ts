@@ -36,7 +36,8 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
    */
   private handleWorkspaceChange(): void {
     if (this.webviewView) {
-      const hasWorkspace = !!vscode.workspace.workspaceFolders?.[0];
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+      const hasWorkspace = !!workspaceFolder;
       this.outputChannel.appendLine(`[DolphinViewProvider] Workspace changed, hasWorkspace: ${hasWorkspace}`);
       
       const capabilities = ['kb_search', 'file_operations', 'planning', 'claude_auth', 'agentic_tools'];
@@ -44,11 +45,15 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
         capabilities.push('conversation_persistence');
       }
       
+      // Get workspace folder name for KB operations
+      const workspaceName = workspaceFolder ? path.basename(workspaceFolder.uri.fsPath) : null;
+      
       // Send updated workspace status to webview
       this.webviewView.webview.postMessage({
         type: 'workspace_changed',
         hasWorkspace,
-        capabilities
+        capabilities,
+        workspaceName
       });
     }
   }
@@ -139,17 +144,22 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           // Webview JavaScript has loaded and is ready to receive messages
           this.outputChannel.appendLine(`[DolphinViewProvider] ✅ Webview confirmed loaded, sending agent_ready event`);
           if (this.agentBridge) {
-            const hasWorkspace = !!vscode.workspace.workspaceFolders?.[0];
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            const hasWorkspace = !!workspaceFolder;
             const capabilities = ['kb_search', 'file_operations', 'planning', 'claude_auth', 'agentic_tools'];
             if (hasWorkspace) {
               capabilities.push('conversation_persistence');
             }
             
+            // Get workspace folder name for KB operations
+            const workspaceName = workspaceFolder ? path.basename(workspaceFolder.uri.fsPath) : null;
+            
             webviewView.webview.postMessage({
               type: 'agent_ready',
               version: '0.1.0',
               capabilities,
-              hasWorkspace
+              hasWorkspace,
+              workspaceName
             });
           }
           break;
@@ -381,8 +391,8 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
         `<style nonce="${nonce}"`
       );
 
-      // Add CSP meta tag with nonce
-      const cspTag = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${nonce}'; script-src ${webview.cspSource} 'nonce-${nonce}'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource}; connect-src ${webview.cspSource};">`;
+      // Add CSP meta tag with nonce - allow connections to localhost KB API
+      const cspTag = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${nonce}'; script-src ${webview.cspSource} 'nonce-${nonce}'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource}; connect-src ${webview.cspSource} http://127.0.0.1:7777;">`;
       htmlContent = htmlContent.replace(
         /<meta charset="UTF-8" \/>/,
         `<meta charset="UTF-8" />\n\t${cspTag}`

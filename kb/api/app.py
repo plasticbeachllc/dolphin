@@ -6,11 +6,21 @@ from time import perf_counter
 from typing import Awaitable, Iterable, Protocol, Sequence
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .task_queue import TaskStatus, get_task_queue
 
 app = FastAPI(title="Unified Knowledge Store", version="0.1.0")
+
+# Add CORS middleware to allow requests from VSCode webviews
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins (webview origins are dynamic)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Will be set by server startup
 _sql_store = None
