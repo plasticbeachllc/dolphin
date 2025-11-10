@@ -31,6 +31,14 @@ export const PlanSchema = z.object({
   steps: z.array(PlanStepSchema),
 });
 
+// Token Usage Schema for per-message tracking
+export const TokenUsageSchema = z.object({
+  input: z.number().default(0),
+  output: z.number().default(0),
+  cacheRead: z.number().optional(),
+  cacheWrite: z.number().optional(),
+});
+
 // Conversation Message Schema
 export const ConversationMessageSchema = z.object({
   id: z.string(),
@@ -38,6 +46,7 @@ export const ConversationMessageSchema = z.object({
   content: z.string(),
   timestamp: z.string(),
   pinned: z.boolean().optional(),
+  tokens: TokenUsageSchema.optional(),
 });
 
 // Conversation Metadata Schema (Phase 5)
@@ -93,3 +102,4 @@ export type PlanStep = z.infer<typeof PlanStepSchema>;
 export type Conversation = z.infer<typeof ConversationSchema>;
 export type ConversationMessage = z.infer<typeof ConversationMessageSchema>;
 export type ConversationMetadata = z.infer<typeof ConversationMetadataSchema>;
+export type TokenUsage = z.infer<typeof TokenUsageSchema>;
