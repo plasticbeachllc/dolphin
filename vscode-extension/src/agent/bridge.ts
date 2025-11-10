@@ -1,7 +1,7 @@
 // vscode-extension/src/agent/bridge.ts
 import { ChildProcess, spawn } from "child_process";
 import * as vscode from "vscode";
-import type { AgentEvent, ExtensionRequest } from "../types/events";
+import type { AgentEvent, ExtensionRequest, ConversationListItem, LoadConversationResult } from "../types/events";
 import {
   StreamMessageReader,
   StreamMessageWriter,
@@ -46,8 +46,8 @@ export class AgentBridge {
 
   public readonly onEvent = this.eventEmitter.event;
 
-  constructor() {
-    this.outputChannel = vscode.window.createOutputChannel("Dolphin Agent");
+  constructor(outputChannel: vscode.OutputChannel) {
+    this.outputChannel = outputChannel;
   }
 
   async start(agentCorePath: string, extensionPath: string, apiKey?: string): Promise<void> {
@@ -97,7 +97,7 @@ export class AgentBridge {
       });
 
       // Set up error handler
-      this.connection.onError((error) => {
+      this.connection.onError((error: any) => {
         this.outputChannel.appendLine(`[AgentBridge] Connection error: ${error[0]}`);
       });
 
@@ -260,7 +260,7 @@ export class AgentBridge {
 
       // Send via connection (vscode-jsonrpc handles backpressure internally)
       this.connection!.sendRequest(method, params)
-        .then((result) => {
+        .then((result: any) => {
           const pending = this.pendingRequests.get(id);
           if (pending) {
             if (pending.timeout) {
@@ -270,7 +270,7 @@ export class AgentBridge {
             resolve(result);
           }
         })
-        .catch((error) => {
+        .catch((error: any) => {
           const pending = this.pendingRequests.get(id);
           if (pending) {
             if (pending.timeout) {
@@ -315,6 +315,25 @@ export class AgentBridge {
     await this.sendNotification("clear_conversation");
   }
 
+  // Phase 5: Conversation Management Methods
+
+  async listConversations(): Promise<ConversationListItem[]> {
+    const result = await this.sendRequest("list_conversations", undefined, 5000);
+    return result.conversations || [];
+  }
+
+  async loadConversation(conversationId: string): Promise<LoadConversationResult> {
+    return await this.sendRequest("load_conversation", { conversationId }, 5000);
+  }
+
+  async deleteConversation(conversationId: string): Promise<void> {
+    await this.sendRequest("delete_conversation", { conversationId }, 5000);
+  }
+
+  async renameConversation(conversationId: string, newTitle: string): Promise<void> {
+    await this.sendRequest("rename_conversation", { conversationId, newTitle }, 5000);
+  }
+
   private async waitForReady(timeout = 60000): Promise<void> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -332,8 +351,14 @@ export class AgentBridge {
   }
 
   shutdown(): void {
-    this.outputChannel.appendLine("[AgentBridge] Shutting down...");
     this.isShuttingDown = true;
+    
+    // Try to log shutdown, but don't fail if channel is disposed
+    try {
+      this.outputChannel.appendLine("[AgentBridge] Shutting down...");
+    } catch (e) {
+      // Output channel may already be disposed in tests
+    }
 
     // Dispose connection first
     if (this.connection) {

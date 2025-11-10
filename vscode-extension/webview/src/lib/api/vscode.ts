@@ -53,6 +53,48 @@ export function abortGeneration() {
 	});
 }
 
+// Phase 5: Conversation Management
+
+// List all conversations
+export function listConversations() {
+	const api = getVSCodeAPI();
+	api.postMessage({
+		type: 'list_conversations',
+		timestamp: Date.now()
+	});
+}
+
+// Load a conversation (creates a branch)
+export function loadConversation(conversationId: string) {
+	const api = getVSCodeAPI();
+	api.postMessage({
+		type: 'load_conversation',
+		conversationId,
+		timestamp: Date.now()
+	});
+}
+
+// Delete a conversation
+export function deleteConversation(conversationId: string) {
+	const api = getVSCodeAPI();
+	api.postMessage({
+		type: 'delete_conversation',
+		conversationId,
+		timestamp: Date.now()
+	});
+}
+
+// Rename a conversation
+export function renameConversation(conversationId: string, newTitle: string) {
+	const api = getVSCodeAPI();
+	api.postMessage({
+		type: 'rename_conversation',
+		conversationId,
+		newTitle,
+		timestamp: Date.now()
+	});
+}
+
 // Save webview state
 export function saveState(state: any) {
 	const api = getVSCodeAPI();

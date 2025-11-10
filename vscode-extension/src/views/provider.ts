@@ -6,6 +6,7 @@ import { AgentBridge } from "../agent/bridge";
 
 export class DolphinViewProvider implements vscode.WebviewViewProvider {
   private webviewView?: vscode.WebviewView;
+  private workspaceChangeDisposable?: vscode.Disposable;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -25,6 +26,28 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
         } else {
           this.outputChannel.appendLine(`[DolphinViewProvider] Webview not ready yet, event will be queued (requestId: ${requestId})`);
         }
+      });
+    }
+  }
+  
+  /**
+   * Handle workspace folder changes
+   */
+  private handleWorkspaceChange(): void {
+    if (this.webviewView) {
+      const hasWorkspace = !!vscode.workspace.workspaceFolders?.[0];
+      this.outputChannel.appendLine(`[DolphinViewProvider] Workspace changed, hasWorkspace: ${hasWorkspace}`);
+      
+      const capabilities = ['kb_search', 'file_operations', 'planning', 'claude_auth', 'agentic_tools'];
+      if (hasWorkspace) {
+        capabilities.push('conversation_persistence');
+      }
+      
+      // Send updated workspace status to webview
+      this.webviewView.webview.postMessage({
+        type: 'workspace_changed',
+        hasWorkspace,
+        capabilities
       });
     }
   }
@@ -65,6 +88,11 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
     // Store webview reference
     this.webviewView = webviewView;
     this.outputChannel.appendLine("[DolphinViewProvider] resolveWebviewView called!");
+    
+    // Set up workspace change listener now that webview exists
+    this.workspaceChangeDisposable = vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      this.handleWorkspaceChange();
+    });
     
     try {
       webviewView.webview.options = {
@@ -110,10 +138,17 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           // Webview JavaScript has loaded and is ready to receive messages
           this.outputChannel.appendLine(`[DolphinViewProvider] ✅ Webview confirmed loaded, sending agent_ready event`);
           if (this.agentBridge) {
+            const hasWorkspace = !!vscode.workspace.workspaceFolders?.[0];
+            const capabilities = ['kb_search', 'file_operations', 'planning', 'claude_auth', 'agentic_tools'];
+            if (hasWorkspace) {
+              capabilities.push('conversation_persistence');
+            }
+            
             webviewView.webview.postMessage({
               type: 'agent_ready',
               version: '0.1.0',
-              capabilities: ['kb_search', 'file_operations', 'planning', 'claude_auth', 'agentic_tools']
+              capabilities,
+              hasWorkspace
             });
           }
           break;
@@ -197,6 +232,85 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               await vscode.commands.executeCommand('dolphin.applyDiff', message.diff);
             } catch (error: any) {
               this.outputChannel.appendLine(`[DolphinViewProvider] Error applying diff: ${error.message}`);
+            }
+          }
+          break;
+        
+        // Phase 5: Conversation Management
+        case "list_conversations":
+          this.outputChannel.appendLine(`[DolphinViewProvider] Processing list_conversations`);
+          if (this.agentBridge) {
+            try {
+              const conversations = await this.agentBridge.listConversations();
+              webviewView.webview.postMessage({
+                type: 'conversations_listed',
+                conversations: conversations
+              });
+            } catch (error: any) {
+              this.outputChannel.appendLine(`[DolphinViewProvider] Error listing conversations: ${error.message}`);
+              webviewView.webview.postMessage({
+                type: 'error',
+                error: { message: `Failed to list conversations: ${error.message}` }
+              });
+            }
+          }
+          break;
+
+        case "load_conversation":
+          this.outputChannel.appendLine(`[DolphinViewProvider] Processing load_conversation: ${message.conversationId}`);
+          if (this.agentBridge) {
+            try {
+              const result = await this.agentBridge.loadConversation(message.conversationId);
+              webviewView.webview.postMessage({
+                type: 'conversation_loaded',
+                conversation: result.conversation,
+                branchInfo: result.branchInfo
+              });
+            } catch (error: any) {
+              this.outputChannel.appendLine(`[DolphinViewProvider] Error loading conversation: ${error.message}`);
+              webviewView.webview.postMessage({
+                type: 'error',
+                error: { message: `Failed to load conversation: ${error.message}` }
+              });
+            }
+          }
+          break;
+
+        case "delete_conversation":
+          this.outputChannel.appendLine(`[DolphinViewProvider] Processing delete_conversation: ${message.conversationId}`);
+          if (this.agentBridge) {
+            try {
+              await this.agentBridge.deleteConversation(message.conversationId);
+              webviewView.webview.postMessage({
+                type: 'conversation_deleted',
+                conversationId: message.conversationId
+              });
+            } catch (error: any) {
+              this.outputChannel.appendLine(`[DolphinViewProvider] Error deleting conversation: ${error.message}`);
+              webviewView.webview.postMessage({
+                type: 'error',
+                error: { message: `Failed to delete conversation: ${error.message}` }
+              });
+            }
+          }
+          break;
+
+        case "rename_conversation":
+          this.outputChannel.appendLine(`[DolphinViewProvider] Processing rename_conversation: ${message.conversationId} -> ${message.newTitle}`);
+          if (this.agentBridge) {
+            try {
+              await this.agentBridge.renameConversation(message.conversationId, message.newTitle);
+              webviewView.webview.postMessage({
+                type: 'conversation_renamed',
+                conversationId: message.conversationId,
+                newTitle: message.newTitle
+              });
+            } catch (error: any) {
+              this.outputChannel.appendLine(`[DolphinViewProvider] Error renaming conversation: ${error.message}`);
+              webviewView.webview.postMessage({
+                type: 'error',
+                error: { message: `Failed to rename conversation: ${error.message}` }
+              });
             }
           }
           break;

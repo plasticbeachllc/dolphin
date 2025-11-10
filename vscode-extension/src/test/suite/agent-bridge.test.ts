@@ -1,13 +1,20 @@
 import * as assert from 'assert';
+import * as vscode from 'vscode';
 import { AgentBridge } from '../../agent/bridge';
 import { ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 
 describe('AgentBridge Unit Tests', () => {
   let agentBridge: AgentBridge;
+  let outputChannel: vscode.OutputChannel;
 
   beforeEach(() => {
-    agentBridge = new AgentBridge();
+    outputChannel = vscode.window.createOutputChannel('Test Agent Bridge');
+    agentBridge = new AgentBridge(outputChannel);
+  });
+
+  afterEach(() => {
+    outputChannel.dispose();
   });
 
   afterEach(() => {
@@ -233,7 +240,9 @@ describe('AgentBridge Unit Tests', () => {
       }
     });
 
-    it('Should stop auto-restart after max attempts', async () => {
+    it('Should stop auto-restart after max attempts', async function() {
+      this.timeout(2000); // Give enough time for async operations
+      
       (agentBridge as any).restartAttempts = 3; // Max attempts
       (agentBridge as any).maxRestartAttempts = 3;
       (agentBridge as any).isShuttingDown = false;
@@ -242,19 +251,23 @@ describe('AgentBridge Unit Tests', () => {
       let errorMessage = '';
 
       // Mock vscode.window.showErrorMessage
-      if (!(global as any).vscode) {
-        (global as any).vscode = { window: {} };
-      }
-      (global as any).vscode.window.showErrorMessage = (msg: string) => {
+      const originalShowError = vscode.window.showErrorMessage;
+      (vscode.window as any).showErrorMessage = (msg: string) => {
         errorShown = true;
         errorMessage = msg;
         return Promise.resolve('Cancel');
       };
 
       await (agentBridge as any).handleCrash('/fake/path', '/fake/ext', undefined);
+      
+      // Wait a tick for the promise to resolve
+      await new Promise(resolve => setImmediate(resolve));
 
       assert.ok(errorShown, 'Should show error message');
       assert.ok(errorMessage.includes('crashed 3 times'), 'Error should mention max attempts');
+      
+      // Restore
+      (vscode.window as any).showErrorMessage = originalShowError;
     });
   });
 
@@ -296,8 +309,23 @@ describe('AgentBridge Unit Tests', () => {
 
     it('Should check platform-specific paths', async () => {
       const originalPlatform = process.platform;
+      const { exec } = require('child_process');
+      const { promisify } = require('util');
+      const originalExec = exec;
       const fs = require('fs');
       const originalExistsSync = fs.existsSync;
+
+      // Mock exec to fail (simulating bun not in PATH)
+      const mockExec = (cmd: string, options: any, callback: any) => {
+        if (typeof options === 'function') {
+          callback = options;
+          options = {};
+        }
+        callback(new Error('Command not found'), '', '');
+      };
+      
+      // Replace exec in child_process module
+      require('child_process').exec = mockExec;
 
       // Mock existsSync to return false for all paths
       fs.existsSync = () => false;
@@ -308,6 +336,7 @@ describe('AgentBridge Unit Tests', () => {
       assert.strictEqual(result, null, 'Should return null when bun not found');
 
       // Restore
+      require('child_process').exec = originalExec;
       fs.existsSync = originalExistsSync;
       Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
     });

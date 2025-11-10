@@ -40,6 +40,28 @@ export const ConversationMessageSchema = z.object({
   pinned: z.boolean().optional(),
 });
 
+// Conversation Metadata Schema (Phase 5)
+export const ConversationMetadataSchema = z.object({
+  // Core metadata
+  title: z.string().default("Untitled Conversation"),
+  
+  // File tracking
+  files: z.array(z.string()).default([]),
+  
+  // Token tracking
+  token_count: z.number().default(0),
+  
+  // UI state
+  pinned: z.boolean().default(false),
+  
+  // Parent conversation (for branching)
+  parent_conversation_id: z.string().optional(),
+  branch_point_message_id: z.string().optional(),
+  
+  // Last active timestamp
+  last_active_at: z.string().optional(),
+});
+
 // Conversation Schema
 export const ConversationSchema = z.object({
   schema_version: z.string().default("1.0"),
@@ -49,6 +71,10 @@ export const ConversationSchema = z.object({
     updated_at: z.string(),
     workspace_root: z.string(),
   }),
+  
+  // NEW: Metadata section (Phase 5)
+  metadata: ConversationMetadataSchema.optional().default({}),
+  
   messages: z.array(ConversationMessageSchema),
   summaries: z
     .array(
@@ -66,3 +92,4 @@ export type Plan = z.infer<typeof PlanSchema>;
 export type PlanStep = z.infer<typeof PlanStepSchema>;
 export type Conversation = z.infer<typeof ConversationSchema>;
 export type ConversationMessage = z.infer<typeof ConversationMessageSchema>;
+export type ConversationMetadata = z.infer<typeof ConversationMetadataSchema>;

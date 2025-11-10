@@ -2,9 +2,10 @@
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import { MessageCard } from "$lib/components/chat";
   import { ToolCallCard } from "$lib/components/tools";
+  import { Loader2 } from "lucide-svelte";
   
   interface Message {
-    type?: "tool_call";
+    type?: "tool_call" | "thinking";
     role?: "user" | "assistant";
     content?: string;
     timestamp?: string;
@@ -48,6 +49,12 @@
           executionTime={message.executionTime}
           diff={message.diff}
         />
+      {:else if message.type === "thinking"}
+        <!-- Thinking indicator -->
+        <div class="flex items-center gap-3 text-muted-foreground py-2 px-3">
+          <Loader2 class="h-4 w-4 animate-spin" />
+          <span class="text-sm">Thinking...</span>
+        </div>
       {:else}
         <MessageCard
           role={message.role!}

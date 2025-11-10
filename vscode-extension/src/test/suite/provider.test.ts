@@ -10,7 +10,7 @@ describe('DolphinViewProvider Unit Tests', () => {
 
   beforeEach(() => {
     outputChannel = vscode.window.createOutputChannel('Test');
-    mockAgentBridge = new AgentBridge();
+    mockAgentBridge = new AgentBridge(outputChannel);
     const extensionUri = vscode.Uri.file('/test/path');
     provider = new DolphinViewProvider(extensionUri, outputChannel, mockAgentBridge);
   });
