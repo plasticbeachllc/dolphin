@@ -716,10 +716,19 @@ class AgentCore {
     // Update metadata with ACCUMULATED token count
     const currentTotal = conversation.metadata?.token_count || 0;
     const newTokens = usage ? usage.inputTokens + usage.outputTokens : 0;
-    await this.conversationStore.updateMetadata(this.currentConversationId, {
-      last_active_at: new Date().toISOString(),
+    const lastActiveAt = new Date().toISOString();
+    const updatedMetadata = {
+      ...(conversation.metadata ?? {}),
+      last_active_at: lastActiveAt,
       token_count: currentTotal + newTokens,
-    });
+    };
+
+    await this.conversationStore.updateMetadata(
+      this.currentConversationId,
+      updatedMetadata,
+    );
+
+    conversation.metadata = updatedMetadata;
 
     await this.conversationStore.saveConversation(conversation);
     console.error(`[Agent Core] Saved conversation: ${this.currentConversationId} (${conversation.messages.length} messages, ${currentTotal + newTokens} total tokens)`);
