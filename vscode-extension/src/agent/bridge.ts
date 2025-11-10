@@ -24,12 +24,15 @@ interface Message {
   };
 }
 
-interface WriteQueueItem {
-  data: string;
-  resolve: () => void;
-  reject: (error: Error) => void;
-}
-
+/**
+ * AgentBridge manages communication with the Agent Core process via JSON-RPC.
+ *
+ * Phase 7 IPC Robustness Features:
+ * - Uses vscode-jsonrpc for reliable message framing and backpressure handling
+ * - Automatically recovers from crashes with exponential backoff (1s, 3s, 10s)
+ * - Includes correlation IDs (requestId) in all notifications for event tracking
+ * - Handles message chunking/boundary issues via StreamMessageReader
+ */
 export class AgentBridge {
   private process: ChildProcess | null = null;
   private messageId = 0;
@@ -37,8 +40,6 @@ export class AgentBridge {
   private outputChannel: vscode.OutputChannel;
   private pendingRequests: Map<number, { resolve: (value: any) => void; reject: (error: any) => void; timeout?: NodeJS.Timeout }> = new Map();
   private connection: MessageConnection | null = null;
-  private writeQueue: WriteQueueItem[] = [];
-  private isWriting = false;
   private restartAttempts = 0;
   private maxRestartAttempts = 3;
   private restartBackoffs = [1000, 3000, 10000]; // 1s, 3s, 10s
