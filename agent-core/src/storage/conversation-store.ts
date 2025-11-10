@@ -217,4 +217,61 @@ export class ConversationStore {
 
     return conversation;
   }
+
+  /**
+   * Recalculates token counts from message-level token data
+   * Useful for validating metadata or migrating existing conversations
+   *
+   * @param conversationId - The conversation to recalculate
+   * @param updateMetadata - If true, updates the metadata.token_count with the recalculated value
+   * @returns Object with total tokens and breakdown by type
+   */
+  async recalculateTokens(
+    conversationId: string,
+    updateMetadata: boolean = false
+  ): Promise<{
+    total: number;
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+  }> {
+    const conversation = await this.loadConversation(conversationId);
+    if (!conversation) {
+      throw new Error(`Conversation not found: ${conversationId}`);
+    }
+
+    let totalInput = 0;
+    let totalOutput = 0;
+    let totalCacheRead = 0;
+    let totalCacheWrite = 0;
+
+    // Sum up tokens from all messages that have token data
+    for (const message of conversation.messages) {
+      if (message.tokens) {
+        totalInput += message.tokens.input || 0;
+        totalOutput += message.tokens.output || 0;
+        totalCacheRead += message.tokens.cacheRead || 0;
+        totalCacheWrite += message.tokens.cacheWrite || 0;
+      }
+    }
+
+    const total = totalInput + totalOutput;
+
+    // Optionally update metadata if out of sync
+    if (updateMetadata && conversation.metadata?.token_count !== total) {
+      console.error(
+        `[ConversationStore] Recalculated tokens for ${conversationId}: ${conversation.metadata?.token_count || 0} -> ${total}`
+      );
+      await this.updateMetadata(conversationId, { token_count: total });
+    }
+
+    return {
+      total,
+      input: totalInput,
+      output: totalOutput,
+      cacheRead: totalCacheRead,
+      cacheWrite: totalCacheWrite,
+    };
+  }
 }

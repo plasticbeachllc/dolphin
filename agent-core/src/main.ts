@@ -654,53 +654,75 @@ class AgentCore {
     console.error(`[Agent Core] Created new conversation: ${conversationId} - "${title}"`);
   }
   
-  private async saveCurrentConversation(usage?: { inputTokens: number; outputTokens: number }): Promise<void> {
+  private async saveCurrentConversation(usage?: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number }): Promise<void> {
     if (!this.currentConversationId) {
       console.error("[Agent Core] No active conversation to save");
       return;
     }
-    
+
     const conversation = await this.conversationStore.loadConversation(this.currentConversationId);
     if (!conversation) {
       console.error(`[Agent Core] Failed to load conversation: ${this.currentConversationId}`);
       return;
     }
-    
-    // Convert Message[] to ConversationMessage[]
-    const conversationMessages: ConversationMessage[] = this.conversationHistory.map((msg, index) => {
-      let content = "";
-      if (typeof msg.content === "string") {
-        content = msg.content;
-      } else if (Array.isArray(msg.content)) {
-        // Extract text from content blocks
-        content = msg.content
-          .filter((block: any) => block.type === "text")
-          .map((block: any) => block.text)
-          .join("\n");
-      }
-      
-      return {
-        id: `msg_${Date.now()}_${index}`,
-        role: msg.role,
-        content,
-        timestamp: new Date().toISOString(),
-        pinned: false,
-      };
-    });
-    
-    // Update conversation
-    conversation.messages = conversationMessages;
+
+    const existingMessageCount = conversation.messages.length;
+    const currentMessageCount = this.conversationHistory.length;
+
+    // Only process new messages (those not already saved)
+    if (currentMessageCount > existingMessageCount) {
+      const newMessages = this.conversationHistory.slice(existingMessageCount);
+
+      // Convert new Message[] to ConversationMessage[]
+      const newConversationMessages: ConversationMessage[] = newMessages.map((msg, index) => {
+        let content = "";
+        if (typeof msg.content === "string") {
+          content = msg.content;
+        } else if (Array.isArray(msg.content)) {
+          // Extract text from content blocks
+          content = msg.content
+            .filter((block: any) => block.type === "text")
+            .map((block: any) => block.text)
+            .join("\n");
+        }
+
+        const conversationMessage: ConversationMessage = {
+          id: `msg_${Date.now()}_${existingMessageCount + index}`,
+          role: msg.role,
+          content,
+          timestamp: new Date().toISOString(),
+          pinned: false,
+        };
+
+        // Attach tokens to the last message (assistant's response) if usage data is provided
+        if (usage && index === newMessages.length - 1 && msg.role === "assistant") {
+          conversationMessage.tokens = {
+            input: usage.inputTokens,
+            output: usage.outputTokens,
+            cacheRead: usage.cacheReadTokens,
+            cacheWrite: usage.cacheWriteTokens,
+          };
+        }
+
+        return conversationMessage;
+      });
+
+      // Append new messages to existing ones
+      conversation.messages.push(...newConversationMessages);
+    }
+
     conversation.conversation.updated_at = new Date().toISOString();
-    
-    // Update metadata
-    const totalTokens = usage ? usage.inputTokens + usage.outputTokens : conversation.metadata?.token_count || 0;
+
+    // Update metadata with ACCUMULATED token count
+    const currentTotal = conversation.metadata?.token_count || 0;
+    const newTokens = usage ? usage.inputTokens + usage.outputTokens : 0;
     await this.conversationStore.updateMetadata(this.currentConversationId, {
       last_active_at: new Date().toISOString(),
-      token_count: totalTokens,
+      token_count: currentTotal + newTokens,
     });
-    
+
     await this.conversationStore.saveConversation(conversation);
-    console.error(`[Agent Core] Saved conversation: ${this.currentConversationId} (${conversationMessages.length} messages)`);
+    console.error(`[Agent Core] Saved conversation: ${this.currentConversationId} (${conversation.messages.length} messages, ${currentTotal + newTokens} total tokens)`);
   }
   
   // RPC Handlers for Conversation Management
