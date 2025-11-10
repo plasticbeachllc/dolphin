@@ -2,9 +2,9 @@
 
 Technical architecture and implementation status for the Dolphin AI enablement platform.
 
-**Version**: 1.0.0
-**Status**: Production Ready
-**Last Updated**: 2025-11-09
+**Version**: 0.1.13
+**Status**: Beta (Production Ready for Core Components)
+**Last Updated**: 2025-11-10
 
 ---
 
@@ -24,16 +24,18 @@ Technical architecture and implementation status for the Dolphin AI enablement p
 
 ## Overview
 
-Dolphin is a full-stack AI enablement platform that combines semantic code retrieval with multiple AI interfaces. The system decomposes repositories into language-aware chunks, embeds them using OpenAI, stores them in LanceDB, and provides semantic search via REST API and MCP protocol.
+Dolphin is a full-stack AI enablement platform that combines semantic code retrieval with multiple AI interfaces. The system decomposes repositories into language-aware chunks, embeds them using OpenAI, stores them in LanceDB, and provides semantic search via REST API, MCP protocol, and VSCode extension. The platform includes an intelligent agent orchestrator (agent-core) that manages Claude AI interactions and coordinates knowledge base searches.
 
 ### Design Goals
 
 1. **Semantic Precision**: Retrieve relevant code for natural-language queries
 2. **Structural Awareness**: Preserve AST structure, symbols, and file anchors
 3. **Git Integration**: Incremental indexing based on git history
-4. **Multiple Interfaces**: Support CLI, REST API, MCP, and Continue IDE
+4. **Multiple Interfaces**: Support CLI, REST API, MCP, VSCode extension, and Continue IDE
 5. **Cost Control**: Deduplication and session spend caps
 6. **Local-First**: Run on MacBook Pro M4 (24GB RAM)
+7. **AI-Powered Assistance**: Intelligent agent orchestration with Claude integration
+8. **Rich UI Experience**: Beautiful SvelteKit-based webview with real-time streaming
 
 ---
 
@@ -42,32 +44,35 @@ Dolphin is a full-stack AI enablement platform that combines semantic code retri
 ### High-Level Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                     User Interfaces                       │
-├──────────────┬──────────────┬──────────────┬─────────────┤
-│ Claude Desktop│  CLI (kb)   │  REST API    │ TypeScript  │
-│   (MCP)      │  (bash)      │  (curl)      │  (bun)      │
-└──────┬───────┴──────┬───────┴──────┬───────┴──────┬──────┘
+┌───────────────────────────────────────────────────────────────┐
+│                      User Interfaces                          │
+├──────────────┬──────────────┬──────────────┬─────────────────┤
+│ VSCode Ext   │Claude Desktop│  CLI (kb)    │  Direct REST    │
+│ (Svelte UI)  │   (MCP)      │  (Python)    │  (curl/bun)     │
+└──────┬───────┴──────┬───────┴──────┬───────┴──────┬──────────┘
        │              │              │              │
-       │ MCP Protocol │              │              │
-       │ (stdio)      │              │ HTTP         │
+       │ JSON-RPC     │ MCP stdio    │              │ HTTP
        ▼              ▼              ▼              ▼
-┌──────────────────────────────────────────────────────────┐
-│              MCP Bridge (TypeScript/Bun)                  │
-│  • 6 MCP Tools                                            │
-│  • REST Client                                            │
-│  • Content Truncation (50KB)                              │
-│  • Type-safe interfaces                                   │
-└──────────────────────────┬───────────────────────────────┘
-                           │ HTTP
-                           ▼
-┌──────────────────────────────────────────────────────────┐
-│              REST API (Python/FastAPI)                    │
-│  • 5 Endpoints                                            │
-│  • Search Backend                                         │
-│  • Embedding Pipeline                                     │
-│  • Rank Fusion                                            │
-└──────────────────────────┬───────────────────────────────┘
+┌──────────────┐  ┌───────────────────────────────────────────┐
+│ Agent Core   │  │      MCP Bridge (TypeScript/Bun)          │
+│ (Bun/TS)     │  │  • 6 MCP Tools                            │
+│ • Claude API │  │  • REST Client                            │
+│ • KB Mgmt    │  │  • Content Truncation (50KB)              │
+│ • Task Plan  │  │  • Type-safe interfaces                   │
+│ • Storage    │  └──────────────────┬────────────────────────┘
+└──────┬───────┘                     │
+       │                             │ HTTP
+       │ HTTP                        │
+       └─────────────┬───────────────┘
+                     ▼
+┌──────────────────────────────────────────────────────────────┐
+│              REST API (Python/FastAPI)                        │
+│  • 5 Endpoints                                                │
+│  • Search Backend (Hybrid BM25 + Vector)                      │
+│  • Embedding Pipeline                                         │
+│  • Rank Fusion & MMR                                          │
+│  • Cross-Encoder Reranking (optional)                         │
+└──────────────────────────┬───────────────────────────────────┘
                            │
         ┌──────────────────┼──────────────────┐
         ▼                  ▼                  ▼
@@ -201,7 +206,88 @@ Check localhost:8000/health
 - `mcp-bridge/src/rest/client.ts` - REST API client
 - `mcp-bridge/kb-cli.ts` - CLI wrapper
 
-### 3. Knowledge Base Pipeline (Python)
+### 3. Agent Core (TypeScript/Bun)
+
+**Location**: `agent-core/`
+
+**Purpose**: Intelligent agent orchestrator that manages Claude AI interactions, coordinates knowledge base searches, and handles conversation persistence.
+
+**Key Features**:
+- Dual authentication support (Claude CLI subscription or API key)
+- JSON-RPC communication with VSCode extension
+- Automatic KB server lifecycle management (health checks, auto-start)
+- Conversation persistence in TOML format
+- Task planning and execution
+- Tool execution with MCP integration
+- Robust message framing with Content-Length headers
+- Write queue to prevent message interleaving
+
+**Components**:
+- `src/main.ts` - Entry point, JSON-RPC IPC handler
+- `src/llm/` - Claude API/CLI integration and tool execution
+- `src/planner/` - Task planning and orchestration
+- `src/kb/manager.ts` - KB lifecycle management (health checks, auto-start)
+- `src/storage/` - Conversation persistence (TOML format)
+- `src/mcp/` - MCP protocol client for tool calls
+
+**Technologies**:
+- **Bun** - Fast JavaScript runtime
+- **Anthropic SDK** - Claude API integration
+- **Zod** - Schema validation
+- **@iarna/toml** - TOML persistence for conversations
+- **diff** - Diff generation for code changes
+
+**Conversation Storage**:
+- Format: TOML with metadata and messages
+- Location: `.dolphin/conversations/`
+- Features: Branching, metadata tracking, full history
+
+### 4. VSCode Extension (TypeScript/Svelte)
+
+**Location**: `vscode-extension/`
+
+**Purpose**: Rich AI coding assistant integrated into VSCode with beautiful UI and seamless Claude integration.
+
+**Key Features**:
+- Real-time streaming Claude responses
+- SvelteKit-based webview with shadcn/ui components
+- Tool call visualization cards
+- Message persistence across sessions
+- Context menu commands (ask about selection/file/folder)
+- Refactoring suggestions
+- Knowledge Bank search integration
+- Beautiful, responsive UI with Tailwind CSS
+
+**Extension Architecture**:
+- `src/extension.ts` - Extension entry point and lifecycle
+- `src/agent/bridge.ts` - JSON-RPC communication with Agent Core
+- `src/views/` - Webview provider and panel management
+- `src/kb/` - Knowledge Base integration helpers
+
+**Webview Architecture** (SvelteKit):
+- **Routes**:
+  - `/` - Main chat interface with message history
+  - `/settings` - Authentication and configuration
+  - `/gallery` - Component testing gallery
+- **Components**: shadcn/ui based, Svelte stores for state management
+- **Styling**: Tailwind CSS with custom theme
+
+**Technologies**:
+- **VSCode API** - Extension framework
+- **SvelteKit** - Full-stack web framework
+- **Svelte** - Reactive components
+- **Tailwind CSS** - Utility-first styling
+- **shadcn/ui** - Beautiful component library
+- **vscode-jsonrpc** - JSON-RPC communication
+
+**Key Capabilities**:
+- Streaming responses with token-by-token display
+- Tool call visualization (Knowledge Bank searches, file operations)
+- Conversation branching and history
+- Code context awareness (selection, file, folder)
+- Inline code refactoring suggestions
+
+### 5. Knowledge Base Pipeline (Python)
 
 **Location**: `kb/`
 
@@ -254,13 +340,18 @@ Check localhost:8000/health
 - `kb prune` - Remove deleted files
 - Typer-based with rich output
 
-### 4. CLI Tools
+### 6. CLI Tools
 
-**kb-search** (`bin/kb-search`):
-- Bash wrapper for MCP tools
-- High-level commands (search, repos, chunk, lines, info, health)
-- curl-based commands (no Bun required)
-- Environment variable support (KB_TOP_K, KB_REPOS)
+**Unified Dolphin CLI** (`dolphin`):
+- Python-based CLI using Typer framework
+- High-level commands (init, add-repo, index, search, serve)
+- Knowledge base management (status, prune, list-files)
+- Configuration management
+- Environment variable support (OPENAI_API_KEY, KB_TOP_K, KB_REPOS)
+
+**Legacy kb CLI**:
+- Standalone `kb` command for backward compatibility
+- Direct access to knowledge base operations
 
 ---
 
@@ -459,16 +550,16 @@ Columns:
 
 ### ✅ Phase 1-6 Complete: Knowledge Base Pipeline
 
-- ✅ Full KB pipeline operational (147/147 tests passing)
+- ✅ Full KB pipeline operational (191+ tests passing)
 - ✅ OpenAI embedding integration with retry logic
 - ✅ SQLite + LanceDB storage layer
 - ✅ Git-aware incremental indexing
-- ✅ Language-specific chunking (Python, TypeScript, Markdown, fallback)
+- ✅ Language-specific chunking (Python, TypeScript, JavaScript, Markdown, SQL, Svelte, fallback)
 - ✅ Per-repository configuration system
 - ✅ Content-based deduplication
 - ✅ Idempotent ingestion (safe re-runs)
 
-### ✅ Phase 7 Complete: REST API
+### ✅ Phase 7 Complete: REST API & Advanced Search
 
 - ✅ All 5 endpoints implemented and tested
 - ✅ Automatic backend initialization
@@ -476,7 +567,9 @@ Columns:
 - ✅ Comprehensive error handling
 - ✅ Health checks (shallow + deep)
 - ✅ Repository listing with stats
-- ✅ Semantic search with filtering
+- ✅ Hybrid search (BM25 + Vector with RRF scoring)
+- ✅ Maximal Marginal Relevance (MMR) for diverse results
+- ✅ Cross-encoder reranking (optional)
 - ✅ Chunk and file retrieval
 
 ### ✅ Phase 5b Complete: MCP Bridge
@@ -488,24 +581,38 @@ Columns:
 - ✅ JSONL logging with rotation
 - ✅ Content truncation (50KB budget)
 - ✅ Error handling with remediation hints
+- ✅ Published to npm as `dolphin-mcp`
+
+### ✅ Phase 8 Complete: VSCode Extension & Agent Core
+
+- ✅ VSCode extension with SvelteKit webview
+- ✅ Agent Core with Claude integration
+- ✅ JSON-RPC IPC communication
+- ✅ Conversation persistence (TOML format)
+- ✅ Dual authentication (Claude CLI / API key)
+- ✅ Real-time streaming responses
+- ✅ Tool call visualization
+- ✅ KB lifecycle management (auto-start)
+- ✅ Conversation history panel
+- ✅ Context menu commands
 
 ### 🔜 Future Enhancements
 
-- 🔜 Hybrid search (BM25 + vector)
-- 🔜 Reranking models
 - 🔜 Watch mode for auto-indexing
 - 🔜 Query understanding and routing
 - 🔜 Cross-repo code intelligence
 - 🔜 Evaluation framework (P@5, R@10, MRR)
+- 🔜 Enhanced code graph capabilities
+- 🔜 Multi-modal code understanding
 
 ---
 
 ## Test Coverage
 
-### Python Tests: 191/191 Passing ✅
+### Python Tests: 191+ Passing ✅
 
 **Unit Tests**:
-- Chunkers (Python, TypeScript, Markdown, fallback): 45 tests
+- Chunkers (Python, TypeScript, Markdown, SQL, Svelte, fallback): 45+ tests
 - Embeddings (OpenAI provider, retry, stub): 15 tests
 - Storage (SQLite, LanceDB): 29 tests
 - Hashing and deduplication: 12 tests
@@ -518,8 +625,9 @@ Columns:
 - MCP endpoints: 12 tests
 - Rank fusion: 19 tests
 - Pipeline end-to-end: 12 tests
+- Hybrid search (BM25 + Vector): Multiple tests
 
-### TypeScript Tests: 52/52 Passing ✅
+### TypeScript Tests: 52+ Passing ✅
 
 **MCP Bridge Tests**:
 - Tool implementations: 36 tests
@@ -527,7 +635,16 @@ Columns:
 - Logging and concurrency: 4 tests
 - Security and connectivity: 4 tests
 
-### Total: 243/243 Tests Passing ✅
+**Agent Core Tests**:
+- Conversation persistence: Multiple tests
+- IPC communication: Multiple tests
+- KB lifecycle management: Multiple tests
+
+**VSCode Extension Tests**:
+- E2E tests: Multiple scenarios
+- Webview integration: Multiple tests
+
+### Total: 243+ Tests Passing ✅
 
 **Test Commands**:
 ```bash
@@ -707,7 +824,7 @@ cd mcp-bridge && bun run test-integration.ts
 
 ---
 
-**Status**: ✅ Production Ready
-**Test Coverage**: 243/243 tests passing
-**Version**: 1.0.0
-**Date**: 2025-11-09
+**Status**: ✅ Beta (Production Ready for Core Components)
+**Test Coverage**: 243+ tests passing
+**Version**: 0.1.13
+**Date**: 2025-11-10
