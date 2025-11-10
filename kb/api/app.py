@@ -402,6 +402,32 @@ class IndexStatusResponse(BaseModel):
     result: dict | None = None
 
 
+class RepoStatsResponse(BaseModel):
+    """Repository statistics for cost estimation and UI display."""
+    name: str
+    path: str
+    files_count: int
+    chunks_count: int
+    total_tokens: int
+    embed_model: str
+    last_indexed: str | None = None
+    needs_reindex: bool = False
+
+
+class ReindexRequest(BaseModel):
+    """Request to trigger a full or incremental reindex."""
+    mode: str = "incremental"  # "full" or "incremental"
+    confirmed: bool = False
+    clear_existing: bool = False
+
+
+class ReindexResponse(BaseModel):
+    """Response from reindex trigger."""
+    task_id: str
+    mode: str
+    message: str
+
+
 @app.post("/v1/repos")
 async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
     """Register a new repository for indexing.
@@ -784,6 +810,273 @@ async def list_index_tasks(repo: str | None = None) -> dict:
             for t in tasks
         ]
     }
+
+
+@app.get("/v1/repos/{repo_name}/stats")
+async def get_repo_stats(repo_name: str) -> RepoStatsResponse:
+    """Get repository statistics for cost estimation and UI display.
+    
+    Returns file count, chunk count, token count, and last index timestamp.
+    Used by the frontend to calculate reindex costs and show current status.
+    """
+    if _sql_store is None:
+        raise HTTPException(status_code=503, detail="SQL store not initialized")
+    
+    # Get repo
+    repo = _sql_store.get_repo_by_name(repo_name)
+    if not repo:
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
+    
+    repo_id = int(repo["id"])
+    repo_path = repo["root_path"]
+    embed_model = repo.get("default_embed_model", "large")
+    
+    try:
+        from contextlib import closing
+        
+        with _sql_store._connect() as conn, closing(conn.cursor()) as cur:
+            # Count files
+            cur.execute("SELECT COUNT(*) FROM files WHERE repo_id = ?", (repo_id,))
+            files_count = cur.fetchone()[0]
+            
+            # Count chunks
+            cur.execute("SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,))
+            chunks_count = cur.fetchone()[0]
+            
+            # Sum token counts (from LanceDB metadata or estimate)
+            # For now, estimate: average 200 tokens per chunk
+            total_tokens = chunks_count * 200
+            
+            # Get last successful session timestamp
+            cur.execute("""
+                SELECT MAX(started_at)
+                FROM sessions
+                WHERE repo_id = ? AND status = 'succeeded'
+            """, (repo_id,))
+            last_indexed_row = cur.fetchone()
+            last_indexed = last_indexed_row[0] if last_indexed_row[0] else None
+            
+            # Check if reindex is needed (simple heuristic: no successful sessions)
+            cur.execute("""
+                SELECT COUNT(*)
+                FROM sessions
+                WHERE repo_id = ? AND status = 'succeeded'
+            """, (repo_id,))
+            successful_sessions = cur.fetchone()[0]
+            needs_reindex = successful_sessions == 0
+            
+        return RepoStatsResponse(
+            name=repo_name,
+            path=repo_path,
+            files_count=files_count,
+            chunks_count=chunks_count,
+            total_tokens=total_tokens,
+            embed_model=embed_model,
+            last_indexed=last_indexed,
+            needs_reindex=needs_reindex
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get repo stats: {str(e)}")
+
+
+@app.post("/v1/repos/{repo_name}/reindex")
+async def reindex_repo(
+    repo_name: str,
+    request: ReindexRequest,
+    background_tasks: BackgroundTasks
+) -> IndexResponse:
+    """Trigger a full or incremental reindex of the repository.
+    
+    Full reindex clears existing index and reprocesses all files.
+    Incremental reindex only processes changed files.
+    
+    Requires confirmation for full reindex due to cost implications.
+    """
+    if _sql_store is None or _lance_store is None or _pipeline is None:
+        raise HTTPException(status_code=503, detail="Stores not initialized")
+    
+    # Get repo
+    repo = _sql_store.get_repo_by_name(repo_name)
+    if not repo:
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
+    
+    # Validate mode
+    if request.mode not in ["full", "incremental"]:
+        raise HTTPException(status_code=400, detail="Mode must be 'full' or 'incremental'")
+    
+    # Require confirmation for full reindex
+    if request.mode == "full" and not request.confirmed:
+        raise HTTPException(
+            status_code=400,
+            detail="Full reindex requires confirmation due to cost implications"
+        )
+    
+    try:
+        # For full reindex, use pipeline's full_reindex flag
+        if request.mode == "full":
+            # Queue full reindex task
+            from pathlib import Path
+            repo_id = int(repo["id"])
+            root = Path(repo["root_path"])
+            
+            # Get all tracked files
+            from ..ingest._helpers import get_all_tracked_files
+            all_files = get_all_tracked_files(root)
+            
+            # Create task
+            task_queue = get_task_queue()
+            task = task_queue.create_task(repo_name, all_files)
+            
+            # If clear_existing is requested, trigger index drop
+            if request.clear_existing:
+                # This will be handled by the background task
+                pass
+            
+            # Queue background processing with full_reindex flag
+            background_tasks.add_task(
+                _process_full_reindex_task,
+                task.task_id,
+                repo_name,
+                all_files,
+                clear_existing=request.clear_existing
+            )
+            
+            return IndexResponse(
+                task_id=task.task_id,
+                status="queued",
+                message=f"Full reindex queued: {len(all_files)} files to process"
+            )
+        else:
+            # Incremental mode: use existing git-diff-based indexing
+            # Get changed files since last commit
+            from ..ingest._helpers import git_changed_files_modified_added
+            from pathlib import Path
+            import subprocess
+            
+            repo_id = int(repo["id"])
+            root = Path(repo["root_path"])
+            
+            # Get last successful commit
+            last_success = _sql_store.get_last_successful_commit(repo_id)
+            
+            if last_success:
+                # Get current commit
+                try:
+                    commit_sha = subprocess.check_output(
+                        ["git", "-C", str(root), "rev-parse", "HEAD"],
+                        stderr=subprocess.STDOUT
+                    ).decode("utf-8").strip()
+                    
+                    # Get changed files
+                    changed_files = git_changed_files_modified_added(root, last_success, commit_sha)
+                except Exception:
+                    # Fallback: queue all tracked files
+                    from ..ingest._helpers import get_all_tracked_files
+                    changed_files = get_all_tracked_files(root)
+            else:
+                # No previous index: process all files
+                from ..ingest._helpers import get_all_tracked_files
+                changed_files = get_all_tracked_files(root)
+            
+            if not changed_files:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No files to index (all files up to date)"
+                )
+            
+            # Create task
+            task_queue = get_task_queue()
+            task = task_queue.create_task(repo_name, changed_files)
+            
+            # Queue background processing
+            background_tasks.add_task(_process_index_task, task.task_id, repo_name, changed_files)
+            
+            return IndexResponse(
+                task_id=task.task_id,
+                status="queued",
+                message=f"Incremental index queued: {len(changed_files)} files to process"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to trigger reindex: {str(e)}")
+
+
+@app.delete("/v1/repos/{repo_name}/index")
+async def clear_repo_index(repo_name: str, confirmed: bool = False) -> dict:
+    """Clear all indexed data for a repository.
+    
+    This removes all chunks, vectors, and metadata for the repository.
+    Requires confirmation due to destructive nature.
+    """
+    if not confirmed:
+        raise HTTPException(
+            status_code=400,
+            detail="Index clearing requires confirmation parameter"
+        )
+    
+    if _sql_store is None or _lance_store is None or _pipeline is None:
+        raise HTTPException(status_code=503, detail="Stores not initialized")
+    
+    # Get repo
+    repo = _sql_store.get_repo_by_name(repo_name)
+    if not repo:
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
+    
+    repo_id = int(repo["id"])
+    
+    try:
+        # Use pipeline's _drop_repo_index method
+        _pipeline._drop_repo_index(repo_id, repo_name)
+        
+        return {
+            "success": True,
+            "message": f"Index cleared for repository '{repo_name}'"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear index: {str(e)}")
+
+
+async def _process_full_reindex_task(
+    task_id: str,
+    repo_name: str,
+    files: list[str],
+    clear_existing: bool = False
+):
+    """Background task for full reindex with optional index clearing."""
+    task_queue = get_task_queue()
+    
+    try:
+        # Update task to processing
+        await task_queue.update_task(task_id, status=TaskStatus.PROCESSING)
+        
+        if _sql_store is None or _lance_store is None or _pipeline is None:
+            raise Exception("Stores not initialized")
+        
+        # Get repo
+        repo = _sql_store.get_repo_by_name(repo_name)
+        if not repo:
+            raise Exception(f"Repository '{repo_name}' not found")
+        
+        repo_id = int(repo["id"])
+        
+        # Clear existing index if requested
+        if clear_existing:
+            _pipeline._drop_repo_index(repo_id, repo_name)
+        
+        # Now process all files using standard indexing
+        await _process_index_task(task_id, repo_name, files)
+        
+    except Exception as e:
+        import traceback
+        error_msg = f"{str(e)}\n{traceback.format_exc()}"
+        await task_queue.update_task(
+            task_id,
+            status=TaskStatus.FAILED,
+            error=error_msg
+        )
 
 
 # Keep old synchronous endpoint for backwards compatibility (deprecated)
