@@ -18,7 +18,7 @@ let viewProvider: DolphinViewProvider | null = null;
 let logger: Logger;
 
 export async function activate(context: vscode.ExtensionContext) {
-  // Create output channel for logging
+  // Create output channel for logging (shared by extension and agent bridge)
   outputChannel = vscode.window.createOutputChannel("Dolphin");
   outputChannel.show();
 
@@ -27,9 +27,9 @@ export async function activate(context: vscode.ExtensionContext) {
   logger.info("Activating Dolphin extension...");
 
   try {
-    // Initialize AgentBridge
+    // Initialize AgentBridge with shared output channel
     logger.info("Initializing AgentBridge...");
-    agentBridge = new AgentBridge();
+    agentBridge = new AgentBridge(outputChannel);
 
     const agentCorePath = context.asAbsolutePath(
       path.join("..", "agent-core", "src", "main.ts")

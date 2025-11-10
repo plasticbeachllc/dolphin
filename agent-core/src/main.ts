@@ -559,7 +559,10 @@ class AgentCore {
   private sendRPCMessage(message: Message) {
     const payload = JSON.stringify(message);
     const contentLength = Buffer.byteLength(payload, "utf-8");
-    const framedMessage = `Content-Length: ${contentLength}\r\n\r\n${payload}`;
+    const header = `Content-Length: ${contentLength}\r\n\r\n`;
+    const framedMessage = header + payload;
+    
+    // Write the complete framed message atomically
     process.stdout.write(framedMessage);
   }
 

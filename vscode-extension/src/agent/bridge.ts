@@ -46,8 +46,8 @@ export class AgentBridge {
 
   public readonly onEvent = this.eventEmitter.event;
 
-  constructor() {
-    this.outputChannel = vscode.window.createOutputChannel("Dolphin Agent");
+  constructor(outputChannel: vscode.OutputChannel) {
+    this.outputChannel = outputChannel;
   }
 
   async start(agentCorePath: string, extensionPath: string, apiKey?: string): Promise<void> {
@@ -97,7 +97,7 @@ export class AgentBridge {
       });
 
       // Set up error handler
-      this.connection.onError((error) => {
+      this.connection.onError((error: any) => {
         this.outputChannel.appendLine(`[AgentBridge] Connection error: ${error[0]}`);
       });
 
@@ -260,7 +260,7 @@ export class AgentBridge {
 
       // Send via connection (vscode-jsonrpc handles backpressure internally)
       this.connection!.sendRequest(method, params)
-        .then((result) => {
+        .then((result: any) => {
           const pending = this.pendingRequests.get(id);
           if (pending) {
             if (pending.timeout) {
@@ -270,7 +270,7 @@ export class AgentBridge {
             resolve(result);
           }
         })
-        .catch((error) => {
+        .catch((error: any) => {
           const pending = this.pendingRequests.get(id);
           if (pending) {
             if (pending.timeout) {
@@ -332,8 +332,14 @@ export class AgentBridge {
   }
 
   shutdown(): void {
-    this.outputChannel.appendLine("[AgentBridge] Shutting down...");
     this.isShuttingDown = true;
+    
+    // Try to log shutdown, but don't fail if channel is disposed
+    try {
+      this.outputChannel.appendLine("[AgentBridge] Shutting down...");
+    } catch (e) {
+      // Output channel may already be disposed in tests
+    }
 
     // Dispose connection first
     if (this.connection) {
