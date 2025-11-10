@@ -151,18 +151,16 @@ export class AutoSyncManager {
         const filePaths = batch.map((c) => c.file_path);
 
         // Trigger indexing via API
+        // Note: Python backend will automatically mark changes as processed
+        // after successfully indexing each file
         await this.triggerIndexing(filePaths);
 
-        // Mark changes as processed
-        const changeIds = batch.map((c) => c.id);
-        await this.markChangesProcessed(changeIds);
-
         this.outputChannel.appendLine(
-          `[AutoSync] Processed batch of ${batch.length} files`
+          `[AutoSync] Queued batch of ${batch.length} files for indexing`
         );
       } catch (error: any) {
         this.outputChannel.appendLine(
-          `[AutoSync] Error processing batch: ${error.message}`
+          `[AutoSync] Error queuing batch: ${error.message}`
         );
         // Continue with next batch even if one fails
       }
@@ -213,27 +211,6 @@ export class AutoSyncManager {
 
     if (!response.ok) {
       throw new Error(`Failed to trigger indexing: ${response.statusText}`);
-    }
-  }
-
-  private async markChangesProcessed(changeIds: number[]): Promise<void> {
-    const response = await fetch(
-      `${this.apiBaseUrl}/v1/repos/${this.repoName}/changes/mark-processed`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          change_ids: changeIds,
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to mark changes as processed: ${response.statusText}`
-      );
     }
   }
 

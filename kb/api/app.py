@@ -408,6 +408,7 @@ class IndexStatusResponse(BaseModel):
     total: int
     indexed: int = 0
     skipped: int = 0
+    current_file: str | None = None  # Currently processing file path
     error: str | None = None
     result: dict | None = None
 
@@ -614,8 +615,12 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]):
         initial_snapshots = {}
 
         for idx, filepath in enumerate(valid_files, 1):
-            # Update progress and yield to event loop
-            await task_queue.update_task(task_id, progress=idx)
+            # Update progress with current file and yield to event loop
+            await task_queue.update_task(
+                task_id,
+                progress=idx,
+                current_file=filepath
+            )
             await asyncio.sleep(0)  # Yield to event loop to handle status requests
 
             file_path = root / filepath
@@ -787,6 +792,11 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]):
                     content_hash=snapshot["content_hash"]
                 )
 
+            # Automatically mark pending changes for this file as processed
+            # This file has been successfully indexed, so any pending changes
+            # that triggered the indexing are now resolved
+            _sql_store.mark_changes_for_file_processed(repo_id=repo_id, file_path=filepath)
+
             # Update task with current indexed/skipped counts
             await task_queue.update_task(
                 task_id,
@@ -847,6 +857,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]):
         await task_queue.update_task(
             task_id,
             status=TaskStatus.COMPLETED,
+            current_file=None,  # Clear current file on completion
             result={
                 "indexed": chunks_indexed,
                 "skipped": chunks_skipped,
@@ -911,6 +922,7 @@ async def get_index_status(task_id: str) -> IndexStatusResponse:
         total=task.total,
         indexed=task.indexed,  # Use real-time task field instead of result
         skipped=task.skipped,  # Use real-time task field instead of result
+        current_file=task.current_file,  # Current file being processed
         error=task.error,
         result=task.result
     )

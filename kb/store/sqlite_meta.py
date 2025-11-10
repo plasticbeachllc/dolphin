@@ -1746,6 +1746,30 @@ class SQLiteMetadataStore:
             conn.commit()
             return updated
 
+    def mark_changes_for_file_processed(self, repo_id: int, file_path: str) -> int:
+        """Mark all pending changes for a specific file as processed.
+
+        Called automatically by the indexing pipeline after successfully indexing a file.
+
+        Args:
+            repo_id: Repository ID
+            file_path: Relative file path within repository
+
+        Returns:
+            Number of changes marked as processed
+        """
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute("""
+                UPDATE pending_changes
+                SET processed = 1, processed_at = datetime('now')
+                WHERE repo_id = ?
+                AND file_path = ?
+                AND processed = 0
+            """, (repo_id, file_path))
+            updated = cur.rowcount
+            conn.commit()
+            return updated
+
     def cleanup_old_changes(self, days: int = 7) -> int:
         """Delete processed changes older than specified days."""
         with self._connect() as conn, closing(conn.cursor()) as cur:

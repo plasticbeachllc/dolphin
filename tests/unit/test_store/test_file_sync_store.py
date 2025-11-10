@@ -157,6 +157,44 @@ class TestPendingChanges:
         processed_count = store.mark_changes_processed([])
         assert processed_count == 0
 
+    def test_mark_changes_for_file_processed(self, temp_db_path):
+        """Test marking changes for a specific file as processed (used by indexing pipeline)."""
+        store = SQLiteMetadataStore(temp_db_path)
+        store.initialize()
+
+        repo_path = Path("/tmp/test_repo")
+        store.record_repo(name="test-repo", path=repo_path, default_embed_model="large")
+        repo = store.get_repo_by_name("test-repo")
+        repo_id = repo["id"]
+
+        # Record multiple changes for same file
+        id1 = store.record_pending_change(repo_id, "important.py", "modified")
+        id2 = store.record_pending_change(repo_id, "important.py", "modified")
+        id3 = store.record_pending_change(repo_id, "other.py", "created")
+
+        # Mark all changes for specific file as processed
+        processed_count = store.mark_changes_for_file_processed(repo_id, "important.py")
+        assert processed_count == 2
+
+        # Only changes for other.py should remain pending
+        changes = store.get_pending_changes()
+        assert len(changes) == 1
+        assert changes[0]["file_path"] == "other.py"
+
+    def test_mark_changes_for_file_processed_no_matches(self, temp_db_path):
+        """Test marking changes for file that has no pending changes."""
+        store = SQLiteMetadataStore(temp_db_path)
+        store.initialize()
+
+        repo_path = Path("/tmp/test_repo")
+        store.record_repo(name="test-repo", path=repo_path, default_embed_model="large")
+        repo = store.get_repo_by_name("test-repo")
+        repo_id = repo["id"]
+
+        # No changes recorded
+        processed_count = store.mark_changes_for_file_processed(repo_id, "nonexistent.py")
+        assert processed_count == 0
+
     def test_cleanup_old_changes(self, temp_db_path):
         """Test cleaning up old processed changes."""
         store = SQLiteMetadataStore(temp_db_path)

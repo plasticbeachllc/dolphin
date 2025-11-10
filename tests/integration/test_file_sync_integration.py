@@ -5,6 +5,12 @@ These tests validate the full file sync workflow:
 - Post-index validation for mid-index changes
 - Drift detection for offline changes
 - Pending changes tracking across crashes
+
+Architecture Note:
+- TypeScript (VSCode extension) detects file changes and records them via API
+- Python (backend) processes the indexing queue and automatically marks
+  changes as processed after successful indexing
+- The mark-processed endpoint exists for manual/admin intervention only
 """
 
 import pytest
@@ -474,6 +480,83 @@ class TestDriftDetection:
 
 
 @pytest.mark.integration
+class TestAutomaticChangeProcessing:
+    """Test that Python automatically marks changes as processed after indexing."""
+
+    def test_python_auto_marks_changes_processed(self, temp_dir, temp_db_path):
+        """Test that indexing automatically marks corresponding changes as processed."""
+        # Set up stores
+        sql_store = SQLiteMetadataStore(temp_db_path)
+        sql_store.initialize()
+
+        lance_dir = temp_dir / "lancedb"
+        lance_dir.mkdir()
+        lance_store = LanceDBVectorStore(lance_dir)
+
+        set_stores(sql_store, lance_store)
+
+        # Set up pipeline
+        pipeline = KBPipeline(sql_store, lance_store)
+        set_pipeline(pipeline)
+
+        # Create workspace
+        workspace = temp_dir / "test_workspace"
+        workspace.mkdir()
+
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        repo = sql_store.get_repo_by_name("test-repo")
+
+        # Create test file
+        test_file = workspace / "auto_process.py"
+        test_file.write_text("def auto_test(): pass")
+
+        client = TestClient(app)
+
+        # 1. Record pending change (simulating file watcher)
+        changes_response = client.post(
+            "/v1/repos/test-repo/changes",
+            json={"changes": [{"file_path": "auto_process.py", "change_type": "created"}]}
+        )
+        assert changes_response.status_code == 200
+        change_ids = changes_response.json()["change_ids"]
+        assert len(change_ids) == 1
+
+        # 2. Verify change is pending
+        pending_before = client.get("/v1/repos/test-repo/pending-changes")
+        assert len(pending_before.json()["changes"]) == 1
+
+        # 3. Index the file
+        index_response = client.post(
+            "/v1/index",
+            json={"repo": "test-repo", "files": ["auto_process.py"], "incremental": True}
+        )
+        task_id = index_response.json()["task_id"]
+
+        # Wait for completion
+        for _ in range(30):
+            if client.get(f"/v1/index/status/{task_id}").json()["status"] == "completed":
+                break
+            time.sleep(1)
+
+        # 4. Verify change was AUTOMATICALLY marked as processed (no manual API call!)
+        pending_after = client.get("/v1/repos/test-repo/pending-changes")
+        assert len(pending_after.json()["changes"]) == 0, \
+            "Python should have automatically marked the change as processed during indexing"
+
+        # 5. Verify by checking directly in database
+        processed_changes = sql_store.get_pending_changes(repo_id=repo["id"], limit=100)
+        # All changes should be processed=True now
+        for change in processed_changes:
+            if change["id"] == change_ids[0]:
+                assert change["processed"] is True
+                assert change["processed_at"] is not None
+
+        # Cleanup
+        reset_pipeline()
+        reset_stores()
+
+
+@pytest.mark.integration
 class TestPendingChangesWorkflow:
     """Test pending changes tracking across crashes and restarts."""
 
@@ -591,16 +674,11 @@ class TestPendingChangesWorkflow:
                 break
             time.sleep(1)
 
-        # 4. Mark changes as processed
-        mark_response = client.post(
-            "/v1/repos/test-repo/changes/mark-processed",
-            json={"change_ids": change_ids}
-        )
-        assert mark_response.json()["processed_count"] == 2
-
-        # 5. Verify no pending changes remain
+        # 4. Verify Python automatically marked changes as processed
+        # (No manual mark-processed call needed!)
         final_pending = client.get("/v1/repos/test-repo/pending-changes")
-        assert len(final_pending.json()["changes"]) == 0
+        assert len(final_pending.json()["changes"]) == 0, \
+            "Python should automatically mark changes as processed after successful indexing"
 
         # 6. Verify snapshots were created
         repo = sql_store.get_repo_by_name("test-repo")
