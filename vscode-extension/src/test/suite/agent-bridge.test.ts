@@ -483,4 +483,356 @@ describe('AgentBridge Unit Tests', () => {
       assert.strictEqual((agentBridge as any).pendingRequests.size, 0, 'Pending requests should be empty after timeout');
     });
   });
+
+  // Phase 5: Conversation Management Tests
+
+  describe('listConversations', () => {
+    it('Should send list_conversations request and return conversations', async () => {
+      const mockConversations = [
+        {
+          id: 'conv-1',
+          metadata: {
+            title: 'Test Conversation 1',
+            files: [],
+            token_count: 100,
+            pinned: false,
+          },
+          created_at: '2025-01-01T00:00:00.000Z',
+          updated_at: '2025-01-01T00:00:00.000Z',
+          message_count: 5,
+        },
+        {
+          id: 'conv-2',
+          metadata: {
+            title: 'Test Conversation 2',
+            files: ['file.ts'],
+            token_count: 200,
+            pinned: true,
+          },
+          created_at: '2025-01-02T00:00:00.000Z',
+          updated_at: '2025-01-02T00:00:00.000Z',
+          message_count: 10,
+        },
+      ];
+
+      const mockConnection = {
+        sendRequest: (method: string, params?: any) => {
+          assert.strictEqual(method, 'list_conversations', 'Should send list_conversations request');
+          return Promise.resolve({ conversations: mockConversations });
+        },
+        dispose: () => {},
+      };
+
+      (agentBridge as any).connection = mockConnection;
+
+      const result = await agentBridge.listConversations();
+
+      assert.deepStrictEqual(result, mockConversations, 'Should return conversations from response');
+    });
+
+    it('Should return empty array when no conversations exist', async () => {
+      const mockConnection = {
+        sendRequest: (method: string, params?: any) => {
+          return Promise.resolve({ conversations: [] });
+        },
+        dispose: () => {},
+      };
+
+      (agentBridge as any).connection = mockConnection;
+
+      const result = await agentBridge.listConversations();
+
+      assert.deepStrictEqual(result, [], 'Should return empty array');
+    });
+
+    it('Should handle missing conversations field in response', async () => {
+      const mockConnection = {
+        sendRequest: (method: string, params?: any) => {
+          return Promise.resolve({}); // No conversations field
+        },
+        dispose: () => {},
+      };
+
+      (agentBridge as any).connection = mockConnection;
+
+      const result = await agentBridge.listConversations();
+
+      assert.deepStrictEqual(result, [], 'Should return empty array when conversations field missing');
+    });
+
+    it('Should timeout after 5 seconds', async function() {
+      this.timeout(7000);
+
+      const mockConnection = {
+        sendRequest: (method: string, params?: any) => {
+          // Never resolve to simulate timeout
+          return new Promise(() => {});
+        },
+        dispose: () => {},
+      };
+
+      (agentBridge as any).connection = mockConnection;
+
+      try {
+        await agentBridge.listConversations();
+        assert.fail('Should have thrown timeout error');
+      } catch (error: any) {
+        assert.ok(error.message.includes('timeout'), 'Should be a timeout error');
+      }
+    });
+  });
+
+  describe('loadConversation', () => {
+    it('Should send load_conversation request with conversationId', async () => {
+      let receivedParams: any;
+      const mockResult = {
+        conversation: {
+          schema_version: '1.0',
+          conversation: {
+            id: 'conv-1',
+            created_at: '2025-01-01T00:00:00.000Z',
+            updated_at: '2025-01-01T00:00:00.000Z',
+            workspace_root: '/workspace',
+          },
+          metadata: {
+            title: 'Test Conversation',
+            files: [],
+            token_count: 100,
+            pinned: false,
+          },
+          messages: [],
+        },
+      };
+
+      const mockConnection = {
+        sendRequest: (method: string, params?: any) => {
+          assert.strictEqual(method, 'load_conversation', 'Should send load_conversation request');
+          receivedParams = params;
+          return Promise.resolve(mockResult);
+        },
+        dispose: () => {},
+      };
+
+      (agentBridge as any).connection = mockConnection;
+
+      const result = await agentBridge.loadConversation('conv-1');
+
+      assert.strictEqual(receivedParams.conversationId, 'conv-1', 'Should include conversationId in params');
+      assert.deepStrictEqual(result, mockResult, 'Should return load result');
+    });
+
+    it('Should handle conversation with branch info', async () => {
+      const mockResult = {
+        conversation: {
+          schema_version: '1.0',
+          conversation: {
+            id: 'branch-conv',
+            created_at: '2025-01-01T00:00:00.000Z',
+            updated_at: '2025-01-01T00:00:00.000Z',
+            workspace_root: '/workspace',
+          },
+          metadata: {
+            title: 'Branched Conversation',
+            parent_conversation_id: 'parent-conv',
+            branch_point_message_id: 'msg-5',
+            files: [],
+            token_count: 50,
+            pinned: false,
+          },
+          messages: [],
+        },
+        branchInfo: {
+          originalId: 'parent-conv',
+          originalTitle: 'Parent Conversation',
+        },
+      };
+
+      const mockConnection = {
+        sendRequest: () => Promise.resolve(mockResult),
+        dispose: () => {},
+      };
+
+      (agentBridge as any).connection = mockConnection;
+
+      const result = await agentBridge.loadConversation('branch-conv');
+
+      assert.ok(result.branchInfo, 'Should include branch info');
+      assert.strictEqual(result.branchInfo?.originalId, 'parent-conv', 'Branch info should have parent ID');
+      assert.strictEqual(result.branchInfo?.originalTitle, 'Parent Conversation', 'Branch info should have parent title');
+    });
+
+    it('Should timeout after 5 seconds', async function() {
+      this.timeout(7000);
+
+      const mockConnection = {
+        sendRequest: () => new Promise(() => {}),
+        dispose: () => {},
+      };
+
+      (agentBridge as any).connection = mockConnection;
+
+      try {
+        await agentBridge.loadConversation('conv-1');
+        assert.fail('Should have thrown timeout error');
+      } catch (error: any) {
+        assert.ok(error.message.includes('timeout'), 'Should be a timeout error');
+      }
+    });
+  });
+
+  describe('deleteConversation', () => {
+    it('Should send delete_conversation request with conversationId', async () => {
+      let receivedMethod: string | undefined;
+      let receivedParams: any;
+
+      const mockConnection = {
+        sendRequest: (method: string, params?: any) => {
+          receivedMethod = method;
+          receivedParams = params;
+          return Promise.resolve({ success: true });
+        },
+        dispose: () => {},
+      };
+
+      (agentBridge as any).connection = mockConnection;
+
+      await agentBridge.deleteConversation('conv-to-delete');
+
+      assert.strictEqual(receivedMethod, 'delete_conversation', 'Should send delete_conversation request');
+      assert.strictEqual(receivedParams.conversationId, 'conv-to-delete', 'Should include conversationId');
+    });
+
+    it('Should handle deletion errors', async () => {
+      const mockConnection = {
+        sendRequest: (method: string, params?: any) => {
+          return Promise.reject(new Error('Conversation not found'));
+        },
+        dispose: () => {},
+      };
+
+      (agentBridge as any).connection = mockConnection;
+
+      try {
+        await agentBridge.deleteConversation('non-existent');
+        assert.fail('Should have thrown error');
+      } catch (error: any) {
+        assert.ok(error.message.includes('Conversation not found'), 'Should propagate error');
+      }
+    });
+
+    it('Should timeout after 5 seconds', async function() {
+      this.timeout(7000);
+
+      const mockConnection = {
+        sendRequest: () => new Promise(() => {}),
+        dispose: () => {},
+      };
+
+      (agentBridge as any).connection = mockConnection;
+
+      try {
+        await agentBridge.deleteConversation('conv-1');
+        assert.fail('Should have thrown timeout error');
+      } catch (error: any) {
+        assert.ok(error.message.includes('timeout'), 'Should be a timeout error');
+      }
+    });
+  });
+
+  describe('renameConversation', () => {
+    it('Should send rename_conversation request with conversationId and newTitle', async () => {
+      let receivedMethod: string | undefined;
+      let receivedParams: any;
+
+      const mockConnection = {
+        sendRequest: (method: string, params?: any) => {
+          receivedMethod = method;
+          receivedParams = params;
+          return Promise.resolve({ success: true });
+        },
+        dispose: () => {},
+      };
+
+      (agentBridge as any).connection = mockConnection;
+
+      await agentBridge.renameConversation('conv-1', 'New Title');
+
+      assert.strictEqual(receivedMethod, 'rename_conversation', 'Should send rename_conversation request');
+      assert.strictEqual(receivedParams.conversationId, 'conv-1', 'Should include conversationId');
+      assert.strictEqual(receivedParams.newTitle, 'New Title', 'Should include newTitle');
+    });
+
+    it('Should handle empty title', async () => {
+      let receivedParams: any;
+
+      const mockConnection = {
+        sendRequest: (method: string, params?: any) => {
+          receivedParams = params;
+          return Promise.resolve({ success: true });
+        },
+        dispose: () => {},
+      };
+
+      (agentBridge as any).connection = mockConnection;
+
+      await agentBridge.renameConversation('conv-1', '');
+
+      assert.strictEqual(receivedParams.newTitle, '', 'Should accept empty title');
+    });
+
+    it('Should handle special characters in title', async () => {
+      let receivedParams: any;
+
+      const mockConnection = {
+        sendRequest: (method: string, params?: any) => {
+          receivedParams = params;
+          return Promise.resolve({ success: true });
+        },
+        dispose: () => {},
+      };
+
+      (agentBridge as any).connection = mockConnection;
+
+      const specialTitle = 'Test with "quotes" and \'apostrophes\' & <html> tags';
+      await agentBridge.renameConversation('conv-1', specialTitle);
+
+      assert.strictEqual(receivedParams.newTitle, specialTitle, 'Should preserve special characters');
+    });
+
+    it('Should handle rename errors', async () => {
+      const mockConnection = {
+        sendRequest: (method: string, params?: any) => {
+          return Promise.reject(new Error('Conversation not found'));
+        },
+        dispose: () => {},
+      };
+
+      (agentBridge as any).connection = mockConnection;
+
+      try {
+        await agentBridge.renameConversation('non-existent', 'New Title');
+        assert.fail('Should have thrown error');
+      } catch (error: any) {
+        assert.ok(error.message.includes('Conversation not found'), 'Should propagate error');
+      }
+    });
+
+    it('Should timeout after 5 seconds', async function() {
+      this.timeout(7000);
+
+      const mockConnection = {
+        sendRequest: () => new Promise(() => {}),
+        dispose: () => {},
+      };
+
+      (agentBridge as any).connection = mockConnection;
+
+      try {
+        await agentBridge.renameConversation('conv-1', 'New Title');
+        assert.fail('Should have thrown timeout error');
+      } catch (error: any) {
+        assert.ok(error.message.includes('timeout'), 'Should be a timeout error');
+      }
+    });
+  });
 });

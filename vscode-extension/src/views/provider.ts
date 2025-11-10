@@ -16,6 +16,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
     // Set up event forwarding immediately when AgentBridge is available
     if (this.agentBridge) {
       this.agentBridge.onEvent((event) => {
+        // Phase 7: Extract and log correlation ID for event tracking
         const requestId = (event as any).requestId || 'unknown';
         this.outputChannel.appendLine(`[DolphinViewProvider] Received event from agent: ${event.type} (requestId: ${requestId})`);
 

@@ -26,6 +26,15 @@ interface Message {
   error?: any;
 }
 
+/**
+ * AgentCore handles the main agent logic and IPC with the VS Code extension.
+ *
+ * Phase 7 IPC Robustness Features:
+ * - Properly framed JSON-RPC messages with Content-Length headers
+ * - Write queue to prevent message interleaving on stdout
+ * - Correlation IDs (requestId) added to all notifications for event tracking
+ * - Robust message parsing that handles chunk boundaries
+ */
 class AgentCore {
   private version = "0.1.0";
   private capabilities = ["kb_search", "file_operations", "planning", "claude_auth", "agentic_tools", "kb_auto_sync", "conversation_persistence"];
@@ -40,14 +49,14 @@ class AgentCore {
   private extensionPath?: string;
   private repoName: string | null = null;
   private requestIdCounter = 0;
-  
+
   // Phase 5: Conversation persistence
   private conversationStore: ConversationStore;
   private currentConversationId: string | null = null;
   private isFirstUserMessage = true;
   private loadedConversationId: string | null = null; // Track original conversation for delayed branching
-  
-  // Stdout write queue to prevent message interleaving
+
+  // Phase 7: Stdout write queue to prevent message interleaving
   private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(workspaceRoot: string, extensionPath?: string) {
@@ -892,10 +901,18 @@ class AgentCore {
     }
   }
   
+  /**
+   * Generate a unique request ID for correlation/logging.
+   * Phase 7: Correlation IDs help track events through the IPC pipeline.
+   */
   private generateRequestId(): string {
     return `req-${Date.now()}-${++this.requestIdCounter}`;
   }
 
+  /**
+   * Send an event notification to the extension.
+   * Phase 7: Automatically adds correlation ID (requestId) for event tracking.
+   */
   private sendEvent(event: AgentEvent) {
     // Add requestId if not already present for correlation/logging
     const eventWithId = {
@@ -912,6 +929,12 @@ class AgentCore {
     this.sendRPCMessage(message);
   }
 
+  /**
+   * Send a JSON-RPC message to stdout with proper framing.
+   * Phase 7: Implements write queuing to prevent message interleaving
+   * and ensure atomic writes. This prevents corruption when multiple
+   * messages are sent rapidly.
+   */
   private sendRPCMessage(message: Message) {
     // Queue the write to prevent interleaving
     this.writeQueue = this.writeQueue.then(() => {
@@ -920,7 +943,7 @@ class AgentCore {
         const contentLength = Buffer.byteLength(payload, "utf-8");
         const header = `Content-Length: ${contentLength}\r\n\r\n`;
         const framedMessage = header + payload;
-        
+
         // Write the complete framed message atomically
         process.stdout.write(framedMessage, () => {
           resolve();
