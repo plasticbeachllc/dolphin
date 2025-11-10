@@ -59,7 +59,7 @@
   }
 </script>
 
-<div class="input-wrapper">
+<div class="input-wrapper" role="region" aria-label="Message input">
   <Textarea
     bind:ref={textareaRef}
     bind:value={message}
@@ -68,21 +68,27 @@
     onkeydown={handleKeyDown}
     rows={3}
     class="flex-1 min-h-[4.5rem] max-h-48 resize-none"
+    aria-label="Type your message here. Press Ctrl+Enter or Cmd+Enter to send."
+    aria-describedby={isProcessing ? "processing-status" : undefined}
   />
+  {#if isProcessing}
+    <span id="processing-status" class="sr-only" aria-live="polite">Processing your message</span>
+  {/if}
   <Button
     onclick={handleAction}
     disabled={disabled && !isProcessing}
     variant={isProcessing ? "destructive" : "default"}
     size="icon"
     class="shrink-0 self-end"
-    aria-label={isProcessing ? "Stop" : showNewConversationButton ? "New Conversation" : "Send"}
+    aria-label={isProcessing ? "Stop generation" : showNewConversationButton ? "Start new conversation" : "Send message"}
+    title={isProcessing ? "Stop (Ctrl+Enter)" : "Send (Ctrl+Enter)"}
   >
     {#if isProcessing}
-      <Square class="h-4 w-4" />
+      <Square class="h-4 w-4" aria-hidden="true" />
     {:else if showNewConversationButton}
-      <Plus class="h-4 w-4" />
+      <Plus class="h-4 w-4" aria-hidden="true" />
     {:else}
-      <SendHorizontal class="h-4 w-4" />
+      <SendHorizontal class="h-4 w-4" aria-hidden="true" />
     {/if}
   </Button>
 </div>
@@ -93,5 +99,17 @@
     gap: 0.75rem;
     width: 100%;
     align-items: flex-end;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
   }
 </style>

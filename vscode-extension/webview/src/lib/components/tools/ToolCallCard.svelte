@@ -61,27 +61,42 @@
 			toggleExpanded();
 		}
 	}
+
+	// Human-readable tool names for better accessibility
+	const toolNames: Record<string, string> = {
+		search_knowledge: 'Search Knowledge Base',
+		kb_search: 'Knowledge Base Search',
+		read_files: 'Read Files',
+		file_write: 'Write File',
+		apply_diff: 'Apply Diff',
+		run_command: 'Run Command',
+		fetch_chunk: 'Fetch Chunk',
+		fetch_lines: 'Fetch Lines'
+	};
+
+	const toolName = toolNames[tool] || tool.replace(/_/g, ' ');
 </script>
 
-<Card class="tool-call-card mb-2 py-2 gap-0" data-status={status}>
+<Card class="tool-call-card mb-2 py-2 gap-0" data-status={status} role="region" aria-label="{toolName} tool call">
 	<CardHeader
-		class="cursor-pointer hover:bg-muted/50 !py-2 !px-2 transition-colors"
+		class="cursor-pointer hover:bg-muted/50 !py-2 !px-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
 		onclick={toggleExpanded}
 		onkeypress={handleKeypress}
 		role="button"
 		tabindex="0"
 		aria-expanded={expanded}
+		aria-label="{expanded ? 'Collapse' : 'Expand'} {toolName} details. Status: {status}. {executionTime ? `Execution time: ${executionTime} milliseconds.` : ''}"
 		data-status={status}
 	>
 		<div class="flex items-center justify-between">
 			<div class="flex items-center gap-3 flex-1 min-w-0">
 				{#if expanded}
-					<ChevronDown class="h-4 w-4 shrink-0" />
+					<ChevronDown class="h-4 w-4 shrink-0" aria-hidden="true" />
 				{:else}
-					<ChevronRight class="h-4 w-4 shrink-0" />
+					<ChevronRight class="h-4 w-4 shrink-0" aria-hidden="true" />
 				{/if}
 
-				<span class="text-2xl shrink-0">{toolIcons[tool] || '🔨'}</span>
+				<span class="text-2xl shrink-0" aria-hidden="true">{toolIcons[tool] || '🔨'}</span>
 				<div class="font-mono text-sm truncate">{tool}</div>
 			</div>
 
@@ -98,15 +113,15 @@
 				{/if}
 
 				{#if executionTime}
-					<Badge variant="outline" class="text-xs">{executionTime}ms</Badge>
+					<Badge variant="outline" class="text-xs" aria-label="Execution time: {executionTime} milliseconds">{executionTime}ms</Badge>
 				{/if}
 
 				{#if status === 'running'}
-					<Loader2 class="h-4 w-4 animate-spin text-blue-500" />
+					<Loader2 class="h-4 w-4 animate-spin tool-status-running" aria-label="Running" />
 				{:else if status === 'success'}
-					<Check class="h-4 w-4 text-green-500" />
+					<Check class="h-4 w-4 tool-status-success" aria-label="Success" />
 				{:else}
-					<X class="h-4 w-4 text-red-500" />
+					<X class="h-4 w-4 tool-status-error" aria-label="Error" />
 				{/if}
 			</div>
 		</div>
@@ -171,24 +186,37 @@
 		border-left-color: var(--vscode-charts-red, hsl(0 84% 60%));
 	}
 
+	/* Theme-aware status icon colors */
+	:global(.tool-status-running) {
+		color: var(--vscode-charts-blue, hsl(var(--primary)));
+	}
+
+	:global(.tool-status-success) {
+		color: var(--vscode-charts-green, hsl(142 76% 36%));
+	}
+
+	:global(.tool-status-error) {
+		color: var(--vscode-charts-red, hsl(0 84% 60%));
+	}
+
 	.peek-button {
 		padding: 0.25rem 0.5rem;
 		border-radius: 0.25rem;
-		background: hsl(var(--muted));
-		color: hsl(var(--foreground));
-		border: 1px solid hsl(var(--border));
+		background: var(--vscode-input-background, hsl(var(--muted)));
+		color: var(--vscode-foreground, hsl(var(--foreground)));
+		border: 1px solid var(--vscode-input-border, hsl(var(--border)));
 		cursor: pointer;
 		transition: all 0.2s;
 		font-family: inherit;
 	}
 
 	.peek-button:hover {
-		background: hsl(var(--accent));
-		border-color: hsl(var(--primary));
+		background: var(--vscode-button-hoverBackground, hsl(var(--accent)));
+		border-color: var(--vscode-focusBorder, hsl(var(--primary)));
 	}
 
 	.peek-button:focus-visible {
-		outline: 2px solid hsl(var(--primary));
+		outline: 2px solid var(--vscode-focusBorder, hsl(var(--primary)));
 		outline-offset: 2px;
 	}
 </style>
