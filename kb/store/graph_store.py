@@ -487,39 +487,50 @@ class GraphStore:
 
     def delete_nodes_for_file(self, file_id: int) -> int:
         """Delete all nodes for a file.
-        
+
         This will cascade delete edges and FTS entries.
-        
+        Edges are deleted both via CASCADE (if schema has it) and manually for compatibility.
+
         Args:
             file_id: File ID
-            
+
         Returns:
             Number of nodes deleted
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
-                # Get node IDs for FTS cleanup
+                # Get node IDs for cleanup
                 cur.execute(
                     "SELECT id FROM code_nodes WHERE file_id = ?",
                     (file_id,)
                 )
                 node_ids = [str(row[0]) for row in cur.fetchall()]
-                
+
+                if not node_ids:
+                    return 0
+
+                placeholders = ",".join(["?"] * len(node_ids))
+
+                # Delete edges (for backward compatibility with databases without CASCADE)
+                # This also handles edges where the target is being deleted
+                cur.execute(
+                    f"DELETE FROM code_edges WHERE source_node_id IN ({placeholders}) OR target_node_id IN ({placeholders})",
+                    tuple(node_ids) + tuple(node_ids)
+                )
+
                 # Delete from FTS5
-                if node_ids:
-                    placeholders = ",".join(["?"] * len(node_ids))
-                    cur.execute(
-                        f"DELETE FROM code_nodes_fts WHERE node_id IN ({placeholders})",
-                        tuple(node_ids)
-                    )
-                
-                # Delete nodes (edges will cascade)
+                cur.execute(
+                    f"DELETE FROM code_nodes_fts WHERE node_id IN ({placeholders})",
+                    tuple(node_ids)
+                )
+
+                # Delete nodes
                 cur.execute(
                     "DELETE FROM code_nodes WHERE file_id = ?",
                     (file_id,)
                 )
                 deleted = cur.rowcount
-                
+
                 conn.commit()
                 return deleted
             except Exception:
@@ -528,39 +539,50 @@ class GraphStore:
 
     def delete_nodes_for_repo(self, repo_id: int) -> int:
         """Delete all nodes for a repository.
-        
+
         This will cascade delete edges and FTS entries.
-        
+        Edges are deleted both via CASCADE (if schema has it) and manually for compatibility.
+
         Args:
             repo_id: Repository ID
-            
+
         Returns:
             Number of nodes deleted
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
-                # Get node IDs for FTS cleanup
+                # Get node IDs for cleanup
                 cur.execute(
                     "SELECT id FROM code_nodes WHERE repo_id = ?",
                     (repo_id,)
                 )
                 node_ids = [str(row[0]) for row in cur.fetchall()]
-                
+
+                if not node_ids:
+                    return 0
+
+                placeholders = ",".join(["?"] * len(node_ids))
+
+                # Delete edges (for backward compatibility with databases without CASCADE)
+                # This also handles edges where the target is being deleted
+                cur.execute(
+                    f"DELETE FROM code_edges WHERE source_node_id IN ({placeholders}) OR target_node_id IN ({placeholders})",
+                    tuple(node_ids) + tuple(node_ids)
+                )
+
                 # Delete from FTS5
-                if node_ids:
-                    placeholders = ",".join(["?"] * len(node_ids))
-                    cur.execute(
-                        f"DELETE FROM code_nodes_fts WHERE node_id IN ({placeholders})",
-                        tuple(node_ids)
-                    )
-                
-                # Delete nodes (edges will cascade)
+                cur.execute(
+                    f"DELETE FROM code_nodes_fts WHERE node_id IN ({placeholders})",
+                    tuple(node_ids)
+                )
+
+                # Delete nodes
                 cur.execute(
                     "DELETE FROM code_nodes WHERE repo_id = ?",
                     (repo_id,)
                 )
                 deleted = cur.rowcount
-                
+
                 conn.commit()
                 return deleted
             except Exception:
