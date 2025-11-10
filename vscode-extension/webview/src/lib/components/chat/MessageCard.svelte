@@ -3,17 +3,18 @@
   import * as Avatar from "$lib/components/ui/avatar";
   import { Badge } from "$lib/components/ui/badge";
   import MarkdownContent from "./MarkdownContent.svelte";
-  
+
   interface Props {
     role: "user" | "assistant";
     content: string;
     timestamp?: string;
   }
-  
+
   let { role, content, timestamp }: Props = $props();
-  
+
   const isUser = role === "user";
   const avatarFallback = isUser ? "U" : "A";
+  const avatarLabel = isUser ? "User avatar" : "Assistant avatar";
 </script>
 
 <Card.Root
@@ -22,8 +23,8 @@
   aria-label="{isUser ? 'User' : 'Assistant'} message{timestamp ? ' at ' + timestamp : ''}"
 >
   <Card.Header class="flex flex-row items-center gap-2 pb-2">
-    <Avatar.Root class="h-8 w-8" aria-hidden="true">
-      <Avatar.Fallback class={isUser ? "bg-blue-500" : "bg-purple-500"}>
+    <Avatar.Root class="h-8 w-8 avatar-{role}" aria-label={avatarLabel}>
+      <Avatar.Fallback>
         {avatarFallback}
       </Avatar.Fallback>
     </Avatar.Root>
@@ -48,3 +49,15 @@
     {/if}
   </Card.Content>
 </Card.Root>
+
+<style>
+  :global(.avatar-user) {
+    background: var(--vscode-button-background, hsl(var(--primary)));
+    color: var(--vscode-button-foreground, hsl(var(--primary-foreground)));
+  }
+
+  :global(.avatar-assistant) {
+    background: var(--vscode-charts-purple, hsl(270 60% 50%));
+    color: var(--vscode-editor-background, hsl(var(--background)));
+  }
+</style>

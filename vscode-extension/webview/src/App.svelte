@@ -55,6 +55,15 @@
   let showLogo = $state(true);
   let hasUserSentMessage = $state(false);
 
+  // Accessibility: status announcements for screen readers
+  let statusAnnouncement = $state<string>('');
+
+  function announceStatus(message: string) {
+    statusAnnouncement = message;
+    // Clear after announcement to allow re-announcing the same message
+    setTimeout(() => statusAnnouncement = '', 1000);
+  }
+
   let messages = $state<Message[]>([]);
 
   let isProcessing = $state(false);
@@ -107,6 +116,7 @@
           console.log('[App] Received hasWorkspace value:', eventHasWorkspace);
           hasWorkspace = eventHasWorkspace ?? true; // Default to true to be safe
           console.log('[App] Final workspace status:', hasWorkspace ? 'Open' : 'None');
+          announceStatus('Dolphin agent is ready');
           if (startupTimer !== null) {
             clearInterval(startupTimer);
             startupTimer = null;
@@ -168,8 +178,9 @@
         case 'task_completed':
           isProcessing = false;
           console.log('[App] Task completed:', event.success);
+          announceStatus(event.success ? 'Task completed successfully' : 'Task completed with errors');
           break;
-          
+
         case 'error':
           isProcessing = false;
           messages = [...messages, {
@@ -177,6 +188,7 @@
             content: `**Error:** ${event.error.message}`,
             timestamp: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
           }];
+          announceStatus(`Error: ${event.error.message}`);
           break;
 
         case 'focus_input':
@@ -295,9 +307,14 @@
 </script>
 
 <div class="app-container">
+  <!-- Screen reader announcements -->
+  <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+    {statusAnnouncement}
+  </div>
+
   <!-- Loading banner shown until agent is ready -->
   {#if !agentReady}
-    <div class="loading-banner">
+    <div class="loading-banner" role="alert" aria-live="assertive">
       <div class="loading-content">
         <div class="loading-spinner"></div>
         <div class="loading-text">
@@ -315,11 +332,11 @@
       </div>
     </div>
   {/if}
-  
+
   <AppNavigation currentPath={currentView} onNavigate={handleNavigate} {hasWorkspace} />
   
   {#if currentView === '/'}
-    <div class="chat-page">
+    <main class="chat-page" aria-label="Chat interface">
       {#if agentReady}
         <ChatHeader
           {model}
@@ -330,15 +347,15 @@
       {/if}
 
       {#if showLogo && messages.length === 0 && agentReady}
-        <div class="logo-container" transition:fade={{ duration: 600 }}>
+        <div class="logo-container" transition:fade={{ duration: 600 }} aria-hidden="true">
           <div class="dolphin-logo">🐬</div>
         </div>
       {/if}
 
-      <div class="messages-container">
+      <div class="messages-container" role="region" aria-label="Conversation messages">
         <MessageList messages={displayMessages} />
       </div>
-      
+
       <div class="input-container">
         <ChatInput
           bind:this={chatInputRef}
@@ -349,28 +366,34 @@
           hasActiveConversation={hasUserSentMessage}
         />
       </div>
-    </div>
+    </main>
   {:else if currentView === '/settings'}
-    <SettingsPage />
+    <main aria-label="Settings">
+      <SettingsPage />
+    </main>
   {:else if currentView === '/profile'}
-    <ProfilePage />
+    <main aria-label="Profile">
+      <ProfilePage />
+    </main>
   {:else if currentView === '/gallery/conversations'}
-    <ConversationsGallery onNavigate={handleNavigate} />
+    <main aria-label="Conversation history">
+      <ConversationsGallery onNavigate={handleNavigate} />
+    </main>
   {:else if currentView === '/functions/architect'}
-    <div class="placeholder-view">
+    <main class="placeholder-view" aria-label="Architect mode">
       <h2>Architect Mode</h2>
       <p>Generate architectural plans and design specifications</p>
-    </div>
+    </main>
   {:else if currentView === '/functions/code-review'}
-    <div class="placeholder-view">
+    <main class="placeholder-view" aria-label="Code review">
       <h2>Code Review</h2>
       <p>AI-powered code review with goal-oriented analysis</p>
-    </div>
+    </main>
   {:else}
-    <div class="placeholder-view">
+    <main class="placeholder-view" role="alert" aria-label="Page not found">
       <h2>404 - View not found</h2>
       <p>Path: {currentView}</p>
-    </div>
+    </main>
   {/if}
 </div>
 
@@ -492,5 +515,18 @@
     opacity: 0.3;
     filter: grayscale(0.3);
     user-select: none;
+  }
+
+  /* Screen reader only utility class */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
   }
 </style>
