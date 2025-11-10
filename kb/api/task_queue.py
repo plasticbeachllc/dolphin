@@ -25,6 +25,8 @@ class IndexTask:
     status: TaskStatus = TaskStatus.QUEUED
     progress: int = 0
     total: int = 0
+    indexed: int = 0  # Track indexed chunks during processing
+    skipped: int = 0  # Track skipped chunks during processing
     error: Optional[str] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     started_at: Optional[datetime] = None
@@ -55,6 +57,8 @@ class TaskQueue:
         task_id: str,
         status: Optional[TaskStatus] = None,
         progress: Optional[int] = None,
+        indexed: Optional[int] = None,
+        skipped: Optional[int] = None,
         error: Optional[str] = None,
         result: Optional[Dict] = None
     ):
@@ -74,6 +78,12 @@ class TaskQueue:
 
             if progress is not None:
                 task.progress = progress
+            
+            if indexed is not None:
+                task.indexed = indexed
+            
+            if skipped is not None:
+                task.skipped = skipped
 
             if error:
                 task.error = error

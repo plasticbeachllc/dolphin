@@ -100,12 +100,16 @@ export const kbActions = {
    * Update indexing progress
    */
   updateProgress(progress: Partial<KBProgress>) {
-    kbStore.update(state => ({
-      ...state,
-      progress: state.progress 
+    kbStore.update(state => {
+      const newProgress = state.progress
         ? { ...state.progress, ...progress }
-        : { current: 0, total: 0, currentFile: '', indexed: 0, skipped: 0, ...progress }
-    }));
+        : { current: 0, total: 0, currentFile: '', indexed: 0, skipped: 0, ...progress };
+      console.log('[kbStore] updateProgress called with:', progress, '-> resulting in:', newProgress);
+      return {
+        ...state,
+        progress: newProgress
+      };
+    });
   },
 
   /**

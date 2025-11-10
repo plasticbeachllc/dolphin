@@ -38,7 +38,7 @@
         chunksCount: stats.chunks_count,
         totalTokens: stats.total_tokens,
         embedModel: stats.embed_model,
-        lastUpdated: stats.last_indexed || 'Never'
+        lastUpdated: stats.last_indexed ? new Date(stats.last_indexed).toLocaleString() : 'Never'
       });
       
       // Set status based on stats
@@ -66,6 +66,15 @@
       
       kbActions.setStatus('indexing');
       
+      // Initialize progress object so reactivity works
+      kbActions.updateProgress({
+        current: 0,
+        total: 0,
+        currentFile: '',
+        indexed: 0,
+        skipped: 0
+      });
+      
       const response = await kbApi.triggerReindex(repoName, {
         mode: 'incremental',
         confirmed: true,
@@ -74,6 +83,7 @@
       
       // Start polling for progress
       await kbApi.pollIndexStatus(response.task_id, (status) => {
+        console.log('[KBManagementPanel] Poll update:', status);
         kbActions.updateProgress({
           current: status.progress,
           total: status.total,
@@ -119,6 +129,15 @@
       
       kbActions.setStatus(mode === 'full' ? 'reindexing' : 'indexing');
       
+      // Initialize progress object so reactivity works
+      kbActions.updateProgress({
+        current: 0,
+        total: 0,
+        currentFile: '',
+        indexed: 0,
+        skipped: 0
+      });
+      
       const response = await kbApi.triggerReindex(repoName, {
         mode,
         confirmed: true,
@@ -127,6 +146,7 @@
       
       // Start polling for progress
       await kbApi.pollIndexStatus(response.task_id, (status) => {
+        console.log('[KBManagementPanel] Poll update:', status);
         kbActions.updateProgress({
           current: status.progress,
           total: status.total,

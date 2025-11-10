@@ -6,7 +6,6 @@
   import { Label } from '$lib/components/ui/label';
   import { Badge } from '$lib/components/ui/badge';
   import { AlertTriangle, AlertCircle, RefreshCw } from 'lucide-svelte';
-  import { estimateReindexCost } from '$lib/stores/kb-store';
   
   interface Props {
     open: boolean;
@@ -22,10 +21,6 @@
   
   let reindexMode = $state<'incremental' | 'full'>('incremental');
   let userConfirmed = $state(false);
-  
-  const costEstimate = $derived(estimateReindexCost(stats.totalTokens, stats.chunksCount));
-  
-  const incrementalCostEstimate = $derived(estimateReindexCost(0, 0)); // Incremental is free with dedup
   
   function handleConfirm() {
     if (!userConfirmed && reindexMode === 'full') return;
@@ -77,9 +72,8 @@
                     Incremental Update (Recommended)
                   </Label>
                   <p class="text-xs text-muted-foreground">
-                    Only reprocess changed files since last index
+                    Only reprocess changed files since last index. Uses deduplication to skip unchanged content.
                   </p>
-                  <Badge variant="secondary" class="mt-1.5">Free - Uses deduplication</Badge>
                 </div>
               </div>
               
@@ -91,51 +85,45 @@
                     Full Rebuild
                   </Label>
                   <p class="text-xs text-muted-foreground">
-                    Clear index and reprocess all files from scratch
+                    Clear index and reprocess all files from scratch. This may take time for large repositories.
                   </p>
-                  <Badge variant="destructive" class="mt-1.5">
-                    <AlertCircle class="mr-1 h-3 w-3" />
-                    Cost: ~${costEstimate.costUSD} USD
-                  </Badge>
                 </div>
               </div>
             </div>
           </RadioGroup.Root>
           
           {#if reindexMode === 'full'}
-            <!-- Cost Warning for Full Reindex -->
+            <!-- Warning for Full Reindex -->
             <Alert.Root variant="destructive">
               <AlertCircle class="h-4 w-4" />
-              <Alert.Title>Cost Warning</Alert.Title>
+              <Alert.Title>Full Rebuild</Alert.Title>
               <Alert.Description>
-                This operation will re-embed all chunks and may incur API costs.
-                <br/>
-                <strong>Estimated:</strong> ~{costEstimate.tokens.toLocaleString()} tokens (${costEstimate.costUSD} USD)
+                This will clear the existing index and reprocess all files. This operation may take time for large repositories.
               </Alert.Description>
             </Alert.Root>
             
             <!-- Impact Summary -->
             <div class="rounded-lg border p-4 space-y-2">
-              <h4 class="font-semibold text-sm">Impact Summary:</h4>
+              <h4 class="font-semibold text-sm">What will happen:</h4>
               <ul class="text-sm space-y-1 text-muted-foreground">
                 <li>• {stats.filesCount.toLocaleString()} files will be reprocessed</li>
                 <li>• {stats.chunksCount.toLocaleString()} chunks will be re-embedded</li>
                 <li>• Existing index will be cleared</li>
-                <li>• Search unavailable during rebuild (~{costEstimate.estimatedTime})</li>
+                <li>• Search may be temporarily unavailable</li>
               </ul>
             </div>
             
             <!-- Confirmation Checkbox -->
             <div class="flex items-center space-x-2">
-              <Checkbox 
-                id="confirm-reindex" 
+              <Checkbox
+                id="confirm-reindex"
                 bind:checked={userConfirmed}
               />
-              <Label 
+              <Label
                 for="confirm-reindex"
                 class="text-sm font-medium leading-none cursor-pointer"
               >
-                I understand this will incur embedding costs
+                I understand this will rebuild the entire index
               </Label>
             </div>
           {:else}
@@ -144,8 +132,7 @@
               <h4 class="font-semibold text-sm text-green-900 dark:text-green-100">Incremental Update</h4>
               <ul class="text-sm space-y-1 text-green-700 dark:text-green-300">
                 <li>• Only changed files are reprocessed</li>
-                <li>• Deduplication prevents re-embedding</li>
-                <li>• No additional API costs</li>
+                <li>• Deduplication prevents re-embedding unchanged content</li>
                 <li>• Fast and efficient</li>
               </ul>
             </div>

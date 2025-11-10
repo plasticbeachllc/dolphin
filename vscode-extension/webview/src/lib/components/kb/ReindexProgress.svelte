@@ -1,8 +1,6 @@
 <script lang="ts">
-  import * as Card from '$lib/components/ui/card';
   import { Progress } from '$lib/components/ui/progress';
-  import { Button } from '$lib/components/ui/button';
-  import { Loader2, X } from 'lucide-svelte';
+  import { Loader2, Check } from 'lucide-svelte';
   import type { KBProgress } from '$lib/stores/kb-store';
   
   interface Props {
@@ -10,7 +8,7 @@
     onCancel?: () => void;
   }
   
-  let { progress, onCancel }: Props = $props();
+  let { progress }: Props = $props();
   
   const progressPercent = $derived(
     progress && progress.total > 0
@@ -22,60 +20,28 @@
 </script>
 
 {#if hasProgress && progress}
-  <Card.Root>
-    <Card.Header>
-      <Card.Title>
-        <div class="flex items-center gap-2">
-          <Loader2 class="h-4 w-4 animate-spin" />
-          Rebuilding Index
+  <div class="rounded-lg border bg-card shadow-sm">
+    <div class="p-3 space-y-2">
+      <div class="flex items-start gap-2">
+        <Loader2 class="h-4 w-4 animate-spin mt-0.5 flex-shrink-0" />
+        <div class="flex-1 min-w-0">
+          <p class="font-medium text-sm">Rebuilding Index</p>
+          <p class="text-xs text-muted-foreground">
+            {progress.current} of {progress.total} files • {progressPercent}%
+          </p>
         </div>
-      </Card.Title>
-    </Card.Header>
-    <Card.Content>
-      <div class="space-y-4">
-        <!-- Overall Progress -->
-        <div class="space-y-2">
-          <div class="flex justify-between text-sm">
-            <span>Processing files...</span>
-            <span>{progress.current}/{progress.total}</span>
-          </div>
-          <Progress value={progressPercent} />
-        </div>
-        
-        <!-- Current Status -->
-        {#if progress.currentFile}
-          <div class="rounded-lg bg-muted p-3">
-            <p class="text-sm">
-              <span class="font-medium">Current:</span>
-              {progress.currentFile}
-            </p>
-          </div>
-        {/if}
-        
-        <!-- Stats -->
-        <div class="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p class="text-muted-foreground">Indexed</p>
-            <p class="font-semibold">{progress.indexed.toLocaleString()} chunks</p>
-          </div>
-          <div>
-            <p class="text-muted-foreground">Skipped</p>
-            <p class="font-semibold">{progress.skipped.toLocaleString()} chunks</p>
-          </div>
-        </div>
-        
-        <!-- Cancel Button -->
-        {#if onCancel}
-          <Button 
-            variant="outline" 
-            class="w-full"
-            onclick={onCancel}
-          >
-            <X class="mr-2 h-4 w-4" />
-            Cancel Reindex
-          </Button>
-        {/if}
       </div>
-    </Card.Content>
-  </Card.Root>
+      
+      <Progress value={progressPercent} class="h-1.5" />
+      
+      <div class="flex gap-3 text-xs text-muted-foreground">
+        <span class="flex items-center gap-1">
+          <Check class="h-3 w-3" />
+          {progress.indexed.toLocaleString()} indexed
+        </span>
+        <span>•</span>
+        <span>{progress.skipped.toLocaleString()} skipped</span>
+      </div>
+    </div>
+  </div>
 {/if}

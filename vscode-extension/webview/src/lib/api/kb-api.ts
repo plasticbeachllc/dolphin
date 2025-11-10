@@ -1,4 +1,5 @@
 // vscode-extension/webview/src/lib/api/kb-api.ts
+import { getVSCodeAPI } from './vscode';
 
 export interface RepoStats {
   name: string;
@@ -35,68 +36,83 @@ export interface IndexStatus {
 }
 
 /**
+ * Send a KB request to the extension host and wait for response
+ */
+function sendKbRequest<T = any>(type: string, params: any = {}): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const requestId = `kb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    console.log(`[kb-api] Sending request: ${type} with requestId: ${requestId}`, params);
+    
+    // Set up response handler
+    const handler = (event: MessageEvent) => {
+      const message = event.data;
+      console.log(`[kb-api] Received message for requestId ${requestId}:`, message);
+      
+      if (message.type === `${type}_response` && message.requestId === requestId) {
+        console.log(`[kb-api] Match! Processing response for ${type}`);
+        window.removeEventListener('message', handler);
+        
+        if (message.error) {
+          console.error(`[kb-api] Request ${type} failed:`, message.error);
+          reject(new Error(message.error));
+        } else {
+          console.log(`[kb-api] Request ${type} succeeded with data:`, message.data);
+          resolve(message.data);
+        }
+      }
+    };
+    
+    window.addEventListener('message', handler);
+    
+    // Send request
+    const vscode = getVSCodeAPI();
+    vscode.postMessage({
+      type,
+      requestId,
+      ...params
+    });
+    
+    // Timeout after 30 seconds
+    setTimeout(() => {
+      window.removeEventListener('message', handler);
+      console.error(`[kb-api] Request ${type} (${requestId}) timed out after 30s`);
+      reject(new Error(`KB request timeout: ${type}`));
+    }, 30000);
+  });
+}
+
+/**
  * KB API client for interacting with the Knowledge Base backend
+ * Uses VSCode postMessage pattern instead of direct fetch
  */
 export const kbApi = {
   /**
    * Get repository statistics
    */
   async getRepoStats(repoName: string): Promise<RepoStats> {
-    // Send request through VSCode API
-    const response = await fetch(`http://127.0.0.1:7777/v1/repos/${repoName}/stats`);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to get repo stats: ${response.statusText}`);
-    }
-    
-    return await response.json();
+    return sendKbRequest<RepoStats>('kb_get_stats', { repoName });
   },
 
   /**
    * Trigger a reindex operation
    */
   async triggerReindex(repoName: string, request: ReindexRequest): Promise<ReindexResponse> {
-    const response = await fetch(`http://127.0.0.1:7777/v1/repos/${repoName}/reindex`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request)
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || `Failed to trigger reindex: ${response.statusText}`);
-    }
-    
-    return await response.json();
+    return sendKbRequest<ReindexResponse>('kb_trigger_reindex', { repoName, request });
   },
 
   /**
    * Get indexing task status
    */
   async getIndexStatus(taskId: string): Promise<IndexStatus> {
-    const response = await fetch(`http://127.0.0.1:7777/v1/index/status/${taskId}`);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to get index status: ${response.statusText}`);
-    }
-    
-    return await response.json();
+    return sendKbRequest<IndexStatus>('kb_get_status', { taskId });
   },
 
   /**
    * Clear repository index
    */
   async clearIndex(repoName: string, confirmed: boolean): Promise<{ success: boolean; message: string }> {
-    const response = await fetch(`http://127.0.0.1:7777/v1/repos/${repoName}/index?confirmed=${confirmed}`, {
-      method: 'DELETE'
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || `Failed to clear index: ${response.statusText}`);
-    }
-    
-    return await response.json();
+    return sendKbRequest('kb_clear_index', { repoName, confirmed });
   },
 
   /**
@@ -104,9 +120,13 @@ export const kbApi = {
    */
   async pollIndexStatus(taskId: string, onUpdate: (status: IndexStatus) => void, intervalMs = 2000): Promise<void> {
     return new Promise((resolve, reject) => {
-      const pollInterval = setInterval(async () => {
+      let errorCount = 0;
+      const MAX_ERRORS = 3;
+      
+      const poll = async () => {
         try {
           const status = await this.getIndexStatus(taskId);
+          errorCount = 0; // Reset error count on success
           onUpdate(status);
           
           // Stop polling if task is complete or failed
@@ -115,10 +135,20 @@ export const kbApi = {
             resolve();
           }
         } catch (error) {
-          clearInterval(pollInterval);
-          reject(error);
+          console.error('[kb-api] Error polling status:', error);
+          errorCount++;
+          
+          // Only stop polling after multiple consecutive errors
+          if (errorCount >= MAX_ERRORS) {
+            clearInterval(pollInterval);
+            reject(error);
+          }
         }
-      }, intervalMs);
+      };
+      
+      // Poll immediately, then set up interval
+      poll();
+      const pollInterval = setInterval(poll, intervalMs);
     });
   }
 };

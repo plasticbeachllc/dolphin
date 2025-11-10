@@ -130,9 +130,9 @@ describe('Conversations E2E Tests', () => {
       // Rapid-fire operations to test queuing and race conditions
       const operations = [
         vscode.commands.executeCommand('dolphin.newConversation'),
-        sleep(50).then(() => Promise.resolve(vscode.commands.executeCommand('dolphin.focusInput')).catch(() => {})),
+        sleep(50).then(() => vscode.commands.executeCommand('dolphin.focusInput')).catch(() => {}),
         sleep(100).then(() => vscode.commands.executeCommand('dolphin.newConversation')),
-        sleep(150).then(() => Promise.resolve(vscode.commands.executeCommand('dolphin.focusInput')).catch(() => {})),
+        sleep(150).then(() => vscode.commands.executeCommand('dolphin.focusInput')).catch(() => {}),
       ];
 
       await Promise.all(operations);
@@ -331,7 +331,7 @@ describe('Conversations E2E Tests', () => {
       const concurrentOps = [
         vscode.commands.executeCommand('dolphin.newConversation'),
         vscode.commands.executeCommand('dolphin.newConversation'),
-        Promise.resolve(vscode.commands.executeCommand('dolphin.focusInput')).catch(() => {}),
+        vscode.commands.executeCommand('dolphin.focusInput').then(() => {}, () => {}),
       ];
 
       await Promise.allSettled(concurrentOps);

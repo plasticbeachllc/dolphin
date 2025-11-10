@@ -496,6 +496,8 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
 
 async def _process_index_task(task_id: str, repo_name: str, files: list[str]):
     """Background task to process file indexing."""
+    import asyncio
+    
     task_queue = get_task_queue()
 
     try:
@@ -564,13 +566,14 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]):
 
         # Start session
         session_id = _sql_store.begin_session(repo_id, commit_sha, branch, embed_model)
-
+    
         chunks_indexed = chunks_skipped = 0
         repo_config = load_repo_chunking_config(root)
-
+    
         for idx, filepath in enumerate(valid_files, 1):
-            # Update progress
+            # Update progress and yield to event loop
             await task_queue.update_task(task_id, progress=idx)
+            await asyncio.sleep(0)  # Yield to event loop to handle status requests
 
             file_path = root / filepath
 
@@ -713,9 +716,16 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]):
             else:
                 _lance_store.prune_file_rows(repo_name, filepath, model=embed_model)
 
-            # Update counters
+            # Update counters and task progress
             chunks_indexed += len(new_hashes)
             chunks_skipped += skipped_occurrences
+            
+            # Update task with current indexed/skipped counts
+            await task_queue.update_task(
+                task_id,
+                indexed=chunks_indexed,
+                skipped=chunks_skipped
+            )
 
         # Update session
         _sql_store.bump_session_counters(
@@ -793,8 +803,8 @@ async def get_index_status(task_id: str) -> IndexStatusResponse:
         status=task.status.value,
         progress=task.progress,
         total=task.total,
-        indexed=task.result.get("indexed", 0) if task.result else 0,
-        skipped=task.result.get("skipped", 0) if task.result else 0,
+        indexed=task.indexed,  # Use real-time task field instead of result
+        skipped=task.skipped,  # Use real-time task field instead of result
         error=task.error,
         result=task.result
     )
@@ -859,7 +869,7 @@ async def get_repo_stats(repo_name: str) -> RepoStatsResponse:
             
             # Get last successful session timestamp
             cur.execute("""
-                SELECT MAX(started_at)
+                SELECT MAX(created_at)
                 FROM sessions
                 WHERE repo_id = ? AND status = 'succeeded'
             """, (repo_id,))
@@ -903,8 +913,12 @@ async def reindex_repo(
     
     Requires confirmation for full reindex due to cost implications.
     """
-    if _sql_store is None or _lance_store is None or _pipeline is None:
+    if _sql_store is None or _lance_store is None:
         raise HTTPException(status_code=503, detail="Stores not initialized")
+    
+    # Pipeline is only required for full reindex with clear_existing
+    if request.mode == "full" and request.clear_existing and _pipeline is None:
+        raise HTTPException(status_code=503, detail="Pipeline not initialized (required for index clearing)")
     
     # Get repo
     repo = _sql_store.get_repo_by_name(repo_name)
@@ -927,6 +941,9 @@ async def reindex_repo(
         if request.mode == "full":
             # Queue full reindex task
             from pathlib import Path
+            import logging
+            
+            logger = logging.getLogger(__name__)
             repo_id = int(repo["id"])
             root = Path(repo["root_path"])
             
@@ -934,9 +951,17 @@ async def reindex_repo(
             from ..ingest._helpers import get_all_tracked_files
             all_files = get_all_tracked_files(root)
             
+            logger.info(f"[Full Reindex] Found {len(all_files)} tracked files for {repo_name}")
+            logger.info(f"[Full Reindex] Root path: {root}")
+            if all_files:
+                logger.info(f"[Full Reindex] First 5 files: {all_files[:5]}")
+            else:
+                logger.warning(f"[Full Reindex] NO TRACKED FILES FOUND for {repo_name} at {root}")
+            
             # Create task
             task_queue = get_task_queue()
             task = task_queue.create_task(repo_name, all_files)
+            logger.info(f"[Full Reindex] Created task {task.task_id} with {len(all_files)} files")
             
             # If clear_existing is requested, trigger index drop
             if request.clear_existing:
@@ -1056,28 +1081,39 @@ async def _process_full_reindex_task(
     clear_existing: bool = False
 ):
     """Background task for full reindex with optional index clearing."""
+    import logging
+    
+    logger = logging.getLogger(__name__)
     task_queue = get_task_queue()
     
     try:
         # Update task to processing
         await task_queue.update_task(task_id, status=TaskStatus.PROCESSING)
         
-        if _sql_store is None or _lance_store is None or _pipeline is None:
-            raise Exception("Stores not initialized")
+        logger.info(f"[Full Reindex Task] Starting for {repo_name} with {len(files)} files (clear_existing={clear_existing})")
         
-        # Get repo
-        repo = _sql_store.get_repo_by_name(repo_name)
-        if not repo:
-            raise Exception(f"Repository '{repo_name}' not found")
-        
-        repo_id = int(repo["id"])
-        
-        # Clear existing index if requested
+        # Stores are validated in the endpoint handler before queuing the task
+        # If clear_existing is True, we need pipeline (also validated in handler)
         if clear_existing:
+            if _sql_store is None or _pipeline is None:
+                raise Exception("Stores not initialized for index clearing")
+            
+            # Get repo
+            repo = _sql_store.get_repo_by_name(repo_name)
+            if not repo:
+                raise Exception(f"Repository '{repo_name}' not found")
+            
+            repo_id = int(repo["id"])
+            
+            logger.info(f"[Full Reindex Task] Clearing existing index for {repo_name} (repo_id={repo_id})")
+            # Clear existing index
             _pipeline._drop_repo_index(repo_id, repo_name)
+            logger.info(f"[Full Reindex Task] Index cleared successfully")
         
+        logger.info(f"[Full Reindex Task] About to process {len(files)} files for {repo_name}")
         # Now process all files using standard indexing
         await _process_index_task(task_id, repo_name, files)
+        logger.info(f"[Full Reindex Task] Completed processing")
         
     except Exception as e:
         import traceback
