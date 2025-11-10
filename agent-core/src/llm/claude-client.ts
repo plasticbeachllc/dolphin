@@ -88,7 +88,7 @@ export class ClaudeClient {
         }
 
         this.authMode = "claude_cli";
-        console.log("[ClaudeClient] Using Claude Code CLI (subscription mode)");
+        console.error("[ClaudeClient] Using Claude Code CLI (subscription mode)");
         return "claude_cli";
       }
     }
@@ -96,7 +96,7 @@ export class ClaudeClient {
     // Fallback to API key
     if (this.config.apiKey || process.env.ANTHROPIC_API_KEY) {
       this.authMode = "api_key";
-      console.log("[ClaudeClient] Using Anthropic API (pay-per-token mode)");
+      console.error("[ClaudeClient] Using Anthropic API (pay-per-token mode)");
 
       if (!this.apiClient) {
         this.apiClient = new Anthropic({

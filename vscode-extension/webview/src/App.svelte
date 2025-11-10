@@ -7,10 +7,11 @@
   import type { AgentEvent } from '../../../shared/types/events';
   import SettingsPage from './routes/settings/+page.svelte';
   import ProfilePage from './routes/profile/+page.svelte';
+  import ConversationsGallery from './routes/gallery/conversations/+page.svelte';
   
   // Message type matching MessageList expectations
   interface Message {
-    type?: "tool_call";
+    type?: "tool_call" | "thinking";
     role?: "user" | "assistant";
     content?: string;
     timestamp?: string;
@@ -57,6 +58,13 @@
   let messages = $state<Message[]>([]);
 
   let isProcessing = $state(false);
+  
+  // Computed messages with thinking indicator
+  let displayMessages = $derived(
+    isProcessing && !messages.some(m => m.type === 'thinking')
+      ? [...messages, { type: 'thinking' as const, role: 'assistant' as const }]
+      : messages.filter(m => m.type !== 'thinking')
+  );
 
   // Track when persisted state has been restored to avoid overwriting it
   let hasRestoredState = $state(false);
@@ -66,40 +74,17 @@
   let model = $state<string>('claude-sonnet-4');
   let temperature = $state<number>(0.7);
   let toolsEnabled = $state<boolean>(true);
+  
+  // Workspace status - conversations require a workspace
+  let hasWorkspace = $state(false);
 
   // Reference to ChatInput component to programmatically focus it
   let chatInputRef: any = null;
 
-  // Auto-save state whenever messages change
-  $effect(() => {
-    if (!hasRestoredState) {
-      return;
-    }
-
-    // Trigger when messages or hasUserSentMessage change
-    const state = {
-      messages,
-      hasUserSentMessage
-    };
-    saveState(state);
-    console.log('[App] Saved state with', messages.length, 'messages');
-  });
-
   // Set up message listener from VS Code extension
   onMount(() => {
-    // Restore saved state
-    const savedState = getState();
-    if (savedState) {
-      console.log('[App] Restoring saved state:', savedState);
-      if (savedState.messages) {
-        messages = savedState.messages;
-      }
-      if (savedState.hasUserSentMessage !== undefined) {
-        hasUserSentMessage = savedState.hasUserSentMessage;
-        showLogo = !savedState.hasUserSentMessage;
-      }
-    }
-
+    // Don't restore state - users should load conversations from gallery
+    console.log('[App] Starting with blank slate - no auto-restore');
     hasRestoredState = true;
 
     // Start tracking startup time
@@ -115,8 +100,13 @@
       switch (event.type) {
         case 'agent_ready':
           console.log('[App] Agent ready:', event.version);
+          console.log('[App] Agent ready event data:', event);
           agentReady = true;
           agentVersion = event.version;
+          const eventHasWorkspace = (event as any).hasWorkspace;
+          console.log('[App] Received hasWorkspace value:', eventHasWorkspace);
+          hasWorkspace = eventHasWorkspace ?? true; // Default to true to be safe
+          console.log('[App] Final workspace status:', hasWorkspace ? 'Open' : 'None');
           if (startupTimer !== null) {
             clearInterval(startupTimer);
             startupTimer = null;
@@ -202,12 +192,57 @@
           isProcessing = false;
           showLogo = true;
           hasUserSentMessage = false;
+          // Clear persisted state
+          saveState({ messages: [], hasUserSentMessage: false });
           break;
 
         case 'prefill_input':
           // Prefill the chat input with text
           console.log('[App] Received prefill_input event with text:', event.text);
           chatInputRef?.prefill(event.text);
+          break;
+
+        case 'conversation_loaded':
+          // When a conversation is loaded, restore messages and navigate to chat
+          console.log('[App] Conversation loaded:', event.conversation);
+          if (event.conversation && event.conversation.messages) {
+            // Convert conversation messages to UI message format
+            messages = event.conversation.messages.map((msg: any) => ({
+              role: msg.role,
+              content: msg.content,
+              timestamp: new Date(msg.timestamp || Date.now()).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+            }));
+            hasUserSentMessage = messages.length > 0;
+            showLogo = false;
+          }
+          // Navigate to chat view
+          currentView = '/';
+          // Show branch info if present
+          if (event.branchInfo) {
+            console.log('[App] Loaded branch from:', event.branchInfo.originalTitle);
+          }
+          break;
+        
+        case 'workspace_changed':
+          // Handle workspace changes (open/close folder)
+          const newWorkspaceStatus = (event as any).hasWorkspace;
+          console.log('[App] Workspace changed event:', event);
+          console.log('[App] New workspace status:', newWorkspaceStatus ? 'Open' : 'Closed');
+          console.log('[App] Current workspace status before change:', hasWorkspace ? 'Open' : 'Closed');
+          
+          // Only update if the status actually changed
+          if (newWorkspaceStatus !== undefined && newWorkspaceStatus !== hasWorkspace) {
+            hasWorkspace = newWorkspaceStatus;
+            console.log('[App] Workspace status updated to:', hasWorkspace ? 'Open' : 'Closed');
+            
+            // If workspace was closed and user is on gallery, navigate to home
+            if (!hasWorkspace && currentView === '/gallery/conversations') {
+              console.log('[App] Workspace closed, navigating away from gallery');
+              currentView = '/';
+            }
+          } else {
+            console.log('[App] Workspace status unchanged, ignoring event');
+          }
           break;
       }
     });
@@ -281,7 +316,7 @@
     </div>
   {/if}
   
-  <AppNavigation currentPath={currentView} onNavigate={handleNavigate} />
+  <AppNavigation currentPath={currentView} onNavigate={handleNavigate} {hasWorkspace} />
   
   {#if currentView === '/'}
     <div class="chat-page">
@@ -301,7 +336,7 @@
       {/if}
 
       <div class="messages-container">
-        <MessageList {messages} />
+        <MessageList messages={displayMessages} />
       </div>
       
       <div class="input-container">
@@ -311,6 +346,7 @@
           onStop={handleStop}
           disabled={!agentReady}
           isProcessing={isProcessing}
+          hasActiveConversation={hasUserSentMessage}
         />
       </div>
     </div>
@@ -318,6 +354,8 @@
     <SettingsPage />
   {:else if currentView === '/profile'}
     <ProfilePage />
+  {:else if currentView === '/gallery/conversations'}
+    <ConversationsGallery onNavigate={handleNavigate} />
   {:else if currentView === '/functions/architect'}
     <div class="placeholder-view">
       <h2>Architect Mode</h2>

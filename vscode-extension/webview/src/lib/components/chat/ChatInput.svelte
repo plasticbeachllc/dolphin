@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Textarea } from "$lib/components/ui/textarea";
   import { Button } from "$lib/components/ui/button";
-  import { SendHorizontal, Square } from "lucide-svelte";
+  import { SendHorizontal, Square, Plus } from "lucide-svelte";
 
   interface Props {
     onSend?: (message: string) => void;
@@ -9,6 +9,7 @@
     placeholder?: string;
     disabled?: boolean;
     isProcessing?: boolean;
+    hasActiveConversation?: boolean;
   }
 
   let {
@@ -16,11 +17,15 @@
     onStop,
     placeholder = "Type a message...",
     disabled = false,
-    isProcessing = false
+    isProcessing = false,
+    hasActiveConversation = false
   }: Props = $props();
 
   let message = $state("");
   let textareaRef: HTMLTextAreaElement | null = $state(null);
+  
+  // Determine if we should show "New Conversation" button
+  let showNewConversationButton = $derived(!hasActiveConversation && !message.trim());
 
   function handleKeyDown(event: KeyboardEvent) {
     // Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux) to send
@@ -70,10 +75,12 @@
     variant={isProcessing ? "destructive" : "default"}
     size="icon"
     class="shrink-0 self-end"
-    aria-label={isProcessing ? "Stop" : "Send"}
+    aria-label={isProcessing ? "Stop" : showNewConversationButton ? "New Conversation" : "Send"}
   >
     {#if isProcessing}
       <Square class="h-4 w-4" />
+    {:else if showNewConversationButton}
+      <Plus class="h-4 w-4" />
     {:else}
       <SendHorizontal class="h-4 w-4" />
     {/if}

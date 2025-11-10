@@ -45,6 +45,10 @@ class AgentCore {
   private conversationStore: ConversationStore;
   private currentConversationId: string | null = null;
   private isFirstUserMessage = true;
+  private loadedConversationId: string | null = null; // Track original conversation for delayed branching
+  
+  // Stdout write queue to prevent message interleaving
+  private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(workspaceRoot: string, extensionPath?: string) {
     this.workspaceRoot = workspaceRoot;
@@ -302,13 +306,13 @@ class AgentCore {
       } else if (message.method === "get_kb_status") {
         this.handleGetKBStatus(message);
       } else if (message.method === "list_conversations") {
-        this.handleListConversations(message);
+        void this.handleListConversations(message);
       } else if (message.method === "load_conversation") {
-        this.handleLoadConversation(message);
+        void this.handleLoadConversation(message);
       } else if (message.method === "delete_conversation") {
-        this.handleDeleteConversation(message);
+        void this.handleDeleteConversation(message);
       } else if (message.method === "rename_conversation") {
-        this.handleRenameConversation(message);
+        void this.handleRenameConversation(message);
       }
     } catch (error) {
       console.error("[Agent Core] Parse error:", error);
@@ -352,9 +356,15 @@ class AgentCore {
   private async handleSendMessage(request: ExtensionRequest) {
     if (request.type === "send_message") {
       try {
-        // Phase 5: Create conversation on first user message
+        // Phase 5: Create conversation or branch on first user message
         if (this.isFirstUserMessage) {
-          await this.createNewConversation(request.content);
+          if (this.loadedConversationId) {
+            // Branch the loaded conversation now that user is sending a message
+            await this.branchLoadedConversation();
+          } else {
+            // Create new conversation
+            await this.createNewConversation(request.content);
+          }
           this.isFirstUserMessage = false;
         }
         
@@ -458,6 +468,7 @@ class AgentCore {
   private handleClearConversation() {
     this.conversationHistory = [];
     this.currentConversationId = null;
+    this.loadedConversationId = null;
     this.isFirstUserMessage = true;
     this.sendEvent({
       type: "task_completed",
@@ -586,6 +597,33 @@ class AgentCore {
     return trimmed.substring(0, maxLength) + "...";
   }
   
+  private async branchLoadedConversation(): Promise<void> {
+    if (!this.loadedConversationId) {
+      console.error("[Agent Core] No loaded conversation to branch");
+      return;
+    }
+    
+    const originalConversation = await this.conversationStore.loadConversation(this.loadedConversationId);
+    if (!originalConversation) {
+      console.error(`[Agent Core] Failed to load conversation: ${this.loadedConversationId}`);
+      return;
+    }
+    
+    // Create branch
+    const branchId = this.generateConversationId();
+    const branchConversation = await this.conversationStore.branchConversation(
+      this.loadedConversationId,
+      originalConversation.messages[originalConversation.messages.length - 1]?.id || "root",
+      branchId
+    );
+    
+    // Set as current conversation
+    this.currentConversationId = branchId;
+    this.loadedConversationId = null; // Clear the loaded conversation tracking
+    
+    console.error(`[Agent Core] Branched conversation ${this.loadedConversationId} to ${branchId} on first message`);
+  }
+  
   private async createNewConversation(firstUserMessage: string): Promise<void> {
     const conversationId = this.generateConversationId();
     const title = this.generateConversationTitle(firstUserMessage);
@@ -669,7 +707,9 @@ class AgentCore {
   
   private async handleListConversations(message: Message) {
     try {
+      console.error(`[Agent Core] Listing conversations for request id: ${message.id}`);
       const conversations = await this.conversationStore.listConversationsWithMetadata();
+      console.error(`[ConversationStore] Returning ${conversations.length} conversations`);
       
       const response: Message = {
         jsonrpc: "2.0",
@@ -677,8 +717,11 @@ class AgentCore {
         result: { conversations },
       };
       
+      console.error(`[Agent Core] Sending list response: ${JSON.stringify(response).substring(0, 200)}`);
       this.sendRPCMessage(response);
+      console.error(`[Agent Core] List response sent`);
     } catch (error: any) {
+      console.error(`[Agent Core] Error in handleListConversations: ${error.message}`);
       const response: Message = {
         jsonrpc: "2.0",
         id: message.id,
@@ -724,20 +767,13 @@ class AgentCore {
         return;
       }
       
-      // Create a branch copy (preserves original)
-      const branchId = this.generateConversationId();
-      const branchConversation = await this.conversationStore.branchConversation(
-        conversationId,
-        conversation.messages[conversation.messages.length - 1]?.id || "root",
-        branchId
-      );
-      
-      // Set as current conversation
-      this.currentConversationId = branchId;
-      this.isFirstUserMessage = false;
+      // Don't branch yet - just load into memory
+      // Branching will happen when user sends their first message
+      this.loadedConversationId = conversationId;
+      this.isFirstUserMessage = true; // Will trigger branch on next message
       
       // Restore conversation history (convert back to Message format)
-      this.conversationHistory = branchConversation.messages.map((msg) => ({
+      this.conversationHistory = conversation.messages.map((msg) => ({
         role: msg.role,
         content: msg.content,
       }));
@@ -746,16 +782,13 @@ class AgentCore {
         jsonrpc: "2.0",
         id: message.id,
         result: {
-          conversation: branchConversation,
-          branchInfo: {
-            originalId: conversationId,
-            originalTitle: conversation.metadata?.title || "Untitled",
-          },
+          conversation: conversation,
+          branchInfo: null, // No branch yet
         },
       };
       
       this.sendRPCMessage(response);
-      console.error(`[Agent Core] Loaded conversation ${conversationId} as branch ${branchId}`);
+      console.error(`[Agent Core] Loaded conversation ${conversationId} (will branch on first message)`);
     } catch (error: any) {
       const response: Message = {
         jsonrpc: "2.0",
@@ -880,13 +913,20 @@ class AgentCore {
   }
 
   private sendRPCMessage(message: Message) {
-    const payload = JSON.stringify(message);
-    const contentLength = Buffer.byteLength(payload, "utf-8");
-    const header = `Content-Length: ${contentLength}\r\n\r\n`;
-    const framedMessage = header + payload;
-    
-    // Write the complete framed message atomically
-    process.stdout.write(framedMessage);
+    // Queue the write to prevent interleaving
+    this.writeQueue = this.writeQueue.then(() => {
+      return new Promise<void>((resolve) => {
+        const payload = JSON.stringify(message);
+        const contentLength = Buffer.byteLength(payload, "utf-8");
+        const header = `Content-Length: ${contentLength}\r\n\r\n`;
+        const framedMessage = header + payload;
+        
+        // Write the complete framed message atomically
+        process.stdout.write(framedMessage, () => {
+          resolve();
+        });
+      });
+    });
   }
 
   private shutdown() {

@@ -1,14 +1,15 @@
 <script lang="ts">
   import * as NavigationMenu from "$lib/components/ui/navigation-menu";
   import { navigationMenuTriggerStyle } from "$lib/components/ui/navigation-menu/navigation-menu-trigger.svelte";
-  import { Home, Workflow, Plug, Settings, User } from "lucide-svelte";
+  import { Home, Workflow, Plug, Settings, User, MessageSquare } from "lucide-svelte";
 
   interface Props {
     currentPath?: string;
     onNavigate?: (path: string) => void;
+    hasWorkspace?: boolean;
   }
 
-  let { currentPath = "/", onNavigate }: Props = $props();
+  let { currentPath = "/", onNavigate, hasWorkspace = false }: Props = $props();
 
   function handleNavigation(path: string) {
     onNavigate?.(path);
@@ -30,6 +31,21 @@
       >
         🐬
       </a>
+
+      <!-- Conversations Link - only show if workspace is open -->
+      {#if hasWorkspace}
+        <a
+          href="/gallery/conversations"
+          class="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground h-8 px-3 gap-1.5"
+          onclick={() => handleNavigation("/gallery/conversations")}
+          title="Conversations"
+          aria-label="Conversations"
+          aria-current={currentPath === "/gallery/conversations" ? "page" : undefined}
+        >
+          <MessageSquare class="size-3.5" />
+          <span class="text-xs">History</span>
+        </a>
+      {/if}
 
       <!-- Functions Dropdown -->
       <NavigationMenu.Root>

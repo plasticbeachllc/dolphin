@@ -109,25 +109,40 @@ export class ConversationStore {
       message_count: number;
     }>
   > {
-    const conversationIds = await this.listConversations();
-    const conversations = await Promise.all(
-      conversationIds.map((id) => this.loadConversation(id))
-    );
+    try {
+      console.error("[ConversationStore] Listing conversations with metadata...");
+      const conversationIds = await this.listConversations();
+      console.error(`[ConversationStore] Found ${conversationIds.length} conversation IDs`);
+      
+      if (conversationIds.length === 0) {
+        return [];
+      }
+      
+      const conversations = await Promise.all(
+        conversationIds.map((id) => this.loadConversation(id))
+      );
 
-    return conversations
-      .filter((conv): conv is Conversation => conv !== null)
-      .map((conv) => ({
-        id: conv.conversation.id,
-        metadata: conv.metadata || {
-          title: "Untitled Conversation",
-          files: [],
-          token_count: 0,
-          pinned: false,
-        },
-        created_at: conv.conversation.created_at,
-        updated_at: conv.conversation.updated_at,
-        message_count: conv.messages.length,
-      }));
+      const result = conversations
+        .filter((conv): conv is Conversation => conv !== null)
+        .map((conv) => ({
+          id: conv.conversation.id,
+          metadata: conv.metadata || {
+            title: "Untitled Conversation",
+            files: [],
+            token_count: 0,
+            pinned: false,
+          },
+          created_at: conv.conversation.created_at,
+          updated_at: conv.conversation.updated_at,
+          message_count: conv.messages.length,
+        }));
+      
+      console.error(`[ConversationStore] Returning ${result.length} conversations`);
+      return result;
+    } catch (error: any) {
+      console.error(`[ConversationStore] Error listing conversations: ${error.message}`);
+      return [];
+    }
   }
 
   async branchConversation(
