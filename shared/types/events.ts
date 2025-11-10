@@ -8,7 +8,11 @@ export type ExtensionRequest =
   | { type: "reject_plan"; planId: string; feedback?: string }
   | { type: "approve_diff"; diffId: string }
   | { type: "reject_diff"; diffId: string; feedback?: string }
-  | { type: "cancel_operation"; operationId: string };
+  | { type: "cancel_operation"; operationId: string }
+  | { type: "list_conversations" }
+  | { type: "load_conversation"; conversationId: string }
+  | { type: "delete_conversation"; conversationId: string }
+  | { type: "rename_conversation"; conversationId: string; newTitle: string };
 
 // Agent Core → Extension
 // All events include an optional requestId for correlation/logging
@@ -47,7 +51,11 @@ export type AgentEvent =
   | { type: "error"; error: AgentError }
   | { type: "focus_input" }
   | { type: "clear_conversation" }
-  | { type: "prefill_input"; text: string };
+  | { type: "prefill_input"; text: string }
+  | { type: "conversation_loaded"; conversation: any; branchInfo?: { originalId: string; originalTitle: string } }
+  | { type: "conversations_listed"; conversations: ConversationListItem[] }
+  | { type: "conversation_deleted"; conversationId: string }
+  | { type: "conversation_renamed"; conversationId: string; newTitle: string };
 
 export interface Plan {
   id: string;
@@ -104,4 +112,32 @@ export interface DiffHunk {
   newStart: number;
   newLines: number;
   lines: string[];
+}
+
+// Phase 5: Conversation Management Types
+
+export interface ConversationListItem {
+  id: string;
+  metadata: ConversationMetadata;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
+export interface ConversationMetadata {
+  title: string;
+  files: string[];
+  token_count: number;
+  pinned: boolean;
+  parent_conversation_id?: string;
+  branch_point_message_id?: string;
+  last_active_at?: string;
+}
+
+export interface LoadConversationResult {
+  conversation: any; // Full Conversation object from state.ts
+  branchInfo?: {
+    originalId: string;
+    originalTitle: string;
+  };
 }

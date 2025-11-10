@@ -200,6 +200,85 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             }
           }
           break;
+        
+        // Phase 5: Conversation Management
+        case "list_conversations":
+          this.outputChannel.appendLine(`[DolphinViewProvider] Processing list_conversations`);
+          if (this.agentBridge) {
+            try {
+              const conversations = await this.agentBridge.listConversations();
+              webviewView.webview.postMessage({
+                type: 'conversations_list',
+                conversations: conversations
+              });
+            } catch (error: any) {
+              this.outputChannel.appendLine(`[DolphinViewProvider] Error listing conversations: ${error.message}`);
+              webviewView.webview.postMessage({
+                type: 'error',
+                error: { message: `Failed to list conversations: ${error.message}` }
+              });
+            }
+          }
+          break;
+
+        case "load_conversation":
+          this.outputChannel.appendLine(`[DolphinViewProvider] Processing load_conversation: ${message.conversationId}`);
+          if (this.agentBridge) {
+            try {
+              const result = await this.agentBridge.loadConversation(message.conversationId);
+              webviewView.webview.postMessage({
+                type: 'conversation_loaded',
+                conversation: result.conversation,
+                branchInfo: result.branchInfo
+              });
+            } catch (error: any) {
+              this.outputChannel.appendLine(`[DolphinViewProvider] Error loading conversation: ${error.message}`);
+              webviewView.webview.postMessage({
+                type: 'error',
+                error: { message: `Failed to load conversation: ${error.message}` }
+              });
+            }
+          }
+          break;
+
+        case "delete_conversation":
+          this.outputChannel.appendLine(`[DolphinViewProvider] Processing delete_conversation: ${message.conversationId}`);
+          if (this.agentBridge) {
+            try {
+              await this.agentBridge.deleteConversation(message.conversationId);
+              webviewView.webview.postMessage({
+                type: 'conversation_deleted',
+                conversationId: message.conversationId
+              });
+            } catch (error: any) {
+              this.outputChannel.appendLine(`[DolphinViewProvider] Error deleting conversation: ${error.message}`);
+              webviewView.webview.postMessage({
+                type: 'error',
+                error: { message: `Failed to delete conversation: ${error.message}` }
+              });
+            }
+          }
+          break;
+
+        case "rename_conversation":
+          this.outputChannel.appendLine(`[DolphinViewProvider] Processing rename_conversation: ${message.conversationId} -> ${message.newTitle}`);
+          if (this.agentBridge) {
+            try {
+              await this.agentBridge.renameConversation(message.conversationId, message.newTitle);
+              webviewView.webview.postMessage({
+                type: 'conversation_renamed',
+                conversationId: message.conversationId,
+                newTitle: message.newTitle
+              });
+            } catch (error: any) {
+              this.outputChannel.appendLine(`[DolphinViewProvider] Error renaming conversation: ${error.message}`);
+              webviewView.webview.postMessage({
+                type: 'error',
+                error: { message: `Failed to rename conversation: ${error.message}` }
+              });
+            }
+          }
+          break;
 
         default:
           this.outputChannel.appendLine(`[DolphinViewProvider] Unknown message type: ${message.type}`);

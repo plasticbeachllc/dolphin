@@ -1,7 +1,7 @@
 // vscode-extension/src/agent/bridge.ts
 import { ChildProcess, spawn } from "child_process";
 import * as vscode from "vscode";
-import type { AgentEvent, ExtensionRequest } from "../types/events";
+import type { AgentEvent, ExtensionRequest, ConversationListItem, LoadConversationResult } from "../types/events";
 import {
   StreamMessageReader,
   StreamMessageWriter,
@@ -313,6 +313,25 @@ export class AgentBridge {
 
   async clearConversation(): Promise<void> {
     await this.sendNotification("clear_conversation");
+  }
+
+  // Phase 5: Conversation Management Methods
+
+  async listConversations(): Promise<ConversationListItem[]> {
+    const result = await this.sendRequest("list_conversations", undefined, 5000);
+    return result.conversations || [];
+  }
+
+  async loadConversation(conversationId: string): Promise<LoadConversationResult> {
+    return await this.sendRequest("load_conversation", { conversationId }, 5000);
+  }
+
+  async deleteConversation(conversationId: string): Promise<void> {
+    await this.sendRequest("delete_conversation", { conversationId }, 5000);
+  }
+
+  async renameConversation(conversationId: string, newTitle: string): Promise<void> {
+    await this.sendRequest("rename_conversation", { conversationId, newTitle }, 5000);
   }
 
   private async waitForReady(timeout = 60000): Promise<void> {
