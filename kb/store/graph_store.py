@@ -499,32 +499,24 @@ class GraphStore:
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
-                # Determine if there are nodes to clean up
-                cur.execute(
-                    "SELECT COUNT(*) FROM code_nodes WHERE file_id = ?",
-                    (file_id,)
-                )
-                node_count = int(cur.fetchone()[0])
-
-                if node_count == 0:
-                    return 0
-
                 # Delete edges (for backward compatibility with databases without CASCADE)
                 # This also handles edges where the target is being deleted
                 cur.execute(
                     (
+                        "WITH nodes AS (SELECT id FROM code_nodes WHERE file_id = ?) "
                         "DELETE FROM code_edges "
-                        "WHERE source_node_id IN (SELECT id FROM code_nodes WHERE file_id = ?) "
-                        "   OR target_node_id IN (SELECT id FROM code_nodes WHERE file_id = ?)"
+                        "WHERE source_node_id IN (SELECT id FROM nodes) "
+                        "   OR target_node_id IN (SELECT id FROM nodes)"
                     ),
-                    (file_id, file_id)
+                    (file_id,)
                 )
 
                 # Delete from FTS5
                 cur.execute(
                     (
+                        "WITH nodes AS (SELECT id FROM code_nodes WHERE file_id = ?) "
                         "DELETE FROM code_nodes_fts "
-                        "WHERE node_id IN (SELECT id FROM code_nodes WHERE file_id = ?)"
+                        "WHERE node_id IN (SELECT id FROM nodes)"
                     ),
                     (file_id,)
                 )
@@ -556,32 +548,24 @@ class GraphStore:
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
-                # Determine if there are nodes to clean up
-                cur.execute(
-                    "SELECT COUNT(*) FROM code_nodes WHERE repo_id = ?",
-                    (repo_id,)
-                )
-                node_count = int(cur.fetchone()[0])
-
-                if node_count == 0:
-                    return 0
-
                 # Delete edges (for backward compatibility with databases without CASCADE)
                 # This also handles edges where the target is being deleted
                 cur.execute(
                     (
+                        "WITH nodes AS (SELECT id FROM code_nodes WHERE repo_id = ?) "
                         "DELETE FROM code_edges "
-                        "WHERE source_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?) "
-                        "   OR target_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)"
+                        "WHERE source_node_id IN (SELECT id FROM nodes) "
+                        "   OR target_node_id IN (SELECT id FROM nodes)"
                     ),
-                    (repo_id, repo_id)
+                    (repo_id,)
                 )
 
                 # Delete from FTS5
                 cur.execute(
                     (
+                        "WITH nodes AS (SELECT id FROM code_nodes WHERE repo_id = ?) "
                         "DELETE FROM code_nodes_fts "
-                        "WHERE node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)"
+                        "WHERE node_id IN (SELECT id FROM nodes)"
                     ),
                     (repo_id,)
                 )
