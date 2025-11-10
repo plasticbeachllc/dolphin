@@ -79,7 +79,9 @@ class SQLiteMetadataStore:
                         "code_nodes": "Code graph nodes",
                         "code_edges": "Code graph edges",
                         "node_aliases": "Code graph aliases",
-                        "cross_repo_references": "Cross-repo references"
+                        "cross_repo_references": "Cross-repo references",
+                        "pending_changes": "File sync pending changes",
+                        "file_snapshots": "File sync snapshots"
                     }
                     
                     for table, description in expected_tables.items():
@@ -1668,3 +1670,181 @@ class SQLiteMetadataStore:
                 repair_report["errors"].append(f"Repair failed: {e}")
         
         return repair_report
+
+    # =====================
+    # File Sync Methods (Phase 1)
+    # =====================
+
+    def record_pending_change(
+        self,
+        repo_id: int,
+        file_path: str,
+        change_type: str,
+        old_path: str | None = None
+    ) -> int:
+        """Record a file change in the pending queue."""
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute("""
+                INSERT INTO pending_changes
+                (repo_id, file_path, change_type, old_path, detected_at)
+                VALUES (?, ?, ?, ?, datetime('now'))
+            """, (repo_id, file_path, change_type, old_path))
+            change_id = cur.lastrowid
+            conn.commit()
+            return change_id
+
+    def get_pending_changes(
+        self,
+        repo_id: int | None = None,
+        limit: int = 1000
+    ) -> list[dict]:
+        """Get unprocessed pending changes."""
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            if repo_id:
+                cur.execute("""
+                    SELECT id, repo_id, file_path, change_type, old_path, detected_at
+                    FROM pending_changes
+                    WHERE repo_id = ? AND processed = 0
+                    ORDER BY detected_at ASC
+                    LIMIT ?
+                """, (repo_id, limit))
+            else:
+                cur.execute("""
+                    SELECT id, repo_id, file_path, change_type, old_path, detected_at
+                    FROM pending_changes
+                    WHERE processed = 0
+                    ORDER BY detected_at ASC
+                    LIMIT ?
+                """, (limit,))
+
+            rows = cur.fetchall()
+            return [
+                {
+                    "id": row[0],
+                    "repo_id": row[1],
+                    "file_path": row[2],
+                    "change_type": row[3],
+                    "old_path": row[4],
+                    "detected_at": row[5]
+                }
+                for row in rows
+            ]
+
+    def mark_changes_processed(self, change_ids: list[int]) -> int:
+        """Mark pending changes as processed."""
+        if not change_ids:
+            return 0
+
+        placeholders = ",".join(["?"] * len(change_ids))
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute(f"""
+                UPDATE pending_changes
+                SET processed = 1, processed_at = datetime('now')
+                WHERE id IN ({placeholders})
+            """, tuple(change_ids))
+            updated = cur.rowcount
+            conn.commit()
+            return updated
+
+    def cleanup_old_changes(self, days: int = 7) -> int:
+        """Delete processed changes older than specified days."""
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute("""
+                DELETE FROM pending_changes
+                WHERE processed = 1
+                AND processed_at < datetime('now', ?)
+            """, (f"-{days} days",))
+            deleted = cur.rowcount
+            conn.commit()
+            return deleted
+
+    def upsert_file_snapshot(
+        self,
+        file_id: int,
+        repo_id: int,
+        path: str,
+        mtime_ns: int,
+        size_bytes: int,
+        content_hash: str
+    ) -> None:
+        """Record file state after successful indexing."""
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute("""
+                INSERT INTO file_snapshots
+                (file_id, repo_id, path, mtime_ns, size_bytes, content_hash, last_indexed_at)
+                VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(file_id) DO UPDATE SET
+                    mtime_ns = excluded.mtime_ns,
+                    size_bytes = excluded.size_bytes,
+                    content_hash = excluded.content_hash,
+                    last_indexed_at = excluded.last_indexed_at
+            """, (file_id, repo_id, path, mtime_ns, size_bytes, content_hash))
+            conn.commit()
+
+    def get_file_snapshot(self, file_id: int) -> dict | None:
+        """Get snapshot for a file."""
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute("""
+                SELECT file_id, path, mtime_ns, size_bytes, content_hash, last_indexed_at
+                FROM file_snapshots
+                WHERE file_id = ?
+            """, (file_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            return {
+                "file_id": row[0],
+                "path": row[1],
+                "mtime_ns": row[2],
+                "size_bytes": row[3],
+                "content_hash": row[4],
+                "last_indexed_at": row[5]
+            }
+
+    def detect_drift(self, repo_id: int) -> list[dict]:
+        """Detect files that changed since last snapshot."""
+        from pathlib import Path
+        import hashlib
+
+        # Get repo info
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute("SELECT name, root_path FROM repos WHERE id = ?", (repo_id,))
+            repo_row = cur.fetchone()
+            if not repo_row:
+                return []
+
+            repo_name = repo_row[0]
+            root = Path(repo_row[1])
+
+        drift_events = []
+
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute("""
+                SELECT fs.file_id, fs.path, fs.mtime_ns, fs.size_bytes, fs.content_hash
+                FROM file_snapshots fs
+                WHERE fs.repo_id = ?
+            """, (repo_id,))
+
+            for row in cur.fetchall():
+                file_id, path, snapshot_mtime, snapshot_size, snapshot_hash = row
+                file_path = root / path
+
+                if not file_path.exists():
+                    drift_events.append({
+                        "file_id": file_id,
+                        "path": path,
+                        "drift_type": "deleted"
+                    })
+                    continue
+
+                stat = file_path.stat()
+                if stat.st_mtime_ns != snapshot_mtime or stat.st_size != snapshot_size:
+                    current_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
+                    if current_hash != snapshot_hash:
+                        drift_events.append({
+                            "file_id": file_id,
+                            "path": path,
+                            "drift_type": "modified"
+                        })
+
+        return drift_events

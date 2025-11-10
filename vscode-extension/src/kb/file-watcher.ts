@@ -11,6 +11,8 @@ export interface WatcherConfig {
   debounceMs: number;
   batchIntervalMs: number;
   excludePatterns: string[];
+  apiBaseUrl?: string;
+  repoName?: string;
 }
 
 export class FileWatcher {
@@ -98,13 +100,51 @@ export class FileWatcher {
 
       console.log(`[FileWatcher] Processing batch of ${batch.length} changes`);
 
-      // Send to handler
+      // Send to API endpoint (Phase 2 integration)
+      if (this.config.apiBaseUrl && this.config.repoName) {
+        try {
+          await this.sendChangesToAPI(batch);
+        } catch (error) {
+          console.error("[FileWatcher] Failed to send changes to API:", error);
+        }
+      }
+
+      // Send to handler (for backwards compatibility)
       try {
         await this.onBatch(batch);
       } catch (error) {
         console.error("[FileWatcher] Batch processing failed:", error);
       }
     }, this.config.batchIntervalMs);
+  }
+
+  private async sendChangesToAPI(batch: ChangeEvent[]): Promise<void> {
+    if (!this.config.apiBaseUrl || !this.config.repoName) {
+      return;
+    }
+
+    // Convert changes to API format
+    const changes = batch.map((event) => ({
+      file_path: vscode.workspace.asRelativePath(event.uri),
+      change_type: event.type,
+    }));
+
+    const response = await fetch(
+      `${this.config.apiBaseUrl}/v1/repos/${this.config.repoName}/changes`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ changes }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.statusText}`);
+    }
+
+    console.log(`[FileWatcher] Sent ${changes.length} changes to API`);
   }
 
   dispose() {

@@ -9,6 +9,8 @@ import { loadWatcherConfig } from "./kb/config";
 import { Logger } from "./utils/logger";
 import { DolphinCodeActionProvider } from "./editor/code-actions";
 import { DiffHandler, DiffChange } from "./editor/diff-handler";
+import { AutoSyncManager } from "./kb/auto-sync-manager";
+import { DriftDetector } from "./kb/drift-detector";
 
 let agentBridge: AgentBridge | null = null;
 let outputChannel: vscode.OutputChannel;
@@ -16,6 +18,8 @@ let fileWatcher: FileWatcher | null = null;
 let statusBar: KBStatusBar | null = null;
 let viewProvider: DolphinViewProvider | null = null;
 let logger: Logger;
+let autoSyncManager: AutoSyncManager | null = null;
+let driftDetector: DriftDetector | null = null;
 
 export async function activate(context: vscode.ExtensionContext) {
   // Create output channel for logging (shared by extension and agent bridge)
@@ -75,6 +79,9 @@ export async function activate(context: vscode.ExtensionContext) {
       // For now, we just log them
     });
 
+    // Crash recovery (Phase 5)
+    await recoverFromCrash(context);
+
     // Initialize file watcher
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (workspaceFolder && agentBridge) {
@@ -82,6 +89,9 @@ export async function activate(context: vscode.ExtensionContext) {
       let config;
       try {
         config = loadWatcherConfig();
+        // Add API integration for file sync (Phase 2)
+        config.apiBaseUrl = "http://localhost:8765";
+        config.repoName = path.basename(workspaceFolder.uri.fsPath);
       } catch (error: any) {
         logger.warn(`Failed to load watcher config, using defaults: ${error.message}`);
         // Fallback to safe defaults if config system isn't ready (e.g., in tests)
@@ -96,6 +106,8 @@ export async function activate(context: vscode.ExtensionContext) {
             "**/out/**",
             "**/*.min.js",
           ],
+          apiBaseUrl: "http://localhost:8765",
+          repoName: path.basename(workspaceFolder.uri.fsPath),
         };
       }
       fileWatcher = new FileWatcher(config, async (changes) => {
@@ -119,6 +131,41 @@ export async function activate(context: vscode.ExtensionContext) {
       });
 
       outputChannel.appendLine("[Extension] File watcher initialized");
+
+      // Initialize Auto-Sync Manager (Phase 4)
+      const autoSyncConfig = {
+        enabled: vscode.workspace.getConfiguration("dolphin.kb.autoSync").get<boolean>("enabled", true),
+        mode: vscode.workspace.getConfiguration("dolphin.kb.autoSync").get<"off" | "manual" | "smart" | "aggressive">("mode", "smart"),
+        idleTimeMs: vscode.workspace.getConfiguration("dolphin.kb.autoSync").get<number>("idleTimeMs", 30000),
+        maxBatchSize: vscode.workspace.getConfiguration("dolphin.kb.autoSync").get<number>("maxBatchSize", 100),
+        checkIntervalMs: vscode.workspace.getConfiguration("dolphin.kb.autoSync").get<number>("checkIntervalMs", 30000),
+      };
+
+      autoSyncManager = new AutoSyncManager(
+        autoSyncConfig,
+        path.basename(workspaceFolder.uri.fsPath),
+        "http://localhost:8765",
+        outputChannel
+      );
+      await autoSyncManager.start();
+      context.subscriptions.push({
+        dispose: () => autoSyncManager?.dispose(),
+      });
+
+      outputChannel.appendLine("[Extension] Auto-sync manager initialized");
+
+      // Initialize Drift Detector (Phase 5)
+      driftDetector = new DriftDetector(
+        path.basename(workspaceFolder.uri.fsPath),
+        "http://localhost:8765",
+        outputChannel
+      );
+      await driftDetector.start();
+      context.subscriptions.push({
+        dispose: () => driftDetector?.dispose(),
+      });
+
+      outputChannel.appendLine("[Extension] Drift detector initialized");
     }
 
     // Register webview provider with AgentBridge
@@ -456,11 +503,67 @@ async function getKBStatus(): Promise<any> {
   });
 }
 
+// Crash recovery function (Phase 5)
+async function recoverFromCrash(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  if (!workspaceFolder) {
+    return;
+  }
+
+  try {
+    outputChannel.appendLine("[CrashRecovery] Checking for incomplete indexing tasks...");
+
+    const repoName = path.basename(workspaceFolder.uri.fsPath);
+    const apiBaseUrl = "http://localhost:8765";
+
+    // Check for pending changes that accumulated during offline period
+    const response = await fetch(
+      `${apiBaseUrl}/v1/repos/${repoName}/pending-changes?limit=10`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      outputChannel.appendLine("[CrashRecovery] Failed to check for pending changes (KB may not be running)");
+      return;
+    }
+
+    const data = await response.json();
+    const pendingCount = data.total || 0;
+
+    if (pendingCount > 0) {
+      outputChannel.appendLine(`[CrashRecovery] Found ${pendingCount} pending changes from previous session`);
+
+      const choice = await vscode.window.showInformationMessage(
+        `Found ${pendingCount} file change(s) from previous session. Sync now?`,
+        "Sync",
+        "Later"
+      );
+
+      if (choice === "Sync") {
+        outputChannel.appendLine("[CrashRecovery] User requested sync - will be handled by auto-sync manager");
+      }
+    } else {
+      outputChannel.appendLine("[CrashRecovery] No pending changes found");
+    }
+  } catch (error: any) {
+    outputChannel.appendLine(`[CrashRecovery] Error during crash recovery: ${error.message}`);
+  }
+}
+
 export function deactivate() {
   fileWatcher?.dispose();
   statusBar?.dispose();
+  autoSyncManager?.dispose();
+  driftDetector?.dispose();
   agentBridge?.shutdown();
   agentBridge = null;
   fileWatcher = null;
   statusBar = null;
+  autoSyncManager = null;
+  driftDetector = null;
 }
