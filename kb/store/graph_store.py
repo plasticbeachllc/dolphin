@@ -499,29 +499,34 @@ class GraphStore:
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
-                # Get node IDs for cleanup
+                # Determine if there are nodes to clean up
                 cur.execute(
-                    "SELECT id FROM code_nodes WHERE file_id = ?",
+                    "SELECT COUNT(*) FROM code_nodes WHERE file_id = ?",
                     (file_id,)
                 )
-                node_ids = [str(row[0]) for row in cur.fetchall()]
+                node_count = int(cur.fetchone()[0])
 
-                if not node_ids:
+                if node_count == 0:
                     return 0
-
-                placeholders = ",".join(["?"] * len(node_ids))
 
                 # Delete edges (for backward compatibility with databases without CASCADE)
                 # This also handles edges where the target is being deleted
                 cur.execute(
-                    f"DELETE FROM code_edges WHERE source_node_id IN ({placeholders}) OR target_node_id IN ({placeholders})",
-                    tuple(node_ids) + tuple(node_ids)
+                    (
+                        "DELETE FROM code_edges "
+                        "WHERE source_node_id IN (SELECT id FROM code_nodes WHERE file_id = ?) "
+                        "   OR target_node_id IN (SELECT id FROM code_nodes WHERE file_id = ?)"
+                    ),
+                    (file_id, file_id)
                 )
 
                 # Delete from FTS5
                 cur.execute(
-                    f"DELETE FROM code_nodes_fts WHERE node_id IN ({placeholders})",
-                    tuple(node_ids)
+                    (
+                        "DELETE FROM code_nodes_fts "
+                        "WHERE node_id IN (SELECT id FROM code_nodes WHERE file_id = ?)"
+                    ),
+                    (file_id,)
                 )
 
                 # Delete nodes
@@ -551,29 +556,34 @@ class GraphStore:
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
-                # Get node IDs for cleanup
+                # Determine if there are nodes to clean up
                 cur.execute(
-                    "SELECT id FROM code_nodes WHERE repo_id = ?",
+                    "SELECT COUNT(*) FROM code_nodes WHERE repo_id = ?",
                     (repo_id,)
                 )
-                node_ids = [str(row[0]) for row in cur.fetchall()]
+                node_count = int(cur.fetchone()[0])
 
-                if not node_ids:
+                if node_count == 0:
                     return 0
-
-                placeholders = ",".join(["?"] * len(node_ids))
 
                 # Delete edges (for backward compatibility with databases without CASCADE)
                 # This also handles edges where the target is being deleted
                 cur.execute(
-                    f"DELETE FROM code_edges WHERE source_node_id IN ({placeholders}) OR target_node_id IN ({placeholders})",
-                    tuple(node_ids) + tuple(node_ids)
+                    (
+                        "DELETE FROM code_edges "
+                        "WHERE source_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?) "
+                        "   OR target_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)"
+                    ),
+                    (repo_id, repo_id)
                 )
 
                 # Delete from FTS5
                 cur.execute(
-                    f"DELETE FROM code_nodes_fts WHERE node_id IN ({placeholders})",
-                    tuple(node_ids)
+                    (
+                        "DELETE FROM code_nodes_fts "
+                        "WHERE node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)"
+                    ),
+                    (repo_id,)
                 )
 
                 # Delete nodes
