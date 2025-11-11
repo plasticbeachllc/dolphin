@@ -149,14 +149,14 @@ class VectorPreFilter:
         # File path exclusions
         if criteria.exclude_paths:
             for exclude_path in criteria.exclude_paths:
-                # Use LIKE for pattern matching
+                # Always use LIKE for path matching (more flexible)
                 if '*' in exclude_path or '?' in exclude_path:
                     # Convert glob to SQL LIKE pattern
                     like_pattern = exclude_path.replace('*', '%').replace('?', '_')
                     conditions.append(f"path NOT LIKE '{like_pattern}'")
                 else:
-                    # Exact match exclusion
-                    conditions.append(f"path != '{exclude_path}'")
+                    # Use LIKE with % for prefix matching
+                    conditions.append(f"path NOT LIKE '{exclude_path}%'")
 
         # File pattern inclusions
         if criteria.file_patterns:
@@ -342,16 +342,9 @@ class VectorPreFilter:
         Returns:
             Dictionary with statistics
         """
-        if not self.enable_stats or self._total_filters == 0:
-            return {
-                'total_filters_applied': 0,
-                'avg_reduction_pct': 0.0,
-                'cache_size': 0,
-            }
-
         return {
             'total_filters_applied': self._total_filters,
-            'avg_reduction_pct': self._total_reduction_pct / self._total_filters,
+            'avg_reduction_pct': self._total_reduction_pct / self._total_filters if self._total_filters > 0 else 0.0,
             'cache_size': len(self._filter_cache),
         }
 

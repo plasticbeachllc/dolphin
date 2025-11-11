@@ -462,9 +462,20 @@ class IngestionPipeline:
                             graph_nodes_created += graph_stats["nodes_created"]
                             graph_edges_created += graph_stats["edges_created"]
 
+                            # Initialize cache state if this is first indexing
+                            graph_manager = self.get_graph_manager(repo_id)
+                            cache_state = graph_manager.validator._get_cache_state()
+                            if cache_state is None:
+                                # Initialize cache state on first indexing
+                                graph_manager.validator.update_cache_state(
+                                    commit_sha=commit_sha,
+                                    node_count=0,  # Will be updated after full index
+                                    edge_count=0,  # Will be updated after full index
+                                    reset_changes=True
+                                )
+
                             # Track edge changes for cache invalidation
                             if graph_stats["edges_created"] > 0:
-                                graph_manager = self.get_graph_manager(repo_id)
                                 graph_manager.on_edges_changed(graph_stats["edges_created"])
                     except Exception as e:
                         error_logger.log_file_error(f"graph: {path}", e)
@@ -680,6 +691,17 @@ class IngestionPipeline:
         else:
             print(f"Dry run: would have updated counters for session {session_id}")
 
+        # Update cache state with final counts after indexing
+        if not dry_run and self.graph_store:
+            graph_manager = self.get_graph_manager(repo_id)
+            # Update cache state with current commit and graph size
+            graph_manager.validator.update_cache_state(
+                commit_sha=commit_sha,
+                node_count=graph_nodes_created,
+                edge_count=graph_edges_created,
+                reset_changes=True  # Reset edge changes after successful index
+            )
+        
         # Print summary
         print(f"\nIndexing complete for {repo_name}:")
         print(f"  Files processed: {files_done}")

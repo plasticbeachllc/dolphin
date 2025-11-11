@@ -126,8 +126,17 @@ class ParallelHybridSearch:
             embedding_provider: Optional embedding provider
             vector_weight: Weight for vector search results (default: 0.6)
         """
-        self.vector_search_fn = vector_search_fn
-        self.bm25_search_fn = bm25_search_fn
+        # Create wrapper functions from stores if provided
+        if vector_search_fn is None and vector_store is not None:
+            self.vector_search_fn = lambda query_embedding, top_k, **kwargs: vector_store.query(query_embedding, top_k, **kwargs)
+        else:
+            self.vector_search_fn = vector_search_fn
+            
+        if bm25_search_fn is None and bm25_store is not None:
+            self.bm25_search_fn = lambda query, top_k, **kwargs: bm25_store.search(query, top_k, **kwargs)
+        else:
+            self.bm25_search_fn = bm25_search_fn
+            
         self.enable_parallel = enable_parallel
         self.vector_store = vector_store
         self.bm25_store = bm25_store
@@ -158,6 +167,14 @@ class ParallelHybridSearch:
         Returns:
             List of SearchResult objects, merged and ranked
         """
+        # Generate embedding if not provided
+        if query_embedding is None and self.embedding_provider is not None:
+            if hasattr(self.embedding_provider, 'embed_query'):
+                if asyncio.iscoroutinefunction(self.embedding_provider.embed_query):
+                    query_embedding = await self.embedding_provider.embed_query(query)
+                else:
+                    query_embedding = self.embedding_provider.embed_query(query)
+        
         if not self.enable_parallel or not self.bm25_search_fn:
             # Fall back to sequential
             return await self._search_sequential(
@@ -303,6 +320,14 @@ class ParallelHybridSearch:
         Returns:
             List of SearchResult objects
         """
+        # Generate embedding if not provided
+        if query_embedding is None and self.embedding_provider is not None:
+            if hasattr(self.embedding_provider, 'embed_query'):
+                if asyncio.iscoroutinefunction(self.embedding_provider.embed_query):
+                    query_embedding = await self.embedding_provider.embed_query(query)
+                else:
+                    query_embedding = self.embedding_provider.embed_query(query)
+        
         # Vector search
         vector_results = await self._vector_search_async(
             query_embedding, top_k, **kwargs

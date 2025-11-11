@@ -168,7 +168,13 @@ class QueryResultCache:
             True if invalidated by repo update
         """
         # Check if any of the queried repos were updated after cache timestamp
+        # Support both 'repo' (singular) and 'repos' (plural) params
         repos = params.get('repos', [])
+        single_repo = params.get('repo')
+        
+        if single_repo:
+            repos = [single_repo]
+        
         if not repos:
             return False
 
@@ -193,9 +199,15 @@ class QueryResultCache:
         self._repo_timestamps[repo_name] = time.time()
 
         # Remove all cache entries that reference this repo
+        # Support both 'repo' (singular) and 'repos' (plural) params
         to_remove = []
         for key, cached in self._cache.items():
             repos = cached.params.get('repos', [])
+            single_repo = cached.params.get('repo')
+            
+            if single_repo:
+                repos = [single_repo]
+            
             if repo_name in repos:
                 to_remove.append(key)
 

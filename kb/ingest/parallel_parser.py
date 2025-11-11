@@ -46,11 +46,10 @@ def _parse_file_worker(job: ParseJob) -> ParseResult:
         ParseResult with chunks or error information
     """
     try:
-        chunker = get_chunker_for_file(job.file_path, job.language)
+        chunker = get_chunker_for_file(job.file_path)
 
-        chunks = chunker.chunk(
-            source=job.content,
-            lang=job.language,
+        chunks = chunker(
+            job.content,
             model=job.model,
             token_target=job.token_target,
             overlap_pct=job.overlap_pct,

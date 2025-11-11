@@ -24,14 +24,23 @@ class TestParallelScanning:
 
     def test_parallel_scanning_small_repo(self, tmp_path):
         """Test parallel scanning on a small repository."""
+        import subprocess
+        
         # Create test repo
         repo_dir = tmp_path / "test_repo"
         repo_dir.mkdir()
-        (repo_dir / ".git").mkdir()
+        
+        # Initialize git repository
+        subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True, capture_output=True)
 
         # Create test files
         for i in range(10):
             (repo_dir / f"file_{i}.py").write_text(f"# File {i}\nprint('hello')")
+        
+        # Add files to git
+        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
 
         # Scan with parallel scanner
         candidates = scan_repo_parallel(repo_dir, [])
@@ -41,16 +50,24 @@ class TestParallelScanning:
 
     def test_parallel_vs_sequential_performance(self, tmp_path):
         """Compare parallel vs sequential scanning performance."""
+        import subprocess
         from kb.ingest.scanner import scan_repo
 
         # Create larger test repo
         repo_dir = tmp_path / "test_repo"
         repo_dir.mkdir()
-        (repo_dir / ".git").mkdir()
+        
+        # Initialize git repository
+        subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True, capture_output=True)
 
         # Create 100 test files
         for i in range(100):
             (repo_dir / f"file_{i}.py").write_text(f"# File {i}\n" + "x = 1\n" * 100)
+        
+        # Add files to git
+        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
 
         # Sequential scan
         start = time.time()
@@ -307,10 +324,16 @@ class TestPhase2Integration:
 
     def test_full_optimized_pipeline(self, tmp_path):
         """Test full optimized pipeline with all Phase 2 features."""
+        import subprocess
+        
         # Create test repository
         repo_dir = tmp_path / "test_repo"
         repo_dir.mkdir()
-        (repo_dir / ".git").mkdir()
+        
+        # Initialize git repository
+        subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True, capture_output=True)
 
         # Create test files
         for i in range(20):
@@ -319,6 +342,9 @@ class TestPhase2Integration:
                 f"def function_{i}():\n"
                 f"    return {i}\n"
             )
+        
+        # Add files to git
+        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
 
         # Test 1: Parallel scanning
         candidates = scan_repo_parallel(repo_dir, [], num_workers=4)

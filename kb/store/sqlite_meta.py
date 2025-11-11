@@ -11,8 +11,8 @@ from sqlmodel import SQLModel, create_engine
 class SQLiteMetadataStore:
     """SQLite-backed metadata store using SQLModel for schema materialization."""
 
-    def __init__(self, db_path: Path) -> None:
-        self.db_path = db_path
+    def __init__(self, db_path: Path | str) -> None:
+        self.db_path = Path(db_path) if isinstance(db_path, str) else db_path
         self._init_lock = threading.Lock()
         self._initialized = False
         self._initializing = False
@@ -262,6 +262,18 @@ class SQLiteMetadataStore:
                 (name, str(path), default_embed_model),
             )
             conn.commit()
+
+    def register_repo(self, name: str, path: str | Path, *, default_embed_model: str = "small") -> None:
+        """Alias for record_repo for backward compatibility.
+        
+        Args:
+            name: Repository name
+            path: Repository root path (str or Path)
+            default_embed_model: Default embedding model to use
+        """
+        from pathlib import Path as PathType
+        path_obj = PathType(path) if isinstance(path, str) else path
+        self.record_repo(name, path_obj, default_embed_model=default_embed_model)
 
     def get_session(self, session_id: int) -> dict[str, Any] | None:
         """Return a session row as a dict or None if not found."""

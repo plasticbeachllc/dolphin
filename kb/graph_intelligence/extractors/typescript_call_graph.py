@@ -39,6 +39,12 @@ class TypeScriptCallGraphExtractor:
         )
         nodes.extend(definitions)
 
+        # Extract relationship edges (implements, extends)
+        relationship_edges = self._extract_relationships(
+            tree.root_node, definitions, repo_id, commit_sha
+        )
+        edges.extend(relationship_edges)
+
         # Extract call edges
         call_edges = self._extract_calls(
             tree.root_node, definitions, repo_id, commit_sha
@@ -90,6 +96,18 @@ class TypeScriptCallGraphExtractor:
                     node, file_path, repo_id, file_id, commit_sha, branch, parent_class
                 )
                 nodes.append(method_node)
+
+                # Visit children
+                for child in node.children:
+                    visit(child)
+                return
+
+            elif node.type == "interface_declaration":
+                # Extract interface (TypeScript only)
+                interface_node = self._extract_interface_node(
+                    node, file_path, repo_id, file_id, commit_sha, branch
+                )
+                nodes.append(interface_node)
 
                 # Visit children
                 for child in node.children:
@@ -288,6 +306,117 @@ class TypeScriptCallGraphExtractor:
                 "branch": branch,
             }
         )
+
+    def _extract_interface_node(
+        self, node: Node, file_path: str, repo_id: int, file_id: int,
+        commit_sha: str, branch: str
+    ) -> GraphNode:
+        """Extract interface declaration node (TypeScript)."""
+        name_node = node.child_by_field_name("name")
+        interface_name = name_node.text.decode('utf8') if name_node else "Unknown"
+
+        # Build qualified name
+        qualified_name = f"{file_path.replace('/', '.').replace('.ts', '').replace('.tsx', '')}.{interface_name}"
+
+        # Extract docstring/comment
+        docstring = self._extract_comment(node)
+
+        return GraphNode(
+            id=str(uuid.uuid4()),
+            repo_id=repo_id,
+            node_type=NodeType.INTERFACE,
+            name=interface_name,
+            qualified_name=qualified_name,
+            file_path=file_path,
+            start_line=node.start_point[0],
+            end_line=node.end_point[0],
+            language="typescript",
+            signature=node.text.decode('utf8')[:200],
+            docstring=docstring,
+            metadata={
+                "ast_type": "interface_declaration",
+                "file_id": file_id,
+                "commit_sha": commit_sha,
+                "branch": branch,
+            }
+        )
+
+    def _extract_relationships(
+        self, root: Node, definitions: List[GraphNode], repo_id: int, commit_sha: str
+    ) -> List[GraphEdge]:
+        """Extract relationship edges (implements, extends) by walking the tree."""
+        edges = []
+
+        def visit(node: Node):
+            if node.type == "class_declaration":
+                # Find the class node
+                name_node = node.child_by_field_name("name")
+                if not name_node:
+                    for child in node.children:
+                        visit(child)
+                    return
+
+                class_name = name_node.text.decode('utf8')
+                class_node = next((n for n in definitions if n.name == class_name and n.node_type == NodeType.CLASS), None)
+                
+                if not class_node:
+                    for child in node.children:
+                        visit(child)
+                    return
+
+                # Look for implements/extends clauses
+                for child in node.children:
+                    if child.type == "class_heritage":
+                        for heritage_child in child.children:
+                            if heritage_child.type == "implements_clause":
+                                # Extract implemented interfaces
+                                for impl_child in heritage_child.children:
+                                    if impl_child.type in ("type_identifier", "identifier"):
+                                        interface_name = impl_child.text.decode('utf8')
+                                        # Find the interface node
+                                        interface_node = next(
+                                            (n for n in definitions if n.name == interface_name and n.node_type == NodeType.INTERFACE),
+                                            None
+                                        )
+                                        if interface_node:
+                                            edges.append(GraphEdge(
+                                                source_id=class_node.id,
+                                                target_id=interface_node.id,
+                                                edge_type=EdgeType.IMPLEMENTS,
+                                                repo_id=repo_id,
+                                                attributes={
+                                                    "line_number": heritage_child.start_point[0],
+                                                    "commit_sha": commit_sha,
+                                                }
+                                            ))
+                            elif heritage_child.type == "extends_clause":
+                                # Extract extended class
+                                for ext_child in heritage_child.children:
+                                    if ext_child.type in ("identifier", "member_expression"):
+                                        base_class_name = ext_child.text.decode('utf8')
+                                        # Find the base class node
+                                        base_node = next(
+                                            (n for n in definitions if n.name == base_class_name and n.node_type == NodeType.CLASS),
+                                            None
+                                        )
+                                        if base_node:
+                                            edges.append(GraphEdge(
+                                                source_id=class_node.id,
+                                                target_id=base_node.id,
+                                                edge_type=EdgeType.INHERITS,
+                                                repo_id=repo_id,
+                                                attributes={
+                                                    "line_number": heritage_child.start_point[0],
+                                                    "commit_sha": commit_sha,
+                                                }
+                                            ))
+
+            # Recurse for other nodes
+            for child in node.children:
+                visit(child)
+
+        visit(root)
+        return edges
 
     def _extract_calls(
         self, root: Node, definitions: List[GraphNode], repo_id: int, commit_sha: str
