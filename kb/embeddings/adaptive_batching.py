@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import List, Iterator
 from collections import deque
 
-from ..chunkers.token_utils import count_tokens
+from ..chunkers.token_utils import count_tokens, get_tokenizer
 
 
 @dataclass
@@ -50,6 +50,7 @@ class AdaptiveBatcher:
         self.min_batch_size = min_batch_size
         self.max_batch_size = max_batch_size
         self.model = model
+        self.tokenizer = get_tokenizer(model)
 
         # Track recent batches for adaptive sizing
         self._recent_metrics: deque[BatchMetrics] = deque(maxlen=10)
@@ -80,7 +81,7 @@ class AdaptiveBatcher:
             batch = texts[i:i + batch_size]
 
             # Calculate metrics
-            total_tokens = sum(count_tokens(text, self.model) for text in batch)
+            total_tokens = sum(count_tokens(text, self.tokenizer) for text in batch)
             metrics = BatchMetrics(
                 batch_size=len(batch),
                 total_tokens=total_tokens,
@@ -108,7 +109,7 @@ class AdaptiveBatcher:
         sample = sample_texts[:sample_size]
 
         # Count tokens in sample
-        token_counts = [count_tokens(text, self.model) for text in sample]
+        token_counts = [count_tokens(text, self.tokenizer) for text in sample]
         avg_tokens = sum(token_counts) / len(token_counts) if token_counts else 400
 
         # Estimate batch size to hit target tokens
