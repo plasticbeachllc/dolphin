@@ -323,7 +323,7 @@ class KnowledgeSearchBackend:
             )
             
             if is_config:
-                result = {**result, 'score': score * CONFIG_FILE_PENALTY}
+                result = {**result, 'score': score * CONFIG_FILE_SCORE_PENALTY}
             
             adjusted.append(result)
         
