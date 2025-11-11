@@ -125,7 +125,9 @@ export class FileWatcher {
 
     // Convert changes to API format
     const changes = batch.map((event) => ({
-      file_path: vscode.workspace.asRelativePath(event.uri),
+      file_path: vscode.workspace
+        .asRelativePath(event.uri)
+        .replace(/\\/g, "/"),
       change_type: event.type,
     }));
 
