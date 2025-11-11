@@ -37,7 +37,8 @@ uv pip install -e .
 
 # Verify installation
 python -c "from prometheus_client import Counter; print('✅ prometheus_client installed')"
-python -c "from opentelemetry.api import trace; print('✅ opentelemetry-api installed')"
+python -c "from opentelemetry import trace; print('✅ opentelemetry installed')"
+python -c "from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor; print('✅ opentelemetry-instrumentation-fastapi installed')"
 ```
 
 #### 1.2 TypeScript Compilation
