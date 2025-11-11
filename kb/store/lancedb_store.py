@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Sequence, Union
 
 
 class LanceDBStore:
@@ -11,12 +11,34 @@ class LanceDBStore:
     embedding dimensions and ensure the root directory exists.
     """
 
-    def __init__(self, root: Path) -> None:
-        self.root = root
+    def __init__(self, root: Union[str, Path]) -> None:
+        # Handle both file paths and in-memory URIs
+        # In-memory URIs like "memory://name" should remain as strings
+        if isinstance(root, str) and root.startswith("memory://"):
+            # Keep memory:// URIs as strings for LanceDB
+            self.root = root
+        else:
+            # Convert file paths to Path objects
+            self.root = Path(root) if isinstance(root, str) else root
+        
+        # Cache for database connection to avoid connection isolation issues
+        self._db = None
 
-    def connect(self) -> None:
-        """Ensure the LanceDB root directory exists."""
-        self.root.mkdir(parents=True, exist_ok=True)
+    def connect(self) -> Any:
+        """Get or create a cached LanceDB connection."""
+        # Only create directory for file-based storage, not memory://
+        if isinstance(self.root, Path):
+            self.root.mkdir(parents=True, exist_ok=True)
+        
+        # Return cached connection if available
+        if self._db is not None:
+            return self._db
+        
+        # Create new connection and cache it
+        import lancedb
+        db_uri = self.root if isinstance(self.root, str) else self.root.as_posix()
+        self._db = lancedb.connect(db_uri)
+        return self._db
 
     def initialize_collections(self) -> None:
         """Create (or open) the global collections per the authoritative schema.
@@ -25,12 +47,11 @@ class LanceDBStore:
         - chunks_small: 1536-dim embeddings
         - chunks_large: 3072-dim embeddings
         """
-        self.connect()
         # Import locally to avoid import cost when unused.
         import pyarrow as pa  # type: ignore
-        import lancedb  # type: ignore
 
-        db = lancedb.connect(self.root.as_posix())
+        # Use cached connection
+        db = self.connect()
 
         def _vector_field(dim: int) -> pa.Field:
             # Use fixed-size list for LanceDB vector search to work properly
@@ -69,8 +90,44 @@ class LanceDBStore:
             if name in existing:
                 # Table already exists; nothing to do.
                 continue
-            # Create an empty table with the target schema.
-            db.create_table(name, data=[], schema=schema)
+            # Create table with schema
+            # LanceDB requires at least one row of data to properly create a table
+            # Create a dummy row with null/zero values that we'll delete immediately
+            try:
+                import datetime
+                # Create a single dummy row with the schema
+                dummy_row = {
+                    "id": "__init_placeholder__",
+                    "vector": [0.0] * dim,
+                    "repo": "",
+                    "path": "",
+                    "start_line": 0,
+                    "end_line": 0,
+                    "text_hash": "",
+                    "commit": "",
+                    "branch": "",
+                    "embed_model": "",
+                    "language": None,
+                    "symbol_kind": None,
+                    "symbol_name": None,
+                    "symbol_path": None,
+                    "heading_h1": None,
+                    "heading_h2": None,
+                    "heading_h3": None,
+                    "token_count": 0,
+                    "created_at": datetime.datetime.now(datetime.timezone.utc),
+                }
+                # Create table with the dummy row
+                table = db.create_table(name, data=[dummy_row])
+                # Immediately delete the placeholder row
+                table.delete("id = '__init_placeholder__'")
+            except Exception as e:
+                # If table creation fails, check if it now exists (race condition)
+                existing_after = set(getattr(db, "table_names", lambda: [])())
+                if name not in existing_after:
+                    # Table truly doesn't exist and creation failed
+                    raise RuntimeError(f"Failed to create table {name}: {e}") from e
+                # Otherwise table exists now (likely race condition), continue
 
     def upsert_chunks(self, repo: str, chunks: Iterable[Any], *, model: str) -> None:
         """Persist chunk data using delete-then-append strategy.
@@ -80,9 +137,6 @@ class LanceDBStore:
             chunks: Iterable of chunk dictionaries with LanceDB schema
             model: Embedding model name ('small' or 'large')
         """
-        import lancedb
-        import pyarrow as pa
-        
         # Map model to table name and expected dimension
         model_to_table = {
             'small': 'chunks_small',
@@ -99,8 +153,8 @@ class LanceDBStore:
         table_name = model_to_table[model]
         expected_dim = model_to_dim[model]
         
-        # Connect to database
-        db = lancedb.connect(self.root.as_posix())
+        # Use cached connection
+        db = self.connect()
         
         # Convert chunks to list for processing
         chunks_list = list(chunks)
@@ -138,9 +192,16 @@ class LanceDBStore:
         except Exception as e:
             # If table doesn't exist, create it and try again
             print(f"Table {table_name} not found, creating it: {e}")
-            self.initialize_collections()
-            table = db.open_table(table_name)
-            table.add(chunks_list)
+            try:
+                self.initialize_collections()
+                # Use the same cached connection (no need to reconnect)
+                table = db.open_table(table_name)
+                table.add(chunks_list)
+            except Exception as retry_error:
+                # If still failing, raise a more descriptive error
+                raise RuntimeError(
+                    f"Failed to create or open table {table_name} after initialization: {retry_error}"
+                ) from e
 
     def prune_file_rows(
         self,
@@ -151,8 +212,6 @@ class LanceDBStore:
         keep_ids: set[str] | None = None,
     ) -> None:
         """Remove vectors for a given repo/path, optionally preserving specific row IDs."""
-        import lancedb
-
         model_to_table = {
             'small': 'chunks_small',
             'large': 'chunks_large'
@@ -161,7 +220,8 @@ class LanceDBStore:
         if model not in model_to_table:
             raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
 
-        db = lancedb.connect(self.root.as_posix())
+        # Use cached connection
+        db = self.connect()
         try:
             table = db.open_table(model_to_table[model])
         except Exception:
@@ -189,8 +249,6 @@ class LanceDBStore:
             repo: Repository name
             model: Embedding model ('small' or 'large')
         """
-        import lancedb
-
         model_to_table = {
             'small': 'chunks_small',
             'large': 'chunks_large'
@@ -199,7 +257,8 @@ class LanceDBStore:
         if model not in model_to_table:
             raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
 
-        db = lancedb.connect(self.root.as_posix())
+        # Use cached connection
+        db = self.connect()
         try:
             table = db.open_table(model_to_table[model])
         except Exception:
@@ -225,8 +284,6 @@ class LanceDBStore:
         Returns:
             Number of vectors found for the repository
         """
-        import lancedb
-
         model_to_table = {
             'small': 'chunks_small',
             'large': 'chunks_large'
@@ -235,7 +292,8 @@ class LanceDBStore:
         if model not in model_to_table:
             raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
 
-        db = lancedb.connect(self.root.as_posix())
+        # Use cached connection
+        db = self.connect()
         try:
             table = db.open_table(model_to_table[model])
         except Exception:
@@ -279,7 +337,6 @@ class LanceDBStore:
         # Use default params if not provided
         if ann_params is None:
             ann_params = ANNParams()  # Default configuration
-        import lancedb
 
         # Map model to table name and expected dimension
         model_to_table = {
@@ -304,8 +361,8 @@ class LanceDBStore:
                 f"expected {expected_dim}, got {len(query_vector)}"
             )
 
-        # Connect to database and open table
-        db = lancedb.connect(self.root.as_posix())
+        # Use cached connection
+        db = self.connect()
 
         try:
             table = db.open_table(table_name)

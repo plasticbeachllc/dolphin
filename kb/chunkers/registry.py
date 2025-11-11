@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Union
 
 from .fallback_chunker import chunk_text
 from .md_chunker import chunk_markdown
@@ -135,11 +135,11 @@ def _load_global_extension_map() -> Dict[str, str]:
         return {}
 
 
-def detect_language_from_extension(file_path: Path) -> Optional[str]:
+def detect_language_from_extension(file_path: Union[str, Path]) -> Optional[str]:
     """Detect language identifier from file extension.
     
     Args:
-        file_path: Path to the file (can be relative or absolute)
+        file_path: Path to the file (can be relative or absolute, str or Path object)
         
     Returns:
         Language identifier (e.g., "python", "typescript") or None if unknown
@@ -147,9 +147,13 @@ def detect_language_from_extension(file_path: Path) -> Optional[str]:
     Example:
         >>> detect_language_from_extension(Path("src/main.py"))
         "python"
-        >>> detect_language_from_extension(Path("app.tsx"))
+        >>> detect_language_from_extension("app.tsx")
         "typescriptreact"
     """
+    # Convert string to Path if needed
+    if isinstance(file_path, str):
+        file_path = Path(file_path)
+    
     ext = file_path.suffix.lstrip(".").lower()
     if not ext:
         return None
@@ -169,11 +173,11 @@ def detect_language_from_extension(file_path: Path) -> Optional[str]:
     return language if language != "text" else None
 
 
-def get_chunker_for_file(file_path: Path) -> Optional[ChunkerFunction]:
+def get_chunker_for_file(file_path: Union[str, Path]) -> Optional[ChunkerFunction]:
     """Get the appropriate chunker for a file based on its extension.
     
     Args:
-        file_path: Path to the file (can be relative or absolute)
+        file_path: Path to the file (can be relative or absolute, str or Path object)
         
     Returns:
         A chunker function if the language is known, otherwise None.
