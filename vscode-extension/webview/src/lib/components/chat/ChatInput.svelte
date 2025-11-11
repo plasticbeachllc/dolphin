@@ -60,7 +60,11 @@
 </script>
 
 <div class="input-wrapper">
+  <label for="message-input" class="sr-only">
+    Enter your message
+  </label>
   <Textarea
+    id="message-input"
     bind:ref={textareaRef}
     bind:value={message}
     {placeholder}
@@ -68,21 +72,27 @@
     onkeydown={handleKeyDown}
     rows={3}
     class="flex-1 min-h-[4.5rem] max-h-48 resize-none"
+    aria-label="Message input"
+    aria-describedby="input-help"
   />
+  <div id="input-help" class="sr-only">
+    Press Ctrl+Enter or Cmd+Enter to send. Shift+Enter for new line.
+  </div>
   <Button
+    type="button"
     onclick={handleAction}
     disabled={disabled && !isProcessing}
     variant={isProcessing ? "destructive" : "default"}
     size="icon"
     class="shrink-0 self-end"
-    aria-label={isProcessing ? "Stop" : showNewConversationButton ? "New Conversation" : "Send"}
+    aria-label={isProcessing ? "Stop generation" : showNewConversationButton ? "Start new conversation" : "Send message"}
   >
     {#if isProcessing}
-      <Square class="h-4 w-4" />
+      <Square class="h-4 w-4" aria-hidden="true" />
     {:else if showNewConversationButton}
-      <Plus class="h-4 w-4" />
+      <Plus class="h-4 w-4" aria-hidden="true" />
     {:else}
-      <SendHorizontal class="h-4 w-4" />
+      <SendHorizontal class="h-4 w-4" aria-hidden="true" />
     {/if}
   </Button>
 </div>
