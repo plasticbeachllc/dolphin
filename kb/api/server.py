@@ -128,3 +128,16 @@ async def health_check():
             "api": "healthy"
         }
     }
+
+def main():
+    """Entry point for kb-api command."""
+    import uvicorn
+    uvicorn.run(
+        "kb.api.server:app_with_lifespan",
+        host="0.0.0.0",
+        port=8000,
+        reload=True
+    )
+
+if __name__ == "__main__":
+    main()
