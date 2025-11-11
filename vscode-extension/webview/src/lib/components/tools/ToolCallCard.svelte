@@ -65,7 +65,7 @@
 
 <Card class="tool-call-card mb-2 py-2 gap-0" data-status={status}>
 	<CardHeader
-		class="cursor-pointer hover:bg-muted/50 !py-2 !px-2 transition-colors"
+		class="cursor-pointer hover:bg-muted/50 py-2! px-2! transition-colors"
 		onclick={toggleExpanded}
 		onkeypress={handleKeypress}
 		role="button"
@@ -114,7 +114,7 @@
 
 	{#if expanded}
 		<div transition:slide={{ duration: 200 }}>
-			<CardContent class="!px-2 !pb-2 !pt-0">
+			<CardContent class="px-2! pb-2! pt-0!">
 				<div class="space-y-2">
 					<!-- Show diff viewer for file editing tools if diff data is available -->
 					{#if isFileEditTool && diff}

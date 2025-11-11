@@ -20,6 +20,10 @@ const config = {
 		paths: {
 			base: '',
 			relative: true
+		},
+		// Path aliases - moved from tsconfig.json per SvelteKit recommendations
+		alias: {
+			'@shared': '../../shared'
 		}
 	}
 };
