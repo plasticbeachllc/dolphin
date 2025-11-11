@@ -91,34 +91,36 @@ class TestGraphRebuild:
             },
         ]
 
-        with patch.object(manager, '_fetch_edges_from_db', return_value=mock_edges):
-            with patch.object(manager.validator, '_get_current_commit_sha', return_value="abc123"):
-                with patch.object(manager.validator, 'update_cache_state') as mock_update:
-                    manager._rebuild_graph()
+        with patch.object(manager, '_fetch_nodes_from_db', return_value=[]):
+            with patch.object(manager, '_fetch_edges_from_db', return_value=mock_edges):
+                with patch.object(manager.validator, '_get_current_commit_sha', return_value="abc123"):
+                    with patch.object(manager.validator, 'update_cache_state') as mock_update:
+                        manager._rebuild_graph()
 
-                    # Verify graph was created
-                    assert manager._graph is not None
-                    assert manager._graph.number_of_nodes() == 3
-                    assert manager._graph.number_of_edges() == 2
+                        # Verify graph was created
+                        assert manager._graph is not None
+                        assert manager._graph.number_of_nodes() == 3
+                        assert manager._graph.number_of_edges() == 2
 
-                    # Verify edges exist
-                    assert manager._graph.has_edge("func1", "func2")
-                    assert manager._graph.has_edge("func2", "func3")
+                        # Verify edges exist
+                        assert manager._graph.has_edge("func1", "func2")
+                        assert manager._graph.has_edge("func2", "func3")
 
-                    # Verify cache state was updated
-                    assert mock_update.called
+                        # Verify cache state was updated
+                        assert mock_update.called
 
     def test_rebuild_with_empty_database(self, manager):
         """Test rebuild with no edges in database."""
-        with patch.object(manager, '_fetch_edges_from_db', return_value=[]):
-            with patch.object(manager.validator, '_get_current_commit_sha', return_value="abc123"):
-                with patch.object(manager.validator, 'update_cache_state'):
-                    manager._rebuild_graph()
+        with patch.object(manager, '_fetch_nodes_from_db', return_value=[]):
+            with patch.object(manager, '_fetch_edges_from_db', return_value=[]):
+                with patch.object(manager.validator, '_get_current_commit_sha', return_value="abc123"):
+                    with patch.object(manager.validator, 'update_cache_state'):
+                        manager._rebuild_graph()
 
-                    # Should create empty graph
-                    assert manager._graph is not None
-                    assert manager._graph.number_of_nodes() == 0
-                    assert manager._graph.number_of_edges() == 0
+                        # Should create empty graph
+                        assert manager._graph is not None
+                        assert manager._graph.number_of_nodes() == 0
+                        assert manager._graph.number_of_edges() == 0
 
 
 class TestEdgeChangeTracking:
@@ -330,22 +332,23 @@ class TestIntegration:
             },
         ]
 
-        with patch.object(manager, '_fetch_edges_from_db', return_value=mock_edges):
-            with patch.object(manager.validator, '_get_current_commit_sha', return_value="abc123"):
-                with patch.object(manager.validator, 'update_cache_state'):
-                    with patch('kb.graph_intelligence.graph_manager.Session') as mock_session:
-                        mock_session_inst = MagicMock()
-                        mock_session.return_value.__enter__.return_value = mock_session_inst
-                        mock_session_inst.exec.return_value.first.return_value = None
+        with patch.object(manager, '_fetch_nodes_from_db', return_value=[]):
+            with patch.object(manager, '_fetch_edges_from_db', return_value=mock_edges):
+                with patch.object(manager.validator, '_get_current_commit_sha', return_value="abc123"):
+                    with patch.object(manager.validator, 'update_cache_state'):
+                        with patch('kb.graph_intelligence.graph_manager.Session') as mock_session:
+                            mock_session_inst = MagicMock()
+                            mock_session.return_value.__enter__.return_value = mock_session_inst
+                            mock_session_inst.exec.return_value.first.return_value = None
 
-                        # Get graph (triggers rebuild)
-                        graph = manager.get_graph()
-                        assert graph.number_of_nodes() == 2
+                            # Get graph (triggers rebuild)
+                            graph = manager.get_graph()
+                            assert graph.number_of_nodes() == 2
 
-                        # Compute metrics
-                        metrics = manager.compute_metrics()
-                        assert "pagerank" in metrics
+                            # Compute metrics
+                            metrics = manager.compute_metrics()
+                            assert "pagerank" in metrics
 
-                        # Store metrics
-                        manager.store_metrics(metrics)
-                        assert mock_session_inst.add.called
+                            # Store metrics
+                            manager.store_metrics(metrics)
+                            assert mock_session_inst.add.called
