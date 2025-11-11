@@ -77,7 +77,12 @@
 	const toolName = toolNames[tool] || tool.replace(/_/g, ' ');
 </script>
 
-<Card class="tool-call-card mb-2 py-2 gap-0" data-status={status} role="region" aria-label="{toolName} tool call">
+<Card
+        class="tool-call-card mb-2 py-2 gap-0"
+        data-status={status}
+        role="region"
+        aria-label={`${toolName} tool call`}
+>
 	<CardHeader
 		class="cursor-pointer hover:bg-muted/50 !py-2 !px-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
 		onclick={toggleExpanded}
@@ -85,7 +90,9 @@
 		role="button"
 		tabindex="0"
 		aria-expanded={expanded}
-		aria-label="{expanded ? 'Collapse' : 'Expand'} {toolName} details. Status: {status}. {executionTime ? `Execution time: ${executionTime} milliseconds.` : ''}"
+                aria-label={`${expanded ? 'Collapse' : 'Expand'} ${toolName} details. Status: ${status}. ${
+                        executionTime ? `Execution time: ${executionTime} milliseconds.` : ''
+                }`}
 		data-status={status}
 	>
 		<div class="flex items-center justify-between">
@@ -102,18 +109,24 @@
 
 			<div class="flex items-center gap-2 shrink-0">
 				{#if isFileEditTool && getFilePath() && status === 'success'}
-					<button
-						class="peek-button text-xs"
-						onclick={handlePeekFile}
-						aria-label="View file {getFilePath()}"
-						title="View file"
-					>
+                                        <button
+                                                class="peek-button text-xs"
+                                                onclick={handlePeekFile}
+                                                aria-label={`View file ${getFilePath()}`}
+                                                title="View file"
+                                        >
 						👁️ View
 					</button>
 				{/if}
 
-				{#if executionTime}
-					<Badge variant="outline" class="text-xs" aria-label="Execution time: {executionTime} milliseconds">{executionTime}ms</Badge>
+                                {#if executionTime}
+                                        <Badge
+                                                variant="outline"
+                                                class="text-xs"
+                                                aria-label={`Execution time: ${executionTime} milliseconds`}
+                                        >
+                                                {executionTime}ms
+                                        </Badge>
 				{/if}
 
 				{#if status === 'running'}

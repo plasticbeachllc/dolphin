@@ -20,7 +20,7 @@
 <Card.Root
   class="mb-2 {isUser ? 'ml-auto' : 'mr-auto'} max-w-[85%]"
   role="article"
-  aria-label="{isUser ? 'User' : 'Assistant'} message{timestamp ? ' at ' + timestamp : ''}"
+  aria-label={`${isUser ? 'User' : 'Assistant'} message${timestamp ? ` at ${timestamp}` : ''}`}
 >
   <Card.Header class="flex flex-row items-center gap-2 pb-2">
     <Avatar.Root class="h-8 w-8 avatar-{role}" aria-label={avatarLabel}>
@@ -29,11 +29,14 @@
       </Avatar.Fallback>
     </Avatar.Root>
     <div class="flex flex-1 items-center justify-between">
-      <Badge variant={isUser ? "secondary" : "default"} aria-label="Message from {isUser ? 'You' : 'Assistant'}">
+      <Badge
+        variant={isUser ? "secondary" : "default"}
+        aria-label={`Message from ${isUser ? 'You' : 'Assistant'}`}
+      >
         {isUser ? "You" : "Assistant"}
       </Badge>
       {#if timestamp}
-        <span class="text-xs text-muted-foreground" aria-label="Sent at {timestamp}">
+        <span class="text-xs text-muted-foreground" aria-label={`Sent at ${timestamp}`}>
           {timestamp}
         </span>
       {/if}
