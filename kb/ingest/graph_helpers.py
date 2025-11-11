@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from kb.chunkers.graph_types import GraphNode, GraphEdge
+from kb.chunkers.graph_types import GraphNode as ChunkerGraphNode, GraphEdge as ChunkerGraphEdge
 from kb.chunkers.types import Chunk
 from kb.store.graph_store import GraphStore
 
@@ -15,26 +15,36 @@ def extract_graph_from_file(
     language: str,
     text: str,
     repo_config: dict[str, Any] | None = None,
-) -> tuple[list[GraphNode], list[GraphEdge]]:
+) -> tuple[list[ChunkerGraphNode], list[ChunkerGraphEdge]]:
     """Extract graph nodes and edges from a file.
-    
-    This calls the appropriate chunker module's extract_graph_data() function.
-    
+
+    This calls the appropriate chunker module's extract_graph_data() function
+    or uses the enhanced graph intelligence extractors for Python and TypeScript.
+
     Args:
         file_path: Absolute path to the file
         language: Programming language
         text: File content
         repo_config: Optional repository-specific configuration
-        
+
     Returns:
         Tuple of (nodes, edges)
     """
-    # Import chunker modules that have extract_graph_data functions
+    lang_key = language.lower() if language else ""
+
+    # Try to use enhanced graph intelligence extractors for Python and TypeScript
+    if lang_key in ("python", "typescript", "typescriptreact", "javascript", "javascriptreact"):
+        try:
+            return _extract_with_intelligence(file_path, lang_key, text)
+        except Exception as e:
+            print(f"  Warning: Enhanced graph extraction failed for {file_path}, falling back to basic: {e}")
+
+    # Fall back to basic chunker extraction
     import kb.chunkers.py_chunker as py_chunker
     import kb.chunkers.ts_chunker as ts_chunker
     import kb.chunkers.sql_chunker as sql_chunker
     import kb.chunkers.svelte_chunker as svelte_chunker
-    
+
     # Map languages to chunker modules that support graph extraction
     chunker_map = {
         "python": py_chunker,
@@ -45,14 +55,13 @@ def extract_graph_from_file(
         "sql": sql_chunker,
         "svelte": svelte_chunker,
     }
-    
-    lang_key = language.lower() if language else ""
+
     chunker_module = chunker_map.get(lang_key)
-    
+
     if not chunker_module or not hasattr(chunker_module, 'extract_graph_data'):
         # Language doesn't support graph extraction
         return [], []
-    
+
     # Call the module's extract_graph_data function
     try:
         nodes, edges = chunker_module.extract_graph_data(text)
@@ -61,6 +70,69 @@ def extract_graph_from_file(
         # Log but don't fail - graph extraction is optional
         print(f"  Warning: Graph extraction failed for {file_path}: {e}")
         return [], []
+
+
+def _extract_with_intelligence(
+    file_path: Path,
+    language: str,
+    text: str,
+) -> tuple[list[ChunkerGraphNode], list[ChunkerGraphEdge]]:
+    """Extract graph data using enhanced graph intelligence extractors.
+
+    Args:
+        file_path: Path to the file
+        language: Programming language
+        text: File content
+
+    Returns:
+        Tuple of (nodes, edges) in chunker format
+    """
+    from kb.graph_intelligence.extractors import PythonCallGraphExtractor, TypeScriptCallGraphExtractor
+
+    # Use appropriate extractor
+    if language == "python":
+        extractor = PythonCallGraphExtractor()
+    else:  # TypeScript/JavaScript
+        extractor = TypeScriptCallGraphExtractor()
+
+    # Extract nodes and edges
+    # Note: We pass dummy IDs since we don't have repo_id/file_id at this stage
+    # The store_graph_data function will handle the actual IDs
+    nodes, edges = extractor.extract(
+        str(file_path),
+        text,
+        repo_id=0,  # Placeholder
+        file_id=0,  # Placeholder
+        commit_sha="",  # Placeholder
+        branch="",  # Placeholder
+    )
+
+    # Convert to chunker format
+    chunker_nodes = []
+    for node in nodes:
+        chunker_nodes.append(ChunkerGraphNode(
+            node_type=node.node_type.value,
+            name=node.name,
+            qualified_name=node.qualified_name or node.name,
+            start_line=node.start_line or 0,
+            end_line=node.end_line or 0,
+        ))
+
+    chunker_edges = []
+    for edge in edges:
+        # Find the qualified names for source and target
+        source_node = next((n for n in nodes if n.id == edge.source_id), None)
+        target_node = next((n for n in nodes if n.id == edge.target_id), None)
+
+        if source_node and target_node:
+            chunker_edges.append(ChunkerGraphEdge(
+                source_name=source_node.qualified_name or source_node.name,
+                target_name=target_node.qualified_name or target_node.name,
+                edge_type=edge.edge_type.value,
+                line_number=edge.attributes.get("call_line") or edge.attributes.get("import_line"),
+            ))
+
+    return chunker_nodes, chunker_edges
 
 
 def store_graph_data(
