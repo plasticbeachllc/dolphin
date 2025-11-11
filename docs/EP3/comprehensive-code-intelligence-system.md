@@ -13,13 +13,12 @@
 4. [Phase 1: Graph Extraction Enhancement](#phase-1-graph-extraction-enhancement)
 5. [Phase 2: Graph-Powered Search](#phase-2-graph-powered-search)
 6. [Phase 3: Impact Analysis Engine](#phase-3-impact-analysis-engine)
-7. [Phase 4: Visual Graph Explorer](#phase-4-visual-graph-explorer)
-8. [Phase 5: Architectural Insights & Reports](#phase-5-architectural-insights--reports)
-9. [Testing Strategy](#testing-strategy)
-10. [Observability & Monitoring](#observability--monitoring)
-11. [Reference Implementations](#reference-implementations)
-12. [Risk Mitigation](#risk-mitigation)
-13. [Success Metrics & KPIs](#success-metrics--kpis)
+7. [Phase 4: Architectural Insights & Reports](#phase-5-architectural-insights--reports)
+8. [Testing Strategy](#testing-strategy)
+9. [Observability & Monitoring](#observability--monitoring)
+10. [Reference Implementations](#reference-implementations)
+11. [Risk Mitigation](#risk-mitigation)
+12. [Success Metrics & KPIs](#success-metrics--kpis)
 
 ---
 
@@ -42,8 +41,7 @@ Transform the existing code graph infrastructure into a **comprehensive code int
 1. **Deep Code Understanding**: Call graphs, data flow, type relationships, cross-language edges
 2. **Intelligent Search**: Graph-aware ranking using PageRank and structural patterns
 3. **Impact Analysis**: "What breaks if I change this?" with risk scoring
-4. **Visual Exploration**: Interactive graph visualization for architecture understanding
-5. **Automated Insights**: Anti-pattern detection, architectural metrics, quality reports
+4. **Automated Insights**: Anti-pattern detection, architectural metrics, quality reports
 
 ### Key Architectural Decisions
 
@@ -73,7 +71,6 @@ Transform the existing code graph infrastructure into a **comprehensive code int
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                     VSCode Extension (TypeScript)               │
-│  • Graph visualization webview                                  │
 │  • Impact analysis UI                                           │
 │  • Architecture insights panel                                  │
 └────────────────────┬────────────────────────────────────────────┘
@@ -170,28 +167,12 @@ dependencies = [
     "tree-sitter-python>=0.20.4",
     "tree-sitter-typescript>=0.20.3",
     "tree-sitter-javascript>=0.20.1",
-
-    # Visualization data export
-    "graphml>=0.1.0",          # GraphML format export
-    "pydot>=2.0.0",            # DOT format export
 ]
 
 [project.optional-dependencies]
 neo4j = [
     "neo4j>=5.14.0",           # Optional Neo4j support
 ]
-```
-
-### TypeScript Dependencies (Agent Core)
-
-```json
-{
-  "dependencies": {
-    // D3.js for custom visualizations
-    "d3": "^7.8.5",
-    "@types/d3": "^7.4.3"
-  }
-}
 ```
 
 ### Database Schema Extensions
@@ -2008,30 +1989,7 @@ _Deliverables:_
 - [ ] Performance: <2s for analysis up to depth 5
 - [ ] Test coverage: 85%+
 
-#### Week 14: Polish & Performance
-
-**Days 66-70: Performance Optimization + Export Features**
-
-_Deliverables:_
-
-- Graph lazy loading (viewport-based)
-- Export to SVG, PNG, GraphML
-- Minimap for large graphs
-- Filter controls
-- Documentation
-
-### Phase 4 Success Criteria
-
-- [ ] Interactive visualization handles 5K+ nodes
-- [ ] Load time <3s for typical repositories
-- [ ] Smooth interactions (60fps)
-- [ ] Export formats working (PNG, SVG, GraphML)
-- [ ] Filter controls functional
-- [ ] Documentation complete
-
----
-
-## Phase 5: Architectural Insights & Reports (2 weeks)
+## Phase 4: Architectural Insights & Reports (2 weeks)
 
 ### Overview
 
@@ -2209,7 +2167,7 @@ class ReportGenerator:
         )
 ```
 
-### Phase 5 Success Criteria
+### Phase 4 Success Criteria
 
 - [ ] 10+ architectural insights detected automatically
 - [ ] Markdown/HTML report generation working
@@ -2407,19 +2365,7 @@ def extract_call_graph(file_path: str):
 - Async background computation
 - Monitoring: Alert if computation >30s
 
-### Risk 3: Visualization Scalability
-
-**Impact**: Medium - Large repos (>10K nodes) may be slow
-
-**Mitigation**:
-
-- Hierarchical clustering for large graphs
-- Viewport-based lazy loading
-- Server-side rendering for initial layout
-- Client-side caching
-- Performance testing on large repos (10K-50K nodes)
-
-### Risk 4: Cross-Language Detection Accuracy
+### Risk 3: Cross-Language Detection Accuracy
 
 **Impact**: Low - Nice-to-have feature
 
@@ -2453,13 +2399,7 @@ def extract_call_graph(file_path: str):
 - **Performance**: <2s for depth-5 analysis
 - **Usage**: 100+ CLI commands per day
 
-### Phase 4: Visualization
-
-- **Scale**: Handles 5K+ node repos with <3s load time
-- **Interaction**: 60fps during panning/zooming
-- **Usage**: 50+ graph views per week
-
-### Phase 5: Insights
+### Phase 4: Insights
 
 - **Detection**: 10+ anti-patterns automatically detected
 - **Accuracy**: 85%+ precision (verified manually on 50 repos)
@@ -2514,10 +2454,7 @@ def extract_call_graph(file_path: str):
 
 ```bash
 # Python dependencies
-uv pip install networkx python-louvain scipy graphml pydot
-
-# Node dependencies (for visualization)
-bun add d3
+uv pip install networkx python-louvain scipy
 ```
 
 ### Testing Datasets

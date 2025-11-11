@@ -750,7 +750,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]):
                         'heading_h2': occ.get('heading_h2'),
                         'heading_h3': occ.get('heading_h3'),
                         'token_count': occ_token_counts.get((occ['start_line'], occ['end_line']), 0),
-                        'created_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                        'created_at': datetime.datetime.now(datetime.timezone.utc),
                     })
 
                     # Prepare chunk for FTS5 indexing (first occurrence only)
@@ -1576,7 +1576,7 @@ async def index_files_old(request: IndexRequest):
                     'heading_h2': occ.get('heading_h2'),
                     'heading_h3': occ.get('heading_h3'),
                     'token_count': occ_token_counts.get((occ['start_line'], occ['end_line']), 0),
-                    'created_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    'created_at': datetime.datetime.now(datetime.timezone.utc),
                 })
 
                 # Prepare chunk for FTS5 indexing (first occurrence only)
