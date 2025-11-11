@@ -180,11 +180,11 @@ def get_chunker_for_file(file_path: Union[str, Path]) -> Optional[ChunkerFunctio
         file_path: Path to the file (can be relative or absolute, str or Path object)
         
     Returns:
-        A chunker function if the language is known, otherwise None.
+        A chunker function if the language is known, otherwise fallback chunker.
     """
     language = detect_language_from_extension(file_path)
     if language is None:
-        return None
+        return chunk_text  # Return fallback chunker instead of None
     return get_chunker(language)
 
 
