@@ -612,8 +612,17 @@ class IngestionPipeline:
                         self.lancedb.prune_file_rows(repo_name, path, model=model_name)
                     
                     # Clean up graph data for deleted file
+                    edges_deleted = 0
+                    nodes_deleted = 0
                     if self.graph_store:
-                        cleanup_graph_for_file(self.graph_store, file_id)
+                        nodes_deleted, edges_deleted = cleanup_graph_for_file(self.graph_store, file_id)
+
+                    if self.graph_store and (edges_deleted > 0 or nodes_deleted > 0):
+                        graph_manager = self.get_graph_manager(repo_id)
+                        if edges_deleted > 0:
+                            graph_manager.on_edges_changed(edges_deleted)
+                        else:
+                            graph_manager.invalidate_cache()
                     
                     files_done += 1
                     chunks_pruned += total_pruned
@@ -645,8 +654,17 @@ class IngestionPipeline:
                         self.lancedb.prune_file_rows(repo_name, file_path, model=model)
                     
                     # Clean up graph data for ignored file
+                    edges_deleted = 0
+                    nodes_deleted = 0
                     if self.graph_store:
-                        cleanup_graph_for_file(self.graph_store, file_id)
+                        nodes_deleted, edges_deleted = cleanup_graph_for_file(self.graph_store, file_id)
+
+                    if self.graph_store and (edges_deleted > 0 or nodes_deleted > 0):
+                        graph_manager = self.get_graph_manager(repo_id)
+                        if edges_deleted > 0:
+                            graph_manager.on_edges_changed(edges_deleted)
+                        else:
+                            graph_manager.invalidate_cache()
         
         # Update session counters
         if not dry_run:

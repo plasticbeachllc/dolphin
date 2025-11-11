@@ -7,7 +7,7 @@ import logging
 import time
 
 from sqlmodel import Session, select
-from kb.store.sql_models import CodeEdge, GraphMetrics
+from kb.store.sql_models import CodeEdge, CodeNode, GraphMetrics
 
 from .cache_validator import GraphCacheValidator
 
@@ -74,11 +74,24 @@ class GraphManager:
         # Get current repo state
         current_commit = self.validator._get_current_commit_sha() or "unknown"
 
-        # Fetch all edges from SQLite
+        # Fetch all nodes and edges from SQLite
+        nodes = self._fetch_nodes_from_db()
         edges = self._fetch_edges_from_db()
 
         # Build graph
         G = nx.DiGraph()
+
+        for node in nodes:
+            G.add_node(
+                node["id"],
+                node_type=node.get("node_type"),
+                name=node.get("name"),
+                qualified_name=node.get("qualified_name"),
+                file_id=node.get("file_id"),
+                language=node.get("language"),
+                commit_sha=node.get("commit_sha"),
+                branch=node.get("branch"),
+            )
 
         for edge in edges:
             G.add_edge(
@@ -109,6 +122,31 @@ class GraphManager:
             f"{G.number_of_nodes()} nodes, "
             f"{G.number_of_edges()} edges in {elapsed:.2f}s"
         )
+
+    def _fetch_nodes_from_db(self) -> list[dict]:
+        """Fetch all graph nodes from database."""
+
+        nodes: list[dict] = []
+
+        with Session(self.db) as session:
+            statement = select(CodeNode).where(CodeNode.repo_id == self.repo_id)
+            results = session.exec(statement).all()
+
+            for node in results:
+                nodes.append(
+                    {
+                        "id": node.id,
+                        "node_type": node.node_type,
+                        "name": node.name,
+                        "qualified_name": node.qualified_name,
+                        "file_id": node.file_id,
+                        "language": node.language,
+                        "commit_sha": node.commit_sha,
+                        "branch": node.branch,
+                    }
+                )
+
+        return nodes
 
     def _fetch_edges_from_db(self) -> list[dict]:
         """Fetch all graph edges from database.
