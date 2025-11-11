@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -230,21 +231,44 @@ def store_graph_data(
     }
 
 
-def cleanup_graph_for_file(graph_store: GraphStore, file_id: int) -> int:
+def cleanup_graph_for_file(graph_store: GraphStore, file_id: int) -> tuple[int, int]:
     """Clean up graph data for a deleted or ignored file.
-    
+
     Args:
         graph_store: Graph store instance
         file_id: File ID
-        
+
     Returns:
-        Number of nodes deleted (edges cascade automatically)
+        Tuple of (nodes_deleted, edges_deleted)
     """
+
+    edges_deleted = 0
+
     try:
-        return graph_store.delete_nodes_for_file(file_id)
+        with graph_store._connect() as conn, closing(conn.cursor()) as cur:  # type: ignore[attr-defined]
+            cur.execute(
+                (
+                    "WITH nodes AS (SELECT id FROM code_nodes WHERE file_id = ?) "
+                    "SELECT COUNT(*) FROM code_edges "
+                    "WHERE source_node_id IN (SELECT id FROM nodes) "
+                    "   OR target_node_id IN (SELECT id FROM nodes)"
+                ),
+                (file_id,),
+            )
+            row = cur.fetchone()
+            if row is not None:
+                edges_deleted = int(row[0])
+    except Exception as e:
+        print(
+            f"  Warning: Failed to calculate graph edge cleanup for file {file_id}: {e}"
+        )
+
+    try:
+        nodes_deleted = graph_store.delete_nodes_for_file(file_id)
+        return nodes_deleted, edges_deleted
     except Exception as e:
         print(f"  Warning: Failed to clean up graph data for file {file_id}: {e}")
-        return 0
+        return 0, 0
 
 
 def cleanup_graph_for_repo(graph_store: GraphStore, repo_id: int) -> int:
