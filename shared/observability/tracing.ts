@@ -8,7 +8,16 @@ import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentation
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { Resource } from '@opentelemetry/resources';
 import { SEMRESATTRS_SERVICE_NAME, SEMRESATTRS_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
-import { trace, context, propagation, SpanStatusCode, Span } from '@opentelemetry/api';
+import { trace, context, propagation, SpanStatusCode, Span, SpanAttributeValue } from '@opentelemetry/api';
+import { createLogger } from './logger';
+
+const logger = createLogger('tracing');
+
+/**
+ * Allowed types for span attributes.
+ * Matches OpenTelemetry spec: string, number, boolean, or arrays thereof.
+ */
+export type SpanAttributes = Record<string, SpanAttributeValue>;
 
 /**
  * Initialize OpenTelemetry tracing for a service.
@@ -38,8 +47,8 @@ export function initTracing(serviceName: string, serviceVersion: string = '1.0.0
   const shutdown = () => {
     sdk
       .shutdown()
-      .then(() => console.log('Tracing terminated'))
-      .catch((error) => console.error('Error terminating tracing', error));
+      .then(() => logger.info('Tracing terminated'))
+      .catch((error) => logger.error('Error terminating tracing', error instanceof Error ? error : undefined));
   };
 
   process.on('SIGTERM', shutdown);
@@ -54,7 +63,7 @@ export function initTracing(serviceName: string, serviceVersion: string = '1.0.0
 export async function traced<T>(
   spanName: string,
   fn: (span: Span) => Promise<T>,
-  attributes?: Record<string, any>
+  attributes?: SpanAttributes
 ): Promise<T> {
   const tracer = trace.getTracer('dolphin');
 

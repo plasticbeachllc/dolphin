@@ -1,12 +1,12 @@
-# EP-1 Deployment Guide
+# Observability Stack Deployment Guide
 
 ## Prerequisites
 
 - Docker and Docker Compose installed
 - Python 3.12+ (for KB API)
 - Bun or Node.js 20+ (for TypeScript services)
-- At least 4GB RAM for observability stack
-- 10GB disk space for logs/metrics
+- At least 2GB RAM for observability stack
+- 5GB disk space for logs/metrics
 
 ## Installation Steps
 
@@ -17,7 +17,7 @@
 cd /path/to/dolphin
 uv pip install -e .
 # Or with pip
-pip install prometheus-client opentelemetry-api opentelemetry-sdk opentelemetry-instrumentation-fastapi opentelemetry-exporter-jaeger
+pip install prometheus-client opentelemetry-api opentelemetry-sdk opentelemetry-instrumentation-fastapi
 ```
 
 #### TypeScript (Shared utilities)
@@ -32,12 +32,12 @@ bun install
 
 ```bash
 cd observability
-docker-compose up -d
+./manage.sh start
 ```
 
 **Verify all services are running:**
 ```bash
-docker-compose ps
+./manage.sh status
 ```
 
 You should see:
@@ -46,115 +46,34 @@ You should see:
 - ✅ dolphin-loki (port 3100)
 - ✅ dolphin-promtail
 - ✅ dolphin-grafana (port 3000)
-- ✅ dolphin-alertmanager (port 9093)
 
 ### 3. Access Web UIs
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| Grafana | http://localhost:3000 | admin / admin |
+| Grafana | http://localhost:3000 | admin / admin (⚠️ **Change in production!**) |
 | Prometheus | http://localhost:9090 | - |
 | Jaeger | http://localhost:16686 | - |
-| Alertmanager | http://localhost:9093 | - |
 
 ### 4. Configure Grafana
 
-Grafana datasources are auto-provisioned, but verify:
+Grafana datasources and dashboards are auto-provisioned. After first login:
 
-1. Open http://localhost:3000
-2. Login with admin/admin (change password when prompted)
-3. Go to Configuration → Data Sources
-4. Verify you see:
-   - ✅ Prometheus (default)
-   - ✅ Loki
-   - ✅ Jaeger
+1. Change default password
+2. Navigate to **Dashboards → Dolphin → Dolphin Debugging Dashboard**
 
-### 5. Import Dashboards
-
-The "Dolphin System Health" dashboard is auto-provisioned in `grafana/dashboards/`.
-
-To view it:
-1. Go to Dashboards → Browse
-2. Open "Dolphin System Health"
-
-## Starting Dolphin Services
-
-### KB API (with metrics)
+### 5. Start KB API
 
 ```bash
-cd kb
-python -m uvicorn api.server:app_with_lifespan --host 0.0.0.0 --port 8000 --reload
+# From project root
+uv run kb-api
 ```
 
-**Verify metrics:**
+Verify metrics:
 ```bash
 curl http://localhost:8000/metrics
 curl http://localhost:8000/health
 ```
-
-### Agent Core (when implemented)
-
-```bash
-cd agent-core
-bun run src/main.ts
-```
-
-**Verify metrics:**
-```bash
-curl http://localhost:9091/metrics
-curl http://localhost:9091/health
-```
-
-### MCP Bridge (when implemented)
-
-```bash
-cd mcp-bridge
-bun run src/main.ts
-```
-
-**Verify metrics:**
-```bash
-curl http://localhost:9092/metrics
-curl http://localhost:9092/health
-```
-
-## Verification
-
-### Check Prometheus is Scraping
-
-1. Open http://localhost:9090/targets
-2. Verify all targets show "UP" status
-3. If "DOWN", check:
-   - Service is running
-   - Port is correct
-   - Firewall allows connection
-
-### Check Metrics in Grafana
-
-1. Open http://localhost:3000
-2. Go to Explore
-3. Select "Prometheus" datasource
-4. Try query: `up`
-5. You should see all services with `value=1`
-
-### Test Alerting
-
-```bash
-# Fire a test alert
-curl -X POST http://localhost:9093/api/v1/alerts -d '[
-  {
-    "labels": {
-      "alertname": "TestAlert",
-      "severity": "warning"
-    },
-    "annotations": {
-      "summary": "Test alert from deployment"
-    }
-  }
-]'
-```
-
-Check Alertmanager UI: http://localhost:9093
 
 ## Configuration
 
@@ -163,19 +82,21 @@ Check Alertmanager UI: http://localhost:9093
 Create a `.env` file in the project root:
 
 ```bash
-# Observability
-JAEGER_ENDPOINT=http://localhost:14268/api/traces
-PROMETHEUS_PUSHGATEWAY=http://localhost:9091
-LOKI_URL=http://localhost:3100
+# OpenTelemetry endpoint
+OTLP_ENDPOINT=http://localhost:4318/v1/traces
 
-# Cost tracking
-DAILY_BUDGET_LIMIT=100.0
+# Loki endpoint
+LOKI_URL=http://localhost:3100
 
 # Log level
 LOG_LEVEL=INFO
+
+# Optional: Secure Grafana credentials (recommended for production)
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=your_secure_password_here
 ```
 
-### Customize Scrape Targets
+### Customize Prometheus Scrape Targets
 
 Edit `observability/prometheus/prometheus.yml`:
 
@@ -184,236 +105,234 @@ scrape_configs:
   - job_name: 'kb-api'
     static_configs:
       - targets: ['host.docker.internal:8000']  # Change port if needed
+    scrape_interval: 10s  # Adjust scrape frequency
 ```
 
-### Customize Alerts
-
-Edit `observability/prometheus/alerts.yml` to add/modify alerts.
-
-Reload Prometheus config:
+Restart Prometheus:
 ```bash
-curl -X POST http://localhost:9090/-/reload
+./manage.sh restart
 ```
 
-### Configure Slack Alerts
+### Customize Retention Periods
 
-Edit `observability/prometheus/alertmanager.yml`:
+**Prometheus** (default: 7 days):
+```yaml
+# observability/prometheus/prometheus.yml
+command:
+  - '--storage.tsdb.retention.time=7d'  # Adjust as needed
+```
+
+**Loki** (default: 30 days):
+```yaml
+# observability/loki/loki-config.yml
+limits_config:
+  retention_period: 720h  # 30 days
+```
+
+## Security Considerations
+
+### 🔒 Production Security Checklist
+
+- [ ] **Change Grafana credentials** from default admin/admin
+- [ ] **Restrict network access** to observability ports (use firewall/VPC)
+- [ ] **Consider authentication** for /metrics endpoints (see below)
+- [ ] **Use HTTPS/TLS** for external access
+- [ ] **Limit log retention** based on compliance requirements
+- [ ] **Review exposed metrics** for sensitive information
+
+### Securing Metrics Endpoints
+
+The `/metrics` endpoints are **unauthenticated by default** for simplicity. For production:
+
+**Option 1: Network isolation** (recommended for internal tools)
+```bash
+# Only allow Prometheus to access metrics
+iptables -A INPUT -p tcp --dport 8000 -s <prometheus_ip> -j ACCEPT
+iptables -A INPUT -p tcp --dport 8000 -j DROP
+```
+
+**Option 2: Add authentication middleware**
+```python
+# kb/api/middleware/auth.py
+from fastapi import Security, HTTPException
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+
+security = HTTPBasic()
+
+async def verify_metrics_auth(credentials: HTTPBasicCredentials = Security(security)):
+    if credentials.username != "metrics" or credentials.password != "secret":
+        raise HTTPException(status_code=401)
+    return credentials
+
+# In server.py
+@app.get("/metrics", dependencies=[Depends(verify_metrics_auth)])
+async def metrics_endpoint():
+    return metrics.metrics_endpoint()
+```
+
+**Option 3: API key header**
+```python
+async def verify_api_key(x_api_key: str = Header(None)):
+    if x_api_key != os.getenv("METRICS_API_KEY"):
+        raise HTTPException(status_code=403)
+```
+
+### Securing Grafana
+
+**Use environment variables for credentials:**
 
 ```yaml
-receivers:
-  - name: 'slack-critical'
-    slack_configs:
-      - api_url: 'YOUR_SLACK_WEBHOOK_URL'
-        channel: '#alerts'
-        title: '🚨 {{ .GroupLabels.alertname }}'
-        text: |
-          *Summary:* {{ .CommonAnnotations.summary }}
-          *Description:* {{ .CommonAnnotations.description }}
+# observability/docker-compose.yml
+grafana:
+  environment:
+    - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+    - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
 ```
 
-Reload Alertmanager:
+Then set in `.env`:
 ```bash
-docker-compose restart alertmanager
+GRAFANA_ADMIN_USER=your_admin_user
+GRAFANA_ADMIN_PASSWORD=your_secure_password
 ```
 
 ## Troubleshooting
 
-### Metrics not showing in Prometheus
+### Services Won't Start
 
-**Problem**: `/metrics` endpoint returns data, but Prometheus shows no data.
+```bash
+# Check Docker is running
+docker ps
 
-**Solution**:
-1. Check Prometheus targets: http://localhost:9090/targets
-2. Verify scrape config in `prometheus/prometheus.yml`
-3. For Mac/Windows Docker Desktop, use `host.docker.internal` instead of `localhost`
-4. Check Prometheus logs: `docker-compose logs prometheus`
+# Check port conflicts
+lsof -i :3000  # Grafana
+lsof -i :9090  # Prometheus
+lsof -i :16686 # Jaeger
 
-### Grafana shows "No data"
+# View error logs
+./manage.sh logs
+```
 
-**Problem**: Dashboard panels show "No data".
+### No Metrics in Prometheus
 
-**Solution**:
-1. Check time range (top right) - should include recent data
-2. Verify Prometheus datasource: Configuration → Data Sources → Prometheus → Test
-3. Try a simple query in Explore: `up`
-4. Check metric names match in panel queries
+```bash
+# Check Prometheus targets
+open http://localhost:9090/targets
 
-### Jaeger shows no traces
+# Should show "kb-api" as UP
+# If DOWN, verify KB API is running:
+curl http://localhost:8000/metrics
+```
 
-**Problem**: No traces appear in Jaeger UI.
+### Dashboard Not Showing in Grafana
 
-**Solution**:
-1. Verify `JAEGER_ENDPOINT` environment variable is set
-2. Check if application has OpenTelemetry initialized
-3. Verify trace sampling rate (default: 100% for development)
-4. Check Jaeger logs: `docker-compose logs jaeger`
+```bash
+# Restart Grafana to reload dashboards
+docker compose restart grafana
 
-### High resource usage
+# Check dashboard file exists
+ls -l grafana/dashboards/debugging.json
 
-**Problem**: Docker containers using too much CPU/memory.
+# View Grafana provisioning logs
+docker compose logs grafana | grep provision
+```
 
-**Solution**:
-1. Reduce Prometheus retention:
+### High Memory Usage
+
+Observability stack uses ~2GB RAM by default. To reduce:
+
+1. **Lower Prometheus retention:**
    ```yaml
-   # prometheus/prometheus.yml
-   --storage.tsdb.retention.time=7d  # Reduce from 30d
+   --storage.tsdb.retention.time=3d
    ```
 
-2. Reduce Loki retention:
+2. **Reduce scrape frequency:**
    ```yaml
-   # loki/loki-config.yml
+   scrape_interval: 30s  # Instead of 10s
+   ```
+
+3. **Limit Loki retention:**
+   ```yaml
    retention_period: 168h  # 7 days instead of 30
    ```
 
-3. Adjust scrape interval:
-   ```yaml
-   # prometheus/prometheus.yml
-   global:
-     scrape_interval: 30s  # Increase from 15s
-   ```
-
-### Port conflicts
-
-**Problem**: Port already in use (e.g., 3000, 9090).
-
-**Solution**:
-Edit `docker-compose.yml` to change ports:
-```yaml
-services:
-  grafana:
-    ports:
-      - "3001:3000"  # Change external port
-```
-
-## Production Deployment
-
-### Security Hardening
-
-1. **Change default passwords:**
-   ```bash
-   # Grafana
-   docker-compose exec grafana grafana-cli admin reset-admin-password <new-password>
-   ```
-
-2. **Enable TLS:**
-   - Add reverse proxy (nginx/traefik)
-   - Configure SSL certificates
-   - Update datasource URLs to use HTTPS
-
-3. **Restrict access:**
-   - Use firewall rules
-   - Enable authentication on all services
-   - Use VPN for internal access
-
-### Persistent Storage
-
-Add named volumes in `docker-compose.yml`:
-
-```yaml
-volumes:
-  prometheus_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /data/prometheus
-```
-
-### Backup Configuration
+### Disk Space Issues
 
 ```bash
-# Backup Prometheus data
-docker run --rm -v dolphin_prometheus_data:/data -v $(pwd):/backup alpine tar czf /backup/prometheus-backup.tar.gz /data
+# Check volume sizes
+docker system df -v
 
-# Backup Grafana dashboards
-docker-compose exec grafana grafana-cli admin export-dashboards > dashboards-backup.json
+# Clean up old data
+./manage.sh clean  # WARNING: Deletes all data!
+
+# Or manually remove old data
+docker volume rm dolphin_prometheus_data
+docker volume rm dolphin_loki_data
 ```
 
-### High Availability
+## Performance Impact
 
-For production HA:
-- Use Prometheus federation or Thanos for multi-cluster metrics
-- Deploy Grafana with SQLite/PostgreSQL backend
-- Use Jaeger with Cassandra/Elasticsearch storage
-- Set up Loki with S3/GCS storage
+Expected overhead from observability:
 
-## Monitoring the Monitors
+| Component | Baseline | With Observability | Overhead |
+|-----------|----------|-------------------|----------|
+| KB API Latency | 45ms | 47ms | +2ms (4%) |
+| Memory per Service | 120MB | 135MB | +15MB (12%) |
+| Disk Usage | - | ~2GB/week | - |
 
-Set up monitoring for the observability stack itself:
+**Recommendations:**
+- Acceptable for development and production
+- Monitor disk usage and adjust retention
+- Consider sampling for high-throughput services
 
-1. **Prometheus self-monitoring:**
-   ```promql
-   # Prometheus targets down
-   up{job="prometheus"} == 0
+## Backup and Recovery
 
-   # Prometheus storage issues
-   prometheus_tsdb_storage_blocks_bytes > 10e9
-   ```
-
-2. **Grafana health:**
-   ```bash
-   curl http://localhost:3000/api/health
-   ```
-
-3. **Disk usage alerts:**
-   ```promql
-   # Docker volume usage
-   (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
-   ```
-
-## Maintenance
-
-### Daily
-- Check Alertmanager for firing alerts
-- Review Grafana dashboards for anomalies
-
-### Weekly
-- Review Prometheus targets health
-- Check disk usage for time-series data
-- Verify backup processes
-
-### Monthly
-- Review and update alert rules
-- Optimize dashboard queries
-- Clean up old/unused metrics
-
-## Upgrading
-
-### Update Observability Stack
+### Backup Grafana Dashboards
 
 ```bash
-cd observability
-docker-compose pull
-docker-compose up -d
+docker compose exec grafana \
+  tar czf - /var/lib/grafana/dashboards > grafana-backup.tar.gz
 ```
 
-### Update Python Dependencies
+### Restore Grafana Dashboards
 
 ```bash
-uv pip install --upgrade prometheus-client opentelemetry-api
+docker compose exec grafana \
+  tar xzf - -C /var/lib/grafana/dashboards < grafana-backup.tar.gz
+
+docker compose restart grafana
 ```
 
-### Update TypeScript Dependencies
+### Export Prometheus Data
 
 ```bash
-cd shared
-npm update
+# Snapshot Prometheus data
+docker compose exec prometheus \
+  promtool tsdb create-blocks-from rules
 ```
 
-## Support
+## Monitoring the Observability Stack
 
-For issues:
-1. Check logs: `docker-compose logs <service>`
-2. Review `/docs/EP1/` documentation
-3. Create GitHub issue: https://github.com/plasticbeachllc/dolphin/issues
+Monitor the observability stack itself:
+
+```bash
+# Prometheus self-monitoring
+curl http://localhost:9090/metrics | grep prometheus_
+
+# Grafana metrics
+curl http://localhost:3000/metrics
+
+# Jaeger health
+curl http://localhost:16686/
+```
 
 ## Next Steps
 
-After deployment:
-1. ✅ Verify all services are healthy
-2. ✅ Import Grafana dashboards
-3. ✅ Configure alert channels (Slack/PagerDuty)
-4. ✅ Set up backup processes
-5. ✅ Document runbook procedures
-6. ⏳ Implement Phase 2: Distributed Tracing
-7. ⏳ Implement Phase 3: Advanced Dashboards
+- See [README.md](./README.md) for usage guide
+- See [COMMANDS.md](./COMMANDS.md) for command reference
+- See [TESTING.md](./TESTING.md) for testing procedures
+
+## References
+
+- [Prometheus Security Best Practices](https://prometheus.io/docs/operating/security/)
+- [Grafana Security Guide](https://grafana.com/docs/grafana/latest/setup-grafana/configure-security/)
+- [OpenTelemetry Documentation](https://opentelemetry.io/docs/)

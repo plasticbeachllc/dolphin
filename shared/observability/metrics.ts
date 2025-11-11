@@ -4,6 +4,9 @@
  */
 
 import { register, Counter, Histogram, Gauge } from 'prom-client';
+import { createLogger } from './logger';
+
+const logger = createLogger('metrics');
 
 /**
  * Helper to record a tool invocation with automatic timing and error handling.
@@ -60,34 +63,39 @@ export function createMetricsServer(port: number = 9091): void {
   const server = BunRuntime.serve({
     port,
     async fetch(req: Request): Promise<Response> {
-      const url = new URL(req.url);
+      try {
+        const url = new URL(req.url);
 
-      if (url.pathname === '/metrics') {
-        const metrics = await getMetrics();
-        return new Response(metrics, {
-          headers: {
-            'Content-Type': 'text/plain; version=0.0.4',
-          },
-        });
-      }
-
-      if (url.pathname === '/health') {
-        return new Response(
-          JSON.stringify({
-            status: 'healthy',
-            timestamp: new Date().toISOString(),
-          }),
-          {
+        if (url.pathname === '/metrics') {
+          const metrics = await getMetrics();
+          return new Response(metrics, {
             headers: {
-              'Content-Type': 'application/json',
+              'Content-Type': 'text/plain; version=0.0.4',
             },
-          }
-        );
-      }
+          });
+        }
 
-      return new Response('Not Found', { status: 404 });
+        if (url.pathname === '/health') {
+          return new Response(
+            JSON.stringify({
+              status: 'healthy',
+              timestamp: new Date().toISOString(),
+            }),
+            {
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            }
+          );
+        }
+
+        return new Response('Not Found', { status: 404 });
+      } catch (error) {
+        logger.error('Metrics endpoint error', error instanceof Error ? error : undefined);
+        return new Response('Internal Server Error', { status: 500 });
+      }
     },
   });
 
-  console.log(`Metrics server listening on http://localhost:${port}`);
+  logger.info('Metrics server started', { port });
 }
