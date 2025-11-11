@@ -46,6 +46,16 @@ dependencies = [
     "python-dotenv",
     "sqlite-utils",
     "tomli ; python_full_version < '3.11'",
+    # Graph intelligence dependencies (Phase 1)
+    "networkx>=3.2",
+    "python-louvain>=0.16",
+    "scipy>=1.11.0",
+    # Observability (EP-1)
+    "prometheus-client>=0.19.0",
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-instrumentation-fastapi>=0.41b0",
+    "opentelemetry-exporter-jaeger>=1.20.0",
 ]
 
 [project.urls]
@@ -137,3 +147,46 @@ markers = [
     "scenario: marks tests as scenario tests",
 ]
 asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["kb", "personas"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/migrations/*",
+    "*/.venv/*",
+    "*/venv/*",
+]
+branch = true
+parallel = true
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+skip_empty = true
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+# Fail build if coverage is below 75%
+fail_under = 75.0
+
+[tool.coverage.html]
+directory = "tests/reports/htmlcov"
+show_contexts = true
+
+[tool.coverage.xml]
+output = "tests/reports/coverage.xml"
+
+[tool.coverage.json]
+output = "tests/reports/coverage.json"
+show_contexts = true

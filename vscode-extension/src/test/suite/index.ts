@@ -36,7 +36,7 @@ export async function run(): Promise<void> {
   const mocha = new Mocha({
     ui: 'bdd',
     color: true,
-    timeout: 10000, // 10 seconds default timeout
+    timeout: 5000, // 5 seconds default timeout (reduced from 10s)
     reporter: 'spec', // Use spec reporter for detailed output
   });
 
