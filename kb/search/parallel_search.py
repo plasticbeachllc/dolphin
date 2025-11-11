@@ -17,11 +17,85 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SearchResult:
     """Search result with score and metadata."""
-    chunk_id: str
+    id: str
     score: float
     text: str
-    metadata: Dict[str, Any]
-    search_type: str  # 'vector' or 'bm25'
+    repo: Optional[str] = None
+    path: Optional[str] = None
+    start_line: Optional[int] = None
+    end_line: Optional[int] = None
+    metadata: Optional[Dict[str, Any]] = None
+    search_type: Optional[str] = None  # 'vector' or 'bm25'
+
+
+def reciprocal_rank_fusion(
+    result_lists: List[List[SearchResult]],
+    k: int = 60,
+    top_k: Optional[int] = None,
+) -> List[SearchResult]:
+    """Merge multiple result lists using Reciprocal Rank Fusion (RRF).
+
+    The RRF algorithm assigns a score to each document based on its rank
+    in each result list:
+
+        RRF_score(doc) = Σ 1 / (k + rank_i)
+
+    where rank_i is the position (1-indexed) in result list i.
+
+    Args:
+        result_lists: List of result lists to merge
+        k: RRF smoothing constant (default: 60)
+        top_k: Optional maximum number of results to return
+
+    Returns:
+        Merged and re-ranked list of SearchResult objects
+    """
+    if not result_lists:
+        return []
+
+    # Build rank maps for each list
+    rrf_scores: Dict[str, float] = {}
+    id_to_result: Dict[str, SearchResult] = {}
+
+    for results in result_lists:
+        for rank, result in enumerate(results, start=1):
+            # Add RRF score contribution
+            if result.id in rrf_scores:
+                rrf_scores[result.id] += 1.0 / (k + rank)
+            else:
+                rrf_scores[result.id] = 1.0 / (k + rank)
+                id_to_result[result.id] = result
+
+    # Sort by RRF score (descending)
+    sorted_ids = sorted(
+        rrf_scores.keys(),
+        key=lambda x: rrf_scores[x],
+        reverse=True,
+    )
+
+    # Build merged result list with updated scores
+    merged = []
+    for result_id in sorted_ids:
+        result = id_to_result[result_id]
+        # Create new result with RRF score
+        merged_result = SearchResult(
+            id=result.id,
+            score=rrf_scores[result_id],
+            text=result.text,
+            repo=result.repo,
+            path=result.path,
+            start_line=result.start_line,
+            end_line=result.end_line,
+            metadata=result.metadata,
+            search_type=result.search_type,
+        )
+        merged.append(merged_result)
+
+    # Limit results if top_k specified
+    if top_k is not None:
+        merged = merged[:top_k]
+
+    return merged
 
 
 class ParallelHybridSearch:
@@ -33,9 +107,13 @@ class ParallelHybridSearch:
 
     def __init__(
         self,
-        vector_search_fn: Callable,
+        vector_search_fn: Callable = None,
         bm25_search_fn: Optional[Callable] = None,
         enable_parallel: bool = True,
+        vector_store: Any = None,
+        bm25_store: Any = None,
+        embedding_provider: Any = None,
+        vector_weight: float = 0.6,
     ):
         """Initialize parallel hybrid search.
 
@@ -43,10 +121,24 @@ class ParallelHybridSearch:
             vector_search_fn: Function to execute vector search
             bm25_search_fn: Optional function to execute BM25 search
             enable_parallel: Enable parallel execution (default: True)
+            vector_store: Optional vector store (alternative to vector_search_fn)
+            bm25_store: Optional BM25 store (alternative to bm25_search_fn)
+            embedding_provider: Optional embedding provider
+            vector_weight: Weight for vector search results (default: 0.6)
         """
         self.vector_search_fn = vector_search_fn
         self.bm25_search_fn = bm25_search_fn
         self.enable_parallel = enable_parallel
+        self.vector_store = vector_store
+        self.bm25_store = bm25_store
+        self.embedding_provider = embedding_provider
+        self.vector_weight = vector_weight
+
+        # Statistics tracking
+        self._total_searches = 0
+        self._total_vector_time_ms = 0.0
+        self._total_bm25_time_ms = 0.0
+        self._total_time_ms = 0.0
 
     async def search_async(
         self,
@@ -139,10 +231,14 @@ class ParallelHybridSearch:
 
         return [
             SearchResult(
-                chunk_id=r.get('chunk_id', ''),
+                id=r.get('id', r.get('chunk_id', '')),
                 score=r.get('score', 0.0),
                 text=r.get('text', ''),
-                metadata=r.get('metadata', {}),
+                repo=r.get('repo'),
+                path=r.get('path'),
+                start_line=r.get('start_line'),
+                end_line=r.get('end_line'),
+                metadata=r.get('metadata'),
                 search_type='vector',
             )
             for r in results
@@ -176,10 +272,14 @@ class ParallelHybridSearch:
 
         return [
             SearchResult(
-                chunk_id=r.get('chunk_id', ''),
+                id=r.get('id', r.get('chunk_id', '')),
                 score=r.get('score', 0.0),
-                text=r.get('text', ''),
-                metadata=r.get('metadata', {}),
+                text=r.get('text', r.get('content', '')),
+                repo=r.get('repo'),
+                path=r.get('path', r.get('file_path')),
+                start_line=r.get('start_line'),
+                end_line=r.get('end_line'),
+                metadata=r.get('metadata'),
                 search_type='bm25',
             )
             for r in results
@@ -236,49 +336,78 @@ class ParallelHybridSearch:
         Returns:
             Merged and ranked list of SearchResult objects
         """
-        # Build rank maps
-        vector_ranks = {r.chunk_id: i + 1 for i, r in enumerate(vector_results)}
-        bm25_ranks = {r.chunk_id: i + 1 for i, r in enumerate(bm25_results)}
-
-        # Get all unique chunk IDs
-        all_ids = set(vector_ranks.keys()) | set(bm25_ranks.keys())
-
-        # Calculate RRF scores
-        rrf_scores: Dict[str, float] = {}
-        for chunk_id in all_ids:
-            score = 0.0
-
-            if chunk_id in vector_ranks:
-                score += 1.0 / (k + vector_ranks[chunk_id])
-
-            if chunk_id in bm25_ranks:
-                score += 1.0 / (k + bm25_ranks[chunk_id])
-
-            rrf_scores[chunk_id] = score
-
-        # Sort by RRF score
-        sorted_ids = sorted(
-            rrf_scores.keys(),
-            key=lambda x: rrf_scores[x],
-            reverse=True,
+        # Use the standalone function
+        return reciprocal_rank_fusion(
+            [vector_results, bm25_results],
+            k=k,
+            top_k=top_k,
         )
 
-        # Build result list
-        id_to_result = {}
-        for r in vector_results:
-            id_to_result[r.chunk_id] = r
-        for r in bm25_results:
-            if r.chunk_id not in id_to_result:
-                id_to_result[r.chunk_id] = r
+    def search(
+        self,
+        query: str,
+        query_embedding: Optional[List[float]] = None,
+        top_k: int = 10,
+        **kwargs,
+    ) -> List[SearchResult]:
+        """Synchronous wrapper around search_async.
 
-        merged = []
-        for chunk_id in sorted_ids[:top_k]:
-            result = id_to_result[chunk_id]
-            # Update score to RRF score
-            result.score = rrf_scores[chunk_id]
-            merged.append(result)
+        Args:
+            query: Query text
+            query_embedding: Optional pre-computed query embedding
+            top_k: Number of results to return
+            **kwargs: Additional search parameters
 
-        return merged
+        Returns:
+            List of SearchResult objects
+        """
+        # Create event loop and run async search
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        return loop.run_until_complete(
+            self.search_async(query, query_embedding, top_k, **kwargs)
+        )
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get search statistics.
+
+        Returns:
+            Dictionary with statistics:
+                - total_searches: Number of searches performed
+                - avg_vector_time_ms: Average vector search time
+                - avg_bm25_time_ms: Average BM25 search time
+                - avg_total_time_ms: Average total search time
+                - parallel_speedup: Speedup from parallelization
+        """
+        if self._total_searches == 0:
+            return {
+                'total_searches': 0,
+                'avg_vector_time_ms': 0.0,
+                'avg_bm25_time_ms': 0.0,
+                'avg_total_time_ms': 0.0,
+                'parallel_speedup': 0.0,
+            }
+
+        avg_vector = self._total_vector_time_ms / self._total_searches
+        avg_bm25 = self._total_bm25_time_ms / self._total_searches
+        avg_total = self._total_time_ms / self._total_searches
+
+        # Calculate speedup (sequential time / parallel time)
+        sequential_time = avg_vector + avg_bm25
+        speedup = sequential_time / avg_total if avg_total > 0 else 1.0
+
+        return {
+            'total_searches': self._total_searches,
+            'avg_vector_time_ms': avg_vector,
+            'avg_bm25_time_ms': avg_bm25,
+            'avg_total_time_ms': avg_total,
+            'parallel_speedup': speedup,
+        }
 
 
 def create_parallel_search(

@@ -124,15 +124,15 @@ class QueryResultCache:
     def put(
         self,
         query: str,
+        params: Optional[Dict[str, Any]],
         results: List[Dict[str, Any]],
-        params: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Store query results in cache.
 
         Args:
             query: Query text
-            results: Query results to cache
             params: Query parameters
+            results: Query results to cache
         """
         params = params or {}
         cache_key = self._make_cache_key(query, params)
