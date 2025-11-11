@@ -1,6 +1,6 @@
 """
 Prometheus metrics middleware for FastAPI.
-Instruments all endpoints with request/response metrics.
+Instruments all endpoints with essential metrics for debugging and latency monitoring.
 """
 
 from prometheus_client import (
@@ -68,12 +68,6 @@ embedding_api_latency_seconds = Histogram(
     'OpenAI embedding API latency',
     ['repo_name'],
     buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0]
-)
-
-embedding_cost_usd = Counter(
-    'kb_embedding_cost_usd',
-    'Total embedding costs in USD',
-    ['repo_name', 'model']
 )
 
 # Database metrics
@@ -215,7 +209,7 @@ def record_vector_search(repo_name: str, duration_seconds: float):
     ).observe(duration_seconds)
 
 
-def record_embedding_call(repo_name: str, model: str, tokens: int, latency_seconds: float):
+def record_embedding_call(repo_name: str, tokens: int, latency_seconds: float):
     """Record metrics for embedding API call."""
     embedding_tokens_total.labels(
         repo_name=repo_name
@@ -224,13 +218,6 @@ def record_embedding_call(repo_name: str, model: str, tokens: int, latency_secon
     embedding_api_latency_seconds.labels(
         repo_name=repo_name
     ).observe(latency_seconds)
-
-    # Calculate cost (text-embedding-3-small: $0.02 per 1M tokens)
-    cost = (tokens / 1_000_000) * 0.02
-    embedding_cost_usd.labels(
-        repo_name=repo_name,
-        model=model
-    ).inc(cost)
 
 
 def record_db_query(operation: str, table: str, duration_seconds: float):
