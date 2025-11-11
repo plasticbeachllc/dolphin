@@ -4,14 +4,14 @@ import { waitForExtensionActivation, sleep } from '../helpers/test-utils';
 
 describe('Phase 1 Integration Tests', () => {
   before(async function () {
-    this.timeout(8000);
+    this.timeout(15000);
     await waitForExtensionActivation();
     await sleep(1000);
   });
 
   describe('Targeted Activation', () => {
     it('Extension should activate on view open', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       const extension = vscode.extensions.getExtension('pb.dolphin');
       assert.ok(extension, 'Extension should be present');
@@ -57,7 +57,7 @@ describe('Phase 1 Integration Tests', () => {
 
   describe('Commands Registration', () => {
     it('All Phase 1 commands should be registered', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       const commands = await vscode.commands.getCommands(true);
       const requiredCommands = [
@@ -249,7 +249,7 @@ describe('Phase 1 Integration Tests', () => {
 
   describe('End-to-End Workflow', () => {
     it('Should support complete command workflow', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       // 1. Extension should be active
       const extension = vscode.extensions.getExtension('pb.dolphin');

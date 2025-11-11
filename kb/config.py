@@ -111,165 +111,129 @@ class KBConfig:
     embedding_cache_ttl: int = 3600
     result_cache_ttl: int = 900
 
-    @staticmethod
-    def _coerce_optional(value: Any, target_type: type) -> Any:
-        """Coerce a value to target type, handling None and string booleans."""
-        if value is None:
-            return None
-        try:
-            if target_type is bool and isinstance(value, str):
-                return value.lower() in ("true", "1", "yes")
-            return target_type(value)
-        except (ValueError, TypeError):
-            return value  # Keep original if coercion fails
-
-    @classmethod
-    def _build_reranking_config(cls, data: dict) -> RerankingConfig:
-        """Build reranking configuration from mapping."""
-        config = RerankingConfig()
-        if not data:
-            return config
-
-        if "enabled" in data:
-            config.enabled = cls._coerce_optional(data["enabled"], bool)
-        if "model" in data:
-            config.model = data["model"]
-        if "device" in data:
-            config.device = data["device"]
-        if "batch_size" in data:
-            config.batch_size = cls._coerce_optional(data["batch_size"], int)
-        if "candidate_multiplier" in data:
-            config.candidate_multiplier = cls._coerce_optional(data["candidate_multiplier"], int)
-        if "score_threshold" in data:
-            config.score_threshold = cls._coerce_optional(data["score_threshold"], float)
-
-        return config
-
-    @classmethod
-    def _build_hybrid_search_config(cls, data: dict) -> HybridSearchConfig:
-        """Build hybrid search configuration from mapping."""
-        config = HybridSearchConfig()
-        if not data:
-            return config
-
-        if "enabled" in data:
-            config.enabled = cls._coerce_optional(data["enabled"], bool)
-        if "fusion_method" in data:
-            config.fusion_method = data["fusion_method"]
-        if "fusion_k" in data:
-            config.fusion_k = cls._coerce_optional(data["fusion_k"], int)
-
-        return config
-
-    @classmethod
-    def _build_ann_config(cls, data: dict) -> ANNConfig:
-        """Build ANN configuration from mapping."""
-        config = ANNConfig()
-        if not data:
-            return config
-
-        if "strategy" in data:
-            config.strategy = data["strategy"]
-        if "metric" in data:
-            config.metric = data["metric"]
-        if "estimated_dataset_size" in data:
-            config.estimated_dataset_size = cls._coerce_optional(data["estimated_dataset_size"], int)
-        if "default_query_type" in data:
-            config.default_query_type = data["default_query_type"]
-
-        return config
-
-    @classmethod
-    def _build_retrieval_config(cls, data: dict) -> RetrievalConfig:
-        """Build retrieval configuration from mapping."""
-        reranking_data = data.get("reranking", {}) if isinstance(data, dict) else {}
-        hybrid_search_data = data.get("hybrid_search", {}) if isinstance(data, dict) else {}
-        ann_data = data.get("ann", {}) if isinstance(data, dict) else {}
-
-        config = RetrievalConfig(
-            reranking=cls._build_reranking_config(reranking_data),
-            hybrid_search=cls._build_hybrid_search_config(hybrid_search_data),
-            ann=cls._build_ann_config(ann_data)
-        )
-
-        if "score_cutoff" in data:
-            config.score_cutoff = cls._coerce_optional(data["score_cutoff"], float)
-        if "top_k" in data:
-            config.top_k = cls._coerce_optional(data["top_k"], int)
-        if "max_snippet_tokens" in data:
-            config.max_snippet_tokens = cls._coerce_optional(data["max_snippet_tokens"], int)
-        if "mmr_enabled" in data:
-            config.mmr_enabled = cls._coerce_optional(data["mmr_enabled"], bool)
-        if "mmr_lambda" in data:
-            config.mmr_lambda = cls._coerce_optional(data["mmr_lambda"], float)
-
-        return config
-
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "KBConfig":
         """Create a configuration object from a mapping, handling nested sections."""
-
-        # Extract nested sections
+        
+        # Extract nested sections, falling back to empty dicts
         retrieval_data = data.get("retrieval", {})
+        reranking_data = retrieval_data.get("reranking", {}) if isinstance(retrieval_data, dict) else {}
+        hybrid_search_data = retrieval_data.get("hybrid_search", {}) if isinstance(retrieval_data, dict) else {}
+        ann_data = retrieval_data.get("ann", {}) if isinstance(retrieval_data, dict) else {}
         embedding_data = data.get("embedding", {})
         cache_data = data.get("cache", {})
         storage_data = data.get("storage", {})
         server_data = data.get("server", {})
 
-        # Build retrieval config using helper methods
-        retrieval_config = cls._build_retrieval_config(retrieval_data)
+        # Type coercion for optional fields
+        def _coerce_optional(value, target_type):
+            if value is None:
+                return None
+            try:
+                if target_type is bool and isinstance(value, str):
+                    return value.lower() in ("true", "1", "yes")
+                return target_type(value)
+            except (ValueError, TypeError):
+                return value  # Keep original if coercion fails
 
-        # Build top-level config
-        config_kwargs = {'retrieval': retrieval_config}
+        # Build nested dataclasses with proper defaults for missing values
+        reranking_config = RerankingConfig()
+        if reranking_data:
+            if "enabled" in reranking_data:
+                reranking_config.enabled = _coerce_optional(reranking_data.get("enabled"), bool)
+            if "model" in reranking_data:
+                reranking_config.model = reranking_data.get("model")
+            if "device" in reranking_data:
+                reranking_config.device = reranking_data.get("device")
+            if "batch_size" in reranking_data:
+                reranking_config.batch_size = _coerce_optional(reranking_data.get("batch_size"), int)
+            if "candidate_multiplier" in reranking_data:
+                reranking_config.candidate_multiplier = _coerce_optional(reranking_data.get("candidate_multiplier"), int)
+            if "score_threshold" in reranking_data:
+                reranking_config.score_threshold = _coerce_optional(reranking_data.get("score_threshold"), float)
 
+        hybrid_search_config = HybridSearchConfig()
+        if hybrid_search_data:
+            if "enabled" in hybrid_search_data:
+                hybrid_search_config.enabled = _coerce_optional(hybrid_search_data.get("enabled"), bool)
+            if "fusion_method" in hybrid_search_data:
+                hybrid_search_config.fusion_method = hybrid_search_data.get("fusion_method")
+            if "fusion_k" in hybrid_search_data:
+                hybrid_search_config.fusion_k = _coerce_optional(hybrid_search_data.get("fusion_k"), int)
+
+        ann_config = ANNConfig()
+        if ann_data:
+            if "strategy" in ann_data:
+                ann_config.strategy = ann_data.get("strategy")
+            if "metric" in ann_data:
+                ann_config.metric = ann_data.get("metric")
+            if "estimated_dataset_size" in ann_data:
+                ann_config.estimated_dataset_size = _coerce_optional(ann_data.get("estimated_dataset_size"), int)
+            if "default_query_type" in ann_data:
+                ann_config.default_query_type = ann_data.get("default_query_type")
+
+        retrieval_config = RetrievalConfig(
+            reranking=reranking_config,
+            hybrid_search=hybrid_search_config,
+            ann=ann_config
+        )
+        if retrieval_data:
+            if "score_cutoff" in retrieval_data:
+                retrieval_config.score_cutoff = _coerce_optional(retrieval_data.get("score_cutoff"), float)
+            if "top_k" in retrieval_data:
+                retrieval_config.top_k = _coerce_optional(retrieval_data.get("top_k"), int)
+            if "max_snippet_tokens" in retrieval_data:
+                retrieval_config.max_snippet_tokens = _coerce_optional(retrieval_data.get("max_snippet_tokens"), int)
+            if "mmr_enabled" in retrieval_data:
+                retrieval_config.mmr_enabled = _coerce_optional(retrieval_data.get("mmr_enabled"), bool)
+            if "mmr_lambda" in retrieval_data:
+                retrieval_config.mmr_lambda = _coerce_optional(retrieval_data.get("mmr_lambda"), float)
+
+        # Build top-level config with proper defaults
+        config_kwargs = {}
+        
         # Handle storage settings
         if storage_data and storage_data.get("store_root"):
             config_kwargs['store_root'] = _to_path(storage_data.get("store_root"))
-
+            
         # Handle server settings
         if server_data and server_data.get("endpoint"):
             config_kwargs['endpoint'] = server_data.get("endpoint")
-
+            
         # Handle embedding settings
         if embedding_data:
             if embedding_data.get("default_embed_model"):
                 config_kwargs['default_embed_model'] = embedding_data.get("default_embed_model")
             if embedding_data.get("concurrency") is not None:
-                config_kwargs['concurrency'] = cls._coerce_optional(embedding_data.get("concurrency"), int)
+                config_kwargs['concurrency'] = _coerce_optional(embedding_data.get("concurrency"), int)
             if embedding_data.get("provider"):
                 config_kwargs['embedding_provider'] = embedding_data.get("provider")
             if embedding_data.get("batch_size") is not None:
-                config_kwargs['embedding_batch_size'] = cls._coerce_optional(embedding_data.get("batch_size"), int)
+                config_kwargs['embedding_batch_size'] = _coerce_optional(embedding_data.get("batch_size"), int)
             if embedding_data.get("api_key_env"):
                 config_kwargs['openai_api_key_env'] = embedding_data.get("api_key_env")
-
+                
         # Handle top-level settings
         if data.get("per_session_spend_cap_usd") is not None:
-            config_kwargs['per_session_spend_cap_usd'] = cls._coerce_optional(data.get("per_session_spend_cap_usd"), float)
+            config_kwargs['per_session_spend_cap_usd'] = _coerce_optional(data.get("per_session_spend_cap_usd"), float)
         if data.get("ignore"):
             config_kwargs['ignore'] = data.get("ignore")
         if data.get("exceptions") or data.get("ignore_exceptions"):
             config_kwargs['ignore_exceptions'] = data.get("exceptions", data.get("ignore_exceptions", []))
-
+            
         # Always override retrieval config with our constructed one
         config_kwargs['retrieval'] = retrieval_config
-
-        # Handle cache settings (support both nested and top-level)
+        
+        # Handle cache settings
         if cache_data:
             if cache_data.get("enabled") is not None:
-                config_kwargs['cache_enabled'] = cls._coerce_optional(cache_data.get("enabled"), bool)
+                config_kwargs['cache_enabled'] = _coerce_optional(cache_data.get("enabled"), bool)
             if cache_data.get("redis_url"):
                 config_kwargs['redis_url'] = cache_data.get("redis_url")
             if cache_data.get("embedding_ttl") is not None:
-                config_kwargs['embedding_cache_ttl'] = cls._coerce_optional(cache_data.get("embedding_ttl"), int)
+                config_kwargs['embedding_cache_ttl'] = _coerce_optional(cache_data.get("embedding_ttl"), int)
             if cache_data.get("result_ttl") is not None:
-                config_kwargs['result_cache_ttl'] = cls._coerce_optional(cache_data.get("result_ttl"), int)
-
-        # Also support top-level cache_enabled parameter (for backward compatibility)
-        if "cache_enabled" in data:
-            config_kwargs['cache_enabled'] = cls._coerce_optional(data.get("cache_enabled"), bool)
-        if "redis_url" in data:
-            config_kwargs['redis_url'] = data.get("redis_url")
+                config_kwargs['result_cache_ttl'] = _coerce_optional(cache_data.get("result_ttl"), int)
 
         return cls(**config_kwargs)
 

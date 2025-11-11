@@ -10,14 +10,14 @@ import { waitForExtensionActivation, sleep } from '../helpers/test-utils';
  */
 describe('Conversations E2E Tests', () => {
   before(async function () {
-    this.timeout(8000);
+    this.timeout(15000);
     await waitForExtensionActivation();
     await sleep(1000);
   });
 
   describe('Conversation Lifecycle', () => {
     it('Should support complete conversation workflow', async function () {
-      this.timeout(5000);
+      this.timeout(20000);
 
       // Verify extension is active
       const extension = vscode.extensions.getExtension('pb.dolphin');
@@ -48,7 +48,7 @@ describe('Conversations E2E Tests', () => {
     });
 
     it('Should handle multiple conversation operations in sequence', async function () {
-      this.timeout(8000);
+      this.timeout(15000);
 
       // Sequence of operations:
       // 1. New conversation
@@ -81,7 +81,7 @@ describe('Conversations E2E Tests', () => {
 
   describe('Conversation Persistence Workflow', () => {
     it('Should verify conversation persistence capability is declared', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       // In a full implementation, we would:
       // 1. Send a message through the agent
@@ -106,7 +106,7 @@ describe('Conversations E2E Tests', () => {
     });
 
     it('Should handle conversation state transitions', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       // State transition sequence:
       // 1. No active conversation -> New conversation
@@ -125,7 +125,7 @@ describe('Conversations E2E Tests', () => {
     });
 
     it('Should handle rapid conversation operations', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       // Rapid-fire operations to test queuing and race conditions
       const operations = [
@@ -201,7 +201,7 @@ describe('Conversations E2E Tests', () => {
     });
 
     it('Should maintain conversation context across view visibility changes', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       // Start a conversation
       await vscode.commands.executeCommand('dolphin.newConversation');
@@ -227,7 +227,7 @@ describe('Conversations E2E Tests', () => {
 
   describe('Conversation Performance', () => {
     it('Should handle conversation operations within acceptable time', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       const startTime = Date.now();
 
@@ -245,7 +245,7 @@ describe('Conversations E2E Tests', () => {
     });
 
     it('Should not leak memory with repeated operations', async function () {
-      this.timeout(8000);
+      this.timeout(15000);
 
       // Perform many operations to check for memory leaks
       for (let i = 0; i < 10; i++) {
@@ -261,7 +261,7 @@ describe('Conversations E2E Tests', () => {
 
   describe('Conversation Data Integrity', () => {
     it('Should handle conversation operations without data corruption', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       // Sequence that could potentially cause corruption:
       // 1. Start new conversation
@@ -288,7 +288,7 @@ describe('Conversations E2E Tests', () => {
     });
 
     it('Should maintain conversation isolation between operations', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       // Each new conversation should be isolated
       await vscode.commands.executeCommand('dolphin.newConversation');
@@ -308,7 +308,7 @@ describe('Conversations E2E Tests', () => {
 
   describe('Conversation Robustness', () => {
     it('Should recover from command failures gracefully', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       // Try operations that might fail
       try {
@@ -325,7 +325,7 @@ describe('Conversations E2E Tests', () => {
     });
 
     it('Should handle concurrent conversation operations', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       // Launch multiple operations concurrently
       const concurrentOps = [

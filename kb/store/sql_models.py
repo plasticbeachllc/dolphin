@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from typing import Optional
 
 from sqlalchemy import UniqueConstraint, Index, ForeignKey, Column, String
@@ -187,13 +186,12 @@ class CodeEdge(SQLModel, table=True):
     )
 
     # Identity
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)  # UUID
+    id: str = Field(primary_key=True)  # UUID
 
     # Relationship - with CASCADE DELETE for automatic cleanup
     source_node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False))
     target_node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False))
     edge_type: str  # 'calls', 'imports', 'inherits', 'implements', 'depends_on_table', etc.
-    repo_id: int = Field(foreign_key="repos.id")  # Repository reference for filtering
 
     # Context
     line_number: Optional[int] = Field(default=None)  # Where this relationship occurs in source
@@ -300,56 +298,3 @@ class FileSnapshot(SQLModel, table=True):
     size_bytes: int
     content_hash: str  # SHA-256 of file content
     last_indexed_at: str
-
-
-# =====================
-# Graph Intelligence Tables
-# =====================
-
-
-class GraphMetrics(SQLModel, table=True):
-    """Computed metrics for graph nodes (PageRank, centrality, etc.)."""
-    __tablename__ = "graph_metrics"
-    __table_args__ = (
-        Index("ix_graph_metrics_pagerank", "pagerank"),
-        Index("ix_graph_metrics_community", "community_id"),
-    )
-
-    node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), primary_key=True, nullable=False))
-    pagerank: Optional[float] = Field(default=None)
-    betweenness_centrality: Optional[float] = Field(default=None)
-    in_degree: int = Field(default=0)
-    out_degree: int = Field(default=0)
-    cyclomatic_complexity: Optional[int] = Field(default=None)
-    community_id: Optional[int] = Field(default=None)
-    computed_at: Optional[str] = Field(default=None)
-
-
-class GraphSnapshot(SQLModel, table=True):
-    """Snapshots of the code graph for time-travel analysis."""
-    __tablename__ = "graph_snapshots"
-    __table_args__ = (
-        Index("ix_graph_snapshots_repo_commit", "repo_id", "commit_sha"),
-    )
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    repo_id: int = Field(foreign_key="repos.id")
-    commit_sha: str
-    commit_message: Optional[str] = Field(default=None)
-    commit_timestamp: Optional[str] = Field(default=None)
-    node_count: int = Field(default=0)
-    edge_count: int = Field(default=0)
-    snapshot_data: Optional[bytes] = Field(default=None)  # Compressed NetworkX graph
-    created_at: Optional[str] = Field(default=None)
-
-
-class GraphCacheState(SQLModel, table=True):
-    """Tracks cache state for NetworkX graph rebuilds."""
-    __tablename__ = "graph_cache_state"
-
-    repo_id: int = Field(primary_key=True, foreign_key="repos.id")
-    commit_sha: str = Field(default="")
-    last_rebuild_at: Optional[str] = Field(default=None)
-    node_count: int = Field(default=0)
-    edge_count: int = Field(default=0)
-    edge_changes_since_rebuild: int = Field(default=0)

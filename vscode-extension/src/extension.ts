@@ -90,7 +90,7 @@ export async function activate(context: vscode.ExtensionContext) {
       try {
         config = loadWatcherConfig();
         // Add API integration for file sync (Phase 2)
-        config.apiBaseUrl = "http://127.0.0.1:7777";
+        config.apiBaseUrl = "http://localhost:8765";
         config.repoName = path.basename(workspaceFolder.uri.fsPath);
       } catch (error: any) {
         logger.warn(`Failed to load watcher config, using defaults: ${error.message}`);
@@ -144,7 +144,7 @@ export async function activate(context: vscode.ExtensionContext) {
       autoSyncManager = new AutoSyncManager(
         autoSyncConfig,
         path.basename(workspaceFolder.uri.fsPath),
-        "http://127.0.0.1:7777",
+        "http://localhost:8765",
         outputChannel
       );
       await autoSyncManager.start();
@@ -157,7 +157,7 @@ export async function activate(context: vscode.ExtensionContext) {
       // Initialize Drift Detector (Phase 5)
       driftDetector = new DriftDetector(
         path.basename(workspaceFolder.uri.fsPath),
-        "http://127.0.0.1:7777",
+        "http://localhost:8765",
         outputChannel
       );
       await driftDetector.start();
@@ -514,7 +514,7 @@ async function recoverFromCrash(context: vscode.ExtensionContext): Promise<void>
     outputChannel.appendLine("[CrashRecovery] Checking for incomplete indexing tasks...");
 
     const repoName = path.basename(workspaceFolder.uri.fsPath);
-    const apiBaseUrl = "http://127.0.0.1:7777";
+    const apiBaseUrl = "http://localhost:8765";
 
     // Check for pending changes that accumulated during offline period
     const response = await fetch(

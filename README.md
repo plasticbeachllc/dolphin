@@ -301,46 +301,6 @@ uv run pytest tests/unit/
 uv run pytest tests/integration/
 ```
 
-See [TESTING-GUIDE.md](docs/TESTING-GUIDE.md) for complete testing procedures.
-
-## Troubleshooting
-
-### Quick Diagnostics
-
-```bash
-# Check API server
-curl http://127.0.0.1:7777/health
-
-# Check indexed repositories
-dolphin kb status
-
-# Re-index a repository
-dolphin kb index <repo-name> --full --force
-```
-
-### Common Issues
-
-**API not responding:**
-- Start the server: `dolphin serve`
-- Check port conflicts: `lsof -i :7777`
-
-**No search results:**
-- Verify repositories are indexed: `dolphin kb status`
-- Try with lower score cutoff in search parameters
-- Re-index: `dolphin kb index <repo-name> --full --force`
-
-**MCP not connecting:**
-- Verify API server is running: `curl http://127.0.0.1:7777/health`
-- Check MCP bridge logs: `tail -f mcp-bridge/logs/mcp.log`
-- Verify Bun is installed: `bun --version`
-
-**High embedding costs:**
-- Use `small` embedding model (1536d instead of 3072d)
-- Check session costs: `dolphin kb status <repo-name>`
-- Use stub provider for testing (no OpenAI calls)
-
-For detailed troubleshooting, performance tips, and development workflows, see [AGENTS.md](AGENTS.md).
-
 ## License
 
 MIT License

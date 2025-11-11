@@ -18,11 +18,6 @@ from ..retrieval.ann_tuning import ANNParams
 from ..retrieval.graph_context import GraphContextEnricher
 from .app import SearchRequest
 
-# Constants
-CANDIDATE_MULTIPLIER = 4
-CONFIG_FILE_SCORE_PENALTY = 0.5
-BM25_SCORE_NORMALIZATION_FACTOR = 10
-
 class KnowledgeSearchBackend:
     def __init__(
         self,
@@ -71,7 +66,7 @@ class KnowledgeSearchBackend:
                 return cached_results
 
         query_embedding = self.embedding_provider.embed_texts(request.embed_model, [request.query])[0]
-        num_candidates = request.top_k * CANDIDATE_MULTIPLIER  # Fetch more candidates for reranking
+        num_candidates = request.top_k * 4 # Fetch more candidates for reranking
 
         # Get ANN parameters from config or use defaults
         ann_params = self._get_ann_params(request)
@@ -89,7 +84,7 @@ class KnowledgeSearchBackend:
         except Exception as e:
             # Log error but continue with empty vector results
             import logging
-            logging.warning(f"Vector search failed: {e}", exc_info=True)
+            logging.warning(f"Vector search failed: {e}")
         
         # BM25 search with error handling
         bm25_hydrated = []
@@ -176,30 +171,9 @@ class KnowledgeSearchBackend:
             except Exception as e:
                 # Fall back gracefully if MMR fails for any reason
                 import logging
-                logging.warning(f"MMR diversification failed: {e}", exc_info=True)
+                logging.warning(f"MMR diversification failed: {e}")
 
         final_results = [h for h in hits if h.get("score", 0.0) >= (request.score_cutoff or 0.0)][:request.top_k]
-        
-        # Hydrate content for all final results
-        if final_results:
-            chunk_ids_needing_content = [r['chunk_id'] for r in final_results if 'content' not in r]
-            if chunk_ids_needing_content:
-                try:
-                    # Use helper to hydrate content
-                    hydrated_content = self._hydrate_chunk_content(chunk_ids_needing_content, self.sql_store)
-
-                    # Apply hydrated content to results
-                    for result in final_results:
-                        chunk_id = result['chunk_id']
-                        if chunk_id in hydrated_content:
-                            result['content'] = hydrated_content[chunk_id]
-                            # Also add file_path for compatibility
-                            if 'path' in result and 'file_path' not in result:
-                                result['file_path'] = result['path']
-                except Exception as e:
-                    # Log error but don't fail the search
-                    import logging
-                    logging.warning(f"Failed to hydrate content for results: {e}", exc_info=True)
         
         # Enrich with graph context if requested and available
         include_graph = getattr(request, 'include_graph_context', False)
@@ -302,10 +276,12 @@ class KnowledgeSearchBackend:
     
     def _apply_file_type_scoring(self, results: list[dict[str, object]]) -> list[dict[str, object]]:
         """Apply scoring adjustments based on file type to deprioritize config files.
-
+        
         Config files (TOML, JSON, YAML) are penalized to prevent them from
         dominating search results, especially when they contain many chunks.
         """
+        CONFIG_FILE_PENALTY = 0.5  # Reduce score by 50% for config files
+        
         adjusted = []
         for result in results:
             path = result.get('path', '')
@@ -323,7 +299,7 @@ class KnowledgeSearchBackend:
             )
             
             if is_config:
-                result = {**result, 'score': score * CONFIG_FILE_SCORE_PENALTY}
+                result = {**result, 'score': score * CONFIG_FILE_PENALTY}
             
             adjusted.append(result)
         
@@ -350,7 +326,7 @@ class KnowledgeSearchBackend:
             # Normalize BM25 score to [0, 1] range for fusion
             # BM25 scores are unbounded, use sigmoid normalization
             bm25_score = result["score"]
-            normalized_score = 1 / (1 + math.exp(-bm25_score / BM25_SCORE_NORMALIZATION_FACTOR))
+            normalized_score = 1 / (1 + math.exp(-bm25_score / 10))
             
             # Create result dict with available data
             hydrated_result = {
@@ -378,107 +354,15 @@ class KnowledgeSearchBackend:
         
         return hydrated
         
-    def _resolve_content_ids(self, row_ids: list[str]) -> dict[str, str]:
-        """Convert LanceDB row IDs to metadata content_ids.
-        
-        LanceDB row IDs have format: {repo_id}:{file_id}:{embed_model}:{text_hash}:{start_line}:{end_line}
-        We need to query the metadata store to get the corresponding content_id.
-        
-        Args:
-            row_ids: List of LanceDB row IDs
-            
-        Returns:
-            Dictionary mapping row_id -> content_id
-        """
-        row_id_to_content_id = {}
-        
-        for row_id in row_ids:
-            try:
-                # Parse the row_id format: repo_id:file_id:embed_model:text_hash:start_line:end_line
-                parts = row_id.split(':')
-                if len(parts) < 4:
-                    continue
-                    
-                repo_id = int(parts[0])
-                file_id = int(parts[1])
-                embed_model = parts[2]
-                text_hash = parts[3]
-                
-                # Query metadata store for the content_id
-                with self.sql_store._connect() as conn:
-                    from contextlib import closing
-                    cur = conn.cursor()
-                    cur.execute(
-                        """
-                        SELECT id FROM chunk_content
-                        WHERE repo_id = ? AND file_id = ? AND embed_model = ? AND text_hash = ?
-                        LIMIT 1
-                        """,
-                        (repo_id, file_id, embed_model, text_hash)
-                    )
-                    row = cur.fetchone()
-                    if row:
-                        content_id = str(row[0])
-                        row_id_to_content_id[row_id] = content_id
-                        
-            except (ValueError, IndexError) as e:
-                # Skip malformed row IDs
-                import logging
-                logging.warning(f"Failed to parse row_id {row_id}: {e}")
-                continue
-                
-        return row_id_to_content_id
-
-    def _hydrate_chunk_content(
-        self,
-        chunk_ids: list[str],
-        sql_store: SQLiteMetadataStore
-    ) -> dict[str, str]:
-        """Hydrate content for chunk IDs.
-
-        Args:
-            chunk_ids: List of chunk row IDs from LanceDB
-            sql_store: Metadata store for content lookup
-
-        Returns:
-            Dictionary mapping chunk_id -> content
-        """
-        if not chunk_ids:
-            return {}
-
-        # Convert LanceDB row IDs to content_ids
-        content_id_map = self._resolve_content_ids(chunk_ids)
-        content_ids = list(content_id_map.values())
-
-        if not content_ids:
-            return {}
-
-        # Fetch content from metadata store
-        contents = sql_store.get_chunk_contents(content_ids)
-
-        # Map content back to original chunk_ids
-        result = {}
-        for chunk_id in chunk_ids:
-            content_id = content_id_map.get(chunk_id)
-            if content_id and content_id in contents:
-                result[chunk_id] = contents[content_id]
-
-        return result
-
     def _hydrate_docs_for_reranking(self, hits: List[Dict], sql_store: SQLiteMetadataStore) -> List[Dict]:
         ids_to_fetch = [h['chunk_id'] for h in hits if 'content' not in h]
         if not ids_to_fetch:
             return hits
-
-        # Use helper to hydrate content
-        hydrated_content = self._hydrate_chunk_content(ids_to_fetch, sql_store)
-
-        # Apply hydrated content to hits
+        
+        contents = sql_store.get_chunk_contents(ids_to_fetch)
         for hit in hits:
-            chunk_id = hit['chunk_id']
-            if chunk_id in hydrated_content:
-                hit['content'] = hydrated_content[chunk_id]
-
+            if hit['chunk_id'] in contents:
+                hit['content'] = contents[hit['chunk_id']]
         return hits
     
     def set_request_ann_config(self, config: Dict[str, Any]) -> None:
@@ -674,11 +558,7 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     }
     
     if config.cache_enabled:
-        cache_instance = create_cache(
-            redis_url=config.redis_url,
-            result_ttl=config.result_cache_ttl,
-            enabled=config.cache_enabled
-        )
+        cache_instance = create_cache(config.redis_url, config.result_cache_ttl)
         provider_kwargs['cache'] = cache_instance
     
     provider = create_provider(
@@ -686,12 +566,10 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
         **provider_kwargs
     )
     
-    # Create cache (always create but may be disabled)
-    cache = create_cache(
-        redis_url=config.redis_url if config.cache_enabled else None,
-        result_ttl=config.result_cache_ttl,
-        enabled=config.cache_enabled
-    )
+    # Create cache if enabled
+    cache = None
+    if config.cache_enabled:
+        cache = create_cache(config.redis_url, config.result_cache_ttl)
     
     # Create reranker if enabled
     reranker = None

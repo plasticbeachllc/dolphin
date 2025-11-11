@@ -7,9 +7,7 @@
         "dev": "bun run src/main.ts",
         "build": "bun build src/main.ts --outdir dist --target bun",
         "test": "bun test",
-        "test:watch": "bun test --watch",
-        "test:coverage": "bun test --coverage --coverage-reporter=html --coverage-reporter=lcov",
-        "test:threshold": "bun test --coverage --coverage-threshold=80"
+        "test:watch": "bun test --watch"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.32.1",

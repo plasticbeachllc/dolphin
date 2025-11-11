@@ -106,7 +106,7 @@ export class MCPClient {
     }
   }
 
-  async callTool(toolName: string, args: any, timeout = 20000): Promise<any> {
+  async callTool(toolName: string, args: any, timeout = 30000): Promise<any> {
     if (!this.process || this.process.exitCode !== null) {
       throw new Error("MCP Bridge not running");
     }

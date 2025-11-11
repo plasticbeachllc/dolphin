@@ -14,7 +14,7 @@
     "dev": "bun run --hot src/index.ts",
     "lint": "bun x eslint .",
     "clean": "rm -rf dist",
-    "test": "bun test ==serial ./src/tests --exclude dist",
+    "test": "bun test --serial ./src/tests --exclude dist",
     "test:clean": "npm run clean && bun test --serial ./src/tests",
     "prepublishOnly": "bun run build"
   },
@@ -36,7 +36,7 @@
   },
   "keywords": [
     "mcp",
-    "mcp-server",
+    "mcp-server", 
     "code-search",
     "ai",
     "continue-dev",

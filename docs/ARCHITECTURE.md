@@ -817,9 +817,8 @@ cd mcp-bridge && bun run test-integration.ts
 
 ## References
 
-- [README](../README.md) - Project overview and user documentation
-- [AGENTS.md](../AGENTS.md) - Developer guidelines and troubleshooting
-- [TESTING-GUIDE.md](TESTING-GUIDE.md) - Testing procedures
+- [User Guide](GUIDE.md) - Complete user documentation
+- [README](../README.md) - Project overview
 - [Main codebase](../kb/src/) - Python implementation
 - [MCP Bridge](../mcp-bridge/) - TypeScript implementation
 

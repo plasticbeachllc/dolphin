@@ -45,7 +45,7 @@ def main():
         print("\n🎉 Database initialization complete!")
         print("\nNext steps:")
         print("1. Index a repository: uv run python -m kb.cli index --repo my-repo /path/to/repo")
-        print("2. Test hybrid search: uv run tests/test_hybrid_search_performance.py")
+        print("2. Test hybrid search: uv run scripts/test_hybrid_search_performance.py")
         
     except Exception as e:
         print(f"❌ Error initializing database: {e}")

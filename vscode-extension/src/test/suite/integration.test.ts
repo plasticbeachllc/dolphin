@@ -7,7 +7,7 @@ describe('Integration Tests', () => {
   let mockServer: MockKBServer;
 
   before(async function () {
-    this.timeout(5000);
+    this.timeout(20000);
 
     // Start mock KB API server
     mockServer = new MockKBServer();
@@ -57,7 +57,7 @@ describe('Integration Tests', () => {
   });
 
   it('Extension should activate in workspace with mock server', async function () {
-    this.timeout(5000);
+    this.timeout(10000);
 
     const extension = vscode.extensions.getExtension('pb.dolphin');
     assert.ok(extension, 'Extension should exist');

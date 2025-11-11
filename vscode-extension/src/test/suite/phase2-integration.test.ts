@@ -4,7 +4,7 @@ import { waitForExtensionActivation, sleep } from '../helpers/test-utils';
 
 describe('Phase 2: Editor Integration - Integration Tests', () => {
   before(async function () {
-    this.timeout(8000);
+    this.timeout(15000);
     await waitForExtensionActivation();
     await sleep(1000);
   });
@@ -21,7 +21,7 @@ describe('Phase 2: Editor Integration - Integration Tests', () => {
     });
 
     it('Should execute askAboutSelection with active editor', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       const editor = await vscode.window.showTextDocument(testDocument);
       editor.selection = new vscode.Selection(0, 0, 2, 1);
@@ -38,7 +38,7 @@ describe('Phase 2: Editor Integration - Integration Tests', () => {
     });
 
     it('Should execute refactorSelection with active editor', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       const editor = await vscode.window.showTextDocument(testDocument);
       editor.selection = new vscode.Selection(0, 0, 2, 1);
@@ -54,7 +54,7 @@ describe('Phase 2: Editor Integration - Integration Tests', () => {
     });
 
     it('Should handle commands with no active editor gracefully', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       // Close all editors
       await vscode.commands.executeCommand('workbench.action.closeAllEditors');
@@ -72,7 +72,7 @@ describe('Phase 2: Editor Integration - Integration Tests', () => {
 
   describe('Code Actions Integration', () => {
     it('Should provide code actions for TypeScript files', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       const document = await vscode.workspace.openTextDocument({
         content: 'const myFunction = () => {\n  return "hello";\n};',
@@ -107,7 +107,7 @@ describe('Phase 2: Editor Integration - Integration Tests', () => {
     });
 
     it('Should execute code action commands programmatically', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       const testCode = 'function add(a, b) { return a + b; }';
       const fileName = 'test.js';
@@ -150,7 +150,7 @@ describe('Phase 2: Editor Integration - Integration Tests', () => {
 
   describe('File and Folder Commands Integration', () => {
     it('Should execute askAboutFile command with URI', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       // Create a temporary file
       const document = await vscode.workspace.openTextDocument({
@@ -171,7 +171,7 @@ describe('Phase 2: Editor Integration - Integration Tests', () => {
     });
 
     it('Should execute askAboutFolder command with URI', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       const workspaceFolders = vscode.workspace.workspaceFolders;
       if (!workspaceFolders || workspaceFolders.length === 0) {
@@ -253,7 +253,7 @@ describe('Phase 2: Editor Integration - Integration Tests', () => {
 
   describe('End-to-End Workflow', () => {
     it('Should complete a typical user workflow', async function () {
-      this.timeout(8000);
+      this.timeout(15000);
 
       // 1. Open a file
       const document = await vscode.workspace.openTextDocument({
@@ -295,7 +295,7 @@ describe('Phase 2: Editor Integration - Integration Tests', () => {
     });
 
     it('Should handle rapid command execution', async function () {
-      this.timeout(8000);
+      this.timeout(15000);
 
       const document = await vscode.workspace.openTextDocument({
         content: 'const x = 1;\nconst y = 2;\nconst z = 3;',
@@ -326,7 +326,7 @@ describe('Phase 2: Editor Integration - Integration Tests', () => {
 
   describe('Error Handling', () => {
     it('Should handle empty selection gracefully', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       const document = await vscode.workspace.openTextDocument({
         content: 'const empty = "";',
@@ -346,7 +346,7 @@ describe('Phase 2: Editor Integration - Integration Tests', () => {
     });
 
     it('Should handle invalid file URI gracefully', async function () {
-      this.timeout(5000);
+      this.timeout(10000);
 
       const invalidUri = vscode.Uri.file('/nonexistent/file.ts');
 

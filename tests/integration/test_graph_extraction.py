@@ -230,31 +230,26 @@ class TestGraphExtraction:
         ts_nodes = graph_store.get_nodes_for_file(file_id)
         
         # Should have nodes for:
+        # - User interface
+        # - UserRepository interface
         # - validateUser function
         # - UserService class
-        # - UserService.getUser method
-        # - UserService.saveUser method
-        # Note: TypeScript interfaces are not currently extracted as graph nodes
-        assert len(ts_nodes) >= 4, "TypeScript graph extraction should create nodes"
+        # - UserService.getUser
+        # - UserService.saveUser
+        assert len(ts_nodes) >= 6, "TypeScript graph extraction should create nodes"
         
         # Verify we have different node types
         node_types = {node["node_type"] for node in ts_nodes}
-        # Note: Interfaces are not currently extracted by TypeScript parser
+        assert "interface" in node_types
         assert "function" in node_types
         assert "class" in node_types
         
         # Find specific nodes
-        # Note: Interfaces are extracted, look for User interface
         user_interface = next(
-            (n for n in ts_nodes if n["name"] == "User" and n["node_type"] == "interface"),
+            (n for n in ts_nodes if n["name"] == "User"),
             None
         )
-        # If interface extraction is working, this should pass
-        # If not, we may need to check if interfaces are being stored correctly
-        if user_interface is None:
-            # Debug: print all nodes to see what was actually extracted
-            print(f"DEBUG: All TS nodes: {[(n['name'], n['node_type']) for n in ts_nodes]}")
-        assert user_interface is not None, f"User interface not found in nodes: {[(n['name'], n['node_type']) for n in ts_nodes]}"
+        assert user_interface is not None
         assert user_interface["node_type"] == "interface"
         
         user_service = next(
