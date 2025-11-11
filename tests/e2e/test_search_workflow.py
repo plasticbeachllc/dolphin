@@ -2,7 +2,7 @@
 
 import pytest
 
-from kb.search.search_backend import SearchBackend
+from kb.api.search_backend import SearchBackend
 
 
 class TestSearchWorkflow:

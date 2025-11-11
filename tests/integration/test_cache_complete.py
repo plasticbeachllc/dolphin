@@ -4,7 +4,7 @@ import pytest
 import time
 from pathlib import Path
 
-from kb.search.search_backend import SearchBackend
+from kb.api.search_backend import SearchBackend
 from kb.store import LanceDBStore, SQLiteMetadataStore
 from kb.ingest.pipeline import IngestionPipeline
 from kb.config import KBConfig

@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 import tempfile
 
-from kb.ingest.pipeline import IngestionPipeline
+from kb.pipeline import IngestionPipeline
 from kb.store import LanceDBStore, SQLiteMetadataStore
 from kb.config import KBConfig
 from kb.chunkers.registry import get_chunker_for_file

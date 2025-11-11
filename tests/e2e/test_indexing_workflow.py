@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 
-from kb.ingest.pipeline import IngestionPipeline
+from kb.pipeline import IngestionPipeline
 from kb.store import SQLiteMetadataStore
 
 
@@ -18,7 +18,7 @@ class TestIndexingWorkflow:
         repo_name = setup['repo_name']
 
         # Step 1: Verify repository was registered
-        repos = metadata_store.list_repos()
+        repos = metadata_store.list_all_repos()
         assert any(r['name'] == repo_name for r in repos)
 
         # Step 2: Index repository
