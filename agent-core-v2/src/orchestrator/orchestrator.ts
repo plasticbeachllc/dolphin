@@ -296,8 +296,9 @@ export class Orchestrator implements IOrchestrator {
     // Set up event listener
     const onUpdate = (update: WorkflowUpdate) => {
       if (resolveNext) {
-        resolveNext({ value: update, done: false });
+        const resolver = resolveNext;
         resolveNext = null;
+        resolver({ value: update, done: false });
       } else {
         updateQueue.push(update);
       }
@@ -306,8 +307,9 @@ export class Orchestrator implements IOrchestrator {
     const onComplete = () => {
       done = true;
       if (resolveNext) {
-        resolveNext({ value: undefined as any, done: true });
+        const resolver = resolveNext;
         resolveNext = null;
+        resolver({ value: undefined as any, done: true });
       }
     };
 
@@ -315,22 +317,26 @@ export class Orchestrator implements IOrchestrator {
     emitter.on('complete', onComplete);
 
     try {
-      while (!done) {
+      while (true) {
         if (updateQueue.length > 0) {
           yield updateQueue.shift()!;
-        } else {
-          await new Promise<void>((resolve) => {
-            resolveNext = (result) => {
-              if (!result.done) {
-                resolve();
-              }
-            };
-          });
-          
-          if (updateQueue.length > 0) {
-            yield updateQueue.shift()!;
-          }
+          continue;
         }
+
+        if (done) {
+          break;
+        }
+
+        const result = await new Promise<IteratorResult<WorkflowUpdate>>((resolve) => {
+          resolveNext = resolve;
+        });
+
+        if (result.done) {
+          done = true;
+          break;
+        }
+
+        yield result.value;
       }
     } finally {
       emitter.off('update', onUpdate);

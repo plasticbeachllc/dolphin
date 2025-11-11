@@ -127,8 +127,14 @@ export class ClaudeProvider {
     } finally {
       // Clean up
       this.activeProcesses.delete(processId);
-      if (!process.killed) {
-        process.kill();
+      if (!process.killed && process.exitCode === null && process.signalCode === null) {
+        try {
+          process.kill();
+        } catch (error: any) {
+          if (error?.code !== 'ESRCH') {
+            throw error;
+          }
+        }
       }
     }
   }
