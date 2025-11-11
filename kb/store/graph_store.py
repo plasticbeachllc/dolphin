@@ -19,13 +19,26 @@ from kb.chunkers.graph_types import GraphNode, GraphEdge
 class GraphStore:
     """Graph database store for code entities and relationships."""
 
-    def __init__(self, db_path: Path) -> None:
+    def __init__(self, db_path: Path |str) -> None:
         """Initialize graph store with database path.
-        
+
         Args:
-            db_path: Path to SQLite database file
+            db_path: Path to SQLite database file (Path or str)
         """
-        self.db_path = db_path
+        self.db_path = Path(db_path) if isinstance(db_path, str) else db_path
+        self._db_engine = None  # Lazy-loaded SQLModel engine
+
+    @property
+    def db(self):
+        """Get SQLModel engine for the database (lazy-loaded).
+
+        Returns:
+            SQLModel Engine instance
+        """
+        if self._db_engine is None:
+            from sqlmodel import create_engine
+            self._db_engine = create_engine(f"sqlite:///{self.db_path}")
+        return self._db_engine
 
     def _connect(self) -> sqlite3.Connection:
         """Create a database connection with proper configuration."""

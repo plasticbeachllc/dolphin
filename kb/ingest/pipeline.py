@@ -11,6 +11,7 @@ from pathspec import PathSpec
 from ..config import KBConfig
 from ..store import LanceDBStore, SQLiteMetadataStore
 from ..store.graph_store import GraphStore
+from ..graph_intelligence.graph_manager import GraphManager
 from ..ingest.scanner import FileCandidate, scan_repo
 from ..ignores import build_ignore_set, load_repo_ignores
 from ..ingest.dedup import ChunkDeduplicator
@@ -41,11 +42,80 @@ class IngestionPipeline:
     lancedb: LanceDBStore
     metadata: SQLiteMetadataStore
     graph_store: GraphStore | None = None
-    
+    graph_managers: Dict[int, GraphManager] | None = None  # repo_id -> GraphManager
+
     def __post_init__(self):
         """Initialize graph store if not provided."""
         if self.graph_store is None:
             self.graph_store = GraphStore(self.metadata.db_path)
+        if self.graph_managers is None:
+            self.graph_managers = {}
+
+    def get_graph_manager(self, repo_id: int) -> GraphManager:
+        """Get or create GraphManager for a repository.
+
+        Args:
+            repo_id: Repository ID
+
+        Returns:
+            GraphManager instance for the repository
+        """
+        if repo_id not in self.graph_managers:
+            # Use the database engine from the graph_store
+            db_engine = self.graph_store.db if self.graph_store else None
+            if db_engine is None:
+                # Fallback to creating engine from metadata db_path
+                from sqlmodel import create_engine
+                db_engine = create_engine(f"sqlite:///{self.metadata.db_path}")
+
+            self.graph_managers[repo_id] = GraphManager(
+                db=db_engine,
+                repo_id=repo_id,
+                edge_change_threshold=100,
+                cache_ttl_hours=1,
+            )
+        return self.graph_managers[repo_id]
+
+    def compute_graph_metrics(self, repo_id: int) -> Dict[str, Any]:
+        """Compute and store graph metrics for a repository.
+
+        This method should be called after indexing to compute PageRank,
+        centrality, and other graph metrics.
+
+        Args:
+            repo_id: Repository ID
+
+        Returns:
+            Dictionary with metrics summary
+        """
+        graph_manager = self.get_graph_manager(repo_id)
+
+        # Get the graph (will rebuild if needed)
+        graph = graph_manager.get_graph()
+
+        if graph.number_of_nodes() == 0:
+            return {
+                "repo_id": repo_id,
+                "node_count": 0,
+                "edge_count": 0,
+                "metrics_computed": False,
+            }
+
+        # Compute metrics
+        metrics = graph_manager.compute_metrics()
+
+        # Store metrics
+        graph_manager.store_metrics(metrics)
+
+        return {
+            "repo_id": repo_id,
+            "node_count": graph.number_of_nodes(),
+            "edge_count": graph.number_of_edges(),
+            "metrics_computed": True,
+            "pagerank_nodes": len(metrics.get("pagerank", {})),
+            "betweenness_nodes": len(metrics.get("betweenness_centrality", {})),
+            "communities": len(set(metrics.get("community", {}).values())) if "community" in metrics else 0,
+        }
 
     def _git(self, root: Path, *args: str) -> str:
         try:
@@ -391,6 +461,11 @@ class IngestionPipeline:
                             )
                             graph_nodes_created += graph_stats["nodes_created"]
                             graph_edges_created += graph_stats["edges_created"]
+
+                            # Track edge changes for cache invalidation
+                            if graph_stats["edges_created"] > 0:
+                                graph_manager = self.get_graph_manager(repo_id)
+                                graph_manager.on_edges_changed(graph_stats["edges_created"])
                     except Exception as e:
                         error_logger.log_file_error(f"graph: {path}", e)
                         # Don't fail the entire file if graph extraction fails
