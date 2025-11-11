@@ -40,6 +40,54 @@ class LanceDBStore:
         self._db = lancedb.connect(db_uri)
         return self._db
 
+    def _get_schema_for_model(self, model: str) -> "pa.Schema":
+        """Get PyArrow schema for the given model.
+        
+        Args:
+            model: Embedding model ('small' or 'large')
+            
+        Returns:
+            PyArrow schema for the model's table
+        """
+        import pyarrow as pa
+        
+        model_to_dim = {
+            'small': 1536,
+            'large': 3072
+        }
+        
+        if model not in model_to_dim:
+            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
+        
+        dim = model_to_dim[model]
+        
+        # Use fixed-size list for LanceDB vector search to work properly
+        vector_field = pa.field("vector", pa.list_(pa.float32(), dim))
+        
+        fields = [
+            pa.field("id", pa.string()),
+            vector_field,
+            pa.field("repo", pa.string()),
+            pa.field("path", pa.string()),
+            pa.field("start_line", pa.int32()),
+            pa.field("end_line", pa.int32()),
+            pa.field("text_hash", pa.string()),
+            pa.field("commit", pa.string()),
+            pa.field("branch", pa.string()),
+            pa.field("embed_model", pa.string()),
+            # Optional/nullable metadata fields
+            pa.field("language", pa.string(), nullable=True),
+            pa.field("symbol_kind", pa.string(), nullable=True),
+            pa.field("symbol_name", pa.string(), nullable=True),
+            pa.field("symbol_path", pa.string(), nullable=True),
+            pa.field("heading_h1", pa.string(), nullable=True),
+            pa.field("heading_h2", pa.string(), nullable=True),
+            pa.field("heading_h3", pa.string(), nullable=True),
+            pa.field("token_count", pa.int32()),
+            pa.field("created_at", pa.timestamp("us", tz="UTC"), nullable=True),
+        ]
+        return pa.schema(fields)
+
     def initialize_collections(self) -> None:
         """Create (or open) the global collections per the authoritative schema.
 
@@ -53,40 +101,11 @@ class LanceDBStore:
         # Use cached connection
         db = self.connect()
 
-        def _vector_field(dim: int) -> pa.Field:
-            # Use fixed-size list for LanceDB vector search to work properly
-            # Syntax: pa.list_(value_type, list_size) creates a FixedSizeListType
-            return pa.field("vector", pa.list_(pa.float32(), dim))
-
-        def _schema_for(dim: int) -> pa.Schema:
-            fields = [
-                pa.field("id", pa.string()),
-                _vector_field(dim),
-                pa.field("repo", pa.string()),
-                pa.field("path", pa.string()),
-                pa.field("start_line", pa.int32()),
-                pa.field("end_line", pa.int32()),
-                pa.field("text_hash", pa.string()),
-                pa.field("commit", pa.string()),
-                pa.field("branch", pa.string()),
-                pa.field("embed_model", pa.string()),
-                # Optional/nullable metadata fields
-                pa.field("language", pa.string(), nullable=True),
-                pa.field("symbol_kind", pa.string(), nullable=True),
-                pa.field("symbol_name", pa.string(), nullable=True),
-                pa.field("symbol_path", pa.string(), nullable=True),
-                pa.field("heading_h1", pa.string(), nullable=True),
-                pa.field("heading_h2", pa.string(), nullable=True),
-                pa.field("heading_h3", pa.string(), nullable=True),
-                pa.field("token_count", pa.int32()),
-                pa.field("created_at", pa.timestamp("us", tz="UTC"), nullable=True),
-            ]
-            return pa.schema(fields)
-
-        collections = [("chunks_small", 1536), ("chunks_large", 3072)]
+        collections = [("chunks_small", "small"), ("chunks_large", "large")]
         existing = set(getattr(db, "table_names", lambda: [])())
-        for name, dim in collections:
-            schema = _schema_for(dim)
+        for name, model in collections:
+            schema = self._get_schema_for_model(model)
+            dim = 1536 if model == "small" else 3072
             if name in existing:
                 # Table already exists; nothing to do.
                 continue
@@ -186,21 +205,59 @@ class LanceDBStore:
                 print(f"Warning: Failed to delete existing rows: {e}")
         
         # Append new rows
+        # Convert data to PyArrow table with explicit schema to avoid casting issues
+        import pyarrow as pa
+        
+        # Get the schema for the target table
+        schema = self._get_schema_for_model(model)
+        
+        # Convert chunks to PyArrow table with explicit schema
+        try:
+            # Normalize None values and create PyArrow table
+            normalized_chunks = []
+            for chunk in chunks_list:
+                normalized = {}
+                for key, value in chunk.items():
+                    # Handle None values properly - PyArrow needs them as None, not as missing keys
+                    normalized[key] = value
+                normalized_chunks.append(normalized)
+            
+            pa_table = pa.Table.from_pylist(normalized_chunks, schema=schema)
+        except Exception as schema_error:
+            raise RuntimeError(
+                f"Failed to convert chunks to PyArrow table with schema: {schema_error}"
+            ) from schema_error
+        
         try:
             table = db.open_table(table_name)
-            table.add(chunks_list)
-        except Exception as e:
-            # If table doesn't exist, create it and try again
-            print(f"Table {table_name} not found, creating it: {e}")
+            # Table exists - check if it has the problematic schema from initialize_collections
             try:
-                self.initialize_collections()
-                # Use the same cached connection (no need to reconnect)
-                table = db.open_table(table_name)
-                table.add(chunks_list)
+                count = table.count_rows()
+                if count == 0:
+                    # Empty table from initialization - drop and recreate with real data
+                    db.drop_table(table_name)
+                    db.create_table(table_name, data=pa_table, mode='create')
+                else:
+                    # Has data - try to append
+                    table.add(pa_table, mode='append')
+            except Exception as append_error:
+                # If append fails, try to drop and recreate
+                try:
+                    db.drop_table(table_name)
+                    db.create_table(table_name, data=pa_table, mode='create')
+                except Exception:
+                    raise append_error
+        except Exception as e:
+            # If table doesn't exist, create it with the data directly
+            print(f"Table {table_name} not found, creating it from data")
+            try:
+                # Create table directly from data instead of using initialize_collections
+                # This ensures schema matches exactly
+                db.create_table(table_name, data=pa_table, mode='create')
             except Exception as retry_error:
                 # If still failing, raise a more descriptive error
                 raise RuntimeError(
-                    f"Failed to create or open table {table_name} after initialization: {retry_error}"
+                    f"Failed to create table {table_name}: {retry_error}"
                 ) from e
 
     def prune_file_rows(
