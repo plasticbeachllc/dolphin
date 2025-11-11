@@ -339,3 +339,15 @@ class GraphSnapshot(SQLModel, table=True):
     edge_count: int = Field(default=0)
     snapshot_data: Optional[bytes] = Field(default=None)  # Compressed NetworkX graph
     created_at: Optional[str] = Field(default=None)
+
+
+class GraphCacheState(SQLModel, table=True):
+    """Tracks cache state for NetworkX graph rebuilds."""
+    __tablename__ = "graph_cache_state"
+
+    repo_id: int = Field(primary_key=True, foreign_key="repos.id")
+    commit_sha: str = Field(default="")
+    last_rebuild_at: Optional[str] = Field(default=None)
+    node_count: int = Field(default=0)
+    edge_count: int = Field(default=0)
+    edge_changes_since_rebuild: int = Field(default=0)
