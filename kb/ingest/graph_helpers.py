@@ -216,6 +216,7 @@ def store_graph_data(
                     source_node_id=source_id,
                     target_node_id=target_id,
                     edge_type=edge.edge_type,
+                    repo_id=repo_id,
                     line_number=edge.line_number,
                     commit_sha=commit_sha,
                 )

@@ -21,16 +21,16 @@ class GraphManager:
         self,
         db,
         repo_id: int,
-        edge_change_threshold: int = 100,
-        cache_ttl_hours: int = 1
+        edge_change_threshold: int = 5,
+        cache_ttl_minutes: int = 10
     ):
         """Initialize graph manager.
 
         Args:
             db: Database connection
             repo_id: Repository ID
-            edge_change_threshold: Edge changes before cache invalidation (default: 100)
-            cache_ttl_hours: Cache TTL in hours (default: 1)
+            edge_change_threshold: Edge changes before cache invalidation (default: 5)
+            cache_ttl_minutes: Cache TTL in minutes (default: 10)
         """
         self.db = db
         self.repo_id = repo_id
@@ -44,7 +44,7 @@ class GraphManager:
             db=db,
             repo_id=repo_id,
             edge_change_threshold=edge_change_threshold,
-            ttl_hours=cache_ttl_hours,
+            ttl_minutes=cache_ttl_minutes,
         )
 
     def get_graph(self, force_rebuild: bool = False) -> nx.DiGraph:

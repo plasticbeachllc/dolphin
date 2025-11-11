@@ -19,21 +19,21 @@ class GraphCacheValidator:
         self,
         db,
         repo_id: int,
-        edge_change_threshold: int = 100,
-        ttl_hours: int = 1
+        edge_change_threshold: int = 5,
+        ttl_minutes: int = 10
     ):
         """Initialize cache validator.
 
         Args:
             db: Database connection
             repo_id: Repository ID
-            edge_change_threshold: Max edge changes before invalidation (default: 100)
-            ttl_hours: Cache TTL in hours (default: 1)
+            edge_change_threshold: Max edge changes before invalidation (default: 5)
+            ttl_minutes: Cache TTL in minutes (default: 10)
         """
         self.db = db
         self.repo_id = repo_id
         self.edge_change_threshold = edge_change_threshold
-        self.ttl = timedelta(hours=ttl_hours)
+        self.ttl = timedelta(minutes=ttl_minutes)
 
     def is_cache_valid(self) -> bool:
         """Check if cached NetworkX graph is still valid.

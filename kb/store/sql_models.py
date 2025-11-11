@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import Optional
 
 from sqlalchemy import UniqueConstraint, Index, ForeignKey, Column, String
@@ -186,12 +187,13 @@ class CodeEdge(SQLModel, table=True):
     )
 
     # Identity
-    id: str = Field(primary_key=True)  # UUID
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)  # UUID
 
     # Relationship - with CASCADE DELETE for automatic cleanup
     source_node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False))
     target_node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False))
     edge_type: str  # 'calls', 'imports', 'inherits', 'implements', 'depends_on_table', etc.
+    repo_id: int = Field(foreign_key="repos.id")  # Repository reference for filtering
 
     # Context
     line_number: Optional[int] = Field(default=None)  # Where this relationship occurs in source
