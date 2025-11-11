@@ -46,15 +46,27 @@ export class BundledKBManager {
   async startServer(): Promise<ChildProcess> {
     console.error("[Bundled KB] Starting KB server with bundled uv...");
     
-    // Use uv run with inline dependency specification
-    // uv will handle: Python installation, venv creation, package installation
+    // Use local source directory for development
+    // This allows hot-reloading of KB code changes without reinstalling the package
+    const kbDir = path.join(this.extensionPath, "..", "kb");
+    
+    // Check if we're in development mode (kb directory exists at expected location)
+    const isDevelopment = fs.existsSync(kbDir);
+    
+    if (isDevelopment) {
+      console.error("[Bundled KB] Development mode: using local kb directory at", kbDir);
+    } else {
+      console.error("[Bundled KB] Production mode: using installed pb-dolphin package");
+    }
+    
+    // Use uv run with inline dependency specification or local directory
+    const args = isDevelopment
+      ? ["run", "--directory", kbDir, "python", "-m", "kb.cli", "serve"]
+      : ["run", "--with", "pb-dolphin", "python", "-m", "kb.cli", "serve"];
+    
     const proc = spawn(
       this.uvBinary,
-      [
-        "run",
-        "--with", "pb-dolphin",  // Install pb-dolphin if not cached
-        "python", "-m", "kb.cli", "serve"
-      ],
+      args,
       {
         stdio: ["ignore", "pipe", "pipe"],
         env: {

@@ -2,12 +2,21 @@
 from __future__ import annotations
 import os
 import sys
+import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from .app import app, set_search_backend, reset_search_backend, set_stores
+from fastapi.middleware.cors import CORSMiddleware
+from .app import app, set_search_backend, reset_search_backend, set_stores, set_pipeline
 from .search_backend import create_search_backend
 from ..config import load_config, KBConfig
+
+# Configure logging to output to stderr at INFO level
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(levelname)s] [%(name)s] %(message)s',
+    stream=sys.stderr
+)
 
 # Load environment variables from .env file if it exists
 def load_env_file():
@@ -29,7 +38,7 @@ def load_env_file():
         print(f"ℹ️  No .env file found at {env_file}", file=sys.stderr)
 
 def initialize_search_backend() -> None:
-    """Initialize and configure the search backend based on config."""
+    """Initialize and configure the search backend and ingestion pipeline based on config."""
     # Load environment variables from .env file
     load_env_file()
     
@@ -61,6 +70,21 @@ def initialize_search_backend() -> None:
     set_search_backend(backend)
     set_stores(backend.sql_store, backend.lance_store)
     print(f"✅ Search backend ready (store: {store_root})", file=sys.stderr)
+    
+    # Initialize ingestion pipeline for full reindex operations
+    print(f"🔧 Initializing ingestion pipeline...", file=sys.stderr)
+    from ..ingest.pipeline import IngestionPipeline
+    from ..store.graph_store import GraphStore
+    
+    # Create pipeline with same stores as backend
+    pipeline = IngestionPipeline(
+        config=config,
+        lancedb=backend.lance_store,
+        metadata=backend.sql_store,
+        graph_store=GraphStore(backend.sql_store.db_path)
+    )
+    set_pipeline(pipeline)
+    print(f"✅ Ingestion pipeline ready", file=sys.stderr)
 
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
@@ -71,5 +95,15 @@ async def lifespan(app_instance: FastAPI):
 
 # Recreate the app instance to use the lifespan manager
 app_with_lifespan = FastAPI(title="Dolphin Knowledge Store", version="0.1.0", lifespan=lifespan)
+
+# Add CORS middleware to allow requests from VSCode webviews
+app_with_lifespan.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins (webview origins are dynamic)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Mount the original app's routes onto the new app
 app_with_lifespan.router.routes.extend(app.routes)

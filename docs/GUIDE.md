@@ -1,10 +1,11 @@
 # Dolphin User Guide
 
-Complete guide for using the Dolphin AI enablement platform for semantic code search and retrieval.
+Complete guide for using the Dolphin AI enablement platform for semantic code search, AI-powered coding assistance, and intelligent code retrieval.
 
 **Version**: 0.1.13
-**Status**: Production Ready
+**Status**: Beta (Production Ready for Core Components)
 **PyPI**: `pip install pb-dolphin`
+**NPM**: `bunx dolphin-mcp`
 
 ---
 
@@ -12,6 +13,7 @@ Complete guide for using the Dolphin AI enablement platform for semantic code se
 
 - [Quick Start](#quick-start)
 - [Installation](#installation)
+- [VSCode Extension](#vscode-extension)
 - [Indexing Repositories](#indexing-repositories)
 - [Using Dolphin CLI](#using-dolphin-cli)
 - [Using Justfile Commands](#using-justfile-commands)
@@ -68,6 +70,75 @@ uv run dolphin kb index my-project
 # Start services
 uv run dolphin serve &
 ```
+
+---
+
+## VSCode Extension
+
+Dolphin includes a powerful VSCode extension that provides an AI coding assistant with seamless Claude integration and Knowledge Bank semantic search.
+
+### Features
+
+- **AI Chat Interface**: Interact with Claude AI directly in VSCode
+- **Knowledge Bank Integration**: Automatically searches your indexed codebase for context
+- **Dual Authentication**: Supports both Claude CLI (subscription) and API key modes
+- **Real-time Streaming**: See AI responses as they're generated
+- **Tool Call Visualization**: Monitor Knowledge Bank searches and other tool executions
+- **Conversation History**: Persistent conversation management with branching support
+- **Context Commands**: Ask about current selection, file, or folder
+- **Beautiful UI**: SvelteKit-based webview with shadcn/ui components
+
+### Installation (Development)
+
+```bash
+# 1. Clone and install dependencies
+git clone https://github.com/plasticbeachllc/dolphin.git
+cd dolphin
+npm run setup
+
+# 2. Build the extension
+npm run build:all
+
+# 3. Launch Extension Development Host
+# Open vscode-extension folder in VSCode and press F5
+```
+
+### Authentication Setup
+
+The extension supports two authentication modes:
+
+**Option A: Claude CLI (No API Costs)**
+```bash
+npm install -g @anthropic-ai/claude-code
+claude
+# Select: "1. Claude account with subscription"
+```
+
+**Option B: API Key**
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+# Or set in VSCode settings
+```
+
+### Usage
+
+1. **Open Chat Panel**: Click the Dolphin icon in the VSCode sidebar
+2. **Ask Questions**: Type your question or request in the chat input
+3. **View Responses**: See streaming responses with tool call visualizations
+4. **Use Context Commands**:
+   - Right-click on a selection → "Ask Dolphin about selection"
+   - Right-click on a file → "Ask Dolphin about file"
+   - Right-click on a folder → "Ask Dolphin about folder"
+
+### Knowledge Bank Integration
+
+The extension automatically:
+- Starts the KB server if needed (auto-lifecycle management)
+- Searches your indexed code when relevant to queries
+- Displays Knowledge Bank search results as tool call cards
+- Shows code snippets and file locations in responses
+
+For complete setup instructions, see [TESTING-GUIDE.md](TESTING-GUIDE.md).
 
 ---
 
@@ -547,9 +618,48 @@ Edit the config file:
     }
   }
 }
+```
+
+---
+
+## VSCode Extension Workflows
+
+### Example Workflow 1: Code Understanding
+
+```
+1. Open a file you want to understand
+2. Select a complex function
+3. Right-click → "Ask Dolphin about selection"
+4. Dolphin analyzes the code and explains it
+5. Knowledge Bank searches for related implementations
+6. Get comprehensive explanation with context
+```
+
+### Example Workflow 2: Feature Implementation
+
+```
+1. Open chat panel
+2. Ask: "Help me implement user authentication"
+3. Dolphin searches Knowledge Bank for existing auth patterns
+4. Provides implementation suggestions based on your codebase
+5. Generates code that follows your project's conventions
+```
+
+### Example Workflow 3: Debugging
+
+```
+1. Select error code or stack trace
+2. Right-click → "Ask Dolphin about selection"
+3. Dolphin searches for similar code patterns in your project
+4. Explains likely causes and suggests fixes
+5. Shows relevant test cases from your codebase
+```
+
+---
+
 ## Advanced Features
 
-Dolphin includes state-of-the-art search optimizations from the completed roadmap implementation.
+Dolphin includes state-of-the-art search optimizations and AI-powered coding assistance.
 
 ### **Hybrid Search (BM25 + Vector)**
 
@@ -939,6 +1049,26 @@ ignore_patterns = [
 ---
 
 ## Troubleshooting
+
+### VSCode Extension Issues
+
+```bash
+# Extension not connecting to agent
+# 1. Check agent-core logs in Output panel (select "Dolphin Agent")
+# 2. Verify authentication is set up (Claude CLI or API key)
+# 3. Restart extension: Cmd+Shift+P → "Reload Window"
+
+# KB server not starting
+# 1. Check if KB is manually running: curl http://127.0.0.1:7777/health
+# 2. Check agent logs for KB startup errors
+# 3. Manually start KB: dolphin serve
+# 4. Verify OPENAI_API_KEY is set
+
+# No Knowledge Bank results in chat
+# 1. Ensure repositories are indexed: dolphin kb status
+# 2. Re-index repository: dolphin kb index <repo-name>
+# 3. Check KB server logs for search errors
+```
 
 ### API Not Running
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as NavigationMenu from "$lib/components/ui/navigation-menu";
   import { navigationMenuTriggerStyle } from "$lib/components/ui/navigation-menu/navigation-menu-trigger.svelte";
-  import { Home, Workflow, Plug, Settings, User, MessageSquare } from "lucide-svelte";
+  import { Home, Workflow, Plug, Settings, User, MessageSquare, Database } from "lucide-svelte";
 
   interface Props {
     currentPath?: string;
@@ -16,7 +16,7 @@
   }
 </script>
 
-<div class="sticky top-0 z-50 w-full border-b bg-card backdrop-blur" role="navigation" aria-label="Main navigation">
+<div class="sticky top-0 z-[100] w-full border-b bg-card backdrop-blur" role="navigation" aria-label="Main navigation">
   <div class="flex h-10 items-center justify-between px-3">
     <!-- Left side: Logo and main navigation -->
     <div class="flex items-center gap-2">
@@ -44,6 +44,19 @@
         >
           <MessageSquare class="size-3.5" />
           <span class="text-xs">History</span>
+        </a>
+        
+        <!-- Knowledge Base Link -->
+        <a
+          href="/kb"
+          class="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground h-8 px-3 gap-1.5"
+          onclick={() => handleNavigation("/kb")}
+          title="Knowledge Base"
+          aria-label="Knowledge Base"
+          aria-current={currentPath === "/kb" ? "page" : undefined}
+        >
+          <Database class="size-3.5" />
+          <span class="text-xs">KB</span>
         </a>
       {/if}
 

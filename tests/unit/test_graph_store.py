@@ -423,7 +423,7 @@ class TestCleanupOperations:
     def test_delete_nodes_for_file(self, graph_store, sample_repo_and_file):
         """Test deleting all nodes for a file."""
         repo_id, file_id = sample_repo_and_file
-        
+
         # Create nodes
         graph_store.upsert_node(
             node_type="function",
@@ -437,7 +437,7 @@ class TestCleanupOperations:
             commit_sha="abc123",
             branch="main",
         )
-        
+
         graph_store.upsert_node(
             node_type="function",
             name="func2",
@@ -450,23 +450,82 @@ class TestCleanupOperations:
             commit_sha="abc123",
             branch="main",
         )
-        
+
         # Verify nodes exist
         nodes = graph_store.get_nodes_for_file(file_id)
         assert len(nodes) == 2
-        
+
         # Delete all nodes for file
         deleted = graph_store.delete_nodes_for_file(file_id)
         assert deleted == 2
-        
+
         # Verify nodes are gone
         nodes = graph_store.get_nodes_for_file(file_id)
         assert len(nodes) == 0
+
+    def test_delete_nodes_for_file_cascades_edges(self, graph_store, sample_repo_and_file):
+        """Test that deleting nodes also deletes associated edges."""
+        repo_id, file_id = sample_repo_and_file
+
+        # Create nodes in the file
+        node1_id = graph_store.upsert_node(
+            node_type="function",
+            name="func1",
+            qualified_name="myapp.func1",
+            repo_id=repo_id,
+            file_id=file_id,
+            start_line=1,
+            end_line=10,
+            language="python",
+            commit_sha="abc123",
+            branch="main",
+        )
+
+        node2_id = graph_store.upsert_node(
+            node_type="function",
+            name="func2",
+            qualified_name="myapp.func2",
+            repo_id=repo_id,
+            file_id=file_id,
+            start_line=15,
+            end_line=25,
+            language="python",
+            commit_sha="abc123",
+            branch="main",
+        )
+
+        # Create edges between nodes
+        edge_id = graph_store.upsert_edge(
+            source_node_id=node1_id,
+            target_node_id=node2_id,
+            edge_type="calls",
+            line_number=5,
+            commit_sha="abc123",
+        )
+
+        # Verify edge exists
+        initial_edge_count = graph_store.get_edge_count(repo_id=repo_id)
+        assert initial_edge_count == 1
+
+        outgoing_edges = graph_store.get_outgoing_edges(node1_id)
+        assert len(outgoing_edges) == 1
+
+        # Delete all nodes for file
+        deleted = graph_store.delete_nodes_for_file(file_id)
+        assert deleted == 2
+
+        # Verify edges are also gone
+        final_edge_count = graph_store.get_edge_count(repo_id=repo_id)
+        assert final_edge_count == 0
+
+        # Verify specific edges are gone
+        outgoing_edges = graph_store.get_outgoing_edges(node1_id)
+        assert len(outgoing_edges) == 0
     
     def test_delete_nodes_for_repo(self, graph_store, sample_repo_and_file):
         """Test deleting all nodes for a repository."""
         repo_id, file_id = sample_repo_and_file
-        
+
         # Create nodes
         graph_store.upsert_node(
             node_type="function",
@@ -480,19 +539,321 @@ class TestCleanupOperations:
             commit_sha="abc123",
             branch="main",
         )
-        
+
         # Delete all nodes for repo
         deleted = graph_store.delete_nodes_for_repo(repo_id)
         assert deleted == 1
-        
+
         # Verify count
         count = graph_store.get_node_count(repo_id=repo_id)
         assert count == 0
 
+    def test_file_rename_cleanup(self, graph_store, temp_db):
+        """Test that file rename (delete old + add new) properly cleans up old graph data."""
+        meta_store = SQLiteMetadataStore(temp_db)
+
+        # Create repo
+        meta_store.record_repo("test-repo", Path("/tmp/test-repo"))
+        repo = meta_store.get_repo_by_name("test-repo")
+        repo_id = repo["id"]
+
+        # Create original file
+        old_file_id = meta_store.upsert_file(
+            repo_id,
+            path="src/old_name.py",
+            ext=".py",
+            language="python",
+            is_binary=False,
+            size_bytes=1024,
+        )
+
+        # Create nodes for old file
+        old_node_id = graph_store.upsert_node(
+            node_type="function",
+            name="my_function",
+            qualified_name="old_name.my_function",
+            repo_id=repo_id,
+            file_id=old_file_id,
+            start_line=1,
+            end_line=10,
+            language="python",
+            commit_sha="abc123",
+            branch="main",
+        )
+
+        # Verify old node exists
+        assert graph_store.get_node_count(repo_id=repo_id) == 1
+
+        # Simulate rename: delete old file's nodes
+        graph_store.delete_nodes_for_file(old_file_id)
+
+        # Verify old nodes are gone
+        assert graph_store.get_node_count(repo_id=repo_id) == 0
+
+        # Create new file (renamed)
+        new_file_id = meta_store.upsert_file(
+            repo_id,
+            path="src/new_name.py",
+            ext=".py",
+            language="python",
+            is_binary=False,
+            size_bytes=1024,
+        )
+
+        # Create nodes for new file
+        new_node_id = graph_store.upsert_node(
+            node_type="function",
+            name="my_function",
+            qualified_name="new_name.my_function",
+            repo_id=repo_id,
+            file_id=new_file_id,
+            start_line=1,
+            end_line=10,
+            language="python",
+            commit_sha="def456",
+            branch="main",
+        )
+
+        # Verify new node exists and is different from old
+        assert graph_store.get_node_count(repo_id=repo_id) == 1
+        assert new_node_id != old_node_id
+
+        # Verify old node is gone
+        old_node = graph_store.get_node_by_id(old_node_id)
+        assert old_node is None
+
+        # Verify new node exists
+        new_node = graph_store.get_node_by_id(new_node_id)
+        assert new_node is not None
+        assert new_node["qualified_name"] == "new_name.my_function"
+
+    def test_file_deletion_with_cross_file_edges(self, graph_store, temp_db):
+        """Test that deleting a file properly handles edges to/from other files."""
+        meta_store = SQLiteMetadataStore(temp_db)
+
+        # Create repo
+        meta_store.record_repo("test-repo", Path("/tmp/test-repo"))
+        repo = meta_store.get_repo_by_name("test-repo")
+        repo_id = repo["id"]
+
+        # Create two files
+        file1_id = meta_store.upsert_file(
+            repo_id,
+            path="src/file1.py",
+            ext=".py",
+            language="python",
+            is_binary=False,
+            size_bytes=1024,
+        )
+
+        file2_id = meta_store.upsert_file(
+            repo_id,
+            path="src/file2.py",
+            ext=".py",
+            language="python",
+            is_binary=False,
+            size_bytes=1024,
+        )
+
+        # Create nodes in both files
+        node1_id = graph_store.upsert_node(
+            node_type="function",
+            name="caller",
+            qualified_name="file1.caller",
+            repo_id=repo_id,
+            file_id=file1_id,
+            start_line=1,
+            end_line=10,
+            language="python",
+            commit_sha="abc123",
+            branch="main",
+        )
+
+        node2_id = graph_store.upsert_node(
+            node_type="function",
+            name="callee",
+            qualified_name="file2.callee",
+            repo_id=repo_id,
+            file_id=file2_id,
+            start_line=1,
+            end_line=10,
+            language="python",
+            commit_sha="abc123",
+            branch="main",
+        )
+
+        # Create edge from file1 to file2
+        edge_id = graph_store.upsert_edge(
+            source_node_id=node1_id,
+            target_node_id=node2_id,
+            edge_type="calls",
+            line_number=5,
+            commit_sha="abc123",
+        )
+
+        # Verify edge exists
+        assert graph_store.get_edge_count(repo_id=repo_id) == 1
+
+        # Delete file1 (which has the source node)
+        graph_store.delete_nodes_for_file(file1_id)
+
+        # Verify edge is gone (since source node was deleted)
+        assert graph_store.get_edge_count(repo_id=repo_id) == 0
+
+        # Verify file2's node still exists
+        node2 = graph_store.get_node_by_id(node2_id)
+        assert node2 is not None
+
+        # Verify file1's node is gone
+        node1 = graph_store.get_node_by_id(node1_id)
+        assert node1 is None
+
+    def test_delete_nodes_cleans_up_fts(self, graph_store, sample_repo_and_file):
+        """Test that deleting nodes also removes FTS entries."""
+        repo_id, file_id = sample_repo_and_file
+
+        # Create node with searchable content
+        node_id = graph_store.upsert_node(
+            node_type="function",
+            name="search_function",
+            qualified_name="myapp.search_function",
+            repo_id=repo_id,
+            file_id=file_id,
+            start_line=1,
+            end_line=10,
+            language="python",
+            commit_sha="abc123",
+            branch="main",
+            signature="def search_function(query: str) -> list",
+            docstring="Search for items matching query",
+        )
+
+        # Verify FTS entry exists
+        with graph_store._connect() as conn:
+            from contextlib import closing
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT COUNT(*) FROM code_nodes_fts WHERE node_id = ?",
+                (node_id,)
+            )
+            count = cur.fetchone()[0]
+            assert count == 1
+
+        # Delete the node
+        deleted = graph_store.delete_nodes_for_file(file_id)
+        assert deleted == 1
+
+        # Verify FTS entry is gone
+        with graph_store._connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT COUNT(*) FROM code_nodes_fts WHERE node_id = ?",
+                (node_id,)
+            )
+            count = cur.fetchone()[0]
+            assert count == 0
+
+    def test_delete_empty_file(self, graph_store, sample_repo_and_file):
+        """Test that deleting a file with no nodes returns 0."""
+        repo_id, file_id = sample_repo_and_file
+
+        # Don't create any nodes, just delete
+        deleted = graph_store.delete_nodes_for_file(file_id)
+        assert deleted == 0
+
+    def test_delete_nodes_for_repo_with_edges(self, graph_store, temp_db):
+        """Test that deleting all nodes for a repo also deletes all edges."""
+        meta_store = SQLiteMetadataStore(temp_db)
+
+        # Create repo
+        meta_store.record_repo("test-repo", Path("/tmp/test-repo"))
+        repo = meta_store.get_repo_by_name("test-repo")
+        repo_id = repo["id"]
+
+        # Create file
+        file_id = meta_store.upsert_file(
+            repo_id,
+            path="src/main.py",
+            ext=".py",
+            language="python",
+            is_binary=False,
+            size_bytes=1024,
+        )
+
+        # Create nodes
+        node1_id = graph_store.upsert_node(
+            node_type="function",
+            name="func1",
+            qualified_name="myapp.func1",
+            repo_id=repo_id,
+            file_id=file_id,
+            start_line=1,
+            end_line=10,
+            language="python",
+            commit_sha="abc123",
+            branch="main",
+        )
+
+        node2_id = graph_store.upsert_node(
+            node_type="function",
+            name="func2",
+            qualified_name="myapp.func2",
+            repo_id=repo_id,
+            file_id=file_id,
+            start_line=15,
+            end_line=25,
+            language="python",
+            commit_sha="abc123",
+            branch="main",
+        )
+
+        # Create edge
+        graph_store.upsert_edge(
+            source_node_id=node1_id,
+            target_node_id=node2_id,
+            edge_type="calls",
+            line_number=5,
+            commit_sha="abc123",
+        )
+
+        # Verify data exists
+        assert graph_store.get_node_count(repo_id=repo_id) == 2
+        assert graph_store.get_edge_count(repo_id=repo_id) == 1
+
+        # Delete all nodes for repo
+        deleted = graph_store.delete_nodes_for_repo(repo_id)
+        assert deleted == 2
+
+        # Verify all data is gone
+        assert graph_store.get_node_count(repo_id=repo_id) == 0
+        assert graph_store.get_edge_count(repo_id=repo_id) == 0
+
+
+class TestSchemaMigration:
+    """Test schema changes and CASCADE DELETE constraints."""
+
+    def test_cascade_delete_in_fresh_database(self, temp_db):
+        """Verify that CASCADE DELETE constraints are present in newly created databases."""
+        import sqlite3
+
+        # Check the schema of code_edges table
+        conn = sqlite3.connect(temp_db)
+        cur = conn.cursor()
+
+        # Get the CREATE TABLE statement
+        cur.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='code_edges'")
+        schema = cur.fetchone()[0]
+
+        # Verify CASCADE DELETE is in the schema for both foreign keys
+        assert "ON DELETE CASCADE" in schema or "ondelete='CASCADE'" in schema.lower(), \
+            f"Expected CASCADE DELETE in schema, got: {schema}"
+
+        conn.close()
+
 
 class TestStatistics:
     """Test statistics operations."""
-    
+
     def test_get_node_count(self, graph_store, sample_repo_and_file):
         """Test getting node count."""
         repo_id, file_id = sample_repo_and_file

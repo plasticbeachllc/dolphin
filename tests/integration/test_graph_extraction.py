@@ -264,13 +264,8 @@ class TestGraphExtraction:
         implements_edges = [e for e in service_edges if e["edge_type"] == "implements"]
         assert len(implements_edges) > 0
         
-    @pytest.mark.skip(reason="Graph node pruning on file deletion not yet implemented")
     def test_graph_cleanup_on_file_deletion(self, temp_test_repo, tmp_path):
-        """Test that graph data is cleaned up when files are deleted.
-        
-        NOTE: Graph nodes are not being pruned when files are deleted.
-        This test is skipped until the cleanup functionality is implemented.
-        """
+        """Test that graph data is cleaned up when files are deleted."""
         # Setup
         config = KBConfig()
         db_path = tmp_path / "test.db"
