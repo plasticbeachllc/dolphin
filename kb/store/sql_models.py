@@ -313,7 +313,7 @@ class GraphMetrics(SQLModel, table=True):
         Index("ix_graph_metrics_community", "community_id"),
     )
 
-    node_id: str = Field(primary_key=True, sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False))
+    node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), primary_key=True, nullable=False))
     pagerank: Optional[float] = Field(default=None)
     betweenness_centrality: Optional[float] = Field(default=None)
     in_degree: int = Field(default=0)
