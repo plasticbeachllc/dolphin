@@ -468,8 +468,6 @@ class LanceDBStore:
         Returns:
             Chunk dictionary if found, None otherwise
         """
-        import lancedb
-
         # Map model to table name
         model_to_table = {
             'small': 'chunks_small',
@@ -481,8 +479,8 @@ class LanceDBStore:
 
         table_name = model_to_table[model]
 
-        # Connect to database and open table
-        db = lancedb.connect(self.root.as_posix())
+        # Connect to database and open table using cached connection logic
+        db = self.connect()
 
         try:
             table = db.open_table(table_name)

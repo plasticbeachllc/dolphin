@@ -637,6 +637,69 @@ clean-build:
 clean-all: clean clean-build
 
 # ==============================================================================
+# Benchmarking and Evaluation
+# ==============================================================================
+
+# Run ANN parameter benchmarks (existing)
+benchmark-ann QUERIES="50" ITERATIONS="50":
+	@echo "Running ANN parameter benchmarks..."
+	@mkdir -p results
+	uv run python scripts/benchmark_ann.py \
+		--queries {{QUERIES}} \
+		--iterations {{ITERATIONS}} \
+		--output results/ann_benchmark.json
+	@echo "✅ Results saved to results/ann_benchmark.json"
+
+# Run retrieval quality evaluation
+eval SCENARIOS="golden-scenarios":
+	@echo "Running retrieval evaluation..."
+	@mkdir -p results
+	uv run python scripts/eval_retrieval.py \
+		--scenarios {{SCENARIOS}} \
+		--output results/eval.json
+	@echo "✅ Results saved to results/eval.json"
+
+# Run evaluation with verbose output
+eval-verbose SCENARIOS="golden-scenarios":
+	@echo "Running retrieval evaluation (verbose)..."
+	@mkdir -p results
+	uv run python scripts/eval_retrieval.py \
+		--scenarios {{SCENARIOS}} \
+		--output results/eval.json \
+		--verbose
+
+# Run quick evaluation (subset of scenarios)
+eval-quick:
+	@echo "Running quick evaluation..."
+	@mkdir -p results
+	uv run python scripts/eval_retrieval.py \
+		--scenarios golden-scenarios/code-search/exact-match \
+		--output results/eval_quick.json
+	@echo "✅ Quick eval complete"
+
+# Compare evaluation results
+compare-eval BASELINE="baseline/eval.json" CURRENT="results/eval.json":
+	@echo "Comparing evaluation results..."
+	uv run python scripts/compare_eval.py \
+		{{BASELINE}} \
+		{{CURRENT}} \
+		--output results/eval_comparison.json
+
+# Run full benchmark suite (ANN + evaluation)
+benchmark-full:
+	@echo "Running full benchmark suite..."
+	@just benchmark-ann
+	@just eval
+	@echo "✅ Full benchmark suite complete"
+
+# Run quick benchmark suite (for CI)
+benchmark-quick:
+	@echo "Running quick benchmark suite..."
+	@just benchmark-ann QUERIES=10 ITERATIONS=10
+	@just eval-quick
+	@echo "✅ Quick benchmark complete"
+
+# ==============================================================================
 # Defaults and Variables
 # ==============================================================================
 
