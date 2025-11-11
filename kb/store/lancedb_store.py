@@ -343,3 +343,42 @@ class LanceDBStore:
         except Exception:
             # Handle empty table or other search errors
             return []
+
+    def get_chunk_by_id(self, chunk_id: str, model: str = "small") -> dict[str, Any] | None:
+        """Retrieve a chunk by its ID from the vector store.
+
+        Args:
+            chunk_id: The chunk ID to retrieve
+            model: Model type ('small' or 'large') determines which table to search
+
+        Returns:
+            Chunk dictionary if found, None otherwise
+        """
+        import lancedb
+
+        # Map model to table name
+        model_to_table = {
+            'small': 'chunks_small',
+            'large': 'chunks_large'
+        }
+
+        if model not in model_to_table:
+            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
+
+        table_name = model_to_table[model]
+
+        # Connect to database and open table
+        db = lancedb.connect(self.root.as_posix())
+
+        try:
+            table = db.open_table(table_name)
+        except Exception:
+            # Table doesn't exist yet
+            return None
+
+        # Query for the specific ID
+        try:
+            results = table.search().where(f"id = '{chunk_id}'").limit(1).to_list()
+            return results[0] if results else None
+        except Exception:
+            return None
