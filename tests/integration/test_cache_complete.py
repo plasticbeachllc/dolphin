@@ -4,10 +4,48 @@ import pytest
 import time
 from pathlib import Path
 
-from kb.api.search_backend import SearchBackend
-from kb.store import LanceDBStore, SQLiteMetadataStore
-from kb.ingest.pipeline import IngestionPipeline
+from kb.api.app import SearchRequest
+from kb.api.search_backend import KnowledgeSearchBackend
+from kb.cache import QueryCache
 from kb.config import KBConfig
+from kb.embeddings.provider import EmbeddingProvider
+from kb.ingest.pipeline import IngestionPipeline
+from kb.store import LanceDBStore, SQLiteMetadataStore
+
+
+def _create_backend(
+    metadata_store: SQLiteMetadataStore,
+    lancedb_store: LanceDBStore,
+    config: KBConfig,
+    *,
+    enable_cache: bool,
+) -> KnowledgeSearchBackend:
+    cache = QueryCache() if enable_cache else None
+    return KnowledgeSearchBackend(
+        embedding_provider=EmbeddingProvider(),
+        lance_store=lancedb_store,
+        sql_store=metadata_store,
+        cache=cache,
+        config=config,
+    )
+
+
+def _run_search(
+    backend: KnowledgeSearchBackend,
+    query: str,
+    *,
+    top_k: int,
+    repo_name: str,
+    embed_model: str,
+):
+    request = SearchRequest(
+        query=query,
+        top_k=top_k,
+        repos=[repo_name],
+        embed_model=embed_model,
+        include_graph_context=False,
+    )
+    return backend.search(request)
 
 
 class TestCachePerformance:
@@ -53,18 +91,35 @@ def create_endpoint(route):
 
         pipeline.index("cache-repo", dry_run=False, force=True)
 
-        # Create search backend
-        backend = SearchBackend(lancedb_store)
+        # Create search backend with caching enabled
+        backend = _create_backend(
+            metadata_store,
+            lancedb_store,
+            config,
+            enable_cache=True,
+        )
 
         # First query (cold cache)
         query = "user authentication"
         start = time.time()
-        results1 = backend.search(query, top_k=5)
+        results1 = _run_search(
+            backend,
+            query,
+            top_k=5,
+            repo_name="cache-repo",
+            embed_model=config.default_embed_model,
+        )
         cold_time = time.time() - start
 
         # Second identical query (warm cache if caching enabled)
         start = time.time()
-        results2 = backend.search(query, top_k=5)
+        results2 = _run_search(
+            backend,
+            query,
+            top_k=5,
+            repo_name="cache-repo",
+            embed_model=config.default_embed_model,
+        )
         warm_time = time.time() - start
 
         # Results should be identical
@@ -98,10 +153,21 @@ def create_endpoint(route):
 
         pipeline.index("invalidate-repo", dry_run=False, force=True)
 
-        backend = SearchBackend(lancedb_store)
+        backend = _create_backend(
+            metadata_store,
+            lancedb_store,
+            config,
+            enable_cache=True,
+        )
 
         # Initial search
-        results1 = backend.search("original", top_k=5)
+        results1 = _run_search(
+            backend,
+            "original",
+            top_k=5,
+            repo_name="invalidate-repo",
+            embed_model=config.default_embed_model,
+        )
         initial_count = len(results1)
 
         # Modify repository
@@ -115,7 +181,13 @@ def another_function(): return 'another'
         pipeline.index("invalidate-repo", dry_run=False, force=True)
 
         # Search again - should reflect new content
-        results2 = backend.search("new function", top_k=5)
+        results2 = _run_search(
+            backend,
+            "new function",
+            top_k=5,
+            repo_name="invalidate-repo",
+            embed_model=config.default_embed_model,
+        )
 
         # Should find new content (cache invalidated)
         assert isinstance(results2, list)
@@ -158,14 +230,25 @@ def transform(data):
 
         pipeline.index("consistent-repo", dry_run=False, force=True)
 
-        backend = SearchBackend(lancedb_store)
+        backend = _create_backend(
+            metadata_store,
+            lancedb_store,
+            config,
+            enable_cache=True,
+        )
 
         # Run same query multiple times
         query = "process data transformation"
         results_list = []
 
         for _ in range(5):
-            results = backend.search(query, top_k=3)
+            results = _run_search(
+                backend,
+                query,
+                top_k=3,
+                repo_name="consistent-repo",
+                embed_model=config.default_embed_model,
+            )
             results_list.append(results)
 
         # All results should be identical
@@ -208,12 +291,35 @@ def transform(data):
 
         pipeline.index("topk-repo", dry_run=False, force=True)
 
-        backend = SearchBackend(lancedb_store)
+        backend = _create_backend(
+            metadata_store,
+            lancedb_store,
+            config,
+            enable_cache=True,
+        )
 
         # Search with different top_k values
-        results_3 = backend.search("function testing", top_k=3)
-        results_5 = backend.search("function testing", top_k=5)
-        results_10 = backend.search("function testing", top_k=10)
+        results_3 = _run_search(
+            backend,
+            "function testing",
+            top_k=3,
+            repo_name="topk-repo",
+            embed_model=config.default_embed_model,
+        )
+        results_5 = _run_search(
+            backend,
+            "function testing",
+            top_k=5,
+            repo_name="topk-repo",
+            embed_model=config.default_embed_model,
+        )
+        results_10 = _run_search(
+            backend,
+            "function testing",
+            top_k=10,
+            repo_name="topk-repo",
+            embed_model=config.default_embed_model,
+        )
 
         # Should respect top_k limits
         assert len(results_3) <= 3
@@ -256,11 +362,28 @@ class TestCacheEdgeCases:
 
         pipeline.index("empty-repo", dry_run=False, force=True)
 
-        backend = SearchBackend(lancedb_store)
+        backend = _create_backend(
+            metadata_store,
+            lancedb_store,
+            config,
+            enable_cache=True,
+        )
 
         # Query unlikely to match
-        results1 = backend.search("xyzabc123nonexistent", top_k=5)
-        results2 = backend.search("xyzabc123nonexistent", top_k=5)
+        results1 = _run_search(
+            backend,
+            "xyzabc123nonexistent",
+            top_k=5,
+            repo_name="empty-repo",
+            embed_model=config.default_embed_model,
+        )
+        results2 = _run_search(
+            backend,
+            "xyzabc123nonexistent",
+            top_k=5,
+            repo_name="empty-repo",
+            embed_model=config.default_embed_model,
+        )
 
         # Both should return empty or same results
         assert len(results1) == len(results2)
@@ -294,7 +417,12 @@ def handle_special_chars():
 
         pipeline.index("special-repo", dry_run=False, force=True)
 
-        backend = SearchBackend(lancedb_store)
+        backend = _create_backend(
+            metadata_store,
+            lancedb_store,
+            config,
+            enable_cache=True,
+        )
 
         # Queries with special characters
         special_queries = [
@@ -305,7 +433,13 @@ def handle_special_chars():
 
         for query in special_queries:
             # Should not crash
-            results = backend.search(query, top_k=5)
+            results = _run_search(
+                backend,
+                query,
+                top_k=5,
+                repo_name="special-repo",
+                embed_model=config.default_embed_model,
+            )
             assert isinstance(results, list)
 
     def test_cache_concurrent_access(self, temp_dir: Path):
@@ -339,14 +473,25 @@ def concurrent_test():
 
         pipeline.index("concurrent-repo", dry_run=False, force=True)
 
-        backend = SearchBackend(lancedb_store)
+        backend = _create_backend(
+            metadata_store,
+            lancedb_store,
+            config,
+            enable_cache=True,
+        )
 
         # Shared results storage
         results_dict = {}
 
         def search_task(task_id: int):
             """Search task for threading."""
-            results = backend.search("concurrent test", top_k=5)
+            results = _run_search(
+                backend,
+                "concurrent test",
+                top_k=5,
+                repo_name="concurrent-repo",
+                embed_model=config.default_embed_model,
+            )
             results_dict[task_id] = results
 
         # Run multiple searches concurrently
