@@ -1,6 +1,7 @@
 """Integration tests for complete KB pipeline orchestration."""
 
 import pytest
+import subprocess
 from pathlib import Path
 import tempfile
 
@@ -8,6 +9,7 @@ from kb.ingest.pipeline import IngestionPipeline
 from kb.store import LanceDBStore, SQLiteMetadataStore
 from kb.config import KBConfig
 from kb.chunkers.registry import get_chunker_for_file
+from tests.conftest import init_test_git_repo
 
 
 class TestPipelineOrchestration:
@@ -18,6 +20,7 @@ class TestPipelineOrchestration:
         # Create test repository with different file types
         repo_path = temp_dir / "test_repo"
         repo_path.mkdir()
+        init_test_git_repo(repo_path)
 
         # Create files of different types
         (repo_path / "code.py").write_text("""
@@ -74,6 +77,10 @@ CREATE TABLE products (
     color: white;
 }
 """)
+
+        # Commit files to git
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
 
         # Setup pipeline
         db_path = temp_dir / "test.db"
@@ -134,6 +141,7 @@ CREATE TABLE products (
         """Test that pipeline correctly preserves file metadata."""
         repo_path = temp_dir / "metadata_repo"
         repo_path.mkdir()
+        init_test_git_repo(repo_path)
 
         # Create test file
         test_file = repo_path / "test.py"
@@ -142,6 +150,10 @@ def test_function():
     '''Test docstring.'''
     return True
 """)
+
+        # Commit files
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
 
         # Setup pipeline
         db_path = temp_dir / "metadata.db"
@@ -180,6 +192,7 @@ def test_function():
         """Test pipeline handles repository with mixed content (code, docs, data)."""
         repo_path = temp_dir / "mixed_repo"
         repo_path.mkdir()
+        init_test_git_repo(repo_path)
 
         # Create subdirectories
         (repo_path / "src").mkdir()
@@ -192,6 +205,10 @@ def test_function():
         (repo_path / "docs" / "README.md").write_text("# Project\n\nDocumentation here.")
         (repo_path / "docs" / "API.md").write_text("# API\n\n## Endpoints")
         (repo_path / "data" / "config.json").write_text('{"key": "value"}')
+
+        # Commit files
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
 
         # Setup and run pipeline
         db_path = temp_dir / "mixed.db"
@@ -228,11 +245,16 @@ def test_function():
         """Test pipeline continues processing after encountering errors."""
         repo_path = temp_dir / "error_repo"
         repo_path.mkdir()
+        init_test_git_repo(repo_path)
 
         # Create mix of valid and problematic files
         (repo_path / "valid.py").write_text("def valid(): return True")
         (repo_path / "binary.dat").write_bytes(b'\x00\x01\x02\x03\xff\xfe')
         (repo_path / "another_valid.py").write_text("def another(): return False")
+
+        # Commit files
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
 
         # Setup pipeline
         db_path = temp_dir / "error.db"
@@ -260,6 +282,7 @@ def test_function():
         """Test pipeline respects configuration options."""
         repo_path = temp_dir / "config_repo"
         repo_path.mkdir()
+        init_test_git_repo(repo_path)
 
         # Create files
         (repo_path / "included.py").write_text("def included(): pass")
@@ -268,6 +291,10 @@ def test_function():
         pycache = repo_path / "__pycache__"
         pycache.mkdir()
         (pycache / "test.pyc").write_bytes(b'')
+
+        # Commit files
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
 
         # Setup pipeline with ignore patterns
         db_path = temp_dir / "config.db"
@@ -349,10 +376,15 @@ def function_{i}():
         """Test pipeline handles large files without crashing."""
         repo_path = temp_dir / "large_repo"
         repo_path.mkdir()
+        init_test_git_repo(repo_path)
 
         # Create a large file
         large_content = "def function_{}():\n    pass\n\n" * 500
         (repo_path / "large.py").write_text(large_content)
+
+        # Commit files
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
 
         # Setup pipeline
         db_path = temp_dir / "large.db"

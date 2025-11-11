@@ -1,6 +1,7 @@
 """Integration tests for cache layer functionality."""
 
 import pytest
+import subprocess
 import time
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from kb.config import KBConfig
 from kb.embeddings.provider import EmbeddingProvider
 from kb.ingest.pipeline import IngestionPipeline
 from kb.store import LanceDBStore, SQLiteMetadataStore
+from tests.conftest import init_test_git_repo
 
 
 def _create_backend(
@@ -56,6 +58,7 @@ class TestCachePerformance:
         # Setup repository and index
         repo_path = temp_dir / "cache_repo"
         repo_path.mkdir()
+        init_test_git_repo(repo_path)
 
         (repo_path / "auth.py").write_text("""
 def authenticate_user(username, password):
@@ -72,6 +75,10 @@ def create_endpoint(route):
     '''Create API endpoint.'''
     return {'route': route}
 """)
+
+        # Commit files to git
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
 
         # Setup and index
         db_path = temp_dir / "cache.db"
@@ -132,8 +139,13 @@ def create_endpoint(route):
         """Test cache is invalidated when repository is re-indexed."""
         repo_path = temp_dir / "invalidate_repo"
         repo_path.mkdir()
+        init_test_git_repo(repo_path)
 
         (repo_path / "code.py").write_text("def original(): return 'original'")
+        
+        # Commit initial file
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
 
         # Setup and initial index
         db_path = temp_dir / "invalidate.db"
@@ -176,6 +188,10 @@ def original(): return 'original'
 def new_function(): return 'new'
 def another_function(): return 'another'
 """)
+        
+        # Commit changes
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Add new functions"], check=True, capture_output=True)
 
         # Re-index
         pipeline.index("invalidate-repo", dry_run=False, force=True)
@@ -201,6 +217,7 @@ class TestCacheConsistency:
         """Test cache returns consistent results across multiple queries."""
         repo_path = temp_dir / "consistent_repo"
         repo_path.mkdir()
+        init_test_git_repo(repo_path)
 
         (repo_path / "data.py").write_text("""
 def process_data(data):
@@ -211,6 +228,10 @@ def transform(data):
     '''Transform data.'''
     return data.upper()
 """)
+        
+        # Commit files
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
 
         # Setup
         db_path = temp_dir / "consistent.db"
@@ -265,6 +286,7 @@ def transform(data):
         """Test cache correctly handles different top_k values."""
         repo_path = temp_dir / "topk_repo"
         repo_path.mkdir()
+        init_test_git_repo(repo_path)
 
         # Create file with enough content for multiple results
         content = "\n\n".join([
@@ -272,6 +294,10 @@ def transform(data):
             for i in range(10)
         ])
         (repo_path / "functions.py").write_text(content)
+        
+        # Commit files
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
 
         # Setup
         db_path = temp_dir / "topk.db"
@@ -341,8 +367,13 @@ class TestCacheEdgeCases:
         """Test cache correctly handles queries with no results."""
         repo_path = temp_dir / "empty_repo"
         repo_path.mkdir()
+        init_test_git_repo(repo_path)
 
         (repo_path / "simple.py").write_text("def simple(): pass")
+        
+        # Commit files
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
 
         # Setup
         db_path = temp_dir / "empty.db"
@@ -392,12 +423,17 @@ class TestCacheEdgeCases:
         """Test cache handles queries with special characters."""
         repo_path = temp_dir / "special_repo"
         repo_path.mkdir()
+        init_test_git_repo(repo_path)
 
         (repo_path / "code.py").write_text("""
 def handle_special_chars():
     '''Handle special characters: @#$%^&*()'''
     return "special"
 """)
+        
+        # Commit files
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
 
         # Setup
         db_path = temp_dir / "special.db"
@@ -448,12 +484,17 @@ def handle_special_chars():
 
         repo_path = temp_dir / "concurrent_repo"
         repo_path.mkdir()
+        init_test_git_repo(repo_path)
 
         (repo_path / "code.py").write_text("""
 def concurrent_test():
     '''Test concurrent access.'''
     return True
 """)
+        
+        # Commit files
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
 
         # Setup
         db_path = temp_dir / "concurrent.db"
