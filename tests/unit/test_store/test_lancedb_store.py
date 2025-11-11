@@ -21,8 +21,18 @@ class _MockTable:
             self.deleted_ids.extend(ids)
             self.rows = [r for r in self.rows if r.get("id") not in ids]
 
-    def add(self, rows):
-        self.rows.extend(list(rows))
+    def add(self, rows, mode='append'):
+        # Accept mode parameter for compatibility
+        # Handle PyArrow tables by converting to list of dicts
+        if hasattr(rows, 'to_pylist'):
+            # PyArrow Table
+            self.rows.extend(rows.to_pylist())
+        else:
+            # Regular list
+            self.rows.extend(list(rows))
+    
+    def count_rows(self):
+        return len(self.rows)
 
 
 class _MockDB:
@@ -32,14 +42,28 @@ class _MockDB:
     def table_names(self):
         return list(self._tables.keys())
 
-    def create_table(self, name, data=None, schema=None):
+    def create_table(self, name, data=None, schema=None, mode='create'):
+        # Accept mode parameter for compatibility
         self._tables[name] = _MockTable(name)
+        if data is not None:
+            # Handle PyArrow tables by converting to list of dicts
+            if hasattr(data, 'to_pylist'):
+                # PyArrow Table
+                self._tables[name].rows = data.to_pylist()
+            elif hasattr(data, '__iter__'):
+                self._tables[name].rows = list(data)
+            else:
+                self._tables[name].rows = []
         return self._tables[name]
 
     def open_table(self, name):
         if name not in self._tables:
             raise RuntimeError(f"Table {name} not found")
         return self._tables[name]
+    
+    def drop_table(self, name):
+        if name in self._tables:
+            del self._tables[name]
 
 
 @pytest.fixture

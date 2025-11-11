@@ -52,7 +52,7 @@ class TestIndexingWorkflow:
         result1 = pipeline.index(repo_name, dry_run=False, force=True)
         initial_chunks = result1['chunks_indexed']
 
-        # Step 2: Add new file
+        # Step 2: Add new file and commit it
         (repo_path / "auth.py").write_text("""
 def authenticate_with_token(token):
     '''Authenticate using JWT token.'''
@@ -65,15 +65,23 @@ def refresh_token(old_token):
     import secrets
     return secrets.token_hex(32)
 """)
+        
+        # Commit the new file so incremental mode can detect it
+        import subprocess
+        subprocess.run(["git", "-C", str(repo_path), "add", "auth.py"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Add auth.py"], check=True, capture_output=True)
 
-        # Step 3: Re-index
+        # Step 3: Re-index (incremental mode will detect the new commit)
         result2 = pipeline.index(repo_name, dry_run=False, force=False)
 
         # Step 4: Verify incremental behavior
         # Should have indexed at least the new file
         assert result2['session_id'] is not None
-        # Either chunks_indexed or chunks_skipped should account for new content
-        assert (result2['chunks_indexed'] + result2['chunks_skipped']) >= initial_chunks
+        # In incremental mode, only the new file should be processed
+        # The new file (auth.py) should have been indexed with new chunks
+        assert result2['chunks_indexed'] > 0
+        # Verify we only processed the changed file, not all files
+        assert result2['files_indexed'] == 1
 
         # Step 5: Verify new file is tracked
         repo = metadata_store.get_repo_by_name(repo_name)
@@ -124,24 +132,25 @@ def refresh_token(old_token):
         assert not any('.pyc' in path for path in file_paths)
 
     def test_force_reindex_workflow(self, e2e_kb_setup):
-        """Test force re-indexing replaces existing content."""
+        """Test full re-indexing replaces existing content."""
         setup = e2e_kb_setup
         pipeline = setup['pipeline']
         repo_name = setup['repo_name']
 
         # Initial index
         result1 = pipeline.index(repo_name, dry_run=False, force=True)
-        session_id1 = result1['session_id']
+        initial_chunks = result1['chunks_indexed']
+        initial_files = result1['files_indexed']
 
-        # Force re-index
-        result2 = pipeline.index(repo_name, dry_run=False, force=True)
-        session_id2 = result2['session_id']
+        # Full re-index (use full_reindex=True to drop and rebuild entire index)
+        result2 = pipeline.index(repo_name, dry_run=False, force=True, full_reindex=True)
 
-        # Should create new session
-        assert session_id2 != session_id1
+        # Full reindex creates a fresh session (may reuse ID 1 after dropping old sessions)
+        assert result2['session_id'] is not None
 
-        # Should re-process files
-        assert result2['files_indexed'] > 0
+        # Should re-process all files
+        assert result2['files_indexed'] == initial_files
+        assert result2['chunks_indexed'] == initial_chunks  # Same files, same chunks
 
 
 class TestIndexingEdgeCases:
