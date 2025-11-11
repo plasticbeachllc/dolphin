@@ -139,7 +139,7 @@ export class CostTracker {
 
     // Block if over threshold
     if (percentage >= this.budgetConfig.blockThreshold) {
-      logger.error('Budget exceeded', {
+      logger.error('Budget exceeded', undefined, {
         projected_cost: cost.projectedDailyCost,
         limit: this.budgetConfig.dailyLimit,
         percentage: percentage * 100,

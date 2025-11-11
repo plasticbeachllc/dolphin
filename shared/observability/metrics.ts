@@ -46,11 +46,20 @@ export function clearMetrics(): void {
 
 /**
  * Create a basic HTTP server for metrics endpoint.
+ * Note: This uses Bun.serve() which requires the Bun runtime.
+ * For Node.js, use Express or similar HTTP framework instead.
  */
 export function createMetricsServer(port: number = 9091): void {
-  const server = Bun.serve({
+  // Check if Bun is available (runtime check)
+  if (typeof (globalThis as any).Bun === 'undefined') {
+    throw new Error('createMetricsServer requires Bun runtime. Use an HTTP framework like Express for Node.js.');
+  }
+
+  const BunRuntime = (globalThis as any).Bun;
+
+  const server = BunRuntime.serve({
     port,
-    async fetch(req) {
+    async fetch(req: Request): Promise<Response> {
       const url = new URL(req.url);
 
       if (url.pathname === '/metrics') {

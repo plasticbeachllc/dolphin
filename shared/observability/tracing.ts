@@ -5,22 +5,25 @@
 
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { JaegerExporter } from '@opentelemetry/exporter-jaeger';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { Resource } from '@opentelemetry/resources';
-import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
+import { SEMRESATTRS_SERVICE_NAME, SEMRESATTRS_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 import { trace, context, propagation, SpanStatusCode, Span } from '@opentelemetry/api';
 
 /**
  * Initialize OpenTelemetry tracing for a service.
+ * Uses OTLP HTTP exporter (replaces deprecated Jaeger exporter).
+ * Jaeger natively supports OTLP on port 4318.
  */
 export function initTracing(serviceName: string, serviceVersion: string = '1.0.0') {
   const sdk = new NodeSDK({
     resource: new Resource({
-      [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
-      [SemanticResourceAttributes.SERVICE_VERSION]: serviceVersion,
+      [SEMRESATTRS_SERVICE_NAME]: serviceName,
+      [SEMRESATTRS_SERVICE_VERSION]: serviceVersion,
     }),
-    traceExporter: new JaegerExporter({
-      endpoint: process.env.JAEGER_ENDPOINT || 'http://localhost:14268/api/traces',
+    traceExporter: new OTLPTraceExporter({
+      // Jaeger OTLP HTTP endpoint (default: localhost:4318)
+      url: process.env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
     }),
     instrumentations: [
       getNodeAutoInstrumentations({
