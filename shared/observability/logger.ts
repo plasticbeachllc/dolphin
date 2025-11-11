@@ -12,6 +12,21 @@ export enum LogLevel {
   ERROR = 'ERROR',
 }
 
+/**
+ * Allowed types for log metadata values.
+ * Prevents accidentally logging complex objects or functions.
+ */
+export type LogMetadataValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | LogMetadataValue[]
+  | { [key: string]: LogMetadataValue };
+
+export type LogMetadata = { [key: string]: LogMetadataValue };
+
 export interface LogEntry {
   timestamp: string;
   level: LogLevel;
@@ -25,7 +40,7 @@ export interface LogEntry {
 export class Logger {
   constructor(private component: string) {}
 
-  private formatEntry(level: LogLevel, message: string, meta: any = {}): string {
+  private formatEntry(level: LogLevel, message: string, meta: LogMetadata = {}): string {
     const span = trace.getSpan(context.active());
     const spanContext = span?.spanContext();
 
@@ -46,9 +61,17 @@ export class Logger {
 
   /**
    * Sanitize metadata to remove potential PII and sensitive data.
+   * Also handles circular references gracefully.
    */
   private sanitizeMeta(meta: any): any {
     if (!meta) return {};
+
+    try {
+      // Check for circular references by attempting JSON stringify
+      JSON.stringify(meta);
+    } catch (e) {
+      return { error: 'Failed to sanitize metadata - circular reference detected' };
+    }
 
     const sanitized = { ...meta };
 
@@ -69,19 +92,19 @@ export class Logger {
     return sanitized;
   }
 
-  debug(message: string, meta?: any) {
+  debug(message: string, meta?: LogMetadata) {
     console.log(this.formatEntry(LogLevel.DEBUG, message, meta));
   }
 
-  info(message: string, meta?: any) {
+  info(message: string, meta?: LogMetadata) {
     console.log(this.formatEntry(LogLevel.INFO, message, meta));
   }
 
-  warn(message: string, meta?: any) {
+  warn(message: string, meta?: LogMetadata) {
     console.warn(this.formatEntry(LogLevel.WARN, message, meta));
   }
 
-  error(message: string, error?: Error, meta?: any) {
+  error(message: string, error?: Error, meta?: LogMetadata) {
     const errorMeta = error
       ? {
           error_message: error.message,
