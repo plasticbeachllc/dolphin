@@ -28,6 +28,8 @@ tests/reports/*
 .coverage
 coverage.xml
 
+profiling_results/
+
 # misc
 .DS_Store
 !*.example
