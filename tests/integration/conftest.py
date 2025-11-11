@@ -159,11 +159,11 @@ def integration_backend_config(
     """Provide a complete backend configuration for integration testing with isolated storage."""
     from kb.config import KBConfig
     from kb.store import LanceDBStore, SQLiteMetadataStore
-    
+
     # Use temp_dir to ensure isolated storage for each test
     store_root = temp_dir / "kb_store"
     store_root.mkdir(parents=True, exist_ok=True)
-    
+
     config = KBConfig(
         store_root=store_root,
         default_embed_model="small",
@@ -172,15 +172,15 @@ def integration_backend_config(
         chunk_size=1000,
         chunk_overlap=200
     )
-    
+
     # Use isolated database and vector store paths
     metadata_store = SQLiteMetadataStore(temp_db_path)
     metadata_store.initialize()
-    
-    # Use a unique in-memory LanceDB instance for each test
+
+    # Use a unique in-memory LanceDB instance for each test (faster than disk)
     import uuid
     lancedb_store = LanceDBStore(f"memory://integration_test_{uuid.uuid4().hex}")
-    
+
     backend_config = {
         "config": config,
         "metadata_store": metadata_store,
@@ -188,10 +188,59 @@ def integration_backend_config(
         "repo_path": sample_repo_path,
         "embedding_service": mock_embedding_service
     }
-    
+
     yield backend_config
-    
+
     # Cleanup: Close connections
+    try:
+        metadata_store.close()
+    except Exception:
+        pass
+
+
+@pytest.fixture
+def fast_backend_config(
+    sample_repo_path: Path,
+    temp_db_path: Path,
+    mock_embedding_service,
+    temp_dir: Path
+):
+    """Fast backend config for tests that don't need full isolation.
+
+    This fixture is optimized for speed by:
+    - Using in-memory SQLite database
+    - Using in-memory LanceDB
+    - Minimal initialization
+    """
+    from kb.config import KBConfig
+    from kb.store import LanceDBStore, SQLiteMetadataStore
+    import uuid
+
+    config = KBConfig(
+        default_embed_model="small",
+        ignore=["*.pyc", "__pycache__/*", "*.bin"],
+        max_file_size=1024 * 1024,
+        chunk_size=1000,
+        chunk_overlap=200
+    )
+
+    # Use in-memory database for faster tests
+    metadata_store = SQLiteMetadataStore(":memory:")
+    metadata_store.initialize()
+
+    # Use in-memory LanceDB for speed
+    lancedb_store = LanceDBStore(f"memory://fast_test_{uuid.uuid4().hex}")
+
+    backend_config = {
+        "config": config,
+        "metadata_store": metadata_store,
+        "lancedb_store": lancedb_store,
+        "repo_path": sample_repo_path,
+        "embedding_service": mock_embedding_service
+    }
+
+    yield backend_config
+
     try:
         metadata_store.close()
     except Exception:

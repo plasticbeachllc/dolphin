@@ -119,25 +119,30 @@ show-mcp-bridge:
 # Testing
 # ==============================================================================
 
-# Test all components using pytest
+# Test all components using pytest (parallel execution enabled by default in pytest.ini)
 test: setup-python
-	@echo "🧪 Running all tests with pytest..."
+	@echo "🧪 Running all tests with pytest (parallel)..."
 	@uv run pytest -q
 
 # Run unit tests only
 test-unit: setup-python
-	@echo "🧪 Running unit tests..."
+	@echo "🧪 Running unit tests (parallel)..."
 	@uv run pytest tests/unit/ -q
 
 # Run integration tests only
 test-integration: setup-python
-	@echo "🧪 Running integration tests..."
+	@echo "🧪 Running integration tests (parallel)..."
 	@uv run pytest tests/integration/ -q
 
-# Run tests with coverage reporting
+# Run tests sequentially (for debugging)
+test-sequential: setup-python
+	@echo "🧪 Running all tests sequentially..."
+	@uv run pytest -q -n0
+
+# Run tests with coverage reporting (note: coverage disables parallelization for accuracy)
 test-coverage: setup-python
 	@echo "🧪 Running tests with coverage..."
-	@uv run pytest --cov=kb --cov-report=html --cov-report=term-missing
+	@uv run pytest -n0 --cov=kb --cov-report=html --cov-report=term-missing
 
 # Run specific test file
 test-file: setup-python
@@ -146,7 +151,7 @@ test-file: setup-python
 
 # Run tests with detailed output
 test-verbose: setup-python
-	@echo "🧪 Running tests with verbose output..."
+	@echo "🧪 Running tests with verbose output (parallel)..."
 	@uv run pytest -v
 
 # Run end-to-end tests across all platform domains
