@@ -257,3 +257,44 @@ class CrossRepoReference(SQLModel, table=True):
     # Lifecycle
     first_seen_at: str
     last_seen_at: str
+
+
+# =====================
+# File Sync Tables
+# =====================
+
+
+class PendingChange(SQLModel, table=True):
+    """Tracks file changes detected by file watcher for crash-proof synchronization."""
+    __tablename__ = "pending_changes"
+    __table_args__ = (
+        Index("idx_pending_changes_repo", "repo_id"),
+        Index("idx_pending_changes_processed", "processed"),
+        Index("idx_pending_changes_detected", "detected_at"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    repo_id: int = Field(foreign_key="repos.id")
+    file_path: str
+    change_type: str  # 'created', 'modified', 'deleted', 'renamed'
+    old_path: Optional[str] = Field(default=None)  # For rename operations
+    detected_at: str
+    processed: bool = Field(default=False)
+    processed_at: Optional[str] = Field(default=None)
+
+
+class FileSnapshot(SQLModel, table=True):
+    """Tracks file state at index time for drift detection and consistency validation."""
+    __tablename__ = "file_snapshots"
+    __table_args__ = (
+        UniqueConstraint("repo_id", "path", name="uq_file_snapshot_repo_path"),
+        Index("idx_file_snapshots_repo", "repo_id"),
+    )
+
+    file_id: int = Field(primary_key=True, foreign_key="files.id")
+    repo_id: int = Field(foreign_key="repos.id")
+    path: str
+    mtime_ns: int  # Modification time in nanoseconds
+    size_bytes: int
+    content_hash: str  # SHA-256 of file content
+    last_indexed_at: str

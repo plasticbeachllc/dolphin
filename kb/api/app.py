@@ -408,6 +408,7 @@ class IndexStatusResponse(BaseModel):
     total: int
     indexed: int = 0
     skipped: int = 0
+    current_file: str | None = None  # Currently processing file path
     error: str | None = None
     result: dict | None = None
 
@@ -436,6 +437,45 @@ class ReindexResponse(BaseModel):
     task_id: str
     mode: str
     message: str
+
+
+# =====================
+# File Sync Models
+# =====================
+
+
+class PendingChangeRequest(BaseModel):
+    """Request to record pending file changes."""
+    changes: list[dict[str, str]]  # list of {file_path, change_type, old_path?}
+
+
+class PendingChangeResponse(BaseModel):
+    """Response from recording pending changes."""
+    recorded: int
+    message: str
+
+
+class PendingChangesListResponse(BaseModel):
+    """Response with list of pending changes."""
+    changes: list[dict[str, object]]
+    total: int
+
+
+class MarkProcessedRequest(BaseModel):
+    """Request to mark changes as processed."""
+    change_ids: list[int]
+
+
+class MarkProcessedResponse(BaseModel):
+    """Response from marking changes as processed."""
+    processed: int
+    message: str
+
+
+class DriftDetectionResponse(BaseModel):
+    """Response from drift detection."""
+    drift_events: list[dict[str, object]]
+    total: int
 
 
 @app.post("/v1/repos")
@@ -566,16 +606,36 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]):
 
         # Start session
         session_id = _sql_store.begin_session(repo_id, commit_sha, branch, embed_model)
-    
+
         chunks_indexed = chunks_skipped = 0
         repo_config = load_repo_chunking_config(root)
-    
+
+        # Track initial snapshots for post-index validation (Phase 3)
+        import hashlib
+        initial_snapshots = {}
+
         for idx, filepath in enumerate(valid_files, 1):
-            # Update progress and yield to event loop
-            await task_queue.update_task(task_id, progress=idx)
+            # Update progress with current file and yield to event loop
+            await task_queue.update_task(
+                task_id,
+                progress=idx,
+                current_file=filepath
+            )
             await asyncio.sleep(0)  # Yield to event loop to handle status requests
 
             file_path = root / filepath
+
+            # Capture initial snapshot before processing (Phase 3)
+            try:
+                stat = file_path.stat()
+                file_bytes = file_path.read_bytes()
+                initial_snapshots[filepath] = {
+                    "mtime_ns": stat.st_mtime_ns,
+                    "size_bytes": stat.st_size,
+                    "content_hash": hashlib.sha256(file_bytes).hexdigest()
+                }
+            except Exception:
+                continue  # Skip file if we can't read it
 
             # Resolve or upsert file_id
             file_id = _sql_store.upsert_file(
@@ -719,7 +779,24 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]):
             # Update counters and task progress
             chunks_indexed += len(new_hashes)
             chunks_skipped += skipped_occurrences
-            
+
+            # Save file snapshot after successful indexing (Phase 3)
+            snapshot = initial_snapshots.get(filepath)
+            if snapshot:
+                _sql_store.upsert_file_snapshot(
+                    file_id=file_id,
+                    repo_id=repo_id,
+                    path=filepath,
+                    mtime_ns=snapshot["mtime_ns"],
+                    size_bytes=snapshot["size_bytes"],
+                    content_hash=snapshot["content_hash"]
+                )
+
+            # Automatically mark pending changes for this file as processed
+            # This file has been successfully indexed, so any pending changes
+            # that triggered the indexing are now resolved
+            _sql_store.mark_changes_for_file_processed(repo_id=repo_id, file_path=filepath)
+
             # Update task with current indexed/skipped counts
             await task_queue.update_task(
                 task_id,
@@ -738,15 +815,55 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]):
         )
         _sql_store.set_session_status(session_id, "succeeded")
 
+        # Post-index validation: detect mid-index changes (Phase 3)
+        changed_files = []
+        for filepath, initial_snapshot in initial_snapshots.items():
+            file_path = root / filepath
+            try:
+                if not file_path.exists():
+                    # File was deleted during indexing
+                    changed_files.append((filepath, "deleted"))
+                    continue
+
+                # Check if file changed during indexing
+                stat = file_path.stat()
+                current_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
+
+                if (stat.st_mtime_ns != initial_snapshot["mtime_ns"] or
+                    stat.st_size != initial_snapshot["size_bytes"] or
+                    current_hash != initial_snapshot["content_hash"]):
+                    changed_files.append((filepath, "modified"))
+            except Exception:
+                # Error reading file, skip validation
+                pass
+
+        # Queue changed files as pending changes
+        if changed_files:
+            for filepath, change_type in changed_files:
+                try:
+                    _sql_store.record_pending_change(
+                        repo_id=repo_id,
+                        file_path=filepath,
+                        change_type=change_type
+                    )
+                except Exception:
+                    pass  # Continue even if recording fails
+
         # Mark task complete
+        result_message = f"Indexed {len(valid_files)} files: {chunks_indexed} new chunks, {chunks_skipped} skipped"
+        if changed_files:
+            result_message += f" (Warning: {len(changed_files)} files changed during indexing and were re-queued)"
+
         await task_queue.update_task(
             task_id,
             status=TaskStatus.COMPLETED,
+            current_file=None,  # Clear current file on completion
             result={
                 "indexed": chunks_indexed,
                 "skipped": chunks_skipped,
                 "files_processed": len(valid_files),
-                "message": f"Indexed {len(valid_files)} files: {chunks_indexed} new chunks, {chunks_skipped} skipped"
+                "mid_index_changes": len(changed_files),
+                "message": result_message
             }
         )
 
@@ -805,6 +922,7 @@ async def get_index_status(task_id: str) -> IndexStatusResponse:
         total=task.total,
         indexed=task.indexed,  # Use real-time task field instead of result
         skipped=task.skipped,  # Use real-time task field instead of result
+        current_file=task.current_file,  # Current file being processed
         error=task.error,
         result=task.result
     )
@@ -1042,7 +1160,7 @@ async def reindex_repo(
 @app.delete("/v1/repos/{repo_name}/index")
 async def clear_repo_index(repo_name: str, confirmed: bool = False) -> dict:
     """Clear all indexed data for a repository.
-    
+
     This removes all chunks, vectors, and metadata for the repository.
     Requires confirmation due to destructive nature.
     """
@@ -1051,27 +1169,156 @@ async def clear_repo_index(repo_name: str, confirmed: bool = False) -> dict:
             status_code=400,
             detail="Index clearing requires confirmation parameter"
         )
-    
+
     if _sql_store is None or _lance_store is None or _pipeline is None:
         raise HTTPException(status_code=503, detail="Stores not initialized")
-    
+
     # Get repo
     repo = _sql_store.get_repo_by_name(repo_name)
     if not repo:
         raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
-    
+
     repo_id = int(repo["id"])
-    
+
     try:
         # Use pipeline's _drop_repo_index method
         _pipeline._drop_repo_index(repo_id, repo_name)
-        
+
         return {
             "success": True,
             "message": f"Index cleared for repository '{repo_name}'"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to clear index: {str(e)}")
+
+
+# =====================
+# File Sync Endpoints (Phase 2)
+# =====================
+
+
+@app.post("/v1/repos/{repo_name}/changes")
+async def record_pending_changes(repo_name: str, request: PendingChangeRequest) -> PendingChangeResponse:
+    """Record pending file changes detected by file watcher.
+
+    This endpoint is called by the VSCode extension when files are created, modified, or deleted.
+    Changes are persisted to survive crashes and restarts.
+    """
+    if _sql_store is None:
+        raise HTTPException(status_code=503, detail="SQL store not initialized")
+
+    # Get repo
+    repo = _sql_store.get_repo_by_name(repo_name)
+    if not repo:
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
+
+    repo_id = int(repo["id"])
+
+    try:
+        recorded = 0
+        for change in request.changes:
+            file_path = change.get("file_path", "")
+            change_type = change.get("change_type", "")
+            old_path = change.get("old_path")
+
+            if not file_path or not change_type:
+                continue
+
+            _sql_store.record_pending_change(
+                repo_id=repo_id,
+                file_path=file_path,
+                change_type=change_type,
+                old_path=old_path
+            )
+            recorded += 1
+
+        return PendingChangeResponse(
+            recorded=recorded,
+            message=f"Recorded {recorded} pending changes for '{repo_name}'"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to record changes: {str(e)}")
+
+
+@app.get("/v1/repos/{repo_name}/pending-changes")
+async def get_pending_changes(repo_name: str, limit: int = 1000) -> PendingChangesListResponse:
+    """Get unprocessed pending changes for a repository.
+
+    This endpoint returns all file changes that have been detected but not yet indexed.
+    Used by the auto-sync manager to process pending changes.
+    """
+    if _sql_store is None:
+        raise HTTPException(status_code=503, detail="SQL store not initialized")
+
+    # Get repo
+    repo = _sql_store.get_repo_by_name(repo_name)
+    if not repo:
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
+
+    repo_id = int(repo["id"])
+
+    try:
+        changes = _sql_store.get_pending_changes(repo_id=repo_id, limit=limit)
+
+        return PendingChangesListResponse(
+            changes=changes,
+            total=len(changes)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get pending changes: {str(e)}")
+
+
+@app.post("/v1/repos/{repo_name}/changes/mark-processed")
+async def mark_changes_processed(repo_name: str, request: MarkProcessedRequest) -> MarkProcessedResponse:
+    """Mark pending changes as processed after indexing.
+
+    This endpoint is called after the auto-sync manager successfully indexes pending changes.
+    """
+    if _sql_store is None:
+        raise HTTPException(status_code=503, detail="SQL store not initialized")
+
+    # Get repo
+    repo = _sql_store.get_repo_by_name(repo_name)
+    if not repo:
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
+
+    try:
+        processed = _sql_store.mark_changes_processed(request.change_ids)
+
+        return MarkProcessedResponse(
+            processed=processed,
+            message=f"Marked {processed} changes as processed"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to mark changes as processed: {str(e)}")
+
+
+@app.get("/v1/repos/{repo_name}/drift")
+async def detect_drift(repo_name: str) -> DriftDetectionResponse:
+    """Detect files that have changed since last indexing (drift detection).
+
+    This endpoint compares current file state with snapshots taken during indexing
+    to identify files that were modified while VSCode was closed or during crashes.
+    """
+    if _sql_store is None:
+        raise HTTPException(status_code=503, detail="SQL store not initialized")
+
+    # Get repo
+    repo = _sql_store.get_repo_by_name(repo_name)
+    if not repo:
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
+
+    repo_id = int(repo["id"])
+
+    try:
+        drift_events = _sql_store.detect_drift(repo_id)
+
+        return DriftDetectionResponse(
+            drift_events=drift_events,
+            total=len(drift_events)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to detect drift: {str(e)}")
 
 
 async def _process_full_reindex_task(

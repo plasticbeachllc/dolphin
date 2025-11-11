@@ -105,6 +105,43 @@
                     ],
                     "description": "Patterns to exclude from automatic indexing"
                 },
+                "dolphin.kb.autoSync.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable automatic synchronization of file changes"
+                },
+                "dolphin.kb.autoSync.mode": {
+                    "type": "string",
+                    "enum": [
+                        "off",
+                        "manual",
+                        "smart",
+                        "aggressive"
+                    ],
+                    "default": "smart",
+                    "enumDescriptions": [
+                        "Disabled - manual reindex only",
+                        "Notify user, require confirmation",
+                        "Auto-sync after idle period (recommended)",
+                        "Immediate incremental indexing"
+                    ],
+                    "description": "Auto-sync mode for file changes"
+                },
+                "dolphin.kb.autoSync.idleTimeMs": {
+                    "type": "number",
+                    "default": 30000,
+                    "description": "Idle time threshold in milliseconds before triggering auto-sync (smart mode)"
+                },
+                "dolphin.kb.autoSync.maxBatchSize": {
+                    "type": "number",
+                    "default": 100,
+                    "description": "Maximum number of files to process per auto-sync batch"
+                },
+                "dolphin.kb.autoSync.checkIntervalMs": {
+                    "type": "number",
+                    "default": 30000,
+                    "description": "Interval in milliseconds to check for pending changes"
+                },
                 "dolphin.model": {
                     "type": "string",
                     "default": "claude-sonnet-4-5-20250929",
