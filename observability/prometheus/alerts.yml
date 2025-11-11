@@ -1,0 +1,129 @@
+groups:
+  - name: dolphin_critical
+    interval: 30s
+    rules:
+      # High error rate
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(kb_http_requests_total{status_code=~"5.."}[5m]))
+          / sum(rate(kb_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          component: kb-api
+        annotations:
+          summary: "KB API error rate above 5%"
+          description: "{{ $value | humanizePercentage }} of requests are failing"
+          runbook_url: "https://github.com/plasticbeachllc/dolphin/docs/runbooks/high-error-rate.md"
+
+      # High latency
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(kb_http_request_duration_seconds_bucket[5m])) by (le, endpoint)
+          ) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+          component: kb-api
+        annotations:
+          summary: "KB API P95 latency above 2s"
+          description: "Endpoint {{ $labels.endpoint }} has P95 latency of {{ $value }}s"
+          runbook_url: "https://github.com/plasticbeachllc/dolphin/docs/runbooks/high-latency.md"
+
+      # Claude API cost spike
+      - alert: CostSpike
+        expr: |
+          increase(agent_claude_cost_usd[1h]) > 10.0
+        labels:
+          severity: warning
+          component: agent-core
+        annotations:
+          summary: "Claude API costs exceeding $10/hour"
+          description: "Current hourly cost: ${{ $value | humanize }}"
+          runbook_url: "https://github.com/plasticbeachllc/dolphin/docs/runbooks/cost-spike.md"
+
+      # Service down
+      - alert: ServiceDown
+        expr: up{job="kb-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "KB API is down"
+          description: "KB API health check failed"
+          runbook_url: "https://github.com/plasticbeachllc/dolphin/docs/runbooks/service-down.md"
+
+      # Index size growth anomaly
+      - alert: IndexGrowthAnomaly
+        expr: |
+          increase(kb_index_size_bytes[1h]) > 1e9
+        labels:
+          severity: warning
+          component: kb-api
+        annotations:
+          summary: "Index growing >1GB per hour"
+          description: "Possible runaway indexing in repo {{ $labels.repo_name }}"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          process_resident_memory_bytes / 1e9 > 2.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Process memory usage above 2GB"
+          description: "{{ $labels.job }} using {{ $value | humanize }}B of memory"
+
+      # MCP tool failures
+      - alert: HighToolFailureRate
+        expr: |
+          sum(rate(mcp_tool_invocations_total{status="error"}[5m]))
+          / sum(rate(mcp_tool_invocations_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: mcp-bridge
+        annotations:
+          summary: "MCP tool failure rate above 10%"
+          description: "{{ $value | humanizePercentage }} of tool calls are failing"
+
+  - name: dolphin_warnings
+    interval: 1m
+    rules:
+      # Approaching context limit
+      - alert: ContextWindowNearLimit
+        expr: |
+          agent_context_window_tokens > 180000
+        labels:
+          severity: warning
+          component: agent-core
+        annotations:
+          summary: "Context window approaching limit"
+          description: "Current context: {{ $value }} tokens (limit: 200000)"
+
+      # Embedding cost accumulation
+      - alert: EmbeddingCostAccumulation
+        expr: |
+          increase(kb_embedding_cost_usd[1d]) > 5.0
+        labels:
+          severity: info
+          component: kb-api
+        annotations:
+          summary: "Daily embedding cost exceeding $5"
+          description: "Embedding costs: ${{ $value | humanize }}"
+
+      # Search latency degradation
+      - alert: SearchLatencyDegradation
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(kb_vector_search_duration_seconds_bucket[5m])) by (le)
+          ) > 1.0
+        for: 10m
+        labels:
+          severity: warning
+          component: kb-api
+        annotations:
+          summary: "Vector search P95 latency above 1s"
+          description: "Search performance degraded to {{ $value }}s"
