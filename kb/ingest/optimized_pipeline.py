@@ -136,6 +136,9 @@ class OptimizedIngestionPipeline:
                 self.config.ignore_patterns if hasattr(self.config, 'ignore_patterns') else [],
             )
 
+        # Map absolute paths to candidates for quick lookup
+        candidate_by_abs: Dict[Path, Any] = {candidate.abs_path.resolve(): candidate for candidate in candidates}
+
         scan_time = time.time() - scan_start
         print(f"Scanned {len(candidates)} files in {scan_time:.1f}s")
 
@@ -191,16 +194,26 @@ class OptimizedIngestionPipeline:
         all_chunks: List[tuple[str, List[Chunk]]] = []
         for result in parse_results:
             if result.success and result.chunks:
-                file_path = str(result.file_path)
-                all_chunks.append((file_path, result.chunks))
+                abs_path = Path(result.file_path).resolve()
+                candidate = candidate_by_abs.get(abs_path)
+                if candidate:
+                    rel_path = candidate.rel_path
+                    language = candidate.language
+                else:
+                    try:
+                        rel_path = abs_path.relative_to(repo_root).as_posix()
+                    except ValueError:
+                        rel_path = abs_path.name
+                    language = 'unknown'
+
+                all_chunks.append((rel_path, result.chunks))
 
                 # Cache the chunks
                 if self.ast_cache:
                     with open(result.file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
                     content_hash = hash_text(content)
-                    lang = next((c.language for c in candidates if str(c.abs_path) == file_path), 'unknown')
-                    self.ast_cache.put(file_path, content_hash, result.chunks, lang)
+                    self.ast_cache.put(rel_path, content_hash, result.chunks, language)
 
         parse_time = time.time() - parse_start
         print(f"Parsed {len(parse_results)} files in {parse_time:.1f}s")
