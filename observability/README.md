@@ -40,11 +40,13 @@ Lightweight observability stack for debugging and monitoring Dolphin services du
 
 ```bash
 cd observability
-./start-stack.sh
+./manage.sh start
 
-# Or manually:
-docker-compose up -d
+# Or use the quick-start wrapper:
+./start-stack.sh
 ```
+
+**Tip**: See [COMMANDS.md](./COMMANDS.md) for full command reference.
 
 ### 2. Access Dashboards
 
@@ -239,6 +241,47 @@ In Grafana:
 2. Select "Loki" datasource
 3. Query: `{job="dolphin"} |~ "search"`
 4. Filter by level, component, or message
+
+## Management Commands
+
+Use the `manage.sh` script for common operations:
+
+```bash
+cd observability
+
+# Start all services
+./manage.sh start
+
+# Stop all services
+./manage.sh stop
+
+# Restart all services (useful after config changes)
+./manage.sh restart
+
+# Check service status and health
+./manage.sh status
+
+# View live logs from all services
+./manage.sh logs
+
+# Show service URLs
+./manage.sh urls
+
+# Clean up (WARNING: deletes all data)
+./manage.sh clean
+```
+
+**Individual services:**
+
+```bash
+# Restart just Grafana (to reload dashboards)
+docker compose restart grafana
+
+# View logs for specific service
+docker compose logs -f grafana
+```
+
+See [COMMANDS.md](./COMMANDS.md) for complete command reference.
 
 ## Useful Prometheus Queries
 
