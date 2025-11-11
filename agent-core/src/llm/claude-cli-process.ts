@@ -271,10 +271,10 @@ export async function executeClaudeCode(
       // Update usage
       usage.input_tokens += message.usage.input_tokens;
       usage.output_tokens += message.usage.output_tokens;
-      usage.cache_read_tokens = (usage.cache_read_tokens || 0) + (message.usage.cache_read_input_tokens || 0);
-      usage.cache_write_tokens = (usage.cache_write_tokens || 0) + (message.usage.cache_creation_input_tokens || 0);
+      usage.cache_read_tokens = (usage.cache_read_tokens || 0) + ((message.usage as any).cache_read_input_tokens || 0);
+      usage.cache_write_tokens = (usage.cache_write_tokens || 0) + ((message.usage as any).cache_creation_input_tokens || 0);
       
-      stop_reason = message.stop_reason;
+      stop_reason = message.stop_reason || undefined;
       continue;
     }
 

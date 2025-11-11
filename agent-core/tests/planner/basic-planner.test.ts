@@ -22,11 +22,13 @@ describe("BasicPlanner Integration Tests", () => {
     });
   });
 
-  it("should process a simple message and emit events", async () => {
-    const events: AgentEvent[] = [];
+  it(
+    "should process a simple message and emit events",
+    async () => {
+      const events: AgentEvent[] = [];
 
-    try {
-      await planner.processMessage(
+      try {
+        await planner.processMessage(
         {
           userMessage: "What is the Dolphin project?",
         },
@@ -37,34 +39,38 @@ describe("BasicPlanner Integration Tests", () => {
             process.stdout.write(event.delta);
           }
         }
-      );
+        );
 
-      console.log("\n\n✅ Test completed");
-      console.log(`📊 Total events emitted: ${events.length}`);
+        console.log("\n\n✅ Test completed");
+        console.log(`📊 Total events emitted: ${events.length}`);
 
-      // Verify we got content deltas
-      const contentDeltas = events.filter((e) => e.type === "content_delta");
-      expect(contentDeltas.length).toBeGreaterThan(0);
+        // Verify we got content deltas
+        const contentDeltas = events.filter((e) => e.type === "content_delta");
+        expect(contentDeltas.length).toBeGreaterThan(0);
 
-      // Verify we got task completed
-      const taskCompleted = events.find((e) => e.type === "task_completed");
-      expect(taskCompleted).toBeDefined();
-      expect((taskCompleted as any).success).toBe(true);
+        // Verify we got task completed
+        const taskCompleted = events.find((e) => e.type === "task_completed");
+        expect(taskCompleted).toBeDefined();
+        expect((taskCompleted as any).success).toBe(true);
 
-      console.log("✅ All assertions passed");
-    } catch (error: any) {
-      if (error.message.includes("No authentication configured")) {
-        console.log("⚠️  Test skipped: No authentication configured");
-        console.log("   This is expected if you haven't set up Claude CLI or API key");
-        return;
+        console.log("✅ All assertions passed");
+      } catch (error: any) {
+        if (error.message.includes("No authentication configured")) {
+          console.log("⚠️  Test skipped: No authentication configured");
+          console.log("   This is expected if you haven't set up Claude CLI or API key");
+          return;
+        }
+        throw error;
       }
-      throw error;
-    }
-  });
+    },
+    { timeout: 10000 } // Increased from default 5000ms to 10000ms for API calls
+  );
 
-  it("should handle KB context in prompt", async () => {
-    const events: AgentEvent[] = [];
-    const kbContext = `
+  it(
+    "should handle KB context in prompt",
+    async () => {
+      const events: AgentEvent[] = [];
+      const kbContext = `
 # Knowledge Bank Results
 
 ## kb/api/app.py (lines 45-60)
@@ -87,25 +93,27 @@ def search_endpoint(query: str):
             process.stdout.write(event.delta);
           }
         }
-      );
+        );
 
-      console.log("\n\n✅ KB context test completed");
+        console.log("\n\n✅ KB context test completed");
 
-      const contentDeltas = events.filter((e) => e.type === "content_delta");
-      expect(contentDeltas.length).toBeGreaterThan(0);
+        const contentDeltas = events.filter((e) => e.type === "content_delta");
+        expect(contentDeltas.length).toBeGreaterThan(0);
 
-      const taskCompleted = events.find((e) => e.type === "task_completed");
-      expect(taskCompleted).toBeDefined();
+        const taskCompleted = events.find((e) => e.type === "task_completed");
+        expect(taskCompleted).toBeDefined();
 
-      console.log("✅ KB context test passed");
-    } catch (error: any) {
-      if (error.message.includes("No authentication configured")) {
-        console.log("⚠️  Test skipped: No authentication configured");
-        return;
+        console.log("✅ KB context test passed");
+      } catch (error: any) {
+        if (error.message.includes("No authentication configured")) {
+          console.log("⚠️  Test skipped: No authentication configured");
+          return;
+        }
+        throw error;
       }
-      throw error;
-    }
-  });
+    },
+    { timeout: 10000 } // Increased from default 5000ms to 10000ms for API calls
+  );
 
   it("should handle errors gracefully", async () => {
     // Create a planner with invalid config to trigger error
