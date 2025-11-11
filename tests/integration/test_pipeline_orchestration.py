@@ -103,7 +103,9 @@ CREATE TABLE products (
         assert result['chunks_indexed'] > 0
 
         # Verify files were tracked
-        files = metadata_store.list_files("test-repo")
+        repo = metadata_store.get_repo_by_name("test-repo")
+        assert repo is not None
+        files = metadata_store.get_all_files_for_repo(repo['id'])
         file_extensions = {Path(f['path']).suffix for f in files}
 
         # Should have processed multiple file types
@@ -161,7 +163,9 @@ def test_function():
         result = pipeline.index("metadata-repo", dry_run=False, force=True)
 
         # Verify metadata was preserved
-        files = metadata_store.list_files("metadata-repo")
+        repo = metadata_store.get_repo_by_name("metadata-repo")
+        assert repo is not None
+        files = metadata_store.get_all_files_for_repo(repo['id'])
         assert len(files) > 0
 
         test_file_metadata = [f for f in files if 'test.py' in f['path']]
@@ -210,7 +214,9 @@ def test_function():
         # Should have indexed files from multiple directories
         assert result['files_indexed'] >= 4
 
-        files = metadata_store.list_files("mixed-repo")
+        repo = metadata_store.get_repo_by_name("mixed-repo")
+        assert repo is not None
+        files = metadata_store.get_all_files_for_repo(repo['id'])
         assert len(files) >= 4
 
         # Verify files from different directories
@@ -285,7 +291,9 @@ def test_function():
         result = pipeline.index("config-repo", dry_run=False, force=True)
 
         # Verify ignored files were not indexed
-        files = metadata_store.list_files("config-repo")
+        repo = metadata_store.get_repo_by_name("config-repo")
+        assert repo is not None
+        files = metadata_store.get_all_files_for_repo(repo['id'])
         paths = [f['path'] for f in files]
 
         assert not any('__pycache__' in p for p in paths)

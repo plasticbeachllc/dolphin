@@ -142,15 +142,29 @@ vscode-extension/
 
 ## Known Issues & Next Steps
 
-### Issues to Address
-1. **API Method Alignment**: Some E2E/integration tests use methods that need updating:
-   - `list_files()` → needs correct API method
-   - Verify all metadata store method signatures
+### API Alignment Fixes Completed ✅
+1. **Import Path Fixes**:
+   - Fixed `kb.search.search_backend` → `kb.api.search_backend`
+   - Standardized to use `kb.pipeline.IngestionPipeline` (compatibility wrapper)
 
-2. **Test Execution**: Some integration tests need tiktoken data for full execution
+2. **Metadata Store API Fixes**:
+   - Fixed `list_repos()` → `list_all_repos()`
+   - Fixed `list_files(repo_name)` → `get_repo_by_name(repo_name)` + `get_all_files_for_repo(repo['id'])`
+   - Updated in: test_indexing_workflow.py, test_pipeline_orchestration.py
+
+3. **E2E Fixture Improvements**:
+   - Added git repository initialization to e2e_test_repo fixture
+   - Configured git user and disabled commit signing for tests
+   - Added initial commit to test repositories
+
+### Known Limitations
+1. **Test Execution**: E2E/integration tests require tiktoken data to be downloaded
+   - Network restrictions may prevent download from OpenAI's blob storage
+   - Tests will fail with 403 errors if tiktoken data is unavailable
+   - Consider pre-downloading tiktoken data or running tests in environment with network access
 
 ### Recommended Next Steps
-1. Update E2E tests to use correct metadata store API
+1. Pre-cache tiktoken data for test environments
 2. Add fixtures for common test data
 3. Consider Phase 3 (optional):
    - Performance benchmarks
@@ -162,6 +176,7 @@ vscode-extension/
 1. **fbf00d7** - Phase 1: E2E tests, Agent Core tests
 2. **07356e3** - Phase 2: Coverage config, integration tests, VSCode tests
 3. **047abcd** - Import path fixes for correct module structure
+4. **[pending]** - Complete API alignment fixes and E2E fixture improvements
 
 ## Test Execution Commands
 
