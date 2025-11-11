@@ -99,8 +99,12 @@ export class ClaudeProvider {
       for await (const chunk of stream) {
         buffer += chunk.toString();
 
-        // Try to extract complete chunks
-        const chunks = this.extractChunks(buffer);
+        // Try to extract complete chunks and get the remainder
+        const { chunks, remainder } = this.extractChunks(buffer);
+
+        // Update buffer to only contain the incomplete line
+        buffer = remainder;
+
         for (const extractedChunk of chunks) {
           const parsed = this.parseChunk(extractedChunk);
           if (parsed) {
@@ -347,18 +351,24 @@ export class ClaudeProvider {
 
   /**
    * Extract complete chunks from buffer
+   * Returns both the complete chunks and the remaining partial line
    */
-  private extractChunks(buffer: string): string[] {
+  private extractChunks(buffer: string): { chunks: string[]; remainder: string } {
     const chunks: string[] = [];
     const lines = buffer.split('\n');
 
-    for (const line of lines) {
+    // All lines except the last are complete (even if empty)
+    for (let i = 0; i < lines.length - 1; i++) {
+      const line = lines[i];
       if (line.trim()) {
         chunks.push(line);
       }
     }
 
-    return chunks;
+    // The last element is the remainder (partial line)
+    const remainder = lines[lines.length - 1];
+
+    return { chunks, remainder };
   }
 
   /**
