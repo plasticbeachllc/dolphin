@@ -9,7 +9,7 @@
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import { slide } from 'svelte/transition';
 	import DiffViewer from './DiffViewer.svelte';
-	import type { FileDiff } from '../../../../../shared/types/events';
+	import type { FileDiff } from '@shared/types/events';
 
 	export let tool: string;
 	export let input: Record<string, any>;
