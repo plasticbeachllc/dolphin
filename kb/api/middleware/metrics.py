@@ -129,6 +129,7 @@ async def prometheus_middleware(request: Request, call_next: Callable):
 
     # Extract metadata
     method = request.method
+    # Default to the raw path; we'll replace with the route template when available
     path = request.url.path
 
     # Extract repo_name from query params or path
@@ -148,6 +149,13 @@ async def prometheus_middleware(request: Request, call_next: Callable):
         status_code = 500
         raise
     finally:
+        # Determine the best identifier for the route. Using the route template keeps
+        # cardinality low for Prometheus metrics even when requests include dynamic
+        # segments (e.g., repo names, file paths).
+        route = request.scope.get("route")
+        if route is not None:
+            path = getattr(route, "path", None) or getattr(route, "path_format", path)
+
         # Record metrics
         duration = time.perf_counter() - start_time
 
