@@ -240,7 +240,7 @@ export class AgentBridge {
     return null;
   }
 
-  private async sendRequest(method: string, params?: any, timeout = 30000): Promise<any> {
+  private async sendRequest(method: string, params?: any, timeout = 20000): Promise<any> {
     if (!this.connection) {
       throw new Error("JSON-RPC connection not established");
     }
@@ -305,7 +305,7 @@ export class AgentBridge {
   }
 
   async getAuthStatus(): Promise<any> {
-    return this.sendRequest("get_auth_status", undefined, 5000);
+    return this.sendRequest("get_auth_status", undefined, 3000);
   }
 
   async abortGeneration(): Promise<void> {
@@ -319,7 +319,7 @@ export class AgentBridge {
   // Phase 5: Conversation Management Methods
 
   async listConversations(): Promise<ConversationListItem[]> {
-    const result = await this.sendRequest("list_conversations", undefined, 5000);
+    const result = await this.sendRequest("list_conversations", undefined, 3000);
     return result.conversations || [];
   }
 
@@ -328,11 +328,11 @@ export class AgentBridge {
   }
 
   async deleteConversation(conversationId: string): Promise<void> {
-    await this.sendRequest("delete_conversation", { conversationId }, 5000);
+    await this.sendRequest("delete_conversation", { conversationId }, 3000);
   }
 
   async renameConversation(conversationId: string, newTitle: string): Promise<void> {
-    await this.sendRequest("rename_conversation", { conversationId, newTitle }, 5000);
+    await this.sendRequest("rename_conversation", { conversationId, newTitle }, 3000);
   }
 
   private async waitForReady(timeout = 60000): Promise<void> {
