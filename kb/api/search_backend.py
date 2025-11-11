@@ -89,7 +89,7 @@ class KnowledgeSearchBackend:
         except Exception as e:
             # Log error but continue with empty vector results
             import logging
-            logging.warning(f"Vector search failed: {e}")
+            logging.warning(f"Vector search failed: {e}", exc_info=True)
         
         # BM25 search with error handling
         bm25_hydrated = []
@@ -176,7 +176,7 @@ class KnowledgeSearchBackend:
             except Exception as e:
                 # Fall back gracefully if MMR fails for any reason
                 import logging
-                logging.warning(f"MMR diversification failed: {e}")
+                logging.warning(f"MMR diversification failed: {e}", exc_info=True)
 
         final_results = [h for h in hits if h.get("score", 0.0) >= (request.score_cutoff or 0.0)][:request.top_k]
         
@@ -185,27 +185,21 @@ class KnowledgeSearchBackend:
             chunk_ids_needing_content = [r['chunk_id'] for r in final_results if 'content' not in r]
             if chunk_ids_needing_content:
                 try:
-                    # Convert LanceDB row IDs to content_ids
-                    content_id_map = self._resolve_content_ids(chunk_ids_needing_content)
-                    
-                    # Fetch content using resolved content_ids
-                    content_ids = list(content_id_map.values())
-                    if content_ids:
-                        contents = self.sql_store.get_chunk_contents(content_ids)
-                        
-                        # Map content back to original chunk_ids
-                        for result in final_results:
-                            row_id = result['chunk_id']
-                            content_id = content_id_map.get(row_id)
-                            if content_id and content_id in contents:
-                                result['content'] = contents[content_id]
-                                # Also add file_path for compatibility
-                                if 'path' in result and 'file_path' not in result:
-                                    result['file_path'] = result['path']
+                    # Use helper to hydrate content
+                    hydrated_content = self._hydrate_chunk_content(chunk_ids_needing_content, self.sql_store)
+
+                    # Apply hydrated content to results
+                    for result in final_results:
+                        chunk_id = result['chunk_id']
+                        if chunk_id in hydrated_content:
+                            result['content'] = hydrated_content[chunk_id]
+                            # Also add file_path for compatibility
+                            if 'path' in result and 'file_path' not in result:
+                                result['file_path'] = result['path']
                 except Exception as e:
                     # Log error but don't fail the search
                     import logging
-                    logging.warning(f"Failed to hydrate content for results: {e}")
+                    logging.warning(f"Failed to hydrate content for results: {e}", exc_info=True)
         
         # Enrich with graph context if requested and available
         include_graph = getattr(request, 'include_graph_context', False)
@@ -434,26 +428,57 @@ class KnowledgeSearchBackend:
                 continue
                 
         return row_id_to_content_id
-    
+
+    def _hydrate_chunk_content(
+        self,
+        chunk_ids: list[str],
+        sql_store: SQLiteMetadataStore
+    ) -> dict[str, str]:
+        """Hydrate content for chunk IDs.
+
+        Args:
+            chunk_ids: List of chunk row IDs from LanceDB
+            sql_store: Metadata store for content lookup
+
+        Returns:
+            Dictionary mapping chunk_id -> content
+        """
+        if not chunk_ids:
+            return {}
+
+        # Convert LanceDB row IDs to content_ids
+        content_id_map = self._resolve_content_ids(chunk_ids)
+        content_ids = list(content_id_map.values())
+
+        if not content_ids:
+            return {}
+
+        # Fetch content from metadata store
+        contents = sql_store.get_chunk_contents(content_ids)
+
+        # Map content back to original chunk_ids
+        result = {}
+        for chunk_id in chunk_ids:
+            content_id = content_id_map.get(chunk_id)
+            if content_id and content_id in contents:
+                result[chunk_id] = contents[content_id]
+
+        return result
+
     def _hydrate_docs_for_reranking(self, hits: List[Dict], sql_store: SQLiteMetadataStore) -> List[Dict]:
         ids_to_fetch = [h['chunk_id'] for h in hits if 'content' not in h]
         if not ids_to_fetch:
             return hits
-        
-        # Convert LanceDB row IDs to content_ids
-        content_id_map = self._resolve_content_ids(ids_to_fetch)
-        content_ids = list(content_id_map.values())
-        
-        if content_ids:
-            contents = sql_store.get_chunk_contents(content_ids)
-            
-            # Map content back to original chunk_ids
-            for hit in hits:
-                row_id = hit['chunk_id']
-                content_id = content_id_map.get(row_id)
-                if content_id and content_id in contents:
-                    hit['content'] = contents[content_id]
-        
+
+        # Use helper to hydrate content
+        hydrated_content = self._hydrate_chunk_content(ids_to_fetch, sql_store)
+
+        # Apply hydrated content to hits
+        for hit in hits:
+            chunk_id = hit['chunk_id']
+            if chunk_id in hydrated_content:
+                hit['content'] = hydrated_content[chunk_id]
+
         return hits
     
     def set_request_ann_config(self, config: Dict[str, Any]) -> None:

@@ -244,6 +244,8 @@ async def list_repos() -> dict[str, list[dict[str, object]]]:
         return {"repos": repos}
 
     except Exception as e:
+        import logging
+        logging.error("Failed to list repositories", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
@@ -301,6 +303,8 @@ async def fetch_chunk(chunk_id: str) -> dict[str, object]:
     except HTTPException:
         raise
     except Exception as e:
+        import logging
+        logging.error(f"Error fetching chunk {chunk_id}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error fetching chunk: {str(e)}")
 
 
@@ -374,6 +378,8 @@ async def fetch_file_slice(
     except HTTPException:
         raise
     except Exception as e:
+        import logging
+        logging.error(f"Error reading file: {file_path}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
 
 
@@ -1006,8 +1012,10 @@ async def get_repo_stats(repo_name: str) -> RepoStatsResponse:
             last_indexed=last_indexed,
             needs_reindex=needs_reindex
         )
-        
+
     except Exception as e:
+        import logging
+        logging.error(f"Failed to get stats for repo {repo_name}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get repo stats: {str(e)}")
 
 
