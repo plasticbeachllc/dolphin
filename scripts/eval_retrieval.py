@@ -158,6 +158,8 @@ def evaluate_scenario(
         return {
             "id": scenario.id,
             "query": scenario.query,
+            "category": scenario.category,
+            "difficulty": scenario.difficulty,
             "status": "error",
             "error": str(e),
             "metrics": {}
@@ -346,38 +348,63 @@ def main():
         result = evaluate_scenario(scenario, backend, args.top_k)
         results.append(result)
 
-        # Update metrics
-        metrics = result["metrics"]
+        status = result.get("status", "error")
+        metrics = result.get("metrics") or {}
+
+        if status not in {"pass", "fail"}:
+            if args.verbose:
+                print("Status: ✗ ERROR")
+                if error_message := result.get("error"):
+                    print(f"Error: {error_message}")
+            continue
+
+        reciprocal_rank = metrics.get("mrr", 0.0)
+        average_precision = metrics.get("map", 0.0)
+        precision_at_k = {
+            5: metrics.get("p@5", 0.0),
+            10: metrics.get("p@10", 0.0),
+        }
+        recall_at_k = {
+            10: metrics.get("r@10", 0.0),
+        }
+
         overall_metrics.add_scenario_result(
-            reciprocal_rank=metrics["mrr"],
-            average_precision=metrics["map"],
-            precision_at_k={5: metrics["p@5"], 10: metrics["p@10"]},
-            recall_at_k={10: metrics["r@10"]}
+            reciprocal_rank=reciprocal_rank,
+            average_precision=average_precision,
+            precision_at_k=precision_at_k,
+            recall_at_k=recall_at_k,
         )
 
         metrics_by_category[scenario.category].add_scenario_result(
-            reciprocal_rank=metrics["mrr"],
-            average_precision=metrics["map"],
-            precision_at_k={5: metrics["p@5"], 10: metrics["p@10"]},
-            recall_at_k={10: metrics["r@10"]}
+            reciprocal_rank=reciprocal_rank,
+            average_precision=average_precision,
+            precision_at_k=precision_at_k,
+            recall_at_k=recall_at_k,
         )
 
         metrics_by_difficulty[scenario.difficulty].add_scenario_result(
-            reciprocal_rank=metrics["mrr"],
-            average_precision=metrics["map"],
-            precision_at_k={5: metrics["p@5"], 10: metrics["p@10"]},
-            recall_at_k={10: metrics["r@10"]}
+            reciprocal_rank=reciprocal_rank,
+            average_precision=average_precision,
+            precision_at_k=precision_at_k,
+            recall_at_k=recall_at_k,
         )
 
         if args.verbose:
-            status_symbol = "✓" if result["status"] == "pass" else "✗"
-            print(f"Status: {status_symbol} {result['status'].upper()}")
-            print(f"MRR: {metrics['mrr']:.3f}, P@5: {metrics['p@5']:.3f}, R@10: {metrics['r@10']:.3f}")
+            status_symbol = "✓" if status == "pass" else "✗"
+            print(f"Status: {status_symbol} {status.upper()}")
+            print(
+                "MRR: {mrr:.3f}, P@5: {p5:.3f}, R@10: {r10:.3f}".format(
+                    mrr=reciprocal_rank,
+                    p5=precision_at_k[5],
+                    r10=recall_at_k[10],
+                )
+            )
 
     # Compute summary
     overall_summary = overall_metrics.compute_summary()
     passed = sum(1 for r in results if r["status"] == "pass")
     failed = sum(1 for r in results if r["status"] == "fail")
+    errors = sum(1 for r in results if r["status"] == "error")
 
     # Print summary
     print("\n" + "=" * 80)
@@ -386,6 +413,8 @@ def main():
     print(f"\nTotal scenarios: {len(scenarios)}")
     print(f"Passed: {passed} ({passed/len(scenarios)*100:.1f}%)")
     print(f"Failed: {failed} ({failed/len(scenarios)*100:.1f}%)")
+    if errors:
+        print(f"Errors: {errors} ({errors/len(scenarios)*100:.1f}%)")
 
     print("\nOverall metrics:")
     for metric, value in overall_summary.items():
@@ -411,7 +440,13 @@ def main():
     print("\nBy category:")
     for category, metrics in metrics_by_category.items():
         summary = metrics.compute_summary()
-        print(f"  {category}: MRR {summary['mrr']:.3f}, P@5 {summary.get('p@5', 0):.3f}")
+        print(
+            "  {category}: MRR {mrr:.3f}, P@5 {p5:.3f}".format(
+                category=category,
+                mrr=summary.get("mrr", 0.0),
+                p5=summary.get("p@5", 0.0),
+            )
+        )
 
     # By difficulty
     print("\nBy difficulty:")
@@ -420,14 +455,22 @@ def main():
         category_results = [r for r in results if r["difficulty"] == difficulty]
         category_passed = sum(1 for r in category_results if r["status"] == "pass")
         pass_rate = category_passed / len(category_results) if category_results else 0
-        print(f"  {difficulty}: MRR {summary['mrr']:.3f}, pass rate {pass_rate:.1%}")
+        print(
+            "  {difficulty}: MRR {mrr:.3f}, pass rate {pass_rate:.1%}".format(
+                difficulty=difficulty,
+                mrr=summary.get("mrr", 0.0),
+                pass_rate=pass_rate,
+            )
+        )
 
     # Failed scenarios
     failed_scenarios = [r for r in results if r["status"] == "fail"]
     if failed_scenarios:
         print(f"\nFailed scenarios ({len(failed_scenarios)}):")
         for r in failed_scenarios:
-            print(f"  - {r['id']} (MRR: {r['metrics']['mrr']:.3f})")
+            print(
+                f"  - {r['id']} (MRR: {r.get('metrics', {}).get('mrr', 0.0):.3f})"
+            )
 
     # Overall status
     print("\n" + "=" * 80)
@@ -450,6 +493,7 @@ def main():
             "total_scenarios": len(scenarios),
             "passed": passed,
             "failed": failed,
+            "errors": errors,
             "pass_rate": passed / len(scenarios) if scenarios else 0,
             "metrics": overall_summary
         },
