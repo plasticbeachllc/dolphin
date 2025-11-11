@@ -19,6 +19,40 @@ Dolphin is a semantic code search and knowledge management system for AI interfa
 
 ## Core Principles for Agents
 
+### 0. Python Command Execution
+
+**CRITICAL: Always use `uv run` for all Python commands.**
+
+This project uses `uv` for Python dependency management. All Python commands, scripts, and tools MUST be executed using `uv run` to ensure correct dependency resolution and virtual environment activation.
+
+**Examples:**
+```bash
+# ✅ CORRECT - Use uv run
+uv run pytest tests/unit/ -v
+uv run python -m black kb/ tests/
+uv run python -m mypy kb/
+uv run dolphin init
+uv run python script.py
+
+# ❌ INCORRECT - Do not run Python commands directly
+pytest tests/unit/ -v
+python -m black kb/ tests/
+python -m mypy kb/
+dolphin init
+python script.py
+```
+
+**Why this matters:**
+- Ensures correct Python version and dependencies
+- Avoids "module not found" errors
+- Maintains consistency across development environments
+- Required for all pytest, Python module execution, and CLI commands
+
+**When NOT to use `uv run`:**
+- TypeScript/JavaScript commands (bun, npm, node)
+- System utilities (curl, git, ls, etc.)
+- Shell commands that don't invoke Python
+
 ### 1. Documentation Management
 
 **DO NOT create new documentation files unless explicitly requested.**
@@ -59,8 +93,8 @@ Dolphin maintains 243+ passing tests across Python and TypeScript:
 **Python Tests** (`tests/`):
 - **Unit tests**: `tests/unit/` - Test individual components
 - **Integration tests**: `tests/integration/` - Test API endpoints and workflows
-- **Run**: `pytest tests/unit/ -v` or `pytest tests/integration/ -v`
-- **Coverage**: `pytest --cov=kb/src`
+- **Run**: `uv run pytest tests/unit/ -v` or `uv run pytest tests/integration/ -v`
+- **Coverage**: `uv run pytest --cov=kb/src`
 
 **TypeScript Tests** (`mcp-bridge/`, `agent-core/`):
 - **MCP Bridge**: `cd mcp-bridge && bun test`
@@ -77,10 +111,10 @@ Dolphin maintains 243+ passing tests across Python and TypeScript:
 **Test checklist:**
 ```bash
 # Before committing, run:
-pytest tests/unit/ -v              # Python unit tests
-pytest tests/integration/ -v       # Python integration tests
-cd mcp-bridge && bun test         # MCP tests
-cd agent-core && bun test         # Agent tests
+uv run pytest tests/unit/ -v              # Python unit tests
+uv run pytest tests/integration/ -v       # Python integration tests
+cd mcp-bridge && bun test                 # MCP tests
+cd agent-core && bun test                 # Agent tests
 ```
 
 ### 4. Code Quality Standards
@@ -127,13 +161,13 @@ cd agent-core && bun test         # Agent tests
 **Before pushing:**
 ```bash
 # Run tests
-pytest tests/ -v
+uv run pytest tests/ -v
 cd mcp-bridge && bun test
 cd agent-core && bun test
 
 # Check code quality
-python -m black kb/ tests/          # Format Python
-python -m mypy kb/                  # Type check
+uv run python -m black kb/ tests/          # Format Python
+uv run python -m mypy kb/                  # Type check
 ```
 
 ### 6. Architecture Awareness
@@ -243,16 +277,16 @@ python -m mypy kb/                  # Type check
 **API not responding:**
 ```bash
 curl http://127.0.0.1:7777/health
-# If down: dolphin serve
+# If down: uv run dolphin serve
 ```
 
 **Tests failing:**
 ```bash
 # Run with verbose output
-pytest tests/ -v -s
+uv run pytest tests/ -v -s
 
 # Run specific test
-pytest tests/unit/chunkers/test_py_chunker.py -v
+uv run pytest tests/unit/chunkers/test_py_chunker.py -v
 
 # Check logs
 tail -f mcp-bridge/logs/mcp.log
@@ -271,10 +305,10 @@ tail -f ~/Library/Logs/Claude/mcp*.log
 **Index not working:**
 ```bash
 # Check status
-dolphin kb status
+uv run dolphin kb status
 
 # Full reindex
-dolphin kb index my-repo --full --force
+uv run dolphin kb index my-repo --full --force
 
 # Check for errors
 tail -f ~/.dolphin/knowledge_store/logs/
@@ -317,9 +351,9 @@ just bun-install     # Install Bun deps for mcp-bridge
 
 ```bash
 # Using dolphin CLI
-dolphin init
-dolphin kb add-repo test-repo /path/to/repo
-dolphin kb index test-repo
+uv run dolphin init
+uv run dolphin kb add-repo test-repo /path/to/repo
+uv run dolphin kb index test-repo
 
 # Using Justfile
 just init
@@ -332,7 +366,7 @@ just reset test-repo /path/to/repo    # init + add + reindex in one command
 
 ```bash
 # Start services manually
-dolphin serve                    # REST API on port 7777
+uv run dolphin serve                    # REST API on port 7777
 
 # Or use Justfile
 just api                         # Start REST API server
@@ -343,9 +377,9 @@ just mcp                         # Start MCP bridge
 
 ```bash
 # Python tests
-pytest tests/unit/ -v            # Unit tests
-pytest tests/integration/ -v     # Integration tests
-pytest --cov=kb/src             # With coverage
+uv run pytest tests/unit/ -v            # Unit tests
+uv run pytest tests/integration/ -v     # Integration tests
+uv run pytest --cov=kb/src              # With coverage
 
 # TypeScript tests
 cd mcp-bridge && bun test        # MCP tests
@@ -357,8 +391,8 @@ cd vscode-extension && npm test  # Extension tests
 
 ```bash
 # CLI search
-dolphin search "query"
-KB_REPOS=my-repo dolphin search "query"  # Filter by repo
+uv run dolphin search "query"
+KB_REPOS=my-repo uv run dolphin search "query"  # Filter by repo
 
 # REST API
 curl -X POST http://127.0.0.1:7777/search \
@@ -413,7 +447,7 @@ curl http://127.0.0.1:7777/health
 
 # 2. Check agent logs for KB startup errors
 # 3. Manually start KB
-dolphin serve
+uv run dolphin serve
 
 # 4. Verify OPENAI_API_KEY is set
 echo $OPENAI_API_KEY
@@ -422,10 +456,10 @@ echo $OPENAI_API_KEY
 **No Knowledge Bank results in chat:**
 ```bash
 # 1. Ensure repositories are indexed
-dolphin kb status
+uv run dolphin kb status
 
 # 2. Re-index repository
-dolphin kb index <repo-name> --full --force
+uv run dolphin kb index <repo-name> --full --force
 
 # 3. Check KB server logs for search errors
 tail -f mcp-bridge/logs/mcp.log
@@ -439,7 +473,7 @@ tail -f mcp-bridge/logs/mcp.log
 curl http://127.0.0.1:7777/health
 
 # If not, start it
-dolphin serve
+uv run dolphin serve
 # Or: just api
 
 # Check for port conflicts
@@ -449,10 +483,10 @@ lsof -i :7777
 **No search results:**
 ```bash
 # Check if repositories are indexed
-dolphin kb status
+uv run dolphin kb status
 
 # Re-index repository
-dolphin kb index my-repo --full --force
+uv run dolphin kb index my-repo --full --force
 
 # Try with lower score cutoff
 curl -X POST http://127.0.0.1:7777/search \
@@ -496,16 +530,16 @@ cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
 **Python tests failing:**
 ```bash
 # Run with verbose output
-pytest tests/ -v -s
+uv run pytest tests/ -v -s
 
 # Run specific test file
-pytest tests/unit/chunkers/test_py_chunker.py -v
+uv run pytest tests/unit/chunkers/test_py_chunker.py -v
 
 # Check for missing dependencies
 uv sync --group test
 
 # Clear test cache
-pytest --cache-clear
+uv run pytest --cache-clear
 ```
 
 **TypeScript tests failing:**
@@ -529,13 +563,13 @@ bun update
 **Index not working / taking too long:**
 ```bash
 # Check status
-dolphin kb status <repo-name>
+uv run dolphin kb status <repo-name>
 
 # Full reindex with force
-dolphin kb index <repo-name> --full --force
+uv run dolphin kb index <repo-name> --full --force
 
 # Use smaller embedding model
-dolphin kb add-repo my-repo /path --default-embed-model small
+uv run dolphin kb add-repo my-repo /path --default-embed-model small
 
 # Check for errors in session logs
 sqlite3 ~/.dolphin/knowledge_store/knowledge.db \
@@ -545,7 +579,7 @@ sqlite3 ~/.dolphin/knowledge_store/knowledge.db \
 **High embedding costs:**
 ```bash
 # Check session costs
-dolphin kb status <repo-name>
+uv run dolphin kb status <repo-name>
 
 # Use stub provider for testing (no OpenAI calls)
 # Edit ~/.dolphin/config.toml:
@@ -564,7 +598,7 @@ dolphin kb status <repo-name>
 ```bash
 # If you get ImportError when running dolphin command
 # Solution: Use the fixed version
-pip install --upgrade pb-dolphin
+uv pip install --upgrade pb-dolphin
 
 # Or in development:
 cd /path/to/dolphin
@@ -592,8 +626,8 @@ curl https://api.openai.com/v1/models \
 
 ```bash
 # Set per-repository
-dolphin kb add-repo critical-app /path --default-embed-model large
-dolphin kb add-repo test-repo /path --default-embed-model small
+uv run dolphin kb add-repo critical-app /path --default-embed-model large
+uv run dolphin kb add-repo test-repo /path --default-embed-model small
 ```
 
 ### Chunk Size Configuration
@@ -616,7 +650,7 @@ overlap_tokens = 64     # Balance between context and duplication
 **Filter searches to reduce latency:**
 ```bash
 # Filter by repository
-KB_REPOS=api-server dolphin search "auth"
+KB_REPOS=api-server uv run dolphin search "auth"
 
 # Filter by path prefix in API call
 curl -X POST http://127.0.0.1:7777/search \
@@ -628,10 +662,10 @@ curl -X POST http://127.0.0.1:7777/search \
 **Always use incremental indexing for faster updates:**
 ```bash
 # Incremental (only changed files) - FAST
-dolphin kb index my-repo
+uv run dolphin kb index my-repo
 
 # Full reindex - SLOW, only when needed
-dolphin kb index my-repo --full --force
+uv run dolphin kb index my-repo --full --force
 ```
 
 ### Cost Monitoring
@@ -639,7 +673,7 @@ dolphin kb index my-repo --full --force
 **Track embedding costs:**
 ```bash
 # Check per-repository costs
-dolphin kb status my-repo
+uv run dolphin kb status my-repo
 
 # Output shows:
 # - Total chunks indexed
