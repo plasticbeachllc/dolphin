@@ -35,7 +35,9 @@ class TestIndexingWorkflow:
         assert session['status'] in ['completed', 'running']
 
         # Step 5: Verify files were tracked
-        files = metadata_store.list_files(repo_name)
+        repo = metadata_store.get_repo_by_name(repo_name)
+        assert repo is not None
+        files = metadata_store.get_all_files_for_repo(repo['id'])
         assert len(files) > 0
 
     def test_incremental_indexing_workflow(self, e2e_kb_setup):
@@ -74,7 +76,9 @@ def refresh_token(old_token):
         assert (result2['chunks_indexed'] + result2['chunks_skipped']) >= initial_chunks
 
         # Step 5: Verify new file is tracked
-        files = metadata_store.list_files(repo_name)
+        repo = metadata_store.get_repo_by_name(repo_name)
+        assert repo is not None
+        files = metadata_store.get_all_files_for_repo(repo['id'])
         file_paths = [f['path'] for f in files]
         assert any('auth.py' in path for path in file_paths)
 
@@ -112,7 +116,9 @@ def refresh_token(old_token):
         result = pipeline.index(repo_name, dry_run=False, force=True)
 
         # Verify ignored files were not indexed
-        files = metadata_store.list_files(repo_name)
+        repo = metadata_store.get_repo_by_name(repo_name)
+        assert repo is not None
+        files = metadata_store.get_all_files_for_repo(repo['id'])
         file_paths = [f['path'] for f in files]
         assert not any('__pycache__' in path for path in file_paths)
         assert not any('.pyc' in path for path in file_paths)
@@ -203,7 +209,9 @@ SELECT * FROM users WHERE active = true;
         result = pipeline.index('test-repo', dry_run=False, force=True)
 
         # Verify different file types were indexed
-        files = metadata_store.list_files('test-repo')
+        repo = metadata_store.get_repo_by_name('test-repo')
+        assert repo is not None
+        files = metadata_store.get_all_files_for_repo(repo['id'])
         extensions = [Path(f['path']).suffix for f in files]
 
         assert result['files_indexed'] > 0

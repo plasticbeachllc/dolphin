@@ -13,8 +13,16 @@ from kb.pipeline import IngestionPipeline
 @pytest.fixture
 def e2e_test_repo() -> Generator[Path, None, None]:
     """Create a test repository with sample code."""
+    import subprocess
+
     with tempfile.TemporaryDirectory() as tmpdir:
         repo_dir = Path(tmpdir)
+
+        # Initialize as git repository
+        subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=repo_dir, check=True, capture_output=True)
 
         # Create sample Python files
         (repo_dir / "main.py").write_text("""
@@ -64,6 +72,10 @@ This is a sample authentication project.
 - Password hashing
 - Token generation
 """)
+
+        # Commit all files
+        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "--no-verify", "-m", "Initial commit"], cwd=repo_dir, check=True, capture_output=True)
 
         yield repo_dir
 
