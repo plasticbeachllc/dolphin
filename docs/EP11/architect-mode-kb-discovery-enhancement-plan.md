@@ -1,9 +1,10 @@
 # EP-11: Architect Mode KB Discovery Enhancement Plan
 
-**Version**: 1.0  
-**Date**: November 11, 2025  
-**Status**: Planning Phase  
-**Timeline**: 3-4 weeks  
+**Version**: 1.1
+**Date**: November 11, 2025
+**Status**: Phase 1 Complete, Phase 2-4 Planned
+**Timeline**: 3-4 weeks (Week 1 completed)
+**Branch**: `develop-architect`  
 
 ---
 
@@ -1132,7 +1133,104 @@ const graphDiscovery = await discovery.executeWithGraph({
 
 ### Reference Implementation
 
-See implementation in branch: `feature/ep11-architect-kb-discovery`
+See implementation in branch: `develop-architect`
+
+---
+
+## Implementation Notes (November 11, 2025)
+
+### Phase 1: Foundation - COMPLETED ✅
+
+**Timeline**: 1 day (November 11, 2025)
+
+**Implemented Components**:
+
+1. **Orchestration Module** (`agent-core/src/orchestration/`)
+   - `types.ts` - Complete type definitions for all 3 phases
+   - `discovery-phase.ts` - Full DiscoveryOrchestrator implementation
+
+2. **KB Components** (`agent-core/src/kb/`)
+   - `kb-query-planner.ts` - Claude-powered strategic query generation
+   - `kb-context-enricher.ts` - Graph context aggregation and deduplication
+   - `kb-result-validator.ts` - Confidence scoring and gap detection
+
+3. **Integration**
+   - Modified `shared/types/events.ts` - Added `mode?: "code" | "architect"` field
+   - Modified `agent-core/src/main.ts` - Added architect mode detection and routing
+   - Added `architect_mode` capability to agent capabilities list
+   - Complete discovery result formatting with markdown output
+
+4. **Test Coverage** (`agent-core/tests/orchestration/`)
+   - `kb-query-planner.test.ts` - 4 tests covering query generation
+   - `kb-result-validator.test.ts` - 8 tests covering validation logic
+   - `kb-context-enricher.test.ts` - 7 tests covering graph enrichment
+   - `discovery-orchestrator.test.ts` - 6 integration tests for full workflow
+
+**Key Achievements**:
+
+✅ **Claude-Powered Query Generation**: Successfully implemented LLM-based query planner with fallback heuristics
+✅ **Graph Intelligence Integration**: Leverages existing EP-3 graph context from KB API
+✅ **Parallel Query Execution**: All KB queries run concurrently with error handling
+✅ **Comprehensive Validation**: Multi-factor confidence scoring (avg score, coverage, graph context, min score)
+✅ **Gap Detection**: Identifies missing information and low-quality results
+✅ **Test Coverage**: 25+ tests with mocked dependencies
+
+**Technical Decisions**:
+
+1. **Query Generation Strategy**: Used Claude (Sonnet) to generate strategic queries rather than hardcoded heuristics
+   - Benefit: More intelligent, context-aware queries
+   - Fallback: Heuristic-based queries if Claude fails
+
+2. **Graph Context**: Leveraged existing `include_graph_context: true` parameter in KB API
+   - No additional EP-3 work required
+   - Graph data already includes nodes, relationships, qualified names
+
+3. **MCP Result Parsing**: Parse MCP tool results from `_meta.hits` array
+   - Handles both chunk metadata and snippet content
+   - Graceful fallback for missing data
+
+4. **Confidence Calculation**: Weighted multi-factor scoring
+   - 40% average relevance score
+   - 30% coverage (result count + file diversity)
+   - 20% graph context availability
+   - 10% minimum score threshold
+
+**Known Limitations**:
+
+- Phase 2 (Synthesis) not implemented - will generate questions/assumptions in next phase
+- Phase 3 (Planning) not implemented - will generate structured plans in next phase
+- No streaming progress indicators yet - discovery runs as single operation
+- UI integration pending - requires webview changes to select architect mode
+
+**Next Steps**:
+
+1. **Phase 2 (Week 2)**: Implement SynthesisOrchestrator
+   - Context analysis with Claude
+   - Assumption extraction from discovery results
+   - Clarifying question generation
+   - Risk identification
+
+2. **Phase 3 (Week 3)**: Implement PlanningOrchestrator
+   - Plan generation with KB grounding
+   - Todo list creation with file references
+   - Code reference attribution
+
+3. **Phase 4 (Week 4)**: Polish & UI
+   - VSCode webview mode selector
+   - Streaming progress indicators
+   - Performance optimization
+   - End-to-end testing
+
+**Files Changed**:
+- `shared/types/events.ts` - Added mode field
+- `agent-core/src/main.ts` - Added architect mode handling
+- `agent-core/src/orchestration/` - New directory (2 files)
+- `agent-core/src/kb/` - 3 new files
+- `agent-core/tests/orchestration/` - New directory (4 test files)
+- `docs/ARCHITECTURE.md` - Added architect mode documentation
+- `docs/EP11/architect-mode-kb-discovery-enhancement-plan.md` - Updated status
+
+**Commit**: Ready for commit to `develop-architect` branch
 
 ---
 

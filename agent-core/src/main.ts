@@ -14,6 +14,8 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { randomBytes } from "crypto";
 import type { Message } from "./llm/claude-tool-executor";
+import { DiscoveryOrchestrator } from "./orchestration/discovery-phase";
+import type { DiscoveryConfig } from "./orchestration/types";
 
 const execAsync = promisify(exec);
 
@@ -37,7 +39,7 @@ interface Message {
  */
 class AgentCore {
   private version = "0.1.0";
-  private capabilities = ["kb_search", "file_operations", "planning", "claude_auth", "agentic_tools", "kb_auto_sync", "conversation_persistence"];
+  private capabilities = ["kb_search", "file_operations", "planning", "claude_auth", "agentic_tools", "kb_auto_sync", "conversation_persistence", "architect_mode"];
   private mcpClient: MCPClient;
   private kbManager: KBManager;
   private indexQueue: IndexQueue | null = null;
@@ -58,6 +60,9 @@ class AgentCore {
 
   // Phase 7: Stdout write queue to prevent message interleaving
   private writeQueue: Promise<void> = Promise.resolve();
+
+  // EP-11: Architect mode discovery orchestrator
+  private discoveryOrchestrator: DiscoveryOrchestrator | null = null;
 
   constructor(workspaceRoot: string, extensionPath?: string) {
     this.workspaceRoot = workspaceRoot;
@@ -111,6 +116,21 @@ class AgentCore {
     console.error(
       `[Agent Core] Available tools: ${tools.map((t: any) => t.name).join(", ")}`
     );
+
+    // EP-11: Initialize Discovery Orchestrator for architect mode
+    const discoveryConfig: DiscoveryConfig = {
+      maxQueries: 5,
+      maxResultsPerQuery: 5,
+      includeGraphContext: true,
+      confidenceThreshold: 0.6,
+      timeoutMs: 5000
+    };
+    this.discoveryOrchestrator = new DiscoveryOrchestrator(
+      this.mcpClient,
+      this.claudeClient,
+      discoveryConfig
+    );
+    console.error("[Agent Core] Discovery Orchestrator initialized");
 
     // Set up stdio communication using JSON-RPC framing
     let buffer = Buffer.alloc(0);
@@ -376,7 +396,13 @@ class AgentCore {
           }
           this.isFirstUserMessage = false;
         }
-        
+
+        // EP-11: Check for architect mode
+        if (request.mode === "architect") {
+          await this.handleArchitectMode(request);
+          return;
+        }
+
         // Check if we can use agentic tools (works with both API key and CLI subscription)
         const authStatus = await this.claudeClient.getAuthStatus();
         
@@ -472,6 +498,181 @@ class AgentCore {
         });
       }
     }
+  }
+
+  /**
+   * EP-11: Handle architect mode requests
+   * Runs the 3-phase orchestration workflow starting with discovery
+   */
+  private async handleArchitectMode(request: ExtensionRequest & { type: "send_message" }) {
+    if (!this.discoveryOrchestrator) {
+      console.error("[Architect Mode] Discovery orchestrator not initialized");
+      this.sendEvent({
+        type: "error",
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message: "Architect mode not available",
+          suggestions: ["Restart the agent", "Check KB service"],
+          recoverable: true,
+        },
+      });
+      return;
+    }
+
+    if (!this.repoName) {
+      console.error("[Architect Mode] Workspace not initialized");
+      this.sendEvent({
+        type: "error",
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message: "Workspace not initialized",
+          suggestions: ["Ensure KB is running", "Restart agent"],
+          recoverable: true,
+        },
+      });
+      return;
+    }
+
+    console.error("[Architect Mode] Starting architect mode workflow...");
+
+    try {
+      // Send "thinking" indicator
+      this.sendEvent({
+        type: "content_delta",
+        delta: "# 🏗️ Architect Mode - Discovery Phase\n\nAnalyzing your request and searching the codebase...\n\n"
+      });
+
+      // Phase 1: Discovery
+      const discoveryResult = await this.discoveryOrchestrator.execute({
+        userQuery: request.content,
+        workspaceRoot: this.workspaceRoot,
+        repoName: this.repoName,
+        conversationHistory: this.conversationHistory
+      });
+
+      // Format and send discovery results
+      const discoveryMessage = this.formatDiscoveryResults(discoveryResult);
+
+      this.sendEvent({
+        type: "content_delta",
+        delta: discoveryMessage
+      });
+
+      // Update conversation history
+      this.conversationHistory.push({
+        role: "user",
+        content: request.content
+      });
+
+      this.conversationHistory.push({
+        role: "assistant",
+        content: discoveryMessage
+      });
+
+      // Save conversation
+      if (this.currentConversationId) {
+        await this.saveCurrentConversation();
+      }
+
+      // Send completion event
+      this.sendEvent({
+        type: "task_completed",
+        success: true,
+        result: {
+          mode: "architect",
+          phase: "discovery",
+          confidence: discoveryResult.confidence,
+          chunksFound: discoveryResult.retrievedChunks.length
+        },
+      });
+
+      console.error("[Architect Mode] Discovery phase completed successfully");
+    } catch (error: any) {
+      console.error("[Architect Mode] Error:", error);
+      this.sendEvent({
+        type: "error",
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message: error.message,
+          suggestions: [
+            "Check KB service is running",
+            "Try a more specific query",
+            "Check network connection"
+          ],
+          recoverable: true,
+        },
+      });
+    }
+  }
+
+  /**
+   * Format discovery results into a readable message
+   */
+  private formatDiscoveryResults(result: any): string {
+    const parts: string[] = [];
+
+    parts.push("## Discovery Results\n");
+    parts.push(result.summary);
+    parts.push(`\n**Confidence**: ${(result.confidence * 100).toFixed(0)}%`);
+    parts.push(`**Execution Time**: ${result.executionTimeMs}ms\n`);
+
+    // Show queries executed
+    if (result.queries && result.queries.length > 0) {
+      parts.push("\n### Strategic Queries");
+      result.queries.forEach((q: any, i: number) => {
+        parts.push(`${i + 1}. **[${q.strategy}]** "${q.text}"`);
+      });
+      parts.push("");
+    }
+
+    // Show gaps identified
+    if (result.gaps && result.gaps.length > 0) {
+      parts.push("\n### Information Gaps");
+      result.gaps.forEach((gap: string) => {
+        parts.push(`- ${gap}`);
+      });
+      parts.push("");
+    }
+
+    // Show top results
+    if (result.retrievedChunks && result.retrievedChunks.length > 0) {
+      parts.push("\n### Relevant Code Found\n");
+
+      const topChunks = result.retrievedChunks.slice(0, 5);
+      topChunks.forEach((chunk: any, i: number) => {
+        const symbol = chunk.symbol_name ? ` - \`${chunk.symbol_name}\`` : "";
+        parts.push(`${i + 1}. **${chunk.path}**#L${chunk.start_line}-L${chunk.end_line}${symbol}`);
+        parts.push(`   Score: ${(chunk.score * 100).toFixed(0)}%`);
+      });
+
+      if (result.retrievedChunks.length > 5) {
+        parts.push(`\n_...and ${result.retrievedChunks.length - 5} more results_`);
+      }
+    }
+
+    // Show graph context summary
+    if (result.graphContext) {
+      parts.push("\n### Code Graph Context");
+      parts.push(`- **Nodes**: ${result.graphContext.nodes.length} code entities`);
+      parts.push(`- **Relationships**: ${result.graphContext.relationships.length} connections`);
+
+      // Summarize relationship types
+      const relTypes = new Map();
+      for (const rel of result.graphContext.relationships) {
+        relTypes.set(rel.type, (relTypes.get(rel.type) || 0) + 1);
+      }
+      if (relTypes.size > 0) {
+        const typeSummary = Array.from(relTypes.entries())
+          .map(([type, count]: [string, number]) => `${count} ${type}`)
+          .join(", ");
+        parts.push(`  - ${typeSummary}`);
+      }
+    }
+
+    parts.push("\n---\n");
+    parts.push("*Phase 1 (Discovery) complete. Phases 2-3 (Synthesis & Planning) coming soon in EP-11.*\n");
+
+    return parts.join("\n");
   }
 
   private handleClearConversation() {
