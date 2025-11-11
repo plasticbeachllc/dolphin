@@ -68,6 +68,13 @@ def test_initialize_collections_creates_tables(monkeypatch, mocked_lancedb, tmp_
 
     # Mock pyarrow presence without heavy import
     import sys
+    
+    # Mock Table class with from_batches method
+    class MockTable:
+        @staticmethod
+        def from_batches(batches, schema):
+            return []  # Return empty list to simulate empty table
+    
     fake_pa = types.SimpleNamespace(
         field=lambda *args, **kwargs: object(),
         schema=lambda fields: object(),
@@ -76,6 +83,7 @@ def test_initialize_collections_creates_tables(monkeypatch, mocked_lancedb, tmp_
         string=lambda: object(),
         int32=lambda: object(),
         timestamp=lambda *args, **kwargs: object(),
+        Table=MockTable,
     )
     monkeypatch.setitem(sys.modules, "pyarrow", fake_pa)
 

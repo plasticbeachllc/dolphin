@@ -175,6 +175,23 @@ class KnowledgeSearchBackend:
 
         final_results = [h for h in hits if h.get("score", 0.0) >= (request.score_cutoff or 0.0)][:request.top_k]
         
+        # Hydrate content for all final results
+        if final_results:
+            chunk_ids_needing_content = [r['chunk_id'] for r in final_results if 'content' not in r]
+            if chunk_ids_needing_content:
+                try:
+                    contents = self.sql_store.get_chunk_contents(chunk_ids_needing_content)
+                    for result in final_results:
+                        if result['chunk_id'] in contents:
+                            result['content'] = contents[result['chunk_id']]
+                            # Also add file_path for compatibility
+                            if 'path' in result and 'file_path' not in result:
+                                result['file_path'] = result['path']
+                except Exception as e:
+                    # Log error but don't fail the search
+                    import logging
+                    logging.warning(f"Failed to hydrate content for results: {e}")
+        
         # Enrich with graph context if requested and available
         include_graph = getattr(request, 'include_graph_context', False)
         if include_graph and self.graph_enricher:
