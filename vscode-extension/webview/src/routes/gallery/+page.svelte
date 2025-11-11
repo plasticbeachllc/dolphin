@@ -193,6 +193,28 @@
 				</div>
 			</CardContent>
 		</Card>
+		
+		<!-- Featured Section: Phase 2 Planning Visualizations -->
+		<Card class="bg-primary/5 border-primary/20">
+			<CardContent class="p-6">
+				<div class="flex items-center justify-between">
+					<div class="space-y-2">
+						<div class="flex items-center gap-2">
+							<Code class="h-6 w-6 text-primary" />
+							<h3 class="text-xl font-bold">Phase 2: Planning Visualization System</h3>
+							<Badge variant="default">New</Badge>
+						</div>
+						<p class="text-sm text-muted-foreground">
+							Interactive planning visualizations including PlanCanvas node-based graph, enhanced timeline with accordion, and Goal Context panel showing agent reasoning. Complete Phase 2 mock-ups ready for sign-off.
+						</p>
+					</div>
+					<Button size="lg" onclick={() => window.location.href = '/gallery/plan'}>
+						View Visualizations
+						<ArrowRight class="h-4 w-4 ml-2" />
+					</Button>
+				</div>
+			</CardContent>
+		</Card>
 	</div>
 {/snippet}
 
