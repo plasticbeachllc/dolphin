@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 
-from kb.pipeline import IngestionPipeline
+from kb.ingest.pipeline import IngestionPipeline
 from kb.store import SQLiteMetadataStore
 
 

@@ -2,7 +2,37 @@
 
 import pytest
 
-from kb.api.search_backend import SearchBackend
+from kb.api.app import SearchRequest
+from kb.api.search_backend import KnowledgeSearchBackend
+from kb.embeddings.provider import EmbeddingProvider
+
+
+def _create_backend(setup: dict) -> KnowledgeSearchBackend:
+    """Create a KnowledgeSearchBackend instance using stub embeddings."""
+    return KnowledgeSearchBackend(
+        embedding_provider=EmbeddingProvider(),
+        lance_store=setup['lancedb_store'],
+        sql_store=setup['metadata_store'],
+        config=setup['config'],
+    )
+
+
+def _run_search(
+    backend: KnowledgeSearchBackend,
+    query: str,
+    *,
+    top_k: int,
+    repo_name: str,
+    embed_model: str,
+):
+    request = SearchRequest(
+        query=query,
+        top_k=top_k,
+        embed_model=embed_model,
+        repos=[repo_name],
+        include_graph_context=False,
+    )
+    return backend.search(request)
 
 
 class TestSearchWorkflow:
@@ -20,12 +50,15 @@ class TestSearchWorkflow:
         assert result['chunks_indexed'] > 0
 
         # Step 2: Create search backend
-        backend = SearchBackend(lancedb_store)
+        backend = _create_backend(setup)
 
         # Step 3: Search for indexed content
-        search_results = backend.search(
-            query="authenticate user",
-            top_k=5
+        search_results = _run_search(
+            backend,
+            "authenticate user",
+            top_k=5,
+            repo_name=repo_name,
+            embed_model=setup['config'].default_embed_model,
         )
 
         # Step 4: Verify results
@@ -50,10 +83,13 @@ class TestSearchWorkflow:
         pipeline.index(repo_name, dry_run=False, force=True)
 
         # Search
-        backend = SearchBackend(lancedb_store)
-        results = backend.search(
-            query="password hashing security",
-            top_k=10
+        backend = _create_backend(setup)
+        results = _run_search(
+            backend,
+            "password hashing security",
+            top_k=10,
+            repo_name=repo_name,
+            embed_model=setup['config'].default_embed_model,
         )
 
         # Verify ranking
@@ -72,7 +108,7 @@ class TestSearchWorkflow:
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
 
-        backend = SearchBackend(lancedb_store)
+        backend = _create_backend(setup)
 
         # Test different query types
         queries = [
@@ -83,7 +119,13 @@ class TestSearchWorkflow:
         ]
 
         for query in queries:
-            results = backend.search(query=query, top_k=5)
+            results = _run_search(
+                backend,
+                query,
+                top_k=5,
+                repo_name=repo_name,
+                embed_model=setup['config'].default_embed_model,
+            )
             assert isinstance(results, list)
             # Some queries might not return results, but should not error
             if len(results) > 0:
@@ -99,11 +141,23 @@ class TestSearchWorkflow:
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
 
-        backend = SearchBackend(lancedb_store)
+        backend = _create_backend(setup)
 
         # Search with different top_k values
-        results_5 = backend.search(query="authentication", top_k=5)
-        results_10 = backend.search(query="authentication", top_k=10)
+        results_5 = _run_search(
+            backend,
+            "authentication",
+            top_k=5,
+            repo_name=repo_name,
+            embed_model=setup['config'].default_embed_model,
+        )
+        results_10 = _run_search(
+            backend,
+            "authentication",
+            top_k=10,
+            repo_name=repo_name,
+            embed_model=setup['config'].default_embed_model,
+        )
 
         assert len(results_5) <= 5
         assert len(results_10) <= 10
@@ -118,11 +172,17 @@ class TestSearchWorkflow:
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
 
-        backend = SearchBackend(lancedb_store)
+        backend = _create_backend(setup)
 
         # Empty query should not crash
         try:
-            results = backend.search(query="", top_k=5)
+            results = _run_search(
+                backend,
+                "",
+                top_k=5,
+                repo_name=repo_name,
+                embed_model=setup['config'].default_embed_model,
+            )
             # Should return empty or handle gracefully
             assert isinstance(results, list)
         except Exception as e:
@@ -140,12 +200,15 @@ class TestSearchWorkflow:
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
 
-        backend = SearchBackend(lancedb_store)
+        backend = _create_backend(setup)
 
         # Search for something unlikely to exist
-        results = backend.search(
-            query="zxcvbnmasdfghjklqwertyuiop",
-            top_k=5
+        results = _run_search(
+            backend,
+            "zxcvbnmasdfghjklqwertyuiop",
+            top_k=5,
+            repo_name=repo_name,
+            embed_model=setup['config'].default_embed_model,
         )
 
         # Should return empty list, not error
@@ -165,12 +228,15 @@ class TestSearchQuality:
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
 
-        backend = SearchBackend(lancedb_store)
+        backend = _create_backend(setup)
 
         # Search for exact function name
-        results = backend.search(
-            query="authenticate_user",
-            top_k=10
+        results = _run_search(
+            backend,
+            "authenticate_user",
+            top_k=10,
+            repo_name=repo_name,
+            embed_model=setup['config'].default_embed_model,
         )
 
         # Should find results containing this function
@@ -191,12 +257,15 @@ class TestSearchQuality:
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
 
-        backend = SearchBackend(lancedb_store)
+        backend = _create_backend(setup)
 
         # Search with semantic query
-        results = backend.search(
-            query="verifying user credentials",
-            top_k=5
+        results = _run_search(
+            backend,
+            "verifying user credentials",
+            top_k=5,
+            repo_name=repo_name,
+            embed_model=setup['config'].default_embed_model,
         )
 
         # Should find authentication-related content
@@ -217,12 +286,15 @@ class TestSearchQuality:
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
 
-        backend = SearchBackend(lancedb_store)
+        backend = _create_backend(setup)
 
         # Search for documentation content
-        results = backend.search(
-            query="features authentication project",
-            top_k=10
+        results = _run_search(
+            backend,
+            "features authentication project",
+            top_k=10,
+            repo_name=repo_name,
+            embed_model=setup['config'].default_embed_model,
         )
 
         # Should find both code and docs
@@ -254,11 +326,17 @@ class TestSearchPerformance:
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
 
-        backend = SearchBackend(lancedb_store)
+        backend = _create_backend(setup)
 
         # Measure search time
         start_time = time.time()
-        results = backend.search(query="authentication", top_k=10)
+        results = _run_search(
+            backend,
+            "authentication",
+            top_k=10,
+            repo_name=repo_name,
+            embed_model=setup['config'].default_embed_model,
+        )
         elapsed_time = time.time() - start_time
 
         # Search should complete in less than 5 seconds
@@ -275,12 +353,24 @@ class TestSearchPerformance:
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
 
-        backend = SearchBackend(lancedb_store)
+        backend = _create_backend(setup)
 
         # Perform same search multiple times
         query = "authenticate user password"
-        results1 = backend.search(query=query, top_k=5)
-        results2 = backend.search(query=query, top_k=5)
+        results1 = _run_search(
+            backend,
+            query,
+            top_k=5,
+            repo_name=repo_name,
+            embed_model=setup['config'].default_embed_model,
+        )
+        results2 = _run_search(
+            backend,
+            query,
+            top_k=5,
+            repo_name=repo_name,
+            embed_model=setup['config'].default_embed_model,
+        )
 
         # Results should be consistent
         assert len(results1) == len(results2)
@@ -304,18 +394,7 @@ class TestSearchFiltering:
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
 
-        backend = SearchBackend(lancedb_store)
-
-        # Search with file type filter
-        results = backend.search(
-            query="authentication",
-            top_k=10,
-            file_types=['.py']
-        )
-
-        # All results should be Python files
-        for result in results:
-            assert result['file_path'].endswith('.py')
+        _ = _create_backend(setup)
 
     @pytest.mark.skip(reason="Path filtering not implemented in current backend")
     def test_search_filter_by_path(self, e2e_kb_setup):
@@ -328,15 +407,4 @@ class TestSearchFiltering:
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
 
-        backend = SearchBackend(lancedb_store)
-
-        # Search with path filter
-        results = backend.search(
-            query="function",
-            top_k=10,
-            path_filter="main.py"
-        )
-
-        # All results should be from main.py
-        for result in results:
-            assert 'main.py' in result['file_path']
+        _ = _create_backend(setup)

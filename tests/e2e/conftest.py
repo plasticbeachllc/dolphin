@@ -7,7 +7,7 @@ from typing import Generator
 
 from kb.store import LanceDBStore, SQLiteMetadataStore
 from kb.config import KBConfig
-from kb.pipeline import IngestionPipeline
+from kb.ingest.pipeline import IngestionPipeline
 
 
 @pytest.fixture
