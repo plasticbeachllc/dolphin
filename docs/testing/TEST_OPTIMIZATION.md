@@ -109,6 +109,32 @@ just test-verbose           # Detailed output
 
 *Note: Integration test times are projected based on unit test improvements and typical parallelization gains. Actual results depend on CPU core count and test distribution.*
 
+## Test Isolation for Parallel Execution
+
+All tests have been designed with proper isolation to support parallel execution:
+
+### Fixture Scoping Strategy
+
+1. **Session-scoped fixtures** (shared, read-only):
+   - `sample_repo_path`: Static test repository
+   - `performance_test_data`: Large test dataset
+   - `setup_tiktoken`: One-time tiktoken validation
+
+2. **Function-scoped fixtures** (isolated per test):
+   - `integration_backend_config`: Full isolation with temp DB and in-memory LanceDB
+   - `fast_backend_config`: Faster isolation with in-memory SQLite and LanceDB
+   - `temp_dir`, `temp_db_path`: Unique temporary directories per test
+   - `registered_test_repo`: Per-test repository registration with cleanup
+
+### Parallel Execution Safety
+
+Tests are safe for parallel execution because:
+- Each test gets its own temp directory and database
+- LanceDB instances use unique in-memory URIs (e.g., `memory://integration_test_<uuid>`)
+- SQLite databases use either temp files or `:memory:`
+- No shared mutable state between tests
+- Proper cleanup in fixture teardown
+
 ## Best Practices
 
 ### For Test Developers
@@ -117,6 +143,8 @@ just test-verbose           # Detailed output
 2. **Keep Tests Independent**: Ensure tests don't rely on execution order
 3. **Avoid Shared State**: Each test should set up and tear down its own state
 4. **Use In-Memory Where Possible**: Prefer in-memory databases for faster execution
+5. **Unique Resource Names**: Use UUIDs for resource names to avoid conflicts
+6. **Proper Cleanup**: Always clean up resources in fixture teardown
 
 ### For CI/CD
 
