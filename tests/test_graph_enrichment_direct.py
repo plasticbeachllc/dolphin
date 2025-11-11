@@ -3,8 +3,10 @@
 import sys
 from pathlib import Path
 
-# Add kb to path
-sys.path.insert(0, str(Path(__file__).parent))
+# Ensure repository root is on sys.path so local kb package resolves
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from kb.config import load_config
 from kb.store.sqlite_meta import SQLiteMetadataStore
