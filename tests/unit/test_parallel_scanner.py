@@ -88,7 +88,11 @@ class TestScanRepoParallel:
 
     def test_scan_small_repo_uses_sequential(self, tmp_path):
         """Test that small repos use sequential scanning."""
+        import subprocess
+
+        # Initialize git repo properly
         (tmp_path / ".git").mkdir()
+        subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
 
         # Create a small number of files
         for i in range(5):
