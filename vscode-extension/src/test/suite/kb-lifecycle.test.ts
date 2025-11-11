@@ -11,7 +11,7 @@ suite('KB Lifecycle Management', () => {
     let extension: vscode.Extension<any> | undefined;
 
     suiteSetup(async function() {
-        this.timeout(30000); // 30 second timeout for extension activation
+        this.timeout(15000); // 15 second timeout for extension activation (reduced from 30s)
 
         // Get the extension
         extension = vscode.extensions.getExtension('pb.dolphin');
@@ -25,7 +25,7 @@ suite('KB Lifecycle Management', () => {
 
     suite('KB Auto-Start', () => {
         test('KB server starts automatically on extension activation', async function() {
-            this.timeout(15000);
+            this.timeout(8000);
 
             assert.ok(extension, 'Extension should be available');
             assert.ok(extension.isActive, 'Extension should be activated');
@@ -45,7 +45,7 @@ suite('KB Lifecycle Management', () => {
         });
 
         test('KB server responds to health checks', async function() {
-            this.timeout(10000);
+            this.timeout(5000);
 
             if (!extension || !extension.exports || !extension.exports.kbManager) {
                 this.skip();
@@ -63,7 +63,7 @@ suite('KB Lifecycle Management', () => {
         });
 
         test('KB server port is assigned correctly', async function() {
-            this.timeout(10000);
+            this.timeout(5000);
 
             if (!extension || !extension.exports || !extension.exports.kbManager) {
                 this.skip();
@@ -128,7 +128,7 @@ suite('KB Lifecycle Management', () => {
 
     suite('KB Status Monitoring', () => {
         test('KB status can be queried via command', async function() {
-            this.timeout(10000);
+            this.timeout(5000);
 
             try {
                 await vscode.commands.executeCommand('dolphin.kb.showStatus');
@@ -141,7 +141,7 @@ suite('KB Lifecycle Management', () => {
         });
 
         test('KB status updates are emitted', async function() {
-            this.timeout(15000);
+            this.timeout(8000);
 
             if (!extension || !extension.exports || !extension.exports.kbManager) {
                 this.skip();
@@ -169,7 +169,7 @@ suite('KB Lifecycle Management', () => {
         });
 
         test('KB error states are reported', async function() {
-            this.timeout(10000);
+            this.timeout(5000);
             this.skip(); // Skip as simulating errors is complex
 
             // This test would verify that KB errors are properly reported
@@ -178,7 +178,7 @@ suite('KB Lifecycle Management', () => {
 
     suite('KB Process Management', () => {
         test('KB process is cleaned up on extension deactivation', async function() {
-            this.timeout(10000);
+            this.timeout(5000);
             this.skip(); // Skip as we cannot safely deactivate extension in tests
 
             // This test would verify KB process terminates when extension deactivates
@@ -212,7 +212,7 @@ suite('KB Lifecycle Management', () => {
         });
 
         test('KB respects workspace folder changes', async function() {
-            this.timeout(10000);
+            this.timeout(5000);
             this.skip(); // Skip as changing workspace folders in tests is complex
 
             // This test would verify KB adjusts to workspace changes
@@ -221,7 +221,7 @@ suite('KB Lifecycle Management', () => {
 
     suite('KB Configuration', () => {
         test('KB uses correct configuration from settings', async function() {
-            this.timeout(10000);
+            this.timeout(5000);
 
             const config = vscode.workspace.getConfiguration('dolphin');
 
@@ -241,7 +241,7 @@ suite('KB Lifecycle Management', () => {
         });
 
         test('KB configuration changes trigger restart', async function() {
-            this.timeout(15000);
+            this.timeout(8000);
             this.skip(); // Skip as modifying configuration in tests is complex
 
             // This test would:
@@ -252,7 +252,7 @@ suite('KB Lifecycle Management', () => {
 
     suite('KB Performance', () => {
         test('KB starts within reasonable time', async function() {
-            this.timeout(15000);
+            this.timeout(8000);
 
             if (!extension || !extension.exports || !extension.exports.kbManager) {
                 this.skip();
