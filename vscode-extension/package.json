@@ -11,17 +11,6 @@
     "categories": [
         "Other"
     ],
-    "activationEvents": [
-        "onView:dolphin.chatView",
-        "onCommand:dolphin.focusInput",
-        "onCommand:dolphin.newConversation",
-        "onCommand:dolphin.setApiKey",
-        "onCommand:dolphin.test",
-        "onCommand:dolphin.askAboutSelection",
-        "onCommand:dolphin.refactorSelection",
-        "onCommand:dolphin.askAboutFile",
-        "onCommand:dolphin.askAboutFolder"
-    ],
     "main": "./out/extension.js",
     "contributes": {
         "viewsContainers": {
