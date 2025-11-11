@@ -266,6 +266,8 @@ class TestGraphExtraction:
         
     def test_graph_cleanup_on_file_deletion(self, temp_test_repo, tmp_path):
         """Test that graph data is cleaned up when files are deleted."""
+        import subprocess
+        
         # Setup
         config = KBConfig()
         db_path = tmp_path / "test.db"
@@ -304,10 +306,12 @@ class TestGraphExtraction:
         assert initial_node_count > 0
         assert initial_edge_count > 0
         
-        # Delete one file
+        # Delete one file and commit the deletion (so git tracks it)
         (temp_test_repo / "example.py").unlink()
+        subprocess.run(["git", "add", "-A"], cwd=temp_test_repo, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "Delete example.py"], cwd=temp_test_repo, check=True, capture_output=True)
         
-        # Re-index (use force=True to skip clean working tree check)
+        # Re-index (incremental mode will detect the deletion via git diff)
         result2 = pipeline.index(
             repo_name,
             force=True,

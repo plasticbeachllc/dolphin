@@ -532,7 +532,7 @@ async function recoverFromCrash(context: vscode.ExtensionContext): Promise<void>
       return;
     }
 
-    const data = await response.json();
+    const data = await response.json() as { total?: number; changes?: any[] };
     const pendingCount = data.total || 0;
 
     if (pendingCount > 0) {

@@ -449,6 +449,34 @@ class SQLiteMetadataStore:
             row = cur.fetchone()
             return int(row[0]) if row else None
 
+    def get_file_by_path(self, repo_id: int, path: str) -> dict[str, Any] | None:
+        """Get file metadata by repo_id and path.
+        
+        Returns file record dict or None if not found.
+        """
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute(
+                """SELECT id, repo_id, path, ext, language, is_binary,
+                          size_bytes, latest_commit_sha, created_at, updated_at
+                   FROM files WHERE repo_id = ? AND path = ?""",
+                (int(repo_id), path)
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return {
+                "id": int(row[0]),
+                "repo_id": int(row[1]),
+                "path": str(row[2]),
+                "ext": row[3],
+                "language": row[4],
+                "is_binary": bool(row[5]),
+                "size_bytes": row[6],
+                "latest_commit_sha": row[7],
+                "created_at": row[8],
+                "updated_at": row[9]
+            }
+
     def upsert_file(
         self,
         repo_id: int,
@@ -1686,8 +1714,8 @@ class SQLiteMetadataStore:
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute("""
                 INSERT INTO pending_changes
-                (repo_id, file_path, change_type, old_path, detected_at)
-                VALUES (?, ?, ?, ?, datetime('now'))
+                (repo_id, file_path, change_type, old_path, detected_at, processed)
+                VALUES (?, ?, ?, ?, datetime('now'), 0)
             """, (repo_id, file_path, change_type, old_path))
             change_id = cur.lastrowid
             conn.commit()
