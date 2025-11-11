@@ -9,14 +9,13 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
-      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.time=7d'
       - '--web.enable-lifecycle'
     restart: unless-stopped
     networks:
@@ -94,22 +93,6 @@ services:
       - loki
       - jaeger
 
-  # Alertmanager - Alert routing and management
-  alertmanager:
-    image: prom/alertmanager:latest
-    container_name: dolphin-alertmanager
-    ports:
-      - "9093:9093"
-    volumes:
-      - ./prometheus/alertmanager.yml:/etc/alertmanager/config.yml
-      - alertmanager_data:/alertmanager
-    command:
-      - '--config.file=/etc/alertmanager/config.yml'
-      - '--storage.path=/alertmanager'
-    restart: unless-stopped
-    networks:
-      - dolphin-observability
-
 networks:
   dolphin-observability:
     driver: bridge
@@ -118,4 +101,3 @@ volumes:
   prometheus_data:
   loki_data:
   grafana_data:
-  alertmanager_data:

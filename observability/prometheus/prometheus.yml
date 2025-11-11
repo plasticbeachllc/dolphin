@@ -5,17 +5,6 @@ global:
     cluster: 'dolphin-dev'
     environment: 'development'
 
-# Alertmanager configuration
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets:
-            - alertmanager:9093
-
-# Load alerting rules
-rule_files:
-  - "alerts.yml"
-
 # Scrape configs
 scrape_configs:
   # Knowledge Bank API (Python/FastAPI)
