@@ -70,15 +70,51 @@ class TestKnowledgeSearchBackend:
 @pytest.fixture
 def real_backend(tmp_path: Path):
     """Provides a backend with real stores for integration testing."""
-    return create_search_backend(store_root=tmp_path, embedding_provider_type="stub")
+    backend = create_search_backend(store_root=tmp_path, embedding_provider_type="stub")
+    
+    # Initialize database to ensure tables exist
+    backend.sql_store.initialize()
+    
+    # Cleanup: Clear any existing test data from previous runs
+    with backend.sql_store._connect() as conn:
+        from contextlib import closing
+        cur = conn.cursor()
+        # Clear FTS5 table
+        cur.execute("DELETE FROM chunks_fts")
+        # Clear LanceDB tables (requires deleting actual table files)
+        conn.commit()
+    
+    # Clear LanceDB tables for both models
+    try:
+        # Delete any existing tables in LanceDB
+        import shutil
+        lance_path = tmp_path / "lancedb"
+        if lance_path.exists():
+            # Remove tables for small and large models
+            for model_dir in lance_path.glob("*"):
+                if model_dir.is_dir():
+                    shutil.rmtree(model_dir, ignore_errors=True)
+    except Exception:
+        pass  # Best effort cleanup
+    
+    yield backend
+    
+    # Post-test cleanup to ensure no data persists
+    try:
+        with backend.sql_store._connect() as conn:
+            from contextlib import closing
+            cur = conn.cursor()
+            cur.execute("DELETE FROM chunks_fts")
+            conn.commit()
+    except Exception:
+        pass  # Best effort cleanup
 
 class TestSearchBackendIntegration:
     def test_end_to_end_search_flow(self, real_backend: KnowledgeSearchBackend):
         """Test a full search cycle from indexing to retrieval."""
         import logging
         
-        # Initialize the database schema first (includes FTS table)
-        real_backend.sql_store.initialize()
+        # Database is already initialized and cleaned by the fixture
         
         # Create test content and compute its hash
         test_content = "some test content"
