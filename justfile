@@ -119,9 +119,9 @@ show-mcp-bridge:
 # Testing
 # ==============================================================================
 
-# Test all components using pytest (Python only - legacy command)
+# Test all Python components using pytest (parallel execution enabled by default in pytest.ini)
 test: setup-python
-	@echo "🧪 Running all Python tests with pytest..."
+	@echo "🧪 Running all Python tests with pytest (parallel)..."
 	@uv run pytest -q
 
 # Run specific test file
@@ -131,13 +131,22 @@ test-file: setup-python
 
 # Run tests with detailed output
 test-verbose: setup-python
-	@echo "🧪 Running tests with verbose output..."
+	@echo "🧪 Running tests with verbose output (parallel)..."
 	@uv run pytest -v
 
-# Run tests with coverage reporting
+# Run tests sequentially (for debugging)
+test-sequential: setup-python
+	@echo "🧪 Running all tests sequentially..."
+	@uv run pytest -q -n0
+
+# Run tests with coverage reporting (note: coverage disables parallelization for accuracy)
 test-coverage: setup-python
 	@echo "🧪 Running tests with coverage..."
-	@uv run pytest --cov=kb --cov-report=html --cov-report=term-missing
+	@uv run pytest -n0 --cov=kb --cov-report=html --cov-report=term-missing
+
+# Legacy aliases for backwards compatibility
+test-unit: test-unit-python
+test-integration: test-integration-python
 
 # ==============================================================================
 # Unit Tests - Fast, isolated tests with no external dependencies
@@ -155,9 +164,9 @@ test-unit-all:
 	@echo ""
 	@echo "✅ All unit tests passed!"
 
-# Run Python unit tests
+# Run Python unit tests (with parallel execution)
 test-unit-python: setup-python
-	@echo "🐍 Testing Python unit tests..."
+	@echo "🐍 Testing Python unit tests (parallel)..."
 	@uv run pytest tests/unit/ -q --tb=short || (echo "   ❌ Python unit tests failed"; exit 1)
 	@echo "   ✅ Python unit tests passed"
 
@@ -201,9 +210,9 @@ test-integration-all:
 	@echo ""
 	@echo "✅ All integration tests passed!"
 
-# Run Python integration tests
+# Run Python integration tests (with parallel execution)
 test-integration-python: setup-python
-	@echo "🐍 Testing Python integration tests..."
+	@echo "🐍 Testing Python integration tests (parallel)..."
 	@uv run pytest tests/integration/ -q --tb=short || (echo "   ❌ Python integration tests failed"; exit 1)
 	@echo "   ✅ Python integration tests passed"
 
