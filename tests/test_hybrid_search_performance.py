@@ -9,7 +9,7 @@ performance targets specified in VISION_HIGH_PRIORITY.md:
 - Maintains ~30-50ms latency with hybrid search enabled
 
 Usage:
-    python scripts/test_hybrid_search_performance.py
+    python tests/test_hybrid_search_performance.py
 
 Requirements:
     - Test repository should be indexed with hybrid search support
