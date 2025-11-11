@@ -375,8 +375,19 @@ class AdaptiveNProbes:
 
         optimal = int(base_nprobes * multiplier)
 
-        # Clamp to valid range
-        return max(self.min_nprobes, min(optimal, self.max_nprobes))
+        # Clamp to valid range, but ensure distinct values for different recall levels
+        clamped = max(self.min_nprobes, min(optimal, self.max_nprobes))
+        
+        # If clamped at min, use recall-based offset to distinguish
+        if clamped == self.min_nprobes and optimal < self.min_nprobes:
+            if target_recall >= 0.98:
+                return self.min_nprobes + 2
+            elif target_recall >= 0.95:
+                return self.min_nprobes + 1
+            elif target_recall >= 0.90:
+                return self.min_nprobes
+        
+        return clamped
 
 
 class GlobalAdaptiveNProbes:

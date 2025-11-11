@@ -321,7 +321,7 @@ class GraphStore:
         source_node_id: str,
         target_node_id: str,
         edge_type: str,
-        repo_id: int,
+        repo_id: int | None = None,
         line_number: int | None = None,
         is_direct: bool = True,
         relationship_metadata: str | None = None,
@@ -334,7 +334,7 @@ class GraphStore:
             source_node_id: Source node UUID
             target_node_id: Target node UUID
             edge_type: Type of relationship
-            repo_id: Repository ID
+            repo_id: Repository ID (optional, will be derived from source node if not provided)
             line_number: Optional line number where relationship occurs
             is_direct: Whether this is a direct relationship
             relationship_metadata: Optional JSON metadata
@@ -348,6 +348,18 @@ class GraphStore:
 
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
+                # If repo_id not provided, derive it from source node
+                if repo_id is None:
+                    cur.execute(
+                        "SELECT repo_id FROM code_nodes WHERE id = ?",
+                        (source_node_id,)
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        repo_id = int(row[0])
+                    else:
+                        raise ValueError(f"Source node {source_node_id} not found")
+                
                 cur.execute(
                     """
                     INSERT INTO code_edges (
