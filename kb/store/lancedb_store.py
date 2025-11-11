@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Sequence, Union
 
 
 class LanceDBStore:
@@ -11,12 +11,21 @@ class LanceDBStore:
     embedding dimensions and ensure the root directory exists.
     """
 
-    def __init__(self, root: Path) -> None:
-        self.root = root
+    def __init__(self, root: Union[str, Path]) -> None:
+        # Handle both file paths and in-memory URIs
+        # In-memory URIs like "memory://name" should remain as strings
+        if isinstance(root, str) and root.startswith("memory://"):
+            # Keep memory:// URIs as strings for LanceDB
+            self.root = root
+        else:
+            # Convert file paths to Path objects
+            self.root = Path(root) if isinstance(root, str) else root
 
     def connect(self) -> None:
         """Ensure the LanceDB root directory exists."""
-        self.root.mkdir(parents=True, exist_ok=True)
+        # Only create directory for file-based storage, not memory://
+        if isinstance(self.root, Path):
+            self.root.mkdir(parents=True, exist_ok=True)
 
     def initialize_collections(self) -> None:
         """Create (or open) the global collections per the authoritative schema.
@@ -30,7 +39,9 @@ class LanceDBStore:
         import pyarrow as pa  # type: ignore
         import lancedb  # type: ignore
 
-        db = lancedb.connect(self.root.as_posix())
+        # Handle both Path and string (memory://) URIs
+        db_uri = self.root if isinstance(self.root, str) else self.root.as_posix()
+        db = lancedb.connect(db_uri)
 
         def _vector_field(dim: int) -> pa.Field:
             # Use fixed-size list for LanceDB vector search to work properly
@@ -100,7 +111,8 @@ class LanceDBStore:
         expected_dim = model_to_dim[model]
         
         # Connect to database
-        db = lancedb.connect(self.root.as_posix())
+        db_uri = self.root if isinstance(self.root, str) else self.root.as_posix()
+        db = lancedb.connect(db_uri)
         
         # Convert chunks to list for processing
         chunks_list = list(chunks)
@@ -139,6 +151,8 @@ class LanceDBStore:
             # If table doesn't exist, create it and try again
             print(f"Table {table_name} not found, creating it: {e}")
             self.initialize_collections()
+            # Reconnect to see the newly created tables
+            db = lancedb.connect(db_uri)
             table = db.open_table(table_name)
             table.add(chunks_list)
 
@@ -161,7 +175,8 @@ class LanceDBStore:
         if model not in model_to_table:
             raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
 
-        db = lancedb.connect(self.root.as_posix())
+        db_uri = self.root if isinstance(self.root, str) else self.root.as_posix()
+        db = lancedb.connect(db_uri)
         try:
             table = db.open_table(model_to_table[model])
         except Exception:
@@ -199,7 +214,8 @@ class LanceDBStore:
         if model not in model_to_table:
             raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
 
-        db = lancedb.connect(self.root.as_posix())
+        db_uri = self.root if isinstance(self.root, str) else self.root.as_posix()
+        db = lancedb.connect(db_uri)
         try:
             table = db.open_table(model_to_table[model])
         except Exception:
@@ -235,7 +251,8 @@ class LanceDBStore:
         if model not in model_to_table:
             raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
 
-        db = lancedb.connect(self.root.as_posix())
+        db_uri = self.root if isinstance(self.root, str) else self.root.as_posix()
+        db = lancedb.connect(db_uri)
         try:
             table = db.open_table(model_to_table[model])
         except Exception:
@@ -305,7 +322,8 @@ class LanceDBStore:
             )
 
         # Connect to database and open table
-        db = lancedb.connect(self.root.as_posix())
+        db_uri = self.root if isinstance(self.root, str) else self.root.as_posix()
+        db = lancedb.connect(db_uri)
 
         try:
             table = db.open_table(table_name)

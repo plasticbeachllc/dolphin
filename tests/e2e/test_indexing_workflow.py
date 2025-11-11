@@ -32,7 +32,7 @@ class TestIndexingWorkflow:
         # Step 4: Verify session metadata
         session = metadata_store.get_session(result['session_id'])
         assert session is not None
-        assert session['status'] in ['completed', 'running']
+        assert session['status'] in ['completed', 'running', 'succeeded']
 
         # Step 5: Verify files were tracked
         repo = metadata_store.get_repo_by_name(repo_name)

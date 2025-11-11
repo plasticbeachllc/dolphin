@@ -85,12 +85,16 @@ def e2e_kb_setup(e2e_test_repo: Path) -> Generator[dict, None, None]:
     """Set up complete KB infrastructure for E2E testing."""
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "kb.db"
+        lance_path = Path(tmpdir) / "lancedb"
 
         # Initialize stores
         metadata_store = SQLiteMetadataStore(db_path)
         metadata_store.initialize()
 
-        lancedb_store = LanceDBStore("memory://e2e_test")
+        # Use file-based LanceDB instead of memory:// to avoid connection isolation issues
+        lancedb_store = LanceDBStore(lance_path)
+        # Initialize collections for the database
+        lancedb_store.initialize_collections()
 
         # Create config
         config = KBConfig(
