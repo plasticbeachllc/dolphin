@@ -191,8 +191,7 @@ def run_command(cmd: list[str], cwd: Path | None = None, env: dict | None = None
     except Exception as e:
         return False, "", str(e)
 
-@pytest.mark.filterwarnings("ignore::pytest.PytestReturnNotNoneWarning")
-def test_initialization(store_root: Path) -> bool:
+def _run_initialization_test(store_root: Path) -> bool:
     """Test Dolphin initialization."""
     log_step("Testing Dolphin initialization...")
     
@@ -215,8 +214,7 @@ def test_initialization(store_root: Path) -> bool:
     log_success("Dolphin initialized successfully")
     return True
 
-@pytest.mark.filterwarnings("ignore::pytest.PytestReturnNotNoneWarning")
-def test_repository_indexing(repo_path: Path, store_root: Path) -> bool:
+def _run_repository_indexing_test(repo_path: Path, store_root: Path) -> bool:
     """Test repository indexing with real OpenAI API calls."""
     log_step("Testing repository indexing (this will make OpenAI API calls)...")
     
@@ -261,8 +259,7 @@ def test_repository_indexing(repo_path: Path, store_root: Path) -> bool:
     
     return True
 
-@pytest.mark.filterwarnings("ignore::pytest.PytestReturnNotNoneWarning")
-def test_search_and_api(store_root: Path, port: int) -> tuple[bool, bool]:
+def _run_search_and_api_test(store_root: Path, port: int) -> tuple[bool, bool]:
     """Test search functionality and API endpoints with a single server instance.
     
     Returns:
@@ -377,8 +374,7 @@ def test_search_and_api(store_root: Path, port: int) -> tuple[bool, bool]:
         if original_config and config_path.exists():
             config_path.write_text(original_config)
 
-@pytest.mark.filterwarnings("ignore::pytest.PytestReturnNotNoneWarning")
-def test_reranking_if_available(store_root: Path) -> bool:
+def _run_reranking_test(store_root: Path) -> bool:
     """Test reranking if dependencies are installed (optional)."""
     log_step("Testing reranking (optional - only if dependencies installed)...")
     
@@ -521,7 +517,7 @@ def main():
             print(f"\n{BLUE}{'─'*70}{RESET}")
             log_step("Test 1: Dolphin Initialization")
             print(f"{BLUE}{'─'*70}{RESET}")
-            test_results["initialization"] = test_initialization(store_root)
+            test_results["initialization"] = _run_initialization_test(store_root)
             if test_results["initialization"]:
                 log_success("Initialization test PASSED")
             else:
@@ -533,7 +529,7 @@ def main():
             print(f"\n{BLUE}{'─'*70}{RESET}")
             log_step("Test 2: Repository Indexing")
             print(f"{BLUE}{'─'*70}{RESET}")
-            test_results["indexing"] = test_repository_indexing(repo_path, store_root)
+            test_results["indexing"] = _run_repository_indexing_test(repo_path, store_root)
             if test_results["indexing"]:
                 log_success("Indexing test PASSED")
             else:
@@ -564,7 +560,7 @@ def main():
                 log_success("  API server started successfully")
                 
                 # Run tests 3 & 4 with the running server
-                search_passed, api_passed = test_search_and_api(store_root, port)
+                search_passed, api_passed = _run_search_and_api_test(store_root, port)
                 test_results["search"] = search_passed
                 test_results["api"] = api_passed
             
@@ -631,7 +627,7 @@ def main():
             print(f"\n{BLUE}{'─'*70}{RESET}")
             log_step("Test 5: Reranking (Optional)")
             print(f"{BLUE}{'─'*70}{RESET}")
-            test_results["reranking"] = test_reranking_if_available(store_root)
+            test_results["reranking"] = _run_reranking_test(store_root)
             if test_results["reranking"]:
                 log_success("Reranking test PASSED")
             
