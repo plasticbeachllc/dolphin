@@ -12,49 +12,65 @@
   
   let codeElement: HTMLElement;
   let copied = $state(false);
-  
+  let announceMessage = $state('');
+
   onMount(() => {
     if (codeElement) {
       hljs.highlightElement(codeElement);
     }
   });
-  
+
   $effect(() => {
     // Re-highlight when code changes (streaming updates)
     if (codeElement && code) {
       hljs.highlightElement(codeElement);
     }
   });
-  
+
   async function copyCode() {
     try {
       await navigator.clipboard.writeText(code);
       copied = true;
+      // Announce to screen readers
+      announceMessage = 'Code copied to clipboard';
       setTimeout(() => {
         copied = false;
+        announceMessage = '';
       }, 2000);
     } catch (err) {
       console.error("Failed to copy code:", err);
+      announceMessage = 'Failed to copy code';
+      setTimeout(() => {
+        announceMessage = '';
+      }, 2000);
     }
   }
 </script>
 
-<div class="code-block-container">
+<div class="code-block-container" role="region" aria-label="Code snippet">
   <div class="code-header">
     <span class="language-label">{language}</span>
     <button
+      type="button"
       class="copy-button"
       onclick={copyCode}
-      aria-label="Copy code"
+      aria-label={copied ? "Code copied" : "Copy code to clipboard"}
     >
       {#if copied}
-        <Check size={16} />
+        <Check size={16} aria-hidden="true" />
+        <span class="sr-only">Copied</span>
       {:else}
-        <Copy size={16} />
+        <Copy size={16} aria-hidden="true" />
+        <span class="sr-only">Copy</span>
       {/if}
     </button>
   </div>
   <pre class="code-content"><code bind:this={codeElement} class="language-{language} hljs">{code}</code></pre>
+
+  <!-- Live region for copy announcements -->
+  <div role="status" aria-live="polite" aria-atomic="true" class="sr-only">
+    {announceMessage}
+  </div>
 </div>
 
 <style>
