@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import datetime
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Any
@@ -472,7 +473,7 @@ class IngestionPipeline:
                                 'heading_h2': occ.get('heading_h2'),
                                 'heading_h3': occ.get('heading_h3'),
                                 'token_count': occ_token_counts.get((occ['start_line'], occ['end_line']), 0),
-                                'created_at': None,  # Will be set by LanceDB
+                                'created_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                             })
                             
                             # Prepare chunk for FTS5 indexing (only for first occurrence per hash)
