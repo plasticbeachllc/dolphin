@@ -164,7 +164,7 @@ test-unit-python: setup-python
 # Run Agent Core unit tests
 test-unit-agent-core:
 	@echo "🤖 Testing Agent Core unit tests..."
-	@cd agent-core && bun test tests/conversation-store.test.ts tests/plan-store.test.ts tests/storage.test.ts tests/toml-writer.test.ts tests/llm/diff-generator.test.ts tests/llm/claude-tool-executor-diff.test.ts tests/llm/claude-tool-executor-kb.test.ts tests/llm/claude-cli-detector.test.ts tests/planner/basic-planner.test.ts --bail || (echo "   ❌ Agent Core unit tests failed"; exit 1)
+	@cd agent-core && bun test tests/conversation-store.test.ts tests/plan-store.test.ts tests/storage.test.ts tests/toml-writer.test.ts tests/llm/diff-generator.test.ts tests/llm/claude-tool-executor-diff.test.ts tests/llm/claude-cli-detector.test.ts tests/planner/basic-planner.test.ts --bail || (echo "   ❌ Agent Core unit tests failed"; exit 1)
 	@echo "   ✅ Agent Core unit tests passed"
 
 # Run Agent Core V2 unit tests
