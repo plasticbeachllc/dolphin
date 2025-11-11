@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import UniqueConstraint, Index
+from sqlalchemy import UniqueConstraint, Index, ForeignKey, Column, String
 from sqlmodel import Field, SQLModel
 
 
@@ -188,9 +188,9 @@ class CodeEdge(SQLModel, table=True):
     # Identity
     id: str = Field(primary_key=True)  # UUID
 
-    # Relationship
-    source_node_id: str = Field(foreign_key="code_nodes.id")
-    target_node_id: str = Field(foreign_key="code_nodes.id")
+    # Relationship - with CASCADE DELETE for automatic cleanup
+    source_node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False))
+    target_node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False))
     edge_type: str  # 'calls', 'imports', 'inherits', 'implements', 'depends_on_table', etc.
 
     # Context
@@ -219,8 +219,8 @@ class NodeAlias(SQLModel, table=True):
     # Identity
     id: str = Field(primary_key=True)  # UUID
 
-    # References
-    node_id: str = Field(foreign_key="code_nodes.id")
+    # References - CASCADE DELETE to remove aliases when node is deleted
+    node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False))
     file_id: int = Field(foreign_key="files.id")
 
     # Alias information
@@ -240,8 +240,8 @@ class CrossRepoReference(SQLModel, table=True):
     # Identity
     id: str = Field(primary_key=True)  # UUID
 
-    # Source (current repo)
-    source_node_id: str = Field(foreign_key="code_nodes.id")
+    # Source (current repo) - CASCADE DELETE to remove references when source node is deleted
+    source_node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False))
     source_repo_id: int = Field(foreign_key="repos.id")
 
     # Target (external reference)
