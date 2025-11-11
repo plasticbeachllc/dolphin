@@ -18,6 +18,11 @@ from ..retrieval.ann_tuning import ANNParams
 from ..retrieval.graph_context import GraphContextEnricher
 from .app import SearchRequest
 
+# Constants
+CANDIDATE_MULTIPLIER = 4
+CONFIG_FILE_SCORE_PENALTY = 0.5
+BM25_SCORE_NORMALIZATION_FACTOR = 10
+
 class KnowledgeSearchBackend:
     def __init__(
         self,
@@ -66,7 +71,7 @@ class KnowledgeSearchBackend:
                 return cached_results
 
         query_embedding = self.embedding_provider.embed_texts(request.embed_model, [request.query])[0]
-        num_candidates = request.top_k * 4 # Fetch more candidates for reranking
+        num_candidates = request.top_k * CANDIDATE_MULTIPLIER  # Fetch more candidates for reranking
 
         # Get ANN parameters from config or use defaults
         ann_params = self._get_ann_params(request)
@@ -276,12 +281,10 @@ class KnowledgeSearchBackend:
     
     def _apply_file_type_scoring(self, results: list[dict[str, object]]) -> list[dict[str, object]]:
         """Apply scoring adjustments based on file type to deprioritize config files.
-        
+
         Config files (TOML, JSON, YAML) are penalized to prevent them from
         dominating search results, especially when they contain many chunks.
         """
-        CONFIG_FILE_PENALTY = 0.5  # Reduce score by 50% for config files
-        
         adjusted = []
         for result in results:
             path = result.get('path', '')
@@ -326,7 +329,7 @@ class KnowledgeSearchBackend:
             # Normalize BM25 score to [0, 1] range for fusion
             # BM25 scores are unbounded, use sigmoid normalization
             bm25_score = result["score"]
-            normalized_score = 1 / (1 + math.exp(-bm25_score / 10))
+            normalized_score = 1 / (1 + math.exp(-bm25_score / BM25_SCORE_NORMALIZATION_FACTOR))
             
             # Create result dict with available data
             hydrated_result = {
