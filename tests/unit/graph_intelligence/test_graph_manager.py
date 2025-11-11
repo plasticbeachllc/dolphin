@@ -20,8 +20,8 @@ def manager(mock_db):
     return GraphManager(
         db=mock_db,
         repo_id=1,
-        edge_change_threshold=100,
-        cache_ttl_hours=1
+        edge_change_threshold=5,
+        cache_ttl_minutes=10
     )
 
 

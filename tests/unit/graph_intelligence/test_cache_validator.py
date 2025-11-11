@@ -21,8 +21,8 @@ def validator(mock_db):
     return GraphCacheValidator(
         db=mock_db,
         repo_id=1,
-        edge_change_threshold=100,
-        ttl_hours=1
+        edge_change_threshold=5,
+        ttl_minutes=10
     )
 
 
@@ -67,7 +67,7 @@ class TestCacheValidation:
             cache_state = Mock()
             cache_state.commit_sha = "commit_123"
             cache_state.last_rebuild_at = datetime.now().isoformat()
-            cache_state.edge_changes_since_rebuild = 150  # Exceeds threshold of 100
+            cache_state.edge_changes_since_rebuild = 10  # Exceeds threshold of 5
             mock_session_inst.exec.return_value.first.return_value = cache_state
 
             # Mock same commit
@@ -81,7 +81,7 @@ class TestCacheValidation:
             mock_session.return_value.__enter__.return_value = mock_session_inst
 
             # Mock cache state with old timestamp
-            old_time = datetime.now() - timedelta(hours=2)
+            old_time = datetime.now() - timedelta(minutes=15)  # Exceeds 10 minute TTL
             cache_state = Mock()
             cache_state.commit_sha = "commit_123"
             cache_state.last_rebuild_at = old_time.isoformat()
@@ -102,7 +102,7 @@ class TestCacheValidation:
             cache_state = Mock()
             cache_state.commit_sha = "commit_123"
             cache_state.last_rebuild_at = datetime.now().isoformat()
-            cache_state.edge_changes_since_rebuild = 10  # Below threshold
+            cache_state.edge_changes_since_rebuild = 2  # Below threshold of 5
             cache_state.node_count = 100
             cache_state.edge_count = 50
             mock_session_inst.exec.return_value.first.return_value = cache_state
@@ -268,8 +268,8 @@ class TestEdgeCases:
             db=mock_db,
             repo_id=1,
             edge_change_threshold=500,
-            ttl_hours=24
+            ttl_minutes=1440  # 24 hours in minutes
         )
 
         assert custom_validator.edge_change_threshold == 500
-        assert custom_validator.ttl == timedelta(hours=24)
+        assert custom_validator.ttl == timedelta(minutes=1440)

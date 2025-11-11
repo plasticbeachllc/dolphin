@@ -71,8 +71,8 @@ class IngestionPipeline:
             self.graph_managers[repo_id] = GraphManager(
                 db=db_engine,
                 repo_id=repo_id,
-                edge_change_threshold=100,
-                cache_ttl_hours=1,
+                edge_change_threshold=5,
+                cache_ttl_minutes=10,
             )
         return self.graph_managers[repo_id]
 

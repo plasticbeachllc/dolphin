@@ -321,23 +321,25 @@ class GraphStore:
         source_node_id: str,
         target_node_id: str,
         edge_type: str,
+        repo_id: int,
         line_number: int | None = None,
         is_direct: bool = True,
         relationship_metadata: str | None = None,
         commit_sha: str,
     ) -> str:
         """Insert or update a code edge.
-        
+
         Args:
             edge_id: Optional edge ID (UUID). If None, a new one is generated.
             source_node_id: Source node UUID
             target_node_id: Target node UUID
             edge_type: Type of relationship
+            repo_id: Repository ID
             line_number: Optional line number where relationship occurs
             is_direct: Whether this is a direct relationship
             relationship_metadata: Optional JSON metadata
             commit_sha: Git commit SHA
-            
+
         Returns:
             The edge ID (UUID string)
         """
@@ -349,10 +351,10 @@ class GraphStore:
                 cur.execute(
                     """
                     INSERT INTO code_edges (
-                        id, source_node_id, target_node_id, edge_type,
+                        id, source_node_id, target_node_id, edge_type, repo_id,
                         line_number, is_direct, relationship_metadata,
                         commit_sha, first_seen_at, last_seen_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
                     ON CONFLICT(source_node_id, target_node_id, edge_type, line_number)
                     DO UPDATE SET
                         is_direct = excluded.is_direct,
@@ -362,7 +364,7 @@ class GraphStore:
                     RETURNING id
                     """,
                     (
-                        edge_id, source_node_id, target_node_id, edge_type,
+                        edge_id, source_node_id, target_node_id, edge_type, repo_id,
                         line_number, is_direct, relationship_metadata, commit_sha
                     ),
                 )
