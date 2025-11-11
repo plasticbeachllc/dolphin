@@ -1,0 +1,26 @@
+{
+  "name": "@dolphin/agent-core-v2",
+  "version": "2.0.0",
+  "type": "module",
+  "main": "src/main.ts",
+  "scripts": {
+    "dev": "bun run src/main.ts",
+    "build": "bun build src/main.ts --outdir dist --target bun",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage --coverage-reporter=html --coverage-reporter=lcov",
+    "test:threshold": "bun test --coverage --coverage-threshold=80"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@iarna/toml": "^2.2.5",
+    "diff": "^8.0.2",
+    "uuid": "^11.0.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/diff": "^7.0.2",
+    "@types/uuid": "^10.0.0",
+    "bun-types": "^1.1.38"
+  }
+}
