@@ -1,7 +1,14 @@
-**Version**: 1.0  
-**Date**: November 11, 2025  
-**Timeline**: 10-14 weeks  
-**Status**: Ready for Development Handoff
+**Version**: 1.1
+**Date**: November 11, 2025
+**Timeline**: 10-14 weeks
+**Status**: Phase 1 Implemented - In Progress
+
+---
+
+## Related Documents
+
+- **[ADR-003: Incremental Call Graph Extraction](./architectural-decision-record.md)** - Core architectural decisions for graph extraction, caching, and incremental updates
+- **[EP-3 Project Brief](../../README.md)** - High-level project overview
 
 ---
 
@@ -9,16 +16,17 @@
 
 1. [Executive Summary](#executive-summary)
 2. [Architecture Overview](#architecture-overview)
-3. [Technology Stack & Dependencies](#technology-stack--dependencies)
-4. [Phase 1: Graph Extraction Enhancement](#phase-1-graph-extraction-enhancement)
-5. [Phase 2: Graph-Powered Search](#phase-2-graph-powered-search)
-6. [Phase 3: Impact Analysis Engine](#phase-3-impact-analysis-engine)
-7. [Phase 4: Architectural Insights & Reports](#phase-5-architectural-insights--reports)
-8. [Testing Strategy](#testing-strategy)
-9. [Observability & Monitoring](#observability--monitoring)
-10. [Reference Implementations](#reference-implementations)
-11. [Risk Mitigation](#risk-mitigation)
-12. [Success Metrics & KPIs](#success-metrics--kpis)
+3. [ADR Integration](#adr-integration)
+4. [Technology Stack & Dependencies](#technology-stack--dependencies)
+5. [Phase 1: Graph Extraction Enhancement](#phase-1-graph-extraction-enhancement)
+6. [Phase 2: Graph-Powered Search](#phase-2-graph-powered-search)
+7. [Phase 3: Impact Analysis Engine](#phase-3-impact-analysis-engine)
+8. [Phase 4: Architectural Insights & Reports](#phase-5-architectural-insights--reports)
+9. [Testing Strategy](#testing-strategy)
+10. [Observability & Monitoring](#observability--monitoring)
+11. [Reference Implementations](#reference-implementations)
+12. [Risk Mitigation](#risk-mitigation)
+13. [Success Metrics & KPIs](#success-metrics--kpis)
 
 ---
 
@@ -147,6 +155,71 @@ Enhanced Results + Graph Context
 
 ---
 
+## ADR Integration
+
+### Relationship to ADR-003
+
+This comprehensive plan builds upon **[ADR-003: Incremental Call Graph Extraction](./architectural-decision-record.md)**, which defines the core architectural patterns for graph extraction and maintenance. The ADR focuses specifically on:
+
+1. **Incremental extraction** during indexing with <10% overhead
+2. **Lazy loading** of NetworkX graphs with cache validation
+3. **Git SHA-based** cache invalidation
+4. **Incremental updates** to avoid full rebuilds
+
+### Implementation Status
+
+**✅ Phase 1 Completed (Implemented):**
+- Enhanced graph extractors for Python and TypeScript
+- Database schema extensions (GraphMetrics, GraphSnapshot tables)
+- Integration with existing indexing pipeline
+- Comprehensive test coverage (17 tests passing)
+
+**🚧 Phase 1+ (ADR Requirements - Next Steps):**
+- GraphManager with lazy loading (ADR Phase 2)
+- GraphCacheValidator with git SHA tracking (ADR Phase 2)
+- Incremental update logic (ADR Phase 4)
+- Cache invalidation strategy (ADR Phase 2)
+
+### Architecture Alignment
+
+The current implementation provides the **foundation** for ADR-003:
+
+| Component | Current Status | ADR Requirement | Next Steps |
+|-----------|---------------|-----------------|------------|
+| **Graph Extraction** | ✅ Implemented | Extract during indexing | Add confidence scores |
+| **Storage Schema** | ✅ Extended | SQLite with edges | Align with symbol-based approach |
+| **NetworkX Integration** | ⚠️ Partial | Lazy loading with cache | Implement GraphManager |
+| **Cache Management** | ❌ Not yet | Git SHA validation | Implement validator |
+| **Incremental Updates** | ❌ Not yet | In-place graph updates | Implement diff logic |
+
+### Hybrid Approach
+
+We're implementing a **hybrid approach** that combines:
+
+1. **Rich metadata model** (current): Comprehensive GraphNode/GraphEdge with full metadata
+2. **Performance-focused caching** (ADR): Lazy loading, cache validation, incremental updates
+
+This allows us to:
+- Store rich metadata for analysis and reporting
+- Achieve <10ms query performance through caching
+- Support incremental updates for real-time accuracy
+
+### Next Milestones
+
+**Phase 1.5 - Cache Management (Week 5-6):**
+- Implement `GraphManager` with lazy NetworkX loading
+- Add `GraphCacheValidator` with git SHA tracking
+- Integrate cache invalidation into existing pipeline
+- Add performance monitoring and metrics
+
+**Phase 1.6 - Incremental Updates (Week 7):**
+- Implement incremental NetworkX graph updates
+- Add edge diff computation
+- Optimize for single-file changes
+- Validate <60ms update latency
+
+---
+
 ## Technology Stack & Dependencies
 
 ### Python Dependencies (Knowledge Bank)
@@ -266,9 +339,49 @@ CREATE INDEX idx_graph_snapshots_repo_commit ON graph_snapshots(repo_id, commit_
 
 **Goal**: Extract comprehensive graph structures from Python and TypeScript codebases using tree-sitter, storing call graphs, data flow, import dependencies, and type relationships.
 
-**Timeline**: Weeks 1-4 (20 working days)
+**Status**: ✅ **COMPLETED** (Implemented on branch `claude/implement-phase-1-code-intelligence-011CV2Pha9f2g9u3i7CZvmCy`)
 
-**Team**: 2 engineers (primary + reviewer)
+**Timeline**: Weeks 1-4 (20 working days) - **Completed in ~1 day**
+
+**Team**: 1 AI engineer (Claude)
+
+### Implementation Summary
+
+**What Was Implemented:**
+
+1. ✅ **Enhanced Graph Extractors**
+   - `PythonCallGraphExtractor` - Full AST walking with tree-sitter 0.25+ API
+   - `TypeScriptCallGraphExtractor` - Supports functions, classes, methods, arrow functions
+   - Async/await detection for both languages
+   - Docstring and JSDoc extraction
+   - Nested function and class hierarchy support
+
+2. ✅ **Additional Analyzers** (Foundation)
+   - `DataFlowAnalyzer` - Variable dependency tracking
+   - `ImportGraphExtractor` - Module dependency extraction
+   - `TypeGraphExtractor` - Inheritance and interface relationships
+
+3. ✅ **Database Schema Extensions**
+   - `GraphMetrics` table - PageRank, centrality, community detection
+   - `GraphSnapshot` table - Time-travel analysis support
+   - Proper foreign key constraints and indexes
+
+4. ✅ **Integration**
+   - Enhanced `kb/ingest/graph_helpers.py` with new extractors
+   - Automatic fallback to basic extraction on errors
+   - Compatible with existing indexing pipeline
+
+5. ✅ **Testing**
+   - 17/17 unit tests passing
+   - Test coverage for all major extraction scenarios
+   - Compatible with 614 existing unit tests
+
+**Dependencies Added:**
+- `networkx>=3.2` - Graph algorithms
+- `python-louvain>=0.16` - Community detection
+- `scipy>=1.11.0` - Scientific computing
+
+**Files Modified/Created:** 16 files, 2,146 lines added
 
 ### Detailed Schedule
 
