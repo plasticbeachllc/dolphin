@@ -4,12 +4,14 @@ import os
 import sys
 import logging
 from pathlib import Path
+from datetime import datetime
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .app import app, set_search_backend, reset_search_backend, set_stores, set_pipeline
 from .search_backend import create_search_backend
 from ..config import load_config, KBConfig
+from .middleware.metrics import prometheus_middleware, metrics_endpoint
 
 # Configure logging to output to stderr at INFO level
 logging.basicConfig(
@@ -107,3 +109,35 @@ app_with_lifespan.add_middleware(
 
 # Mount the original app's routes onto the new app
 app_with_lifespan.router.routes.extend(app.routes)
+
+# Add Prometheus metrics middleware
+app_with_lifespan.middleware("http")(prometheus_middleware)
+
+# Add metrics endpoint
+app_with_lifespan.get("/metrics")(metrics_endpoint)
+
+# Add health check endpoint
+@app_with_lifespan.get("/health")
+async def health_check():
+    """Enhanced health check with component status."""
+    return {
+        "status": "healthy",
+        "version": "1.0.0",
+        "timestamp": datetime.utcnow().isoformat(),
+        "components": {
+            "api": "healthy"
+        }
+    }
+
+def main():
+    """Entry point for kb-api command."""
+    import uvicorn
+    uvicorn.run(
+        "kb.api.server:app_with_lifespan",
+        host="0.0.0.0",
+        port=8000,
+        reload=True
+    )
+
+if __name__ == "__main__":
+    main()

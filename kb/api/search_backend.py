@@ -175,6 +175,33 @@ class KnowledgeSearchBackend:
 
         final_results = [h for h in hits if h.get("score", 0.0) >= (request.score_cutoff or 0.0)][:request.top_k]
         
+        # Hydrate content for all final results
+        if final_results:
+            chunk_ids_needing_content = [r['chunk_id'] for r in final_results if 'content' not in r]
+            if chunk_ids_needing_content:
+                try:
+                    # Convert LanceDB row IDs to content_ids
+                    content_id_map = self._resolve_content_ids(chunk_ids_needing_content)
+                    
+                    # Fetch content using resolved content_ids
+                    content_ids = list(content_id_map.values())
+                    if content_ids:
+                        contents = self.sql_store.get_chunk_contents(content_ids)
+                        
+                        # Map content back to original chunk_ids
+                        for result in final_results:
+                            row_id = result['chunk_id']
+                            content_id = content_id_map.get(row_id)
+                            if content_id and content_id in contents:
+                                result['content'] = contents[content_id]
+                                # Also add file_path for compatibility
+                                if 'path' in result and 'file_path' not in result:
+                                    result['file_path'] = result['path']
+                except Exception as e:
+                    # Log error but don't fail the search
+                    import logging
+                    logging.warning(f"Failed to hydrate content for results: {e}")
+        
         # Enrich with graph context if requested and available
         include_graph = getattr(request, 'include_graph_context', False)
         if include_graph and self.graph_enricher:
@@ -354,15 +381,76 @@ class KnowledgeSearchBackend:
         
         return hydrated
         
+    def _resolve_content_ids(self, row_ids: list[str]) -> dict[str, str]:
+        """Convert LanceDB row IDs to metadata content_ids.
+        
+        LanceDB row IDs have format: {repo_id}:{file_id}:{embed_model}:{text_hash}:{start_line}:{end_line}
+        We need to query the metadata store to get the corresponding content_id.
+        
+        Args:
+            row_ids: List of LanceDB row IDs
+            
+        Returns:
+            Dictionary mapping row_id -> content_id
+        """
+        row_id_to_content_id = {}
+        
+        for row_id in row_ids:
+            try:
+                # Parse the row_id format: repo_id:file_id:embed_model:text_hash:start_line:end_line
+                parts = row_id.split(':')
+                if len(parts) < 4:
+                    continue
+                    
+                repo_id = int(parts[0])
+                file_id = int(parts[1])
+                embed_model = parts[2]
+                text_hash = parts[3]
+                
+                # Query metadata store for the content_id
+                with self.sql_store._connect() as conn:
+                    from contextlib import closing
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        SELECT id FROM chunk_content
+                        WHERE repo_id = ? AND file_id = ? AND embed_model = ? AND text_hash = ?
+                        LIMIT 1
+                        """,
+                        (repo_id, file_id, embed_model, text_hash)
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        content_id = str(row[0])
+                        row_id_to_content_id[row_id] = content_id
+                        
+            except (ValueError, IndexError) as e:
+                # Skip malformed row IDs
+                import logging
+                logging.warning(f"Failed to parse row_id {row_id}: {e}")
+                continue
+                
+        return row_id_to_content_id
+    
     def _hydrate_docs_for_reranking(self, hits: List[Dict], sql_store: SQLiteMetadataStore) -> List[Dict]:
         ids_to_fetch = [h['chunk_id'] for h in hits if 'content' not in h]
         if not ids_to_fetch:
             return hits
         
-        contents = sql_store.get_chunk_contents(ids_to_fetch)
-        for hit in hits:
-            if hit['chunk_id'] in contents:
-                hit['content'] = contents[hit['chunk_id']]
+        # Convert LanceDB row IDs to content_ids
+        content_id_map = self._resolve_content_ids(ids_to_fetch)
+        content_ids = list(content_id_map.values())
+        
+        if content_ids:
+            contents = sql_store.get_chunk_contents(content_ids)
+            
+            # Map content back to original chunk_ids
+            for hit in hits:
+                row_id = hit['chunk_id']
+                content_id = content_id_map.get(row_id)
+                if content_id and content_id in contents:
+                    hit['content'] = contents[content_id]
+        
         return hits
     
     def set_request_ann_config(self, config: Dict[str, Any]) -> None:
@@ -558,7 +646,11 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     }
     
     if config.cache_enabled:
-        cache_instance = create_cache(config.redis_url, config.result_cache_ttl)
+        cache_instance = create_cache(
+            redis_url=config.redis_url,
+            result_ttl=config.result_cache_ttl,
+            enabled=config.cache_enabled
+        )
         provider_kwargs['cache'] = cache_instance
     
     provider = create_provider(
@@ -566,10 +658,12 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
         **provider_kwargs
     )
     
-    # Create cache if enabled
-    cache = None
-    if config.cache_enabled:
-        cache = create_cache(config.redis_url, config.result_cache_ttl)
+    # Create cache (always create but may be disabled)
+    cache = create_cache(
+        redis_url=config.redis_url if config.cache_enabled else None,
+        result_ttl=config.result_cache_ttl,
+        enabled=config.cache_enabled
+    )
     
     # Create reranker if enabled
     reranker = None
