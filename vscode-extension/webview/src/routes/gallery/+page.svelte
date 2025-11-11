@@ -3,8 +3,9 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Badge } from '$lib/components/ui/badge';
+	import * as Tabs from '$lib/components/ui/tabs';
 	import * as Collapsible from '$lib/components/ui/collapsible';
-	import { ChevronDown, ChevronRight, FileCode, Info, MessageSquare, ArrowRight } from 'lucide-svelte';
+	import { ChevronDown, ChevronRight, FileCode, Info, MessageSquare, ArrowRight, Palette, Loader, Code } from 'lucide-svelte';
 	import MessageCard from '$lib/components/chat/MessageCard.svelte';
 	import ChatInput from '$lib/components/chat/ChatInput.svelte';
 	import ToolCallCard from '$lib/components/tools/ToolCallCard.svelte';
@@ -13,6 +14,8 @@
 	import ErrorAlert from '$lib/components/ErrorAlert.svelte';
 	import AuthStatus from '$lib/components/AuthStatus.svelte';
 	import GalleryShowcase from '$lib/components/GalleryShowcase.svelte';
+	import AnimationGallery from '$lib/components/AnimationGallery.svelte';
+	import LoadingStates from '$lib/components/LoadingStates.svelte';
 	
 	// Sample data
 	let showConfirmDialog = $state(false);
@@ -88,14 +91,89 @@
 <div class="h-full overflow-auto p-6">
 	<div class="max-w-6xl mx-auto">
 		<div class="mb-8">
-			<h1 class="text-4xl font-bold mb-2">Component Gallery</h1>
-			<p class="text-muted-foreground">
-				Visual showcase of all Dolphin UI components with interactive examples
+			<h1 class="text-4xl font-bold mb-2">Dolphin Design System Gallery</h1>
+			<p class="text-muted-foreground mb-4">
+				Complete design system with components, animations, and patterns for building exceptional AI experiences
 			</p>
+			<div class="flex items-center gap-2 text-sm">
+				<Badge variant="outline" class="gap-1">
+					<Palette class="size-3" />
+					Phase 1: Foundation
+				</Badge>
+				<Badge variant="secondary">Updated 2025-11-11</Badge>
+			</div>
 		</div>
 
+		<!-- Tabbed Navigation -->
+		<Tabs.Root value="components" class="mb-8">
+			<Tabs.List class="grid w-full grid-cols-4">
+				<Tabs.Trigger value="components">
+					<Code class="size-4 mr-2" />
+					Components
+				</Tabs.Trigger>
+				<Tabs.Trigger value="animations">
+					<Loader class="size-4 mr-2" />
+					Animations
+				</Tabs.Trigger>
+				<Tabs.Trigger value="loading">
+					<Loader class="size-4 mr-2" />
+					Loading States
+				</Tabs.Trigger>
+				<Tabs.Trigger value="featured">
+					<MessageSquare class="size-4 mr-2" />
+					Featured
+				</Tabs.Trigger>
+			</Tabs.List>
+
+			<!-- Components Tab -->
+			<Tabs.Content value="components" class="space-y-12 mt-6">
+				{@render componentsSection()}
+			</Tabs.Content>
+
+			<!-- Animations Tab -->
+			<Tabs.Content value="animations" class="mt-6">
+				<AnimationGallery />
+			</Tabs.Content>
+
+			<!-- Loading States Tab -->
+			<Tabs.Content value="loading" class="mt-6">
+				<LoadingStates />
+			</Tabs.Content>
+
+			<!-- Featured Tab -->
+			<Tabs.Content value="featured" class="mt-6">
+				{@render featuredSection()}
+			</Tabs.Content>
+		</Tabs.Root>
+	</div>
+</div>
+
+{#snippet featuredSection()}
+	<div class="space-y-8">
+		<!-- Featured Section: Chat View Gallery -->
+		<Card class="bg-primary/5 border-primary/20">
+			<CardContent class="p-6">
+				<div class="flex items-center justify-between">
+					<div class="space-y-2">
+						<div class="flex items-center gap-2">
+							<Code class="h-6 w-6 text-primary" />
+							<h3 class="text-xl font-bold">Chat View Gallery</h3>
+							<Badge variant="default">New</Badge>
+						</div>
+						<p class="text-sm text-muted-foreground">
+							Comprehensive reference for all chat formatting scenarios. View code blocks, tool calls, markdown rendering, inline code, tables, and edge cases.
+						</p>
+					</div>
+					<Button size="lg" onclick={() => window.location.href = '/gallery/chat'}>
+						View Gallery
+						<ArrowRight class="h-4 w-4 ml-2" />
+					</Button>
+				</div>
+			</CardContent>
+		</Card>
+		
 		<!-- Featured Section: Conversation Persistence Mockups -->
-		<Card class="bg-primary/5 border-primary/20 mb-8">
+		<Card class="bg-primary/5 border-primary/20">
 			<CardContent class="p-6">
 				<div class="flex items-center justify-between">
 					<div class="space-y-2">
@@ -115,12 +193,13 @@
 				</div>
 			</CardContent>
 		</Card>
+	</div>
+{/snippet}
 
-		<Separator class="mb-12" />
-
-		<div class="space-y-12">
-			<!-- Chat Components Section -->
-			<section>
+{#snippet componentsSection()}
+	<div class="space-y-12">
+		<!-- Chat Components Section -->
+		<section>
 				<h2 class="text-2xl font-bold mb-6">Chat Components</h2>
 				
 				<div class="space-y-6">
@@ -415,93 +494,6 @@
 			</section>
 
 			<Separator />
-
-			<!-- Agentic Animations Section -->
-			<section>
-				<h2 class="text-2xl font-bold mb-6">Agentic Animations</h2>
-
-				<div class="space-y-6">
-					<Card>
-						<CardHeader>
-							<CardTitle>Thinking Indicator</CardTitle>
-							<CardDescription>Shows when the agent is processing</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<div class="flex items-center gap-3 p-4 bg-muted rounded-lg">
-								<div class="w-8 h-8 rounded-full bg-primary animate-pulse-glow flex items-center justify-center text-primary-foreground text-xs">
-									AI
-								</div>
-								<div class="flex gap-1">
-									<div class="w-2 h-2 rounded-full bg-foreground animate-typing-dot"></div>
-									<div class="w-2 h-2 rounded-full bg-foreground animate-typing-dot"></div>
-									<div class="w-2 h-2 rounded-full bg-foreground animate-typing-dot"></div>
-								</div>
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>Message Slide In</CardTitle>
-							<CardDescription>Smooth entrance animation for new messages</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<div class="p-4 bg-card border rounded-lg animate-slide-in-up">
-								<p class="text-sm">This message slides in smoothly from below</p>
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>Loading Shimmer</CardTitle>
-							<CardDescription>Skeleton loading state</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<div class="h-16 rounded-lg animate-shimmer"></div>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>Active Status</CardTitle>
-							<CardDescription>Breathing indicator for active agents</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<div class="flex items-center gap-2">
-								<div class="w-3 h-3 rounded-full bg-green-500 animate-breathe"></div>
-								<p class="text-sm text-muted-foreground">Agent is active</p>
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>Fade In</CardTitle>
-							<CardDescription>Gentle reveal animation</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<div class="p-4 bg-accent rounded-lg animate-fade-in">
-								<p class="text-sm">This content fades in gracefully</p>
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>Attention Bounce</CardTitle>
-							<CardDescription>Subtle bounce for notifications</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<span class="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-primary text-primary-foreground animate-bounce-subtle">
-								New
-							</span>
-						</CardContent>
-					</Card>
-				</div>
-			</section>
-
-			<Separator />
 	
 			<!-- Theme Testing Section -->
 			<section>
@@ -551,8 +543,7 @@
 				</Card>
 			</section>
 		</div>
-	</div>
-</div>
+	{/snippet}
 
 <style>
 	.diff-line {

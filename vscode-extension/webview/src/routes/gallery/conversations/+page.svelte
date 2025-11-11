@@ -17,8 +17,7 @@
 		Plus
 	} from 'lucide-svelte';
 	import { listConversations, loadConversation, deleteConversation, renameConversation, onMessage, getVSCodeAPI } from '$lib/api/vscode';
-	import type { ConversationListItem } from '../../../../../shared/types/events';
-	import type { AgentEvent } from '../../../../../shared/types/events';
+	import type { ConversationListItem, AgentEvent } from '@shared/types/events';
 
 	// Props from parent
 	interface Props {
@@ -170,6 +169,21 @@
 
 <div class="h-full overflow-auto p-6">
 	<div class="max-w-7xl mx-auto">
+		<!-- Dev Mode Notice -->
+		{#if typeof acquireVsCodeApi === 'undefined'}
+			<div class="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+				<div class="flex items-start gap-3">
+					<div class="text-yellow-500 text-lg">ℹ️</div>
+					<div class="flex-1">
+						<h3 class="text-sm font-semibold text-yellow-500 mb-1">Development Mode</h3>
+						<p class="text-sm text-muted-foreground">
+							Conversations require the VS Code extension backend. To test this feature, run the webview inside VS Code.
+						</p>
+					</div>
+				</div>
+			</div>
+		{/if}
+		
 		<!-- Header -->
 		<div class="mb-8">
 			<div class="flex items-center justify-between gap-4">
@@ -262,7 +276,12 @@
 												<div class="flex items-start justify-between gap-2">
 													<div class="flex-1 min-w-0">
 														{#if renamingId === conv.id}
-															<div class="space-y-2" onclick={(e) => e.stopPropagation()}>
+															<div
+																class="space-y-2"
+																role="form"
+																onclick={(e) => e.stopPropagation()}
+																onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
+															>
 																<Input
 																	type="text"
 																	bind:value={renameText}
@@ -293,7 +312,13 @@
 														{/if}
 													</div>
 													{#if renamingId !== conv.id}
-														<div class="flex gap-1 opacity-0 group-hover:opacity-100" onclick={(e) => e.stopPropagation()}>
+														<div
+															class="flex gap-1 opacity-0 group-hover:opacity-100"
+															role="toolbar"
+															aria-label="Conversation actions"
+															onclick={(e) => e.stopPropagation()}
+															onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
+														>
 															<Button
 																variant="ghost"
 																size="sm"
@@ -359,7 +384,12 @@
 											<div class="flex items-start justify-between gap-2">
 												<div class="flex-1 min-w-0">
 													{#if renamingId === conv.id}
-														<div class="space-y-2" onclick={(e) => e.stopPropagation()}>
+														<div
+															class="space-y-2"
+															role="form"
+															onclick={(e) => e.stopPropagation()}
+															onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
+														>
 															<Input
 																type="text"
 																bind:value={renameText}
@@ -390,7 +420,13 @@
 													{/if}
 												</div>
 												{#if renamingId !== conv.id}
-													<div class="flex gap-1 opacity-0 group-hover:opacity-100" onclick={(e) => e.stopPropagation()}>
+													<div
+														class="flex gap-1 opacity-0 group-hover:opacity-100"
+														role="toolbar"
+														aria-label="Conversation actions"
+														onclick={(e) => e.stopPropagation()}
+														onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
+													>
 														<Button
 															variant="ghost"
 															size="sm"
