@@ -1,0 +1,20 @@
+{
+  "id": "hybrid-fastapi-endpoints",
+  "query": "FastAPI endpoints for search",
+  "expected_results": [
+    {
+      "file": "kb/api/app.py",
+      "relevance": 1.0
+    },
+    {
+      "file": "kb/api/search_backend.py",
+      "relevance": 0.9
+    }
+  ],
+  "metadata": {
+    "category": "hybrid-search",
+    "difficulty": "medium",
+    "description": "Framework-specific query combining FastAPI + search concepts",
+    "tags": ["fastapi", "api", "search", "hybrid"]
+  }
+}

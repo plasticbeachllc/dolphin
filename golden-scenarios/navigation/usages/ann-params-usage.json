@@ -1,0 +1,26 @@
+{
+  "id": "nav-ann-params-usage",
+  "query": "find all usages of ANNParams",
+  "expected_results": [
+    {
+      "file": "kb/retrieval/ann_tuning.py",
+      "symbol": "ANNParams",
+      "rank": 1,
+      "relevance": 1.0
+    },
+    {
+      "file": "scripts/benchmark_ann.py",
+      "relevance": 0.8
+    },
+    {
+      "file": "kb/store/lancedb_store.py",
+      "relevance": 0.8
+    }
+  ],
+  "metadata": {
+    "category": "navigation",
+    "difficulty": "medium",
+    "description": "Find all files that use ANNParams class",
+    "tags": ["usages", "cross-file", "navigation"]
+  }
+}

@@ -12,19 +12,7 @@
         "Other"
     ],
     "main": "./out/extension.js",
-    "activationEvents": [
-        "onView:dolphin.chatView",
-        "onCommand:dolphin.focusInput",
-        "onCommand:dolphin.newConversation",
-        "onCommand:dolphin.setApiKey",
-        "onCommand:dolphin.test",
-        "onCommand:dolphin.kb.showStatus",
-        "onCommand:dolphin.kb.restart",
-        "onCommand:dolphin.askAboutSelection",
-        "onCommand:dolphin.refactorSelection",
-        "onCommand:dolphin.askAboutFile",
-        "onCommand:dolphin.askAboutFolder"
-    ],
+    "activationEvents": [],
     "contributes": {
         "viewsContainers": {
             "activitybar": [
