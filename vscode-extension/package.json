@@ -230,7 +230,8 @@
             {
                 "command": "dolphin.kb.showStatus",
                 "key": "ctrl+shift+k",
-                "mac": "cmd+shift+k"
+                "mac": "cmd+shift+k",
+                "when": "!editorTextFocus"
             }
         ]
     },
