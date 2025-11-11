@@ -694,13 +694,10 @@ class IngestionPipeline:
         # Update cache state with final counts after indexing
         if not dry_run and self.graph_store:
             graph_manager = self.get_graph_manager(repo_id)
-            # Update cache state with current commit and graph size
-            graph_manager.validator.update_cache_state(
-                commit_sha=commit_sha,
-                node_count=graph_nodes_created,
-                edge_count=graph_edges_created,
-                reset_changes=True  # Reset edge changes after successful index
-            )
+            # Force rebuild to get accurate total counts from database
+            # This ensures cache state reflects TOTAL graph size, not just incremental changes
+            graph = graph_manager.get_graph(force_rebuild=True)
+            # Cache state is automatically updated in _rebuild_graph() with total counts
         
         # Print summary
         print(f"\nIndexing complete for {repo_name}:")
