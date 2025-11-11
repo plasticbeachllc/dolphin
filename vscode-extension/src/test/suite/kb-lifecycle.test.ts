@@ -10,7 +10,7 @@ import * as path from 'path';
 suite('KB Lifecycle Management', () => {
     let extension: vscode.Extension<any> | undefined;
 
-    suiteSetup(async function() {
+    suiteSetup(async function () {
         this.timeout(15000); // 15 second timeout for extension activation (reduced from 30s)
 
         // Get the extension
@@ -24,7 +24,7 @@ suite('KB Lifecycle Management', () => {
     });
 
     suite('KB Auto-Start', () => {
-        test('KB server starts automatically on extension activation', async function() {
+        test('KB server starts automatically on extension activation', async function () {
             this.timeout(8000);
 
             assert.ok(extension, 'Extension should be available');
@@ -44,7 +44,7 @@ suite('KB Lifecycle Management', () => {
             }
         });
 
-        test('KB server responds to health checks', async function() {
+        test('KB server responds to health checks', async function () {
             this.timeout(5000);
 
             if (!extension || !extension.exports || !extension.exports.kbManager) {
@@ -62,7 +62,7 @@ suite('KB Lifecycle Management', () => {
             );
         });
 
-        test('KB server port is assigned correctly', async function() {
+        test('KB server port is assigned correctly', async function () {
             this.timeout(5000);
 
             if (!extension || !extension.exports || !extension.exports.kbManager) {
@@ -84,7 +84,7 @@ suite('KB Lifecycle Management', () => {
     });
 
     suite('KB Restart Functionality', () => {
-        test('KB can be manually restarted via command', async function() {
+        test('KB can be manually restarted via command', async function () {
             this.timeout(20000);
 
             // Execute restart command
@@ -105,7 +105,7 @@ suite('KB Lifecycle Management', () => {
             }
         });
 
-        test('KB restarts after unexpected crash', async function() {
+        test('KB restarts after unexpected crash', async function () {
             this.timeout(30000);
             this.skip(); // Skip as simulating crashes is complex
 
@@ -115,7 +115,7 @@ suite('KB Lifecycle Management', () => {
             // 3. Verify KB is running again
         });
 
-        test('KB maintains state across restarts', async function() {
+        test('KB maintains state across restarts', async function () {
             this.timeout(20000);
             this.skip(); // Skip as this requires actual KB operations
 
@@ -127,7 +127,7 @@ suite('KB Lifecycle Management', () => {
     });
 
     suite('KB Status Monitoring', () => {
-        test('KB status can be queried via command', async function() {
+        test('KB status can be queried via command', async function () {
             this.timeout(5000);
 
             try {
@@ -140,7 +140,7 @@ suite('KB Lifecycle Management', () => {
             }
         });
 
-        test('KB status updates are emitted', async function() {
+        test('KB status updates are emitted', async function () {
             this.timeout(8000);
 
             if (!extension || !extension.exports || !extension.exports.kbManager) {
@@ -168,7 +168,7 @@ suite('KB Lifecycle Management', () => {
             // This test is informational - status updates may not always fire
         });
 
-        test('KB error states are reported', async function() {
+        test('KB error states are reported', async function () {
             this.timeout(5000);
             this.skip(); // Skip as simulating errors is complex
 
@@ -177,14 +177,14 @@ suite('KB Lifecycle Management', () => {
     });
 
     suite('KB Process Management', () => {
-        test('KB process is cleaned up on extension deactivation', async function() {
+        test('KB process is cleaned up on extension deactivation', async function () {
             this.timeout(5000);
             this.skip(); // Skip as we cannot safely deactivate extension in tests
 
             // This test would verify KB process terminates when extension deactivates
         });
 
-        test('KB handles multiple restart requests gracefully', async function() {
+        test('KB handles multiple restart requests gracefully', async function () {
             this.timeout(20000);
 
             if (!extension || !extension.exports || !extension.exports.kbManager) {
@@ -211,7 +211,7 @@ suite('KB Lifecycle Management', () => {
             assert.ok(status, 'KB should be operational after multiple restarts');
         });
 
-        test('KB respects workspace folder changes', async function() {
+        test('KB respects workspace folder changes', async function () {
             this.timeout(5000);
             this.skip(); // Skip as changing workspace folders in tests is complex
 
@@ -220,7 +220,7 @@ suite('KB Lifecycle Management', () => {
     });
 
     suite('KB Configuration', () => {
-        test('KB uses correct configuration from settings', async function() {
+        test('KB uses correct configuration from settings', async function () {
             this.timeout(5000);
 
             const config = vscode.workspace.getConfiguration('dolphin');
@@ -240,7 +240,7 @@ suite('KB Lifecycle Management', () => {
             );
         });
 
-        test('KB configuration changes trigger restart', async function() {
+        test('KB configuration changes trigger restart', async function () {
             this.timeout(8000);
             this.skip(); // Skip as modifying configuration in tests is complex
 
@@ -251,7 +251,7 @@ suite('KB Lifecycle Management', () => {
     });
 
     suite('KB Performance', () => {
-        test('KB starts within reasonable time', async function() {
+        test('KB starts within reasonable time', async function () {
             this.timeout(8000);
 
             if (!extension || !extension.exports || !extension.exports.kbManager) {
@@ -276,7 +276,7 @@ suite('KB Lifecycle Management', () => {
             assert.ok(elapsed < 10000, `KB startup took ${elapsed}ms, should be < 10000ms`);
         });
 
-        test('KB status checks are fast', async function() {
+        test('KB status checks are fast', async function () {
             this.timeout(5000);
 
             if (!extension || !extension.exports || !extension.exports.kbManager) {

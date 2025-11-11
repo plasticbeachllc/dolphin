@@ -137,3 +137,46 @@ markers = [
     "scenario: marks tests as scenario tests",
 ]
 asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["kb", "personas"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/migrations/*",
+    "*/.venv/*",
+    "*/venv/*",
+]
+branch = true
+parallel = true
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+skip_empty = true
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+# Fail build if coverage is below 75%
+fail_under = 75.0
+
+[tool.coverage.html]
+directory = "tests/reports/htmlcov"
+show_contexts = true
+
+[tool.coverage.xml]
+output = "tests/reports/coverage.xml"
+
+[tool.coverage.json]
+output = "tests/reports/coverage.json"
+show_contexts = true
