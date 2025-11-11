@@ -266,26 +266,41 @@ class TestCreateCache:
         assert cache.embedding_ttl == 7200
         assert cache.result_ttl == 1800
 
-    @patch('redis.from_url')
-    def test_create_with_redis_success(self, mock_redis_from_url):
+    def test_create_with_redis_success(self):
         """Create cache with successful Redis connection."""
+        # Mock redis at import time
         mock_client = MagicMock()
         mock_client.ping.return_value = True
-        mock_redis_from_url.return_value = mock_client
         
-        cache = create_cache(redis_url="redis://localhost:6379/0")
-        assert cache.redis is not None
-        mock_client.ping.assert_called_once()
+        with patch('builtins.__import__') as mock_import:
+            def import_side_effect(name, *args, **kwargs):
+                if name == 'redis':
+                    mock_redis = MagicMock()
+                    mock_redis.from_url.return_value = mock_client
+                    return mock_redis
+                return __import__(name, *args, **kwargs)
+            
+            mock_import.side_effect = import_side_effect
+            cache = create_cache(redis_url="redis://localhost:6379/0")
+            assert cache.redis is not None
+            mock_client.ping.assert_called_once()
 
-    @patch('redis.from_url')
-    def test_create_with_redis_failure(self, mock_redis_from_url):
+    def test_create_with_redis_failure(self):
         """Create cache with failed Redis connection (fallback to in-memory)."""
-        mock_redis_from_url.side_effect = Exception("Connection failed")
-        
-        cache = create_cache(redis_url="redis://localhost:6379/0")
-        # Should fall back to in-memory
-        assert cache.redis is None
-        assert cache.enabled is True
+        # Mock redis import that raises on connection
+        with patch('builtins.__import__') as mock_import:
+            def import_side_effect(name, *args, **kwargs):
+                if name == 'redis':
+                    mock_redis = MagicMock()
+                    mock_redis.from_url.side_effect = Exception("Connection failed")
+                    return mock_redis
+                return __import__(name, *args, **kwargs)
+            
+            mock_import.side_effect = import_side_effect
+            cache = create_cache(redis_url="redis://localhost:6379/0")
+            # Should fall back to in-memory
+            assert cache.redis is None
+            assert cache.enabled is True
 
 
 class TestCacheIntegration:

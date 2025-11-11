@@ -558,7 +558,11 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     }
     
     if config.cache_enabled:
-        cache_instance = create_cache(config.redis_url, config.result_cache_ttl)
+        cache_instance = create_cache(
+            redis_url=config.redis_url,
+            result_ttl=config.result_cache_ttl,
+            enabled=config.cache_enabled
+        )
         provider_kwargs['cache'] = cache_instance
     
     provider = create_provider(
@@ -566,10 +570,12 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
         **provider_kwargs
     )
     
-    # Create cache if enabled
-    cache = None
-    if config.cache_enabled:
-        cache = create_cache(config.redis_url, config.result_cache_ttl)
+    # Create cache (always create but may be disabled)
+    cache = create_cache(
+        redis_url=config.redis_url if config.cache_enabled else None,
+        result_ttl=config.result_cache_ttl,
+        enabled=config.cache_enabled
+    )
     
     # Create reranker if enabled
     reranker = None
