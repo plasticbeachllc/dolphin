@@ -365,7 +365,7 @@ describe("ClaudeToolExecutor - KB Tool Execution", () => {
 
       expect(completedEvent).toBeDefined();
       expect(completedEvent.error).toBeDefined();
-      expect(completedEvent.error).toContain("unknown");
+      expect(completedEvent.error).toContain("not found");
     });
 
     test("handles malformed tool input", async () => {
@@ -430,7 +430,7 @@ describe("ClaudeToolExecutor - KB Tool Execution", () => {
       ) as any;
 
       expect(startedEvent).toBeDefined();
-      expect(startedEvent.toolName).toBe("search_knowledge");
+      expect(startedEvent.tool).toBe("search_knowledge");
       expect(startedEvent.input).toBeDefined();
     });
 
@@ -462,7 +462,7 @@ describe("ClaudeToolExecutor - KB Tool Execution", () => {
       ) as any;
 
       expect(completedEvent).toBeDefined();
-      expect(completedEvent.toolName).toBe("search_knowledge");
+      expect(completedEvent.toolId).toBe("event-2");
       expect(completedEvent.executionTime).toBeDefined();
     });
 

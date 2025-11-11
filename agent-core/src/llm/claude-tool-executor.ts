@@ -441,6 +441,14 @@ export class ClaudeToolExecutor {
       toolCalls.map(async (toolCall) => {
         const startTime = Date.now();
 
+        // Emit tool_call_started event
+        this.config.onEvent({
+          type: "tool_call_started",
+          toolId: toolCall.id,
+          tool: toolCall.name,
+          input: toolCall.input,
+        });
+
         try {
           // Strip MCP server prefix if present (e.g., "mcp__pb-kb__search_knowledge" -> "search_knowledge")
           const toolName = toolCall.name.replace(/^mcp__[^_]+__/, "");
