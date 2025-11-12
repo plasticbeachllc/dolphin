@@ -46,8 +46,9 @@ jobs:
             - Performance considerations
             - Security concerns
             - Test coverage
+            - Idiomatic pattern
 
-            Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
+            Use the repository's AGENTS.md for guidance on style, conventions, and existing tools. Be constructive and thorough in your feedback.
 
             Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
 
