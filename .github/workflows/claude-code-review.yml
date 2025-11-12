@@ -48,7 +48,7 @@ jobs:
             - Test coverage
             - Idiomatic pattern
 
-            Use the repository's AGENTS.md for guidance on style, conventions, and existing tools. Be constructive and thorough in your feedback.
+            Use the repository's AGENTS.md for guidance on style, conventions, and existing tools. Be constructive and direct in your feedback.
 
             Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
 
