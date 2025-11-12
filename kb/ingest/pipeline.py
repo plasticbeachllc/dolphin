@@ -194,8 +194,8 @@ class IngestionPipeline:
                     cur.execute("DELETE FROM cross_repo_references WHERE file_id IN (SELECT id FROM files WHERE repo_id = ?)", (repo_id,))
 
                 if table_exists("code_edges"):
-                    cur.execute("DELETE FROM code_edges WHERE from_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)", (repo_id,))
-                    cur.execute("DELETE FROM code_edges WHERE to_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)", (repo_id,))
+                    cur.execute("DELETE FROM code_edges WHERE source_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)", (repo_id,))
+                    cur.execute("DELETE FROM code_edges WHERE target_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)", (repo_id,))
 
                 if table_exists("code_nodes"):
                     cur.execute("DELETE FROM code_nodes WHERE repo_id = ?", (repo_id,))
