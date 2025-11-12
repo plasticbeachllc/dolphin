@@ -54,8 +54,8 @@
 </script>
 
 <Sheet.Root bind:open>
-	<Sheet.Content side="right" class="w-full sm:max-w-[540px] overflow-y-auto">
-		<Sheet.Header>
+	<Sheet.Content side="right" class="w-full sm:max-w-[90vw] overflow-y-auto">
+		<Sheet.Header class="border-b pb-4">
 			<div class="flex items-start justify-between">
 				<div class="flex-1">
 					<div class="flex items-center gap-2 mb-2">
@@ -70,7 +70,8 @@
 			</div>
 		</Sheet.Header>
 		
-		<div class="space-y-6 py-6">
+		<!-- Interior panel with proper padding -->
+		<div class="p-8 space-y-6">
 			<!-- Reasoning Chain Section -->
 			<section class="space-y-4">
 				<div class="flex items-center gap-2">
@@ -99,15 +100,14 @@
 									<p class="text-sm font-medium">{reason.step}</p>
 									<p class="text-xs text-muted-foreground">{reason.reasoning}</p>
 									
-									<!-- Confidence bar -->
+									<!-- Progress bar (simulates thinking progress) -->
 									<div class="space-y-1">
-										<div class="flex items-center justify-between text-xs">
-											<span class="text-muted-foreground">Confidence</span>
-											<span class="font-semibold">{Math.round(reason.confidence * 100)}%</span>
+										<div class="flex items-center justify-between">
+											<span class="text-[11px] italic text-muted-foreground">Progress</span>
 										</div>
 										<div class="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
 											<div
-												class="h-full {getConfidenceColor(reason.confidence)} transition-all duration-500"
+												class="h-full bg-primary transition-all duration-500"
 												style="width: {reason.confidence * 100}%"
 											></div>
 										</div>
@@ -195,7 +195,8 @@
 						<div class="flex items-start gap-3">
 							<Checkbox
 								id="criterion-{i}"
-								bind:checked={checkedCriteria[i]}
+								checked={checkedCriteria[i] ?? false}
+								onCheckedChange={(checked) => { checkedCriteria[i] = checked === true; }}
 								class="mt-0.5"
 							/>
 							<label

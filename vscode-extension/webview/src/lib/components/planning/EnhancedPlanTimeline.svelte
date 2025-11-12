@@ -112,26 +112,28 @@
 				</Accordion.Trigger>
 				
 				<Accordion.Content>
-					<div class="px-4 pb-4">
+					<!-- Interior panel with proper padding -->
+					<div class="p-6 bg-muted/20 border-t">
 						<!-- Timeline Track -->
-						<div class="relative pl-6">
+						<div class="relative pl-8">
 							{#each phase.steps as step, i}
-								<div class="relative pb-6 last:pb-0">
-									<!-- Connector Line -->
-									{#if i < phase.steps.length - 1}
-										<div
-											class="absolute left-[-18px] top-8 w-0.5 h-full {step.status === 'completed' ? 'bg-green-500' : 'bg-border'}"
-										></div>
-									{/if}
-									
+								<div class="relative pb-8 last:pb-0">
 									<!-- Step Node -->
-									<div class="flex items-start gap-3">
-										<!-- Status Circle -->
+									<div class="flex items-start gap-4">
+										<!-- Status Circle - properly positioned -->
 										<div
-											class="absolute left-[-24px] top-0 size-3 rounded-full border-2 border-background {statusBgColors[step.status]}"
+											class="relative size-3 rounded-full border-2 border-background {statusBgColors[step.status]} flex-shrink-0"
 											class:animate-pulse={step.status === 'running'}
 											title={step.status}
+											style="margin-top: 2px;"
 										></div>
+										
+										<!-- Connector Line - properly aligned from center of circle -->
+										{#if i < phase.steps.length - 1}
+											<div
+												class="absolute left-[5px] top-[8px] w-0.5 h-[calc(100%-8px)] {step.status === 'completed' ? 'bg-green-500' : 'bg-border'}"
+											></div>
+										{/if}
 										
 										<!-- Step Content -->
 										<div class="flex-1 space-y-2">
@@ -142,7 +144,6 @@
 													</span>
 													{#if step.status === 'running'}
 														<Badge variant="secondary" class="text-xs">
-															<Loader2 class="size-3 mr-1 animate-spin" />
 															In Progress
 														</Badge>
 													{/if}
