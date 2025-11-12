@@ -173,18 +173,19 @@ class SQLiteMetadataStore:
             table_exists = cur.fetchone()
 
             if table_exists:
-                # Check if it has the text_hash column (added in recent update)
-                cur.execute("PRAGMA table_info(chunks_fts)")
-                columns = cur.fetchall()
-                has_text_hash = any(col[1] == 'text_hash' for col in columns)
-
-                if has_text_hash:
+                # Test if it has the text_hash column by trying to use it
+                # PRAGMA table_info doesn't work reliably with FTS5 virtual tables
+                try:
+                    cur.execute("SELECT text_hash FROM chunks_fts LIMIT 0")
                     return  # Already has correct schema
-                else:
-                    # Old schema - drop and recreate
-                    print(f"[SQLiteMeta] Migrating FTS5 table to new schema (adding text_hash column)...")
-                    cur.execute("DROP TABLE chunks_fts")
-                    # Fall through to creation below
+                except sqlite3.OperationalError as e:
+                    if "no column named text_hash" in str(e):
+                        # Old schema - drop and recreate
+                        print(f"[SQLiteMeta] Migrating FTS5 table to new schema (adding text_hash column)...")
+                        cur.execute("DROP TABLE chunks_fts")
+                        # Fall through to creation below
+                    else:
+                        raise
 
             # Test FTS5 support
             cur.execute("CREATE VIRTUAL TABLE IF NOT EXISTS _fts5_test USING fts5(x)")
