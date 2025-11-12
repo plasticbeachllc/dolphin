@@ -1,0 +1,19 @@
+{
+  "id": "flask-exact-blueprint",
+  "query": "Blueprint",
+  "repo": "pallets/flask@2.3.0",
+  "expected_results": [
+    {
+      "file": "src/flask/blueprints.py",
+      "symbol": "Blueprint",
+      "rank": 1,
+      "relevance": 1.0
+    }
+  ],
+  "metadata": {
+    "category": "code-search",
+    "difficulty": "easy",
+    "description": "Exact class name lookup for Blueprint",
+    "tags": ["class", "blueprint", "exact-match"]
+  }
+}

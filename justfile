@@ -334,6 +334,142 @@ tail-mcp:
   tail -f mcp-bridge/logs/mcp.log
 
 # ==============================================================================
+# Benchmarking & Evaluation
+# ==============================================================================
+
+# SWE-Bench Lite Evaluation
+# ------------------------------------------------------------------------------
+
+# Setup SWE-Bench test repos (clone and index)
+swe-bench-setup:
+	@echo "Setting up SWE-Bench Lite test repositories..."
+	uv run python scripts/orchestrate_swe_bench.py setup
+
+# Show SWE-Bench setup status
+swe-bench-status:
+	uv run python scripts/orchestrate_swe_bench.py status
+
+# Run SWE-Bench Lite evaluation (file identification task)
+eval-swe-bench REPOS="*" LIMIT="":
+	@echo "Running SWE-Bench Lite evaluation..."
+	@mkdir -p results
+	uv run python scripts/eval_swe_bench.py \
+		--dataset test-data/swe_bench_instances.json \
+		{{if REPOS != "*" { "--repos " + REPOS } else { "" } }} \
+		{{if LIMIT != "" { "--limit " + LIMIT } else { "" } }} \
+		--output results/swe_bench_eval.json
+	@echo "✅ Results saved to results/swe_bench_eval.json"
+
+# Run SWE-Bench evaluation with verbose output
+eval-swe-bench-verbose REPOS="*":
+	@mkdir -p results
+	uv run python scripts/eval_swe_bench.py \
+		--dataset test-data/swe_bench_instances.json \
+		{{if REPOS != "*" { "--repos " + REPOS } else { "" } }} \
+		--output results/swe_bench_eval.json \
+		--verbose
+
+# Quick SWE-Bench smoke test (10 instances)
+eval-swe-bench-quick:
+	@echo "Running quick SWE-Bench smoke test..."
+	@mkdir -p results
+	uv run python scripts/eval_swe_bench.py \
+		--dataset test-data/swe_bench_instances.json \
+		--limit 10 \
+		--output results/swe_bench_quick.json
+
+# Golden Scenarios Evaluation (Flask)
+# ------------------------------------------------------------------------------
+
+# Run custom golden scenario evaluation
+eval-golden SCENARIOS="golden-scenarios-flask":
+	@echo "Running golden scenario evaluation..."
+	@mkdir -p results
+	uv run python scripts/eval_retrieval.py \
+		--scenarios {{SCENARIOS}} \
+		--output results/golden_eval.json
+	@echo "✅ Results saved to results/golden_eval.json"
+
+# Run golden scenarios with verbose output
+eval-golden-verbose SCENARIOS="golden-scenarios-flask":
+	@mkdir -p results
+	uv run python scripts/eval_retrieval.py \
+		--scenarios {{SCENARIOS}} \
+		--output results/golden_eval.json \
+		--verbose
+
+# Setup Flask test repo for golden scenarios
+flask-setup:
+	@echo "Setting up Flask 2.3.0 test repository..."
+	@mkdir -p test-repos
+	@if [ ! -d "test-repos/flask" ]; then \
+		git clone https://github.com/pallets/flask.git test-repos/flask; \
+		cd test-repos/flask && git checkout 2.3.0; \
+	fi
+	@echo "Indexing with small model..."
+	uv run python -m kb.cli index test-repos/flask --embed-model small
+	@echo "Indexing with large model..."
+	uv run python -m kb.cli index test-repos/flask --embed-model large
+	@echo "✅ Flask test repo ready"
+
+# ANN Benchmarks (Existing)
+# ------------------------------------------------------------------------------
+
+# Run ANN parameter benchmarks
+benchmark-ann QUERIES="50" ITERATIONS="50":
+	@echo "Running ANN parameter benchmarks..."
+	@mkdir -p results
+	uv run python scripts/benchmark_ann.py \
+		--queries {{QUERIES}} \
+		--iterations {{ITERATIONS}} \
+		--output results/ann_benchmark.json
+	@echo "✅ Results saved to results/ann_benchmark.json"
+
+# Combined Benchmarks
+# ------------------------------------------------------------------------------
+
+# Run full benchmark suite (SWE-Bench + Golden + ANN)
+benchmark-full:
+	@echo "Running full benchmark suite..."
+	@echo ""
+	@echo "1/3: SWE-Bench Lite evaluation..."
+	@just eval-swe-bench-quick
+	@echo ""
+	@echo "2/3: Golden scenarios..."
+	@just eval-golden
+	@echo ""
+	@echo "3/3: ANN benchmarks..."
+	@just benchmark-ann 20 20
+	@echo ""
+	@echo "✅ Full benchmark complete!"
+	@echo "   - SWE-Bench: results/swe_bench_quick.json"
+	@echo "   - Golden: results/golden_eval.json"
+	@echo "   - ANN: results/ann_benchmark.json"
+
+# Quick benchmark for CI (fast smoke tests)
+benchmark-quick:
+	@echo "Running quick benchmark suite..."
+	@just eval-swe-bench-quick
+	@just benchmark-ann 10 10
+	@echo "✅ Quick benchmark complete"
+
+# Compare evaluations against baseline
+compare-eval BASELINE="results/baseline_eval.json" CURRENT="results/golden_eval.json":
+	@echo "Comparing evaluation results..."
+	uv run python scripts/compare_eval.py \
+		{{BASELINE}} \
+		{{CURRENT}} \
+		--threshold 3.0
+
+# Save current results as baseline
+save-baseline:
+	@echo "Saving current results as baseline..."
+	@mkdir -p results/baselines
+	@cp results/golden_eval.json results/baselines/baseline_$(shell date +%Y%m%d_%H%M%S).json
+	@cp results/golden_eval.json results/baseline_eval.json
+	@echo "✅ Baseline saved"
+
+# ==============================================================================
 # Cleanup Commands
 # ==============================================================================
 

@@ -1,0 +1,28 @@
+{
+  "id": "flask-framework-werkzeug",
+  "query": "Werkzeug Request and Response wrappers",
+  "repo": "pallets/flask@2.3.0",
+  "expected_results": [
+    {
+      "file": "src/flask/wrappers.py",
+      "symbol": "Request",
+      "relevance": 1.0
+    },
+    {
+      "file": "src/flask/wrappers.py",
+      "symbol": "Response",
+      "relevance": 1.0
+    },
+    {
+      "file": "src/flask/app.py",
+      "symbol": "request_class",
+      "relevance": 0.7
+    }
+  ],
+  "metadata": {
+    "category": "hybrid-search",
+    "difficulty": "medium",
+    "description": "Werkzeug WSGI wrapper integration",
+    "tags": ["werkzeug", "wsgi", "framework"]
+  }
+}
