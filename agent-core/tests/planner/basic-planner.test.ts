@@ -112,7 +112,7 @@ def search_endpoint(query: str):
         throw error;
       }
     },
-    { timeout: 10000 } // Increased from default 5000ms to 10000ms for API calls
+    { timeout: 30000 } // Increased to 30s for API calls that may take longer
   );
 
   it("should handle errors gracefully", async () => {

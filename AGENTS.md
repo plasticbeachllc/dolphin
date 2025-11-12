@@ -13,9 +13,10 @@ Dolphin is a semantic code search and knowledge management system for AI interfa
 - **Documentation** (`docs/`): Architecture, guides, and implementation plans
 
 **Key Documentation:**
+
 - [README.md](README.md) - Project overview, quick start, and user guide
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - Technical architecture and implementation status
-- [docs/TESTING-GUIDE.md](docs/TESTING-GUIDE.md) - Testing setup and procedures
+- [TESTING.md](TESTING.md) - Testing setup and procedures
 
 ## Core Principles for Agents
 
@@ -26,6 +27,7 @@ Dolphin is a semantic code search and knowledge management system for AI interfa
 This project uses `uv` for Python dependency management. All Python commands, scripts, and tools MUST be executed using `uv run` to ensure correct dependency resolution and virtual environment activation.
 
 **Examples:**
+
 ```bash
 # ✅ CORRECT - Use uv run
 uv run pytest tests/unit/ -v
@@ -43,12 +45,14 @@ python script.py
 ```
 
 **Why this matters:**
+
 - Ensures correct Python version and dependencies
 - Avoids "module not found" errors
 - Maintains consistency across development environments
 - Required for all pytest, Python module execution, and CLI commands
 
 **When NOT to use `uv run`:**
+
 - TypeScript/JavaScript commands (bun, npm, node)
 - System utilities (curl, git, ls, etc.)
 - Shell commands that don't invoke Python
@@ -58,11 +62,13 @@ python script.py
 **DO NOT create new documentation files unless explicitly requested.**
 
 Dolphin has a mature documentation structure. Instead of creating new files:
+
 - Update existing documentation to reflect changes
 - Reference existing docs (ARCHITECTURE.md, README.md, TESTING-GUIDE.md)
 - Keep implementation plans in `docs/` updated with current progress
 
 **If you must create documentation:**
+
 - Ask for confirmation first
 - Place it in the appropriate location (`docs/` for technical docs)
 - Update the main documentation index
@@ -73,12 +79,14 @@ Dolphin has a mature documentation structure. Instead of creating new files:
 **Keep existing specs and implementation plans current.**
 
 The `docs/` directory contains detailed implementation plans and specifications:
+
 - `docs/phase5-implementation-plan.md`
 - `docs/phase3-test-coverage.md`
 - `docs/conversations-test-suite.md`
 - `docs/kb-index/*.md`
 
 **When making changes:**
+
 - Update the relevant plan/spec with completion status
 - Mark completed items with ✅
 - Update the ARCHITECTURE.md implementation status section
@@ -91,17 +99,20 @@ The `docs/` directory contains detailed implementation plans and specifications:
 Dolphin maintains 243+ passing tests across Python and TypeScript:
 
 **Python Tests** (`tests/`):
+
 - **Unit tests**: `tests/unit/` - Test individual components
 - **Integration tests**: `tests/integration/` - Test API endpoints and workflows
 - **Run**: `uv run pytest tests/unit/ -v` or `uv run pytest tests/integration/ -v`
 - **Coverage**: `uv run pytest --cov=kb/src`
 
 **TypeScript Tests** (`mcp-bridge/`, `agent-core/`):
+
 - **MCP Bridge**: `cd mcp-bridge && bun test`
 - **Agent Core**: `cd agent-core && bun test`
 - **VSCode Extension**: E2E tests in `vscode-extension/`
 
 **Requirements for code changes:**
+
 1. **New features**: Must include unit tests and integration tests
 2. **Bug fixes**: Must include regression tests
 3. **Refactoring**: Existing tests must pass
@@ -109,6 +120,7 @@ Dolphin maintains 243+ passing tests across Python and TypeScript:
 5. **Aim for**: ≥80% code coverage on new code
 
 **Test checklist:**
+
 ```bash
 # Before committing, run:
 uv run pytest tests/unit/ -v              # Python unit tests
@@ -122,6 +134,7 @@ cd agent-core && bun test                 # Agent tests
 **Language-specific guidelines:**
 
 **Python** (`kb/`, test files):
+
 - Use type hints (SQLModel, Pydantic)
 - Follow PEP 8 style guidelines
 - Use pytest for testing with fixtures
@@ -129,6 +142,7 @@ cd agent-core && bun test                 # Agent tests
 - Use SQLModel for database models
 
 **TypeScript** (`mcp-bridge/`, `agent-core/`, `vscode-extension/`):
+
 - Use strict TypeScript with Zod validation
 - Follow the existing code patterns
 - Use Bun for runtime and testing
@@ -136,6 +150,7 @@ cd agent-core && bun test                 # Agent tests
 - Handle errors with structured error types
 
 **Svelte** (`vscode-extension/webview/`):
+
 - Use SvelteKit conventions
 - Follow Tailwind CSS for styling
 - Use shadcn/ui components
@@ -144,12 +159,14 @@ cd agent-core && bun test                 # Agent tests
 ### 5. Git Workflow
 
 **Branch naming:**
+
 - Feature branches: `feature/description`
 - Bug fixes: `fix/description`
 - Documentation: `docs/description`
 - Automated branches: `claude/task-name-sessionid`
 
 **Commit messages:**
+
 - Use conventional commits: `type(scope): description`
 - Types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`
 - Examples:
@@ -159,6 +176,7 @@ cd agent-core && bun test                 # Agent tests
   - `test(chunkers): add tests for SQL chunker`
 
 **Before pushing:**
+
 ```bash
 # Run tests
 uv run pytest tests/ -v
@@ -202,6 +220,7 @@ uv run python -m mypy kb/                  # Type check
 ```
 
 **Key components:**
+
 - **REST API** (`kb/api/`): FastAPI server with search endpoints
 - **Knowledge Base** (`kb/`): Indexing, chunking, embeddings, storage
 - **MCP Bridge** (`mcp-bridge/`): MCP protocol server
@@ -209,12 +228,14 @@ uv run python -m mypy kb/                  # Type check
 - **VSCode Extension** (`vscode-extension/`): IDE integration
 
 **Data flow:**
+
 1. **Indexing**: Repository → Scanner → Chunker → Embedder → Storage (SQLite + LanceDB)
 2. **Search**: Query → Embed → Vector Search → Re-rank → Response
 
 ### 7. Common Tasks
 
 **Adding a new REST API endpoint:**
+
 1. Add route in `kb/api/app.py`
 2. Implement handler with proper error handling
 3. Add integration test in `tests/integration/api/`
@@ -222,6 +243,7 @@ uv run python -m mypy kb/                  # Type check
 5. Consider adding MCP tool if needed
 
 **Adding a new MCP tool:**
+
 1. Create tool in `mcp-bridge/src/mcp/tools/`
 2. Register in `mcp-bridge/src/index.ts`
 3. Add unit tests in `mcp-bridge/tests/`
@@ -229,6 +251,7 @@ uv run python -m mypy kb/                  # Type check
 5. Test with MCP Inspector
 
 **Adding a new chunker:**
+
 1. Create chunker in `kb/chunkers/`
 2. Register in `kb/chunkers/registry.py`
 3. Add unit tests in `tests/unit/chunkers/`
@@ -236,6 +259,7 @@ uv run python -m mypy kb/                  # Type check
 5. Add integration test with sample files
 
 **Updating the VSCode extension:**
+
 1. Make changes in `vscode-extension/src/` or `vscode-extension/webview/`
 2. Build: `npm run build:all`
 3. Test in Extension Development Host (F5)
@@ -244,12 +268,14 @@ uv run python -m mypy kb/                  # Type check
 ### 8. Security Considerations
 
 **Always validate user input:**
+
 - Path traversal protection (no `..` in file paths)
 - SQL injection prevention (use SQLModel ORM)
 - API input validation (Pydantic models)
 - Environment variable validation
 
 **Sensitive data:**
+
 - Never commit API keys or secrets
 - Use environment variables for credentials
 - Respect `.gitignore` patterns in scanner
@@ -258,12 +284,14 @@ uv run python -m mypy kb/                  # Type check
 ### 9. Performance Guidelines
 
 **Optimization priorities:**
+
 1. **Search latency**: Target <600ms p50, <2s p95
 2. **Indexing speed**: Incremental indexing via git diff
 3. **Memory usage**: ~500MB under load
 4. **API throughput**: 10-20 QPS sustained
 
 **Performance techniques:**
+
 - Content deduplication via SHA256 hashing
 - Batch embedding API calls (100 chunks)
 - LanceDB vector search with ANN
@@ -275,12 +303,14 @@ uv run python -m mypy kb/                  # Type check
 **Common issues:**
 
 **API not responding:**
+
 ```bash
 curl http://127.0.0.1:7777/health
 # If down: uv run dolphin serve
 ```
 
 **Tests failing:**
+
 ```bash
 # Run with verbose output
 uv run pytest tests/ -v -s
@@ -293,6 +323,7 @@ tail -f mcp-bridge/logs/mcp.log
 ```
 
 **MCP not connecting:**
+
 ```bash
 # Test MCP bridge manually
 cd mcp-bridge
@@ -303,6 +334,7 @@ tail -f ~/Library/Logs/Claude/mcp*.log
 ```
 
 **Index not working:**
+
 ```bash
 # Check status
 uv run dolphin kb status
@@ -317,6 +349,7 @@ tail -f ~/.dolphin/knowledge_store/logs/
 ### 11. Release Process
 
 **Version management:**
+
 1. Update version in `pyproject.toml`
 2. Update CHANGELOG.md with changes
 3. Update version references in documentation
@@ -325,6 +358,7 @@ tail -f ~/.dolphin/knowledge_store/logs/
 6. Deploy: `just deploy-prod`
 
 **Pre-release checklist:**
+
 - [ ] All tests passing (Python + TypeScript)
 - [ ] Documentation updated
 - [ ] CHANGELOG.md updated
@@ -433,6 +467,7 @@ just store-clean                 # Delete ~/.dolphin/knowledge_store (5s warning
 ### VSCode Extension Issues
 
 **Extension not connecting to agent:**
+
 ```bash
 # 1. Check agent-core logs in Output panel (select "Dolphin Agent")
 # 2. Verify authentication is set up (Claude CLI or API key)
@@ -441,6 +476,7 @@ just store-clean                 # Delete ~/.dolphin/knowledge_store (5s warning
 ```
 
 **KB server not starting:**
+
 ```bash
 # 1. Check if KB is manually running
 curl http://127.0.0.1:7777/health
@@ -454,6 +490,7 @@ echo $OPENAI_API_KEY
 ```
 
 **No Knowledge Bank results in chat:**
+
 ```bash
 # 1. Ensure repositories are indexed
 uv run dolphin kb status
@@ -468,6 +505,7 @@ tail -f mcp-bridge/logs/mcp.log
 ### API Issues
 
 **API not responding:**
+
 ```bash
 # Check if API is up
 curl http://127.0.0.1:7777/health
@@ -481,6 +519,7 @@ lsof -i :7777
 ```
 
 **No search results:**
+
 ```bash
 # Check if repositories are indexed
 uv run dolphin kb status
@@ -497,6 +536,7 @@ curl -X POST http://127.0.0.1:7777/search \
 ### MCP Issues
 
 **MCP not connecting in Claude Desktop:**
+
 ```bash
 # 1. Check if API server is running
 curl http://127.0.0.1:7777/health
@@ -517,6 +557,7 @@ bun run src/index.ts
 ```
 
 **MCP tools not appearing:**
+
 ```bash
 # Verify MCP config path (macOS)
 cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
@@ -528,6 +569,7 @@ cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
 ### Test Failures
 
 **Python tests failing:**
+
 ```bash
 # Run with verbose output
 uv run pytest tests/ -v -s
@@ -543,6 +585,7 @@ uv run pytest --cache-clear
 ```
 
 **TypeScript tests failing:**
+
 ```bash
 # MCP tests
 cd mcp-bridge
@@ -561,6 +604,7 @@ bun update
 ### Indexing Issues
 
 **Index not working / taking too long:**
+
 ```bash
 # Check status
 uv run dolphin kb status <repo-name>
@@ -577,6 +621,7 @@ sqlite3 ~/.dolphin/knowledge_store/knowledge.db \
 ```
 
 **High embedding costs:**
+
 ```bash
 # Check session costs
 uv run dolphin kb status <repo-name>
@@ -595,6 +640,7 @@ uv run dolphin kb status <repo-name>
 ### Import Errors
 
 **Dolphin CLI import error:**
+
 ```bash
 # If you get ImportError when running dolphin command
 # Solution: Use the fixed version
@@ -607,6 +653,7 @@ uv run dolphin init
 ```
 
 **OpenAI API errors:**
+
 ```bash
 # Verify API key is set
 echo $OPENAI_API_KEY
@@ -621,6 +668,7 @@ curl https://api.openai.com/v1/models \
 ### Embedding Model Selection
 
 **Choose the right model for your use case:**
+
 - `small` (1536d): Faster, cheaper, good for most use cases (recommended)
 - `large` (3072d): More accurate, use for critical repos where precision matters
 
@@ -633,6 +681,7 @@ uv run dolphin kb add-repo test-repo /path --default-embed-model small
 ### Chunk Size Configuration
 
 **Optimize chunking for your codebase:**
+
 ```toml
 # <repo>/.dolphin/config.toml
 [chunking]
@@ -642,12 +691,14 @@ overlap_tokens = 64     # Balance between context and duplication
 ```
 
 **Trade-offs:**
+
 - Smaller chunks (256 tokens): Better precision, more API calls, higher cost
 - Larger chunks (512 tokens): Better context, fewer chunks, lower cost
 
 ### Search Optimization
 
 **Filter searches to reduce latency:**
+
 ```bash
 # Filter by repository
 KB_REPOS=api-server uv run dolphin search "auth"
@@ -660,6 +711,7 @@ curl -X POST http://127.0.0.1:7777/search \
 ### Incremental Indexing
 
 **Always use incremental indexing for faster updates:**
+
 ```bash
 # Incremental (only changed files) - FAST
 uv run dolphin kb index my-repo
@@ -671,6 +723,7 @@ uv run dolphin kb index my-repo --full --force
 ### Cost Monitoring
 
 **Track embedding costs:**
+
 ```bash
 # Check per-repository costs
 uv run dolphin kb status my-repo
@@ -684,6 +737,7 @@ uv run dolphin kb status my-repo
 ### LanceDB Performance
 
 **Optimize vector search performance:**
+
 - Smaller collections (< 100K chunks): Fast by default
 - Large collections (> 500K chunks): Consider index tuning in LanceDB config
 - Memory: Allocate ~500MB for active searches
@@ -691,6 +745,7 @@ uv run dolphin kb status my-repo
 ### Caching Strategy
 
 **Leverage deduplication:**
+
 - Content-based deduplication via SHA256 prevents re-embedding unchanged code
 - Git-aware indexing only processes changed files
 - Reindexing same code is nearly free
@@ -698,11 +753,13 @@ uv run dolphin kb status my-repo
 ## Getting Help
 
 **Internal resources:**
+
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) - System design and status
 - [README.md](README.md) - Project overview and quick start
 - [TESTING-GUIDE.md](docs/TESTING-GUIDE.md) - Testing procedures
 
 **For issues:**
+
 - Check existing GitHub issues: https://github.com/plasticbeachllc/dolphin/issues
 - Review relevant test files for examples
 - Consult the implementation plans in `docs/`
