@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import subprocess
 import datetime
 from dataclasses import dataclass
@@ -11,6 +12,7 @@ from pathspec import PathSpec
 from ..config import KBConfig
 from ..store import LanceDBStore, SQLiteMetadataStore
 from ..store.graph_store import GraphStore
+from ..store.sqlite_meta import generate_fts_content_id
 from ..graph_intelligence.graph_manager import GraphManager
 from ..ingest.scanner import FileCandidate, scan_repo
 from ..ignores import build_ignore_set, load_repo_ignores
@@ -172,8 +174,33 @@ class IngestionPipeline:
                 # Get all file IDs for this repo
                 cur.execute("SELECT id FROM files WHERE repo_id = ?", (repo_id,))
                 file_ids = [row[0] for row in cur.fetchall()]
-                
-                # Delete chunk locations for these files
+
+                # Delete in correct order respecting foreign key constraints:
+
+                # 1. Delete code graph data (references code_nodes and files) - if tables exist
+                # Use try-except since these tables may not exist in all schemas
+                try:
+                    cur.execute("DELETE FROM code_node_aliases WHERE file_id IN (SELECT id FROM files WHERE repo_id = ?)", (repo_id,))
+                except sqlite3.OperationalError:
+                    pass  # Table doesn't exist
+
+                try:
+                    cur.execute("DELETE FROM cross_repo_references WHERE file_id IN (SELECT id FROM files WHERE repo_id = ?)", (repo_id,))
+                except sqlite3.OperationalError:
+                    pass  # Table doesn't exist
+
+                try:
+                    cur.execute("DELETE FROM code_edges WHERE from_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)", (repo_id,))
+                    cur.execute("DELETE FROM code_edges WHERE to_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)", (repo_id,))
+                except sqlite3.OperationalError:
+                    pass  # Table doesn't exist
+
+                try:
+                    cur.execute("DELETE FROM code_nodes WHERE repo_id = ?", (repo_id,))
+                except sqlite3.OperationalError:
+                    pass  # Table doesn't exist
+
+                # 2. Delete chunk locations (references chunk_content)
                 for file_id in file_ids:
                     cur.execute("""
                         DELETE FROM chunk_locations
@@ -181,19 +208,31 @@ class IngestionPipeline:
                             SELECT id FROM chunk_content WHERE file_id = ?
                         )
                     """, (file_id,))
-                
-                # Delete chunk content
+
+                # 3. Delete chunk content (references files)
                 cur.execute("DELETE FROM chunk_content WHERE repo_id = ?", (repo_id,))
-                
-                # Delete from FTS5
+
+                # 4. Delete from FTS5
                 cur.execute("DELETE FROM chunks_fts WHERE repo = ?", (repo_name,))
-                
-                # Delete files
+
+                # 5. Delete file snapshots (references files) - if table exists
+                try:
+                    cur.execute("DELETE FROM file_snapshots WHERE repo_id = ?", (repo_id,))
+                except sqlite3.OperationalError:
+                    pass  # Table doesn't exist
+
+                # 6. Delete files
                 cur.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
-                
-                # Delete sessions
+
+                # 7. Delete sessions
                 cur.execute("DELETE FROM sessions WHERE repo_id = ?", (repo_id,))
-                
+
+                # 8. Delete pending changes - if table exists
+                try:
+                    cur.execute("DELETE FROM pending_changes WHERE repo_id = ?", (repo_id,))
+                except sqlite3.OperationalError:
+                    pass  # Table doesn't exist
+
                 conn.commit()
                 print(f"  Metadata cleared successfully")
             except Exception as e:
@@ -570,12 +609,16 @@ class IngestionPipeline:
                                     if chunk.text_hash == h:
                                         chunk_text = chunk.text
                                         break
-                                
+
                                 if chunk_text:
+                                    # Generate deterministic FTS5 content_id (independent of embed_model)
+                                    fts_content_id = generate_fts_content_id(repo_id, file_id, h)
+
                                     fts_chunks.append({
-                                        'content_id': content_id,
+                                        'content_id': fts_content_id,
                                         'repo': repo_name,
                                         'path': path,
+                                        'text_hash': h,
                                         'content': chunk_text,
                                         'symbol_name': occ.get('symbol_name'),
                                         'symbol_path': occ.get('symbol_path'),

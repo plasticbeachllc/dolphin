@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional, Sequence, List, Dict, Any
 
 from ..config import KBConfig
-from ..embeddings.provider import EmbeddingProvider, create_provider
+from ..embeddings.provider import EmbeddingProvider, create_provider, set_default_provider
 from ..store.lancedb_store import LanceDBStore
 from ..store.sqlite_meta import SQLiteMetadataStore
 from ..store.graph_store import GraphStore
@@ -56,6 +56,16 @@ class KnowledgeSearchBackend:
             )
 
     def search(self, request: SearchRequest) -> Sequence[dict[str, object]]:
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Log incoming search request
+        logger.info(f"[SEARCH] Query: {request.query[:100]}")
+        logger.info(f"[SEARCH] Repos filter: {request.repos}")
+        logger.info(f"[SEARCH] Path prefix: {request.path_prefix}")
+        logger.info(f"[SEARCH] Top-K: {request.top_k}, Score cutoff: {request.score_cutoff}")
+        logger.info(f"[SEARCH] Embed model: {request.embed_model}")
+
         # Check cache first if available
         if self.cache:
             # Create cache key from request parameters
@@ -68,6 +78,7 @@ class KnowledgeSearchBackend:
             }
             cached_results = self.cache.get_results(request.query, **cache_params)
             if cached_results is not None:
+                logger.info(f"[SEARCH] Returning {len(cached_results)} results from cache")
                 return cached_results
 
         query_embedding = self.embedding_provider.embed_texts(request.embed_model, [request.query])[0]
@@ -86,45 +97,50 @@ class KnowledgeSearchBackend:
                 ann_params=ann_params
             )
             vector_formatted = self._format_vector_results(vector_results)
+            logger.info(f"[SEARCH] Vector search returned {len(vector_formatted)} results")
         except Exception as e:
             # Log error but continue with empty vector results
-            import logging
-            logging.warning(f"Vector search failed: {e}", exc_info=True)
-        
+            logger.warning(f"[SEARCH] Vector search failed: {e}", exc_info=True)
+
         # BM25 search with error handling
         bm25_hydrated = []
         if self.hybrid_search_enabled and hasattr(self.sql_store, 'bm25_search'):
             try:
+                repo_filter = request.repos[0] if request.repos else None
+                logger.info(f"[SEARCH] BM25 search with repo={repo_filter}, path_prefix={request.path_prefix}")
                 bm25_results = self.sql_store.bm25_search(
                     request.query,
-                    repo=request.repos[0] if request.repos else None,
+                    repo=repo_filter,
                     path_prefix=request.path_prefix,
                     top_k=num_candidates
                 )
+                logger.info(f"[SEARCH] BM25 raw results: {len(bm25_results)}")
+                if bm25_results:
+                    logger.info(f"[SEARCH] BM25 sample result: chunk_id={bm25_results[0].get('chunk_id')}, repo={bm25_results[0].get('repo')}, score={bm25_results[0].get('score')}")
                 bm25_hydrated = self._hydrate_bm25_results(bm25_results, self.sql_store)
+                logger.info(f"[SEARCH] BM25 after hydration: {len(bm25_hydrated)} results")
             except Exception as e:
                 # Log error but continue with empty BM25 results
-                import logging
-                logging.warning(f"BM25 search failed: {e}")
+                logger.warning(f"[SEARCH] BM25 search failed: {e}", exc_info=True)
 
         # Apply request filters to both vector and BM25 results
         vector_filtered = self._apply_request_filters(vector_formatted, request)
         bm25_filtered = self._apply_request_filters(bm25_hydrated, request)
-        
+
+        logger.info(f"[SEARCH] After filtering - Vector: {len(vector_filtered)}, BM25: {len(bm25_filtered)}")
+
         # Apply file type scoring adjustments to deprioritize config files
         vector_filtered = self._apply_file_type_scoring(vector_filtered)
         bm25_filtered = self._apply_file_type_scoring(bm25_filtered)
-        
-        import logging
-        logging.debug(f"Vector results before RRF: {len(vector_filtered)}")
-        logging.debug(f"BM25 results before RRF: {len(bm25_filtered)}")
-        
+
+        logger.info(f"[SEARCH] After file type scoring - Vector: {len(vector_filtered)}, BM25: {len(bm25_filtered)}")
+
         hits = reciprocal_rank_fusion([vector_filtered, bm25_filtered])
-        
-        logging.debug(f"RRF results: {len(hits)}")
-        for hit in hits:
+
+        logger.info(f"[SEARCH] After RRF: {len(hits)} results")
+        for i, hit in enumerate(hits[:3]):  # Log first 3 hits
             rrf_score = hit.get('rrf_score', 0.0)
-            logging.debug(f"Hit {hit.get('chunk_id')}: rrf_score={rrf_score}")
+            logger.info(f"[SEARCH] Hit {i+1}: chunk_id={hit.get('chunk_id')}, rrf_score={rrf_score}")
             hit['score'] = hit.pop('rrf_score', 0.0)
         
         # UNCOMMENTED AND CORRECTED RERANKING LOGIC
@@ -178,8 +194,17 @@ class KnowledgeSearchBackend:
                 import logging
                 logging.warning(f"MMR diversification failed: {e}", exc_info=True)
 
+        logger.info(f"[SEARCH] Before score cutoff: {len(hits)} hits")
+        logger.info(f"[SEARCH] Score cutoff threshold: {request.score_cutoff}")
+
         final_results = [h for h in hits if h.get("score", 0.0) >= (request.score_cutoff or 0.0)][:request.top_k]
-        
+
+        logger.info(f"[SEARCH] After score cutoff and top-k limit: {len(final_results)} results")
+        if not final_results:
+            logger.warning(f"[SEARCH] ❌ NO RESULTS after score cutoff! Check if cutoff {request.score_cutoff} is too high")
+        else:
+            logger.info(f"[SEARCH] First result score: {final_results[0].get('score')}")
+
         # Hydrate content for all final results
         if final_results:
             chunk_ids_needing_content = [r['chunk_id'] for r in final_results if 'content' not in r]
@@ -665,6 +690,7 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     
     # Create stores
     sql_store = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    sql_store.initialize()  # Ensure DB is initialized with proper schema
     lance_store = LanceDBStore(config.resolved_store_root() / "lancedb")
     
     # Create embedding provider
@@ -685,7 +711,10 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
         config.embedding_provider,
         **provider_kwargs
     )
-    
+
+    # Set as global default provider for async convenience functions
+    set_default_provider(provider)
+
     # Create cache (always create but may be disabled)
     cache = create_cache(
         redis_url=config.redis_url if config.cache_enabled else None,

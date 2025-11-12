@@ -294,11 +294,12 @@ export class AgentBridge {
     this.connection.sendNotification(method, params);
   }
 
-  async sendMessage(content: string): Promise<void> {
+  async sendMessage(content: string, mode?: 'code' | 'architect'): Promise<void> {
     const request: ExtensionRequest = {
       type: "send_message",
       messageId: `msg-${this.messageId}`,
       content,
+      mode,
     };
 
     await this.sendNotification("send_message", request);
