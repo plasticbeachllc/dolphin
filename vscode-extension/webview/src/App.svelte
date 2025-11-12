@@ -110,11 +110,18 @@
           agentVersion = event.version;
           const eventHasWorkspace = (event as any).hasWorkspace;
           const workspaceName = (event as any).workspaceName;
+          const workspacePath = (event as any).workspacePath;
           console.log('[App] Received hasWorkspace value:', eventHasWorkspace);
           console.log('[App] Received workspaceName:', workspaceName);
+          console.log('[App] Received workspacePath:', workspacePath);
           hasWorkspace = eventHasWorkspace ?? true; // Default to true to be safe
           console.log('[App] Final workspace status:', hasWorkspace ? 'Open' : 'None');
-          
+
+          // Store workspace path globally for KB operations
+          if (workspacePath) {
+            (window as any).workspacePath = workspacePath;
+          }
+
           // Initialize KB store with workspace name if available
           if (workspaceName) {
             kbActions.initialize(workspaceName, {});
