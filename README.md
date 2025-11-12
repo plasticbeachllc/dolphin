@@ -413,7 +413,9 @@ This triggers the [`publish-mcp.yml`](.github/workflows/publish-mcp.yml:1) workf
 
 ### Git Flow Integration
 
-For feature development, use standard Git Flow:
+The workflows trigger on **git tags**, not branches. Here's the complete Git Flow process:
+
+#### Daily Development
 
 ```bash
 # Start feature
@@ -424,23 +426,72 @@ git flow feature start my-feature
 
 # Finish feature (merges to develop)
 git flow feature finish my-feature
+git push origin develop
 ```
 
-When ready to release a component:
+#### Releasing Components
 
+**Step 1: Prepare on develop branch**
+```bash
+# On develop branch
+git checkout develop
+
+# Update version(s) in package files
+# - pyproject.toml for Python
+# - vscode-extension/package.json for VSCode
+# - mcp-bridge/package.json for MCP
+
+# Commit version bumps
+git add pyproject.toml vscode-extension/package.json mcp-bridge/package.json
+git commit -m "chore: bump version(s) for release"
+git push origin develop
+```
+
+**Step 2: Merge to master**
 ```bash
 # Merge develop to master
 git checkout master
 git merge develop
 git push origin master
+```
 
-# Tag the specific component(s) that changed
-git tag py-v0.1.14      # If Python package changed
-git tag vscode-v0.1.1   # If VSCode extension changed
-git tag mcp-v0.1.3      # If MCP bridge changed
+**Step 3: Create tags (triggers workflows)**
+```bash
+# IMPORTANT: You must be on master branch when creating tags
+git checkout master
 
-# Push tags to trigger automated publishing
+# Tag only the component(s) you want to release
+git tag py-v0.1.14      # Triggers Python package publish
+git tag vscode-v0.1.1   # Triggers VSCode extension publish
+git tag mcp-v0.1.3      # Triggers MCP bridge publish
+
+# Push tags - this triggers the GitHub Actions workflows
 git push origin --tags
+```
+
+**The branch doesn't matter for triggering** - workflows trigger on tags being pushed to the repository. However, **best practice is to tag from master** to ensure you're releasing production-ready code.
+
+#### Quick Reference
+
+```bash
+# Complete release flow
+git checkout develop
+# ... update versions, commit ...
+git push origin develop
+
+git checkout master
+git merge develop
+git push origin master
+
+git tag py-v0.1.14      # Tag what changed
+git push origin --tags  # Triggers workflows
+```
+
+**Multiple components?** You can create multiple tags and push them all at once:
+```bash
+git tag py-v0.1.14 vscode-v0.1.1 mcp-v0.1.3
+git push origin --tags
+# All three workflows run in parallel
 ```
 
 ### Manual Publishing
