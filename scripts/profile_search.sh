@@ -117,7 +117,7 @@ echo ""
 (uv run dolphin kb index "$REPO_NAME" 2>&1 | \
   tee /dev/null | \
   grep --line-buffered "Chunked.*into.*chunks" | \
-  pv -l -s "$FILE_COUNT" -N "🐬 Indexing files" -F "%b %t %r %p %e" > /dev/null)
+  pv -l -s "$FILE_COUNT" -N "🐬 Indexing files" > /dev/null)
 echo ""
 echo "  Indexing complete!"
 
@@ -259,7 +259,7 @@ else
       echo "."
       QUERY_NUM=$((QUERY_NUM + 1))
     done
-  ) | pv -l -s "$TOTAL_QUERIES" -N "🐬 Search queries" -F "%b %t %r %p %e" > /dev/null
+  ) | pv -l -s "$TOTAL_QUERIES" -N "🐬 Search queries" > /dev/null
   echo ""
   
   # Wait for py-spy to finish

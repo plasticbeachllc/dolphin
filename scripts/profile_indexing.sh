@@ -164,7 +164,7 @@ echo "Starting indexing..."
   -- uv run dolphin kb index "$REPO_NAME" 2>&1 | \
   tee "$LOG_FILE" | \
   grep --line-buffered "Chunked.*into.*chunks" | \
-  pv -l -s "$FILE_COUNT" -N "🐬 Indexing files" -F "%b %t %r %p %e" > /dev/null)
+  pv -l -s "$FILE_COUNT" -N "🐬 Indexing files" > /dev/null)
 
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
