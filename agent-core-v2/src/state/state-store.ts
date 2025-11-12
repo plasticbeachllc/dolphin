@@ -158,14 +158,14 @@ export class StateStore {
    */
   async loadSession(sessionId: string): Promise<TaskSession | null> {
     const sessionPath = join(this.sessionsDir, `${sessionId}.toml`);
-    
+
     if (!existsSync(sessionPath)) {
       return null;
     }
 
     try {
       const toml = await readFile(sessionPath, 'utf-8');
-      return this.deserializeSession(toml);
+      return await this.deserializeSession(toml);
     } catch (error) {
       console.error(`[StateStore] Failed to load session ${sessionId}:`, error);
       return null;
@@ -418,7 +418,7 @@ export class StateStore {
   /**
    * Deserialize a TOML string to TaskSession
    */
-  private deserializeSession(toml: string): TaskSession {
+  private async deserializeSession(toml: string): Promise<TaskSession> {
     const obj = TOML.parse(toml) as any;
     
     const session: TaskSession = {
@@ -482,6 +482,16 @@ export class StateStore {
 
     // Add plan if present
     if (obj.plan) {
+      // Load plan content from file
+      let planContent = '';
+      if (obj.plan.content_path && existsSync(obj.plan.content_path)) {
+        try {
+          planContent = await readFile(obj.plan.content_path, 'utf-8');
+        } catch (error) {
+          console.error(`[StateStore] Failed to load plan content from ${obj.plan.content_path}:`, error);
+        }
+      }
+
       session.plan = {
         version: obj.plan.version,
         status: obj.plan.status,
@@ -490,7 +500,7 @@ export class StateStore {
         model: obj.plan.model,
         tokensUsed: obj.plan.tokens_used,
         estimatedCost: obj.plan.estimated_cost,
-        content: '', // Will be loaded separately
+        content: planContent,
         contentPath: obj.plan.content_path,
         filesToModify: [],
         filesToCreate: [],
