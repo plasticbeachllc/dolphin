@@ -33,7 +33,11 @@ def extract_unique_files(results: list[dict], top_k: int = 5) -> list[str]:
     unique_files = []
 
     for result in results:
-        file_path = result.get("file", "")
+        file_path = (
+            result.get("path")
+            or result.get("metadata", {}).get("path")
+            or result.get("file", "")
+        )
         if file_path and file_path not in seen_files:
             seen_files.add(file_path)
             unique_files.append(file_path)
@@ -84,6 +88,7 @@ def evaluate_instance(
     try:
         request = SearchRequest(
             query=problem_statement,
+            repos=[instance["repo"]],
             top_k=top_k * 3,  # Get more results, then collapse to files
             embed_model="small"  # Use small model for all
         )
