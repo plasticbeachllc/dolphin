@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import sqlite3
 import threading
 from contextlib import closing
@@ -29,6 +30,9 @@ def generate_fts_content_id(repo_id: int, file_id: int, text_hash: str) -> str:
     # Create a stable, deterministic identifier
     composite = f"{repo_id}:{file_id}:{text_hash}"
     return hashlib.sha256(composite.encode()).hexdigest()[:32]
+logger = logging.getLogger(__name__)
+
+
 class SQLiteMetadataStore:
     """SQLite-backed metadata store using SQLModel for schema materialization."""
 
@@ -161,28 +165,36 @@ class SQLiteMetadataStore:
     def _create_fts5_table_safe(self, cur) -> None:
         """Safely create FTS5 table with version and feature detection."""
         import sqlite3
-        
+
+        logger.info("[FTS5 Migration] _create_fts5_table_safe() called")
+
         # Check SQLite version and FTS5 support
         cur.execute("SELECT sqlite_version()")
         sqlite_version = cur.fetchone()[0]
-        
+        logger.info(f"[FTS5 Migration] SQLite version: {sqlite_version}")
+
         # Check if FTS5 is available and handle schema migration
         try:
             # Check if table already exists
             cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
             table_exists = cur.fetchone()
+            logger.info(f"[FTS5 Migration] Table exists: {bool(table_exists)}")
 
             if table_exists:
                 # Test if it has the text_hash column by trying to use it
                 # PRAGMA table_info doesn't work reliably with FTS5 virtual tables
+                logger.info("[FTS5 Migration] Testing for text_hash column...")
                 try:
                     cur.execute("SELECT text_hash FROM chunks_fts LIMIT 0")
+                    logger.info("[FTS5 Migration] text_hash column exists - schema is up to date")
                     return  # Already has correct schema
                 except sqlite3.OperationalError as e:
+                    logger.info(f"[FTS5 Migration] SELECT text_hash failed: {e}")
                     if "no column named text_hash" in str(e):
                         # Old schema - drop and recreate
-                        print(f"[SQLiteMeta] Migrating FTS5 table to new schema (adding text_hash column)...")
+                        logger.warning("[FTS5 Migration] 🔄 Migrating FTS5 table to new schema (adding text_hash column)...")
                         cur.execute("DROP TABLE chunks_fts")
+                        logger.info("[FTS5 Migration] Dropped old chunks_fts table")
                         # Fall through to creation below
                     else:
                         raise
@@ -201,6 +213,7 @@ class SQLiteMetadataStore:
                 raise RuntimeError(f"FTS5 test failed: {e}")
         
         # Create FTS5 table with proper schema
+        logger.info("[FTS5 Migration] Creating chunks_fts table with new schema...")
         try:
             cur.execute("""
                 CREATE VIRTUAL TABLE chunks_fts USING fts5(
@@ -214,7 +227,9 @@ class SQLiteMetadataStore:
                     tokenize='porter unicode61'
                 )
             """)
+            logger.info("[FTS5 Migration] ✅ chunks_fts table created successfully")
         except sqlite3.OperationalError as e:
+            logger.error(f"[FTS5 Migration] ❌ Failed to create FTS5 table: {e}")
             raise RuntimeError(f"Failed to create FTS5 table: {e}")
     
     def _create_code_graph_fts5_safe(self, cur) -> None:
