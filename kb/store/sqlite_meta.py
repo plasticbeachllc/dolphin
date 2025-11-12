@@ -202,7 +202,8 @@ class SQLiteMetadataStore:
                     return  # Already has correct schema
                 except sqlite3.OperationalError as e:
                     logger.info(f"[FTS5 Migration] SELECT text_hash failed: {e}")
-                    if "no column named text_hash" in str(e):
+                    error_msg = str(e).lower()
+                    if "text_hash" in error_msg and ("no column" in error_msg or "no such column" in error_msg):
                         # Old schema - drop and recreate
                         logger.warning("[FTS5 Migration] 🔄 Migrating FTS5 table to new schema (adding text_hash column)...")
                         cur.execute("DROP TABLE chunks_fts")
@@ -1146,8 +1147,9 @@ class SQLiteMetadataStore:
             try:
                 cur.execute("SELECT text_hash FROM chunks_fts LIMIT 0")
             except sqlite3.OperationalError as e:
-                if "no column named text_hash" in str(e):
-                    logger.warning("[FTS5 Migration] Runtime check: text_hash column missing, migrating now...")
+                error_msg = str(e).lower()
+                if "text_hash" in error_msg and ("no column" in error_msg or "no such column" in error_msg):
+                    logger.warning(f"[FTS5 Migration] Runtime check: text_hash column missing ({e}), migrating now...")
                     cur.execute("DROP TABLE IF EXISTS chunks_fts")
                     cur.execute("""
                         CREATE VIRTUAL TABLE chunks_fts USING fts5(
