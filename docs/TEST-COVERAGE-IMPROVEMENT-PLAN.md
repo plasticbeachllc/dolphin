@@ -1,8 +1,45 @@
 # Test Coverage Improvement Plan
 
 **Date:** 2025-11-12
-**Status:** Implementation Ready
+**Status:** Phase 1 & 2 Complete ✅ | Phase 3 Ready to Start 🔄
 **Estimated Effort:** 45-65 hours (1-1.5 weeks)
+**Last Updated:** 2025-11-12
+
+## Implementation Status
+
+| Phase | Status | Completion Date | Tests Added |
+|-------|--------|----------------|-------------|
+| Phase 1: Critical Path Testing | ✅ Complete | 2025-11-12 | 160+ tests |
+| Phase 2: Utility & Support Code | ✅ Complete | 2025-11-12 | 150+ tests |
+| Phase 3: Type Validation & Schema Tests | ⏳ Pending | - | - |
+
+### Phase 1 Deliverables (✅ Complete)
+
+- ✅ `tests/unit/test_lang.py` - 50 tests for language classification
+- ✅ `tests/unit/test_api_server.py` - Enhanced with env file loading tests
+- ✅ `mcp-bridge/src/tests/rest_client.test.ts` - 50+ tests for REST client
+- ✅ `agent-core/tests/tool-executor-unit.test.ts` - 30+ tests for tool executor
+- ✅ `agent-core/tests/index-queue.test.ts` - 30+ tests for index queue
+
+**Coverage Impact:**
+- kb/ingest/lang.py: 0% → 100%
+- kb/api/server.py: Partial → ~90%
+- mcp-bridge/rest/client.ts: 0% → ~85%
+- agent-core/llm/claude-tool-executor.ts: Integration only → ~80%
+- agent-core/kb/index-queue.ts: 0% → ~90%
+
+### Phase 2 Deliverables (✅ Complete)
+
+- ✅ `tests/unit/test_graph_helpers_unit.py` - 50+ tests for graph extraction and storage
+- ✅ `tests/unit/test_graph_context_unit.py` - 60+ tests for graph context enrichment
+- ✅ `mcp-bridge/src/tests/util.test.ts` - 90+ tests for config, language, and logger utilities
+
+**Coverage Impact:**
+- kb/ingest/graph_helpers.py: Integration only → ~95%
+- kb/retrieval/graph_context.py: Integration only → ~90%
+- mcp-bridge/util/config.ts: 0% → ~90%
+- mcp-bridge/util/language.ts: 0% → ~95%
+- mcp-bridge/util/logger.ts: 0% → ~85%
 
 ## Executive Summary
 
