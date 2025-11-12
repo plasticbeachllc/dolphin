@@ -116,13 +116,19 @@ export class KBManager {
     if (fs.existsSync(path.join(workspaceRoot, "pyproject.toml"))) {
       return true;
     }
-    
+
     // Check if dolphin subdirectory has pyproject.toml
     const dolphinPath = path.join(workspaceRoot, "dolphin");
     if (fs.existsSync(path.join(dolphinPath, "pyproject.toml"))) {
       return true;
     }
-    
+
+    // Check parent directory (for when workspace is vscode-extension or other subdirectory)
+    const parentPath = path.dirname(workspaceRoot);
+    if (fs.existsSync(path.join(parentPath, "pyproject.toml"))) {
+      return true;
+    }
+
     return false;
   }
 
@@ -136,6 +142,12 @@ export class KBManager {
     const dolphinPath = path.join(workspaceRoot, "dolphin");
     if (fs.existsSync(path.join(dolphinPath, "pyproject.toml"))) {
       return dolphinPath;
+    }
+
+    // Check parent directory (for when workspace is vscode-extension or other subdirectory)
+    const parentPath = path.dirname(workspaceRoot);
+    if (fs.existsSync(path.join(parentPath, "pyproject.toml"))) {
+      return parentPath;
     }
 
     // Fallback to workspace root
