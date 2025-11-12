@@ -144,7 +144,7 @@ export class ArchitectWorkflow implements IWorkflow {
   private async *executeResearchPhase(
     sessionId: string,
     input: TaskInput
-  ): AsyncIterableIterator<ResearchResult> {
+  ): AsyncGenerator<WorkflowUpdate, ResearchResult, unknown> {
     const startTime = Date.now();
     const kbSearches: KBSearch[] = [];
     const relevantFiles: string[] = [];
@@ -256,7 +256,7 @@ export class ArchitectWorkflow implements IWorkflow {
     sessionId: string,
     input: TaskInput,
     research: ResearchResult
-  ): AsyncIterableIterator<ClarificationResult> {
+  ): AsyncGenerator<WorkflowUpdate, ClarificationResult, unknown> {
     const questions: ClarificationQuestion[] = [];
     const responses: ClarificationResponse[] = [];
     let conversationTurns = 0;
@@ -394,7 +394,7 @@ export class ArchitectWorkflow implements IWorkflow {
     input: TaskInput,
     research: ResearchResult,
     clarification: ClarificationResult
-  ): AsyncIterableIterator<Plan> {
+  ): AsyncGenerator<WorkflowUpdate, Plan, unknown> {
     yield {
       type: 'progress',
       sessionId,

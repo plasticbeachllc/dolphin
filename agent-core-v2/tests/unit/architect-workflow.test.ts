@@ -36,7 +36,7 @@ class MockClaudeProvider {
 }
 
 class MockContextBuilder {
-  async buildContext(params: any): Promise<Context> {
+  async build(params: any): Promise<Context> {
     return {
       kbResults: [
         {
