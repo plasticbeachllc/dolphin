@@ -497,32 +497,68 @@ class KnowledgeSearchBackend:
         """Hydrate content for chunk IDs.
 
         Args:
-            chunk_ids: List of chunk row IDs from LanceDB
+            chunk_ids: List of chunk IDs (can be LanceDB row IDs or FTS content IDs)
             sql_store: Metadata store for content lookup
 
         Returns:
             Dictionary mapping chunk_id -> content
         """
+        from kb.store.sqlite_meta import generate_fts_content_id
+        
         if not chunk_ids:
             return {}
 
-        # Convert LanceDB row IDs to content_ids
-        content_id_map = self._resolve_content_ids(chunk_ids)
-        content_ids = list(content_id_map.values())
-
-        if not content_ids:
-            return {}
-
-        # Fetch content from metadata store
-        contents = sql_store.get_chunk_contents(content_ids)
-
-        # Map content back to original chunk_ids
-        result = {}
+        # Separate LanceDB row IDs from FTS content IDs
+        # LanceDB row IDs have format: repo_id:file_id:embed_model:text_hash:start_line:end_line
+        # FTS content IDs are 32-character hex strings
+        lancedb_row_ids = []
+        fts_content_ids = []
+        
         for chunk_id in chunk_ids:
-            content_id = content_id_map.get(chunk_id)
-            if content_id and content_id in contents:
-                result[chunk_id] = contents[content_id]
-
+            # Check if this looks like a LanceDB row ID (has multiple colons)
+            if chunk_id.count(':') >= 5:
+                lancedb_row_ids.append(chunk_id)
+            else:
+                # Treat as FTS content ID
+                fts_content_ids.append(chunk_id)
+        
+        result = {}
+        
+        # Handle LanceDB row IDs - convert to FTS content_ids for lookup
+        if lancedb_row_ids:
+            # Parse LanceDB row IDs and generate corresponding FTS content_ids
+            lancedb_to_fts = {}
+            for row_id in lancedb_row_ids:
+                try:
+                    parts = row_id.split(':')
+                    if len(parts) >= 4:
+                        repo_id = int(parts[0])
+                        file_id = int(parts[1])
+                        # embed_model = parts[2]  # Not needed for FTS lookup
+                        text_hash = parts[3]
+                        # Generate deterministic FTS content_id
+                        fts_content_id = generate_fts_content_id(repo_id, file_id, text_hash)
+                        lancedb_to_fts[row_id] = fts_content_id
+                except (ValueError, IndexError):
+                    # Skip malformed row IDs
+                    continue
+            
+            if lancedb_to_fts:
+                # Fetch content using FTS content_ids
+                fts_ids = list(lancedb_to_fts.values())
+                contents = sql_store.get_chunk_contents(fts_ids)
+                
+                # Map content back to original LanceDB row IDs
+                for row_id, fts_id in lancedb_to_fts.items():
+                    if fts_id in contents:
+                        result[row_id] = contents[fts_id]
+        
+        # Handle FTS content IDs (can be used directly)
+        if fts_content_ids:
+            # These can be used directly with get_chunk_contents
+            fts_contents = sql_store.get_chunk_contents(fts_content_ids)
+            result.update(fts_contents)
+        
         return result
 
     def _hydrate_docs_for_reranking(self, hits: List[Dict], sql_store: SQLiteMetadataStore) -> List[Dict]:
