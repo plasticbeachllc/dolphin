@@ -26,6 +26,7 @@ import type { ContextBuilder } from '../context/context-builder.js';
 import type { PromptBuilder } from '../prompts/prompt-builder.js';
 import type { ClaudeProvider } from '../execution/claude-provider.js';
 import { MODELS, CHARS_PER_TOKEN, DEFAULT_MAX_CLARIFICATION_TURNS } from './constants.js';
+import { parsePlanFromMarkdown, parseLegacyMarkdownPlan } from './plan-parser.js';
 
 export interface ArchitectWorkflowConfig {
   claudeProvider: ClaudeProvider;
@@ -463,9 +464,24 @@ export class ArchitectWorkflow implements IWorkflow {
       }
     }
 
-    // Parse plan from markdown
-    const parsedPlan = this.parsePlanFromMarkdown(planContent);
+    // Parse plan from markdown with robust TOML extraction
+    let parsedPlan: any;
+    let parseSource = 'toml';
 
+    try {
+      // Try robust TOML parsing first
+      const result = parsePlanFromMarkdown(planContent);
+      parsedPlan = result.plan;
+      parseSource = result.source;
+      console.log(`[ArchitectWorkflow] Plan parsed from ${result.source}`);
+    } catch (tomlError) {
+      // Fallback to legacy markdown parsing
+      console.warn('[ArchitectWorkflow] TOML parsing failed, using legacy markdown parser:', tomlError);
+      parsedPlan = parseLegacyMarkdownPlan(planContent);
+      parseSource = 'legacy-markdown';
+    }
+
+    // Convert TOML snake_case to Plan camelCase
     const plan: Plan = {
       version: 1,
       status: 'pending_approval',
@@ -474,11 +490,13 @@ export class ArchitectWorkflow implements IWorkflow {
       tokensUsed: Math.floor(planContent.length / CHARS_PER_TOKEN),
       estimatedCost: 0.015, // Rough estimate for Opus
       content: planContent,
-      filesToModify: parsedPlan.filesToModify || [],
-      filesToCreate: parsedPlan.filesToCreate || [],
-      steps: parsedPlan.steps || [],
+      filesToModify: parsedPlan.files_to_modify || parsedPlan.filesToModify || [],
+      filesToCreate: parsedPlan.files_to_create || parsedPlan.filesToCreate || [],
+      steps: (parsedPlan.steps || []).map((s: any) =>
+        typeof s === 'string' ? s : s.description
+      ),
       complexity: parsedPlan.complexity || 'medium',
-      estimatedTokens: parsedPlan.estimatedTokens || Math.floor(planContent.length / CHARS_PER_TOKEN),
+      estimatedTokens: parsedPlan.estimated_tokens || parsedPlan.estimatedTokens || Math.floor(planContent.length / CHARS_PER_TOKEN),
       overview: parsedPlan.overview,
     };
 
@@ -518,73 +536,6 @@ export class ArchitectWorkflow implements IWorkflow {
     return questions;
   }
 
-  /**
-   * Helper: Parse plan from markdown content
-   */
-  private parsePlanFromMarkdown(content: string): Partial<Plan> {
-    const filesToModify: string[] = [];
-    const filesToCreate: string[] = [];
-    const steps: string[] = [];
-    let overview = '';
-    let complexity: 'low' | 'medium' | 'high' = 'medium';
-
-    // Extract overview (first paragraph or summary section)
-    const overviewMatch = content.match(/##?\s*(?:Overview|Summary)\s*\n\n([\s\S]*?)(?:\n##|$)/i);
-    if (overviewMatch) {
-      overview = overviewMatch[1].trim();
-    }
-
-    // Extract files to modify
-    const modifyMatch = content.match(/##?\s*Files?\s+to\s+Modify\s*\n([\s\S]*?)(?:\n##|$)/i);
-    if (modifyMatch) {
-      const fileLines = modifyMatch[1].split('\n');
-      for (const line of fileLines) {
-        const fileMatch = line.match(/[-*]\s*`?([a-zA-Z0-9_/.]+\.[a-zA-Z0-9]+)`?/);
-        if (fileMatch) {
-          filesToModify.push(fileMatch[1]);
-        }
-      }
-    }
-
-    // Extract files to create
-    const createMatch = content.match(/##?\s*Files?\s+to\s+Create\s*\n([\s\S]*?)(?:\n##|$)/i);
-    if (createMatch) {
-      const fileLines = createMatch[1].split('\n');
-      for (const line of fileLines) {
-        const fileMatch = line.match(/[-*]\s*`?([a-zA-Z0-9_/.]+\.[a-zA-Z0-9]+)`?/);
-        if (fileMatch) {
-          filesToCreate.push(fileMatch[1]);
-        }
-      }
-    }
-
-    // Extract steps
-    const stepsMatch = content.match(/##?\s*(?:Steps|Implementation\s+Steps?)\s*\n([\s\S]*?)(?:\n##|$)/i);
-    if (stepsMatch) {
-      const stepLines = stepsMatch[1].split('\n');
-      for (const line of stepLines) {
-        const stepMatch = line.match(/^\s*\d+\.\s+(.+)$/);
-        if (stepMatch) {
-          steps.push(stepMatch[1].trim());
-        }
-      }
-    }
-
-    // Extract complexity
-    const complexityMatch = content.match(/complexity:?\s*(low|medium|high)/i);
-    if (complexityMatch) {
-      complexity = complexityMatch[1].toLowerCase() as 'low' | 'medium' | 'high';
-    }
-
-    return {
-      overview,
-      filesToModify,
-      filesToCreate,
-      steps,
-      complexity,
-      estimatedTokens: Math.floor(steps.length * 500), // Rough estimate
-    };
-  }
 
   /**
    * Helper: Build initial clarification prompt
@@ -666,38 +617,73 @@ Be efficient with questions - ask what's essential, not everything possible.`;
   private getPlanningSystemPrompt(): string {
     return `You are an expert software architect creating an implementation plan.
 
-Your plan must include:
+CRITICAL: Your plan MUST be provided as a TOML code block. Use this exact structure:
 
-## Overview
-Brief summary of the approach and key decisions
+\`\`\`toml
+plan_version = 1
 
-## Files to Modify
-- List each file that needs changes
-- Include file paths
+overview = """
+Brief summary of the approach and key decisions.
+Explain the overall strategy and important architectural choices.
+"""
 
-## Files to Create
-- List new files needed
-- Include file paths
+complexity = "medium"  # Options: "low", "medium", "high"
 
-## Implementation Steps
-1. Numbered list of concrete steps
-2. Each step should be actionable
-3. Order steps by logical dependencies
+estimated_tokens = 5000  # Rough estimate of implementation tokens
 
-## Complexity
-Estimate: low, medium, or high
+files_to_modify = [
+  "path/to/file1.ts",
+  "path/to/file2.ts"
+]
 
-## Estimated Effort
-Rough time estimate
+files_to_create = [
+  "path/to/new-file1.ts",
+  "path/to/new-file2.ts"
+]
+
+[[steps]]
+id = 1
+description = "First concrete step with specific actions"
+files = ["path/to/file1.ts"]
+estimated_tokens = 500
+
+[[steps]]
+id = 2
+description = "Second step that builds on the first"
+files = ["path/to/file2.ts"]
+estimated_tokens = 1000
+
+# Add more steps as needed
+
+[[risks]]
+description = "Potential risk or challenge"
+mitigation = "How to mitigate this risk"
+
+# Add dependencies if needed
+dependencies = ["package-name"]
+
+generated_at = "2025-01-15T10:30:00Z"
+\`\`\`
+
+REQUIREMENTS:
+- MUST use TOML format in a fenced code block labeled \`toml\`
+- Use snake_case for all keys (not camelCase)
+- Each step MUST have: id (sequential), description, files array
+- Complexity MUST be one of: "low", "medium", "high"
+- Overview MUST be a clear multi-line string using triple quotes
+- Steps MUST use [[steps]] array-of-tables syntax
+- File paths MUST be actual paths from the codebase
+- Be specific and actionable in step descriptions
 
 Guidelines:
 - Reference specific files, functions, and classes from the codebase
 - Follow existing architecture patterns
 - Consider error handling and edge cases
 - Think about testing strategy
-- Be concrete and specific
+- Order steps by logical dependencies
+- Estimate tokens realistically (consider file size and complexity)
 
-Output as well-structured markdown.`;
+You may include explanatory markdown before or after the TOML block, but the plan data MUST be in TOML format.`;
   }
 
   /**
