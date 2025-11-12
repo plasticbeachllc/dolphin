@@ -60,8 +60,8 @@
         />
       {:else if message.type === "thinking"}
         <!-- Thinking indicator -->
-        <div class="flex items-center gap-3 text-muted-foreground py-2 px-3">
-          <Loader2 class="h-4 w-4 animate-spin" />
+        <div class="flex items-center gap-3 text-muted-foreground py-2 px-3" role="status" aria-live="polite" aria-label="AI is thinking">
+          <Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />
           <span class="text-sm">Thinking...</span>
         </div>
       {:else}
