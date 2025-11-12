@@ -64,6 +64,12 @@ if ! command -v py-spy &> /dev/null; then
   exit 1
 fi
 
+# Check if pv is installed
+if ! command -v pv &> /dev/null; then
+  echo "Error: pv not found. Install with: brew install pv (macOS) or apt-get install pv (Linux)"
+  exit 1
+fi
+
 # Cleanup function for error handling
 cleanup() {
   local exit_code=$?
@@ -133,6 +139,13 @@ fi
 
 echo "  Clone complete!"
 
+# Fix Git ownership issue when running with sudo
+# Change ownership back to the original user (if running as sudo)
+if [ -n "$SUDO_USER" ]; then
+  echo "  Fixing repository ownership..."
+  chown -R "$SUDO_USER:$(id -gn $SUDO_USER)" "$REPO_PATH"
+fi
+
 # Step 3: Register with Dolphin KB
 echo ""
 echo "Step 3: Registering repository with Dolphin KB..."
@@ -151,28 +164,39 @@ echo "  Flame graph: $INDEX_FLAMEGRAPH_FILE"
 echo "  Log file: $INDEX_LOG_FILE"
 echo ""
 
-INDEX_START_TIME=$(date +%s)
+# Count actual files in repository
+echo "Counting files in repository..."
+FILE_COUNT=$(cd "$REPO_PATH" && git ls-files | wc -l | tr -d ' ')
+echo "  Files to index: $FILE_COUNT"
+echo ""
 
-# Run profiling with py-spy
-py-spy record \
+# Run profiling with py-spy (single run, generate both outputs from same data)
+echo "Starting indexing at: $(date +%H:%M:%S)"
+INDEX_START=$(date +%s.%N)
+
+# Generate speedscope JSON format with pv progress tracking
+# Filter output to only count lines that indicate actual file processing
+(py-spy record \
   --format speedscope \
   --output "$INDEX_PROFILE_FILE" \
   --rate 100 \
   --subprocesses \
-  -- uv run dolphin kb index "$REPO_NAME" 2>&1 | tee "$INDEX_LOG_FILE"
+  -- uv run dolphin kb index "$REPO_NAME" --full --force 2>&1 | \
+  tee "$INDEX_LOG_FILE" | \
+  grep --line-buffered "Chunked.*into.*chunks" | \
+  pv -l -s "$FILE_COUNT" -N "Indexing files" > /dev/null)
 
-INDEX_END_TIME=$(date +%s)
-INDEX_DURATION=$((INDEX_END_TIME - INDEX_START_TIME))
-
-# Generate flame graph (reindex for flamegraph)
+INDEX_END=$(date +%s.%N)
 echo ""
-echo "Generating indexing flame graph (reindexing)..."
-py-spy record \
-  --format flamegraph \
-  --output "$INDEX_FLAMEGRAPH_FILE" \
-  --rate 100 \
-  --subprocesses \
-  -- uv run dolphin kb index "$REPO_NAME" --full --force 2>&1 > /dev/null
+echo "Indexing finished at: $(date +%H:%M:%S)"
+
+INDEX_DURATION=$(echo "$INDEX_END - $INDEX_START" | bc)
+INDEX_DURATION_INT=$(echo "$INDEX_DURATION / 1" | bc)
+
+# Note: Flamegraph generation removed to avoid double-indexing
+# Upload the .json file to https://speedscope.app to view flamegraph
+echo ""
+echo "Note: Upload $INDEX_PROFILE_FILE to https://speedscope.app to view flamegraph"
 
 echo ""
 echo "========================================="
@@ -184,15 +208,20 @@ echo "Flame graph: $INDEX_FLAMEGRAPH_FILE"
 echo "Log: $INDEX_LOG_FILE"
 echo ""
 
-# Extract indexing metrics from log
-if grep -q "files/min" "$INDEX_LOG_FILE"; then
-  THROUGHPUT=$(grep -oP "[\d,]+ files/min" "$INDEX_LOG_FILE" | head -1)
-  echo "Throughput: $THROUGHPUT"
+# Extract indexing metrics from log (BSD grep compatible)
+if grep -q "Files processed" "$INDEX_LOG_FILE"; then
+  FILES=$(grep "Files processed:" "$INDEX_LOG_FILE" | head -1 | sed -E 's/.*Files processed: ([0-9]+).*/\1/')
+  echo "Files processed: $FILES"
 fi
 
 if grep -q "Chunks indexed" "$INDEX_LOG_FILE"; then
-  CHUNKS=$(grep -oP "Chunks indexed: \d+" "$INDEX_LOG_FILE" | head -1)
-  echo "$CHUNKS"
+  CHUNKS=$(grep "Chunks indexed:" "$INDEX_LOG_FILE" | head -1 | sed -E 's/.*Chunks indexed: ([0-9]+).*/\1/')
+  echo "Chunks indexed: $CHUNKS"
+fi
+
+if grep -q "Vectors written" "$INDEX_LOG_FILE"; then
+  VECTORS=$(grep "Vectors written:" "$INDEX_LOG_FILE" | head -1 | sed -E 's/.*Vectors written: ([0-9]+).*/\1/')
+  echo "Vectors written: $VECTORS"
 fi
 
 # ==============================================================================
@@ -277,11 +306,14 @@ py-spy record \
   --duration 60 &
 PYSPY_PID=$!
 
-SEARCH_START_TIME=$(date +%s)
-
 # Run searches
+echo "Starting searches at: $(date +%H:%M:%S)"
+SEARCH_START=$(date +%s.%N)
+
+QUERY_NUM=1
+TOTAL_QUERIES=${#QUERIES[@]}
 for query in "${QUERIES[@]}"; do
-  echo "Searching: $query"
+  echo "[$QUERY_NUM/$TOTAL_QUERIES] Searching: $query"
   START=$(uv run python -c 'import time; print(int(time.time() * 1000))')
   
   curl -s -X POST http://localhost:$API_PORT/search \
@@ -290,12 +322,15 @@ for query in "${QUERIES[@]}"; do
   
   END=$(uv run python -c 'import time; print(int(time.time() * 1000))')
   LATENCY=$((END - START))
-  echo "Latency: ${LATENCY}ms" | tee -a "$SEARCH_LOG_FILE"
-  echo ""
+  echo "  Latency: ${LATENCY}ms" | tee -a "$SEARCH_LOG_FILE"
+  QUERY_NUM=$((QUERY_NUM + 1))
 done
 
-SEARCH_END_TIME=$(date +%s)
-SEARCH_DURATION=$((SEARCH_END_TIME - SEARCH_START_TIME))
+SEARCH_END=$(date +%s.%N)
+echo "Searches finished at: $(date +%H:%M:%S)"
+
+SEARCH_DURATION=$(echo "$SEARCH_END - $SEARCH_START" | bc)
+SEARCH_DURATION_INT=$(echo "$SEARCH_DURATION / 1" | bc)
 
 # Wait for py-spy to finish
 wait $PYSPY_PID || true
@@ -343,6 +378,17 @@ fi
 # SUMMARY
 # ==============================================================================
 
+# Calculate total duration and format as MM:SS
+TOTAL_DURATION=$(echo "$INDEX_DURATION + $SEARCH_DURATION" | bc)
+TOTAL_DURATION_INT=$(echo "$TOTAL_DURATION / 1" | bc)
+
+INDEX_MINUTES=$((INDEX_DURATION_INT / 60))
+INDEX_SECONDS=$((INDEX_DURATION_INT % 60))
+SEARCH_MINUTES=$((SEARCH_DURATION_INT / 60))
+SEARCH_SECONDS=$((SEARCH_DURATION_INT % 60))
+TOTAL_MINUTES=$((TOTAL_DURATION_INT / 60))
+TOTAL_SECONDS=$((TOTAL_DURATION_INT % 60))
+
 echo ""
 echo "========================================="
 echo "Combined Profiling Summary"
@@ -352,17 +398,23 @@ echo "Repository: $REPO_SIZE ($EXPECTED_FILES files)"
 echo "Repository name: $REPO_NAME"
 echo ""
 echo "INDEXING:"
-echo "  Duration: ${INDEX_DURATION}s"
+echo "  Duration: ${INDEX_DURATION}s ($(printf '%02d:%02d' $INDEX_MINUTES $INDEX_SECONDS))"
 echo "  Profile: $INDEX_PROFILE_FILE"
 echo "  Flamegraph: $INDEX_FLAMEGRAPH_FILE"
 echo "  Log: $INDEX_LOG_FILE"
 echo ""
 echo "SEARCH:"
-echo "  Duration: ${SEARCH_DURATION}s"
+if [[ $SEARCH_START_TIME == *.* ]]; then
+  echo "  Duration: ${SEARCH_DURATION}s ($(printf '%02d:%02d' $SEARCH_MINUTES $SEARCH_SECONDS))"
+else
+  echo "  Duration: ${SEARCH_DUR_FOR_CALC}s ($(printf '%02d:%02d' $SEARCH_MINUTES $SEARCH_SECONDS))"
+fi
 echo "  Queries: ${#QUERIES[@]}"
 echo "  Profile: $SEARCH_PROFILE_FILE"
 echo "  Flamegraph: $SEARCH_FLAMEGRAPH_FILE"
 echo "  Log: $SEARCH_LOG_FILE"
+echo ""
+echo "TOTAL RUNTIME: ${TOTAL_DURATION}s ($(printf '%02d:%02d' $TOTAL_MINUTES $TOTAL_SECONDS))"
 echo ""
 echo "View flame graphs at: https://speedscope.app"
 echo "Upload both .json files for comparison"

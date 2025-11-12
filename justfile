@@ -410,6 +410,41 @@ tail-mcp:
   tail -f mcp-bridge/logs/mcp.log
 
 # ==============================================================================
+# Performance Profiling
+# ==============================================================================
+
+# Profile indexing performance (small/medium/large)
+profile-index SIZE="small":
+	@echo "🔬 Profiling indexing performance ({{SIZE}} repository)..."
+	sudo -E ./scripts/profile_indexing.sh {{SIZE}}
+
+# Profile search performance (cold/warm/concurrent)
+profile-search TYPE="cold":
+	@echo "🔍 Profiling search performance ({{TYPE}} cache)..."
+	sudo -E ./scripts/profile_search.sh {{TYPE}}
+
+# Profile both indexing and search on same repository
+profile-combined SIZE="small":
+	@echo "🚀 Profiling combined workflow ({{SIZE}} repository)..."
+	sudo -E ./scripts/profile_combined.sh {{SIZE}}
+
+# Keep repository after profiling for debugging
+profile-combined-keep SIZE="small":
+	@echo "🚀 Profiling combined workflow with --keep-repo flag..."
+	sudo -E ./scripts/profile_combined.sh {{SIZE}} --keep-repo
+
+# View profiling results in speedscope
+profile-view RESULT:
+	@echo "📊 Opening {{RESULT}} in browser..."
+	@open https://speedscope.app || echo "Visit https://speedscope.app and upload {{RESULT}}"
+
+# Clean profiling results
+profile-clean:
+	@echo "🧹 Cleaning profiling results..."
+	@rm -rf profiling_results/
+	@echo "✅ Profiling results cleaned"
+
+# ==============================================================================
 # Benchmarking & Evaluation
 # ==============================================================================
 

@@ -62,6 +62,12 @@ if ! command -v py-spy &> /dev/null; then
   exit 1
 fi
 
+# Check if pv is installed
+if ! command -v pv &> /dev/null; then
+  echo "Error: pv not found. Install with: brew install pv (macOS) or apt-get install pv (Linux)"
+  exit 1
+fi
+
 # Cleanup function for error handling
 cleanup() {
   local exit_code=$?
@@ -133,9 +139,17 @@ echo "  Flame graph: $FLAMEGRAPH_FILE"
 echo "  Log file: $LOG_FILE"
 echo ""
 
+# Count actual files in repository
+echo "Counting files in repository..."
+FILE_COUNT=$(cd "$REPO_PATH" && git ls-files | wc -l | tr -d ' ')
+echo "  Files to index: $FILE_COUNT"
+echo "  (Indexing may take several minutes...)"
+echo ""
+
 START_TIME=$(date +%s)
 
 # Run profiling with py-spy
+echo "Starting indexing..."
 py-spy record \
   --format speedscope \
   --output "$PROFILE_FILE" \
@@ -145,6 +159,7 @@ py-spy record \
 
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
+echo ""
 
 # Generate flame graph (reindex for flamegraph)
 echo ""
