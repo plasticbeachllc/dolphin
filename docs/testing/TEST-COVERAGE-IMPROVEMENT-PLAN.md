@@ -21,16 +21,14 @@ This document outlines a strategic plan to enhance test coverage across the Dolp
 | Agent Core (TS) | ~60% | 80% | High |
 | VSCode Extension (TS) | ~70% | 80% | High |
 | MCP Bridge (TS) | ~80% | 85% | Low |
-| **Personas Module** | **0%** | **75%** | **CRITICAL** |
 | **E2E Tests** | **0%** | **60%** | **CRITICAL** |
 
 ### Key Findings
 
-1. **Personas module (50K+ lines) has ZERO test coverage** - Critical risk
-2. **No end-to-end tests** validating complete user workflows
-3. **Agent Core tool execution** lacks comprehensive testing
-4. **VSCode KB lifecycle management** needs integration tests
-5. **Performance benchmarks** are missing
+1. **No end-to-end tests** validating complete user workflows
+2. **Agent Core tool execution** lacks comprehensive testing
+3. **VSCode KB lifecycle management** needs integration tests
+4. **Performance benchmarks** are missing
 
 ---
 
@@ -38,161 +36,7 @@ This document outlines a strategic plan to enhance test coverage across the Dolp
 
 **Goal:** Eliminate high-risk areas with zero or minimal coverage
 
-### 1.1 Personas Module Testing
-
-**Impact:** 🔴 CRITICAL - 50K+ lines of untested code
-**Effort:** 5-7 days
-**Risk:** Production failures, persona generation bugs
-
-#### Current State
-```
-personas/src/
-├── personas.py          # ~17K lines - NOT TESTED ❌
-├── persona_utils.py     # ~16K lines - NOT TESTED ❌
-├── kilocode_utils.py    # ~16K lines - NOT TESTED ❌
-├── continue_utils.py    # ~7K lines - NOT TESTED ❌
-```
-
-#### Implementation Steps
-
-**Step 1: Create test structure** (Day 1)
-```bash
-# Create directory
-mkdir -p tests/unit/test_personas
-
-# Create test files
-touch tests/unit/test_personas/__init__.py
-touch tests/unit/test_personas/test_personas.py
-touch tests/unit/test_personas/test_persona_utils.py
-touch tests/unit/test_personas/test_kilocode_utils.py
-touch tests/unit/test_personas/test_continue_utils.py
-
-# Create fixtures
-mkdir -p tests/fixtures/personas
-```
-
-**Step 2: Identify testable units** (Day 1)
-```bash
-# Analyze module structure
-grep -n "^def \|^class " personas/src/personas.py > personas_functions.txt
-grep -n "^def \|^class " personas/src/persona_utils.py > persona_utils_functions.txt
-```
-
-**Step 3: Write unit tests** (Days 2-5)
-
-Priority functions to test:
-
-```python
-# tests/unit/test_personas/test_personas.py
-"""Unit tests for personas.py core functionality."""
-
-import pytest
-from personas.src.personas import (
-    generate_persona,
-    validate_persona_config,
-    parse_persona_template,
-    # ... other key functions
-)
-
-class TestPersonaGeneration:
-    """Test persona generation functions."""
-
-    def test_generate_persona_with_valid_config(self):
-        """Test persona generation with valid configuration."""
-        config = {
-            "name": "test-persona",
-            "description": "Test persona",
-            "parameters": {}
-        }
-        result = generate_persona(config)
-        assert result is not None
-        assert result["name"] == "test-persona"
-
-    def test_generate_persona_with_invalid_config(self):
-        """Test persona generation fails gracefully with invalid config."""
-        with pytest.raises(ValueError):
-            generate_persona({})
-
-    @pytest.mark.parametrize("persona_type", [
-        "kilocode",
-        "continue",
-        "claude"
-    ])
-    def test_generate_persona_for_different_types(self, persona_type):
-        """Test persona generation for different integration types."""
-        config = {"type": persona_type, "name": f"test-{persona_type}"}
-        result = generate_persona(config)
-        assert result["type"] == persona_type
-
-class TestPersonaValidation:
-    """Test persona validation logic."""
-
-    def test_validate_persona_config_success(self):
-        """Test validation passes with correct config."""
-        config = {"name": "test", "type": "kilocode"}
-        assert validate_persona_config(config) is True
-
-    def test_validate_persona_config_missing_required_fields(self):
-        """Test validation fails with missing fields."""
-        assert validate_persona_config({}) is False
-
-# Add 20-30 more tests covering edge cases
-```
-
-**Step 4: Add integration tests** (Days 6-7)
-```python
-# tests/integration/test_persona_workflows.py
-"""Integration tests for persona workflows."""
-
-import pytest
-from personas.src.personas import generate_persona
-from personas.src.kilocode_utils import export_to_kilocode
-from personas.src.continue_utils import export_to_continue
-
-def test_full_persona_generation_to_kilocode_export():
-    """Test complete workflow from generation to Kilocode export."""
-    config = {
-        "name": "test-dev",
-        "type": "kilocode",
-        "rules": ["rule1", "rule2"]
-    }
-    persona = generate_persona(config)
-    export_result = export_to_kilocode(persona)
-
-    assert export_result["success"] is True
-    assert "config_path" in export_result
-
-def test_persona_export_to_multiple_formats():
-    """Test exporting same persona to multiple formats."""
-    persona = generate_persona({"name": "multi", "type": "generic"})
-
-    kilocode_export = export_to_kilocode(persona)
-    continue_export = export_to_continue(persona)
-
-    assert kilocode_export["success"]
-    assert continue_export["success"]
-```
-
-**Step 5: Run tests and measure coverage** (Day 7)
-```bash
-# Run tests with coverage
-uv run pytest tests/unit/test_personas/ \
-    --cov=personas/src \
-    --cov-report=html \
-    --cov-report=term-missing
-
-# Target: 75%+ coverage
-```
-
-**Success Metrics:**
-- ✅ 75%+ line coverage for personas module
-- ✅ All critical functions have unit tests
-- ✅ Integration tests for main workflows
-- ✅ No regressions in existing functionality
-
----
-
-### 1.2 End-to-End Test Suite
+### 1.1 End-to-End Test Suite
 
 **Impact:** 🔴 CRITICAL - No validation of complete workflows
 **Effort:** 4-5 days
@@ -480,7 +324,7 @@ bun test src/tests/ --serial
 
 ---
 
-### 1.3 Agent Core Tool Executor Tests
+### 1.2 Agent Core Tool Executor Tests
 
 **Impact:** 🟠 HIGH - Core execution engine lacks coverage
 **Effort:** 2-3 days
@@ -676,7 +520,7 @@ def test_cache_speeds_up_repeated_queries():
 ```toml
 # pyproject.toml
 [tool.coverage.run]
-source = ["kb", "personas"]
+source = ["kb"]
 omit = [
     "*/tests/*",
     "*/test_*.py",
@@ -838,14 +682,13 @@ def test_chunk_size_bounds(text, max_size):
 ## Implementation Timeline
 
 ### Week 1: Critical Gaps - Part 1
-- **Mon-Tue:** Personas module test structure + core tests
-- **Wed-Thu:** Personas integration tests + coverage measurement
-- **Fri:** E2E test infrastructure setup
+- **Mon-Tue:** E2E test infrastructure setup
+- **Wed-Thu:** E2E tests (indexing + search workflows)
+- **Fri:** E2E tests (VSCode + MCP workflows)
 
 ### Week 2: Critical Gaps - Part 2
-- **Mon-Tue:** E2E tests (indexing + search workflows)
-- **Wed:** E2E tests (VSCode + MCP workflows)
-- **Thu-Fri:** Agent Core tool executor tests
+- **Mon-Wed:** Agent Core tool executor tests
+- **Thu-Fri:** KB component integration tests
 
 ### Week 3: Integration Testing
 - **Mon-Tue:** KB component integration tests
@@ -877,7 +720,6 @@ def test_chunk_size_bounds(text, max_size):
 | Metric | Current | Target | Timeline |
 |--------|---------|--------|----------|
 | Overall Coverage | ~65% | 80% | 6 weeks |
-| Personas Coverage | 0% | 75% | 2 weeks |
 | E2E Test Count | 0 | 10+ | 2 weeks |
 | Test Execution Time | N/A | <10 min | 4 weeks |
 | CI/CD Test Pass Rate | N/A | >95% | 6 weeks |
@@ -966,7 +808,7 @@ def test_chunk_size_bounds(text, max_size):
 uv run pytest
 
 # Run with coverage
-uv run pytest --cov=kb --cov=personas --cov-report=html
+uv run pytest --cov=kb --cov-report=html
 
 # Run only unit tests
 uv run pytest tests/unit/
@@ -1048,7 +890,7 @@ jobs:
       - name: Run tests
         run: |
           uv sync --group test
-          uv run pytest --cov=kb --cov=personas \
+          uv run pytest --cov=kb \
             --cov-report=xml \
             --junitxml=junit.xml
 
