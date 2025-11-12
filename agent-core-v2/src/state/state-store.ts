@@ -8,8 +8,9 @@
 
 import * as TOML from '@iarna/toml';
 import { readFile, writeFile, mkdir, readdir, unlink, stat } from 'fs/promises';
-import { join, dirname } from 'path';
+import { join, dirname, resolve, relative } from 'path';
 import { existsSync } from 'fs';
+import { z } from 'zod';
 import type {
   TaskSession,
   Plan,
@@ -103,6 +104,93 @@ interface SessionTOML {
     completed_at?: string;
   };
 }
+
+/**
+ * Zod schemas for runtime validation of TOML data
+ */
+const SessionTOMLSchema = z.object({
+  session: z.object({
+    id: z.string(),
+    mode: z.string(),
+    state: z.string(),
+    created_at: z.string(),
+    updated_at: z.string(),
+  }),
+  input: z.object({
+    message: z.string(),
+    context: z.object({
+      files: z.array(z.string()),
+      folders: z.array(z.string()),
+      selection: z.string(),
+    }),
+  }),
+  research: z.object({
+    completed_at: z.string(),
+    model: z.string(),
+    tokens_used: z.number(),
+    findings: z.string(),
+    kb_searches: z.array(z.object({
+      query: z.string(),
+      results_count: z.number(),
+      top_result: z.string().optional(),
+    })),
+  }).optional(),
+  clarification: z.object({
+    completed_at: z.string(),
+    model: z.string(),
+    tokens_used: z.number(),
+    conversation_turns: z.number(),
+    ready_for_planning: z.boolean(),
+    final_context: z.string(),
+    questions: z.array(z.object({
+      question: z.string(),
+      priority: z.string(),
+      reason: z.string(),
+    })),
+    responses: z.array(z.object({
+      answers: z.string(),
+      timestamp: z.string(),
+    })),
+  }).optional(),
+  plan: z.object({
+    version: z.number(),
+    status: z.string(),
+    created_at: z.string(),
+    approved_at: z.string().optional(),
+    model: z.string(),
+    tokens_used: z.number(),
+    estimated_cost: z.number(),
+    content_path: z.string(),
+    revisions: z.array(z.object({
+      version: z.number(),
+      created_at: z.string(),
+      rejected_at: z.string().optional(),
+      rejected_reason: z.string().optional(),
+      content_path: z.string(),
+    })).optional(),
+  }).optional(),
+  execution: z.object({
+    started_at: z.string(),
+    completed_at: z.string().optional(),
+    model: z.string(),
+    tokens_used: z.number(),
+    cost: z.number(),
+    steps: z.array(z.object({
+      step_number: z.number(),
+      description: z.string(),
+      status: z.string(),
+      started_at: z.string().optional(),
+      completed_at: z.string().optional(),
+    })),
+  }).optional(),
+  metadata: z.object({
+    total_tokens: z.number(),
+    total_cost: z.number(),
+    models_used: z.array(z.string()),
+    started_at: z.string(),
+    completed_at: z.string().optional(),
+  }),
+});
 
 /**
  * StateStore manages persistent storage of sessions, plans, and conversations
@@ -419,10 +507,36 @@ export class StateStore {
   }
 
   /**
+   * Validate that a file path is within the expected directory
+   * Prevents path traversal attacks
+   */
+  private validatePath(filePath: string, expectedDir: string): string {
+    const resolvedPath = resolve(filePath);
+    const resolvedDir = resolve(expectedDir);
+    const relativePath = relative(resolvedDir, resolvedPath);
+
+    // Check if path escapes the expected directory
+    if (relativePath.startsWith('..') || resolve(relativePath) === resolvedPath) {
+      throw new Error(`Invalid file path: ${filePath} is outside expected directory ${expectedDir}`);
+    }
+
+    return resolvedPath;
+  }
+
+  /**
    * Deserialize a TOML string to TaskSession
    */
   private async deserializeSession(toml: string): Promise<TaskSession> {
-    const obj = TOML.parse(toml) as any;
+    // Parse TOML
+    const parsed = TOML.parse(toml);
+
+    // Validate with Zod schema
+    const validationResult = SessionTOMLSchema.safeParse(parsed);
+    if (!validationResult.success) {
+      throw new Error(`Invalid session TOML: ${validationResult.error.message}`);
+    }
+
+    const obj = validationResult.data;
     
     const session: TaskSession = {
       id: obj.session.id,
@@ -485,13 +599,28 @@ export class StateStore {
 
     // Add plan if present
     if (obj.plan) {
-      // Load plan content from file
+      // Load plan content from file with security validation
       let planContent = '';
-      if (obj.plan.content_path && existsSync(obj.plan.content_path)) {
+      let loadError: string | undefined;
+
+      if (obj.plan.content_path) {
         try {
-          planContent = await readFile(obj.plan.content_path, 'utf-8');
+          // Validate path is within plans directory
+          const validatedPath = this.validatePath(obj.plan.content_path, this.plansDir);
+
+          if (existsSync(validatedPath)) {
+            planContent = await readFile(validatedPath, 'utf-8');
+          } else {
+            loadError = `Plan file not found: ${obj.plan.content_path}`;
+            console.error(`[StateStore] ${loadError}`);
+          }
         } catch (error) {
+          loadError = error instanceof Error ? error.message : String(error);
           console.error(`[StateStore] Failed to load plan content from ${obj.plan.content_path}:`, error);
+          // Throw on security violations
+          if (loadError.includes('outside expected directory')) {
+            throw new Error(`Security violation: ${loadError}`);
+          }
         }
       }
 
@@ -511,6 +640,8 @@ export class StateStore {
         complexity: 'medium',
         estimatedTokens: 0,
         revisions: obj.plan.revisions,
+        // Add metadata about load failures
+        ...(loadError && { loadError }),
       };
     }
 

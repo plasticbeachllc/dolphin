@@ -25,6 +25,7 @@ import type {
 import type { ContextBuilder } from '../context/context-builder.js';
 import type { PromptBuilder } from '../prompts/prompt-builder.js';
 import type { ClaudeProvider } from '../execution/claude-provider.js';
+import { MODELS, CHARS_PER_TOKEN, DEFAULT_MAX_CLARIFICATION_TURNS } from './constants.js';
 
 export interface ArchitectWorkflowConfig {
   claudeProvider: ClaudeProvider;
@@ -43,7 +44,7 @@ export class ArchitectWorkflow implements IWorkflow {
 
   constructor(config: ArchitectWorkflowConfig) {
     this.config = config;
-    this.maxClarificationTurns = config.maxClarificationTurns || 3;
+    this.maxClarificationTurns = config.maxClarificationTurns || DEFAULT_MAX_CLARIFICATION_TURNS;
   }
 
   /**
@@ -201,7 +202,7 @@ export class ArchitectWorkflow implements IWorkflow {
     // Execute research with Haiku (fast, cost-effective)
     let findings = '';
     for await (const chunk of this.config.claudeProvider.execute({
-      model: 'claude-haiku-4-20250514',
+      model: MODELS.RESEARCH,
       prompt: researchPrompt,
       systemPrompt: this.getResearchSystemPrompt(),
       context,
@@ -225,8 +226,8 @@ export class ArchitectWorkflow implements IWorkflow {
 
     const result: ResearchResult = {
       completedAt: new Date().toISOString(),
-      model: 'claude-haiku-4-20250514',
-      tokensUsed: Math.floor((findings.length / 4)), // Rough estimate
+      model: MODELS.RESEARCH,
+      tokensUsed: Math.floor(findings.length / CHARS_PER_TOKEN),
       findings,
       kbSearches,
       relevantFiles,
@@ -300,7 +301,7 @@ export class ArchitectWorkflow implements IWorkflow {
       // Execute clarification with Sonnet (good reasoning, balanced cost)
       let llmResponse = '';
       for await (const chunk of this.config.claudeProvider.execute({
-        model: 'claude-sonnet-4-20250514',
+        model: MODELS.CLARIFICATION,
         prompt: conversationHistory[conversationHistory.length - 1].content,
         systemPrompt: this.getClarificationSystemPrompt(conversationTurns),
         thinkingMode: 'normal',
@@ -371,8 +372,10 @@ export class ArchitectWorkflow implements IWorkflow {
 
     const result: ClarificationResult = {
       completedAt: new Date().toISOString(),
-      model: 'claude-sonnet-4-20250514',
-      tokensUsed: Math.floor((conversationHistory.reduce((sum, msg) => sum + msg.content.length, 0) / 4)),
+      model: MODELS.CLARIFICATION,
+      tokensUsed: Math.floor(
+        conversationHistory.reduce((sum, msg) => sum + msg.content.length, 0) / CHARS_PER_TOKEN
+      ),
       conversationTurns,
       questions,
       responses,
@@ -438,7 +441,7 @@ export class ArchitectWorkflow implements IWorkflow {
     // Execute planning with Opus (best reasoning)
     let planContent = '';
     for await (const chunk of this.config.claudeProvider.execute({
-      model: 'claude-opus-4-20250514',
+      model: MODELS.PLANNING,
       prompt: planningPrompt,
       systemPrompt: this.getPlanningSystemPrompt(),
       context,
@@ -467,15 +470,15 @@ export class ArchitectWorkflow implements IWorkflow {
       version: 1,
       status: 'pending_approval',
       createdAt: new Date().toISOString(),
-      model: 'claude-opus-4-20250514',
-      tokensUsed: Math.floor((planContent.length / 4)),
+      model: MODELS.PLANNING,
+      tokensUsed: Math.floor(planContent.length / CHARS_PER_TOKEN),
       estimatedCost: 0.015, // Rough estimate for Opus
       content: planContent,
       filesToModify: parsedPlan.filesToModify || [],
       filesToCreate: parsedPlan.filesToCreate || [],
       steps: parsedPlan.steps || [],
       complexity: parsedPlan.complexity || 'medium',
-      estimatedTokens: parsedPlan.estimatedTokens || Math.floor(planContent.length / 4),
+      estimatedTokens: parsedPlan.estimatedTokens || Math.floor(planContent.length / CHARS_PER_TOKEN),
       overview: parsedPlan.overview,
     };
 
