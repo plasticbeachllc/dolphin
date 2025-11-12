@@ -193,7 +193,7 @@ export class AutoSyncManager {
       throw new Error(`Failed to get pending changes: ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as { changes?: PendingChange[]; total?: number };
     return data.changes || [];
   }
 

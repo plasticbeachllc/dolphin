@@ -144,7 +144,7 @@ html, body {
   }
 }
 
-/* Screen reader only content - Accessibility Guide requirement */
+/* Screen reader only utility class - WCAG 2.1 AA compliance */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -242,7 +242,7 @@ html, body {
   animation: bounce-subtle 1s ease-in-out infinite;
 }
 
-/* Respect reduced motion preferences - Accessibility Guide requirement */
+/* Respect reduced motion preferences - WCAG 2.1 AA compliance */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

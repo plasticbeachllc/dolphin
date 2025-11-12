@@ -86,7 +86,7 @@ export class DriftDetector {
       throw new Error(`Failed to fetch drift events: ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as { drift_events?: DriftEvent[] };
     return data.drift_events || [];
   }
 

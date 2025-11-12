@@ -444,9 +444,16 @@ class ReindexResponse(BaseModel):
 # =====================
 
 
+class FileChange(BaseModel):
+    """Individual file change."""
+    file_path: str
+    change_type: str
+    old_path: str | None = None
+
+
 class PendingChangeRequest(BaseModel):
     """Request to record pending file changes."""
-    changes: list[dict[str, str]]  # list of {file_path, change_type, old_path?}
+    changes: list[FileChange]
 
 
 class PendingChangeResponse(BaseModel):
@@ -1198,7 +1205,7 @@ async def clear_repo_index(repo_name: str, confirmed: bool = False) -> dict:
 
 
 @app.post("/v1/repos/{repo_name}/changes")
-async def record_pending_changes(repo_name: str, request: PendingChangeRequest) -> PendingChangeResponse:
+async def record_pending_changes(repo_name: str, request: PendingChangeRequest) -> dict:
     """Record pending file changes detected by file watcher.
 
     This endpoint is called by the VSCode extension when files are created, modified, or deleted.
@@ -1215,33 +1222,26 @@ async def record_pending_changes(repo_name: str, request: PendingChangeRequest) 
     repo_id = int(repo["id"])
 
     try:
-        recorded = 0
+        change_ids = []
         for change in request.changes:
-            file_path = change.get("file_path", "")
-            change_type = change.get("change_type", "")
-            old_path = change.get("old_path")
-
-            if not file_path or not change_type:
-                continue
-
-            _sql_store.record_pending_change(
+            change_id = _sql_store.record_pending_change(
                 repo_id=repo_id,
-                file_path=file_path,
-                change_type=change_type,
-                old_path=old_path
+                file_path=change.file_path,
+                change_type=change.change_type,
+                old_path=change.old_path
             )
-            recorded += 1
+            change_ids.append(change_id)
 
-        return PendingChangeResponse(
-            recorded=recorded,
-            message=f"Recorded {recorded} pending changes for '{repo_name}'"
-        )
+        return {
+            "change_ids": change_ids,
+            "message": f"Recorded {len(change_ids)} pending changes for '{repo_name}'"
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to record changes: {str(e)}")
 
 
 @app.get("/v1/repos/{repo_name}/pending-changes")
-async def get_pending_changes(repo_name: str, limit: int = 1000) -> PendingChangesListResponse:
+async def get_pending_changes(repo_name: str, limit: int = 1000) -> dict:
     """Get unprocessed pending changes for a repository.
 
     This endpoint returns all file changes that have been detected but not yet indexed.
@@ -1259,17 +1259,21 @@ async def get_pending_changes(repo_name: str, limit: int = 1000) -> PendingChang
 
     try:
         changes = _sql_store.get_pending_changes(repo_id=repo_id, limit=limit)
+        
+        # Add processed field to each change for compatibility
+        for change in changes:
+            change["processed"] = False
 
-        return PendingChangesListResponse(
-            changes=changes,
-            total=len(changes)
-        )
+        return {
+            "changes": changes,
+            "total": len(changes)
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get pending changes: {str(e)}")
 
 
 @app.post("/v1/repos/{repo_name}/changes/mark-processed")
-async def mark_changes_processed(repo_name: str, request: MarkProcessedRequest) -> MarkProcessedResponse:
+async def mark_changes_processed(repo_name: str, request: MarkProcessedRequest) -> dict:
     """Mark pending changes as processed after indexing.
 
     This endpoint is called after the auto-sync manager successfully indexes pending changes.
@@ -1285,10 +1289,10 @@ async def mark_changes_processed(repo_name: str, request: MarkProcessedRequest) 
     try:
         processed = _sql_store.mark_changes_processed(request.change_ids)
 
-        return MarkProcessedResponse(
-            processed=processed,
-            message=f"Marked {processed} changes as processed"
-        )
+        return {
+            "processed_count": processed,
+            "message": f"Marked {processed} changes as processed"
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to mark changes as processed: {str(e)}")
 
