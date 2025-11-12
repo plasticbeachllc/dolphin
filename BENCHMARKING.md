@@ -66,8 +66,8 @@ just compare-eval
 | **Vector Index (large)** | ~3GB | 3 repos with 3072-dim embeddings |
 | **Metadata (SQLite)** | ~2GB | Chunk metadata and FTS |
 | **Graph Store** | ~2GB | Code relationships |
-| **Flask Test Repo** | ~500MB | Source + indices |
-| **Buffer** | ~17.5GB | Remaining headroom |
+| **Flask Test Repo** | ~300MB | Source + large model index |
+| **Buffer** | ~17.7GB | Remaining headroom |
 
 ---
 
@@ -186,8 +186,7 @@ just flask-setup
 # This will:
 # 1. Clone pallets/flask
 # 2. Checkout tag 2.3.0
-# 3. Index with small model (1536-dim)
-# 4. Index with large model (3072-dim)
+# 3. Index with large model (3072-dim for better quality)
 ```
 
 ### Running Evaluation
