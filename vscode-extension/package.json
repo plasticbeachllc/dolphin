@@ -10,7 +10,12 @@
         "vscode": "^1.96.0"
     },
     "categories": [
-        "Other"
+        "Programming Languages",
+        "Snippets",
+        "Other",
+        "Machine Learning",
+        "Education",
+        "Testing"
     ],
     "main": "./out/extension.js",
     "activationEvents": [],
