@@ -483,13 +483,35 @@ def stop_api_server(server_process: subprocess.Popen) -> None:
     except subprocess.TimeoutExpired:
         server_process.kill()
 
-def cleanup_test_repo(store_root: Path) -> None:
+def cleanup_test_repo(temp_store_root: Path) -> None:
     """Clean up test repository from the database.
 
     This provides explicit cleanup even though we use a temporary directory,
     ensuring no test data leaks into the persistent database.
     """
     try:
+        # The CLI commands invoked by this script load their configuration via
+        # ``kb.config.load_config`` which ultimately resolves the store root from
+        # the user's config directory. Those commands currently ignore the
+        # DOLPHIN_STORE_ROOT env var that this script sets, so we need to resolve
+        # the same path the CLI uses to make sure we clean up the real metadata
+        # store instead of the temporary directory passed to this function.
+        from kb.config import load_config
+
+        try:
+            config_store_root = load_config().resolved_store_root()
+        except FileNotFoundError:
+            # If dolphin init failed before creating a config, fall back to the
+            # temporary store root to keep cleanup best-effort.
+            config_store_root = temp_store_root
+        except Exception as config_error:
+            log_warning(f"Cleanup warning: could not load config ({config_error}); using temp store root")
+            config_store_root = temp_store_root
+
+        store_root = config_store_root
+
+        if store_root != temp_store_root:
+            log_step(f"Cleaning up CLI store root at {store_root}")
         db_path = store_root / "metadata.db"
 
         if not db_path.exists():
