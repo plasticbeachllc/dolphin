@@ -53,13 +53,12 @@ export class PlanningPhase {
       { role: "user", content: systemPrompt }
     ];
 
-    const response = await this.claudeClient.sendMessage({
+    const response = await this.claudeClient.complete({
       messages,
-      model: "claude-sonnet-4-5-20250929",
       maxTokens: 4000
     });
 
-    const assistantResponse = response.content[0].text;
+    const assistantResponse = response.content;
 
     messages.push({
       role: "assistant",
@@ -97,13 +96,12 @@ export class PlanningPhase {
       content: userFeedback
     });
 
-    const response = await this.claudeClient.sendMessage({
+    const response = await this.claudeClient.complete({
       messages: session.messages,
-      model: "claude-sonnet-4-5-20250929",
       maxTokens: 4000
     });
 
-    const assistantResponse = response.content[0].text;
+    const assistantResponse = response.content;
 
     session.messages.push({
       role: "assistant",
