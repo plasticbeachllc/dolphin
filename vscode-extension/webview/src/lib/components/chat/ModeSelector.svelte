@@ -4,19 +4,13 @@
 
   interface Props {
     value?: 'code' | 'architect';
-    onValueChange?: (value: 'code' | 'architect') => void;
   }
 
-  let { value = $bindable('code'), onValueChange }: Props = $props();
-
-  function handleValueChange(newValue: string) {
-    value = newValue as 'code' | 'architect';
-    onValueChange?.(value);
-  }
+  let { value = $bindable('code') }: Props = $props();
 </script>
 
 <div class="mode-selector">
-  <Tabs value={value} onValueChange={handleValueChange}>
+  <Tabs {value} onValueChange={(v) => value = v as 'code' | 'architect'}>
     <TabsList class="grid w-full grid-cols-2">
       <TabsTrigger value="code" class="flex items-center gap-2">
         <Code class="h-4 w-4" />
