@@ -2,6 +2,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ClaudeCLIDetector } from "./claude-cli-detector";
 import { executeClaudeCode } from "./claude-cli-process";
+import { RateLimiter, type RateLimitStatus } from "./rate-limiter";
 
 export type AuthMode = "claude_cli" | "api_key" | "auto";
 
@@ -46,11 +47,19 @@ export class ClaudeClient {
   public apiClient: Anthropic | null = null; // Exposed for tool executor
   private cliDetector: ClaudeCLIDetector;
   private config: ClaudeConfig;
+  private rateLimiter: RateLimiter;
 
   constructor(config: ClaudeConfig) {
     this.config = config;
     this.authMode = config.authMode || "auto";
     this.cliDetector = new ClaudeCLIDetector();
+
+    // Initialize rate limiter with Anthropic's limits for tier 1
+    // User indicated: 1k requests/min, 450k input tokens/min
+    this.rateLimiter = new RateLimiter({
+      maxRequestsPerMinute: 1000,
+      maxInputTokensPerMinute: 450000
+    });
 
     // Initialize API client if API key provided or in environment
     if (config.apiKey || process.env.ANTHROPIC_API_KEY) {
@@ -113,16 +122,32 @@ export class ClaudeClient {
   }
 
   /**
-   * Complete a chat request (unified interface)
+   * Complete a chat request (unified interface) with rate limiting
    */
   async complete(request: CompletionRequest): Promise<CompletionResult> {
+    // Estimate input tokens (rough approximation: 4 chars per token)
+    const inputText = request.messages.map(m => m.content).join(' ') + (request.system || '');
+    const estimatedTokens = Math.ceil(inputText.length / 4);
+
+    // Wait for rate limit capacity
+    await this.rateLimiter.waitForCapacity(estimatedTokens);
+
+    // Reserve capacity
+    this.rateLimiter.reserve(estimatedTokens);
+
     const mode = await this.detectAuthMode();
 
+    let result: CompletionResult;
     if (mode === "claude_cli") {
-      return await this.completeCLI(request);
+      result = await this.completeCLI(request);
     } else {
-      return await this.completeAPI(request);
+      result = await this.completeAPI(request);
     }
+
+    // Record actual usage
+    this.rateLimiter.recordUsage(result.usage.input_tokens, estimatedTokens);
+
+    return result;
   }
 
   /**
@@ -191,6 +216,13 @@ export class ClaudeClient {
       },
       stop_reason: response.stop_reason,
     };
+  }
+
+  /**
+   * Get current rate limit status
+   */
+  getRateLimitStatus(): RateLimitStatus {
+    return this.rateLimiter.getStatus();
   }
 
   /**
