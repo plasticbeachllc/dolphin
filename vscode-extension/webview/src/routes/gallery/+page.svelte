@@ -3,9 +3,10 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Badge } from '$lib/components/ui/badge';
+	import { Input } from '$lib/components/ui/input';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import * as Collapsible from '$lib/components/ui/collapsible';
-	import { ChevronDown, ChevronRight, FileCode, Info, MessageSquare, ArrowRight, Palette, Loader, Code, Target, Clock } from 'lucide-svelte';
+	import { ChevronDown, ChevronRight, FileCode, Info, MessageSquare, ArrowRight, Palette, Loader, Code, Target, Clock, User, Settings as SettingsIcon, Database, Zap, Bell, Mail, Calendar, Book } from 'lucide-svelte';
 	import MessageCard from '$lib/components/chat/MessageCard.svelte';
 	import ChatInput from '$lib/components/chat/ChatInput.svelte';
 	import ToolCallCard from '$lib/components/tools/ToolCallCard.svelte';
@@ -18,6 +19,7 @@
 	import LoadingStates from '$lib/components/LoadingStates.svelte';
 	import EnhancedPlanTimeline from '$lib/components/planning/EnhancedPlanTimeline.svelte';
 	import GoalContext from '$lib/components/planning/GoalContext.svelte';
+	import KBManagementPanel from '$lib/components/kb/KBManagementPanel.svelte';
 	
 	// Sample data
 	let showConfirmDialog = $state(false);
@@ -193,6 +195,11 @@
 	};
 	
 	let showGoalContext = $state(false);
+	
+	// Settings state
+	let apiKey = $state('');
+	let model = $state('claude-sonnet-4');
+	let temperature = $state(0.7);
 </script>
 
 <div class="h-full overflow-auto p-6">
@@ -383,6 +390,70 @@
 					</div>
 					<Button size="lg" onclick={() => window.location.href = '/gallery/plan'}>
 						View Visualizations
+						<ArrowRight class="h-4 w-4 ml-2" />
+					</Button>
+				</div>
+			</CardContent>
+		</Card>
+		
+		<!-- Featured Section: Knowledge Bank ---->
+		<Card class="bg-primary/5 border-primary/20">
+			<CardContent class="p-6">
+				<div class="flex items-center justify-between">
+					<div class="space-y-2">
+						<div class="flex items-center gap-2">
+							<Database class="h-6 w-6 text-primary" />
+							<h3 class="text-xl font-bold">Knowledge Bank</h3>
+							<Badge variant="default">New</Badge>
+						</div>
+						<p class="text-sm text-muted-foreground">
+							Manage your indexed repositories and code search. View statistics, trigger reindexing, and configure semantic search settings for your workspace.
+						</p>
+					</div>
+					<Button size="lg" onclick={() => window.location.href = '/kb'}>
+						View Knowledge Bank
+						<ArrowRight class="h-4 w-4 ml-2" />
+					</Button>
+				</div>
+			</CardContent>
+		</Card>
+		
+		<!-- Featured Section: User Profile ---->
+		<Card class="bg-primary/5 border-primary/20">
+			<CardContent class="p-6">
+				<div class="flex items-center justify-between">
+					<div class="space-y-2">
+						<div class="flex items-center gap-2">
+							<User class="h-6 w-6 text-primary" />
+							<h3 class="text-xl font-bold">User Profile</h3>
+						</div>
+						<p class="text-sm text-muted-foreground">
+							View your account information, usage statistics, and activity overview. Manage your Dolphin profile and preferences.
+						</p>
+					</div>
+					<Button size="lg" onclick={() => window.location.href = '/profile'}>
+						View Profile
+						<ArrowRight class="h-4 w-4 ml-2" />
+					</Button>
+				</div>
+			</CardContent>
+		</Card>
+		
+		<!-- Featured Section: Settings ---->
+		<Card class="bg-primary/5 border-primary/20">
+			<CardContent class="p-6">
+				<div class="flex items-center justify-between">
+					<div class="space-y-2">
+						<div class="flex items-center gap-2">
+							<SettingsIcon class="h-6 w-6 text-primary" />
+							<h3 class="text-xl font-bold">Settings</h3>
+						</div>
+						<p class="text-sm text-muted-foreground">
+							Configure Dolphin preferences, AI model settings, API credentials, and notification preferences. Customize your development experience.
+						</p>
+					</div>
+					<Button size="lg" onclick={() => window.location.href = '/settings'}>
+						View Settings
 						<ArrowRight class="h-4 w-4 ml-2" />
 					</Button>
 				</div>
