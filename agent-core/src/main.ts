@@ -482,7 +482,11 @@ class AgentCore {
         }
 
         // EP-11: Check for active planning session (user refining plan)
-        if (this.activePlanningSession && request.mode !== "architect") {
+        if (this.activePlanningSession && request.mode === "code") {
+          // Clear session when user explicitly switches to code mode
+          this.clearPlanningSession();
+          // Fall through to normal code mode handling
+        } else if (this.activePlanningSession && request.mode !== "architect") {
           await this.handlePlanningInteraction(request.content);
           return;
         }
@@ -728,6 +732,15 @@ class AgentCore {
         },
       });
     }
+  }
+
+  /**
+   * Clear active planning session
+   */
+  private clearPlanningSession() {
+    console.error("[Planning] Clearing planning session");
+    this.activePlanningSession = null;
+    this.currentArchitectPrompt = null;
   }
 
   /**

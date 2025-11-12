@@ -7,6 +7,7 @@ Supports both stub (zero-vector) and OpenAI API providers with async support.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import os
 from typing import List, Optional
 
@@ -157,7 +158,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
     def _validate_api_key(self) -> None:
         """Validate API key by making a minimal test request.
-        
+
         Raises:
             RuntimeError: If API key is invalid or authentication fails
         """
@@ -186,6 +187,11 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 )
             # For other errors, raise the original exception
             raise
+
+    async def close(self) -> None:
+        """Close async client and release resources."""
+        if hasattr(self, 'async_client'):
+            await self.async_client.close()
 
     @with_retry(max_attempts=3, delays=(1.0, 2.0, 4.0))
     def embed_texts(self, model: str, texts: List[str]) -> List[List[float]]:
@@ -324,21 +330,27 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         return all_embeddings  # type: ignore
 
 
-# Global instance for convenience - starts with stub provider
-_default_provider: EmbeddingProvider = EmbeddingProvider()
+# Context-aware provider storage for async safety
+# Using contextvars instead of global mutable state ensures proper isolation
+# in async contexts and avoids thread-safety issues
+_provider_context: contextvars.ContextVar[EmbeddingProvider] = contextvars.ContextVar(
+    'embedding_provider',
+    default=EmbeddingProvider()
+)
 
 
 def embed_texts(model: str, texts: List[str]) -> List[List[float]]:
     """Convenience function to embed texts using the default provider.
-    
+
     Args:
         model: The embedding model to use ('small' or 'large')
         texts: List of text strings to embed
-        
+
     Returns:
         List of embedding vectors
     """
-    return _default_provider.embed_texts(model, texts)
+    provider = _provider_context.get()
+    return provider.embed_texts(model, texts)
 
 
 def embed_texts_with_retry(model: str, texts: List[str]) -> List[List[float]]:
@@ -362,7 +374,8 @@ async def embed_texts_async(model: str, texts: List[str]) -> List[List[float]]:
     Note:
         Falls back to synchronous embedding for providers without async support.
     """
-    return await _default_provider.embed_texts_async(model, texts)
+    provider = _provider_context.get()
+    return await provider.embed_texts_async(model, texts)
 
 
 def create_provider(provider_type: str = "stub", **kwargs) -> EmbeddingProvider:
@@ -390,10 +403,13 @@ def create_provider(provider_type: str = "stub", **kwargs) -> EmbeddingProvider:
 
 
 def set_default_provider(provider: EmbeddingProvider) -> None:
-    """Set the global default provider.
+    """Set the context-local default provider.
 
     Args:
         provider: The provider instance to use as default
+
+    Note:
+        This sets the provider for the current async context using contextvars,
+        ensuring proper isolation in concurrent async operations.
     """
-    global _default_provider
-    _default_provider = provider
+    _provider_context.set(provider)

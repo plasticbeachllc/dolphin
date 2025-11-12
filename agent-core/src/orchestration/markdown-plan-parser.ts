@@ -113,8 +113,21 @@ export function isConfirmation(message: string): boolean {
     /\b(no|cancel|stop|nevermind|wait|hold on)\b/i
   ];
 
+  // Patterns that indicate the user is questioning or refining (not confirming)
+  const qualificationPatterns = [
+    /\b(but|however|although|though)\b/i,
+    /\b(wait|what about|question|concern)\b/i,
+    /\b(change|modify|update|instead)\b/i,
+    /[?]/ // Contains a question mark
+  ];
+
   // Check for rejection first
   if (rejectPatterns.some(pattern => pattern.test(message))) {
+    return false;
+  }
+
+  // Check for qualifications that indicate user wants to refine, not confirm
+  if (qualificationPatterns.some(pattern => pattern.test(message))) {
     return false;
   }
 

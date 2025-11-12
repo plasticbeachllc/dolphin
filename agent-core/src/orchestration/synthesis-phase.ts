@@ -18,6 +18,15 @@ import type {
   Risk
 } from "./types";
 
+/**
+ * Sanitize user input to prevent prompt injection attacks
+ * Removes XML-like tags that could be used to break out of prompt structure
+ */
+function sanitizeUserInput(input: string): string {
+  // Remove XML-like tags (e.g., </user_request>, <system>, etc.)
+  return input.replace(/<\/?[a-z_][a-z0-9_]*>/gi, '');
+}
+
 export class SynthesisPhase {
   constructor(private claudeClient: ClaudeClient) {}
 
@@ -91,10 +100,13 @@ ${chunk.snippet}
     formattedChunks: string,
     discoveryResult: DiscoveryResult
   ): string {
+    // Sanitize user input to prevent prompt injection
+    const sanitizedPrompt = sanitizeUserInput(userPrompt);
+
     return `You are analyzing a codebase to help the user implement their request.
 
 <user_request>
-${userPrompt}
+${sanitizedPrompt}
 </user_request>
 
 <discovery_summary>
