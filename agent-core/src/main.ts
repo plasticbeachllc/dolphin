@@ -68,9 +68,12 @@ class AgentCore {
   private discoveryOrchestrator: DiscoveryOrchestrator | null = null;
   private planningPhase: PlanningPhase | null = null;
 
-  // EP-11: Planning session state
+  // EP-11: Planning session state with lifecycle management
   private activePlanningSession: PlanningSession | null = null;
   private currentArchitectPrompt: string | null = null;  // Store original prompt for planning
+  private sessionStartTime: number | null = null;
+  private sessionTimeoutMs: number = 30 * 60 * 1000; // 30 minutes default timeout
+  private sessionTimeoutTimer: NodeJS.Timeout | null = null;
 
   constructor(workspaceRoot: string, extensionPath?: string) {
     this.workspaceRoot = workspaceRoot;
@@ -482,7 +485,11 @@ class AgentCore {
         }
 
         // EP-11: Check for active planning session (user refining plan)
-        if (this.activePlanningSession && request.mode !== "architect") {
+        if (this.activePlanningSession && request.mode === "code") {
+          // Clear session when user explicitly switches to code mode
+          this.clearPlanningSession();
+          // Fall through to normal code mode handling
+        } else if (this.activePlanningSession && request.mode !== "architect") {
           await this.handlePlanningInteraction(request.content);
           return;
         }
@@ -671,9 +678,10 @@ class AgentCore {
         delta: response
       });
 
-      // Store session for refinement
+      // Store session for refinement and start timeout
       this.activePlanningSession = session;
       this.currentArchitectPrompt = request.content;
+      this.startSessionTimeout();
 
       this.sendEvent({
         type: "content_delta",
@@ -714,6 +722,13 @@ class AgentCore {
       console.error("[Architect Mode] Planning phase started successfully");
     } catch (error: any) {
       console.error("[Architect Mode] Error:", error);
+
+      // Clear any partially created session on error
+      if (this.activePlanningSession) {
+        console.error("[Architect Mode] Cleaning up session due to error");
+        this.clearPlanningSession();
+      }
+
       this.sendEvent({
         type: "error",
         error: {
@@ -728,6 +743,49 @@ class AgentCore {
         },
       });
     }
+  }
+
+  /**
+   * Clear active planning session with cleanup
+   */
+  private clearPlanningSession() {
+    console.error("[Planning] Clearing planning session");
+    this.activePlanningSession = null;
+    this.currentArchitectPrompt = null;
+    this.sessionStartTime = null;
+
+    // Clear timeout timer
+    if (this.sessionTimeoutTimer) {
+      clearTimeout(this.sessionTimeoutTimer);
+      this.sessionTimeoutTimer = null;
+    }
+  }
+
+  /**
+   * Start session timeout timer
+   * Automatically clears stale sessions after timeout period
+   */
+  private startSessionTimeout() {
+    // Clear any existing timer
+    if (this.sessionTimeoutTimer) {
+      clearTimeout(this.sessionTimeoutTimer);
+    }
+
+    this.sessionStartTime = Date.now();
+    this.sessionTimeoutTimer = setTimeout(() => {
+      const elapsed = Date.now() - (this.sessionStartTime || 0);
+      console.error(`[Planning] Session timeout after ${Math.floor(elapsed / 1000)}s, clearing stale session`);
+
+      // Send notification to user
+      this.sendEvent({
+        type: "content_delta",
+        delta: "\n\n⏱️ *Planning session timed out due to inactivity. Please start a new architect mode session.*\n"
+      });
+
+      this.clearPlanningSession();
+    }, this.sessionTimeoutMs);
+
+    console.error(`[Planning] Session timeout set for ${this.sessionTimeoutMs / 1000}s`);
   }
 
   /**
@@ -834,8 +892,9 @@ class AgentCore {
         delta: "\n\n*Review the updated plan. Reply with more feedback or say 'confirm' to save it.*\n"
       });
 
-      // Update session
+      // Update session and reset timeout
       this.activePlanningSession = session;
+      this.startSessionTimeout(); // Reset timeout on user interaction
 
       // Update conversation
       this.conversationHistory.push({
@@ -863,6 +922,10 @@ class AgentCore {
 
     } catch (error: any) {
       console.error("[Planning] Error during interaction:", error);
+
+      // Clear session on unrecoverable error
+      this.clearPlanningSession();
+
       this.sendEvent({
         type: "error",
         error: {

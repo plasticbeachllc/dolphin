@@ -29,6 +29,7 @@ export class DiscoveryOrchestrator {
   private queryPlanner: KBQueryPlanner;
   private contextEnricher: KBContextEnricher;
   private resultValidator: KBResultValidator;
+  private pendingDiscoveries: Map<string, Promise<DiscoveryResult>> = new Map();
 
   constructor(
     private mcpClient: MCPClient,
@@ -46,9 +47,34 @@ export class DiscoveryOrchestrator {
   }
 
   /**
-   * Execute the discovery phase
+   * Execute the discovery phase with request deduplication
    */
   async execute(context: ArchitectContext): Promise<DiscoveryResult> {
+    // Check if there's already a pending discovery for this query
+    const cacheKey = context.userQuery;
+    const pending = this.pendingDiscoveries.get(cacheKey);
+    if (pending) {
+      console.error(`[Discovery] Reusing pending discovery for: "${context.userQuery}"`);
+      return pending;
+    }
+
+    // Create and store the discovery promise
+    const discoveryPromise = this.executeDiscovery(context);
+    this.pendingDiscoveries.set(cacheKey, discoveryPromise);
+
+    // Clean up when done (both success and error cases)
+    try {
+      const result = await discoveryPromise;
+      return result;
+    } finally {
+      this.pendingDiscoveries.delete(cacheKey);
+    }
+  }
+
+  /**
+   * Internal method that performs the actual discovery
+   */
+  private async executeDiscovery(context: ArchitectContext): Promise<DiscoveryResult> {
     const startTime = Date.now();
 
     console.error("[Discovery] Starting discovery phase...");
@@ -124,7 +150,7 @@ export class DiscoveryOrchestrator {
   }
 
   /**
-   * Execute all queries in parallel
+   * Execute all queries in parallel with timeout enforcement
    */
   private async executeQueriesInParallel(
     queries: DiscoveryQuery[],
@@ -137,7 +163,21 @@ export class DiscoveryOrchestrator {
       })
     );
 
-    return await Promise.all(promises);
+    // Enforce timeout
+    const timeoutPromise = new Promise<KBSearchResult[]>((_, reject) =>
+      setTimeout(() => reject(new Error('Discovery timeout')), this.config.timeoutMs)
+    );
+
+    try {
+      return await Promise.race([Promise.all(promises), timeoutPromise]);
+    } catch (error: any) {
+      if (error.message === 'Discovery timeout') {
+        console.error(`[Discovery] Timeout after ${this.config.timeoutMs}ms, returning partial results`);
+        // Return empty results on timeout
+        return queries.map(() => ({ hits: [] }));
+      }
+      throw error;
+    }
   }
 
   /**

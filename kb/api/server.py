@@ -69,6 +69,11 @@ def initialize_search_backend() -> None:
     )
     set_search_backend(backend)
     set_stores(backend.sql_store, backend.lance_store)
+
+    # Store embedding provider reference for cleanup
+    global _embedding_provider
+    _embedding_provider = backend.embedding_provider
+
     print(f"✅ Search backend ready (store: {store_root})", file=sys.stderr)
 
     # Initialize ingestion pipeline for full reindex operations
@@ -109,11 +114,23 @@ async def health_check():
         }
     }
 
+# Store embedding provider reference for cleanup
+_embedding_provider = None
+
 # Add shutdown handler for cleanup
 @app.on_event("shutdown")
 async def shutdown_event():
     """Clean up resources on shutdown."""
     print(f"🛑 Shutting down KB server...", file=sys.stderr)
+
+    # Close embedding provider if it has async client
+    if _embedding_provider and hasattr(_embedding_provider, 'close'):
+        try:
+            await _embedding_provider.close()
+            print(f"✅ Closed embedding provider", file=sys.stderr)
+        except Exception as e:
+            print(f"⚠️  Failed to close embedding provider: {e}", file=sys.stderr)
+
     reset_search_backend()
     print(f"✅ KB server shutdown complete", file=sys.stderr)
 
