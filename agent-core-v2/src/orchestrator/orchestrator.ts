@@ -265,6 +265,7 @@ export class Orchestrator implements IOrchestrator {
     switch (session.state) {
       case 'researching':
         return 'research';
+      case 'clarifying':
       case 'planning':
       case 'awaiting_approval':
       case 'plan_revision':
@@ -377,6 +378,11 @@ export class Orchestrator implements IOrchestrator {
         // Handle research updates
         if (update.type === 'progress' && update.data.phase === 'research' && update.data.result) {
           session.research = update.data.result;
+        }
+
+        // Handle clarification updates
+        if (update.type === 'progress' && update.data.phase === 'clarification' && update.data.result) {
+          session.clarification = update.data.result;
         }
 
         // Emit update to subscribers

@@ -47,6 +47,23 @@ interface SessionTOML {
       top_result?: string;
     }>;
   };
+  clarification?: {
+    completed_at: string;
+    model: string;
+    tokens_used: number;
+    conversation_turns: number;
+    ready_for_planning: boolean;
+    final_context: string;
+    questions: Array<{
+      question: string;
+      priority: string;
+      reason: string;
+    }>;
+    responses: Array<{
+      answers: string;
+      timestamp: string;
+    }>;
+  };
   plan?: {
     version: number;
     status: string;
@@ -341,6 +358,27 @@ export class StateStore {
       };
     }
 
+    // Add clarification if present
+    if (session.clarification) {
+      tomlObject.clarification = {
+        completed_at: session.clarification.completedAt,
+        model: session.clarification.model,
+        tokens_used: session.clarification.tokensUsed,
+        conversation_turns: session.clarification.conversationTurns,
+        ready_for_planning: session.clarification.readyForPlanning,
+        final_context: session.clarification.finalContext,
+        questions: session.clarification.questions.map(q => ({
+          question: q.question,
+          priority: q.priority,
+          reason: q.reason,
+        })),
+        responses: session.clarification.responses.map(r => ({
+          answers: r.answers,
+          timestamp: r.timestamp,
+        })),
+      };
+    }
+
     // Add plan if present
     if (session.plan) {
       tomlObject.plan = {
@@ -418,6 +456,27 @@ export class StateStore {
           topResult: s.top_result,
         })),
         relevantFiles: [], // Will be populated from research findings
+      };
+    }
+
+    // Add clarification if present
+    if (obj.clarification) {
+      session.clarification = {
+        completedAt: obj.clarification.completed_at,
+        model: obj.clarification.model,
+        tokensUsed: obj.clarification.tokens_used,
+        conversationTurns: obj.clarification.conversation_turns,
+        readyForPlanning: obj.clarification.ready_for_planning,
+        finalContext: obj.clarification.final_context,
+        questions: obj.clarification.questions.map((q: any) => ({
+          question: q.question,
+          priority: q.priority,
+          reason: q.reason,
+        })),
+        responses: obj.clarification.responses.map((r: any) => ({
+          answers: r.answers,
+          timestamp: r.timestamp,
+        })),
       };
     }
 

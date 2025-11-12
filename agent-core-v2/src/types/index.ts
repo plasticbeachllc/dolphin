@@ -18,6 +18,7 @@ export type WorkflowMode = 'editor' | 'architect';
 export type WorkflowState =
   | 'idle'
   | 'researching'
+  | 'clarifying'
   | 'planning'
   | 'awaiting_approval'
   | 'plan_revision'
@@ -101,6 +102,7 @@ export interface TaskSession {
   metadata: SessionMetadata;
   input: TaskInput;
   research?: ResearchResult;
+  clarification?: ClarificationResult;
 }
 
 // =============================================================================
@@ -190,6 +192,41 @@ export interface ResearchResult {
   findings: string;
   kbSearches: KBSearch[];
   relevantFiles: string[];
+}
+
+// =============================================================================
+// Clarification Types
+// =============================================================================
+
+/**
+ * Clarification question from LLM
+ */
+export interface ClarificationQuestion {
+  question: string;
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  reason: string;
+}
+
+/**
+ * User's response to clarification questions
+ */
+export interface ClarificationResponse {
+  answers: string;
+  timestamp: string;
+}
+
+/**
+ * Clarification phase result
+ */
+export interface ClarificationResult {
+  completedAt: string;
+  model: string;
+  tokensUsed: number;
+  conversationTurns: number;
+  questions: ClarificationQuestion[];
+  responses: ClarificationResponse[];
+  readyForPlanning: boolean;
+  finalContext: string;
 }
 
 // =============================================================================
