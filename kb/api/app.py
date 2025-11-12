@@ -620,7 +620,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
         from ..chunkers.registry import detect_language_from_extension, chunk_file as chunk_file_with_config
         from ..chunkers.repo_config import load_repo_chunking_config
         from ..hashing import hash_text
-        from ..embeddings.provider import embed_texts_with_retry
+        from ..embeddings.provider import embed_texts_async
         from ..ingest._helpers import build_desired_map, representative_text_for_hash
 
         # Get commit info for provenance
@@ -701,7 +701,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             new_hashes = {c.text_hash for c in changed_chunks}
             skipped_occurrences = len(unchanged_chunks)
 
-            # Embed only new hashes (batched)
+            # Embed only new hashes (batched, async to avoid blocking status requests)
             text_hash_to_embedding: dict = {}
             if new_hashes:
                 hashes_list = sorted(new_hashes)
@@ -712,8 +712,11 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                     ]
                     if not texts_to_embed:
                         continue
-                    vectors = embed_texts_with_retry(embed_model, texts_to_embed)
+                    # Use async embedding to keep event loop responsive
+                    vectors = await embed_texts_async(embed_model, texts_to_embed)
                     text_hash_to_embedding.update(dict(zip(batch_hashes, vectors)))
+                    # Yield to event loop after each batch to handle status requests
+                    await asyncio.sleep(0)
 
             # Upsert metadata and locations
             mapping = _sql_store.ensure_content_rows_for_file(
