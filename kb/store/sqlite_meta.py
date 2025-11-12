@@ -1140,6 +1140,33 @@ class SQLiteMetadataStore:
             return 0
 
         with self._connect() as conn, closing(conn.cursor()) as cur:
+            # Runtime schema migration check - ensure FTS5 table has text_hash column
+            # This catches cases where initialize() was already called before the migration was added
+            import sqlite3
+            try:
+                cur.execute("SELECT text_hash FROM chunks_fts LIMIT 0")
+            except sqlite3.OperationalError as e:
+                if "no column named text_hash" in str(e):
+                    logger.warning("[FTS5 Migration] Runtime check: text_hash column missing, migrating now...")
+                    cur.execute("DROP TABLE IF EXISTS chunks_fts")
+                    cur.execute("""
+                        CREATE VIRTUAL TABLE chunks_fts USING fts5(
+                            content_id UNINDEXED,
+                            repo UNINDEXED,
+                            path UNINDEXED,
+                            text_hash UNINDEXED,
+                            content,
+                            symbol_name,
+                            symbol_path,
+                            tokenize='porter unicode61'
+                        )
+                    """)
+                    conn.commit()
+                    logger.info("[FTS5 Migration] Runtime migration complete")
+                else:
+                    raise
+
+            # Proceed with bulk insert
             cur.executemany("""
                 INSERT OR REPLACE INTO chunks_fts
                 (content_id, repo, path, text_hash, content, symbol_name, symbol_path)
