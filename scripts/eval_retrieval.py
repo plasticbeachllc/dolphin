@@ -120,6 +120,32 @@ def load_scenarios(path: Path) -> list[GoldenScenario]:
     return scenarios
 
 
+def _extract_path(result: dict[str, Any]) -> str:
+    """Return the best-effort file path from a search result."""
+
+    path = result.get("path") or result.get("file")
+
+    if not path:
+        metadata = result.get("metadata")
+        if isinstance(metadata, dict):
+            path = metadata.get("path") or metadata.get("file")
+
+    return path or ""
+
+
+def _extract_symbol(result: dict[str, Any]) -> str:
+    """Return the symbol name from a search result if available."""
+
+    symbol = result.get("symbol")
+
+    if not symbol:
+        metadata = result.get("metadata")
+        if isinstance(metadata, dict):
+            symbol = metadata.get("symbol")
+
+    return symbol or ""
+
+
 def match_result(actual: dict, expected: dict) -> bool:
     """Check if an actual result matches an expected result."""
     # Match by file path
@@ -146,10 +172,15 @@ def evaluate_scenario(
 ) -> dict[str, Any]:
     """Evaluate a single scenario."""
     # Run query
+    repo = scenario.repo or ""
+    repo_name = repo.split("@", 1)[0].strip()
+    repos = [repo_name] if repo_name else None
+
     request = SearchRequest(
         query=scenario.query,
         top_k=top_k,
-        embed_model="large"
+        embed_model="large",
+        repos=repos,
     )
 
     try:
@@ -169,8 +200,8 @@ def evaluate_scenario(
     actual_results = []
     for r in results:
         result_info = {
-            "file": r.get("file", ""),
-            "symbol": r.get("symbol", ""),
+            "file": _extract_path(r),
+            "symbol": _extract_symbol(r),
             "score": r.get("score", 0.0)
         }
         actual_results.append(result_info)

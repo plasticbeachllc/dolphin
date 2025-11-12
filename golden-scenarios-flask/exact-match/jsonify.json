@@ -1,0 +1,19 @@
+{
+  "id": "flask-exact-jsonify",
+  "query": "jsonify",
+  "repo": "pallets/flask@2.3.0",
+  "expected_results": [
+    {
+      "file": "src/flask/json/__init__.py",
+      "symbol": "jsonify",
+      "rank": 1,
+      "relevance": 1.0
+    }
+  ],
+  "metadata": {
+    "category": "code-search",
+    "difficulty": "easy",
+    "description": "Find JSON response creation function",
+    "tags": ["function", "json", "exact-match"]
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "id": "flask-desc-blueprint-registration",
+  "query": "register blueprint with application",
+  "repo": "pallets/flask@2.3.0",
+  "expected_results": [
+    {
+      "file": "src/flask/app.py",
+      "symbol": "register_blueprint",
+      "relevance": 1.0
+    },
+    {
+      "file": "src/flask/blueprints.py",
+      "symbol": "Blueprint",
+      "relevance": 0.8
+    },
+    {
+      "file": "src/flask/blueprints.py",
+      "symbol": "register",
+      "relevance": 0.9
+    }
+  ],
+  "metadata": {
+    "category": "code-search",
+    "difficulty": "medium",
+    "description": "Find blueprint registration mechanism",
+    "tags": ["blueprint", "registration", "description"]
+  }
+}

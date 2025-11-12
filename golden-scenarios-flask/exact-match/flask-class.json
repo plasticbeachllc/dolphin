@@ -1,0 +1,19 @@
+{
+  "id": "flask-exact-flask-class",
+  "query": "Flask",
+  "repo": "pallets/flask@2.3.0",
+  "expected_results": [
+    {
+      "file": "src/flask/app.py",
+      "symbol": "Flask",
+      "rank": 1,
+      "relevance": 1.0
+    }
+  ],
+  "metadata": {
+    "category": "code-search",
+    "difficulty": "easy",
+    "description": "Exact class name lookup for main Flask application class",
+    "tags": ["class", "exact-match", "flask"]
+  }
+}

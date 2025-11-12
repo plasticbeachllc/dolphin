@@ -1,0 +1,19 @@
+{
+  "id": "flask-exact-render-template",
+  "query": "render_template",
+  "repo": "pallets/flask@2.3.0",
+  "expected_results": [
+    {
+      "file": "src/flask/templating.py",
+      "symbol": "render_template",
+      "rank": 1,
+      "relevance": 1.0
+    }
+  ],
+  "metadata": {
+    "category": "code-search",
+    "difficulty": "easy",
+    "description": "Find template rendering function",
+    "tags": ["function", "templating", "exact-match"]
+  }
+}
