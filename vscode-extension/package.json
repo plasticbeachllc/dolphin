@@ -224,8 +224,27 @@
         "keybindings": [
             {
                 "command": "dolphin.focusInput",
-                "key": "cmd+l",
+                "key": "ctrl+l",
+                "mac": "cmd+l",
                 "when": "dolphin.chatViewVisible"
+            },
+            {
+                "command": "dolphin.newConversation",
+                "key": "ctrl+shift+n",
+                "mac": "cmd+shift+n",
+                "when": "dolphin.chatViewVisible"
+            },
+            {
+                "command": "dolphin.askAboutSelection",
+                "key": "ctrl+shift+a",
+                "mac": "cmd+shift+a",
+                "when": "editorHasSelection"
+            },
+            {
+                "command": "dolphin.kb.showStatus",
+                "key": "ctrl+shift+k",
+                "mac": "cmd+shift+k",
+                "when": "!editorTextFocus"
             }
         ]
     },

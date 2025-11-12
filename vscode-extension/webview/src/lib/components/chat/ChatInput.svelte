@@ -60,7 +60,11 @@
 </script>
 
 <div class="input-wrapper">
+  <label for="message-input" class="sr-only">
+    Enter your message
+  </label>
   <Textarea
+    id="message-input"
     bind:ref={textareaRef}
     bind:value={message}
     {placeholder}
@@ -72,9 +76,10 @@
     aria-describedby="input-help"
   />
   <div id="input-help" class="sr-only">
-    Press Ctrl+Enter or Cmd+Enter to send message. Use Shift+Enter for new line.
+    Press Ctrl+Enter or Cmd+Enter to send. Shift+Enter for new line.
   </div>
   <Button
+    type="button"
     onclick={handleAction}
     disabled={disabled && !isProcessing}
     variant={isProcessing ? "destructive" : "default"}
