@@ -358,40 +358,52 @@ def pytest_configure(config):
 
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_test_repos():
-    """Clean up any leftover test repositories from previous test runs."""
+    """Clean up any leftover test repositories from previous test runs.
+
+    This fixture runs both before and after all tests to ensure:
+    1. Clean starting state (cleans up repos from interrupted previous runs)
+    2. Clean ending state (cleans up repos created during this test run)
+    """
+    def _cleanup():
+        """Perform the actual cleanup of test repositories."""
+        try:
+            from pathlib import Path
+            from kb.config import CONFIG_ROOT
+            from kb.store.sqlite_meta import SQLiteMetadataStore
+
+            # Check if the default database exists
+            db_path = CONFIG_ROOT / "metadata.db"
+            if db_path.exists():
+                store = SQLiteMetadataStore(db_path)
+                store.initialize()
+
+                # Get all repos
+                with store._get_connection() as conn:
+                    cursor = conn.execute("SELECT id, name FROM repos")
+                    repos = cursor.fetchall()
+
+                    # Delete test repositories (those with test-related names)
+                    test_repo_patterns = ["test", "test_repo", "test-repo", "repo-1", "repo-2", "my-repo", "integration-test"]
+                    for repo_id, repo_name in repos:
+                        if any(pattern in repo_name.lower() for pattern in test_repo_patterns):
+                            # Delete all data associated with this test repo
+                            conn.execute("DELETE FROM chunks WHERE repo_id = ?", (repo_id,))
+                            conn.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
+                            conn.execute("DELETE FROM scan_sessions WHERE repo_id = ?", (repo_id,))
+                            conn.execute("DELETE FROM repos WHERE id = ?", (repo_id,))
+
+                    conn.commit()
+        except Exception:
+            # Silently ignore cleanup failures - they shouldn't break tests
+            pass
+
+    # Clean up before tests (in case previous run was interrupted)
+    _cleanup()
+
     yield
-    
-    # After all tests complete, clean up any test repositories
-    try:
-        from pathlib import Path
-        from kb.config import CONFIG_ROOT
-        from kb.store.sqlite_meta import SQLiteMetadataStore
-        
-        # Check if the default database exists
-        db_path = CONFIG_ROOT / "metadata.db"
-        if db_path.exists():
-            store = SQLiteMetadataStore(db_path)
-            store.initialize()
-            
-            # Get all repos
-            with store._get_connection() as conn:
-                cursor = conn.execute("SELECT id, name FROM repos")
-                repos = cursor.fetchall()
-                
-                # Delete test repositories (those with test-related names)
-                test_repo_patterns = ["test", "test_repo", "test-repo", "repo-1", "repo-2", "my-repo", "integration-test"]
-                for repo_id, repo_name in repos:
-                    if any(pattern in repo_name.lower() for pattern in test_repo_patterns):
-                        # Delete all data associated with this test repo
-                        conn.execute("DELETE FROM chunks WHERE repo_id = ?", (repo_id,))
-                        conn.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
-                        conn.execute("DELETE FROM scan_sessions WHERE repo_id = ?", (repo_id,))
-                        conn.execute("DELETE FROM repos WHERE id = ?", (repo_id,))
-                
-                conn.commit()
-    except Exception:
-        # Silently ignore cleanup failures - they shouldn't break tests
-        pass
+
+    # Clean up after all tests complete
+    _cleanup()
 
 
 def pytest_collection_modifyitems(config, items):

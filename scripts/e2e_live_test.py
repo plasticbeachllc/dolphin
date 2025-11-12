@@ -483,6 +483,44 @@ def stop_api_server(server_process: subprocess.Popen) -> None:
     except subprocess.TimeoutExpired:
         server_process.kill()
 
+def cleanup_test_repo(store_root: Path) -> None:
+    """Clean up test repository from the database.
+
+    This provides explicit cleanup even though we use a temporary directory,
+    ensuring no test data leaks into the persistent database.
+    """
+    try:
+        db_path = store_root / "metadata.db"
+
+        if not db_path.exists():
+            return
+
+        from kb.store.sqlite_meta import SQLiteMetadataStore
+
+        store = SQLiteMetadataStore(db_path)
+        store.initialize()
+
+        with store._get_connection() as conn:
+            # Delete test_repo and all associated data
+            cursor = conn.execute("SELECT id FROM repos WHERE name = ?", ("test_repo",))
+            repo_row = cursor.fetchone()
+
+            if repo_row:
+                repo_id = repo_row[0]
+                log_step("Cleaning up test repository from database...")
+
+                # Delete all data associated with test_repo
+                conn.execute("DELETE FROM chunks WHERE repo_id = ?", (repo_id,))
+                conn.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
+                conn.execute("DELETE FROM scan_sessions WHERE repo_id = ?", (repo_id,))
+                conn.execute("DELETE FROM repos WHERE id = ?", (repo_id,))
+
+                conn.commit()
+                log_success("Test repository cleaned up")
+    except Exception as e:
+        # Don't fail the test if cleanup fails
+        log_warning(f"Cleanup warning: {e}")
+
 def main():
     """Run all end-to-end tests."""
     print(f"\n{BLUE}{'='*70}{RESET}")
@@ -620,7 +658,7 @@ def main():
             stop_api_server(server_process)
             log_success("  API server stopped")
             server_process = None
-            
+
             # ============================================================
             # Test 5: Reranking (Optional)
             # ============================================================
@@ -630,21 +668,29 @@ def main():
             test_results["reranking"] = _run_reranking_test(store_root)
             if test_results["reranking"]:
                 log_success("Reranking test PASSED")
-            
+
+            # ============================================================
+            # Cleanup
+            # ============================================================
+            print(f"\n{BLUE}{'─'*70}{RESET}")
+            log_step("Cleanup: Removing test data from database")
+            print(f"{BLUE}{'─'*70}{RESET}")
+            cleanup_test_repo(store_root)
+
             # ============================================================
             # Summary
             # ============================================================
             print(f"\n{BLUE}{'='*70}{RESET}")
             print(f"{BLUE}Test Summary{RESET}")
             print(f"{BLUE}{'='*70}{RESET}\n")
-            
+
             for test_name, passed in test_results.items():
                 status = f"{GREEN}✓ PASSED{RESET}" if passed else f"{RED}✗ FAILED{RESET}"
                 print(f"  {test_name.capitalize():20s} {status}")
-            
+
             tests_passed = sum(test_results.values())
             tests_total = len(test_results)
-            
+
             print()
             if tests_passed == tests_total:
                 log_success(f"All {tests_total} tests passed! ✨")
@@ -654,11 +700,13 @@ def main():
                 log_warning(f"{tests_passed}/{tests_total} tests passed")
                 print(f"\n{YELLOW}Some tests failed. Review output above.{RESET}\n")
                 return 1
-                
+
         except KeyboardInterrupt:
             log_warning("\nTest interrupted by user")
             if server_process:
                 stop_api_server(server_process)
+            # Attempt cleanup even on interrupt
+            cleanup_test_repo(store_root)
             return 130
         except Exception as e:
             log_error(f"Unexpected error: {e}")
@@ -666,6 +714,8 @@ def main():
             traceback.print_exc()
             if server_process:
                 stop_api_server(server_process)
+            # Attempt cleanup even on error
+            cleanup_test_repo(store_root)
             return 1
 
 if __name__ == "__main__":
