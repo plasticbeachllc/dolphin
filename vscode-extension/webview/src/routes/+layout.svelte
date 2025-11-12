@@ -22,7 +22,7 @@
 </script>
 
 <div class="flex h-screen flex-col bg-background text-foreground">
-	<AppNavigation currentPath={$page.url.pathname} onNavigate={handleNavigate} />
+	<AppNavigation currentPath={$page.url.pathname} onNavigate={handleNavigate} hasWorkspace={true} />
 	<div class="flex-1 overflow-hidden bg-background">
 		{@render children()}
 	</div>
