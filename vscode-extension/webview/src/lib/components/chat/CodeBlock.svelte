@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import hljs from "highlight.js";
   import { Copy, Check } from "lucide-svelte";
   
@@ -10,19 +9,23 @@
   
   let { code, language = "text" }: Props = $props();
   
-  let codeElement: HTMLElement;
   let copied = $state(false);
   
-  onMount(() => {
-    if (codeElement) {
-      hljs.highlightElement(codeElement);
-    }
-  });
-  
-  $effect(() => {
-    // Re-highlight when code changes (streaming updates)
-    if (codeElement && code) {
-      hljs.highlightElement(codeElement);
+  // Generate highlighted HTML without DOM mutation
+  // This prevents the infinite loop caused by hljs.highlightElement()
+  let highlightedCode = $derived.by(() => {
+    try {
+      const result = hljs.highlight(code, { language, ignoreIllegals: true });
+      return result.value;
+    } catch (err) {
+      console.error("Failed to highlight code:", err);
+      // Fallback to plain code with HTML escaping
+      return code
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
   });
   
@@ -54,7 +57,7 @@
       {/if}
     </button>
   </div>
-  <pre class="code-content"><code bind:this={codeElement} class="language-{language} hljs">{code}</code></pre>
+  <pre class="code-content"><code class="language-{language} hljs">{@html highlightedCode}</code></pre>
 </div>
 
 <style>
