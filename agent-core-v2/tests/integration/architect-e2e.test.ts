@@ -5,7 +5,7 @@
  * with real-world scenarios and edge cases.
  */
 
-import { describe, test, expect, beforeEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterAll } from 'bun:test';
 import { Orchestrator } from '../../src/orchestrator/orchestrator';
 import { ArchitectWorkflow } from '../../src/workflows/architect-workflow';
 import { EditorWorkflow } from '../../src/workflows/editor-workflow';
@@ -235,10 +235,12 @@ describe('ArchitectWorkflow E2E', () => {
   let tempDir: string;
   let stateStore: StateStore;
   let orchestrator: Orchestrator;
+  const tempDirs: string[] = [];
 
   beforeEach(async () => {
     // Create temporary directory for state storage
     tempDir = await mkdtemp(join(tmpdir(), 'dolphin-test-'));
+    tempDirs.push(tempDir);
 
     stateStore = new StateStore({
       storagePath: join(tempDir, '.dolphin'),
@@ -555,9 +557,13 @@ describe('ArchitectWorkflow E2E', () => {
   });
 
   // Cleanup
-  afterEach(async () => {
-    if (tempDir) {
-      await rm(tempDir, { recursive: true, force: true });
+  afterAll(async () => {
+    for (const dir of tempDirs) {
+      try {
+        await rm(dir, { recursive: true, force: true });
+      } catch (error) {
+        // Ignore cleanup errors
+      }
     }
   });
 });
