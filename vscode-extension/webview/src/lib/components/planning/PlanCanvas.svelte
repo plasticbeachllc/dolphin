@@ -184,25 +184,25 @@
 	<div class="absolute top-4 left-4 z-10 bg-card/95 border border-border rounded-lg p-3 space-y-2 shadow-lg">
 		<div class="text-xs font-semibold mb-2">Node Types</div>
 		<div class="flex items-center gap-2 text-xs">
-			<svg width="32" height="32" viewBox="-16 -16 32 32" class="flex-shrink-0">
+			<svg width="32" height="32" viewBox="-16 -16 32 32" class="shrink-0">
 				<circle r="12" fill={nodeColors.goal} class="stroke-background" stroke-width="2" />
 			</svg>
 			<span>Goal</span>
 		</div>
 		<div class="flex items-center gap-2 text-xs">
-			<svg width="24" height="24" viewBox="-12 -12 24 24" class="flex-shrink-0">
+			<svg width="24" height="24" viewBox="-12 -12 24 24" class="shrink-0">
 				<rect x="-10" y="-8" width="20" height="16" rx="2" fill={nodeColors.step} class="stroke-background" stroke-width="1.5" />
 			</svg>
 			<span>Step</span>
 		</div>
 		<div class="flex items-center gap-2 text-xs">
-			<svg width="20" height="20" viewBox="-10 -10 20 20" class="flex-shrink-0">
+			<svg width="20" height="20" viewBox="-10 -10 20 20" class="shrink-0">
 				<rect x="-8" y="-6" width="16" height="12" rx="1.5" fill={nodeColors.action} class="stroke-background" stroke-width="1.5" />
 			</svg>
 			<span>Action</span>
 		</div>
 		<div class="flex items-center gap-2 text-xs">
-			<svg width="20" height="20" viewBox="-10 -10 20 20" class="flex-shrink-0">
+			<svg width="20" height="20" viewBox="-10 -10 20 20" class="shrink-0">
 				<path d="M0,-7 L8,0 L0,7 L-8,0 Z" fill={nodeColors.tool} class="stroke-background" stroke-width="1.5" />
 			</svg>
 			<span>Tool</span>

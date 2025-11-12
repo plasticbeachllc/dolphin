@@ -122,7 +122,7 @@
 									<div class="flex items-start gap-4">
 										<!-- Status Circle - properly positioned -->
 										<div
-											class="relative size-3 rounded-full border-2 border-background {statusBgColors[step.status]} flex-shrink-0"
+											class="relative size-3 rounded-full border-2 border-background {statusBgColors[step.status]} shrink-0"
 											class:animate-pulse={step.status === 'running'}
 											title={step.status}
 											style="margin-top: 2px;"
@@ -131,7 +131,7 @@
 										<!-- Connector Line - properly aligned from center of circle -->
 										{#if i < phase.steps.length - 1}
 											<div
-												class="absolute left-[5px] top-[8px] w-0.5 h-[calc(100%-8px)] {step.status === 'completed' ? 'bg-green-500' : 'bg-border'}"
+												class="absolute left-[5px] top-2 w-0.5 h-[calc(100%-8px)] {step.status === 'completed' ? 'bg-green-500' : 'bg-border'}"
 											></div>
 										{/if}
 										
