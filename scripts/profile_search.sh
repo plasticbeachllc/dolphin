@@ -42,8 +42,15 @@ if ! command -v py-spy &> /dev/null; then
 fi
 
 
-# Cleanup function for error handling
+# Cleanup function for error handling (runs only once)
+CLEANUP_DONE=false
 cleanup() {
+  # Prevent double cleanup
+  if [ "$CLEANUP_DONE" = true ]; then
+    return
+  fi
+  CLEANUP_DONE=true
+  
   local exit_code=$?
   if [ $exit_code -ne 0 ]; then
     echo ""
@@ -110,7 +117,7 @@ echo ""
 (uv run dolphin kb index "$REPO_NAME" 2>&1 | \
   tee /dev/null | \
   grep --line-buffered "Chunked.*into.*chunks" | \
-  pv -l -s "$FILE_COUNT" -N "Indexing files" > /dev/null)
+  pv -l -s "$FILE_COUNT" -N "🐬 Indexing files" -F "%b %t %r %p %e" > /dev/null)
 echo ""
 echo "  Indexing complete!"
 
@@ -252,7 +259,7 @@ else
       echo "."
       QUERY_NUM=$((QUERY_NUM + 1))
     done
-  ) | pv -l -s "$TOTAL_QUERIES" -N "Search queries" > /dev/null
+  ) | pv -l -s "$TOTAL_QUERIES" -N "🐬 Search queries" -F "%b %t %r %p %e" > /dev/null
   echo ""
   
   # Wait for py-spy to finish

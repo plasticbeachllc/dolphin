@@ -68,8 +68,15 @@ if ! command -v pv &> /dev/null; then
   exit 1
 fi
 
-# Cleanup function for error handling
+# Cleanup function for error handling (runs only once)
+CLEANUP_DONE=false
 cleanup() {
+  # Prevent double cleanup
+  if [ "$CLEANUP_DONE" = true ]; then
+    return
+  fi
+  CLEANUP_DONE=true
+  
   local exit_code=$?
   if [ $exit_code -ne 0 ]; then
     echo ""
@@ -157,7 +164,7 @@ echo "Starting indexing..."
   -- uv run dolphin kb index "$REPO_NAME" 2>&1 | \
   tee "$LOG_FILE" | \
   grep --line-buffered "Chunked.*into.*chunks" | \
-  pv -l -s "$FILE_COUNT" -N "Indexing files" > /dev/null)
+  pv -l -s "$FILE_COUNT" -N "🐬 Indexing files" -F "%b %t %r %p %e" > /dev/null)
 
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
