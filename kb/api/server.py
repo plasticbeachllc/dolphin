@@ -5,9 +5,7 @@ import sys
 import logging
 from pathlib import Path
 from datetime import datetime
-from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from .app import app, set_search_backend, reset_search_backend, set_stores, set_pipeline
 from .search_backend import create_search_backend
 from ..config import load_config, KBConfig
@@ -88,23 +86,17 @@ def initialize_search_backend() -> None:
     set_pipeline(pipeline)
     print(f"✅ Ingestion pipeline ready", file=sys.stderr)
 
-@asynccontextmanager
-async def lifespan(app_instance: FastAPI):
-    """Manage application lifespan - startup and shutdown."""
-    initialize_search_backend()
-    yield
-    reset_search_backend()
+# Initialize search backend when module loads (before uvicorn starts)
+print(f"🚀 Initializing KB server...", file=sys.stderr)
+initialize_search_backend()
 
-# Update the original app to use the lifespan manager
-app.router.lifespan_context = lifespan
-
-# Add Prometheus metrics middleware to the original app
+# Add Prometheus metrics middleware to the app
 app.middleware("http")(prometheus_middleware)
 
-# Add metrics endpoint to the original app
+# Add metrics endpoint to the app
 app.get("/metrics")(metrics_endpoint)
 
-# Add health check endpoint to the original app
+# Add health check endpoint to the app
 @app.get("/health")
 async def health_check():
     """Enhanced health check with component status."""
@@ -116,6 +108,14 @@ async def health_check():
             "api": "healthy"
         }
     }
+
+# Add shutdown handler for cleanup
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean up resources on shutdown."""
+    print(f"🛑 Shutting down KB server...", file=sys.stderr)
+    reset_search_backend()
+    print(f"✅ KB server shutdown complete", file=sys.stderr)
 
 # Export the app for uvicorn
 app_with_lifespan = app
