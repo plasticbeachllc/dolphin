@@ -406,16 +406,11 @@ flask-setup:
 		git clone https://github.com/pallets/flask.git test-repos/flask; \
 		cd test-repos/flask && git checkout 2.3.0; \
 	fi
-        @REPO_PATH="$(pwd)/test-repos/flask"; \
-                echo "Registering repo with small model..."; \
-                uv run python -m kb.cli add-repo pallets/flask "$$REPO_PATH" --default-embed-model small; \
-                echo "Indexing with small model..."; \
-                uv run python -m kb.cli index pallets/flask; \
-                echo "Registering repo with large model..."; \
-                uv run python -m kb.cli add-repo pallets/flask "$$REPO_PATH" --default-embed-model large; \
-                echo "Indexing with large model..."; \
-                uv run python -m kb.cli index pallets/flask
-        @echo "✅ Flask test repo ready"
+	@REPO_PATH="$(pwd)/test-repos/flask"; \
+		echo "Registering and indexing Flask with large model (3072-dim for better quality)..."; \
+		uv run python -m kb.cli add-repo pallets/flask "$$REPO_PATH" --default-embed-model large; \
+		uv run python -m kb.cli index pallets/flask
+	@echo "✅ Flask test repo ready"
 
 # ANN Benchmarks (Existing)
 # ------------------------------------------------------------------------------

@@ -28,11 +28,16 @@ from kb.store.graph_store import GraphStore
 
 
 def extract_unique_files(results: list[dict], top_k: int = 5) -> list[str]:
-    """Extract unique file paths from search results."""
+    """Extract unique file paths from search results.
+
+    Results from the backend have a 'path' field containing the file path.
+    """
     seen_files = set()
     unique_files = []
 
     for result in results:
+        # Backend returns 'path' field from LanceDB schema
+        # Fallback to metadata.path or file for compatibility
         file_path = (
             result.get("path")
             or result.get("metadata", {}).get("path")
@@ -70,10 +75,20 @@ def evaluate_instance(
     instance: dict[str, Any],
     backend: KnowledgeSearchBackend,
     repo_root: Path,
+    embed_model: str = "small",
     top_k: int = 5,
     verbose: bool = False
 ) -> dict[str, Any]:
-    """Evaluate a single SWE-Bench instance."""
+    """Evaluate a single SWE-Bench instance.
+
+    Args:
+        instance: SWE-Bench instance with problem statement and gold files
+        backend: Search backend instance
+        repo_root: Path to repository root
+        embed_model: Embedding model to use ('small' or 'large')
+        top_k: Number of files to predict
+        verbose: Whether to print detailed output
+    """
     instance_id = instance["instance_id"]
     problem_statement = instance["problem_statement"]
     gold_files = set(instance.get("changed_files", []))
@@ -90,7 +105,7 @@ def evaluate_instance(
             query=problem_statement,
             repos=[instance["repo"]],
             top_k=top_k * 3,  # Get more results, then collapse to files
-            embed_model="small"  # Use small model for all
+            embed_model=embed_model  # Use model from repo config
         )
 
         results = backend.search(request)
@@ -271,6 +286,17 @@ def main():
         config=config
     )
 
+    # Load repo configuration to get embed models
+    repo_config_path = Path("test-data/swe_bench_repos.json")
+    repo_models = {}
+    if repo_config_path.exists():
+        with open(repo_config_path) as f:
+            config_data = json.load(f)
+            repo_models = {
+                repo_name: repo_data.get("embed_model", "small")
+                for repo_name, repo_data in config_data.get("repos", {}).items()
+            }
+
     # Evaluate each instance
     print(f"\n{'='*80}")
     print(f"EVALUATING {len(instances)} INSTANCES")
@@ -283,6 +309,9 @@ def main():
         repo = instance["repo"]
         repo_root = args.repos_dir / repo.replace("/", "__")
 
+        # Get embed model for this repo (default to small if not configured)
+        embed_model = repo_models.get(repo, "small")
+
         if not args.verbose:
             print(f"[{i}/{len(instances)}] {instance['instance_id']}...", end="", flush=True)
 
@@ -290,6 +319,7 @@ def main():
             instance,
             backend,
             repo_root,
+            embed_model=embed_model,
             top_k=args.top_k,
             verbose=args.verbose
         )
