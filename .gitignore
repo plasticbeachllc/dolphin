@@ -28,8 +28,6 @@ tests/reports/*
 .coverage
 coverage.xml
 
-profiling_results/
-
 # profiling artifacts
 profiling_results/
 
