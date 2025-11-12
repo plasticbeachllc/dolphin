@@ -35,6 +35,19 @@ export interface IndexStatus {
   result: any;
 }
 
+export interface RegisterRepoRequest {
+  name: string;
+  path: string;
+  default_embed_model?: string;
+}
+
+export interface RegisterRepoResponse {
+  repo_id: number;
+  name: string;
+  path: string;
+  message: string;
+}
+
 /**
  * Send a KB request to the extension host and wait for response
  */
@@ -87,6 +100,13 @@ function sendKbRequest<T = any>(type: string, params: any = {}): Promise<T> {
  * Uses VSCode postMessage pattern instead of direct fetch
  */
 export const kbApi = {
+  /**
+   * Register a new repository in the knowledge base
+   */
+  async registerRepo(request: RegisterRepoRequest): Promise<RegisterRepoResponse> {
+    return sendKbRequest<RegisterRepoResponse>('kb_register_repo', request);
+  },
+
   /**
    * Get repository statistics
    */

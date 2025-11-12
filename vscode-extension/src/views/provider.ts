@@ -46,15 +46,17 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
         capabilities.push('conversation_persistence');
       }
       
-      // Get workspace folder name for KB operations
+      // Get workspace folder name and path for KB operations
       const workspaceName = workspaceFolder ? path.basename(workspaceFolder.uri.fsPath) : null;
-      
+      const workspacePath = workspaceFolder ? workspaceFolder.uri.fsPath : null;
+
       // Send updated workspace status to webview
       this.webviewView.webview.postMessage({
         type: 'workspace_changed',
         hasWorkspace,
         capabilities,
-        workspaceName
+        workspaceName,
+        workspacePath
       });
     }
   }
@@ -166,9 +168,9 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           break;
           
         case "send_message":
-          this.outputChannel.appendLine(`[DolphinViewProvider] Processing send_message: ${message.content}`);
+          this.outputChannel.appendLine(`[DolphinViewProvider] Processing send_message: ${message.content} (mode: ${message.mode || 'code'})`);
           if (this.agentBridge) {
-            await this.agentBridge.sendMessage(message.content);
+            await this.agentBridge.sendMessage(message.content, message.mode);
           } else {
             this.outputChannel.appendLine(`[DolphinViewProvider] WARNING: agentBridge not available`);
             // Send mock response for testing
@@ -328,6 +330,29 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           break;
 
         // KB API Operations
+        case "kb_register_repo":
+          this.outputChannel.appendLine(`[DolphinViewProvider] Processing kb_register_repo: ${message.name} at ${message.path}`);
+          try {
+            const data = await this.httpRequest('POST', '/v1/repos', {
+              name: message.name,
+              path: message.path,
+              default_embed_model: message.default_embed_model || 'large'
+            });
+            webviewView.webview.postMessage({
+              type: 'kb_register_repo_response',
+              requestId: message.requestId,
+              data
+            });
+          } catch (error: any) {
+            this.outputChannel.appendLine(`[DolphinViewProvider] Error registering repo: ${error.message}`);
+            webviewView.webview.postMessage({
+              type: 'kb_register_repo_response',
+              requestId: message.requestId,
+              error: error.message || 'Failed to register repository'
+            });
+          }
+          break;
+
         case "kb_get_stats":
           this.outputChannel.appendLine(`[DolphinViewProvider] Processing kb_get_stats: ${message.repoName}`);
           try {

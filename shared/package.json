@@ -4,6 +4,12 @@
   "type": "module",
   "main": "types/index.ts",
   "types": "types/index.ts",
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testMatch='**/ipc/__tests__/**/*.test.ts' --runInBand",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testMatch='**/ipc/__tests__/**/*.test.ts' --watch",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testMatch='**/ipc/__tests__/**/*.test.ts' --coverage",
+    "benchmark": "node --experimental-specifier-resolution=node --loader ts-node/esm ipc/benchmark.ts"
+  },
   "dependencies": {
     "zod": "^3.23.8",
     "prom-client": "^15.1.0",
@@ -12,6 +18,14 @@
     "@opentelemetry/auto-instrumentations-node": "^0.48.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.52.0",
     "@opentelemetry/resources": "^1.25.0",
+    "@opentelemetry/semantic-conventions": "^1.25.0",
+    "vscode-jsonrpc": "^8.2.1",
+    "msgpack5": "^6.0.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "@types/node": "^20.10.0",
+    "@types/msgpack5": "^3.4.5"
     "@opentelemetry/semantic-conventions": "^1.25.0"
   },
   "devDependencies": {

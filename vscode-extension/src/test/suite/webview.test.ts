@@ -103,10 +103,17 @@ describe('Webview Tests', () => {
     );
 
     assert.ok(focusInputBinding, 'Focus input keybinding should exist');
+
+    // Check platform-specific keybinding
+    const expectedKey = process.platform === 'darwin' ? 'cmd+l' : 'ctrl+l';
+    const actualKey = process.platform === 'darwin' && focusInputBinding.mac
+      ? focusInputBinding.mac
+      : focusInputBinding.key;
+
     assert.strictEqual(
-      focusInputBinding.key,
-      'cmd+l',
-      'Focus input should use cmd+l'
+      actualKey,
+      expectedKey,
+      `Focus input should use ${expectedKey} on ${process.platform}`
     );
   });
 });

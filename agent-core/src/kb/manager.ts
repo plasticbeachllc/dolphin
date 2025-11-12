@@ -43,8 +43,8 @@ export class KBManager {
         this.process = await bundled.startServer();
       } else if (hasDevelopmentSetup) {
         console.error("[KB Manager] Development mode: using system uv");
-        // Find dolphin root (could be workspace or subdirectory)
-        const dolphinRoot = this.findDolphinRoot(workspaceRoot);
+        // Find dolphin root - prefer extension path if available
+        const dolphinRoot = this.findDolphinRoot(workspaceRoot, extensionPath);
         console.error(`[KB Manager] Dolphin root: ${dolphinRoot}`);
         
         // Development: Use system uv with dolphin project directory
@@ -95,7 +95,7 @@ export class KBManager {
   private checkBundledUv(extensionPath: string): boolean {
     const platform = os.platform();
     const arch = os.arch();
-    
+
     let uvName: string;
     if (platform === "darwin") {
       uvName = arch === "arm64" ? "uv-darwin-arm64" : "uv-darwin-x64";
@@ -106,36 +106,65 @@ export class KBManager {
     } else {
       return false;
     }
-    
+
     const uvPath = path.join(extensionPath, "dist", "uv", uvName);
     return fs.existsSync(uvPath);
   }
 
-  private checkDevelopmentSetup(workspaceRoot: string): boolean {
-    // Check if workspace has pyproject.toml directly
-    if (fs.existsSync(path.join(workspaceRoot, "pyproject.toml"))) {
-      return true;
+  /**
+   * Walk up directory tree to find pyproject.toml
+   * Checks both current directory and dolphin subdirectory at each level
+   * @returns Path to directory containing pyproject.toml, or null if not found
+   */
+  private findPyprojectToml(startDir: string): string | null {
+    let currentDir = path.resolve(startDir);
+    const root = path.parse(currentDir).root;
+
+    while (currentDir !== root) {
+      // Check current directory
+      if (fs.existsSync(path.join(currentDir, "pyproject.toml"))) {
+        return currentDir;
+      }
+
+      // Check dolphin subdirectory
+      const dolphinPath = path.join(currentDir, "dolphin");
+      if (fs.existsSync(path.join(dolphinPath, "pyproject.toml"))) {
+        return dolphinPath;
+      }
+
+      // Move up one level
+      const parentDir = path.dirname(currentDir);
+      if (parentDir === currentDir) break; // Reached root
+      currentDir = parentDir;
     }
-    
-    // Check if dolphin subdirectory has pyproject.toml
-    const dolphinPath = path.join(workspaceRoot, "dolphin");
-    if (fs.existsSync(path.join(dolphinPath, "pyproject.toml"))) {
-      return true;
-    }
-    
-    return false;
+
+    return null;
   }
 
-  private findDolphinRoot(workspaceRoot: string): string {
-    // Check if workspaceRoot itself has pyproject.toml
+  private checkDevelopmentSetup(workspaceRoot: string): boolean {
+    return this.findPyprojectToml(workspaceRoot) !== null;
+  }
+
+  private findDolphinRoot(workspaceRoot: string, extensionPath?: string): string {
+    // If extension path is provided, derive dolphin root from it
+    // Extension is at: dolphin-develop-backend/vscode-extension
+    // Dolphin root is: dolphin-develop-backend
+    if (extensionPath) {
+      const parentDir = path.dirname(extensionPath);
+      if (fs.existsSync(path.join(parentDir, "pyproject.toml"))) {
+        console.error(`[KB Manager] Using dolphin root from extension path: ${parentDir}`);
+        return parentDir;
+      }
+    }
+
+    // Fallback: Check if workspaceRoot itself has pyproject.toml
     if (fs.existsSync(path.join(workspaceRoot, "pyproject.toml"))) {
       return workspaceRoot;
     }
 
-    // Check if there's a "dolphin" subdirectory with pyproject.toml
-    const dolphinPath = path.join(workspaceRoot, "dolphin");
-    if (fs.existsSync(path.join(dolphinPath, "pyproject.toml"))) {
-      return dolphinPath;
+    if (projectRoot) {
+      console.error(`[KB Manager] Found pyproject.toml at: ${projectRoot}`);
+      return projectRoot;
     }
 
     // Fallback to workspace root

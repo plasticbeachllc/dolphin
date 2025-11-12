@@ -8,12 +8,17 @@ import { ClaudeToolExecutor } from "./llm/claude-tool-executor";
 import { BasicPlanner } from "./planner/basic-planner";
 import { ConversationStore } from "./storage/conversation-store";
 import type { Conversation, ConversationMessage } from "../../shared/types/state";
+import { IPCTransport } from "../../shared/ipc";
 import * as path from "path";
 import * as fs from "fs";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { randomBytes } from "crypto";
 import type { Message } from "./llm/claude-tool-executor";
+import { DiscoveryOrchestrator } from "./orchestration/discovery-phase";
+import { PlanningPhase, type PlanningSession } from "./orchestration/planning-phase";
+import { isConfirmation } from "./orchestration/markdown-plan-parser";
+import type { DiscoveryConfig, DiscoveryResult } from "./orchestration/types";
 
 const execAsync = promisify(exec);
 
@@ -29,15 +34,15 @@ interface Message {
 /**
  * AgentCore handles the main agent logic and IPC with the VS Code extension.
  *
- * Phase 7 IPC Robustness Features:
- * - Properly framed JSON-RPC messages with Content-Length headers
- * - Write queue to prevent message interleaving on stdout
+ * IPC Implementation:
+ * - Uses vscode-jsonrpc for robust message framing (LSP-style)
+ * - Supports pluggable serialization (JSON/MessagePack via DOLPHIN_IPC_FORMAT env var)
+ * - Security hardening: payload size limits, buffer limits, max pending requests
  * - Correlation IDs (requestId) added to all notifications for event tracking
- * - Robust message parsing that handles chunk boundaries
  */
 class AgentCore {
   private version = "0.1.0";
-  private capabilities = ["kb_search", "file_operations", "planning", "claude_auth", "agentic_tools", "kb_auto_sync", "conversation_persistence"];
+  private capabilities = ["kb_search", "file_operations", "planning", "claude_auth", "agentic_tools", "kb_auto_sync", "conversation_persistence", "architect_mode"];
   private mcpClient: MCPClient;
   private kbManager: KBManager;
   private indexQueue: IndexQueue | null = null;
@@ -56,8 +61,16 @@ class AgentCore {
   private isFirstUserMessage = true;
   private loadedConversationId: string | null = null; // Track original conversation for delayed branching
 
-  // Phase 7: Stdout write queue to prevent message interleaving
-  private writeQueue: Promise<void> = Promise.resolve();
+  // IPC Transport
+  private transport: IPCTransport;
+
+  // EP-11: Architect mode orchestration (Discovery → Planning)
+  private discoveryOrchestrator: DiscoveryOrchestrator | null = null;
+  private planningPhase: PlanningPhase | null = null;
+
+  // EP-11: Planning session state
+  private activePlanningSession: PlanningSession | null = null;
+  private currentArchitectPrompt: string | null = null;  // Store original prompt for planning
 
   constructor(workspaceRoot: string, extensionPath?: string) {
     this.workspaceRoot = workspaceRoot;
@@ -81,9 +94,144 @@ class AgentCore {
       maxTokens: 8000,
       temperature: 1.0,
     });
-    
+
     // Initialize conversation store
     this.conversationStore = new ConversationStore(workspaceRoot);
+
+    // Initialize IPC transport
+    this.transport = new IPCTransport({
+      input: process.stdin,
+      output: process.stdout,
+      serializationFormat: (process.env.DOLPHIN_IPC_FORMAT as any) || 'json',
+      security: {
+        maxMessageSize: 100 * 1024 * 1024, // 100 MB
+        maxBufferSize: 50 * 1024 * 1024,    // 50 MB
+        maxPendingRequests: 1000,
+      },
+      enableMetrics: process.env.DOLPHIN_IPC_METRICS === 'true',
+    });
+
+    // Register method handlers
+    this.setupIPCHandlers();
+  }
+
+  /**
+   * Setup IPC method handlers
+   */
+  private setupIPCHandlers() {
+    this.transport.onMethod('send_message', async (params) => {
+      await this.handleSendMessage(params as ExtensionRequest);
+      return { success: true };
+    });
+
+    this.transport.onMethod('get_auth_status', async () => {
+      return await this.claudeClient.getAuthStatus();
+    });
+
+    this.transport.onMethod('clear_conversation', async () => {
+      this.handleClearConversation();
+      return { success: true };
+    });
+
+    this.transport.onMethod('abort_generation', async () => {
+      this.handleAbortGeneration();
+      return { success: true };
+    });
+
+    this.transport.onMethod('queue_files', async (params) => {
+      const { files, priority = 5 } = params || {};
+
+      if (!this.indexQueue) {
+        throw new Error('Index queue not initialized');
+      }
+
+      if (!files || !Array.isArray(files)) {
+        throw new Error('Invalid params: files array required');
+      }
+
+      this.indexQueue.enqueueBatch(files, priority);
+
+      return {
+        queued: files.length,
+        queueDepth: this.indexQueue.getQueueDepth(),
+      };
+    });
+
+    this.transport.onMethod('get_kb_status', async () => {
+      return {
+        initialized: this.indexQueue !== null,
+        repoName: this.repoName,
+        queueDepth: this.indexQueue?.getQueueDepth() || 0,
+        isIndexing: this.indexQueue?.isIndexing() || false,
+      };
+    });
+
+    this.transport.onMethod('list_conversations', async () => {
+      const conversations = await this.conversationStore.listConversationsWithMetadata();
+      return { conversations };
+    });
+
+    this.transport.onMethod('load_conversation', async (params) => {
+      const { conversationId } = params || {};
+
+      if (!conversationId) {
+        throw new Error('Invalid params: conversationId required');
+      }
+
+      const conversation = await this.conversationStore.loadConversation(conversationId);
+
+      if (!conversation) {
+        throw new Error(`Conversation not found: ${conversationId}`);
+      }
+
+      // Don't branch yet - just load into memory
+      this.loadedConversationId = conversationId;
+      this.isFirstUserMessage = true;
+
+      // Restore conversation history
+      this.conversationHistory = conversation.messages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+
+      return {
+        conversation: conversation,
+        branchInfo: null,
+      };
+    });
+
+    this.transport.onMethod('delete_conversation', async (params) => {
+      const { conversationId } = params || {};
+
+      if (!conversationId) {
+        throw new Error('Invalid params: conversationId required');
+      }
+
+      await this.conversationStore.deleteConversation(conversationId);
+
+      // Clear if it was the current conversation
+      if (this.currentConversationId === conversationId) {
+        this.currentConversationId = null;
+        this.conversationHistory = [];
+        this.isFirstUserMessage = true;
+      }
+
+      return { success: true };
+    });
+
+    this.transport.onMethod('rename_conversation', async (params) => {
+      const { conversationId, newTitle } = params || {};
+
+      if (!conversationId || !newTitle) {
+        throw new Error('Invalid params: conversationId and newTitle required');
+      }
+
+      await this.conversationStore.updateMetadata(conversationId, {
+        title: newTitle,
+      });
+
+      return { success: true };
+    });
   }
 
   async start() {
@@ -111,6 +259,25 @@ class AgentCore {
     console.error(
       `[Agent Core] Available tools: ${tools.map((t: any) => t.name).join(", ")}`
     );
+
+    // EP-11: Initialize Discovery Orchestrator for architect mode
+    const discoveryConfig: DiscoveryConfig = {
+      maxQueries: 5,
+      maxResultsPerQuery: 8,  // Increased to get more diverse results
+      includeGraphContext: true,
+      confidenceThreshold: 0.01,  // Lowered to 0.01 for RRF scores (typically 0.01-0.05 after fusion, vs raw semantic 0.1-0.4)
+      timeoutMs: 5000
+    };
+    this.discoveryOrchestrator = new DiscoveryOrchestrator(
+      this.mcpClient,
+      this.claudeClient,
+      discoveryConfig
+    );
+    console.error("[Agent Core] Discovery Orchestrator initialized");
+
+    // EP-11: Initialize Planning phase
+    this.planningPhase = new PlanningPhase(this.claudeClient, this.workspaceRoot);
+    console.error("[Agent Core] Planning phase initialized");
 
     // Set up stdio communication using JSON-RPC framing
     let buffer = Buffer.alloc(0);
@@ -182,7 +349,8 @@ class AgentCore {
       capabilities: this.capabilities,
     });
 
-    console.error("[Agent Core] Ready and listening on stdin");
+    const ipcFormat = this.transport.getSerializationFormat();
+    console.error(`[Agent Core] Ready and listening on stdin (using ${ipcFormat} serialization)`);
   }
 
   private async initializeKBWorkspace() {
@@ -297,70 +465,6 @@ class AgentCore {
     }
   }
 
-  private handleMessage(data: string) {
-    try {
-      const message: Message = JSON.parse(data);
-      console.error(`[Agent Core] Received: ${message.method || "response"}`);
-
-      if (message.method === "send_message") {
-        this.handleSendMessage(message.params as ExtensionRequest);
-      } else if (message.method === "get_auth_status") {
-        this.handleGetAuthStatus(message);
-      } else if (message.method === "clear_conversation") {
-        this.handleClearConversation();
-      } else if (message.method === "abort_generation") {
-        this.handleAbortGeneration();
-      } else if (message.method === "queue_files") {
-        this.handleQueueFiles(message);
-      } else if (message.method === "get_kb_status") {
-        this.handleGetKBStatus(message);
-      } else if (message.method === "list_conversations") {
-        void this.handleListConversations(message);
-      } else if (message.method === "load_conversation") {
-        void this.handleLoadConversation(message);
-      } else if (message.method === "delete_conversation") {
-        void this.handleDeleteConversation(message);
-      } else if (message.method === "rename_conversation") {
-        void this.handleRenameConversation(message);
-      }
-    } catch (error) {
-      console.error("[Agent Core] Parse error:", error);
-      this.sendEvent({
-        type: "error",
-        error: {
-          code: "SERVICE_UNAVAILABLE",
-          message: "Failed to parse message",
-          suggestions: ["Check message format"],
-          recoverable: true,
-        },
-      });
-    }
-  }
-
-  private async handleGetAuthStatus(message: Message) {
-    try {
-      const status = await this.claudeClient.getAuthStatus();
-      
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        result: status,
-      };
-      
-      this.sendRPCMessage(response);
-    } catch (error: any) {
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        error: {
-          code: -32603,
-          message: error.message,
-        },
-      };
-      
-      this.sendRPCMessage(response);
-    }
-  }
 
   private async handleSendMessage(request: ExtensionRequest) {
     if (request.type === "send_message") {
@@ -376,7 +480,19 @@ class AgentCore {
           }
           this.isFirstUserMessage = false;
         }
-        
+
+        // EP-11: Check for active planning session (user refining plan)
+        if (this.activePlanningSession && request.mode !== "architect") {
+          await this.handlePlanningInteraction(request.content);
+          return;
+        }
+
+        // EP-11: Check for architect mode
+        if (request.mode === "architect") {
+          await this.handleArchitectMode(request);
+          return;
+        }
+
         // Check if we can use agentic tools (works with both API key and CLI subscription)
         const authStatus = await this.claudeClient.getAuthStatus();
         
@@ -474,6 +590,358 @@ class AgentCore {
     }
   }
 
+  /**
+   * EP-11: Handle architect mode requests
+   * Runs the 3-phase orchestration workflow starting with discovery
+   */
+  private async handleArchitectMode(request: ExtensionRequest & { type: "send_message" }) {
+    if (!this.discoveryOrchestrator) {
+      console.error("[Architect Mode] Discovery orchestrator not initialized");
+      this.sendEvent({
+        type: "error",
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message: "Architect mode not available",
+          suggestions: ["Restart the agent", "Check KB service"],
+          recoverable: true,
+        },
+      });
+      return;
+    }
+
+    if (!this.repoName) {
+      console.error("[Architect Mode] Workspace not initialized");
+      this.sendEvent({
+        type: "error",
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message: "Workspace not initialized",
+          suggestions: ["Ensure KB is running", "Restart agent"],
+          recoverable: true,
+        },
+      });
+      return;
+    }
+
+    console.error("[Architect Mode] Starting architect mode workflow...");
+
+    try {
+      // Send "thinking" indicator
+      this.sendEvent({
+        type: "content_delta",
+        delta: "# 🏗️ Architect Mode - Discovery Phase\n\nAnalyzing your request and searching the codebase...\n\n"
+      });
+
+      // Phase 1: Discovery
+      const discoveryResult = await this.discoveryOrchestrator.execute({
+        userQuery: request.content,
+        workspaceRoot: this.workspaceRoot,
+        repoName: this.repoName,
+        conversationHistory: this.conversationHistory
+      });
+
+      // Format and send discovery results
+      const discoveryMessage = this.formatDiscoveryResults(discoveryResult);
+
+      this.sendEvent({
+        type: "content_delta",
+        delta: discoveryMessage
+      });
+
+      console.error("[Architect Mode] Discovery phase completed successfully");
+
+      // Phase 2: Planning (interactive conversation)
+      if (!this.planningPhase) {
+        throw new Error("Planning phase not initialized");
+      }
+
+      this.sendEvent({
+        type: "content_delta",
+        delta: "\n## 📋 Planning\n\nAnalyzing code and creating implementation plan...\n\n"
+      });
+
+      const { session, response } = await this.planningPhase.start(
+        request.content,
+        discoveryResult
+      );
+
+      // Send Claude's response (could be questions or a plan)
+      this.sendEvent({
+        type: "content_delta",
+        delta: response
+      });
+
+      // Store session for refinement
+      this.activePlanningSession = session;
+      this.currentArchitectPrompt = request.content;
+
+      this.sendEvent({
+        type: "content_delta",
+        delta: "\n\n*Reply with feedback to refine the plan, or say 'confirm' to save it.*\n"
+      });
+
+      // Update conversation history
+      this.conversationHistory.push({
+        role: "user",
+        content: request.content
+      });
+
+      const fullResponse = discoveryMessage + "\n\n" + response;
+
+      this.conversationHistory.push({
+        role: "assistant",
+        content: fullResponse
+      });
+
+      // Save conversation
+      if (this.currentConversationId) {
+        await this.saveCurrentConversation();
+      }
+
+      // Send completion event
+      this.sendEvent({
+        type: "task_completed",
+        success: true,
+        result: {
+          mode: "architect",
+          phase: "planning",
+          confidence: discoveryResult.confidence,
+          chunksFound: discoveryResult.retrievedChunks.length,
+          hasActivePlanningSession: true
+        },
+      });
+
+      console.error("[Architect Mode] Planning phase started successfully");
+    } catch (error: any) {
+      console.error("[Architect Mode] Error:", error);
+      this.sendEvent({
+        type: "error",
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message: error.message,
+          suggestions: [
+            "Check KB service is running",
+            "Try a more specific query",
+            "Check network connection"
+          ],
+          recoverable: true,
+        },
+      });
+    }
+  }
+
+  /**
+   * Handle planning interaction - refine or confirm plan
+   */
+  private async handlePlanningInteraction(userMessage: string) {
+    if (!this.activePlanningSession || !this.planningPhase || !this.currentArchitectPrompt) {
+      console.error("[Planning] No active planning session");
+      return;
+    }
+
+    try {
+      // Check if user is confirming the plan using natural language detection
+      if (isConfirmation(userMessage) && this.activePlanningSession.parsedPlan) {
+        // Save and confirm plan
+        this.sendEvent({
+          type: "content_delta",
+          delta: "\n## ✅ Confirming Plan\n\nSaving plan to `.dolphin/state/plans/`...\n\n"
+        });
+
+        const savedPlan = await this.planningPhase.confirm(
+          this.activePlanningSession,
+          this.currentArchitectPrompt,
+          this.workspaceRoot
+        );
+
+        this.sendEvent({
+          type: "content_delta",
+          delta: `**Plan saved!**\n\n`
+        });
+
+        this.sendEvent({
+          type: "content_delta",
+          delta: `- **Plan ID**: \`${savedPlan.planId}\`\n`
+        });
+
+        this.sendEvent({
+          type: "content_delta",
+          delta: `- **Location**: \`${savedPlan.path}\`\n`
+        });
+
+        this.sendEvent({
+          type: "content_delta",
+          delta: `- **Tasks**: ${savedPlan.parsedPlan.tasks.length}\n\n`
+        });
+
+        this.sendEvent({
+          type: "content_delta",
+          delta: "*The plan is now ready for implementation!*\n"
+        });
+
+        // Clear planning session
+        this.activePlanningSession = null;
+        this.currentArchitectPrompt = null;
+
+        // Update conversation
+        this.conversationHistory.push({
+          role: "user",
+          content: userMessage
+        });
+
+        this.conversationHistory.push({
+          role: "assistant",
+          content: `Plan confirmed and saved to ${savedPlan.path}`
+        });
+
+        if (this.currentConversationId) {
+          await this.saveCurrentConversation();
+        }
+
+        this.sendEvent({
+          type: "task_completed",
+          success: true,
+          result: {
+            mode: "architect",
+            phase: "planning_confirmed",
+            planId: savedPlan.planId,
+            planPath: savedPlan.path
+          }
+        });
+
+        return;
+      }
+
+      // Otherwise, refine the plan
+      this.sendEvent({
+        type: "content_delta",
+        delta: "\n## 🔄 Refining Plan\n\nUpdating based on your feedback...\n\n"
+      });
+
+      const { session, response } = await this.planningPhase.refine(
+        this.activePlanningSession,
+        userMessage
+      );
+
+      // Send Claude's updated response
+      this.sendEvent({
+        type: "content_delta",
+        delta: response
+      });
+
+      this.sendEvent({
+        type: "content_delta",
+        delta: "\n\n*Review the updated plan. Reply with more feedback or say 'confirm' to save it.*\n"
+      });
+
+      // Update session
+      this.activePlanningSession = session;
+
+      // Update conversation
+      this.conversationHistory.push({
+        role: "user",
+        content: userMessage
+      });
+
+      this.conversationHistory.push({
+        role: "assistant",
+        content: response
+      });
+
+      if (this.currentConversationId) {
+        await this.saveCurrentConversation();
+      }
+
+      this.sendEvent({
+        type: "task_completed",
+        success: true,
+        result: {
+          mode: "architect",
+          phase: "planning_refined"
+        }
+      });
+
+    } catch (error: any) {
+      console.error("[Planning] Error during interaction:", error);
+      this.sendEvent({
+        type: "error",
+        error: {
+          code: "PLANNING_ERROR",
+          message: error.message,
+          suggestions: ["Try rephrasing your feedback", "Say 'cancel' to exit planning mode"],
+          recoverable: true
+        }
+      });
+    }
+  }
+
+  /**
+   * Format discovery results into a readable message
+   */
+  private formatDiscoveryResults(result: any): string {
+    const parts: string[] = [];
+
+    parts.push("## Discovery Results\n");
+    parts.push(result.summary);
+    parts.push(`\n**Confidence**: ${(result.confidence * 100).toFixed(0)}%`);
+    parts.push(`**Execution Time**: ${result.executionTimeMs}ms\n`);
+
+    // Show queries executed
+    if (result.queries && result.queries.length > 0) {
+      parts.push("\n### Strategic Queries");
+      result.queries.forEach((q: any, i: number) => {
+        parts.push(`${i + 1}. **[${q.strategy}]** "${q.text}"`);
+      });
+      parts.push("");
+    }
+
+    // Show gaps identified
+    if (result.gaps && result.gaps.length > 0) {
+      parts.push("\n### Information Gaps");
+      result.gaps.forEach((gap: string) => {
+        parts.push(`- ${gap}`);
+      });
+      parts.push("");
+    }
+
+    // Show top results
+    if (result.retrievedChunks && result.retrievedChunks.length > 0) {
+      parts.push("\n### Relevant Code Found\n");
+
+      const topChunks = result.retrievedChunks.slice(0, 5);
+      topChunks.forEach((chunk: any, i: number) => {
+        const symbol = chunk.symbol_name ? ` - \`${chunk.symbol_name}\`` : "";
+        parts.push(`${i + 1}. **${chunk.path}**#L${chunk.start_line}-L${chunk.end_line}${symbol}`);
+        parts.push(`   Score: ${(chunk.score * 100).toFixed(0)}%`);
+      });
+
+      if (result.retrievedChunks.length > 5) {
+        parts.push(`\n_...and ${result.retrievedChunks.length - 5} more results_`);
+      }
+    }
+
+    // Show graph context summary
+    if (result.graphContext) {
+      parts.push("\n### Code Graph Context");
+      parts.push(`- **Nodes**: ${result.graphContext.nodes.length} code entities`);
+      parts.push(`- **Relationships**: ${result.graphContext.relationships.length} connections`);
+
+      // Summarize relationship types
+      const relTypes = new Map();
+      for (const rel of result.graphContext.relationships) {
+        relTypes.set(rel.type, (relTypes.get(rel.type) || 0) + 1);
+      }
+      if (relTypes.size > 0) {
+        const typeSummary = Array.from(relTypes.entries())
+          .map(([type, count]: [string, number]) => `${count} ${type}`)
+          .join(", ");
+        parts.push(`  - ${typeSummary}`);
+      }
+    }
+
+    return parts.join("\n");
+  }
+
   private handleClearConversation() {
     this.conversationHistory = [];
     this.currentConversationId = null;
@@ -499,93 +967,6 @@ class AgentCore {
       success: false,
       result: { message: "Generation aborted by user" },
     });
-  }
-
-  private async handleQueueFiles(message: Message) {
-    try {
-      const { files, priority = 5 } = message.params || {};
-
-      if (!this.indexQueue) {
-        const response: Message = {
-          jsonrpc: "2.0",
-          id: message.id,
-          error: {
-            code: -32603,
-            message: "Index queue not initialized",
-          },
-        };
-        this.sendRPCMessage(response);
-        return;
-      }
-
-      if (!files || !Array.isArray(files)) {
-        const response: Message = {
-          jsonrpc: "2.0",
-          id: message.id,
-          error: {
-            code: -32602,
-            message: "Invalid params: files array required",
-          },
-        };
-        this.sendRPCMessage(response);
-        return;
-      }
-
-      // Queue the files
-      this.indexQueue.enqueueBatch(files, priority);
-
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        result: {
-          queued: files.length,
-          queueDepth: this.indexQueue.getQueueDepth(),
-        },
-      };
-
-      this.sendRPCMessage(response);
-    } catch (error: any) {
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        error: {
-          code: -32603,
-          message: error.message,
-        },
-      };
-
-      this.sendRPCMessage(response);
-    }
-  }
-
-  private async handleGetKBStatus(message: Message) {
-    try {
-      const status = {
-        initialized: this.indexQueue !== null,
-        repoName: this.repoName,
-        queueDepth: this.indexQueue?.getQueueDepth() || 0,
-        isIndexing: this.indexQueue?.isIndexing() || false,
-      };
-
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        result: status,
-      };
-
-      this.sendRPCMessage(response);
-    } catch (error: any) {
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        error: {
-          code: -32603,
-          message: error.message,
-        },
-      };
-
-      this.sendRPCMessage(response);
-    }
   }
 
   // Phase 5: Conversation Management Methods
@@ -743,198 +1124,8 @@ class AgentCore {
     console.error(`[Agent Core] Saved conversation: ${this.currentConversationId} (${conversation.messages.length} messages, ${currentTotal + newTokens} total tokens)`);
   }
   
-  // RPC Handlers for Conversation Management
-  
-  private async handleListConversations(message: Message) {
-    try {
-      console.error(`[Agent Core] Listing conversations for request id: ${message.id}`);
-      const conversations = await this.conversationStore.listConversationsWithMetadata();
-      console.error(`[ConversationStore] Returning ${conversations.length} conversations`);
-      
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        result: { conversations },
-      };
-      
-      console.error(`[Agent Core] Sending list response: ${JSON.stringify(response).substring(0, 200)}`);
-      this.sendRPCMessage(response);
-      console.error(`[Agent Core] List response sent`);
-    } catch (error: any) {
-      console.error(`[Agent Core] Error in handleListConversations: ${error.message}`);
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        error: {
-          code: -32603,
-          message: error.message,
-        },
-      };
-      
-      this.sendRPCMessage(response);
-    }
-  }
-  
-  private async handleLoadConversation(message: Message) {
-    try {
-      const { conversationId } = message.params || {};
-      
-      if (!conversationId) {
-        const response: Message = {
-          jsonrpc: "2.0",
-          id: message.id,
-          error: {
-            code: -32602,
-            message: "Invalid params: conversationId required",
-          },
-        };
-        this.sendRPCMessage(response);
-        return;
-      }
-      
-      const conversation = await this.conversationStore.loadConversation(conversationId);
-      
-      if (!conversation) {
-        const response: Message = {
-          jsonrpc: "2.0",
-          id: message.id,
-          error: {
-            code: -32603,
-            message: `Conversation not found: ${conversationId}`,
-          },
-        };
-        this.sendRPCMessage(response);
-        return;
-      }
-      
-      // Don't branch yet - just load into memory
-      // Branching will happen when user sends their first message
-      this.loadedConversationId = conversationId;
-      this.isFirstUserMessage = true; // Will trigger branch on next message
-      
-      // Restore conversation history (convert back to Message format)
-      this.conversationHistory = conversation.messages.map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-      }));
-      
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        result: {
-          conversation: conversation,
-          branchInfo: null, // No branch yet
-        },
-      };
-      
-      this.sendRPCMessage(response);
-      console.error(`[Agent Core] Loaded conversation ${conversationId} (will branch on first message)`);
-    } catch (error: any) {
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        error: {
-          code: -32603,
-          message: error.message,
-        },
-      };
-      
-      this.sendRPCMessage(response);
-    }
-  }
-  
-  private async handleDeleteConversation(message: Message) {
-    try {
-      const { conversationId } = message.params || {};
-      
-      if (!conversationId) {
-        const response: Message = {
-          jsonrpc: "2.0",
-          id: message.id,
-          error: {
-            code: -32602,
-            message: "Invalid params: conversationId required",
-          },
-        };
-        this.sendRPCMessage(response);
-        return;
-      }
-      
-      await this.conversationStore.deleteConversation(conversationId);
-      
-      // Clear if it was the current conversation
-      if (this.currentConversationId === conversationId) {
-        this.currentConversationId = null;
-        this.conversationHistory = [];
-        this.isFirstUserMessage = true;
-      }
-      
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        result: { success: true },
-      };
-      
-      this.sendRPCMessage(response);
-    } catch (error: any) {
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        error: {
-          code: -32603,
-          message: error.message,
-        },
-      };
-      
-      this.sendRPCMessage(response);
-    }
-  }
-  
-  private async handleRenameConversation(message: Message) {
-    try {
-      const { conversationId, newTitle } = message.params || {};
-      
-      if (!conversationId || !newTitle) {
-        const response: Message = {
-          jsonrpc: "2.0",
-          id: message.id,
-          error: {
-            code: -32602,
-            message: "Invalid params: conversationId and newTitle required",
-          },
-        };
-        this.sendRPCMessage(response);
-        return;
-      }
-      
-      await this.conversationStore.updateMetadata(conversationId, {
-        title: newTitle,
-      });
-      
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        result: { success: true },
-      };
-      
-      this.sendRPCMessage(response);
-    } catch (error: any) {
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        error: {
-          code: -32603,
-          message: error.message,
-        },
-      };
-      
-      this.sendRPCMessage(response);
-    }
-  }
-  
   /**
    * Generate a unique request ID for correlation/logging.
-   * Phase 7: Correlation IDs help track events through the IPC pipeline.
    */
   private generateRequestId(): string {
     return `req-${Date.now()}-${++this.requestIdCounter}`;
@@ -942,7 +1133,7 @@ class AgentCore {
 
   /**
    * Send an event notification to the extension.
-   * Phase 7: Automatically adds correlation ID (requestId) for event tracking.
+   * Automatically adds correlation ID (requestId) for event tracking.
    */
   private sendEvent(event: AgentEvent) {
     // Add requestId if not already present for correlation/logging
@@ -951,35 +1142,9 @@ class AgentCore {
       requestId: (event as any).requestId || this.generateRequestId(),
     };
 
-    const message: Message = {
-      jsonrpc: "2.0",
-      method: "notify",
-      params: eventWithId,
-    };
-
-    this.sendRPCMessage(message);
-  }
-
-  /**
-   * Send a JSON-RPC message to stdout with proper framing.
-   * Phase 7: Implements write queuing to prevent message interleaving
-   * and ensure atomic writes. This prevents corruption when multiple
-   * messages are sent rapidly.
-   */
-  private sendRPCMessage(message: Message) {
-    // Queue the write to prevent interleaving
-    this.writeQueue = this.writeQueue.then(() => {
-      return new Promise<void>((resolve) => {
-        const payload = JSON.stringify(message);
-        const contentLength = Buffer.byteLength(payload, "utf-8");
-        const header = `Content-Length: ${contentLength}\r\n\r\n`;
-        const framedMessage = header + payload;
-
-        // Write the complete framed message atomically
-        process.stdout.write(framedMessage, () => {
-          resolve();
-        });
-      });
+    // Send notification via transport (fire-and-forget)
+    this.transport.notify("notify", eventWithId).catch(error => {
+      console.error("[Agent Core] Error sending event:", error);
     });
   }
 
@@ -987,6 +1152,7 @@ class AgentCore {
     console.error("[Agent Core] Shutting down...");
     this.kbManager.shutdown();
     this.mcpClient.shutdown();
+    this.transport.dispose();
     process.exit(0);
   }
 }
