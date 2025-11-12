@@ -323,23 +323,23 @@
 																variant="ghost"
 																size="sm"
 																class="h-7 w-7 p-0"
-																title="Rename"
+																aria-label="Rename conversation"
 																onclick={() => startRename(conv.id, conv.metadata.title)}
 															>
-																<Edit3 class="h-3 w-3" />
+																<Edit3 class="h-3 w-3" aria-hidden="true" />
 															</Button>
 															<Button
 																variant="ghost"
 																size="sm"
 																class="h-7 w-7 p-0"
-																title="Delete"
+																aria-label={deletingId === conv.id ? "Deleting conversation" : "Delete conversation"}
 																disabled={deletingId === conv.id}
 																onclick={() => handleDelete(conv.id, conv.metadata.title)}
 															>
 																{#if deletingId === conv.id}
-																	<Loader2 class="h-3 w-3 animate-spin" />
+																	<Loader2 class="h-3 w-3 animate-spin" aria-hidden="true" />
 																{:else}
-																	<Trash2 class="h-3 w-3 text-destructive" />
+																	<Trash2 class="h-3 w-3 text-destructive" aria-hidden="true" />
 																{/if}
 															</Button>
 														</div>
@@ -431,23 +431,23 @@
 															variant="ghost"
 															size="sm"
 															class="h-7 w-7 p-0"
-															title="Rename"
+															aria-label="Rename conversation"
 															onclick={() => startRename(conv.id, conv.metadata.title)}
 														>
-															<Edit3 class="h-3 w-3" />
+															<Edit3 class="h-3 w-3" aria-hidden="true" />
 														</Button>
 														<Button
 															variant="ghost"
 															size="sm"
 															class="h-7 w-7 p-0"
-															title="Delete"
+															aria-label={deletingId === conv.id ? "Deleting conversation" : "Delete conversation"}
 															disabled={deletingId === conv.id}
 															onclick={() => handleDelete(conv.id, conv.metadata.title)}
 														>
 															{#if deletingId === conv.id}
-																<Loader2 class="h-3 w-3 animate-spin" />
+																<Loader2 class="h-3 w-3 animate-spin" aria-hidden="true" />
 															{:else}
-																<Trash2 class="h-3 w-3 text-destructive" />
+																<Trash2 class="h-3 w-3 text-destructive" aria-hidden="true" />
 															{/if}
 														</Button>
 													</div>

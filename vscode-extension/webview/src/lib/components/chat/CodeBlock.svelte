@@ -46,17 +46,25 @@
       await navigator.clipboard.writeText(code);
       copied = true;
       // Announce to screen readers
-      announceMessage = 'Code copied to clipboard';
+      announceToScreenReader('Code copied to clipboard');
       setTimeout(() => {
         copied = false;
         announceMessage = '';
       }, 2000);
     } catch (err) {
       console.error("Failed to copy code:", err);
-      announceMessage = 'Failed to copy code';
+      announceToScreenReader('Failed to copy code');
+    }
+  }
+
+  function announceToScreenReader(message: string) {
+    const liveRegion = document.getElementById('a11y-announcer');
+    if (liveRegion) {
+      liveRegion.textContent = message;
+      // Clear after announcement to allow repeat announcements
       setTimeout(() => {
-        announceMessage = '';
-      }, 2000);
+        liveRegion.textContent = '';
+      }, 1000);
     }
   }
 </script>
@@ -68,7 +76,7 @@
       type="button"
       class="copy-button"
       onclick={copyCode}
-      aria-label={copied ? "Code copied" : "Copy code to clipboard"}
+      aria-label={copied ? 'Code copied to clipboard' : 'Copy code to clipboard'}
     >
       {#if copied}
         <Check size={16} aria-hidden="true" />
@@ -79,7 +87,7 @@
       {/if}
     </button>
   </div>
-  <pre class="code-content"><code class="language-{language} hljs">{@html highlightedCode}</code></pre>
+  <pre class="code-content"><code bind:this={codeElement} class="language-{language} hljs">{code}</code></pre>
 
   <!-- Live region for copy announcements -->
   <div role="status" aria-live="polite" aria-atomic="true" class="sr-only">
