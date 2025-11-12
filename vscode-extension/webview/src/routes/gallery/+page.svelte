@@ -3,8 +3,10 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Badge } from '$lib/components/ui/badge';
+	import { Input } from '$lib/components/ui/input';
+	import * as Tabs from '$lib/components/ui/tabs';
 	import * as Collapsible from '$lib/components/ui/collapsible';
-	import { ChevronDown, ChevronRight, FileCode, Info, MessageSquare, ArrowRight } from 'lucide-svelte';
+	import { ChevronDown, ChevronRight, FileCode, Info, MessageSquare, ArrowRight, Palette, Loader, Code, Target, Clock, User, Settings as SettingsIcon, Database, Zap, Bell, Mail, Calendar, Book } from 'lucide-svelte';
 	import MessageCard from '$lib/components/chat/MessageCard.svelte';
 	import ChatInput from '$lib/components/chat/ChatInput.svelte';
 	import ToolCallCard from '$lib/components/tools/ToolCallCard.svelte';
@@ -13,6 +15,11 @@
 	import ErrorAlert from '$lib/components/ErrorAlert.svelte';
 	import AuthStatus from '$lib/components/AuthStatus.svelte';
 	import GalleryShowcase from '$lib/components/GalleryShowcase.svelte';
+	import AnimationGallery from '$lib/components/AnimationGallery.svelte';
+	import LoadingStates from '$lib/components/LoadingStates.svelte';
+	import EnhancedPlanTimeline from '$lib/components/planning/EnhancedPlanTimeline.svelte';
+	import GoalContext from '$lib/components/planning/GoalContext.svelte';
+	import KBManagementPanel from '$lib/components/kb/KBManagementPanel.svelte';
 	
 	// Sample data
 	let showConfirmDialog = $state(false);
@@ -83,19 +90,270 @@
 	function handleErrorRetry() {
 		console.log('Retrying operation');
 	}
+	
+	// Mock data for EnhancedPlanTimeline
+	const mockPlanPhases = [
+		{
+			id: 'phase-1',
+			name: 'Plan',
+			status: 'completed' as const,
+			steps: [
+				{
+					id: '1-1',
+					description: 'Analyze requirements',
+					status: 'completed' as const,
+					estimatedTime: 300000,
+					actualTime: 280000,
+					context: 'Reviewed authentication specifications'
+				},
+				{
+					id: '1-2',
+					description: 'Design architecture',
+					status: 'completed' as const,
+					estimatedTime: 600000,
+					actualTime: 720000,
+					context: 'Created database schema and API design'
+				}
+			]
+		},
+		{
+			id: 'phase-2',
+			name: 'Exec',
+			status: 'active' as const,
+			steps: [
+				{
+					id: '2-1',
+					description: 'Setup database',
+					status: 'completed' as const,
+					estimatedTime: 400000,
+					actualTime: 350000
+				},
+				{
+					id: '2-2',
+					description: 'Implement JWT auth',
+					status: 'running' as const,
+					estimatedTime: 800000,
+					actualTime: 600000
+				},
+				{
+					id: '2-3',
+					description: 'Add middleware',
+					status: 'pending' as const,
+					estimatedTime: 500000
+				}
+			]
+		},
+		{
+			id: 'phase-3',
+			name: 'Test',
+			status: 'pending' as const,
+			steps: [
+				{
+					id: '3-1',
+					description: 'Write unit tests',
+					status: 'pending' as const,
+					estimatedTime: 600000
+				},
+				{
+					id: '3-2',
+					description: 'Integration testing',
+					status: 'pending' as const,
+					estimatedTime: 400000
+				}
+			]
+		}
+	];
+	
+	// Mock data for GoalContext
+	const mockGoalContext = {
+		currentGoal: 'Build Authentication System',
+		reasoningChain: [
+			{
+				step: 'Identify authentication requirements',
+				reasoning: 'System needs secure user authentication with JWT tokens and optional OAuth',
+				confidence: 0.95
+			},
+			{
+				step: 'Choose JWT over sessions',
+				reasoning: 'JWT provides stateless authentication, better scalability for distributed systems',
+				confidence: 0.85
+			}
+		],
+		alternatives: [
+			{
+				approach: 'Session-based authentication',
+				pros: ['Simpler implementation', 'Server-side control'],
+				cons: ['Not stateless', 'Scaling challenges'],
+				whyNotChosen: 'Does not fit distributed architecture requirements'
+			}
+		],
+		successCriteria: [
+			'Secure password hashing with bcrypt',
+			'JWT tokens with 15-minute expiration',
+			'Rate limiting on auth endpoints'
+		]
+	};
+	
+	let showGoalContext = $state(false);
+	
+	// Settings state
+	let apiKey = $state('');
+	let model = $state('claude-sonnet-4');
+	let temperature = $state(0.7);
 </script>
 
 <div class="h-full overflow-auto p-6">
 	<div class="max-w-6xl mx-auto">
 		<div class="mb-8">
-			<h1 class="text-4xl font-bold mb-2">Component Gallery</h1>
-			<p class="text-muted-foreground">
-				Visual showcase of all Dolphin UI components with interactive examples
+			<h1 class="text-4xl font-bold mb-2">Dolphin Design System Gallery</h1>
+			<p class="text-muted-foreground mb-4">
+				Complete design system with components, animations, and patterns for building exceptional AI experiences
 			</p>
+			<div class="flex items-center gap-2 text-sm">
+				<Badge variant="outline" class="gap-1">
+					<Palette class="size-3" />
+					Phase 1: Foundation
+				</Badge>
+				<Badge variant="secondary">Updated 2025-11-11</Badge>
+			</div>
 		</div>
 
+		<!-- Tabbed Navigation -->
+		<Tabs.Root value="components" class="mb-8">
+			<Tabs.List class="grid w-full grid-cols-5">
+				<Tabs.Trigger value="components">
+					<Code class="size-4 mr-2" />
+					Components
+				</Tabs.Trigger>
+				<Tabs.Trigger value="animations">
+					<Loader class="size-4 mr-2" />
+					Animations
+				</Tabs.Trigger>
+				<Tabs.Trigger value="loading">
+					<Loader class="size-4 mr-2" />
+					Loading States
+				</Tabs.Trigger>
+				<Tabs.Trigger value="planning">
+					<Palette class="size-4 mr-2" />
+					Planning
+				</Tabs.Trigger>
+				<Tabs.Trigger value="featured">
+					<MessageSquare class="size-4 mr-2" />
+					Featured
+				</Tabs.Trigger>
+			</Tabs.List>
+
+			<!-- Components Tab -->
+			<Tabs.Content value="components" class="space-y-12 mt-6">
+				{@render componentsSection()}
+			</Tabs.Content>
+
+			<!-- Animations Tab -->
+			<Tabs.Content value="animations" class="mt-6">
+				<AnimationGallery />
+			</Tabs.Content>
+
+			<!-- Loading States Tab -->
+			<Tabs.Content value="loading" class="mt-6">
+				<LoadingStates />
+			</Tabs.Content>
+
+			<!-- Planning Tab -->
+			<Tabs.Content value="planning" class="space-y-6 mt-6">
+				<Card class="bg-primary/5 border-primary/20">
+					<CardContent class="p-6">
+						<div class="space-y-4">
+							<div>
+								<h3 class="text-xl font-bold mb-2">Phase 2: Planning Visualization System</h3>
+								<p class="text-sm text-muted-foreground mb-4">
+									Interactive planning visualizations including enhanced timeline with accordion and goal context panel showing agent reasoning
+								</p>
+								<div class="flex gap-2 flex-wrap">
+									<Badge variant="outline">Enhanced Timeline</Badge>
+									<Badge variant="outline">Goal Context</Badge>
+									<Badge variant="outline">Reasoning Chain</Badge>
+									<Badge variant="default">Phase 2</Badge>
+								</div>
+							</div>
+						</div>
+					</CardContent>
+				</Card>
+	
+				<GalleryShowcase
+					title="Enhanced Timeline - Grouped by Phases"
+					description="Accordion-based timeline with collapsible sections, time comparisons, and contextual tooltips"
+				>
+					{#snippet children()}
+						<EnhancedPlanTimeline phases={mockPlanPhases} />
+					{/snippet}
+				</GalleryShowcase>
+	
+				<Card>
+					<CardHeader>
+						<CardTitle>Goal Context Panel</CardTitle>
+						<CardDescription>Agent reasoning transparency and decision-making insights</CardDescription>
+					</CardHeader>
+					<CardContent>
+						<Button onclick={() => showGoalContext = true} size="lg">
+							<Target class="size-4 mr-2" />
+							Open Goal Context Panel
+						</Button>
+						
+						<div class="mt-6 text-sm text-muted-foreground space-y-2">
+							<p class="font-semibold text-foreground">Features:</p>
+							<ul class="list-disc list-inside space-y-1 text-xs">
+								<li>Step-by-step reasoning chain with confidence levels</li>
+								<li>Alternative approaches with pros/cons analysis</li>
+								<li>Success criteria checklist</li>
+								<li>Complete transparency into agent thinking</li>
+							</ul>
+						</div>
+					</CardContent>
+				</Card>
+			</Tabs.Content>
+	
+			<!-- Featured Tab -->
+			<Tabs.Content value="featured" class="mt-6">
+				{@render featuredSection()}
+			</Tabs.Content>
+		</Tabs.Root>
+		
+		{#if showGoalContext}
+			<GoalContext
+				{...mockGoalContext}
+				open={showGoalContext}
+				onClose={() => showGoalContext = false}
+			/>
+		{/if}
+	</div>
+</div>
+
+{#snippet featuredSection()}
+	<div class="space-y-8">
+		<!-- Featured Section: Chat View Gallery -->
+		<Card class="bg-primary/5 border-primary/20">
+			<CardContent class="p-6">
+				<div class="flex items-center justify-between">
+					<div class="space-y-2">
+						<div class="flex items-center gap-2">
+							<Code class="h-6 w-6 text-primary" />
+							<h3 class="text-xl font-bold">Chat View Gallery</h3>
+							<Badge variant="default">New</Badge>
+						</div>
+						<p class="text-sm text-muted-foreground">
+							Comprehensive reference for all chat formatting scenarios. View code blocks, tool calls, markdown rendering, inline code, tables, and edge cases.
+						</p>
+					</div>
+					<Button size="lg" onclick={() => window.location.href = '/gallery/chat'}>
+						View Gallery
+						<ArrowRight class="h-4 w-4 ml-2" />
+					</Button>
+				</div>
+			</CardContent>
+		</Card>
+		
 		<!-- Featured Section: Conversation Persistence Mockups -->
-		<Card class="bg-primary/5 border-primary/20 mb-8">
+		<Card class="bg-primary/5 border-primary/20">
 			<CardContent class="p-6">
 				<div class="flex items-center justify-between">
 					<div class="space-y-2">
@@ -115,12 +373,99 @@
 				</div>
 			</CardContent>
 		</Card>
+		
+		<!-- Featured Section: Phase 2 Planning Visualizations -->
+		<Card class="bg-primary/5 border-primary/20">
+			<CardContent class="p-6">
+				<div class="flex items-center justify-between">
+					<div class="space-y-2">
+						<div class="flex items-center gap-2">
+							<Code class="h-6 w-6 text-primary" />
+							<h3 class="text-xl font-bold">Phase 2: Planning Visualization System</h3>
+							<Badge variant="default">New</Badge>
+						</div>
+						<p class="text-sm text-muted-foreground">
+							Interactive planning visualizations including PlanCanvas node-based graph, enhanced timeline with accordion, and Goal Context panel showing agent reasoning. Complete Phase 2 mock-ups ready for sign-off.
+						</p>
+					</div>
+					<Button size="lg" onclick={() => window.location.href = '/gallery/plan'}>
+						View Visualizations
+						<ArrowRight class="h-4 w-4 ml-2" />
+					</Button>
+				</div>
+			</CardContent>
+		</Card>
+		
+		<!-- Featured Section: Knowledge Bank ---->
+		<Card class="bg-primary/5 border-primary/20">
+			<CardContent class="p-6">
+				<div class="flex items-center justify-between">
+					<div class="space-y-2">
+						<div class="flex items-center gap-2">
+							<Database class="h-6 w-6 text-primary" />
+							<h3 class="text-xl font-bold">Knowledge Bank</h3>
+							<Badge variant="default">New</Badge>
+						</div>
+						<p class="text-sm text-muted-foreground">
+							Manage your indexed repositories and code search. View statistics, trigger reindexing, and configure semantic search settings for your workspace.
+						</p>
+					</div>
+					<Button size="lg" onclick={() => window.location.href = '/kb'}>
+						View Knowledge Bank
+						<ArrowRight class="h-4 w-4 ml-2" />
+					</Button>
+				</div>
+			</CardContent>
+		</Card>
+		
+		<!-- Featured Section: User Profile ---->
+		<Card class="bg-primary/5 border-primary/20">
+			<CardContent class="p-6">
+				<div class="flex items-center justify-between">
+					<div class="space-y-2">
+						<div class="flex items-center gap-2">
+							<User class="h-6 w-6 text-primary" />
+							<h3 class="text-xl font-bold">User Profile</h3>
+						</div>
+						<p class="text-sm text-muted-foreground">
+							View your account information, usage statistics, and activity overview. Manage your Dolphin profile and preferences.
+						</p>
+					</div>
+					<Button size="lg" onclick={() => window.location.href = '/profile'}>
+						View Profile
+						<ArrowRight class="h-4 w-4 ml-2" />
+					</Button>
+				</div>
+			</CardContent>
+		</Card>
+		
+		<!-- Featured Section: Settings ---->
+		<Card class="bg-primary/5 border-primary/20">
+			<CardContent class="p-6">
+				<div class="flex items-center justify-between">
+					<div class="space-y-2">
+						<div class="flex items-center gap-2">
+							<SettingsIcon class="h-6 w-6 text-primary" />
+							<h3 class="text-xl font-bold">Settings</h3>
+						</div>
+						<p class="text-sm text-muted-foreground">
+							Configure Dolphin preferences, AI model settings, API credentials, and notification preferences. Customize your development experience.
+						</p>
+					</div>
+					<Button size="lg" onclick={() => window.location.href = '/settings'}>
+						View Settings
+						<ArrowRight class="h-4 w-4 ml-2" />
+					</Button>
+				</div>
+			</CardContent>
+		</Card>
+	</div>
+{/snippet}
 
-		<Separator class="mb-12" />
-
-		<div class="space-y-12">
-			<!-- Chat Components Section -->
-			<section>
+{#snippet componentsSection()}
+	<div class="space-y-12">
+		<!-- Chat Components Section -->
+		<section>
 				<h2 class="text-2xl font-bold mb-6">Chat Components</h2>
 				
 				<div class="space-y-6">
@@ -415,93 +760,6 @@
 			</section>
 
 			<Separator />
-
-			<!-- Agentic Animations Section -->
-			<section>
-				<h2 class="text-2xl font-bold mb-6">Agentic Animations</h2>
-
-				<div class="space-y-6">
-					<Card>
-						<CardHeader>
-							<CardTitle>Thinking Indicator</CardTitle>
-							<CardDescription>Shows when the agent is processing</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<div class="flex items-center gap-3 p-4 bg-muted rounded-lg">
-								<div class="w-8 h-8 rounded-full bg-primary animate-pulse-glow flex items-center justify-center text-primary-foreground text-xs">
-									AI
-								</div>
-								<div class="flex gap-1">
-									<div class="w-2 h-2 rounded-full bg-foreground animate-typing-dot"></div>
-									<div class="w-2 h-2 rounded-full bg-foreground animate-typing-dot"></div>
-									<div class="w-2 h-2 rounded-full bg-foreground animate-typing-dot"></div>
-								</div>
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>Message Slide In</CardTitle>
-							<CardDescription>Smooth entrance animation for new messages</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<div class="p-4 bg-card border rounded-lg animate-slide-in-up">
-								<p class="text-sm">This message slides in smoothly from below</p>
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>Loading Shimmer</CardTitle>
-							<CardDescription>Skeleton loading state</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<div class="h-16 rounded-lg animate-shimmer"></div>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>Active Status</CardTitle>
-							<CardDescription>Breathing indicator for active agents</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<div class="flex items-center gap-2">
-								<div class="w-3 h-3 rounded-full bg-green-500 animate-breathe"></div>
-								<p class="text-sm text-muted-foreground">Agent is active</p>
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>Fade In</CardTitle>
-							<CardDescription>Gentle reveal animation</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<div class="p-4 bg-accent rounded-lg animate-fade-in">
-								<p class="text-sm">This content fades in gracefully</p>
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>Attention Bounce</CardTitle>
-							<CardDescription>Subtle bounce for notifications</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<span class="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-primary text-primary-foreground animate-bounce-subtle">
-								New
-							</span>
-						</CardContent>
-					</Card>
-				</div>
-			</section>
-
-			<Separator />
 	
 			<!-- Theme Testing Section -->
 			<section>
@@ -551,8 +809,7 @@
 				</Card>
 			</section>
 		</div>
-	</div>
-</div>
+	{/snippet}
 
 <style>
 	.diff-line {

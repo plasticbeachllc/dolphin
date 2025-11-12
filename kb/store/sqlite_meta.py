@@ -11,8 +11,8 @@ from sqlmodel import SQLModel, create_engine
 class SQLiteMetadataStore:
     """SQLite-backed metadata store using SQLModel for schema materialization."""
 
-    def __init__(self, db_path: Path) -> None:
-        self.db_path = db_path
+    def __init__(self, db_path: Path | str) -> None:
+        self.db_path = Path(db_path) if isinstance(db_path, str) else db_path
         self._init_lock = threading.Lock()
         self._initialized = False
         self._initializing = False
@@ -262,6 +262,18 @@ class SQLiteMetadataStore:
                 (name, str(path), default_embed_model),
             )
             conn.commit()
+
+    def register_repo(self, name: str, path: str | Path, *, default_embed_model: str = "small") -> None:
+        """Alias for record_repo for backward compatibility.
+        
+        Args:
+            name: Repository name
+            path: Repository root path (str or Path)
+            default_embed_model: Default embedding model to use
+        """
+        from pathlib import Path as PathType
+        path_obj = PathType(path) if isinstance(path, str) else path
+        self.record_repo(name, path_obj, default_embed_model=default_embed_model)
 
     def get_session(self, session_id: int) -> dict[str, Any] | None:
         """Return a session row as a dict or None if not found."""
@@ -1115,12 +1127,18 @@ class SQLiteMetadataStore:
             }
 
     def get_chunk_contents(self, chunk_ids: list[str]) -> dict[str, str]:
-        """Get a mapping of chunk_id to its content."""
+        """Get a mapping of chunk_id to its content.
+        
+        Tries to fetch content from FTS table first (preferred), but falls back
+        to reconstructing content from files if FTS entries don't exist.
+        """
         if not chunk_ids:
             return {}
         
         placeholders = ",".join(["?"] * len(chunk_ids))
-        query = f"""
+        
+        # Try FTS table first (contains actual chunk content)
+        fts_query = f"""
             SELECT c.id, fts.content
             FROM chunk_content c
             JOIN chunks_fts fts ON c.id = fts.content_id
@@ -1128,9 +1146,49 @@ class SQLiteMetadataStore:
         """
         
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute(query, chunk_ids)
+            cur.execute(fts_query, chunk_ids)
             rows = cur.fetchall()
-            return {str(row[0]): str(row[1]) for row in rows}
+            result = {str(row[0]): str(row[1]) for row in rows}
+            
+            # If all chunks found in FTS, return immediately
+            if len(result) == len(chunk_ids):
+                return result
+            
+            # For chunks not in FTS, try to get content from files
+            missing_ids = [cid for cid in chunk_ids if cid not in result]
+            if missing_ids:
+                # Get file path and line ranges for missing chunks
+                placeholders_missing = ",".join(["?"] * len(missing_ids))
+                fallback_query = f"""
+                    SELECT cc.id, f.path, r.root_path, cl.start_line, cl.end_line
+                    FROM chunk_content cc
+                    JOIN files f ON cc.file_id = f.id
+                    JOIN repos r ON cc.repo_id = r.id
+                    LEFT JOIN chunk_locations cl ON cc.id = cl.content_id
+                    WHERE cc.id IN ({placeholders_missing})
+                """
+                cur.execute(fallback_query, missing_ids)
+                fallback_rows = cur.fetchall()
+                
+                # Read content from files (best effort)
+                from pathlib import Path
+                for row in fallback_rows:
+                    chunk_id, file_path, repo_root, start_line, end_line = row
+                    if not all([file_path, repo_root, start_line, end_line]):
+                        continue
+                    
+                    try:
+                        full_path = Path(repo_root) / file_path
+                        if full_path.exists():
+                            lines = full_path.read_text(encoding='utf-8', errors='ignore').splitlines()
+                            # Extract lines (1-indexed to 0-indexed)
+                            chunk_lines = lines[start_line-1:end_line]
+                            result[str(chunk_id)] = '\n'.join(chunk_lines)
+                    except Exception:
+                        # If we can't read the file, skip this chunk
+                        pass
+            
+            return result
 
 
     # =====================

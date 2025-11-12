@@ -4,14 +4,14 @@ import { waitForExtensionActivation, sleep } from '../helpers/test-utils';
 
 describe('Phase 1 Integration Tests', () => {
   before(async function () {
-    this.timeout(15000);
+    this.timeout(8000);
     await waitForExtensionActivation();
     await sleep(1000);
   });
 
   describe('Targeted Activation', () => {
     it('Extension should activate on view open', async function () {
-      this.timeout(10000);
+      this.timeout(5000);
 
       const extension = vscode.extensions.getExtension('pb.dolphin');
       assert.ok(extension, 'Extension should be present');
@@ -24,40 +24,43 @@ describe('Phase 1 Integration Tests', () => {
       assert.ok(extension.isActive, 'Extension should be activated');
     });
 
-    it('Extension should register activation events correctly', () => {
+    it('Extension should use targeted activation (not on startup)', async function () {
+      this.timeout(5000);
+      
       const extension = vscode.extensions.getExtension('pb.dolphin');
       assert.ok(extension, 'Extension should be present');
 
-      // Read package.json to verify activation events
+      // Verify package.json doesn't use onStartupFinished
       const packageJson = extension.packageJSON;
-      const activationEvents = packageJson.activationEvents;
+      const activationEvents = packageJson.activationEvents || [];
 
       assert.ok(
         Array.isArray(activationEvents),
         'Activation events should be an array'
       );
 
-      // Should NOT have onStartupFinished
+      // Should NOT have onStartupFinished - this is the key behavior test
       assert.ok(
         !activationEvents.includes('onStartupFinished'),
         'Should not activate on startup'
       );
 
-      // Should have targeted activation events
+      // Verify that views and commands are properly declared (VSCode will auto-infer activation)
       assert.ok(
-        activationEvents.includes('onView:dolphin.chatView'),
-        'Should activate on view open'
+        packageJson.contributes?.views?.dolphin,
+        'Should have views declared (for auto-activation)'
       );
       assert.ok(
-        activationEvents.some((e: string) => e.includes('onCommand:')),
-        'Should activate on commands'
+        Array.isArray(packageJson.contributes?.commands) &&
+        packageJson.contributes.commands.length > 0,
+        'Should have commands declared (for auto-activation)'
       );
     });
   });
 
   describe('Commands Registration', () => {
     it('All Phase 1 commands should be registered', async function () {
-      this.timeout(10000);
+      this.timeout(5000);
 
       const commands = await vscode.commands.getCommands(true);
       const requiredCommands = [
@@ -249,7 +252,7 @@ describe('Phase 1 Integration Tests', () => {
 
   describe('End-to-End Workflow', () => {
     it('Should support complete command workflow', async function () {
-      this.timeout(10000);
+      this.timeout(5000);
 
       // 1. Extension should be active
       const extension = vscode.extensions.getExtension('pb.dolphin');

@@ -1,0 +1,27 @@
+{
+  "id": "flask-desc-request-context",
+  "query": "request context management and thread-local storage",
+  "repo": "pallets/flask@2.3.0",
+  "expected_results": [
+    {
+      "file": "src/flask/ctx.py",
+      "symbol": "RequestContext",
+      "relevance": 1.0
+    },
+    {
+      "file": "src/flask/globals.py",
+      "relevance": 0.9
+    },
+    {
+      "file": "src/flask/ctx.py",
+      "symbol": "AppContext",
+      "relevance": 0.8
+    }
+  ],
+  "metadata": {
+    "category": "code-search",
+    "difficulty": "medium",
+    "description": "Natural language query for request context implementation",
+    "tags": ["context", "threading", "description"]
+  }
+}

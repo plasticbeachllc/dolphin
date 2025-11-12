@@ -1,0 +1,146 @@
+{
+  "description": "SWE-Bench Lite repository selection for Dolphin benchmarking",
+  "total_budget_gb": 40,
+  "embedding_models": {
+    "small": {
+      "name": "text-embedding-3-small",
+      "dimensions": 1536,
+      "repos_count": 10
+    },
+    "large": {
+      "name": "text-embedding-3-large",
+      "dimensions": 3072,
+      "repos_count": 3
+    }
+  },
+  "repos": {
+    "django/django": {
+      "instances": 45,
+      "size_category": "very_large",
+      "estimated_loc": 300000,
+      "estimated_size_mb": 80,
+      "primary_language": "python",
+      "description": "Web framework - largest SWE-Bench repo",
+      "embed_model": "small",
+      "priority": 1
+    },
+    "scikit-learn/scikit-learn": {
+      "instances": 40,
+      "size_category": "large",
+      "estimated_loc": 200000,
+      "estimated_size_mb": 60,
+      "primary_language": "python",
+      "description": "Machine learning library",
+      "embed_model": "small",
+      "priority": 2
+    },
+    "matplotlib/matplotlib": {
+      "instances": 23,
+      "size_category": "large",
+      "estimated_loc": 150000,
+      "estimated_size_mb": 50,
+      "primary_language": "python",
+      "description": "Plotting library",
+      "embed_model": "small",
+      "priority": 3
+    },
+    "sympy/sympy": {
+      "instances": 35,
+      "size_category": "very_large",
+      "estimated_loc": 500000,
+      "estimated_size_mb": 100,
+      "primary_language": "python",
+      "description": "Symbolic mathematics - largest codebase",
+      "embed_model": "small",
+      "priority": 4
+    },
+    "pytest-dev/pytest": {
+      "instances": 18,
+      "size_category": "medium",
+      "estimated_loc": 50000,
+      "estimated_size_mb": 15,
+      "primary_language": "python",
+      "description": "Testing framework",
+      "embed_model": "small",
+      "priority": 5
+    },
+    "sphinx-doc/sphinx": {
+      "instances": 16,
+      "size_category": "medium",
+      "estimated_loc": 50000,
+      "estimated_size_mb": 18,
+      "primary_language": "python",
+      "description": "Documentation generator",
+      "embed_model": "small",
+      "priority": 6
+    },
+    "pydata/xarray": {
+      "instances": 12,
+      "size_category": "medium",
+      "estimated_loc": 40000,
+      "estimated_size_mb": 12,
+      "primary_language": "python",
+      "description": "N-D labeled arrays",
+      "embed_model": "small",
+      "priority": 7
+    },
+    "psf/requests": {
+      "instances": 15,
+      "size_category": "small",
+      "estimated_loc": 10000,
+      "estimated_size_mb": 5,
+      "primary_language": "python",
+      "description": "HTTP library - small, popular",
+      "embed_model": "large",
+      "priority": 8
+    },
+    "pallets/flask": {
+      "instances": 10,
+      "size_category": "small",
+      "estimated_loc": 15000,
+      "estimated_size_mb": 6,
+      "primary_language": "python",
+      "description": "Web microframework",
+      "embed_model": "large",
+      "priority": 9
+    },
+    "mwaskom/seaborn": {
+      "instances": 8,
+      "size_category": "small",
+      "estimated_loc": 15000,
+      "estimated_size_mb": 5,
+      "primary_language": "python",
+      "description": "Statistical visualization",
+      "embed_model": "large",
+      "priority": 10
+    }
+  },
+  "notes": {
+    "instance_coverage": "Top 10 repos cover ~222/300 instances (74%)",
+    "storage_estimate": {
+      "source_code": "~350MB (all 10 repos)",
+      "vector_index_small": "~10GB (10 repos with small model)",
+      "vector_index_large": "~3GB (3 repos with large model)",
+      "metadata_sqlite": "~2GB",
+      "graph_store": "~2GB",
+      "total": "~17.5GB (well under 40GB budget)"
+    },
+    "model_selection_rationale": {
+      "small_model_repos": [
+        "django",
+        "scikit-learn",
+        "matplotlib",
+        "sympy",
+        "pytest",
+        "sphinx",
+        "xarray"
+      ],
+      "large_model_repos": [
+        "requests",
+        "flask",
+        "seaborn"
+      ],
+      "reasoning": "Use small model for largest repos (cost/storage), use large model for smaller repos to test quality differences"
+    }
+  }
+}

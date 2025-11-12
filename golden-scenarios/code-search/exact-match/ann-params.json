@@ -1,0 +1,18 @@
+{
+  "id": "exact-ann-params",
+  "query": "ANNParams",
+  "expected_results": [
+    {
+      "file": "kb/retrieval/ann_tuning.py",
+      "symbol": "ANNParams",
+      "rank": 1,
+      "relevance": 1.0
+    }
+  ],
+  "metadata": {
+    "category": "code-search",
+    "difficulty": "easy",
+    "description": "Exact class name for ANN configuration",
+    "tags": ["class", "ann", "retrieval", "exact-match"]
+  }
+}

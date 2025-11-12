@@ -4,7 +4,7 @@
   import { MessageList, ChatInput, ChatHeader } from '$lib/components/chat';
   import AppNavigation from '$lib/components/navigation/AppNavigation.svelte';
   import { sendMessage, onMessage, abortGeneration, saveState, getState } from '$lib/api/vscode';
-  import type { AgentEvent } from '../../../shared/types/events';
+  import type { AgentEvent } from '@shared/types/events';
   import SettingsPage from './routes/settings/+page.svelte';
   import ProfilePage from './routes/profile/+page.svelte';
   import ConversationsGallery from './routes/gallery/conversations/+page.svelte';

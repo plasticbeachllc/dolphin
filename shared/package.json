@@ -5,10 +5,18 @@
   "main": "types/index.ts",
   "types": "types/index.ts",
   "dependencies": {
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "prom-client": "^15.1.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-node": "^0.52.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.48.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.52.0",
+    "@opentelemetry/resources": "^1.25.0",
+    "@opentelemetry/semantic-conventions": "^1.25.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "@types/node": "^20.10.0"
   }
 }
 

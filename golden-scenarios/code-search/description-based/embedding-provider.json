@@ -1,0 +1,24 @@
+{
+  "id": "desc-embedding-provider",
+  "query": "code that generates embeddings from text",
+  "expected_results": [
+    {
+      "file": "kb/embeddings/provider.py",
+      "symbol": "EmbeddingProvider",
+      "rank": 1,
+      "relevance": 1.0
+    },
+    {
+      "file": "kb/embeddings/provider.py",
+      "symbol": "embed_texts",
+      "rank": 2,
+      "relevance": 0.9
+    }
+  ],
+  "metadata": {
+    "category": "code-search",
+    "difficulty": "medium",
+    "description": "Natural language query for embedding functionality",
+    "tags": ["embeddings", "semantic", "description"]
+  }
+}

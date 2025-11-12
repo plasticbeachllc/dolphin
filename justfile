@@ -5,7 +5,6 @@ set dotenv-load
 
 # Variables
 HOME := env('HOME')
-MCP_PORT := "8010"
 
 list:
 	just -l
@@ -20,15 +19,9 @@ clean: stop
 # Start all services
 run: start
 
-# Start all services (Ollama, MCP bridge) and wait for readiness
+# Start all services and wait for readiness
 start:
 	@echo "Starting all services..."
-	@just --quiet ollama-start
-	@echo "Waiting for Ollama to become ready..."
-	@TIMEOUT=30; while ! just --quiet ollama-check >/dev/null 2>&1; do \
-		sleep 1; TIMEOUT=$((TIMEOUT-1)); \
-		if [ $TIMEOUT -le 0 ]; then echo "❌ Timed out waiting for Ollama"; exit 1; fi; \
-	done
 	@just --quiet start-mcp-bridge
 	@echo "Waiting for MCP Bridge to listen on port 7777..."
 	@TIMEOUT=30; while ! just --quiet mcp-bridge-check >/dev/null 2>&1; do \
@@ -36,15 +29,13 @@ start:
 		if [ $TIMEOUT -le 0 ]; then echo "❌ Timed out waiting for MCP Bridge"; exit 1; fi; \
 	done
 	@echo "✅ All services are up:"
-	@echo " - Ollama API:       http://localhost:11434"
 	@echo " - Dolphin API:      http://localhost:7777"
-	@echo " - MCP Bridge:       http://localhost:8010"
 
 # Set up the entire project
 setup: setup-env setup-python
 
 # Stop all services
-stop: ollama-stop mcp-bridge-stop
+stop: mcp-bridge-stop
 
 # ==============================================================================
 # Environment Management
@@ -54,45 +45,13 @@ stop: ollama-stop mcp-bridge-stop
 setup-env:
 	@# Check if .env file exists, if not, create it from the template
 	@[ -f .env ] || (echo "Creating .env from .env.template..."; cp .env.template .env)
-	@# Check if GITHUB_PERSONAL_ACCESS_TOKEN is set and not empty
-	@test -n "${GITHUB_PERSONAL_ACCESS_TOKEN}" || (echo "❌ Error: GITHUB_PERSONAL_ACCESS_TOKEN is not set in .env file. Please add it and try again."; exit 1)
+	@# Check if OPENAI_API_KEY is set and not empty
 	@test -n "${OPENAI_API_KEY}" || (echo "❌ Error: OPENAI_API_KEY is not set in .env file. Please add it and try again."; exit 1)
 	@echo "✅ Environment is configured."
 
 # Install Python dependencies from pyproject.toml
 setup-python:
 	uv sync --group test
-
-# ==============================================================================
-# Ollama (Homebrew Services) Management
-# ==============================================================================
-
-# Start Ollama as a background macOS service
-ollama-start:
-	@echo "Starting Ollama via Homebrew services..."
-	brew services start ollama
-
-# Stop the Ollama service
-ollama-stop:
-	@echo "Stopping Ollama via Homebrew services..."
-	brew services stop ollama
-
-# Restart the Ollama service
-ollama-restart:
-	@echo "Restarting Ollama via Homebrew services..."
-	brew services restart ollama
-
-# Show Ollama service status and port
-ollama-status:
-	@echo "Ollama service status:"
-	brew services list | grep -E '^ollama\s' || true
-	@echo "Checking if port 11434 is listening:"
-	lsof -nP -iTCP:11434 -sTCP:LISTEN || true
-
-# Health check for the local Ollama API
-ollama-check:
-	@echo "Checking Ollama API at http://localhost:11434 ..."
-	@curl -sSf http://localhost:11434/api/tags >/dev/null && echo "API reachable" || (echo "API not reachable"; exit 1)
 
 # ==============================================================================
 # MCP Bridge Management
@@ -119,25 +78,10 @@ show-mcp-bridge:
 # Testing
 # ==============================================================================
 
-# Test all components using pytest
+# Test all Python components using pytest (parallel execution enabled by default in pytest.ini)
 test: setup-python
-	@echo "🧪 Running all tests with pytest..."
+	@echo "🧪 Running all Python tests with pytest (parallel)..."
 	@uv run pytest -q
-
-# Run unit tests only
-test-unit: setup-python
-	@echo "🧪 Running unit tests..."
-	@uv run pytest tests/unit/ -q
-
-# Run integration tests only
-test-integration: setup-python
-	@echo "🧪 Running integration tests..."
-	@uv run pytest tests/integration/ -q
-
-# Run tests with coverage reporting
-test-coverage: setup-python
-	@echo "🧪 Running tests with coverage..."
-	@uv run pytest --cov=kb --cov-report=html --cov-report=term-missing
 
 # Run specific test file
 test-file: setup-python
@@ -146,19 +90,161 @@ test-file: setup-python
 
 # Run tests with detailed output
 test-verbose: setup-python
-	@echo "🧪 Running tests with verbose output..."
+	@echo "🧪 Running tests with verbose output (parallel)..."
 	@uv run pytest -v
 
-# Run end-to-end tests across all platform domains
-test-e2e:
-	@echo "🚀 Running end-to-end platform tests across all domains..."
+# Run tests sequentially (for debugging)
+test-sequential: setup-python
+	@echo "🧪 Running all tests sequentially..."
+	@uv run pytest -q -n0
+
+# Run tests with coverage reporting (note: coverage disables parallelization for accuracy)
+test-coverage: setup-python
+	@echo "🧪 Running tests with coverage..."
+	@uv run pytest -n0 --cov=kb --cov-report=html --cov-report=term-missing
+
+# Legacy aliases for backwards compatibility
+test-unit: test-unit-python
+test-integration: test-integration-python
+
+# ==============================================================================
+# Unit Tests - Fast, isolated tests with no external dependencies
+# ==============================================================================
+
+# Run ALL unit tests across all domains
+test-unit-all:
+	@echo "⚡ Running all unit tests across all domains..."
 	@echo ""
-	@echo "📋 Testing Domains:"
-	@echo "  1. Python Backend (KB, API, Personas)"
-	@echo "  2. TypeScript Agent Core"
-	@echo "  3. MCP Bridge"
-	@echo "  4. VSCode Extension"
-	@echo "  5. Webview UI"
+	@just test-unit-python
+	@just test-unit-agent-core
+	@just test-unit-agent-core-v2
+	@just test-unit-extension
+	@just test-unit-webview
+	@echo ""
+	@echo "✅ All unit tests passed!"
+
+# Run Python unit tests (with parallel execution)
+test-unit-python: setup-python
+	@echo "🐍 Testing Python unit tests (parallel)..."
+	@uv run pytest tests/unit/ -q --tb=short || (echo "   ❌ Python unit tests failed"; exit 1)
+	@echo "   ✅ Python unit tests passed"
+
+# Run Agent Core unit tests
+test-unit-agent-core:
+	@echo "🤖 Testing Agent Core unit tests..."
+	@cd agent-core && bun test tests/conversation-store.test.ts tests/plan-store.test.ts tests/storage.test.ts tests/toml-writer.test.ts tests/llm/diff-generator.test.ts tests/llm/claude-tool-executor-diff.test.ts tests/llm/claude-cli-detector.test.ts tests/planner/basic-planner.test.ts --bail || (echo "   ❌ Agent Core unit tests failed"; exit 1)
+	@echo "   ✅ Agent Core unit tests passed"
+
+# Run Agent Core V2 unit tests
+test-unit-agent-core-v2:
+	@echo "🤖 Testing Agent Core V2 unit tests..."
+	@cd agent-core-v2 && bun test tests/unit/ --bail || (echo "   ❌ Agent Core V2 unit tests failed"; exit 1)
+	@echo "   ✅ Agent Core V2 unit tests passed"
+
+# Run VSCode Extension unit tests
+test-unit-extension:
+	@echo "📦 Testing VSCode Extension unit tests..."
+	@cd vscode-extension && npm test -- --grep "logger|configuration|diff-handler|code-actions|drift-detector|auto-sync-manager|file-watcher-sync" || (echo "   ❌ Extension unit tests failed"; exit 1)
+	@echo "   ✅ Extension unit tests passed"
+
+# Run Webview unit tests
+test-unit-webview:
+	@echo "🎨 Testing Webview unit tests..."
+	@cd vscode-extension/webview && bun test || (echo "   ❌ Webview unit tests failed"; exit 1)
+	@echo "   ✅ Webview unit tests passed"
+
+# ==============================================================================
+# Integration Tests - Tests that integrate components within a domain
+# ==============================================================================
+
+# Run ALL integration tests across all domains
+test-integration-all:
+	@echo "🔗 Running all integration tests across all domains..."
+	@echo ""
+	@just test-integration-python
+	@just test-integration-agent-core
+	@just test-integration-agent-core-v2
+	@just test-integration-extension
+	@just test-integration-mcp-bridge
+	@echo ""
+	@echo "✅ All integration tests passed!"
+
+# Run Python integration tests (with parallel execution)
+test-integration-python: setup-python
+	@echo "🐍 Testing Python integration tests (parallel)..."
+	@uv run pytest tests/integration/ -q --tb=short || (echo "   ❌ Python integration tests failed"; exit 1)
+	@echo "   ✅ Python integration tests passed"
+
+# Run Agent Core integration tests
+test-integration-agent-core:
+	@echo "🤖 Testing Agent Core integration tests..."
+	@cd agent-core && bun test tests/llm/claude-client.test.ts tests/mcp-client.integration.test.ts tests/kb/manager.test.ts tests/main.test.ts --bail || (echo "   ❌ Agent Core integration tests failed"; exit 1)
+	@echo "   ✅ Agent Core integration tests passed"
+
+# Run Agent Core V2 integration tests
+test-integration-agent-core-v2:
+	@echo "🤖 Testing Agent Core V2 integration tests..."
+	@cd agent-core-v2 && bun test tests/integration/claude-auth.test.ts tests/integration/kb-integration.test.ts --bail || (echo "   ❌ Agent Core V2 integration tests failed"; exit 1)
+	@echo "   ✅ Agent Core V2 integration tests passed"
+
+# Run VSCode Extension integration tests
+test-integration-extension:
+	@echo "📦 Testing VSCode Extension integration tests..."
+	@cd vscode-extension && npm test -- --grep "agent-bridge|provider|commands|webview|^extension" || (echo "   ❌ Extension integration tests failed"; exit 1)
+	@echo "   ✅ Extension integration tests passed"
+
+# Run MCP Bridge integration tests
+test-integration-mcp-bridge:
+	@echo "🌉 Testing MCP Bridge integration tests..."
+	@cd mcp-bridge && bun test || (echo "   ❌ MCP bridge integration tests failed"; exit 1)
+	@echo "   ✅ MCP bridge integration tests passed"
+
+# ==============================================================================
+# End-to-End Tests - Full cross-domain integration tests
+# ==============================================================================
+
+# Run ALL end-to-end tests
+test-e2e-all:
+	@echo "🚀 Running all end-to-end tests..."
+	@echo ""
+	@just test-e2e-extension-full
+	@just test-e2e-agent-core-v2
+	@echo ""
+	@echo "✅ All end-to-end tests passed!"
+
+# Run VSCode Extension full e2e tests
+test-e2e-extension-full:
+	@echo "📦 Testing VSCode Extension E2E tests..."
+	@cd vscode-extension && npm test -- --grep "phase1-integration|phase2-integration|integration\.test|conversations-e2e|kb-lifecycle" || (echo "   ❌ Extension E2E tests failed"; exit 1)
+	@echo "   ✅ Extension E2E tests passed"
+
+# Run Agent Core V2 e2e tests
+test-e2e-agent-core-v2:
+	@echo "🤖 Testing Agent Core V2 E2E tests..."
+	@cd agent-core-v2 && bun test tests/integration/orchestrator-e2e.test.ts tests/integration/editor-workflow.test.ts --bail || (echo "   ❌ Agent Core V2 E2E tests failed"; exit 1)
+	@echo "   ✅ Agent Core V2 E2E tests passed"
+
+# ==============================================================================
+# Legacy E2E Commands (comprehensive test suite - runs EVERYTHING)
+# ==============================================================================
+
+# Run COMPREHENSIVE test suite across all domains (LEGACY - runs ALL tests)
+# This is the original test-e2e that runs ALL tests (unit + integration + e2e)
+# For faster testing, use test-unit-all, test-integration-all, or test-e2e-all instead
+test-e2e:
+	@echo "🚀 Running COMPREHENSIVE test suite across all domains..."
+	@echo ""
+	@echo "📋 This runs ALL tests (unit, integration, and e2e):"
+	@echo "  1. Python Backend (unit + integration)"
+	@echo "  2. TypeScript Agent Core (all tests)"
+	@echo "  3. MCP Bridge (integration tests)"
+	@echo "  4. VSCode Extension (all tests)"
+	@echo "  5. Webview UI (unit tests)"
+	@echo ""
+	@echo "💡 TIP: For faster testing, use:"
+	@echo "   - just test-unit-all        (fast unit tests only)"
+	@echo "   - just test-integration-all (integration tests only)"
+	@echo "   - just test-e2e-all         (e2e tests only)"
 	@echo ""
 	@just test-e2e-python
 	@just test-e2e-agent-core
@@ -166,18 +252,11 @@ test-e2e:
 	@just test-e2e-extension
 	@just test-e2e-webview
 	@echo ""
-	@echo "✅ All end-to-end tests passed!"
+	@echo "✅ All comprehensive tests passed!"
 
 # Run end-to-end tests with lenient mode (skip flaky tests)
 test-e2e-lenient:
 	@echo "🚀 Running end-to-end platform tests (lenient mode - skips flaky tests)..."
-	@echo ""
-	@echo "📋 Testing Domains:"
-	@echo "  1. Python Backend (KB, API, Personas)"
-	@echo "  2. TypeScript Agent Core (unit tests)"
-	@echo "  3. MCP Bridge"
-	@echo "  4. VSCode Extension"
-	@echo "  5. Webview UI"
 	@echo ""
 	@just test-e2e-python
 	@just test-e2e-agent-core-unit
@@ -187,39 +266,43 @@ test-e2e-lenient:
 	@echo ""
 	@echo "✅ All end-to-end tests passed (lenient mode)!"
 
-# Test Python backend (KB, API, Personas)
+# ==============================================================================
+# Legacy Per-Domain Test Commands
+# ==============================================================================
+
+# Test Python backend (KB, API) - ALL Python tests
 test-e2e-python:
-	@echo "🐍 [1/5] Testing Python Backend..."
+	@echo "🐍 Testing Python Backend (all tests)..."
 	@uv run pytest tests/ -q --tb=short || (echo "   ❌ Python backend tests failed"; exit 1)
 	@echo "   ✅ Python backend tests passed"
 
-# Test Agent Core (TypeScript)
+# Test Agent Core (TypeScript) - ALL Agent Core tests
 test-e2e-agent-core:
-	@echo "🤖 [2/5] Testing Agent Core..."
+	@echo "🤖 Testing Agent Core (all tests)..."
 	@cd agent-core && bun test --bail || (echo "   ❌ Agent core tests failed"; exit 1)
 	@echo "   ✅ Agent core tests passed"
 
 # Test Agent Core excluding flaky integration tests
 test-e2e-agent-core-unit:
-	@echo "🤖 [2/5] Testing Agent Core (unit tests only)..."
+	@echo "🤖 Testing Agent Core (unit tests only)..."
 	@cd agent-core && bun test tests/ --exclude "**/llm/claude-client.test.ts" || (echo "   ❌ Agent core tests failed"; exit 1)
 	@echo "   ✅ Agent core tests passed"
 
-# Test MCP Bridge
+# Test MCP Bridge - ALL MCP Bridge tests
 test-e2e-mcp-bridge:
-	@echo "🌉 [3/5] Testing MCP Bridge..."
+	@echo "🌉 Testing MCP Bridge (all tests)..."
 	@cd mcp-bridge && bun test || (echo "   ❌ MCP bridge tests failed"; exit 1)
 	@echo "   ✅ MCP bridge tests passed"
 
-# Test VSCode Extension
+# Test VSCode Extension - ALL Extension tests
 test-e2e-extension:
-	@echo "📦 [4/5] Testing VSCode Extension..."
+	@echo "📦 Testing VSCode Extension (all tests)..."
 	@cd vscode-extension && npm test || (echo "   ❌ Extension tests failed"; exit 1)
 	@echo "   ✅ Extension tests passed"
 
-# Test Webview UI
+# Test Webview UI - ALL Webview tests
 test-e2e-webview:
-	@echo "🎨 [5/5] Testing Webview UI..."
+	@echo "🎨 Testing Webview UI (all tests)..."
 	@cd vscode-extension/webview && bun test || (echo "   ❌ Webview tests failed"; exit 1)
 	@echo "   ✅ Webview tests passed"
 
@@ -298,24 +381,6 @@ kb-list-repos:
 kb-reset-all:
 	uv run dolphin kb reset-all
 
-# --- Persona Management (via dolphin personas) ---
-
-# List available personas
-personas-list:
-	uv run dolphin personas preview --list
-
-# Preview specific persona
-personas-preview id:
-	uv run dolphin personas preview --id {{id}} --verbose
-
-# Generate KiloCode configuration
-personas-kilocode:
-	uv run dolphin personas generate --kilocode --verbose
-
-# Generate Continue configuration
-personas-continue:
-	uv run dolphin personas generate --continue --verbose
-
 # --- API Server ---
 
 # Start the Dolphin API server
@@ -332,6 +397,177 @@ health:
 
 tail-mcp:
   tail -f mcp-bridge/logs/mcp.log
+
+# ==============================================================================
+# Performance Profiling
+# ==============================================================================
+
+# Profile indexing performance (small/medium/large)
+profile-index SIZE="small":
+	@echo "🔬 Profiling indexing performance ({{SIZE}} repository)..."
+	sudo -E ./scripts/profile_indexing.sh {{SIZE}}
+
+# Profile search performance (cold/warm/concurrent)
+profile-search TYPE="cold":
+	@echo "🔍 Profiling search performance ({{TYPE}} cache)..."
+	sudo -E ./scripts/profile_search.sh {{TYPE}}
+
+# Profile both indexing and search on same repository
+profile-combined SIZE="small":
+	@echo "🚀 Profiling combined workflow ({{SIZE}} repository)..."
+	sudo -E ./scripts/profile_combined.sh {{SIZE}}
+
+# Keep repository after profiling for debugging
+profile-combined-keep SIZE="small":
+	@echo "🚀 Profiling combined workflow with --keep-repo flag..."
+	sudo -E ./scripts/profile_combined.sh {{SIZE}} --keep-repo
+
+# View profiling results in speedscope
+profile-view RESULT:
+	@echo "📊 Opening {{RESULT}} in browser..."
+	@open https://speedscope.app || echo "Visit https://speedscope.app and upload {{RESULT}}"
+
+# Clean profiling results
+profile-clean:
+	@echo "🧹 Cleaning profiling results..."
+	@rm -rf profiling_results/
+	@echo "✅ Profiling results cleaned"
+
+# ==============================================================================
+# Benchmarking & Evaluation
+# ==============================================================================
+
+# SWE-Bench Lite Evaluation
+# ------------------------------------------------------------------------------
+
+# Setup SWE-Bench test repos (clone and index)
+swe-bench-setup:
+	@echo "Setting up SWE-Bench Lite test repositories..."
+	uv run python scripts/orchestrate_swe_bench.py setup
+
+# Show SWE-Bench setup status
+swe-bench-status:
+	uv run python scripts/orchestrate_swe_bench.py status
+
+# Run SWE-Bench Lite evaluation (file identification task)
+eval-swe-bench REPOS="*" LIMIT="":
+	@echo "Running SWE-Bench Lite evaluation..."
+	@mkdir -p results
+	uv run python scripts/eval_swe_bench.py \
+		--dataset test-data/swe_bench_instances.json \
+		{{if REPOS != "*" { "--repos " + REPOS } else { "" } }} \
+		{{if LIMIT != "" { "--limit " + LIMIT } else { "" } }} \
+		--output results/swe_bench_eval.json
+	@echo "✅ Results saved to results/swe_bench_eval.json"
+
+# Run SWE-Bench evaluation with verbose output
+eval-swe-bench-verbose REPOS="*":
+	@mkdir -p results
+	uv run python scripts/eval_swe_bench.py \
+		--dataset test-data/swe_bench_instances.json \
+		{{if REPOS != "*" { "--repos " + REPOS } else { "" } }} \
+		--output results/swe_bench_eval.json \
+		--verbose
+
+# Quick SWE-Bench smoke test (10 instances)
+eval-swe-bench-quick:
+	@echo "Running quick SWE-Bench smoke test..."
+	@mkdir -p results
+	uv run python scripts/eval_swe_bench.py \
+		--dataset test-data/swe_bench_instances.json \
+		--limit 10 \
+		--output results/swe_bench_quick.json
+
+# Golden Scenarios Evaluation (Flask)
+# ------------------------------------------------------------------------------
+
+# Run custom golden scenario evaluation
+eval-golden SCENARIOS="golden-scenarios-flask":
+	@echo "Running golden scenario evaluation..."
+	@mkdir -p results
+	uv run python scripts/eval_retrieval.py \
+		--scenarios {{SCENARIOS}} \
+		--output results/golden_eval.json
+	@echo "✅ Results saved to results/golden_eval.json"
+
+# Run golden scenarios with verbose output
+eval-golden-verbose SCENARIOS="golden-scenarios-flask":
+	@mkdir -p results
+	uv run python scripts/eval_retrieval.py \
+		--scenarios {{SCENARIOS}} \
+		--output results/golden_eval.json \
+		--verbose
+
+# Setup Flask test repo for golden scenarios
+flask-setup:
+	@echo "Setting up Flask 2.3.0 test repository..."
+	@mkdir -p test-repos
+	@if [ ! -d "test-repos/flask" ]; then \
+		git clone https://github.com/pallets/flask.git test-repos/flask; \
+		cd test-repos/flask && git checkout 2.3.0; \
+	fi
+	@REPO_PATH="$(pwd)/test-repos/flask"; \
+		echo "Registering and indexing Flask with large model (3072-dim for better quality)..."; \
+		uv run python -m kb.cli add-repo pallets/flask "$$REPO_PATH" --default-embed-model large; \
+		uv run python -m kb.cli index pallets/flask
+	@echo "✅ Flask test repo ready"
+
+# ANN Benchmarks
+# ------------------------------------------------------------------------------
+
+# Run ANN parameter benchmarks
+benchmark-ann QUERIES="50" ITERATIONS="50":
+	@echo "Running ANN parameter benchmarks..."
+	@mkdir -p results
+	uv run python scripts/benchmark_ann.py \
+		--queries {{QUERIES}} \
+		--iterations {{ITERATIONS}} \
+		--output results/ann_benchmark.json
+	@echo "✅ Results saved to results/ann_benchmark.json"
+
+# Combined Benchmarks
+# ------------------------------------------------------------------------------
+
+# Run full benchmark suite (SWE-Bench + Golden + ANN)
+benchmark-full:
+	@echo "Running full benchmark suite..."
+	@echo ""
+	@echo "1/3: SWE-Bench Lite evaluation..."
+	@just eval-swe-bench-quick
+	@echo ""
+	@echo "2/3: Golden scenarios..."
+	@just eval-golden
+	@echo ""
+	@echo "3/3: ANN benchmarks..."
+	@just benchmark-ann 20 20
+	@echo ""
+	@echo "✅ Full benchmark complete!"
+	@echo "   - SWE-Bench: results/swe_bench_quick.json"
+	@echo "   - Golden: results/golden_eval.json"
+	@echo "   - ANN: results/ann_benchmark.json"
+
+# Quick benchmark for CI (fast smoke tests)
+benchmark-quick:
+	@echo "Running quick benchmark suite..."
+	@just eval-swe-bench-quick
+	@just benchmark-ann 10 10
+	@echo "✅ Quick benchmark complete"
+
+# Compare evaluations against baseline
+compare-eval BASELINE="results/baseline_eval.json" CURRENT="results/golden_eval.json":
+	@echo "Comparing evaluation results..."
+	uv run python scripts/compare_eval.py \
+		{{BASELINE}} \
+		{{CURRENT}} \
+		--threshold 3.0
+
+# Save current results as baseline
+save-baseline:
+	@echo "Saving current results as baseline..."
+	@mkdir -p results/baselines
+	@cp results/golden_eval.json results/baselines/baseline_$(shell date +%Y%m%d_%H%M%S).json
+	@cp results/golden_eval.json results/baseline_eval.json
+	@echo "✅ Baseline saved"
 
 # ==============================================================================
 # Cleanup Commands
@@ -373,36 +609,6 @@ build-cli-tools: build
 	@echo "Building CLI tools for version {{VERSION}}..."
 	@echo "✅ Using existing build from dist/ directory"
 
-# Create standalone scripts for local development
-create-scripts:
-	@echo "Creating standalone scripts for local development..."
-	@mkdir -p bin
-	@# Create dolphin script
-	@echo '#!/usr/bin/env bash' > bin/dolphin
-	@echo 'set -e' >> bin/dolphin
-	@echo 'cd "$(dirname "$0")/.."' >> bin/dolphin
-	@echo 'exec uv run dolphin "$@"' >> bin/dolphin
-	@chmod +x bin/dolphin
-	@# Create kb script
-	@echo '#!/usr/bin/env bash' > bin/kb
-	@echo 'set -e' >> bin/kb
-	@echo 'cd "$(dirname "$0")/.."' >> bin/kb
-	@echo 'exec uv run kb "$@"' >> bin/kb
-	@chmod +x bin/kb
-	@# Create kb-api script
-	@echo '#!/usr/bin/env bash' > bin/kb-api
-	@echo 'set -e' >> bin/kb-api
-	@echo 'cd "$(dirname "$0")/.."' >> bin/kb-api
-	@echo 'exec uv run kb-api "$@"' >> bin/kb-api
-	@chmod +x bin/kb-api
-	@# Create personas script
-	@echo '#!/usr/bin/env bash' > bin/personas
-	@echo 'set -e' >> bin/personas
-	@echo 'cd "$(dirname "$0")/.."' >> bin/personas
-	@echo 'exec uv run personas "$@"' >> bin/personas
-	@chmod +x bin/personas
-	@echo "✅ Created standalone scripts in bin/ directory"
-
 # Install MCP bridge dependencies
 install-mcp-bridge:
 	@echo "Installing MCP bridge dependencies..."
@@ -414,7 +620,7 @@ build-mcp-bridge:
 	@cd mcp-bridge && bun build
 
 # Reinstall all tools (full rebuild)
-reinstall-all: install-cli-tools create-scripts install-mcp-bridge build-mcp-bridge
+reinstall-all: install-cli-tools install-mcp-bridge build-mcp-bridge
 	@echo "✅ All CLI tools and MCP bridge reinstalled"
 
 # ==============================================================================
