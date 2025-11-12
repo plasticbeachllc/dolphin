@@ -191,7 +191,7 @@ INDEX_START=$(date +%s.%N)
   -- uv run dolphin kb index "$REPO_NAME" --full --force 2>&1 | \
   tee "$INDEX_LOG_FILE" | \
   grep --line-buffered "Chunked.*into.*chunks" | \
-  pv -l -s "$FILE_COUNT" -N "🐬 Indexing files" -F "%b %t %r %p %e" > /dev/null)
+  pv -l -s "$FILE_COUNT" -N "🐬 Indexing files" > /dev/null)
 
 INDEX_END=$(date +%s.%N)
 echo ""
