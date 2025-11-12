@@ -690,6 +690,7 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     
     # Create stores
     sql_store = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    sql_store.initialize()  # Ensure DB is initialized with proper schema
     lance_store = LanceDBStore(config.resolved_store_root() / "lancedb")
     
     # Create embedding provider
