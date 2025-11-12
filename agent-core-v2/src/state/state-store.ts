@@ -174,14 +174,15 @@ export class StateStore {
 
   /**
    * Save a plan to disk
+   * Returns the path where the plan content was saved
    */
-  async savePlan(sessionId: string, plan: Plan): Promise<void> {
+  async savePlan(sessionId: string, plan: Plan): Promise<string> {
     await this.ensureDirectories();
-    
+
     // Save plan content as markdown
     const planPath = join(this.plansDir, `plan_${sessionId}_v${plan.version}.md`);
     await writeFile(planPath, plan.content, 'utf-8');
-    
+
     // Update session with plan metadata
     const session = await this.loadSession(sessionId);
     if (session) {
@@ -191,6 +192,8 @@ export class StateStore {
       };
       await this.saveSession(session);
     }
+
+    return planPath;
   }
 
   /**

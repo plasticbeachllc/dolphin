@@ -372,7 +372,9 @@ export class Orchestrator implements IOrchestrator {
         // Handle plan updates
         if (update.type === 'progress' && update.data.phase === 'planning' && update.data.plan) {
           session.plan = update.data.plan;
-          await this.config.stateStore.savePlan(session.id, session.plan);
+          const contentPath = await this.config.stateStore.savePlan(session.id, session.plan);
+          // Update in-memory session with contentPath so subsequent saves preserve it
+          session.plan.contentPath = contentPath;
         }
 
         // Handle research updates
