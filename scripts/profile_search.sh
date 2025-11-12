@@ -245,21 +245,22 @@ else
   QUERY_NUM=0
   TOTAL_QUERIES=${#QUERIES[@]}
   echo "Running searches with progress..."
-  (
-    for query in "${QUERIES[@]}"; do
-      START=$(uv run python -c 'import time; print(int(time.time() * 1000))')
-      
-      curl -s -X POST http://localhost:$API_PORT/search \
-        -H "Content-Type: application/json" \
-        -d "{\"query\": \"$query\", \"top_k\": 10}" >> "$LOG_FILE" 2>&1
-      
-      END=$(uv run python -c 'import time; print(int(time.time() * 1000))')
-      LATENCY=$((END - START))
-      echo "Latency: ${LATENCY}ms" | tee -a "$LOG_FILE"
-      echo "."
-      QUERY_NUM=$((QUERY_NUM + 1))
-    done
-  ) | pv -l -s "$TOTAL_QUERIES" -N "🐬 Search queries" > /dev/null
+  
+  # Run searches and log latencies separately from pv
+  for query in "${QUERIES[@]}"; do
+    QUERY_NUM=$((QUERY_NUM + 1))
+    echo "[$QUERY_NUM/$TOTAL_QUERIES] $query" | pv -l -s "$TOTAL_QUERIES" -N "🐬 Search queries" > /dev/null
+    
+    START=$(uv run python -c 'import time; print(int(time.time() * 1000))')
+    
+    curl -s -X POST http://localhost:$API_PORT/search \
+      -H "Content-Type: application/json" \
+      -d "{\"query\": \"$query\", \"top_k\": 10}" >> "$LOG_FILE" 2>&1
+    
+    END=$(uv run python -c 'import time; print(int(time.time() * 1000))')
+    LATENCY=$((END - START))
+    echo "Latency: ${LATENCY}ms" | tee -a "$LOG_FILE"
+  done
   echo ""
   
   # Wait for py-spy to finish
