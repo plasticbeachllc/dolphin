@@ -41,14 +41,16 @@ jobs:
             PR NUMBER: ${{ github.event.pull_request.number }}
 
             Please review this pull request and provide feedback on:
-            - Code quality and best practices
-            - Potential bugs or issues
+            - Code quality and best practice
+            - Potential flaws, bugs or issues
             - Performance considerations
             - Security concerns
             - Test coverage
             - Idiomatic patterns
 
-            Use the repository's AGENTS.md for guidance on style, conventions, and existing tools. Be constructive and direct in your feedback.
+            Use the repository's AGENTS.md for guidance on style, conventions, and existing tools. 
+            
+            Be constructive and direct in your feedback. Focus on actionable improvements that should be made prior to merging.
 
             Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
 
