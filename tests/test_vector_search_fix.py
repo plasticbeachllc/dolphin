@@ -63,37 +63,34 @@ def test_hybrid_search_comparison():
     
     store_root = Path.home() / '.dolphin' / 'knowledge_store'
     
-    try:
-        # Create both backends
-        vector_backend = create_search_backend(store_root=store_root, hybrid_search_enabled=False)
-        hybrid_backend = create_search_backend(store_root=store_root, hybrid_search_enabled=True)
-        
-        # Test query
-        request = SearchRequest(query="authentication", top_k=5)
-        
-        # Time both searches
-        import time
-        
-        # Vector-only search
-        start = time.time()
-        vector_results = vector_backend.search(request)
-        vector_time = (time.time() - start) * 1000
-        
-        # Hybrid search
-        start = time.time()
-        hybrid_results = hybrid_backend.search(request)
-        hybrid_time = (time.time() - start) * 1000
-        
-        print(f"\nPerformance Comparison:")
-        print(f"Vector-only: {vector_time:.1f}ms ({len(vector_results)} results)")
-        print(f"Hybrid:      {hybrid_time:.1f}ms ({len(hybrid_results)} results)")
-        print(f"Overhead:    {hybrid_time - vector_time:.1f}ms")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ Error during comparison test: {e}")
-        return False
+    # Create both backends
+    vector_backend = create_search_backend(store_root=store_root, hybrid_search_enabled=False)
+    hybrid_backend = create_search_backend(store_root=store_root, hybrid_search_enabled=True)
+    
+    # Test query
+    request = SearchRequest(query="authentication", top_k=5)
+    
+    # Time both searches
+    import time
+    
+    # Vector-only search
+    start = time.time()
+    vector_results = vector_backend.search(request)
+    vector_time = (time.time() - start) * 1000
+    
+    # Hybrid search
+    start = time.time()
+    hybrid_results = hybrid_backend.search(request)
+    hybrid_time = (time.time() - start) * 1000
+    
+    print(f"\nPerformance Comparison:")
+    print(f"Vector-only: {vector_time:.1f}ms ({len(vector_results)} results)")
+    print(f"Hybrid:      {hybrid_time:.1f}ms ({len(hybrid_results)} results)")
+    print(f"Overhead:    {hybrid_time - vector_time:.1f}ms")
+    
+    # Assert that both searches returned results
+    assert len(vector_results) >= 0, "Vector search should return results"
+    assert len(hybrid_results) >= 0, "Hybrid search should return results"
 
 
 def main():

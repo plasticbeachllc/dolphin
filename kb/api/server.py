@@ -5,6 +5,7 @@ import sys
 import logging
 from pathlib import Path
 from datetime import datetime
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from .app import app, set_search_backend, reset_search_backend, set_stores, set_pipeline
 from .search_backend import create_search_backend
@@ -117,12 +118,19 @@ async def health_check():
 # Store embedding provider reference for cleanup
 _embedding_provider = None
 
-# Add shutdown handler for cleanup
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Clean up resources on shutdown."""
+# Define lifespan context manager for startup/shutdown
+@asynccontextmanager
+async def lifespan_handler(app_instance: FastAPI):
+    """Manage application lifespan (startup and shutdown)."""
+    global _embedding_provider
+    
+    # Startup is handled by module-level initialization (line 95-96)
+    # This keeps existing behavior where backend is ready before uvicorn starts
+    yield  # Application is running
+    
+    # Shutdown: Clean up resources
     print(f"🛑 Shutting down KB server...", file=sys.stderr)
-
+    
     # Close embedding provider if it has async client
     if _embedding_provider and hasattr(_embedding_provider, 'close'):
         try:
@@ -130,9 +138,12 @@ async def shutdown_event():
             print(f"✅ Closed embedding provider", file=sys.stderr)
         except Exception as e:
             print(f"⚠️  Failed to close embedding provider: {e}", file=sys.stderr)
-
+    
     reset_search_backend()
     print(f"✅ KB server shutdown complete", file=sys.stderr)
+
+# Assign lifespan to the app
+app.router.lifespan_context = lifespan_handler
 
 # Export the app for uvicorn
 app_with_lifespan = app
