@@ -122,8 +122,8 @@
           <span>{progress.skipped.toLocaleString()} skipped</span>
         </div>
         
-        <Button variant="ghost" size="sm" class="h-7">
-          <X class="h-3 w-3" />
+        <Button variant="ghost" size="sm" class="h-7" aria-label="Close progress indicator">
+          <X class="h-3 w-3" aria-hidden="true" />
         </Button>
       </div>
       <Progress value={progressPercent} class="h-1 rounded-none" />
@@ -196,8 +196,8 @@
               </p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" class="h-6 w-6 p-0">
-            <X class="h-3 w-3" />
+          <Button variant="ghost" size="sm" class="h-6 w-6 p-0" aria-label="Close banner">
+            <X class="h-3 w-3" aria-hidden="true" />
           </Button>
         </div>
         
