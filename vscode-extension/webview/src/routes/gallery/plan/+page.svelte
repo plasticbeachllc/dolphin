@@ -436,7 +436,11 @@
 						<CardDescription>Click to open the context panel with detailed reasoning</CardDescription>
 					</CardHeader>
 					<CardContent>
-						<Button onclick={() => showGoalContext = true} size="lg">
+						<Button onclick={() => {
+							console.log('Button clicked, showGoalContext before:', showGoalContext);
+							showGoalContext = true;
+							console.log('Button clicked, showGoalContext after:', showGoalContext);
+						}} size="lg">
 							<Target class="size-4 mr-2" />
 							Open Goal Context Panel
 						</Button>
@@ -542,6 +546,9 @@
 	<GoalContext
 		{...mockGoalContext}
 		open={showGoalContext}
-		onClose={() => showGoalContext = false}
+		onClose={() => {
+			console.log('GoalContext closed, setting showGoalContext to false');
+			showGoalContext = false;
+		}}
 	/>
 {/if}
