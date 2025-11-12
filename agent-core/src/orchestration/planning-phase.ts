@@ -1,41 +1,35 @@
 /**
- * EP-11 Phase 3: Planning Phase
+ * EP-11 Phase 2+3: Planning Conversation (Simplified)
  *
- * Interactive planning conversation with Claude to produce:
- * - Implementation plan with tasks
- * - File modifications needed
- * - Dependencies and order
- * - Saves final plan to TOML
+ * Single conversational phase that:
+ * - Analyzes discovered code
+ * - Asks clarifying questions
+ * - Generates implementation plan
+ * - Refines based on user feedback
+ * - Saves to TOML when confirmed
  */
 
 import type { ClaudeClient, Message } from "../llm/claude-client";
-import type {
-  SynthesisResult,
-  Plan,
-  PlanPhase,
-  TodoItem,
-  CodeReference
-} from "./types";
+import type { DiscoveryResult, EnrichedChunk } from "./types";
+import { parseMarkdownPlan, type ParsedPlan } from "./markdown-plan-parser";
 import { PlanStore } from "../storage/plan-store";
 import type { Plan as ExecutionPlan } from "../../../shared/types/state";
 import { v4 as uuidv4 } from "uuid";
 
 export interface PlanningSession {
   sessionId: string;
-  status: "refining" | "confirmed";
-  currentPlan: Plan | null;
-  conversationMessages: Message[];
+  messages: Message[];
+  parsedPlan: ParsedPlan | null;
 }
 
 export interface SavedPlan {
   planId: string;
   path: string;
-  plan: Plan;
+  parsedPlan: ParsedPlan;
 }
 
 export class PlanningPhase {
   private planStore: PlanStore;
-  private conversationMessages: Message[] = [];
 
   constructor(
     private claudeClient: ClaudeClient,
@@ -45,113 +39,112 @@ export class PlanningPhase {
   }
 
   /**
-   * Start planning phase - generate initial plan draft with questions
+   * Start planning conversation
    */
-  async startPlanning(
+  async start(
     userPrompt: string,
-    synthesisResult: SynthesisResult,
-    repoName: string
-  ): Promise<PlanningSession> {
-    console.error("[Planning] Starting planning phase...");
+    discoveryResult: DiscoveryResult
+  ): Promise<{ session: PlanningSession; response: string }> {
+    console.error("[Planning] Starting planning conversation...");
 
-    // Build initial system prompt
-    const systemPrompt = this.buildInitialPlanningPrompt(
-      userPrompt,
-      synthesisResult
-    );
+    const systemPrompt = this.buildPlanningPrompt(userPrompt, discoveryResult);
 
-    this.conversationMessages = [
+    const messages: Message[] = [
       { role: "user", content: systemPrompt }
     ];
 
-    // Get initial plan from Claude
     const response = await this.claudeClient.sendMessage({
-      messages: this.conversationMessages,
+      messages,
       model: "claude-sonnet-4-5-20250929",
       maxTokens: 4000
     });
 
-    const assistantMessage = response.content[0].text;
-    this.conversationMessages.push({
+    const assistantResponse = response.content[0].text;
+
+    messages.push({
       role: "assistant",
-      content: assistantMessage
+      content: assistantResponse
     });
 
-    // Try to parse plan from response
-    const parsedPlan = this.extractPlanFromResponse(assistantMessage, userPrompt, repoName);
+    // Try to parse plan if Claude provided one
+    const parsedPlan = this.tryParsePlan(assistantResponse);
 
-    console.error("[Planning] Generated initial plan draft");
+    const session: PlanningSession = {
+      sessionId: uuidv4(),
+      messages,
+      parsedPlan
+    };
+
+    console.error(`[Planning] Started session ${session.sessionId}`);
     if (parsedPlan) {
-      console.error(`[Planning] Plan has ${parsedPlan.phases.length} phases, ${parsedPlan.todoList.length} tasks`);
+      console.error(`[Planning] Found ${parsedPlan.tasks.length} tasks in ${parsedPlan.phases.length} phases`);
     }
 
-    return {
-      sessionId: uuidv4(),
-      status: "refining",
-      currentPlan: parsedPlan,
-      conversationMessages: this.conversationMessages
-    };
+    return { session, response: assistantResponse };
   }
 
   /**
-   * Refine plan based on user feedback
+   * Continue conversation with user feedback
    */
   async refine(
     session: PlanningSession,
-    userFeedback: string,
-    userPrompt: string,
-    repoName: string
-  ): Promise<PlanningSession> {
-    console.error(`[Planning] Refining plan based on user feedback`);
+    userFeedback: string
+  ): Promise<{ session: PlanningSession; response: string }> {
+    console.error("[Planning] Refining plan based on feedback");
 
-    // Add user message
-    this.conversationMessages.push({
+    session.messages.push({
       role: "user",
       content: userFeedback
     });
 
-    // Get updated plan
     const response = await this.claudeClient.sendMessage({
-      messages: this.conversationMessages,
+      messages: session.messages,
       model: "claude-sonnet-4-5-20250929",
       maxTokens: 4000
     });
 
-    const assistantMessage = response.content[0].text;
-    this.conversationMessages.push({
+    const assistantResponse = response.content[0].text;
+
+    session.messages.push({
       role: "assistant",
-      content: assistantMessage
+      content: assistantResponse
     });
 
-    // Parse updated plan
-    const updatedPlan = this.extractPlanFromResponse(assistantMessage, userPrompt, repoName);
+    // Update parsed plan
+    session.parsedPlan = this.tryParsePlan(assistantResponse);
 
-    return {
-      ...session,
-      currentPlan: updatedPlan,
-      conversationMessages: this.conversationMessages
-    };
+    return { session, response: assistantResponse };
   }
 
   /**
-   * Confirm and save final plan
+   * Confirm and save plan
    */
-  async confirmPlan(
+  async confirm(
     session: PlanningSession,
     userPrompt: string,
     workspaceRoot: string
   ): Promise<SavedPlan> {
     console.error("[Planning] Confirming and saving plan...");
 
-    if (!session.currentPlan) {
-      throw new Error("No plan to confirm");
+    // Get last assistant message (the plan)
+    const lastMessage = session.messages
+      .slice()
+      .reverse()
+      .find(m => m.role === "assistant");
+
+    if (!lastMessage) {
+      throw new Error("No plan found in conversation");
     }
 
-    const planId = uuidv4();
+    // Parse plan from markdown
+    const parsedPlan = parseMarkdownPlan(lastMessage.content);
+
+    console.error(`[Planning] Parsed ${parsedPlan.tasks.length} tasks`);
 
     // Convert to execution plan format
+    const planId = uuidv4();
     const executionPlan = this.convertToExecutionPlan(
-      session.currentPlan,
+      parsedPlan,
       planId,
       userPrompt,
       workspaceRoot
@@ -167,184 +160,115 @@ export class PlanningPhase {
     return {
       planId,
       path: planPath,
-      plan: session.currentPlan
+      parsedPlan
     };
   }
 
   /**
    * Build initial planning prompt
    */
-  private buildInitialPlanningPrompt(
+  private buildPlanningPrompt(
     userPrompt: string,
-    synthesisResult: SynthesisResult
+    discoveryResult: DiscoveryResult
   ): string {
-    const questionsSection = synthesisResult.clarifyingQuestions.length > 0
-      ? `<clarifying_questions>
-${synthesisResult.clarifyingQuestions.map(q =>
-  `- [${q.priority}] ${q.question}\n  Reason: ${q.reason}`
-).join('\n')}
-</clarifying_questions>`
-      : '';
+    const formattedChunks = this.formatChunks(discoveryResult.retrievedChunks);
 
-    return `You are helping create an implementation plan.
+    return `You are helping plan an implementation in a codebase.
 
 <user_request>
 ${userPrompt}
 </user_request>
 
-<synthesis_analysis>
-${synthesisResult.analysis}
+<relevant_code>
+${formattedChunks}
+</relevant_code>
 
-Assumptions:
-${synthesisResult.assumptions.map(a => `- [${a.confidence}] ${a.statement}`).join('\n')}
-
-Risks:
-${synthesisResult.risks.map(r => `- [${r.severity}] ${r.description}`).join('\n')}
-</synthesis_analysis>
-
-${questionsSection}
+<context>
+- Chunks found: ${discoveryResult.retrievedChunks.length}
+- Confidence: ${(discoveryResult.confidence * 100).toFixed(0)}%
+- Information gaps: ${discoveryResult.gaps.join(", ") || "None"}
+</context>
 
 Your task:
-1. If there are clarifying questions above, ASK THEM FIRST before making the plan
-2. Once you have enough info, generate an implementation plan
-3. Structure the plan as phases with specific tasks
-4. Identify files to create/modify
-5. Note dependencies between tasks
+1. **Ask clarifying questions** if you need more information
+2. **Analyze the existing code** to understand patterns, architecture, dependencies
+3. **Create an implementation plan** when ready
 
-Return your response in this format:
+When providing a plan, use this EXACT format:
 
-**Questions** (if any remain):
-- Question 1
-- Question 2
+## Plan: [Short descriptive title]
 
-**Implementation Plan** (once ready):
+[Brief summary of the approach]
 
-### Phase 1: [Phase Name]
-Description of what this phase accomplishes
+### Phase 1: [Phase name]
+- Task: [Specific task description] (Files: path/to/file.ts)
+- Task: [Another task] (Files: file1.ts, file2.ts)
 
-Tasks:
-1. [Specific task] - Files: path/to/file.ts
-2. [Another task] - Files: path/to/other.ts
+### Phase 2: [Next phase name]
+- Task: [Task description] (Files: path/to/file.ts)
 
-### Phase 2: [Next Phase]
-...
+**Important formatting rules:**
+- Each task must start with "- Task:" or just "-"
+- Files are optional but helpful: "(Files: file1.ts, file2.ts)"
+- Keep tasks atomic and actionable
+- Order tasks logically within phases
 
-**Files to Modify**:
-- path/to/file1.ts
-- path/to/file2.ts
-
-**Dependencies**:
-- Task 2 depends on Task 1
-- Task 3 depends on Task 2
-
-Keep it concise and actionable. Ask critical questions first!`;
+Start by asking clarifying questions or providing the plan if you have enough information.`;
   }
 
   /**
-   * Extract plan structure from Claude's response
+   * Format code chunks for prompt
    */
-  private extractPlanFromResponse(
-    response: string,
-    userPrompt: string,
-    repoName: string
-  ): Plan | null {
+  private formatChunks(chunks: EnrichedChunk[]): string {
+    if (chunks.length === 0) {
+      return "<no_relevant_code_found/>";
+    }
+
+    const sections: string[] = [];
+
+    // Show top 10 chunks to keep prompt manageable
+    const topChunks = chunks.slice(0, 10);
+
+    for (const chunk of topChunks) {
+      sections.push(`
+<chunk>
+<location>${chunk.repo}/${chunk.path}:${chunk.start_line}-${chunk.end_line}</location>
+${chunk.symbol_name ? `<symbol>${chunk.symbol_name}</symbol>` : ''}
+\`\`\`${chunk.language || 'text'}
+${chunk.snippet}
+\`\`\`
+</chunk>`);
+    }
+
+    if (chunks.length > 10) {
+      sections.push(`\n<note>...and ${chunks.length - 10} more chunks available</note>`);
+    }
+
+    return sections.join('\n');
+  }
+
+  /**
+   * Try to parse plan from Claude's response
+   */
+  private tryParsePlan(response: string): ParsedPlan | null {
     try {
-      // Try to parse structured plan
-      // This is a simple extraction - can be made more robust
-
-      const phases: PlanPhase[] = [];
-      const todoList: TodoItem[] = [];
-      const references: CodeReference[] = [];
-      const assumptions: string[] = [];
-      const risks: string[] = [];
-
-      // Extract phases (look for ### Phase markers)
-      const phaseRegex = /###\s*Phase\s+\d+:\s*(.+?)\n([\s\S]*?)(?=###\s*Phase|\*\*|$)/g;
-      let match;
-      let phaseIndex = 0;
-
-      while ((match = phaseRegex.exec(response)) !== null) {
-        const phaseName = match[1].trim();
-        const phaseContent = match[2].trim();
-
-        // Extract tasks from this phase
-        const taskRegex = /\d+\.\s+(.+?)(?:\s*-\s*Files?:\s*(.+?))?(?=\n\d+\.|\n\n|$)/g;
-        const steps: string[] = [];
-        const affectedFiles: string[] = [];
-        let taskMatch;
-
-        while ((taskMatch = taskRegex.exec(phaseContent)) !== null) {
-          const taskDesc = taskMatch[1].trim();
-          steps.push(taskDesc);
-
-          // Add to todo list
-          todoList.push({
-            id: `task-${todoList.length + 1}`,
-            description: taskDesc,
-            status: "pending",
-            priority: phaseIndex + 1,
-            dependencies: [],
-            fileReferences: taskMatch[2] ? [taskMatch[2].trim()] : []
-          });
-
-          if (taskMatch[2]) {
-            affectedFiles.push(taskMatch[2].trim());
-          }
-        }
-
-        phases.push({
-          name: phaseName,
-          description: phaseContent.split('\n')[0] || phaseName,
-          steps,
-          affectedFiles: [...new Set(affectedFiles)],
-          estimatedTime: "TBD"
-        });
-
-        phaseIndex++;
+      const parsed = parseMarkdownPlan(response);
+      // Only return if we found actual tasks
+      if (parsed.tasks.length > 0 && parsed.tasks[0].description !== "Implement based on discussion") {
+        return parsed;
       }
-
-      // Extract file references
-      const filesRegex = /\*\*Files to (?:Modify|Create)\*\*:?\s*\n([\s\S]*?)(?=\n\*\*|$)/i;
-      const filesMatch = filesRegex.exec(response);
-      if (filesMatch) {
-        const fileLines = filesMatch[1].trim().split('\n');
-        for (const line of fileLines) {
-          const cleanedLine = line.replace(/^[-*]\s*/, '').trim();
-          if (cleanedLine) {
-            references.push({
-              file: cleanedLine,
-              description: "File to be modified"
-            });
-          }
-        }
-      }
-
-      // If we found phases, return a plan
-      if (phases.length > 0) {
-        return {
-          title: userPrompt.length > 50 ? userPrompt.substring(0, 47) + "..." : userPrompt,
-          summary: phases.map(p => p.name).join(", "),
-          phases,
-          todoList,
-          risks,
-          assumptions,
-          estimatedComplexity: phases.length > 3 ? "high" : phases.length > 1 ? "medium" : "low",
-          references
-        };
-      }
-
       return null;
     } catch (error) {
-      console.error("[Planning] Failed to extract plan:", error);
+      console.error("[Planning] Failed to parse plan:", error);
       return null;
     }
   }
 
   /**
-   * Convert orchestration Plan to execution Plan format
+   * Convert parsed plan to execution plan format
    */
   private convertToExecutionPlan(
-    plan: Plan,
+    parsedPlan: ParsedPlan,
     planId: string,
     task: string,
     workspaceRoot: string
@@ -352,15 +276,15 @@ Keep it concise and actionable. Ask critical questions first!`;
     const now = new Date().toISOString();
 
     // Convert tasks to execution steps
-    const steps = plan.todoList.map((todo, index) => ({
-      id: todo.id,
+    const steps = parsedPlan.tasks.map((t, index) => ({
+      id: t.id,
       order: index + 1,
-      description: todo.description,
+      description: t.description,
       action_type: "tool_call" as const,
-      tool: "edit_file",  // Default tool
+      tool: "edit_file",
       status: "pending" as const,
       input: {
-        files: todo.fileReferences
+        files: t.files
       }
     }));
 
