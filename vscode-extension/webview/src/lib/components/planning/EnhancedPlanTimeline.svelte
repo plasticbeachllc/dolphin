@@ -68,47 +68,40 @@
 		{#each phases as phase}
 			{@const progress = getPhaseProgress(phase)}
 			<Accordion.Item value={phase.id} class="border rounded-lg">
-				<Accordion.Trigger class="hover:no-underline">
-					{#snippet child({ props })}
-						<button
-							{...props}
-							class="flex w-full items-center justify-between px-4 py-3 hover:bg-muted/50 transition-colors rounded-lg"
-						>
-							<div class="flex items-center gap-3">
-								<!-- Phase Status Icon -->
-								{#if phase.status === 'completed'}
-									<CheckCircle2 class="size-5 text-green-500" />
-								{:else if phase.status === 'active'}
-									<Loader2 class="size-5 text-blue-500 animate-spin" />
-								{:else}
-									<Circle class="size-5 text-muted-foreground" />
-								{/if}
-								
-								<!-- Phase Name and Progress -->
-								<div class="flex items-center gap-3">
-									<Badge
-										variant={phase.status === 'completed' ? 'secondary' : phase.status === 'active' ? 'default' : 'outline'}
-										class="text-sm font-semibold"
-									>
-										{phase.name}
-									</Badge>
-									<span class="text-sm text-muted-foreground">
-										{progress.completed}/{progress.total} steps
-									</span>
-								</div>
-							</div>
-							
-							<!-- Progress Bar -->
-							<div class="flex items-center gap-3">
-								<div class="h-2 w-32 bg-secondary rounded-full overflow-hidden">
-									<div
-										class="h-full bg-primary transition-all duration-500"
-										style="width: {(progress.completed / progress.total) * 100}%"
-									></div>
-								</div>
-							</div>
-						</button>
-					{/snippet}
+				<Accordion.Trigger class="hover:no-underline flex w-full items-center justify-between px-4 py-3 hover:bg-muted/50 transition-colors rounded-lg">
+					<div class="flex items-center gap-3">
+						<!-- Phase Status Icon -->
+						{#if phase.status === 'completed'}
+							<CheckCircle2 class="size-5 text-green-500" />
+						{:else if phase.status === 'active'}
+							<Loader2 class="size-5 text-blue-500 animate-spin" />
+						{:else}
+							<Circle class="size-5 text-muted-foreground" />
+						{/if}
+						
+						<!-- Phase Name and Progress -->
+						<div class="flex items-center gap-3">
+							<Badge
+								variant={phase.status === 'completed' ? 'secondary' : phase.status === 'active' ? 'default' : 'outline'}
+								class="text-sm font-semibold"
+							>
+								{phase.name}
+							</Badge>
+							<span class="text-sm text-muted-foreground">
+								{progress.completed}/{progress.total} steps
+							</span>
+						</div>
+					</div>
+					
+					<!-- Progress Bar -->
+					<div class="flex items-center gap-3">
+						<div class="h-2 w-32 bg-secondary rounded-full overflow-hidden">
+							<div
+								class="h-full bg-primary transition-all duration-500"
+								style="width: {(progress.completed / progress.total) * 100}%"
+							></div>
+						</div>
+					</div>
 				</Accordion.Trigger>
 				
 				<Accordion.Content>
