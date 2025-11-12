@@ -64,26 +64,32 @@ class SQLiteMetadataStore:
 
     def initialize(self) -> None:
         """Thread-safe enhanced initialization with proper validation and error handling."""
+        logger.info("[SQLiteMeta] initialize() called")
         # Fast path: check if already initialized
         if self._initialized:
+            logger.info("[SQLiteMeta] Already initialized, skipping")
             return
         
         # Use lock to prevent concurrent initialization
         with self._init_lock:
             # Double-check pattern: another thread might have initialized while we were waiting
             if self._initialized:
+                logger.info("[SQLiteMeta] Already initialized (double-check), skipping")
                 return
-            
+
             try:
+                logger.info("[SQLiteMeta] Starting initialization...")
                 self._initializing = True
-                
+
                 engine = self._engine()
-                
+
                 # Import models at call time to register them with SQLModel.metadata
                 from . import sql_models as _models  # noqa: F401
-                
+
                 # Create all tables if they don't exist (via SQLModel models)
+                logger.info("[SQLiteMeta] Creating SQLModel tables...")
                 SQLModel.metadata.create_all(engine)
+                logger.info("[SQLiteMeta] SQLModel tables created")
                 
                 # Validate foreign key support and constraints
                 with self._connect() as conn, closing(conn.cursor()) as cur:
@@ -116,20 +122,26 @@ class SQLiteMetadataStore:
                         
                         # Validate table schema
                         self._validate_table_schema(cur, table)
-                    
+
+                    logger.info("[SQLiteMeta] Table validation complete, creating FTS5 tables...")
+
                     # Robust FTS5 creation with version checking
                     self._create_fts5_table_safe(cur)
-                    
+
                     # Create code graph FTS5 index for symbol search
                     self._create_code_graph_fts5_safe(cur)
-                    
+
+                    logger.info("[SQLiteMeta] FTS5 tables created, committing...")
                     conn.commit()
-                
+                    logger.info("[SQLiteMeta] Changes committed")
+
                 # Post-initialization validation
+                logger.info("[SQLiteMeta] Validating database integrity...")
                 self._validate_database_integrity()
-                
+
                 # Mark as successfully initialized
                 self._initialized = True
+                logger.info("[SQLiteMeta] ✅ Initialization complete")
                 
             finally:
                 self._initializing = False
