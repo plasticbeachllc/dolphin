@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional, Sequence, List, Dict, Any
 
 from ..config import KBConfig
-from ..embeddings.provider import EmbeddingProvider, create_provider
+from ..embeddings.provider import EmbeddingProvider, create_provider, set_default_provider
 from ..store.lancedb_store import LanceDBStore
 from ..store.sqlite_meta import SQLiteMetadataStore
 from ..store.graph_store import GraphStore
@@ -685,7 +685,10 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
         config.embedding_provider,
         **provider_kwargs
     )
-    
+
+    # Set as global default provider for async convenience functions
+    set_default_provider(provider)
+
     # Create cache (always create but may be disabled)
     cache = create_cache(
         redis_url=config.redis_url if config.cache_enabled else None,
