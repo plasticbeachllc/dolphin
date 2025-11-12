@@ -20,6 +20,9 @@ from typing import Any
 # Add parent to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from kb.config import CONFIG_ROOT
+from kb.store.sqlite_meta import SQLiteMetadataStore
+
 
 class SWEBenchOrchestrator:
     """Orchestrates SWE-Bench Lite evaluation workflow."""
@@ -318,6 +321,80 @@ class SWEBenchOrchestrator:
         print("\n" + "="*80)
         self._print_status()
 
+    def cleanup_registered_repos(self):
+        """Clean up all registered SWE-Bench repositories from the database."""
+        print("="*80)
+        print("CLEANING UP SWE-BENCH REPOS")
+        print("="*80)
+
+        db_path = CONFIG_ROOT / "metadata.db"
+
+        if not db_path.exists():
+            print(f"No database found at {db_path}")
+            return
+
+        try:
+            store = SQLiteMetadataStore(db_path)
+            store.initialize()
+
+            # Get all repos that were indexed
+            repos_to_cleanup = set()
+
+            # Add repos from state file
+            for index_key in self.state.get("repos_indexed", {}).keys():
+                repo_name = index_key.split(":")[0]
+                repos_to_cleanup.add(repo_name)
+
+            # Also check database for any repos matching our cloned repos
+            with store._get_connection() as conn:
+                cursor = conn.execute("SELECT id, name FROM repos")
+                db_repos = cursor.fetchall()
+
+                deleted_count = 0
+                for repo_id, repo_name in db_repos:
+                    # Check if this repo is in our SWE-Bench configuration or state
+                    should_delete = False
+
+                    # Check if repo name matches any cloned repo
+                    for cloned_repo in self.state.get("repos_cloned", {}).keys():
+                        if repo_name == cloned_repo or repo_name == cloned_repo.replace("/", "__"):
+                            should_delete = True
+                            break
+
+                    # Check if repo name is in our indexed repos
+                    if repo_name in repos_to_cleanup:
+                        should_delete = True
+
+                    if should_delete:
+                        print(f"  Deleting SWE-Bench repo: {repo_name} (id={repo_id})")
+
+                        # Delete all data associated with this repo
+                        conn.execute("DELETE FROM chunks WHERE repo_id = ?", (repo_id,))
+                        conn.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
+                        conn.execute("DELETE FROM scan_sessions WHERE repo_id = ?", (repo_id,))
+                        conn.execute("DELETE FROM repos WHERE id = ?", (repo_id,))
+
+                        deleted_count += 1
+
+                conn.commit()
+
+            print(f"\nCleaned up {deleted_count} SWE-Bench repositories from database")
+
+            # Clear state file
+            print("Clearing state file...")
+            self.state["repos_indexed"] = {}
+            self._save_state()
+            print("State file cleared")
+
+            print("\n" + "="*80)
+            print("CLEANUP COMPLETE")
+            print("="*80)
+
+        except Exception as e:
+            print(f"Error during cleanup: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc()
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -357,6 +434,9 @@ def main():
     # Status command
     subparsers.add_parser("status", help="Show current setup status")
 
+    # Cleanup command
+    subparsers.add_parser("cleanup", help="Remove all registered SWE-Bench repos from database")
+
     # Clone command
     clone_parser = subparsers.add_parser("clone", help="Clone specific repo")
     clone_parser.add_argument("repo", help="Repo name (e.g., django/django)")
@@ -390,6 +470,8 @@ def main():
         orchestrator.setup_all_repos()
     elif args.command == "status":
         orchestrator.list_status()
+    elif args.command == "cleanup":
+        orchestrator.cleanup_registered_repos()
     elif args.command == "clone":
         orchestrator.clone_repo(args.repo)
     elif args.command == "index":
