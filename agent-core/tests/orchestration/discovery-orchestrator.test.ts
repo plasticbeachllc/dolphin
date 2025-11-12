@@ -36,7 +36,7 @@ describe("DiscoveryOrchestrator Integration", () => {
     maxQueries: 3,
     maxResultsPerQuery: 5,
     includeGraphContext: true,
-    confidenceThreshold: 0.6,
+    confidenceThreshold: 0.05,
     timeoutMs: 5000
   };
 

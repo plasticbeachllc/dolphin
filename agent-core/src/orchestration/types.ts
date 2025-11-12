@@ -17,9 +17,9 @@ import type { Message } from "../llm/claude-tool-executor";
 
 export interface DiscoveryConfig {
   maxQueries: number;              // Default: 5
-  maxResultsPerQuery: number;      // Default: 5
+  maxResultsPerQuery: number;      // Default: 8
   includeGraphContext: boolean;    // Default: true
-  confidenceThreshold: number;     // Default: 0.6
+  confidenceThreshold: number;     // Default: 0.05 (semantic search scores typically range 0.1-0.4)
   timeoutMs: number;               // Default: 5000
 }
 

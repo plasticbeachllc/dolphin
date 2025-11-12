@@ -27,7 +27,7 @@ export interface QualityMetrics {
 export class KBResultValidator {
   private confidenceThreshold: number;
 
-  constructor(confidenceThreshold: number = 0.6) {
+  constructor(confidenceThreshold: number = 0.05) {
     this.confidenceThreshold = confidenceThreshold;
   }
 
