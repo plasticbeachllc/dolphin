@@ -153,22 +153,48 @@ class SWEBenchOrchestrator:
         print(f"  Indexing {repo_name} with {embed_model} model...")
 
         try:
-            # Run indexing command
-            result = subprocess.run(
-                [
-                    "uv",
-                    "run",
-                    "python",
-                    "-m",
-                    "kb.cli",
-                    "index",
-                    str(repo_path),
-                    "--embed-model",
-                    embed_model
-                ],
+            repo_id = repo_name
+            resolved_path = str(repo_path.resolve())
+
+            register_cmd = [
+                "uv",
+                "run",
+                "python",
+                "-m",
+                "kb.cli",
+                "add-repo",
+                repo_id,
+                resolved_path,
+                "--default-embed-model",
+                embed_model,
+            ]
+
+            register = subprocess.run(
+                register_cmd,
                 capture_output=True,
                 text=True,
-                timeout=3600  # 1 hour timeout
+                timeout=300,
+            )
+
+            if register.returncode != 0:
+                print(f"  ✗ Repo registration failed: {register.stderr}")
+                return False
+
+            index_cmd = [
+                "uv",
+                "run",
+                "python",
+                "-m",
+                "kb.cli",
+                "index",
+                repo_id,
+            ]
+
+            result = subprocess.run(
+                index_cmd,
+                capture_output=True,
+                text=True,
+                timeout=3600,  # 1 hour timeout
             )
 
             if result.returncode != 0:
@@ -176,17 +202,17 @@ class SWEBenchOrchestrator:
                 return False
 
             self.state["repos_indexed"][index_key] = {
-                "repo_path": str(repo_path),
+                "repo_path": resolved_path,
                 "embed_model": embed_model,
                 "indexed_at": subprocess.run(
                     ["date", "+%Y-%m-%d %H:%M:%S"],
                     capture_output=True,
-                    text=True
-                ).stdout.strip()
+                    text=True,
+                ).stdout.strip(),
             }
             self._save_state()
 
-            print(f"  ✓ Indexed successfully")
+            print("  ✓ Indexed successfully")
             return True
 
         except Exception as e:
