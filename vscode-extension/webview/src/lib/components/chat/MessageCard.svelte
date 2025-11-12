@@ -23,7 +23,7 @@
 >
   <Card.Header class="flex flex-row items-center gap-2 pb-1 px-3 pt-2">
     <Avatar.Root class="h-8 w-8" aria-hidden="true">
-      <Avatar.Fallback class={isUser ? "bg-blue-500" : "bg-purple-500"}>
+      <Avatar.Fallback class={isUser ? "bg-primary" : "bg-accent"}>
         {avatarFallback}
       </Avatar.Fallback>
     </Avatar.Root>

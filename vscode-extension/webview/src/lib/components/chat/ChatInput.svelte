@@ -85,7 +85,7 @@
     variant={isProcessing ? "destructive" : "default"}
     size="icon"
     class="shrink-0 self-end"
-    aria-label={isProcessing ? "Stop generation" : showNewConversationButton ? "Start new conversation" : "Send message"}
+    aria-label={isProcessing ? "Stop processing" : showNewConversationButton ? "Start new conversation" : "Send message"}
   >
     {#if isProcessing}
       <Square class="h-4 w-4" aria-hidden="true" />

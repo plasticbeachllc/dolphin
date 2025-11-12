@@ -150,7 +150,7 @@ echo "  Flame graph: $FLAMEGRAPH_FILE"
 echo "  Log file: $LOG_FILE"
 echo ""
 
-# Test queries
+# Test queries - comprehensive set for profiling
 QUERIES=(
   "authentication middleware"
   "error handling utils"
@@ -162,6 +162,46 @@ QUERIES=(
   "response formatting"
   "session management"
   "logging mechanism"
+  "HTTP request parser"
+  "route matching algorithm"
+  "middleware stack execution"
+  "cookie parsing"
+  "query string parser"
+  "URL encoding decoder"
+  "JSON body parser"
+  "multipart form data"
+  "file upload handler"
+  "static file serving"
+  "template engine integration"
+  "view rendering pipeline"
+  "CORS configuration"
+  "security headers"
+  "rate limiting"
+  "request throttling"
+  "cache control headers"
+  "ETag generation"
+  "compression middleware"
+  "body size limits"
+  "timeout configuration"
+  "proxy settings"
+  "trust proxy setup"
+  "subdomain routing"
+  "virtual host handling"
+  "parameter validation"
+  "input sanitization"
+  "XSS protection"
+  "CSRF token"
+  "session store"
+  "cookie signature"
+  "secure cookies"
+  "HTTP strict transport"
+  "content security policy"
+  "redirect handling"
+  "error page templates"
+  "404 handler"
+  "500 error handling"
+  "async error handling"
+  "promise rejection"
 )
 
 case $QUERY_TYPE in
@@ -245,21 +285,22 @@ else
   QUERY_NUM=0
   TOTAL_QUERIES=${#QUERIES[@]}
   echo "Running searches with progress..."
-  (
-    for query in "${QUERIES[@]}"; do
-      START=$(uv run python -c 'import time; print(int(time.time() * 1000))')
-      
-      curl -s -X POST http://localhost:$API_PORT/search \
-        -H "Content-Type: application/json" \
-        -d "{\"query\": \"$query\", \"top_k\": 10}" >> "$LOG_FILE" 2>&1
-      
-      END=$(uv run python -c 'import time; print(int(time.time() * 1000))')
-      LATENCY=$((END - START))
-      echo "Latency: ${LATENCY}ms" | tee -a "$LOG_FILE"
-      echo "."
-      QUERY_NUM=$((QUERY_NUM + 1))
-    done
-  ) | pv -l -s "$TOTAL_QUERIES" -N "🐬 Search queries" > /dev/null
+  
+  # Run searches and log latencies separately from pv
+  for query in "${QUERIES[@]}"; do
+    QUERY_NUM=$((QUERY_NUM + 1))
+    echo "[$QUERY_NUM/$TOTAL_QUERIES] $query" | pv -l -s "$TOTAL_QUERIES" -N "🐬 Search queries" > /dev/null
+    
+    START=$(uv run python -c 'import time; print(int(time.time() * 1000))')
+    
+    curl -s -X POST http://localhost:$API_PORT/search \
+      -H "Content-Type: application/json" \
+      -d "{\"query\": \"$query\", \"top_k\": 10}" >> "$LOG_FILE" 2>&1
+    
+    END=$(uv run python -c 'import time; print(int(time.time() * 1000))')
+    LATENCY=$((END - START))
+    echo "Latency: ${LATENCY}ms" | tee -a "$LOG_FILE"
+  done
   echo ""
   
   # Wait for py-spy to finish

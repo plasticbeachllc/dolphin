@@ -25,5 +25,13 @@
 	<AppNavigation currentPath={$page.url.pathname} onNavigate={handleNavigate} hasWorkspace={true} />
 	<div class="flex-1 overflow-hidden bg-background">
 		{@render children()}
-	</div>
+	</main>
+	<!-- Live region for screen reader announcements - WCAG 2.1 AA compliance -->
+	<div
+		id="a11y-announcer"
+		role="status"
+		aria-live="polite"
+		aria-atomic="true"
+		class="sr-only"
+	></div>
 </div>
