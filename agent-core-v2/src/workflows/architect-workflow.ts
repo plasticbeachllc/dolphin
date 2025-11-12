@@ -380,6 +380,18 @@ export class ArchitectWorkflow implements IWorkflow {
       finalContext: conversationHistory[conversationHistory.length - 1].content,
     };
 
+    // Yield progress update with result so orchestrator can capture it
+    yield {
+      type: 'progress',
+      sessionId,
+      timestamp: new Date().toISOString(),
+      data: {
+        phase: 'clarification',
+        message: 'Clarification phase complete',
+        result,
+      },
+    };
+
     return result;
   }
 
