@@ -1,0 +1,18 @@
+{
+  "id": "exact-lancedb-store",
+  "query": "LanceDBStore",
+  "expected_results": [
+    {
+      "file": "kb/store/lancedb_store.py",
+      "symbol": "LanceDBStore",
+      "rank": 1,
+      "relevance": 1.0
+    }
+  ],
+  "metadata": {
+    "category": "code-search",
+    "difficulty": "easy",
+    "description": "Exact class name lookup for main vector store",
+    "tags": ["class", "storage", "exact-match"]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "id": "semantic-vector-storage",
+  "query": "how are vectors stored and indexed?",
+  "expected_results": [
+    {
+      "file": "kb/store/lancedb_store.py",
+      "symbol": "LanceDBStore",
+      "relevance": 1.0
+    },
+    {
+      "file": "kb/store/lancedb_vector.py",
+      "relevance": 0.8
+    },
+    {
+      "file": "kb/retrieval/ann_tuning.py",
+      "symbol": "ANNParams",
+      "relevance": 0.7
+    }
+  ],
+  "metadata": {
+    "category": "semantic-search",
+    "difficulty": "medium",
+    "description": "Architectural query about vector storage system",
+    "tags": ["architecture", "vectors", "storage", "semantic"]
+  }
+}

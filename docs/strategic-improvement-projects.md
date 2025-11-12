@@ -12,12 +12,12 @@
 1. [Executive Summary](#executive-summary)
 2. [Project Categories](#project-categories)
 3. [Enhancement Projects](#enhancement-projects)
-   - [EP-1: Production Observability & Monitoring](#ep-1-production-observability--monitoring)
+   - [EP-1: Production Observability & Monitoring] (#ep-1-production-observability--monitoring) ✅
    - [EP-2: Intelligent Query Understanding Layer](#ep-2-intelligent-query-understanding-layer)
-   - [EP-3: Advanced Code Graph Intelligence](#ep-3-advanced-code-graph-intelligence)
+   - [EP-3: Advanced Code Graph Intelligence](#ep-3-advanced-code-graph-intelligence) ✅
    - [EP-4: Multi-Repository Cross-Intelligence](#ep-4-multi-repository-cross-intelligence)
-   - [EP-5: Evaluation & Quality Assurance Framework](#ep-5-evaluation--quality-assurance-framework)
-   - [EP-6: Performance Optimization Suite](#ep-6-performance-optimization-suite)
+   - [EP-5: Evaluation & Quality Assurance Framework](#ep-5-evaluation--quality-assurance-framework) ✅
+   - [EP-6: Performance Optimization Suite](#ep-6-performance-optimization-suite) ✅
    - [EP-7: Enhanced Developer Experience](#ep-7-enhanced-developer-experience)
    - [EP-8: Enterprise-Grade Security & Compliance](#ep-8-enterprise-grade-security--compliance)
    - [EP-9: Web-Based Knowledge Portal](#ep-9-web-based-knowledge-portal)
@@ -34,6 +34,7 @@ Dolphin has achieved beta maturity with a solid foundation: 243+ passing tests, 
 ### Current State Analysis
 
 **Strengths:**
+
 - ✅ Robust indexing pipeline with 191+ Python tests
 - ✅ Modern tech stack (FastAPI, Bun, Svelte, LanceDB)
 - ✅ Comprehensive language support (Python, TS, JS, MD, SQL, Svelte)
@@ -41,6 +42,7 @@ Dolphin has achieved beta maturity with a solid foundation: 243+ passing tests, 
 - ✅ Rich VSCode integration with beautiful UI
 
 **Gaps Identified:**
+
 - ⚠️ Limited production observability (no metrics, tracing, or alerting)
 - ⚠️ Query understanding is basic (no intent classification or routing)
 - ⚠️ Code graph underutilized (no impact analysis or visualization)
@@ -53,6 +55,7 @@ Dolphin has achieved beta maturity with a solid foundation: 243+ passing tests, 
 ### Strategic Vision
 
 Transform Dolphin into the **premier AI-enabled code intelligence platform** by:
+
 1. **Production-grade reliability** with observability and monitoring
 2. **Intelligent search** with query understanding and routing
 3. **Deep code intelligence** leveraging graph analysis
@@ -95,7 +98,9 @@ Create a comprehensive observability suite that provides real-time insights into
 #### Broad Specification
 
 **1. Metrics Collection Layer**
+
 - **KB API Metrics** (Python/FastAPI)
+
   - Request counts by endpoint, status code, repo
   - Latency histograms (p50, p95, p99) per endpoint
   - Search-specific metrics: ANN parameters, result counts, MMR application
@@ -104,6 +109,7 @@ Create a comprehensive observability suite that provides real-time insights into
   - Error rates and types
 
 - **Agent Core Metrics** (TypeScript/Bun)
+
   - Conversation lifecycle: creation, duration, message counts
   - Tool execution: KB searches, file operations, success/failure rates
   - Claude API: token usage, latency, costs
@@ -116,30 +122,35 @@ Create a comprehensive observability suite that provides real-time insights into
   - Performance: webview render time, extension activation time
 
 **2. Distributed Tracing**
+
 - Implement OpenTelemetry for cross-component trace propagation
 - Trace full request lifecycle: VSCode → Agent → KB → LanceDB
 - Correlation IDs already exist - enhance with span context
 - Visualize trace waterfalls in Jaeger or Zipkin
 
 **3. Structured Logging Enhancement**
+
 - Standardize JSONL logging across all components
 - Add trace context (trace_id, span_id) to all logs
 - Log levels with proper severity (DEBUG, INFO, WARN, ERROR)
 - Log aggregation and search (Loki or ELK stack)
 
 **4. Health Checks & Alerting**
+
 - Enhanced `/v1/health` endpoint with detailed component status
 - Readiness vs. liveness probes for Kubernetes
 - Alert rules for critical metrics (error rate >5%, latency >2s)
 - Dead man's switch for indexing pipeline
 
 **5. Dashboards**
+
 - Grafana dashboards for real-time monitoring
 - Pre-built panels: system health, search performance, costs
 - User activity dashboards for VSCode extension usage
 - Capacity planning views (index size growth, query volume trends)
 
 **6. Cost Tracking & Budget Management**
+
 - Real-time embedding cost calculation and accumulation
 - Per-repo cost tracking and budgets
 - Cost anomaly detection (sudden spikes)
@@ -148,16 +159,19 @@ Create a comprehensive observability suite that provides real-time insights into
 #### Implementation Phases
 
 **Phase 1: Core Metrics (2 weeks)**
+
 - Add Prometheus metrics to KB API
 - Implement OpenTelemetry in Agent Core
 - Basic Grafana dashboards
 
 **Phase 2: Distributed Tracing (2 weeks)**
+
 - OpenTelemetry spans across components
 - Jaeger deployment and integration
 - Trace-to-log correlation
 
 **Phase 3: Advanced Features (2 weeks)**
+
 - Alerting rules and notifications
 - Cost tracking enhancements
 - Production deployment guides
@@ -165,6 +179,7 @@ Create a comprehensive observability suite that provides real-time insights into
 #### Technical Considerations
 
 **Questions to Answer:**
+
 1. Should metrics be opt-in or always-on? (Recommend: always-on with privacy controls)
 2. Which backend: Prometheus + Grafana, DataDog, New Relic? (Recommend: Prometheus for self-hosted)
 3. How to handle PII in logs and traces? (Recommend: automatic scrubbing of query content)
@@ -173,6 +188,7 @@ Create a comprehensive observability suite that provides real-time insights into
 6. How to track multi-tenant usage if deployed centrally? (Recommend: repo_name label on all metrics)
 
 **Technology Stack:**
+
 - **Metrics**: Prometheus (Python client for FastAPI, prom-client for Node/Bun)
 - **Tracing**: OpenTelemetry with Jaeger backend
 - **Logging**: Structured JSON to stdout, aggregated by Loki or ELK
@@ -180,6 +196,7 @@ Create a comprehensive observability suite that provides real-time insights into
 - **Alerting**: Prometheus Alertmanager or PagerDuty integration
 
 **Success Criteria:**
+
 - [ ] All API endpoints emit latency and error metrics
 - [ ] Full-stack traces for 100% of search requests
 - [ ] Grafana dashboard showing 10+ key metrics
@@ -211,23 +228,29 @@ Implement an AI-powered query understanding layer that interprets user intent, c
 **1. Query Classification**
 
 Classify queries into intent categories:
+
 - **Code Lookup**: Finding specific functions, classes, or variables
+
   - Example: "where is the authentication handler?"
   - Strategy: Exact + fuzzy symbol search, prioritize definitions
 
 - **Conceptual Search**: Understanding how something works
+
   - Example: "how does caching work in this project?"
   - Strategy: Semantic search across related files, include documentation
 
 - **Bug Investigation**: Finding potential issues or error sources
+
   - Example: "what could cause a null pointer error in the parser?"
   - Strategy: Search error handling code, related call paths
 
 - **API Discovery**: Finding available APIs or interfaces
+
   - Example: "what REST endpoints are available?"
   - Strategy: Search decorators, route definitions, OpenAPI specs
 
 - **Example Finding**: Locating usage examples
+
   - Example: "show me how to use the SearchBackend class"
   - Strategy: Search test files, example directories, README code blocks
 
@@ -276,24 +299,28 @@ Plan:
 #### Implementation Phases
 
 **Phase 1: Query Classification (3 weeks)**
+
 - Build training dataset from existing queries
 - Fine-tune lightweight classifier (DistilBERT or similar)
 - Integrate classification into search pipeline
 - A/B test against baseline
 
 **Phase 2: Query Expansion (2 weeks)**
+
 - Build domain-specific synonym dictionary
 - Implement acronym resolver with code-aware logic
 - Add contextual query rewriting
 - Measure expansion impact on recall
 
 **Phase 3: Multi-Stage Retrieval (4 weeks)**
+
 - Design query plan DSL
 - Implement orchestration engine
 - Build strategy library (5-10 common patterns)
 - Optimize plan selection
 
 **Phase 4: Feedback & Personalization (3 weeks)**
+
 - Click-through tracking infrastructure
 - Personalization model (simple ranking adjustment)
 - Online learning pipeline
@@ -304,29 +331,36 @@ Plan:
 **Questions to Answer:**
 
 1. **Model Selection**: Should we fine-tune a model or use GPT-4 for classification?
+
    - Option A: Fine-tuned DistilBERT (fast, cheap, private)
    - Option B: GPT-4 few-shot (accurate, expensive, requires API)
    - Recommendation: Start with GPT-4, migrate to fine-tuned model at scale
 
 2. **Query Caching**: How long should query results be cached?
+
    - Recommendation: 5 minutes for identical queries, 1 hour for similar queries
 
 3. **Privacy**: Should we store query history?
+
    - Recommendation: Local-only with opt-in telemetry for improvement
 
 4. **Fallback Strategy**: What if classification fails?
+
    - Recommendation: Default to semantic search with full recall
 
 5. **Performance Target**: Maximum latency overhead from query understanding?
+
    - Recommendation: <100ms for classification, <50ms for expansion
 
 6. **Training Data**: Where do we get labeled queries?
+
    - Recommendation: Synthetic generation + manual labeling + implicit feedback
 
 7. **Multi-Language**: Support non-English queries?
    - Recommendation: Phase 2 feature, start English-only
 
 **Technology Stack:**
+
 - **Classification**: Transformers library (HuggingFace) or OpenAI API
 - **Expansion**: Custom dictionary + regex + embedding similarity
 - **Orchestration**: Python async/await with configurable strategies
@@ -334,6 +368,7 @@ Plan:
 - **Experimentation**: Simple A/B framework with statistical significance testing
 
 **Success Criteria:**
+
 - [ ] 90%+ query classification accuracy (human eval on 500 queries)
 - [ ] 30% improvement in MRR on benchmark dataset
 - [ ] 80% reduction in "no results" queries
@@ -368,22 +403,27 @@ Unlock the full potential of the existing code graph infrastructure by building 
 Current state: Basic node/edge extraction exists but is underutilized.
 
 Enhancements needed:
+
 - **Call Graph Extraction**
+
   - Function/method calls across files
   - Async/await flow analysis
   - Event handler relationships
 
 - **Data Flow Tracking**
+
   - Variable dependencies
   - State mutations
   - Data transformations
 
 - **Import/Dependency Graph**
+
   - Module-level dependencies
   - Circular dependency detection
   - Dead code identification
 
 - **Type Relationships**
+
   - Inheritance hierarchies
   - Interface implementations
   - Generic type constraints
@@ -406,11 +446,13 @@ Enhance retrieval with graph-aware ranking:
 **3. Impact Analysis Engine**
 
 Answer questions like:
+
 - "If I change this function signature, what breaks?"
 - "What code paths can reach this database query?"
 - "Which API endpoints depend on this service?"
 
 Implementation:
+
 - **Forward Analysis**: Traverse call graph downstream
 - **Backward Analysis**: Traverse call graph upstream
 - **Transitive Closure**: Find all affected components
@@ -433,18 +475,21 @@ Interactive visualization for code exploration:
 Automated detection of patterns and anti-patterns:
 
 - **Metrics**:
+
   - Cyclomatic complexity per function
   - Coupling between modules
   - Cohesion within modules
   - Depth of inheritance trees
 
 - **Anti-Patterns**:
+
   - God classes (too many responsibilities)
   - Circular dependencies
   - Spaghetti code (high coupling, low cohesion)
   - Dead code (unreachable from entry points)
 
 - **Best Practices**:
+
   - Clean layering (no violations)
   - Interface segregation
   - Dependency inversion
@@ -464,30 +509,35 @@ Track graph evolution over time:
 #### Implementation Phases
 
 **Phase 1: Graph Extraction Enhancement (4 weeks)**
+
 - Implement call graph extraction for Python/TypeScript
 - Add data flow tracking
 - Store enhanced edges in graph_store
 - Unit tests for extraction accuracy
 
 **Phase 2: Graph-Powered Search (3 weeks)**
+
 - Implement PageRank scoring
 - Integrate graph features into ranking
 - A/B test against baseline search
 - Optimize graph query performance
 
 **Phase 3: Impact Analysis (3 weeks)**
+
 - Build forward/backward traversal algorithms
 - Implement risk scoring
 - Create CLI command: `dolphin impact <symbol>`
 - VSCode extension integration
 
 **Phase 4: Visual Explorer (4 weeks)**
+
 - Design web UI for graph visualization
 - Implement backend API for graph data
 - Interactive exploration features
 - Export and sharing capabilities
 
 **Phase 5: Insights & Reports (2 weeks)**
+
 - Implement anti-pattern detectors
 - Generate architectural reports
 - CI integration for quality gates
@@ -497,30 +547,38 @@ Track graph evolution over time:
 **Questions to Answer:**
 
 1. **Graph Database**: Should we migrate from SQLite to Neo4j or NetworkX?
+
    - Recommendation: Stay SQLite for now, add optional Neo4j support for large repos
 
 2. **Graph Storage**: How to efficiently store and query million-node graphs?
+
    - Recommendation: Adjacency list in SQLite + in-memory graph for hot paths
 
 3. **Real-Time Updates**: How to incrementally update graph on file changes?
+
    - Recommendation: Incremental edge addition/removal, rebuild on conflicts
 
 4. **Performance**: Can we compute PageRank on-the-fly for search?
+
    - Recommendation: Pre-compute PageRank on index, update incrementally
 
 5. **Cross-Language**: How to handle Python→TypeScript calls accurately?
+
    - Recommendation: Pattern matching on RPC frameworks (JSON-RPC, REST annotations)
 
 6. **Visualization Scale**: How to visualize graphs with 10K+ nodes?
+
    - Recommendation: Hierarchical clustering + focus+context technique
 
 7. **Privacy**: Should graph data be included in telemetry?
+
    - Recommendation: Aggregate metrics only, no code structure details
 
 8. **Integration**: Expose graph via MCP tools or REST API?
    - Recommendation: Both - MCP for agent use, REST for web UI
 
 **Technology Stack:**
+
 - **Graph Processing**: NetworkX (Python) for algorithms
 - **Storage**: SQLite with adjacency tables (current) + optional Neo4j
 - **Visualization**: React + D3.js or Cytoscape.js
@@ -529,6 +587,7 @@ Track graph evolution over time:
 - **Export**: GraphML, DOT, JSON formats
 
 **Success Criteria:**
+
 - [ ] Call graph extraction for 95%+ of function calls
 - [ ] Impact analysis accurate for 90%+ of symbol changes (manual verification)
 - [ ] Graph-powered search improves MRR by 15%+ on dependency queries
@@ -563,17 +622,20 @@ Enable Dolphin to understand relationships across multiple repositories, providi
 Detect and model dependencies between repositories:
 
 - **Package Dependencies**:
+
   - Python: Parse `pyproject.toml`, `requirements.txt`, `setup.py`
   - TypeScript/JavaScript: Parse `package.json`, `pnpm-lock.yaml`
   - Go: Parse `go.mod`
   - Java: Parse `pom.xml`, `build.gradle`
 
 - **API Dependencies**:
+
   - REST API calls: Detect fetch/axios/requests to URLs
   - RPC calls: gRPC service definitions, JSON-RPC calls
   - Message queues: Kafka topics, RabbitMQ exchanges
 
 - **Shared Configuration**:
+
   - Environment variables
   - Config files (YAML, TOML, JSON)
   - Database schemas
@@ -616,6 +678,7 @@ Extend impact analysis across repo boundaries:
 Organize and manage collections of related repos:
 
 - **Workspace Definitions**:
+
   ```yaml
   name: "payment-service-ecosystem"
   repos:
@@ -649,21 +712,25 @@ Extend visual graph explorer to show multi-repo view:
 #### Implementation Phases
 
 **Phase 1: Dependency Detection (2 weeks)**
+
 - Implement package manifest parsing
 - Detect API calls and match to definitions
 - Store cross-repo edges in graph_store
 
 **Phase 2: Unified Search (2 weeks)**
+
 - Enhance search backend for multi-repo queries
 - Implement fair ranking across repos
 - Add repo context to UI
 
 **Phase 3: Workspace Management (2 weeks)**
+
 - Workspace data model and API
 - CLI commands for workspace operations
 - VSCode extension workspace selector
 
 **Phase 4: Cross-Repo Analysis (2 weeks)**
+
 - Extend impact analysis across repos
 - Global symbol resolution
 - Breaking change detection
@@ -673,27 +740,34 @@ Extend visual graph explorer to show multi-repo view:
 **Questions to Answer:**
 
 1. **Repository Registration**: How do users group related repos?
+
    - Recommendation: Workspace concept with YAML configuration
 
 2. **Dependency Discovery**: Automatic vs. manual relationship definition?
+
    - Recommendation: Automatic with manual override capability
 
 3. **Version Handling**: How to handle multiple versions of shared packages?
+
    - Recommendation: Index all versions, filter by date or explicit selection
 
 4. **Performance**: Does indexing scale to 50+ repos?
+
    - Recommendation: Parallel indexing + incremental updates
 
 5. **Access Control**: What if user doesn't have access to all repos?
+
    - Recommendation: Graceful degradation, show what's accessible
 
 6. **Monorepo vs. Polyrepo**: Should these be handled differently?
+
    - Recommendation: Unified model, auto-detect monorepo structure
 
 7. **Cost**: How to manage embedding costs for many repos?
    - Recommendation: Shared deduplication across repos
 
 **Technology Stack:**
+
 - **Dependency Parsing**: Language-specific parsers (already exist for chunking)
 - **Graph Storage**: Enhanced SQLite graph_store with cross-repo edges
 - **API Matching**: Pattern matching + embedding similarity
@@ -701,6 +775,7 @@ Extend visual graph explorer to show multi-repo view:
 - **UI**: Enhanced VSCode extension with workspace selector
 
 **Success Criteria:**
+
 - [ ] Detect 90%+ of package dependencies automatically
 - [ ] Resolve 80%+ of API call sites to definitions across repos
 - [ ] Multi-repo search ranks results fairly (human evaluation)
@@ -735,12 +810,14 @@ Build a comprehensive evaluation framework that measures search quality, enables
 Create diverse, representative datasets:
 
 - **Golden Query Set**:
+
   - 500+ queries covering all intent types
   - Manual relevance judgments (5-point scale)
   - Mix of easy/medium/hard queries
   - Diverse languages and project types
 
 - **Synthetic Query Generation**:
+
   - Generate queries from code: "Find implementation of <function>"
   - Question templates: "How does X work?", "Where is X defined?"
   - Negative queries: Intentionally ambiguous or impossible queries
@@ -755,6 +832,7 @@ Create diverse, representative datasets:
 Implement industry-standard IR metrics:
 
 - **Ranking Quality**:
+
   - **MRR (Mean Reciprocal Rank)**: Position of first relevant result
   - **MAP (Mean Average Precision)**: Precision across all relevant results
   - **NDCG@K (Normalized Discounted Cumulative Gain)**: Quality at top K
@@ -762,11 +840,13 @@ Implement industry-standard IR metrics:
   - **Recall@K**: Fraction of relevant results in top K
 
 - **Coverage**:
+
   - **Zero Result Rate**: Queries returning no results
   - **Result Diversity**: MMR score across result set
   - **Source Distribution**: Variety of files/modules in results
 
 - **Efficiency**:
+
   - **Latency Distribution**: p50, p95, p99 search times
   - **Index Freshness**: Time from code change to searchability
   - **Cost per Query**: Embedding + search compute costs
@@ -781,11 +861,13 @@ Implement industry-standard IR metrics:
 Automated evaluation infrastructure:
 
 - **Continuous Evaluation**:
+
   - Run eval suite on every commit (10-minute subset)
   - Nightly full evaluation (all queries, all metrics)
   - Weekly deep evaluation (include human review)
 
 - **A/B Testing Framework**:
+
   - Split traffic between baseline and experiment
   - Statistical significance testing (t-test, bootstrap)
   - Minimum sample size enforcement
@@ -802,12 +884,14 @@ Automated evaluation infrastructure:
 Compare against other code search tools:
 
 - **Competitors**:
+
   - GitHub Code Search
   - Sourcegraph
   - grep/ripgrep (baseline)
   - IDE built-in search (VSCode, IntelliJ)
 
 - **Benchmark Datasets**:
+
   - CodeSearchNet dataset
   - GitHub issue queries → code snippets
   - StackOverflow questions → code answers
@@ -822,12 +906,14 @@ Compare against other code search tools:
 Real-time view of search quality:
 
 - **Grafana Dashboards**:
+
   - Current MRR, MAP, P@5 (updated nightly)
   - Trend lines over time
   - Per-language and per-repo breakdowns
   - Latency vs. quality trade-off curves
 
 - **Regression Alerts**:
+
   - Alert if MRR drops >5% week-over-week
   - Alert if latency increases >20%
   - Alert if zero-result rate >10%
@@ -842,12 +928,14 @@ Real-time view of search quality:
 Web UI for manual relevance judging:
 
 - **Judge Workflow**:
+
   1. Show query and search results
   2. Judge each result: Excellent / Good / Fair / Poor / Bad
   3. Provide optional feedback text
   4. Calculate inter-annotator agreement
 
 - **Features**:
+
   - Side-by-side comparison of two result sets
   - Blind evaluation (no labels shown)
   - Batch processing (judge 10 queries at once)
@@ -861,21 +949,25 @@ Web UI for manual relevance judging:
 #### Implementation Phases
 
 **Phase 1: Dataset Creation (2 weeks)**
+
 - Build golden query set (manual)
 - Implement synthetic query generation
 - Create evaluation dataset structure
 
 **Phase 2: Metrics & Pipeline (2 weeks)**
+
 - Implement all IR metrics
 - Build automated evaluation runner
 - Integrate with CI/CD
 
 **Phase 3: A/B Testing Framework (1 week)**
+
 - Traffic splitting mechanism
 - Statistical significance testing
 - Experiment tracking database
 
 **Phase 4: Dashboard & Alerting (1 week)**
+
 - Grafana dashboards
 - Regression alert rules
 - Quality reports generation
@@ -885,27 +977,34 @@ Web UI for manual relevance judging:
 **Questions to Answer:**
 
 1. **Dataset Size**: How many queries needed for statistical significance?
+
    - Recommendation: Minimum 200 queries, target 500+
 
 2. **Human Evaluation**: How many judges per query?
+
    - Recommendation: 3 judges for gold set, 1 for experiments
 
 3. **Evaluation Frequency**: How often to run full eval?
+
    - Recommendation: Nightly for full suite, real-time for subset
 
 4. **Regression Threshold**: What drop constitutes a regression?
+
    - Recommendation: >3% MRR drop or >20% latency increase
 
 5. **Benchmark Fairness**: How to ensure fair comparison with competitors?
+
    - Recommendation: Identical repos, queries, and evaluation protocol
 
 6. **LLM-as-Judge**: Should we use GPT-4 for automated evaluation?
+
    - Recommendation: Yes for preliminary screening, humans for final validation
 
 7. **Public Leaderboard**: Should we publish metrics publicly?
    - Recommendation: Yes, builds credibility and attracts contributors
 
 **Technology Stack:**
+
 - **Evaluation Runner**: Python script with pytest integration
 - **Metrics**: scikit-learn, scipy, custom implementations
 - **Storage**: SQLite for results, JSON for datasets
@@ -914,6 +1013,7 @@ Web UI for manual relevance judging:
 - **Human Eval UI**: Svelte web app with FastAPI backend
 
 **Success Criteria:**
+
 - [ ] 500+ query evaluation dataset with relevance judgments
 - [ ] 10+ IR metrics computed automatically
 - [ ] A/B tests run automatically on config changes
@@ -949,18 +1049,21 @@ Systematically optimize Dolphin's performance across indexing, search, and runti
 Current bottlenecks identified in codebase analysis:
 
 - **Parallel Processing**:
+
   - Current: Sequential file processing
   - Target: Parallel chunking with worker pool (8-16 workers)
   - Approach: Python multiprocessing or asyncio with process pool
   - Expected: 5-10x indexing throughput
 
 - **Incremental Embedding**:
+
   - Current: Re-embed all chunks on reindex
   - Target: Only embed changed chunks (already implemented via SHA256)
   - Enhancement: Incremental vector table updates
   - Expected: 90% reduction in reindex time
 
 - **Batch Size Optimization**:
+
   - Current: Fixed batch size (100 chunks)
   - Target: Adaptive batching based on text length and API latency
   - Approach: Measure throughput at various batch sizes, auto-tune
@@ -975,6 +1078,7 @@ Current bottlenecks identified in codebase analysis:
 **2. Search Query Optimization**
 
 - **Query Result Caching**:
+
   - Implementation: Redis or in-memory LRU cache
   - Cache key: Query hash + repo filter + top_k
   - TTL: 5 minutes for exact matches, 1 hour for similar queries
@@ -982,6 +1086,7 @@ Current bottlenecks identified in codebase analysis:
   - Expected: 70% cache hit rate, 10x speedup for cached queries
 
 - **Vector Search Optimization**:
+
   - Current: LanceDB KNN on every query
   - Enhancements:
     - Pre-filter by repo before KNN (reduces search space)
@@ -991,6 +1096,7 @@ Current bottlenecks identified in codebase analysis:
   - Expected: 40% reduction in search latency
 
 - **Database Connection Pooling**:
+
   - Current: New SQLite connection per request
   - Target: Connection pool with 10-20 connections
   - Implementation: SQLAlchemy or aiosqlite
@@ -1005,12 +1111,14 @@ Current bottlenecks identified in codebase analysis:
 **3. Storage Optimization**
 
 - **LanceDB Compaction**:
+
   - Current: Append-only writes, no compaction
   - Target: Periodic compaction to reduce storage and improve query speed
   - Schedule: Weekly or after N% new data
   - Expected: 30% storage reduction, 15% query speedup
 
 - **SQLite Optimization**:
+
   - WAL mode: Enable write-ahead logging for concurrency
   - PRAGMA optimize: Run after bulk operations
   - Index tuning: Analyze query plans, add missing indexes
@@ -1026,12 +1134,14 @@ Current bottlenecks identified in codebase analysis:
 **4. Runtime Performance**
 
 - **Lazy Initialization**:
+
   - Current: Load embedding models on startup
   - Target: Load on first use (reduces extension activation time)
   - Implementation: Singleton with lazy loading
   - Expected: 80% reduction in API startup time
 
 - **Webview Optimization**:
+
   - Code splitting: Load features on demand
   - Virtual scrolling: Render only visible messages
   - Debounced search: Wait 300ms before searching
@@ -1047,6 +1157,7 @@ Current bottlenecks identified in codebase analysis:
 **5. Profiling & Monitoring**
 
 - **Continuous Profiling**:
+
   - Python: cProfile or py-spy sampling profiler
   - TypeScript: Chrome DevTools profiler or clinic.js
   - Visualization: Flame graphs for hotspot identification
@@ -1062,12 +1173,14 @@ Current bottlenecks identified in codebase analysis:
 **6. Load Testing**
 
 - **Scenarios**:
+
   - Concurrent search: 10 simultaneous users
   - Indexing during search: Simulate background indexing
   - Large result sets: Queries returning 100+ results
   - Stress test: 100 QPS for 5 minutes
 
 - **Tools**:
+
   - Locust or k6 for HTTP load testing
   - Custom scripts for CLI operations
   - Monitoring: Track latency, error rate, resource usage
@@ -1080,26 +1193,31 @@ Current bottlenecks identified in codebase analysis:
 #### Implementation Phases
 
 **Phase 1: Profiling & Baseline (1 week)**
+
 - Profile indexing and search pipelines
 - Identify top 10 bottlenecks
 - Establish performance baselines
 
 **Phase 2: Indexing Optimization (2 weeks)**
+
 - Implement parallel processing
 - Optimize batch sizes
 - Add tree-sitter caching
 
 **Phase 3: Search Optimization (2 weeks)**
+
 - Implement query caching
 - Optimize vector search
 - Add connection pooling
 
 **Phase 4: Storage & Runtime (1 week)**
+
 - LanceDB compaction
 - SQLite optimization
 - Webview improvements
 
 **Phase 5: Load Testing (1 week)**
+
 - Build load test suite
 - Run comprehensive tests
 - Generate performance report
@@ -1109,27 +1227,34 @@ Current bottlenecks identified in codebase analysis:
 **Questions to Answer:**
 
 1. **Parallel vs. Async**: Multiprocessing or asyncio for indexing?
+
    - Recommendation: Multiprocessing for CPU-bound parsing/hashing, asyncio for I/O-bound embedding
 
 2. **Cache Strategy**: Redis vs. in-memory?
+
    - Recommendation: In-memory for single-user, Redis for multi-user deployments
 
 3. **LanceDB vs. Alternatives**: Is LanceDB the bottleneck?
+
    - Recommendation: Profile first, consider Faiss/Annoy if LanceDB is limiting factor
 
 4. **Compression Trade-off**: Is 10ms decompression acceptable?
+
    - Recommendation: Make it configurable, benchmark on target hardware
 
 5. **Performance Budgets**: Are these targets realistic?
+
    - Recommendation: Based on current 2x slower performance, budgets are achievable
 
 6. **Breaking Changes**: Will optimizations require API changes?
+
    - Recommendation: Maintain backward compatibility, make optimizations opt-in initially
 
 7. **Measurement Overhead**: How much does profiling slow things down?
    - Recommendation: Use sampling profilers (1-5% overhead) for production
 
 **Technology Stack:**
+
 - **Profiling**: py-spy (Python), clinic.js (Node/Bun)
 - **Caching**: Redis (distributed) or functools.lru_cache (local)
 - **Async**: asyncio (Python), native async/await (TypeScript)
@@ -1138,6 +1263,7 @@ Current bottlenecks identified in codebase analysis:
 - **Visualization**: Flame graphs (speedscope.app)
 
 **Success Criteria:**
+
 - [ ] Indexing throughput: 5x improvement (500 → 2500 files/min)
 - [ ] Search latency: 50% reduction (300ms → 150ms p50)
 - [ ] Cache hit rate: 70%+ on repeated queries
@@ -1175,11 +1301,13 @@ Current pain points: Multi-step setup, manual KB server management.
 **Improvements:**
 
 - **Automatic Detection**:
+
   - Detect `.dolphin/config.toml` on workspace open
   - Prompt: "This workspace has Dolphin configured. Index now?"
   - Auto-detect programming languages and suggest optimal settings
 
 - **Setup Wizard**:
+
   - Step 1: Welcome and feature overview (30-second video)
   - Step 2: API key setup (auto-detect from env, offer to save securely)
   - Step 3: Select repos to index (auto-detect git repos in workspace)
@@ -1187,104 +1315,74 @@ Current pain points: Multi-step setup, manual KB server management.
   - Step 5: Start indexing (progress indicator, time estimate)
 
 - **Smart Defaults**:
+
   - Auto-configure chunking based on repo size and languages
   - Set reasonable `top_k` and `score_cutoff` based on repo characteristics
   - Enable/disable expensive features (reranking) based on hardware
 
 - **Background Indexing**:
   - Index in background with <10% CPU usage
-  - Pause indexing if user is actively coding
+  - Debounce file saves
   - Resume on idle or schedule for off-hours
 
 **2. Intelligent Code Navigation**
 
 Enhance VSCode extension with smart navigation features:
 
-- **Jump to Definition (Enhanced)**:
-  - Standard "Go to Definition" + "Find All References"
-  - Add "Find Semantic Equivalents" (finds similar implementations)
-  - Add "Find Usage Examples" (finds test code and examples)
-
-- **Breadcrumb Trail**:
-  - Show call path from entry point to current function
-  - Click any breadcrumb to jump to that level
-  - Visualize as hierarchical tree in sidebar
-
 - **Related Files**:
+
   - Sidebar panel showing semantically related files
   - Auto-update as you navigate code
   - Include tests, imports, and implementers
 
 - **Contextual Commands**:
+
   - Right-click symbol → "Ask about this function"
   - Right-click file → "Summarize this file"
   - Right-click folder → "Explain this module"
   - Selection → "Find similar code patterns"
+
+- **Breadcrumb Trail** (Descoped):
+
+  - Show call path from entry point to current function
+  - Click any breadcrumb to jump to that level
+  - Visualize as hierarchical tree in sidebar
 
 **3. Conversational AI Enhancements**
 
 Improve the chat interface with better AI interactions:
 
 - **Quick Actions**:
-  - Pre-defined prompts: "Summarize recent changes", "Find TODOs", "Review security issues"
+
+  - Pre-defined functions/personas (e.g., Code Review, Plan Project, Journalist/Documentarian)
   - Customizable quick action buttons
   - Keyboard shortcuts for common actions
 
 - **Multi-File Operations**:
+
   - "Explain how authentication works" → Automatically searches and synthesizes answer from multiple files
   - "Refactor error handling" → Suggests changes across multiple files
   - "Update all API calls to v2" → Batch editing with preview
-
-- **Inline Suggestions**:
-  - Suggest improvements while viewing code
-  - Detect anti-patterns and offer fixes
-  - Proactive "Did you know?" tips
-
-- **Voice Input** (Experimental):
-  - Speak queries instead of typing
-  - Useful for long explanations or hands-free coding
-  - Push-to-talk or always-listening mode
-
-**4. Documentation Generation**
-
-Automated documentation features:
-
-- **README Generation**:
-  - Analyze repo structure and generate README sections
-  - Include: Overview, Installation, Usage, Architecture, Contributing
-  - Markdown with code examples and diagrams
-
-- **Function Documentation**:
-  - Generate docstrings from function signatures and body
-  - Follow language conventions (JSDoc, Python docstrings, etc.)
-  - Include parameter descriptions and return types
-
-- **API Documentation**:
-  - Extract REST endpoints and generate OpenAPI spec
-  - Create Postman collection from definitions
-  - Generate API client code (TypeScript, Python)
-
-- **Architecture Diagrams**:
-  - Generate Mermaid diagrams from code graph
-  - System overview, component diagrams, sequence diagrams
-  - Export as SVG or PNG for inclusion in docs
 
 **5. Collaboration Features**
 
 Enable team knowledge sharing:
 
 - **Code Annotations**:
+
   - Add notes to specific code locations
   - Visible to all team members
   - Markdown support with screenshots
   - Link to Jira/GitHub issues
 
 - **Shared Queries**:
+
   - Save and share useful queries with team
   - "How to deploy", "Where is config?", "Common errors"
   - Query library with categorization
 
 - **Team Insights**:
+
   - Dashboard showing what code teammates are exploring
   - Hot files: What's being viewed most
   - Knowledge gaps: Areas with few annotations or questions
@@ -1299,23 +1397,27 @@ Enable team knowledge sharing:
 Enhance CLI experience:
 
 - **Interactive Mode**:
+
   - `dolphin` (no args) starts interactive REPL
   - Tab completion for commands and repos
   - Colorized output with syntax highlighting
 
 - **Doctor Command**:
+
   - `dolphin doctor` diagnoses common issues
   - Checks: API key, disk space, port conflicts, dependencies
   - Suggests fixes for detected problems
   - Validates configuration files
 
 - **Watch Mode**:
+
   - `dolphin watch <repo>` auto-reindexes on file changes
   - Smart debouncing: Wait for editing to stop
   - Incremental updates only
 
 - **Pre-commit Hook**:
-  - Auto-install git hook to index on commit
+
+  - Enable CLI install of git hook to index on commit (check if index is up to date before install)
   - Runs `dolphin index --incremental` in background
   - Skip if commit is urgent (`--no-verify` flag)
 
@@ -1329,44 +1431,49 @@ Enhance CLI experience:
 Visual and interaction improvements:
 
 - **Themes**:
+
   - Light, dark, and high-contrast themes
   - Sync with VSCode theme automatically
   - Custom theme editor
 
 - **Accessibility**:
+
   - Full keyboard navigation
   - Screen reader support (ARIA labels)
   - High-contrast mode
   - Adjustable font sizes
 
 - **Animations**:
+
   - Smooth transitions between views
   - Loading skeletons instead of spinners
   - Subtle micro-interactions (hover effects, focus states)
 
 - **Responsive Design**:
   - Adapt layout to webview size
-  - Mobile-friendly (for web portal)
-  - Print-friendly views for documentation
 
 #### Implementation Phases
 
 **Phase 1: Onboarding (2 weeks)**
+
 - Setup wizard UI
 - Auto-detection logic
 - Background indexing
 
 **Phase 2: Navigation (2 weeks)**
+
 - Enhanced definition jumps
 - Related files sidebar
 - Breadcrumb trail
 
 **Phase 3: AI Enhancements (2 weeks)**
+
 - Quick actions
 - Multi-file operations
 - Inline suggestions
 
 **Phase 4: Collaboration (2 weeks)**
+
 - Code annotations
 - Shared queries
 - Team insights
@@ -1376,35 +1483,42 @@ Visual and interaction improvements:
 **Questions to Answer:**
 
 1. **Setup Complexity**: What's acceptable onboarding time?
+
    - Target: <3 minutes from install to first search
 
 2. **Background Indexing**: How to balance speed vs. resource usage?
+
    - Recommendation: Adaptive throttling based on CPU/memory pressure
 
 3. **Voice Input**: Is this a gimmick or valuable feature?
+
    - Recommendation: Start with opt-in experimental feature, gather feedback
 
 4. **Collaboration Storage**: Where to store team annotations?
+
    - Recommendation: Local `.dolphin/annotations.json` in git repo (team-shared)
 
 5. **Privacy**: How to handle team insights without invading privacy?
+
    - Recommendation: Aggregate only, opt-in, no individual tracking
 
 6. **Accessibility**: What WCAG level to target?
+
    - Recommendation: WCAG 2.1 AA compliance
 
 7. **Offline Support**: Should Dolphin work without internet?
    - Recommendation: Yes for search (local), no for embedding (requires API)
 
 **Technology Stack:**
+
 - **UI**: Svelte 5 with SvelteKit, Tailwind CSS, shadcn/ui
-- **Voice**: Web Speech API or Whisper API
 - **Diagrams**: Mermaid.js, D3.js
 - **Accessibility**: radix-ui primitives, ARIA attributes
 - **CLI**: Typer (Python), Inquirer for interactive prompts
 - **Storage**: Local JSON/TOML files for annotations
 
 **Success Criteria:**
+
 - [ ] Setup wizard completion rate >80%
 - [ ] Onboarding time: <3 minutes from install to first search
 - [ ] Enhanced navigation used in 50%+ of sessions
@@ -1442,18 +1556,21 @@ Current state: Single-user, local access only.
 **Enterprise Requirements:**
 
 - **Multi-User Authentication**:
+
   - Local accounts with bcrypt password hashing
   - SSO integration (SAML 2.0, OAuth 2.0, OIDC)
   - API key authentication for programmatic access
   - Service account support for CI/CD
 
 - **Role-Based Access Control (RBAC)**:
+
   - Roles: Admin, Developer, Read-Only, Auditor
   - Permissions: Index, Search, Configure, Audit
   - Repo-level permissions: Access control per repository
   - Fine-grained: Control access to specific features
 
 - **Multi-Tenancy**:
+
   - Logical isolation: Each team has separate namespace
   - Resource quotas: Index size, query rate, storage limits
   - Cost tracking: Attribute embedding costs to teams
@@ -1469,17 +1586,20 @@ Current state: Single-user, local access only.
 Protect sensitive code and data:
 
 - **Encryption at Rest**:
+
   - SQLite database encryption (SQLCipher)
   - LanceDB encryption (AES-256)
   - Encrypted backups
   - Key management (KMS integration: AWS KMS, HashiCorp Vault)
 
 - **Encryption in Transit**:
+
   - TLS 1.3 for all HTTP connections
   - Certificate pinning for API clients
   - Mutual TLS (mTLS) for service-to-service communication
 
 - **Secrets Management**:
+
   - Never log secrets (auto-redaction)
   - Secure storage of API keys (OS keychain or Vault)
   - Rotation policy enforcement (90-day expiry)
@@ -1496,6 +1616,7 @@ Protect sensitive code and data:
 Comprehensive audit trail:
 
 - **Audit Events**:
+
   - Authentication: Login, logout, failed attempts, password changes
   - Authorization: Permission grants/revokes, role changes
   - Data access: Search queries, file fetches, chunk access
@@ -1503,6 +1624,7 @@ Comprehensive audit trail:
   - Admin actions: User creation, permission changes, system config
 
 - **Audit Log Format**:
+
   ```json
   {
     "timestamp": "2025-11-11T10:30:00Z",
@@ -1518,6 +1640,7 @@ Comprehensive audit trail:
   ```
 
 - **Audit Log Storage**:
+
   - Append-only log file with rotation
   - Immutable storage (S3 with object lock, WORM drives)
   - Tamper-evident (cryptographic checksums)
@@ -1534,17 +1657,20 @@ Comprehensive audit trail:
 Prevent accidental exposure of credentials:
 
 - **Pre-Index Scanning**:
+
   - Scan files before indexing for secrets
   - Patterns: API keys, passwords, private keys, tokens
   - Entropy detection: High-entropy strings (likely secrets)
   - Machine learning: Trained model for secret detection
 
 - **Blocklist**:
+
   - Automatically exclude files with detected secrets
   - Warn user and suggest adding to `.gitignore`
   - Quarantine mode: Index without embedding sensitive parts
 
 - **Post-Index Monitoring**:
+
   - Periodic rescanning of indexed content
   - Alert on newly detected secrets (keys leaked in commit)
   - Automated remediation: Remove from index, notify user
@@ -1559,6 +1685,7 @@ Prevent accidental exposure of credentials:
 Work toward industry compliance:
 
 - **SOC 2 Type II**:
+
   - Security: Access controls, encryption, monitoring
   - Availability: Uptime monitoring, incident response
   - Processing Integrity: Input validation, error handling
@@ -1566,6 +1693,7 @@ Work toward industry compliance:
   - Privacy: Data handling, retention policies
 
 - **GDPR Compliance**:
+
   - Data minimization: Only index necessary code
   - Right to access: Export user's queries and annotations
   - Right to erasure: Delete user data on request
@@ -1573,6 +1701,7 @@ Work toward industry compliance:
   - Privacy by design: Minimize data collection
 
 - **HIPAA** (if applicable):
+
   - PHI protection: Never index patient data
   - Access controls: Audit all PHI access
   - Encryption: At rest and in transit
@@ -1589,6 +1718,7 @@ Work toward industry compliance:
 Harden network attack surface:
 
 - **API Security**:
+
   - Rate limiting: 100 req/min per user, 1000 req/min global
   - DDoS protection: Cloudflare or AWS Shield
   - Input validation: Strict schemas, reject invalid requests
@@ -1596,6 +1726,7 @@ Harden network attack surface:
   - CSRF protection: Tokens for state-changing operations
 
 - **Firewall Rules**:
+
   - Restrict KB API to localhost by default
   - Production: Whitelist IPs or use VPN
   - Block all except necessary ports
@@ -1611,11 +1742,13 @@ Harden network attack surface:
 Ongoing security validation:
 
 - **Internal Pen Testing**:
+
   - Quarterly security reviews by team
   - OWASP Top 10 testing
   - Automated security scanners (Burp Suite, OWASP ZAP)
 
 - **External Audits**:
+
   - Annual third-party penetration test
   - Bug bounty program (HackerOne, Bugcrowd)
   - Security researcher engagement
@@ -1629,26 +1762,31 @@ Ongoing security validation:
 #### Implementation Phases
 
 **Phase 1: Authentication & RBAC (3 weeks)**
+
 - Implement user accounts and authentication
 - Build RBAC system with roles and permissions
 - Multi-tenancy data model
 
 **Phase 2: Encryption & Secrets (3 weeks)**
+
 - Database encryption
 - TLS enforcement
 - Secrets detection and prevention
 
 **Phase 3: Audit Logging (2 weeks)**
+
 - Implement comprehensive audit logging
 - Build audit log search and reporting
 - SIEM integration
 
 **Phase 4: Compliance (3 weeks)**
+
 - GDPR compliance implementation
 - SOC 2 controls documentation
 - Privacy policy and terms
 
 **Phase 5: Security Hardening (1 week)**
+
 - Rate limiting and DDoS protection
 - Penetration testing
 - Security documentation
@@ -1658,27 +1796,34 @@ Ongoing security validation:
 **Questions to Answer:**
 
 1. **Authentication Backend**: Build in-house or use existing (Auth0, Keycloak)?
+
    - Recommendation: Keycloak for self-hosted, Auth0 for SaaS
 
 2. **Encryption Performance**: How much does SQLCipher slow down queries?
+
    - Recommendation: Benchmark, expect 10-20% overhead, acceptable for security
 
 3. **Multi-Tenancy**: Logical vs. physical isolation?
+
    - Recommendation: Logical (shared DB with tenant_id) for cost, physical for highest security
 
 4. **Secrets Detection**: False positive rate tolerance?
+
    - Recommendation: Aggressive detection with manual override capability
 
 5. **Audit Log Size**: How to manage log growth?
+
    - Recommendation: Compress and archive after 90 days, delete after 7 years
 
 6. **Compliance Scope**: Full SOC 2 or just security controls?
+
    - Recommendation: Start with security controls, expand to full SOC 2 for enterprise sales
 
 7. **Open Source**: Can security features remain open source?
    - Recommendation: Yes, security through transparency, not obscurity
 
 **Technology Stack:**
+
 - **Authentication**: Keycloak (self-hosted) or Auth0 (SaaS)
 - **Encryption**: SQLCipher (SQLite), AES-256-GCM (LanceDB)
 - **Secrets**: TruffleHog, git-secrets, custom ML model
@@ -1687,6 +1832,7 @@ Ongoing security validation:
 - **Security Scanning**: Snyk, Bandit, ESLint security, OWASP ZAP
 
 **Success Criteria:**
+
 - [ ] Multi-user authentication with SSO support
 - [ ] RBAC with 4+ roles and repo-level permissions
 - [ ] All data encrypted at rest (SQLite, LanceDB)
@@ -1723,12 +1869,14 @@ Build a standalone web application that provides a beautiful, powerful code sear
 Beautiful, fast search experience:
 
 - **Search Box**:
+
   - Large, prominent search box on landing page
   - Auto-complete suggestions as you type
   - Recent searches dropdown
   - Advanced search link (filters, options)
 
 - **Results Page**:
+
   - List view with code snippets
   - Highlighting of matched terms
   - File path breadcrumbs (clickable)
@@ -1749,17 +1897,20 @@ Beautiful, fast search experience:
 Rich code browsing experience:
 
 - **Syntax Highlighting**:
+
   - Support 50+ languages via Prism or Monaco
   - Theme selection (light/dark/high-contrast)
   - Line numbers and gutter
 
 - **Navigation**:
+
   - Jump to definition (if indexed)
   - Find references (cross-file)
   - Symbol outline (sidebar)
   - Breadcrumb navigation
 
 - **Annotations**:
+
   - Inline comments and discussions
   - Link to related docs or issues
   - Code review comments
@@ -1775,12 +1926,14 @@ Rich code browsing experience:
 Explore repository structure:
 
 - **File Tree**:
+
   - Collapsible directory tree
   - Search within tree
   - File icons by type
   - Size and last modified metadata
 
 - **Repository Dashboard**:
+
   - Overview: Description, languages, contributors
   - Statistics: Files, lines, chunks, index size
   - Recent commits and changes
@@ -1796,17 +1949,20 @@ Explore repository structure:
 Organizational knowledge management:
 
 - **Documentation Pages**:
+
   - Markdown wiki pages
   - Link to code locations
   - Embed search results dynamically
   - Version control (git-backed storage)
 
 - **Saved Searches**:
+
   - Create and save useful queries
   - Share with team via link
   - Schedule: Run query daily, email results
 
 - **Dashboards**:
+
   - Custom dashboards with widgets
   - Widgets: Recent changes, top files, code metrics, team activity
   - Embeddable in other tools (iframe)
@@ -1821,12 +1977,14 @@ Organizational knowledge management:
 Team collaboration tools:
 
 - **Code Annotations**:
+
   - Add notes to specific lines or files
   - Mention teammates (@username)
   - Attach screenshots or links
   - Threaded discussions
 
 - **Collections**:
+
   - Bookmark files or code snippets
   - Organize into collections (like playlists)
   - Share collections with team
@@ -1843,11 +2001,13 @@ Team collaboration tools:
 Bring Agent Core to the web:
 
 - **Chat Interface**:
+
   - Same conversational AI as VSCode extension
   - Streaming responses
   - Tool call visualization
 
 - **Contextual Questions**:
+
   - Right-click code → "Explain this"
   - "How is this function used?"
   - "What does this file do?"
@@ -1862,16 +2022,19 @@ Bring Agent Core to the web:
 Management and configuration:
 
 - **User Management**:
+
   - List users, roles, permissions
   - Add/remove users
   - Reset passwords, manage API keys
 
 - **Repository Management**:
+
   - Add/remove repos
   - Configure indexing schedules
   - View index status and logs
 
 - **System Health**:
+
   - Metrics dashboard (queries, latency, errors)
   - Logs viewer and search
   - Alerts and notifications
@@ -1884,26 +2047,31 @@ Management and configuration:
 #### Implementation Phases
 
 **Phase 1: Core Search (4 weeks)**
+
 - Build search interface and results page
 - Implement code viewer with syntax highlighting
 - Basic filtering and pagination
 
 **Phase 2: Repository Browser (2 weeks)**
+
 - File tree navigation
 - Repository dashboard
 - Batch operations
 
 **Phase 3: Knowledge Hub (3 weeks)**
+
 - Documentation pages
 - Saved searches
 - Custom dashboards
 
 **Phase 4: Collaboration (3 weeks)**
+
 - Code annotations
 - Collections
 - Activity feed
 
 **Phase 5: AI Integration (2 weeks)**
+
 - Chat interface
 - Contextual questions
 - Code generation
@@ -1913,27 +2081,34 @@ Management and configuration:
 **Questions to Answer:**
 
 1. **Frontend Framework**: React, Vue, or Svelte?
+
    - Recommendation: SvelteKit (consistency with VSCode extension webview)
 
 2. **Authentication**: Reuse agent-core auth or separate?
+
    - Recommendation: Shared authentication service (Keycloak)
 
 3. **Real-Time Updates**: WebSockets or polling for live activity feed?
+
    - Recommendation: Server-Sent Events (SSE) for simplicity
 
 4. **Deployment**: Standalone app or embedded in KB API?
+
    - Recommendation: Standalone Next.js/SvelteKit app, proxied through KB API
 
 5. **Mobile Experience**: Responsive or separate mobile app?
+
    - Recommendation: Responsive web app, evaluate native app later
 
 6. **Offline Support**: Progressive Web App (PWA)?
+
    - Recommendation: Yes, cache search results and viewed files
 
 7. **Branding**: White-label support for enterprise customers?
    - Recommendation: Yes, custom logo, colors, domain (enterprise feature)
 
 **Technology Stack:**
+
 - **Frontend**: SvelteKit with TypeScript
 - **UI**: Tailwind CSS, shadcn/ui, Radix UI
 - **Code Viewer**: Monaco Editor (VSCode engine) or Prism
@@ -1943,6 +2118,7 @@ Management and configuration:
 - **Deployment**: Docker container, Kubernetes-ready
 
 **Success Criteria:**
+
 - [ ] Search latency: <500ms p95 (including network)
 - [ ] Code viewer supports 50+ languages with syntax highlighting
 - [ ] Mobile-responsive with usable experience on phone
@@ -1978,6 +2154,7 @@ Transform Dolphin from a single-user tool into a team collaboration platform. En
 Collaborative code commenting:
 
 - **Annotation Types**:
+
   - **Note**: General observation or explanation
   - **Question**: Ask teammates for clarification
   - **Warning**: Highlight potential issues or gotchas
@@ -1985,6 +2162,7 @@ Collaborative code commenting:
   - **Link**: Reference external docs, tickets, or PRs
 
 - **Annotation Features**:
+
   - Attach to specific lines, ranges, or entire files
   - Markdown formatting with code blocks
   - Mention teammates (@username for notifications)
@@ -2002,17 +2180,20 @@ Collaborative code commenting:
 Capture collective understanding:
 
 - **Knowledge Nodes**:
+
   - **Concepts**: High-level ideas (e.g., "authentication flow")
   - **Components**: Modules, services, libraries
   - **Patterns**: Design patterns used in codebase
   - **Decisions**: ADRs (Architecture Decision Records)
 
 - **Relationships**:
+
   - "Concept X is implemented in Component Y"
   - "Pattern P solves Problem Q"
   - "Decision D affects Components A, B, C"
 
 - **Knowledge Cards**:
+
   - Title, description, related code locations
   - Contributors and last updated
   - Tags and categories
@@ -2028,12 +2209,14 @@ Capture collective understanding:
 Visualize team activity and knowledge:
 
 - **Activity Metrics**:
+
   - Who's exploring what code (opt-in, privacy-respecting)
   - Hot files: Most viewed/searched
   - Knowledge gaps: Code with few annotations or searches
   - Collaboration heatmap: Which team members work in which areas
 
 - **Expertise Mapping**:
+
   - Automatically infer expertise from activity
   - "Who knows about the payment processing module?"
   - Show top contributors to each area
@@ -2050,11 +2233,13 @@ Visualize team activity and knowledge:
 Team-enhanced search experience:
 
 - **Query Sharing**:
+
   - "Share this search" button copies link
   - Saved searches visible to team
   - Search templates: Fill in the blanks
 
 - **Collective Ranking**:
+
   - Upvote/downvote search results
   - Personalized ranking based on team feedback
   - "Top result for 8/10 team members"
@@ -2069,17 +2254,20 @@ Team-enhanced search experience:
 Guided walkthroughs of codebase:
 
 - **Tour Structure**:
+
   - Series of steps, each highlighting code + explanation
   - Step: File path, line range, description, next action
   - Branching paths: "If you're interested in X, go to step 5, otherwise 6"
 
 - **Use Cases**:
+
   - Onboarding: "New engineer orientation"
   - Feature tours: "How search indexing works"
   - Bug investigation: "Tracing the authentication bug"
   - Refactoring: "What we changed and why"
 
 - **Creation**:
+
   - Record mode: Create tour as you navigate
   - Manual mode: Write steps explicitly
   - Collaborative editing: Team can improve tours
@@ -2094,12 +2282,14 @@ Guided walkthroughs of codebase:
 Contextual conversations:
 
 - **Threaded Discussions**:
+
   - Start discussion on any file or code snippet
   - Threaded replies
   - Resolved/unresolved status
   - Link to issues or PRs
 
 - **Real-Time Chat**:
+
   - Ephemeral chat channel per repo or team
   - Code snippet sharing in chat
   - Screen sharing integration
@@ -2115,11 +2305,13 @@ Contextual conversations:
 Team-wide review insights:
 
 - **Review Checklist Templates**:
+
   - Security checklist: "Check for SQL injection, XSS, etc."
   - Performance: "Are there N+1 queries? Unnecessary loops?"
   - Style: "Follows team conventions?"
 
 - **Review Insights**:
+
   - Common issues: What gets flagged most
   - Reviewer effectiveness: Who catches most bugs
   - Review coverage: What code is rarely reviewed
@@ -2132,21 +2324,25 @@ Team-wide review insights:
 #### Implementation Phases
 
 **Phase 1: Shared Annotations (2 weeks)**
+
 - Implement annotation data model
 - VSCode extension UI for creating/viewing annotations
 - Git-based storage
 
 **Phase 2: Team Knowledge Graph (3 weeks)**
+
 - Knowledge node data model
 - Knowledge card UI
 - Search integration
 
 **Phase 3: Team Insights (2 weeks)**
+
 - Activity tracking (opt-in)
 - Insights dashboard
 - Expertise mapping
 
 **Phase 4: Code Tours (3 weeks)**
+
 - Tour data format
 - Record and playback functionality
 - Tour editor UI
@@ -2156,27 +2352,34 @@ Team-wide review insights:
 **Questions to Answer:**
 
 1. **Privacy**: How much team activity tracking is acceptable?
+
    - Recommendation: Opt-in, aggregate only, no individual monitoring
 
 2. **Storage**: Git-based (distributed) vs. server-based (centralized)?
+
    - Recommendation: Git-based for small teams, server for large teams
 
 3. **Real-Time**: How to sync annotations across teammates?
+
    - Recommendation: Git commits for durability, WebSockets for real-time preview
 
 4. **Access Control**: Can annotations be private?
+
    - Recommendation: Yes, personal vs. team annotations
 
 5. **Notification Overload**: How to avoid spamming teammates?
+
    - Recommendation: Smart notifications, digest mode, user preferences
 
 6. **Expertise**: How to avoid "expert shaming" (you should know this)?
+
    - Recommendation: Emphasize learning, not judgment. "Top contributors" not "experts"
 
 7. **Moderation**: What if annotations are inappropriate?
    - Recommendation: Report/flag mechanism, team admin can remove
 
 **Technology Stack:**
+
 - **Annotations**: JSON files in `.dolphin/annotations/`
 - **Real-Time**: WebSockets (Socket.io) or Server-Sent Events
 - **Knowledge Graph**: SQLite with graph edges, NetworkX for queries
@@ -2184,6 +2387,7 @@ Team-wide review insights:
 - **Tours**: JSON format, playback engine in extension
 
 **Success Criteria:**
+
 - [ ] Annotation creation and viewing in <5 seconds
 - [ ] Knowledge graph contains 100+ nodes after 1 month of use
 - [ ] Team insights dashboard shows 10+ metrics
@@ -2197,22 +2401,23 @@ Team-wide review insights:
 
 Projects ranked by Priority, Effort, and Impact:
 
-| Project | Priority | Effort | Impact | Score | Rec. Order |
-|---------|----------|--------|--------|-------|------------|
-| EP-1: Observability | High | Medium | High | 9 | 1 |
-| EP-2: Query Understanding | High | Large | Very High | 10 | 2 |
-| EP-5: Evaluation Framework | High | Medium | High | 9 | 3 |
-| EP-7: Developer Experience | High | Medium | High | 9 | 4 |
-| EP-3: Code Graph | Medium | Large | Very High | 8 | 5 |
-| EP-6: Performance | Medium | Medium | High | 7 | 6 |
-| EP-4: Multi-Repo | Medium | Medium | High | 7 | 7 |
-| EP-8: Security | Medium | Large | Very High* | 9* | 8 |
-| EP-9: Web Portal | Low | Large | High** | 6 | 9 |
-| EP-10: Collaboration | Low | Medium | Medium-High | 5 | 10 |
+| Project                    | Priority | Effort | Impact      | Score | Rec. Order |
+| -------------------------- | -------- | ------ | ----------- | ----- | ---------- |
+| EP-1: Observability        | High     | Medium | High        | 9     | 1          |
+| EP-2: Query Understanding  | High     | Large  | Very High   | 10    | 2          |
+| EP-5: Evaluation Framework | High     | Medium | High        | 9     | 3          |
+| EP-7: Developer Experience | High     | Medium | High        | 9     | 4          |
+| EP-3: Code Graph           | Medium   | Large  | Very High   | 8     | 5          |
+| EP-6: Performance          | Medium   | Medium | High        | 7     | 6          |
+| EP-4: Multi-Repo           | Medium   | Medium | High        | 7     | 7          |
+| EP-8: Security             | Medium   | Large  | Very High\* | 9\*   | 8          |
+| EP-9: Web Portal           | Low      | Large  | High\*\*    | 6     | 9          |
+| EP-10: Collaboration       | Low      | Medium | Medium-High | 5     | 10         |
 
 **Notes:**
-- *EP-8 Impact is "Very High" specifically for enterprise adoption, but "Low" for open-source/single-user scenarios
-- **EP-9 Impact is "High" for teams not using VSCode, but "Low" if all users have VSCode
+
+- \*EP-8 Impact is "Very High" specifically for enterprise adoption, but "Low" for open-source/single-user scenarios
+- \*\*EP-9 Impact is "High" for teams not using VSCode, but "Low" if all users have VSCode
 
 **Scoring**: Priority (1-3) × Impact (1-4) × (1 / Effort (1-3))
 
@@ -2223,7 +2428,9 @@ Projects ranked by Priority, Effort, and Impact:
 ### Year 1: Foundation & Intelligence
 
 **Q1 2026 (Weeks 1-13)**
+
 - **EP-1: Observability** (Weeks 1-6)
+
   - Core metrics and distributed tracing
   - Grafana dashboards
   - Alerting infrastructure
@@ -2234,7 +2441,9 @@ Projects ranked by Priority, Effort, and Impact:
   - A/B testing framework
 
 **Q2 2026 (Weeks 14-26)**
+
 - **EP-2: Query Understanding** (Weeks 14-25)
+
   - Query classification
   - Query expansion
   - Multi-stage retrieval
@@ -2245,7 +2454,9 @@ Projects ranked by Priority, Effort, and Impact:
   - Setup wizard
 
 **Q3 2026 (Weeks 27-39)**
+
 - **EP-6: Performance Optimization** (Weeks 31-37)
+
   - Profiling and baseline
   - Indexing optimization
   - Search optimization
@@ -2257,6 +2468,7 @@ Projects ranked by Priority, Effort, and Impact:
   - Documentation generation
 
 **Q4 2026 (Weeks 40-52)**
+
 - **EP-3: Code Graph (Part 1)** (Weeks 44-51)
   - Enhanced graph extraction
   - Graph-powered search
@@ -2265,7 +2477,9 @@ Projects ranked by Priority, Effort, and Impact:
 ### Year 2: Scale & Enterprise
 
 **Q1 2027**
+
 - **EP-3: Code Graph (Part 2)**
+
   - Visual graph explorer
   - Architectural insights
   - Time-travel code graph
@@ -2276,6 +2490,7 @@ Projects ranked by Priority, Effort, and Impact:
   - Workspace management
 
 **Q2 2027**
+
 - **EP-8: Enterprise Security**
   - Authentication & RBAC
   - Encryption & secrets management
@@ -2283,6 +2498,7 @@ Projects ranked by Priority, Effort, and Impact:
   - Compliance preparation
 
 **Q3 2027**
+
 - **EP-9: Web Portal**
   - Core search interface
   - Code viewer
@@ -2290,6 +2506,7 @@ Projects ranked by Priority, Effort, and Impact:
   - AI integration
 
 **Q4 2027**
+
 - **EP-10: Collaboration Features**
   - Shared annotations
   - Team knowledge graph
@@ -2309,6 +2526,7 @@ These 10 strategic enhancement projects provide a comprehensive roadmap to trans
 - **Success criteria** for measuring impact
 
 **Next Steps:**
+
 1. Review and prioritize projects based on business goals
 2. Validate technical assumptions through prototyping
 3. Gather stakeholder feedback and requirements
@@ -2316,6 +2534,7 @@ These 10 strategic enhancement projects provide a comprehensive roadmap to trans
 5. Begin implementation following the recommended order
 
 **Key Success Factors:**
+
 - Maintain backward compatibility throughout changes
 - Keep experimental features opt-in to reduce risk
 - Measure impact with evaluation framework (EP-5) before full rollout

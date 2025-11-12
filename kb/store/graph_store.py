@@ -19,13 +19,26 @@ from kb.chunkers.graph_types import GraphNode, GraphEdge
 class GraphStore:
     """Graph database store for code entities and relationships."""
 
-    def __init__(self, db_path: Path) -> None:
+    def __init__(self, db_path: Path |str) -> None:
         """Initialize graph store with database path.
-        
+
         Args:
-            db_path: Path to SQLite database file
+            db_path: Path to SQLite database file (Path or str)
         """
-        self.db_path = db_path
+        self.db_path = Path(db_path) if isinstance(db_path, str) else db_path
+        self._db_engine = None  # Lazy-loaded SQLModel engine
+
+    @property
+    def db(self):
+        """Get SQLModel engine for the database (lazy-loaded).
+
+        Returns:
+            SQLModel Engine instance
+        """
+        if self._db_engine is None:
+            from sqlmodel import create_engine
+            self._db_engine = create_engine(f"sqlite:///{self.db_path}")
+        return self._db_engine
 
     def _connect(self) -> sqlite3.Connection:
         """Create a database connection with proper configuration."""
@@ -308,23 +321,25 @@ class GraphStore:
         source_node_id: str,
         target_node_id: str,
         edge_type: str,
+        repo_id: int | None = None,
         line_number: int | None = None,
         is_direct: bool = True,
         relationship_metadata: str | None = None,
         commit_sha: str,
     ) -> str:
         """Insert or update a code edge.
-        
+
         Args:
             edge_id: Optional edge ID (UUID). If None, a new one is generated.
             source_node_id: Source node UUID
             target_node_id: Target node UUID
             edge_type: Type of relationship
+            repo_id: Repository ID (optional, will be derived from source node if not provided)
             line_number: Optional line number where relationship occurs
             is_direct: Whether this is a direct relationship
             relationship_metadata: Optional JSON metadata
             commit_sha: Git commit SHA
-            
+
         Returns:
             The edge ID (UUID string)
         """
@@ -333,13 +348,25 @@ class GraphStore:
 
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
+                # If repo_id not provided, derive it from source node
+                if repo_id is None:
+                    cur.execute(
+                        "SELECT repo_id FROM code_nodes WHERE id = ?",
+                        (source_node_id,)
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        repo_id = int(row[0])
+                    else:
+                        raise ValueError(f"Source node {source_node_id} not found")
+                
                 cur.execute(
                     """
                     INSERT INTO code_edges (
-                        id, source_node_id, target_node_id, edge_type,
+                        id, source_node_id, target_node_id, edge_type, repo_id,
                         line_number, is_direct, relationship_metadata,
                         commit_sha, first_seen_at, last_seen_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
                     ON CONFLICT(source_node_id, target_node_id, edge_type, line_number)
                     DO UPDATE SET
                         is_direct = excluded.is_direct,
@@ -349,7 +376,7 @@ class GraphStore:
                     RETURNING id
                     """,
                     (
-                        edge_id, source_node_id, target_node_id, edge_type,
+                        edge_id, source_node_id, target_node_id, edge_type, repo_id,
                         line_number, is_direct, relationship_metadata, commit_sha
                     ),
                 )

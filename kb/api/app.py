@@ -11,6 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .task_queue import TaskStatus, get_task_queue
+from .utils import validate_path_within_repo, GitRepository
+
+# Constants
+EMBEDDING_BATCH_SIZE = 128
+ESTIMATED_TOKENS_PER_CHUNK = 200
 
 app = FastAPI(title="Unified Knowledge Store", version="0.1.0")
 
@@ -239,6 +244,8 @@ async def list_repos() -> dict[str, list[dict[str, object]]]:
         return {"repos": repos}
 
     except Exception as e:
+        import logging
+        logging.error("Failed to list repositories", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
@@ -296,6 +303,8 @@ async def fetch_chunk(chunk_id: str) -> dict[str, object]:
     except HTTPException:
         raise
     except Exception as e:
+        import logging
+        logging.error(f"Error fetching chunk {chunk_id}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error fetching chunk: {str(e)}")
 
 
@@ -321,12 +330,7 @@ async def fetch_file_slice(
         full_path = repo_root / path
 
         # Security check: ensure path is within repo
-        try:
-            full_path = full_path.resolve()
-            if not str(full_path).startswith(str(repo_root.resolve())):
-                raise HTTPException(status_code=403, detail="Path outside repository")
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid file path")
+        full_path = validate_path_within_repo(full_path, repo_root)
 
         # Check file exists
         if not full_path.exists():
@@ -374,6 +378,8 @@ async def fetch_file_slice(
     except HTTPException:
         raise
     except Exception as e:
+        import logging
+        logging.error(f"Error reading file: {file_path}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
 
 
@@ -542,7 +548,7 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
         raise HTTPException(status_code=500, detail=f"Failed to register repository: {str(e)}")
 
 
-async def _process_index_task(task_id: str, repo_name: str, files: list[str]):
+async def _process_index_task(task_id: str, repo_name: str, files: list[str]) -> None:
     """Background task to process file indexing."""
     import asyncio
     
@@ -571,11 +577,9 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]):
 
             # Security check: ensure path is within repo
             try:
-                resolved = full_path.resolve()
-                if not str(resolved).startswith(str(root.resolve())):
-                    continue  # Skip files outside repo
-            except Exception:
-                continue
+                validate_path_within_repo(full_path, root)
+            except HTTPException:
+                continue  # Skip files outside repo
 
             if full_path.exists() and full_path.is_file():
                 valid_files.append(filepath)
@@ -598,19 +602,8 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]):
         from ..ingest._helpers import build_desired_map, representative_text_for_hash
 
         # Get commit info for provenance
-        try:
-            commit_sha = subprocess.check_output(
-                ["git", "-C", str(root), "rev-parse", "HEAD"],
-                stderr=subprocess.STDOUT
-            ).decode("utf-8").strip()
-            branch = subprocess.check_output(
-                ["git", "-C", str(root), "rev-parse", "--abbrev-ref", "HEAD"],
-                stderr=subprocess.STDOUT
-            ).decode("utf-8").strip()
-        except Exception:
-            # Non-git repo or git not available
-            commit_sha = "unknown"
-            branch = "unknown"
+        git_repo = GitRepository(root)
+        commit_sha, branch = git_repo.get_commit_and_branch()
 
         # Start session
         session_id = _sql_store.begin_session(repo_id, commit_sha, branch, embed_model)
@@ -679,27 +672,26 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]):
             desired_row_ids: set[str] = set()
 
             # Deduplicate by text_hash
-            dedup = ChunkDeduplicator(_sql_store)
-            changed_chunks, unchanged_chunks = dedup.filter_unchanged_chunks(
+            chunk_deduplicator = ChunkDeduplicator(_sql_store)
+            changed_chunks, unchanged_chunks = chunk_deduplicator.filter_unchanged_chunks(
                 chunks, repo_id, file_id, embed_model
             )
             new_hashes = {c.text_hash for c in changed_chunks}
             skipped_occurrences = len(unchanged_chunks)
 
             # Embed only new hashes (batched)
-            hash_to_vec: dict = {}
+            text_hash_to_embedding: dict = {}
             if new_hashes:
                 hashes_list = sorted(new_hashes)
-                batch_size = 128
-                for i in range(0, len(hashes_list), batch_size):
-                    batch_hashes = hashes_list[i:i+batch_size]
+                for i in range(0, len(hashes_list), EMBEDDING_BATCH_SIZE):
+                    batch_hashes = hashes_list[i:i+EMBEDDING_BATCH_SIZE]
                     texts_to_embed = [
                         representative_text_for_hash(h, chunks) for h in batch_hashes
                     ]
                     if not texts_to_embed:
                         continue
                     vectors = embed_texts_with_retry(embed_model, texts_to_embed)
-                    hash_to_vec.update(dict(zip(batch_hashes, vectors)))
+                    text_hash_to_embedding.update(dict(zip(batch_hashes, vectors)))
 
             # Upsert metadata and locations
             mapping = _sql_store.ensure_content_rows_for_file(
@@ -725,7 +717,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]):
             fts_chunks = []
             for h, occs in desired.items():
                 content_id = mapping.get(h)
-                vec = hash_to_vec.get(h)
+                vec = text_hash_to_embedding.get(h)
                 for idx_occ, occ in enumerate(occs):
                     row_id = f"{repo_id}:{file_id}:{embed_model}:{h}:{occ['start_line']}:{occ['end_line']}"
                     desired_row_ids.add(row_id)
@@ -990,8 +982,7 @@ async def get_repo_stats(repo_name: str) -> RepoStatsResponse:
             chunks_count = cur.fetchone()[0]
             
             # Sum token counts (from LanceDB metadata or estimate)
-            # For now, estimate: average 200 tokens per chunk
-            total_tokens = chunks_count * 200
+            total_tokens = chunks_count * ESTIMATED_TOKENS_PER_CHUNK
             
             # Get last successful session timestamp
             cur.execute("""
@@ -1021,8 +1012,10 @@ async def get_repo_stats(repo_name: str) -> RepoStatsResponse:
             last_indexed=last_indexed,
             needs_reindex=needs_reindex
         )
-        
+
     except Exception as e:
+        import logging
+        logging.error(f"Failed to get stats for repo {repo_name}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get repo stats: {str(e)}")
 
 
@@ -1124,11 +1117,9 @@ async def reindex_repo(
             if last_success:
                 # Get current commit
                 try:
-                    commit_sha = subprocess.check_output(
-                        ["git", "-C", str(root), "rev-parse", "HEAD"],
-                        stderr=subprocess.STDOUT
-                    ).decode("utf-8").strip()
-                    
+                    git_repo = GitRepository(root)
+                    commit_sha = git_repo.get_current_commit()
+
                     # Get changed files
                     changed_files = git_changed_files_modified_added(root, last_success, commit_sha)
                 except Exception:
@@ -1331,7 +1322,7 @@ async def _process_full_reindex_task(
     repo_name: str,
     files: list[str],
     clear_existing: bool = False
-):
+) -> None:
     """Background task for full reindex with optional index clearing."""
     import logging
     
@@ -1375,263 +1366,6 @@ async def _process_full_reindex_task(
             status=TaskStatus.FAILED,
             error=error_msg
         )
-
-
-# Keep old synchronous endpoint for backwards compatibility (deprecated)
-@app.post("/v1/index/sync")
-async def index_files_sync(request: IndexRequest):
-    """Synchronous indexing endpoint (deprecated - use /v1/index instead)."""
-    if _sql_store is None or _lance_store is None:
-        raise HTTPException(status_code=503, detail="Stores not initialized")
-
-    # Create and process task synchronously
-    task_queue = get_task_queue()
-    task = task_queue.create_task(request.repo, request.files)
-
-    await _process_index_task(task.task_id, request.repo, request.files)
-
-    # Get final result
-    final_task = task_queue.get_task(task.task_id)
-    if final_task and final_task.status == TaskStatus.COMPLETED:
-        return final_task.result
-    elif final_task and final_task.status == TaskStatus.FAILED:
-        raise HTTPException(status_code=500, detail=final_task.error)
-    else:
-        raise HTTPException(status_code=500, detail="Unknown error occurred")
-
-
-# Remove old implementation code below this point
-@app.post("/v1/index_old")
-async def index_files_old(request: IndexRequest):
-    """Old implementation - kept for reference only."""
-    if _sql_store is None or _lance_store is None:
-        raise HTTPException(status_code=503, detail="Stores not initialized")
-
-    if _pipeline is None:
-        raise HTTPException(status_code=503, detail="Ingestion pipeline not initialized")
-
-    # Get repo
-    repo = _sql_store.get_repo_by_name(request.repo)
-    if not repo:
-        raise HTTPException(status_code=404, detail=f"Repository '{request.repo}' not found")
-
-    repo_id = int(repo["id"])
-    root = Path(repo["root_path"])
-    embed_model = repo.get("default_embed_model", "large")
-
-    # Filter files that actually exist
-    valid_files = []
-    for filepath in request.files:
-        full_path = root / filepath
-
-        # Security check: ensure path is within repo
-        try:
-            resolved = full_path.resolve()
-            if not str(resolved).startswith(str(root.resolve())):
-                continue  # Skip files outside repo
-        except Exception:
-            continue
-
-        if full_path.exists() and full_path.is_file():
-            valid_files.append(filepath)
-
-    if not valid_files:
-        raise HTTPException(status_code=400, detail="No valid files to index")
-
-    # Old sync implementation follows...
-    import subprocess
-    from ..ingest.dedup import ChunkDeduplicator
-    from ..chunkers.registry import detect_language_from_extension, chunk_file as chunk_file_with_config
-    from ..chunkers.repo_config import load_repo_chunking_config
-    from ..hashing import hash_text
-    from ..embeddings.provider import embed_texts_with_retry
-    from ..ingest._helpers import build_desired_map, representative_text_for_hash
-
-    # Get commit info for provenance
-    try:
-        commit_sha = subprocess.check_output(
-            ["git", "-C", str(root), "rev-parse", "HEAD"],
-            stderr=subprocess.STDOUT
-        ).decode("utf-8").strip()
-        branch = subprocess.check_output(
-            ["git", "-C", str(root), "rev-parse", "--abbrev-ref", "HEAD"],
-            stderr=subprocess.STDOUT
-        ).decode("utf-8").strip()
-    except Exception:
-        # Non-git repo or git not available
-        commit_sha = "unknown"
-        branch = "unknown"
-
-    # Start session
-    session_id = _sql_store.begin_session(repo_id, commit_sha, branch, embed_model)
-
-    chunks_indexed = chunks_skipped = 0
-    repo_config = load_repo_chunking_config(root)
-
-    for filepath in valid_files:
-        file_path = root / filepath
-
-        # Resolve or upsert file_id
-        file_id = _sql_store.upsert_file(
-            repo_id=repo_id,
-            path=filepath,
-            ext=file_path.suffix,
-            language=None,  # Will be detected by chunker
-            is_binary=False,
-            size_bytes=file_path.stat().st_size
-        )
-
-        # Determine language and chunk the file
-        language = detect_language_from_extension(file_path) or "text"
-        try:
-            text = file_path.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
-            continue
-
-        chunks = chunk_file_with_config(
-            abs_path=file_path,
-            rel_path=filepath,
-            language=language,
-            text=text,
-            repo_config=repo_config,
-        )
-
-        # Compute text_hash for each chunk
-        for chunk in chunks:
-            chunk.text_hash = hash_text(chunk.text)
-
-        # Build desired map
-        desired = build_desired_map(chunks)
-        desired_row_ids: set[str] = set()
-
-        # Deduplicate by text_hash
-        dedup = ChunkDeduplicator(_sql_store)
-        changed_chunks, unchanged_chunks = dedup.filter_unchanged_chunks(
-            chunks, repo_id, file_id, embed_model
-        )
-        new_hashes = {c.text_hash for c in changed_chunks}
-        skipped_occurrences = len(unchanged_chunks)
-
-        # Embed only new hashes (batched)
-        hash_to_vec: dict = {}
-        if new_hashes:
-            hashes_list = sorted(new_hashes)
-            batch_size = 128
-            for i in range(0, len(hashes_list), batch_size):
-                batch_hashes = hashes_list[i:i+batch_size]
-                texts_to_embed = [
-                    representative_text_for_hash(h, chunks) for h in batch_hashes
-                ]
-                if not texts_to_embed:
-                    continue
-                vectors = embed_texts_with_retry(embed_model, texts_to_embed)
-                hash_to_vec.update(dict(zip(batch_hashes, vectors)))
-
-        # Upsert metadata and locations
-        mapping = _sql_store.ensure_content_rows_for_file(
-            repo_id, file_id, embed_model, list(desired.keys())
-        )
-
-        for h, occs in desired.items():
-            cid = mapping.get(h)
-            if cid:
-                _sql_store.sync_locations_for_content_row(cid, occs)
-
-        _sql_store.prune_invalidated_content_for_file(
-            repo_id, file_id, embed_model, set(desired.keys())
-        )
-
-        # Build token count lookup
-        occ_token_counts = {
-            (ch.start_line, ch.end_line): getattr(ch, 'token_count', 0) for ch in chunks
-        }
-
-        # Persist vectors to LanceDB
-        payload = []
-        fts_chunks = []
-        for h, occs in desired.items():
-            content_id = mapping.get(h)
-            vec = hash_to_vec.get(h)
-            for idx, occ in enumerate(occs):
-                row_id = f"{repo_id}:{file_id}:{embed_model}:{h}:{occ['start_line']}:{occ['end_line']}"
-                desired_row_ids.add(row_id)
-                if vec is None:
-                    continue  # unchanged hash
-                payload.append({
-                    'id': row_id,
-                    'vector': vec,
-                    'repo': request.repo,
-                    'path': filepath,
-                    'start_line': occ['start_line'],
-                    'end_line': occ['end_line'],
-                    'text_hash': h,
-                    'commit': commit_sha,
-                    'branch': branch,
-                    'embed_model': embed_model,
-                    'language': language,
-                    'symbol_kind': occ.get('symbol_kind'),
-                    'symbol_name': occ.get('symbol_name'),
-                    'symbol_path': occ.get('symbol_path'),
-                    'heading_h1': occ.get('heading_h1'),
-                    'heading_h2': occ.get('heading_h2'),
-                    'heading_h3': occ.get('heading_h3'),
-                    'token_count': occ_token_counts.get((occ['start_line'], occ['end_line']), 0),
-                    'created_at': datetime.datetime.now(datetime.timezone.utc),
-                })
-
-                # Prepare chunk for FTS5 indexing (first occurrence only)
-                if content_id and idx == 0:
-                    chunk_text = None
-                    for chunk in chunks:
-                        if chunk.text_hash == h:
-                            chunk_text = chunk.text
-                            break
-
-                    if chunk_text:
-                        fts_chunks.append({
-                            'content_id': content_id,
-                            'repo': request.repo,
-                            'path': filepath,
-                            'content': chunk_text,
-                            'symbol_name': occ.get('symbol_name'),
-                            'symbol_path': occ.get('symbol_path'),
-                        })
-
-        if payload:
-            _lance_store.upsert_chunks(request.repo, payload, model=embed_model)
-
-        # Index chunks in FTS5 for BM25 search
-        if fts_chunks:
-            _sql_store.bulk_index_chunks_for_fts(fts_chunks)
-
-        # Prune any stale vectors for this file/model
-        if desired_row_ids:
-            _lance_store.prune_file_rows(request.repo, filepath, model=embed_model, keep_ids=desired_row_ids)
-        else:
-            _lance_store.prune_file_rows(request.repo, filepath, model=embed_model)
-
-        # Update counters
-        chunks_indexed += len(new_hashes)
-        chunks_skipped += skipped_occurrences
-
-    # Update session
-    _sql_store.bump_session_counters(
-        session_id,
-        files_indexed=len(valid_files),
-        chunks_indexed=chunks_indexed,
-        chunks_skipped=chunks_skipped,
-        vectors_written=chunks_indexed,
-        chunks_pruned=0
-    )
-    _sql_store.set_session_status(session_id, "succeeded")
-
-    return IndexResponse(
-        indexed=chunks_indexed,
-        skipped=chunks_skipped,
-        tokens_used=0,  # TODO: Track token usage
-        cost_usd=0.0,   # TODO: Calculate cost
-        message=f"Indexed {len(valid_files)} files: {chunks_indexed} new chunks, {chunks_skipped} skipped"
-    )
 
 
 def main() -> None:
