@@ -91,16 +91,15 @@ dev = [
 dolphin = "kb.cli:main"
 kb = "kb.ingest.cli:app"
 kb-api = "kb.api.server:main"
-personas = "personas.src.personas:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["kb", "personas"]
+packages = ["kb"]
 
 [tool.hatch.build.targets.wheel.shared-data]
 "kb/config_template.toml" = "kb/config_template.toml"
 
 [tool.hatch.build.targets.sdist]
-include = ["kb", "personas", "kb/config_template.toml"]
+include = ["kb", "kb/config_template.toml"]
 
 [tool.uv.sources]
 dolphin = { workspace = true }
@@ -145,7 +144,7 @@ markers = [
 asyncio_mode = "auto"
 
 [tool.coverage.run]
-source = ["kb", "personas"]
+source = ["kb"]
 omit = [
     "*/tests/*",
     "*/test_*.py",
