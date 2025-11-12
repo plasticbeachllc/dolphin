@@ -30,24 +30,28 @@ This guide provides instructions for profiling Dolphin's performance using the t
 ### Required Tools
 
 **Python Profiling**:
+
 ```bash
-# Install py-spy for Python profiling
-uv pip install py-spy
+# Install py-spy globally (recommended for profiling tools that need sudo)
+pipx install py-spy
+# or: pip install --user py-spy
 
 # Verify installation
 py-spy --version
 ```
 
 **Node/Bun Profiling**:
+
 ```bash
 # Install clinic.js for Node/Bun profiling
-npm install -g clinic
+bun install -g clinic
 
 # Verify installation
-clinic --version
+bun run clinic --version
 ```
 
 **Monitoring Stack** (Optional but recommended):
+
 ```bash
 # Requires Docker
 docker --version
@@ -89,12 +93,14 @@ git clone --depth 1 https://github.com/torvalds/linux large
 **Purpose**: CPU profiling for Python (Knowledge Bank backend)
 
 **Key Features**:
+
 - Low-overhead sampling profiler
 - No code modification required
 - Generates flame graphs and speedscope format
 - Supports multiprocessing
 
 **Usage**:
+
 ```bash
 # Record profiling data
 py-spy record --format speedscope --output profile.json --rate 100 -- uv run python -m kb.cli index /path/to/repo
@@ -108,11 +114,13 @@ py-spy record --format flamegraph --output flamegraph.svg --rate 100 -- uv run p
 **Purpose**: Performance profiling for Node.js/Bun (Agent Core, Extension)
 
 **Key Features**:
+
 - Doctor: Detects performance issues
 - Bubbleprof: Async operations visualization
 - Flame: CPU flame graphs
 
 **Usage**:
+
 ```bash
 # Profile extension activation
 clinic doctor -- node extension/dist/extension.js
@@ -126,11 +134,13 @@ clinic flame -- bun run agent-core/src/main.ts
 **Purpose**: Real-time metrics collection and visualization
 
 **Key Features**:
+
 - Time-series metrics database
 - Pre-built dashboard for EP-6 metrics
 - Alerting on performance regressions
 
 **Setup**:
+
 ```bash
 # Start monitoring stack
 ./scripts/setup_monitoring.sh
@@ -178,11 +188,13 @@ Results saved to: `profiling_results/search/`
 ### 3. View Results
 
 **Flame Graphs**:
+
 1. Visit https://speedscope.app
 2. Upload `profiling_results/*/*.json` files
 3. Analyze CPU hotspots
 
 **Monitoring Dashboard**:
+
 1. Open http://localhost:3001
 2. Add Prometheus data source (http://host.docker.internal:9090)
 3. Import dashboard from `monitoring/grafana/ep6-dashboard.json`
@@ -239,6 +251,7 @@ py-spy record \
 #### Step 4: Extract Metrics
 
 From the log output, record:
+
 - Total time (seconds)
 - Files processed
 - Throughput (files/min)
@@ -268,6 +281,7 @@ Top CPU consumers in indexing:
 ```
 
 **Optimization Opportunities**:
+
 - Parallelize tree_sitter.parse() (35% → ~3.5% with 10 workers)
 - Batch openai.embed() calls (25% → ~10% with adaptive batching)
 - Cache parsed ASTs (8% reduction in parse time)
@@ -338,6 +352,7 @@ curl -X POST http://localhost:8420/api/search \
 #### Step 6: Analyze Results
 
 Review `profiling_results/search/*.log`:
+
 ```bash
 # Calculate average latency
 grep "Latency:" profiling_results/search/search_cold_*.log | \
@@ -372,6 +387,7 @@ Breakdown (cold):
 ```
 
 **Optimization Opportunities**:
+
 - Implement query caching (expect 70%+ hit rate → 50% avg latency reduction)
 - Pre-filter vector search by repo (180ms → ~80ms)
 - Parallelize vector + BM25 (260ms → ~180ms)
@@ -386,6 +402,7 @@ Breakdown (cold):
 #### 1. Add Prometheus Instrumentation
 
 **KB API** (`kb/api/server.py`):
+
 ```python
 from prometheus_client import Counter, Histogram, Gauge
 
@@ -408,13 +425,14 @@ async def search(request: SearchRequest):
 ```
 
 **Agent Core** (`agent-core/src/main.ts`):
+
 ```typescript
-import { register, Counter, Histogram } from 'prom-client';
+import { register, Counter, Histogram } from "prom-client";
 
 // Metrics
 const extensionActivationDuration = new Histogram({
-  name: 'extension_activation_duration_seconds',
-  help: 'Extension activation time'
+  name: "extension_activation_duration_seconds",
+  help: "Extension activation time",
 });
 
 // Usage
@@ -427,6 +445,7 @@ extensionActivationDuration.observe(duration);
 #### 2. Expose Metrics Endpoints
 
 **KB API**:
+
 ```python
 from prometheus_client import generate_latest
 
@@ -436,9 +455,10 @@ def metrics():
 ```
 
 **Agent Core**:
+
 ```typescript
-app.get('/metrics', (req, res) => {
-  res.set('Content-Type', register.contentType);
+app.get("/metrics", (req, res) => {
+  res.set("Content-Type", register.contentType);
   res.end(register.metrics());
 });
 ```
@@ -471,16 +491,19 @@ The EP-6 dashboard includes:
 #### 1. CPU-Bound Operations
 
 **Indicators**:
+
 - High % in flame graph for specific functions
 - Low I/O wait time
 - All cores at 100% utilization
 
 **Common Culprits**:
+
 - tree-sitter parsing (synchronous, CPU-intensive)
 - Text embedding (if done locally)
 - Vector similarity calculations
 
 **Solutions**:
+
 - Parallelize across multiple processes
 - Use Rust/C++ extensions for hot paths
 - Cache expensive computations
@@ -488,16 +511,19 @@ The EP-6 dashboard includes:
 #### 2. I/O-Bound Operations
 
 **Indicators**:
+
 - High disk read/write time
 - Low CPU utilization
 - Long wait times in flame graph
 
 **Common Culprits**:
+
 - Sequential file reading
 - Synchronous database operations
 - Network API calls (embeddings)
 
 **Solutions**:
+
 - Async I/O with asyncio/tokio
 - Batch database operations
 - Connection pooling
@@ -506,16 +532,19 @@ The EP-6 dashboard includes:
 #### 3. Memory Bottlenecks
 
 **Indicators**:
+
 - High memory allocation rate
 - Frequent garbage collection
 - Out-of-memory errors
 
 **Common Culprits**:
+
 - Loading entire files into memory
 - Large intermediate data structures
 - Memory leaks in loops
 
 **Solutions**:
+
 - Streaming/chunked processing
 - Clear references explicitly
 - Use generators instead of lists
@@ -530,6 +559,7 @@ For each optimization, calculate:
 **ROI**: Impact / Complexity
 
 **Example**:
+
 ```
 Optimization: Parallelize file scanning
 Impact: 8x throughput improvement = 800%
@@ -553,6 +583,7 @@ ROI: 35 / 2 = 17.5
 **Issue**: Permission denied when profiling
 
 **Solution**:
+
 ```bash
 # Run with sudo (Linux)
 sudo py-spy record --pid <pid> --output profile.json
@@ -566,6 +597,7 @@ sudo setcap cap_sys_ptrace=eip $(which py-spy)
 **Issue**: "Cannot find module"
 
 **Solution**:
+
 ```bash
 # Reinstall clinic globally
 npm uninstall -g clinic
@@ -580,6 +612,7 @@ clinic --version
 **Issue**: Targets down in Prometheus UI
 
 **Solution**:
+
 ```bash
 # Check if KB API is exposing metrics
 curl http://localhost:8420/metrics
@@ -596,6 +629,7 @@ docker restart ep6-prometheus
 **Issue**: Profiling takes too long or crashes
 
 **Solution**:
+
 ```bash
 # Use a subset of the repository
 git clone --depth 1 --single-branch <repo-url>
@@ -609,6 +643,7 @@ uv run python scripts/generate_test_repo.py --size 1000
 **Issue**: Profiling results vary significantly between runs
 
 **Solution**:
+
 ```bash
 # Warm up system before profiling
 echo 3 > /proc/sys/vm/drop_caches  # Clear caches (Linux, requires sudo)

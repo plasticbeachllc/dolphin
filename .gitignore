@@ -30,6 +30,9 @@ coverage.xml
 
 profiling_results/
 
+# profiling artifacts
+profiling_results/
+
 # misc
 .DS_Store
 !*.example
