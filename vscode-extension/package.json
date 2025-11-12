@@ -4,6 +4,7 @@
     "description": "AI coding assistant with semantic code search",
     "version": "0.1.0",
     "publisher": "plasticbeach",
+    "license": "MIT",
     "icon": "resources/dolphin_vscode.png",
     "engines": {
         "vscode": "^1.96.0"

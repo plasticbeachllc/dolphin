@@ -341,6 +341,79 @@ dolphin kb index <repo-name> --full --force
 
 For detailed troubleshooting, performance tips, and development workflows, see [AGENTS.md](AGENTS.md).
 
+## Release Process
+
+Dolphin uses Git Flow for release management. Follow these steps to create and publish a new release:
+
+### 1. Start a Release Branch
+
+When the `develop` branch is stable and ready for a new release, create a release branch:
+
+```bash
+git flow release start <version>
+```
+
+Replace `<version>` with the specific version number (e.g., `1.0.0`). This creates a new branch (e.g., `release/1.0.0`) from the `develop` branch.
+
+### 2. Publish the Release Branch (Optional)
+
+If multiple developers need to collaborate on the release or perform testing, publish the release branch to the remote repository:
+
+```bash
+git flow release publish <version>
+```
+
+### 3. Perform Release-Specific Tasks
+
+On the release branch, conduct any final preparations:
+
+- Update version numbers in `pyproject.toml` and `vscode-extension/package.json`
+- Make last-minute bug fixes specific to this release
+- Run final tests and quality assurance checks
+- Update `CHANGELOG.md` with release notes
+
+### 4. Finish the Release
+
+Once the release branch is stable and ready for deployment, finalize the release:
+
+```bash
+git flow release finish <version>
+```
+
+This command:
+- Merges the release branch into `master` (production-ready code)
+- Tags the `master` branch with the specified version
+- Merges the release branch back into `develop`
+- Deletes the local release branch
+
+### 5. Push Changes and Tag
+
+After finishing the release, push the updated branches and tag to the remote repository:
+
+```bash
+git push origin master develop
+git push origin --tags
+```
+
+### 6. Publish to Marketplaces
+
+The GitHub Actions workflow will automatically publish the VSCode extension when a new release is created on GitHub. To manually publish:
+
+**VSCode Extension:**
+```bash
+cd vscode-extension
+npm install
+cd webview && bun install && bun run build && cd ..
+npx vsce publish --pat <your-pat>
+```
+
+**Python Package (PyPI):**
+```bash
+# Build and publish using uv
+uv build
+uv publish
+```
+
 ## License
 
 MIT License
