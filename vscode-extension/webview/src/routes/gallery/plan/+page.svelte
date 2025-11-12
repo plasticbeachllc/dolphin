@@ -14,7 +14,7 @@
 	const mockPlanPhases = [
 		{
 			id: 'phase-1',
-			name: 'Planning',
+			name: 'Plan',
 			status: 'completed' as const,
 			steps: [
 				{
@@ -37,7 +37,7 @@
 		},
 		{
 			id: 'phase-2',
-			name: 'Implementation',
+			name: 'Exec',
 			status: 'active' as const,
 			steps: [
 				{
@@ -64,7 +64,7 @@
 		},
 		{
 			id: 'phase-3',
-			name: 'Testing',
+			name: 'Test',
 			status: 'pending' as const,
 			steps: [
 				{
