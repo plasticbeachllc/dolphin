@@ -219,7 +219,7 @@
 			<!-- Info Footer -->
 			<div class="pt-4 border-t border-border">
 				<div class="flex items-start gap-2 text-xs text-muted-foreground">
-					<div class="size-4 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+					<div class="size-4 rounded-full bg-primary/20 flex items-center justify-center shrink-0 mt-0.5">
 						<span class="text-[10px]">💡</span>
 					</div>
 					<p>
