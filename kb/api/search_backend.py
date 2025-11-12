@@ -369,21 +369,31 @@ class KnowledgeSearchBackend:
         
         hydrated = []
         for result in bm25_results:
-            # Fetch full chunk metadata from SQLiteMetadataStore
-            chunk_data = sql_store.get_chunk_by_id(result["chunk_id"])
-            
+            chunk_id = result["chunk_id"]
+
+            # Attempt to resolve deterministic FTS content IDs (repo_id:file_id:text_hash)
+            chunk_data = None
+            identity = self._parse_fts_content_id(chunk_id)
+            if identity:
+                repo_id, file_id, text_hash = identity
+                chunk_data = sql_store.get_chunk_by_content_identity(repo_id, file_id, text_hash)
+
+            # Fallback to legacy lookup by chunk_id (UUID content_id)
+            if not chunk_data:
+                chunk_data = sql_store.get_chunk_by_id(chunk_id)
+
             # Normalize BM25 score to [0, 1] range for fusion
             # BM25 scores are unbounded, use sigmoid normalization
             bm25_score = result["score"]
             normalized_score = 1 / (1 + math.exp(-bm25_score / BM25_SCORE_NORMALIZATION_FACTOR))
-            
+
             # Create result dict with available data
             hydrated_result = {
-                "chunk_id": result["chunk_id"],
+                "chunk_id": chunk_id,
                 "repo": result["repo"],
                 "path": result["path"],
                 "score": normalized_score,
-                "id": result["chunk_id"],  # For compatibility with vector results
+                "id": chunk_id,  # For compatibility with vector results
             }
             
             # Add metadata from chunk_data if available
@@ -402,6 +412,19 @@ class KnowledgeSearchBackend:
             hydrated.append(hydrated_result)
         
         return hydrated
+
+    @staticmethod
+    def _parse_fts_content_id(content_id: str) -> tuple[int, int, str] | None:
+        """Parse deterministic FTS content IDs (repo_id:file_id:text_hash)."""
+
+        if content_id.count(":") < 2:
+            return None
+
+        try:
+            repo_id_str, file_id_str, text_hash = content_id.split(":", 2)
+            return int(repo_id_str), int(file_id_str), text_hash
+        except (ValueError, TypeError):
+            return None
         
     def _resolve_content_ids(self, row_ids: list[str]) -> dict[str, str]:
         """Convert LanceDB row IDs to metadata content_ids.

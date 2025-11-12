@@ -1199,7 +1199,7 @@ class SQLiteMetadataStore:
 
     def get_chunk_by_id(self, chunk_id: str) -> dict[str, Any] | None:
         """Get full chunk metadata by content_id.
-        
+
         Returns:
             Dict with chunk metadata or None if not found
         """
@@ -1242,6 +1242,84 @@ class SQLiteMetadataStore:
                 "symbol_name": row[10],
                 "symbol_path": row[11],
             }
+
+    def get_chunk_by_content_identity(
+        self,
+        repo_id: int,
+        file_id: int,
+        text_hash: str,
+    ) -> dict[str, Any] | None:
+        """Get chunk metadata using deterministic FTS identity components."""
+
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute(
+                """
+                SELECT
+                    cc.id,
+                    cc.text_hash,
+                    cc.embed_model,
+                    cc.first_indexed_at,
+                    cc.last_indexed_at,
+                    f.path,
+                    f.language
+                FROM chunk_content cc
+                JOIN files f ON cc.file_id = f.id
+                WHERE cc.repo_id = ? AND cc.file_id = ? AND cc.text_hash = ?
+                ORDER BY
+                    CASE WHEN cc.last_indexed_at IS NOT NULL THEN 0 ELSE 1 END,
+                    cc.last_indexed_at DESC
+                LIMIT 1
+                """,
+                (repo_id, file_id, text_hash),
+            )
+
+            row = cur.fetchone()
+            if not row:
+                return None
+
+            content_id = str(row[0])
+            metadata: dict[str, Any] = {
+                "chunk_id": content_id,
+                "text_hash": str(row[1]),
+                "embed_model": str(row[2]),
+                "first_indexed_at": row[3],
+                "last_indexed_at": row[4],
+                "path": str(row[5]),
+                "language": row[6],
+            }
+
+            cur.execute(
+                """
+                SELECT
+                    start_line,
+                    end_line,
+                    symbol_kind,
+                    symbol_name,
+                    symbol_path
+                FROM chunk_locations
+                WHERE content_id = ?
+                ORDER BY
+                    CASE WHEN last_seen_at IS NOT NULL THEN 0 ELSE 1 END,
+                    last_seen_at DESC,
+                    start_line ASC
+                LIMIT 1
+                """,
+                (content_id,),
+            )
+            location = cur.fetchone()
+
+            if location:
+                metadata.update(
+                    {
+                        "start_line": int(location[0]) if location[0] is not None else None,
+                        "end_line": int(location[1]) if location[1] is not None else None,
+                        "symbol_kind": location[2],
+                        "symbol_name": location[3],
+                        "symbol_path": location[4],
+                    }
+                )
+
+            return metadata
 
     def get_chunk_contents(self, chunk_ids: list[str]) -> dict[str, str]:
         """Get a mapping of chunk_id to its content.
