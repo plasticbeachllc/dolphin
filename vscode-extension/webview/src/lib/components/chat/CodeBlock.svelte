@@ -22,6 +22,22 @@
     // Re-highlight when code changes (streaming updates)
     if (codeElement && code) {
       hljs.highlightElement(codeElement);
+  
+  // Generate highlighted HTML without DOM mutation
+  // This prevents the infinite loop caused by hljs.highlightElement()
+  let highlightedCode = $derived.by(() => {
+    try {
+      const result = hljs.highlight(code, { language, ignoreIllegals: true });
+      return result.value;
+    } catch (err) {
+      console.error("Failed to highlight code:", err);
+      // Fallback to plain code with HTML escaping
+      return code
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
   });
 
@@ -58,7 +74,6 @@
     <span class="language-label">{language}</span>
     <button
       type="button"
-      type="button"
       class="copy-button"
       onclick={copyCode}
       aria-label={copied ? 'Code copied to clipboard' : 'Copy code to clipboard'}
@@ -66,11 +81,7 @@
       {#if copied}
         <Check size={16} aria-hidden="true" />
         <span class="sr-only">Copied</span>
-        <Check size={16} aria-hidden="true" />
-        <span class="sr-only">Copied</span>
       {:else}
-        <Copy size={16} aria-hidden="true" />
-        <span class="sr-only">Copy</span>
         <Copy size={16} aria-hidden="true" />
         <span class="sr-only">Copy</span>
       {/if}
