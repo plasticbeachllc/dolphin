@@ -112,42 +112,54 @@ export class KBManager {
   }
 
   private checkDevelopmentSetup(workspaceRoot: string): boolean {
-    // Check if workspace has pyproject.toml directly
-    if (fs.existsSync(path.join(workspaceRoot, "pyproject.toml"))) {
-      return true;
-    }
+    // Walk up the directory tree to find pyproject.toml
+    let currentDir = path.resolve(workspaceRoot);
+    const root = path.parse(currentDir).root;
 
-    // Check if dolphin subdirectory has pyproject.toml
-    const dolphinPath = path.join(workspaceRoot, "dolphin");
-    if (fs.existsSync(path.join(dolphinPath, "pyproject.toml"))) {
-      return true;
-    }
+    while (currentDir !== root) {
+      // Check current directory
+      if (fs.existsSync(path.join(currentDir, "pyproject.toml"))) {
+        return true;
+      }
 
-    // Check parent directory (for when workspace is vscode-extension or other subdirectory)
-    const parentPath = path.dirname(workspaceRoot);
-    if (fs.existsSync(path.join(parentPath, "pyproject.toml"))) {
-      return true;
+      // Check dolphin subdirectory
+      const dolphinPath = path.join(currentDir, "dolphin");
+      if (fs.existsSync(path.join(dolphinPath, "pyproject.toml"))) {
+        return true;
+      }
+
+      // Move up one level
+      const parentDir = path.dirname(currentDir);
+      if (parentDir === currentDir) break; // Reached root
+      currentDir = parentDir;
     }
 
     return false;
   }
 
   private findDolphinRoot(workspaceRoot: string): string {
-    // Check if workspaceRoot itself has pyproject.toml
-    if (fs.existsSync(path.join(workspaceRoot, "pyproject.toml"))) {
-      return workspaceRoot;
-    }
+    // Walk up the directory tree to find pyproject.toml
+    let currentDir = path.resolve(workspaceRoot);
+    const root = path.parse(currentDir).root;
 
-    // Check if there's a "dolphin" subdirectory with pyproject.toml
-    const dolphinPath = path.join(workspaceRoot, "dolphin");
-    if (fs.existsSync(path.join(dolphinPath, "pyproject.toml"))) {
-      return dolphinPath;
-    }
+    while (currentDir !== root) {
+      // Check current directory
+      if (fs.existsSync(path.join(currentDir, "pyproject.toml"))) {
+        console.error(`[KB Manager] Found pyproject.toml at: ${currentDir}`);
+        return currentDir;
+      }
 
-    // Check parent directory (for when workspace is vscode-extension or other subdirectory)
-    const parentPath = path.dirname(workspaceRoot);
-    if (fs.existsSync(path.join(parentPath, "pyproject.toml"))) {
-      return parentPath;
+      // Check dolphin subdirectory
+      const dolphinPath = path.join(currentDir, "dolphin");
+      if (fs.existsSync(path.join(dolphinPath, "pyproject.toml"))) {
+        console.error(`[KB Manager] Found pyproject.toml at: ${dolphinPath}`);
+        return dolphinPath;
+      }
+
+      // Move up one level
+      const parentDir = path.dirname(currentDir);
+      if (parentDir === currentDir) break; // Reached root
+      currentDir = parentDir;
     }
 
     // Fallback to workspace root
