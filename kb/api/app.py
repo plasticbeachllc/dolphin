@@ -744,17 +744,42 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                 (ch.start_line, ch.end_line): getattr(ch, 'token_count', 0) for ch in chunks
             }
 
-            # Persist vectors to LanceDB
+            # Persist vectors to LanceDB and prepare FTS5 chunks
             payload = []
             fts_chunks = []
             for h, occs in desired.items():
                 content_id = mapping.get(h)
                 vec = text_hash_to_embedding.get(h)
+
+                # Prepare chunk for FTS5 indexing (once per hash, independent of vector status)
+                # FTS5 is for BM25 text search and should work even without embeddings
+                if content_id:
+                    chunk_text = None
+                    for chunk in chunks:
+                        if chunk.text_hash == h:
+                            chunk_text = chunk.text
+                            break
+
+                    if chunk_text:
+                        # Generate deterministic FTS5 content_id (independent of embed_model)
+                        fts_content_id = generate_fts_content_id(repo_id, file_id, h)
+
+                        fts_chunks.append({
+                            'content_id': fts_content_id,
+                            'repo': repo_name,
+                            'path': filepath,
+                            'text_hash': h,
+                            'content': chunk_text,
+                            'symbol_name': occs[0].get('symbol_name') if occs else None,
+                            'symbol_path': occs[0].get('symbol_path') if occs else None,
+                        })
+
+                # Build LanceDB payload for chunks with vectors
                 for idx_occ, occ in enumerate(occs):
                     row_id = f"{repo_id}:{file_id}:{embed_model}:{h}:{occ['start_line']}:{occ['end_line']}"
                     desired_row_ids.add(row_id)
                     if vec is None:
-                        continue  # unchanged hash
+                        continue  # unchanged hash, skip vector storage
                     payload.append({
                         'id': row_id,
                         'vector': vec,
@@ -776,28 +801,6 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                         'token_count': occ_token_counts.get((occ['start_line'], occ['end_line']), 0),
                         'created_at': datetime.datetime.now(datetime.timezone.utc),
                     })
-
-                    # Prepare chunk for FTS5 indexing (first occurrence only)
-                    if content_id and idx_occ == 0:
-                        chunk_text = None
-                        for chunk in chunks:
-                            if chunk.text_hash == h:
-                                chunk_text = chunk.text
-                                break
-
-                        if chunk_text:
-                            # Generate deterministic FTS5 content_id (independent of embed_model)
-                            fts_content_id = generate_fts_content_id(repo_id, file_id, h)
-
-                            fts_chunks.append({
-                                'content_id': fts_content_id,
-                                'repo': repo_name,
-                                'path': filepath,
-                                'text_hash': h,
-                                'content': chunk_text,
-                                'symbol_name': occ.get('symbol_name'),
-                                'symbol_path': occ.get('symbol_path'),
-                            })
 
             logger.info(f"[DEBUG] File {filepath}: prepared {len(payload)} LanceDB vectors and {len(fts_chunks)} FTS5 chunks")
 
