@@ -2,9 +2,9 @@
 
 Technical architecture and implementation status for the Dolphin AI enablement platform.
 
-**Version**: 0.1.13
-**Status**: Beta (Production Ready for Core Components)
-**Last Updated**: 2025-11-10
+**Version**: 1.0.0
+**Status**: Production Ready
+**Last Updated**: 2025-11-12
 
 ---
 
@@ -819,13 +819,15 @@ cd mcp-bridge && bun run test-integration.ts
 
 - [README](../README.md) - Project overview and user documentation
 - [AGENTS.md](../AGENTS.md) - Developer guidelines and troubleshooting
-- [TESTING-GUIDE.md](TESTING-GUIDE.md) - Testing procedures
+- [TESTING.md](../TESTING.md) - Testing procedures
+- [ACCESSIBILITY.md](ACCESSIBILITY.md) - Accessibility compliance guide
+- [PROFILING.md](PROFILING.md) - Performance profiling guide
 - [Main codebase](../kb/src/) - Python implementation
 - [MCP Bridge](../mcp-bridge/) - TypeScript implementation
 
 ---
 
-**Status**: ✅ Beta (Production Ready for Core Components)
+**Status**: ✅ Production Ready
 **Test Coverage**: 243+ tests passing
-**Version**: 0.1.13
-**Date**: 2025-11-10
+**Version**: 1.0.0
+**Date**: 2025-11-12

@@ -209,7 +209,7 @@ claude
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-See [TESTING-GUIDE.md](docs/TESTING-GUIDE.md) for complete setup instructions.
+See [TESTING.md](TESTING.md) for complete setup instructions.
 
 ## REST API
 
@@ -267,7 +267,7 @@ uv run dolphin serve
 
 ## Development Status
 
-**Current**: Beta (0.1.13)
+**Current**: Production Ready (1.0.0)
 
 - ✅ Core indexing and search pipeline
 - ✅ Language-aware chunking (Python, TS, JS, Markdown)
@@ -301,7 +301,7 @@ uv run pytest tests/unit/
 uv run pytest tests/integration/
 ```
 
-See [TESTING-GUIDE.md](docs/TESTING-GUIDE.md) for complete testing procedures.
+See [TESTING.md](TESTING.md) for complete testing procedures.
 
 ## Troubleshooting
 
@@ -348,8 +348,8 @@ Dolphin is a monorepo with independently versioned components. Each component (P
 ### Component Versions
 
 Current versions:
-- **Python Package (PyPI)**: [`0.1.13`](pyproject.toml:7) - `pb-dolphin`
-- **VSCode Extension**: [`0.1.0`](vscode-extension/package.json:5) - `dolphin`
+- **Python Package (PyPI)**: [`1.0.0`](pyproject.toml:7) - `pb-dolphin`
+- **VSCode Extension**: [`1.0.0`](vscode-extension/package.json:5) - `dolphin`
 - **MCP Bridge (npm)**: [`0.1.2`](mcp-bridge/package.json:3) - `dolphin-mcp`
 
 ### Independent Release Workflow

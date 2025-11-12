@@ -1210,5 +1210,6 @@ Remember: **An accessible product is a better product for everyone.**
 
 ---
 
-_Last updated: 2025_
+_Last updated: 2025-11-12_
+_Version: 1.0.0_
 _Maintained by: Dolphin Team_

@@ -756,7 +756,7 @@ uv run dolphin kb status my-repo
 
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) - System design and status
 - [README.md](README.md) - Project overview and quick start
-- [TESTING-GUIDE.md](docs/TESTING-GUIDE.md) - Testing procedures
+- [TESTING.md](TESTING.md) - Testing procedures
 
 **For issues:**
 

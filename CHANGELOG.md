@@ -1,261 +1,27 @@
-# Changelog
+# Changelog - pb-dolphin Python Package
 
-## [1.0.0] - 2025-11-12
+All notable changes to the pb-dolphin Python package will be documented in this file.
 
-This is the first major release of Dolphin, marking a significant milestone in AI-powered development tooling. Version 1.0.0 represents a complete, production-ready platform with comprehensive testing, accessibility compliance, and a beautiful VSCode extension.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+**Note**: This changelog covers only the Python package. For component-specific changes:
+
+- **VSCode Extension**: See [vscode-extension/CHANGELOG.md](vscode-extension/CHANGELOG.md)
+- **MCP Bridge**: See [mcp-bridge/CHANGELOG.md](mcp-bridge/CHANGELOG.md)
+
+---
+
+## [0.2.0] - 2025-11-12
+
+This is the first major release of pb-dolphin, marking a significant milestone in semantic code search and knowledge management. Version 1.0.0 represents a complete, production-ready Python backend with comprehensive testing and performance optimization.
 
 ### Added
-
-#### 🎨 VSCode Extension with Claude CLI Support
-
-- **Dual Authentication System**
-  - Claude CLI integration for subscription-based usage (no API costs)
-  - Direct Anthropic API key support as fallback
-  - Automatic authentication detection and status display
-  - OAuth workflow integration for Claude Code
-
-- **Modern Webview Interface**
-  - Beautiful SvelteKit-based UI with shadcn/ui component library
-  - Real-time token-by-token streaming from Claude
-  - VSCode theme integration with dark/light mode support
-  - Multiple routes: Chat, Settings, Gallery, Profile, Tools, Functions
-  - Component gallery for development and testing
-  - Interactive plan timeline visualization with animated status indicators
-
-- **Rich Editor Integration**
-  - Context menu commands: "Ask About Selection", "Refactor Selection", "Ask About File", "Ask About Folder"
-  - Keyboard shortcuts (Cmd+L/Ctrl+L to focus chat input)
-  - Diff viewer with syntax highlighting and side-by-side/unified modes
-  - Copy functionality for code blocks and diffs
-  - File and folder context injection
-
-- **Conversation Management**
-  - Persistent conversation history in TOML format
-  - Conversation branching support
-  - Message metadata tracking with hybrid token counting
-  - Session restoration across VSCode restarts
-  - Comprehensive test suite (52+ TypeScript tests)
-
-#### 🧠 Architect Mode & Intelligent Planning
-
-- **Personas System**
-  - Nine specialized AI personas for different development scenarios:
-    - **Smartest Guy** - Senior engineer for architectural excellence
-    - **Chief of Staff** - Project coordination and strategic planning
-    - **Deep Dive** - Detailed technical analysis and research
-    - **Big Balls** - Bold decision-making and risk assessment
-    - **Journalist** - Documentation and clear communication
-    - **Little Ripper** - Fast iteration and prototyping
-    - **Popeye** - Strength-focused, robust solutions
-    - **Quiet Kid** - Thoughtful, methodical approach
-    - **Fancy Slave** - Polished, production-ready implementation
-  - TOML-based persona configuration
-  - System prompt customization per persona
-
-- **Structured Planning Process**
-  - Task planning with semantic search integration
-  - Adaptive planner architecture
-  - Event-driven progress tracking system
-  - Step-by-step execution with status tracking (pending, running, completed, error)
-  - Plan timeline visualization component with interactive draggable UI
-  - Tool call visualization cards with real-time status updates
-
-#### ♿ Accessibility Standards (WCAG 2.1 AA Compliance)
-
-- **Comprehensive Keyboard Navigation**
-  - Full keyboard accessibility for all extension features
-  - Logical tab order throughout the interface
-  - Focus indicators with 3:1 minimum contrast ratio
-  - Standard keyboard shortcuts (Escape to close, Enter to submit)
-  - No keyboard traps in any UI components
-
-- **Screen Reader Support**
-  - ARIA labels and landmarks for all interactive elements
-  - Semantic HTML structure with proper heading hierarchy
-  - Live regions for dynamic content announcements
-  - Context announcements for tool calls and status changes
-  - Tested with NVDA, JAWS, VoiceOver, and Orca screen readers
-
-- **Visual Accessibility**
-  - 4.5:1 minimum contrast ratio for normal text
-  - 3:1 minimum contrast ratio for UI components and focus indicators
-  - VSCode theme token integration for consistent, accessible colors
-  - High contrast mode support
-  - Color-independent information display (no meaning by color alone)
-  - Reduced motion support (`prefers-reduced-motion` media query)
-
-- **Accessibility Testing Infrastructure**
-  - axe-core integration for automated accessibility testing
-  - ARIA validation in component tests
-  - Manual testing checklist for keyboard and screen reader workflows
-  - Comprehensive accessibility guide in `/docs/accessibility-guide.md`
-
-#### 🔄 Dual-Path Indexing (File Watch + Git Diff)
-
-- **Real-Time File Watch System**
-  - Live file change detection via VSCode file system API
-  - Crash-proof pending changes queue stored in SQLite
-  - Four auto-sync modes:
-    - **Off** - Manual indexing only
-    - **Manual** - User confirmation required for each sync
-    - **Smart** (default) - Auto-sync during idle periods (30+ seconds)
-    - **Aggressive** - Immediate incremental indexing on every change
-  - Mid-index change detection and automatic re-queuing
-  - Progress tracking with current file display
-  - Configurable debounce timing
-
-- **Git-Aware Incremental Indexing**
-  - `git diff` integration for efficient change detection
-  - Commit SHA and branch tracking with each indexed chunk
-  - Drift detection for offline/background changes
-  - Post-commit hook support for automatic indexing
-  - Only reindexes changed files for maximum efficiency
-  - Graph pruning on file deletions to maintain data integrity
-
-- **Robust Architecture**
-  - TypeScript (VSCode) handles detection and triggers indexing
-  - Python (FastAPI) handles processing and persistence
-  - JSON-RPC communication over stdio with proper framing
-  - Automatic status updates on completion
-  - Path normalization before API sync
-  - Comprehensive test coverage for all sync phases
-
-#### ⚡ Parallelized Knowledge Base
-
-- **High-Performance Batch Processing**
-  - Configurable batch size for embedding API calls (default: 100)
-  - Parallel embedding requests with concurrency control
-  - Rate limit handling with exponential backoff retry logic
-  - Batch processing for cross-encoder reranking (batch size: 32)
-
-- **Concurrent Search Capabilities**
-  - 8 parallel search queries supported (for LLM multi-tool calls)
-  - ~300ms p50 search latency (60% faster than target)
-  - ~800ms p95 search latency (60% faster than target)
-  - 10-20 sustained queries per second for single-user workloads
-
-- **Adaptive ANN (Approximate Nearest Neighbor) Tuning**
-  - Automatic query-type detection (identifier vs. concept vs. example-based)
-  - Dynamic nprobes adjustment based on dataset size and query patterns
-  - Three preset optimization strategies: speed, accuracy, development
-  - Custom parameter support for fine-tuning
-  - ~40% faster searches with adaptive tuning vs. static parameters
-  - Profiling and benchmarking scripts (`scripts/benchmark_ann.py`)
-
-- **Multi-Level Caching System**
-  - Redis support for distributed caching (optional)
-  - In-memory LRU caching for hot queries
-  - 512 MB LanceDB cache (configurable via `LANCE_DB_CACHE_SIZE`)
-  - Embedding deduplication via SHA256 content hashing
-  - Query result caching with TTL
-
-- **Resource Management**
-  - Baseline memory footprint: ~200 MB
-  - Under load (8 concurrent queries): ~500 MB
-  - Per-session spend caps (default: $10 USD)
-  - Token usage tracking and reporting
-  - Graceful handling of rate limits
-
-#### 🧪 Comprehensive Testing, Profiling, and Evaluation Frameworks
-
-- **Extensive Test Suite (243+ Tests)**
-  - **Python Tests (191+ passing tests)**:
-    - Chunkers (Python, TypeScript, Markdown, SQL, Svelte, fallback): 45+ tests
-    - Embeddings (OpenAI provider, retry logic, stub implementations): 15 tests
-    - Storage layers (SQLite, LanceDB, graph store): 29 tests
-    - Hashing and content deduplication: 12 tests
-    - Scanner and `.gitignore` handling: 18 tests
-    - Token counting utilities: 8 tests
-    - ANN tuning and optimization: Multiple tests
-    - Search API integration: 11 tests
-    - Search backend unit tests: 10 tests
-    - MCP endpoints: 12 tests
-    - Rank fusion algorithms: 19 tests
-    - End-to-end pipeline tests: 12 tests
-    - Hybrid search: Multiple tests
-    - KB auto-sync system: Multiple tests
-  - **TypeScript Tests (52+ passing tests)**:
-    - MCP Bridge: 36 tool implementation tests
-    - REST client: 8 tests
-    - Agent Core: Conversation persistence, IPC, KB lifecycle
-    - VSCode Extension: E2E and webview integration tests
-  - Unified test runner: `tests/run_tests.py`
-  - Separate directories for unit/integration/e2e tests
-  - Mock backends for fast unit testing
-  - Real backends for integration validation
-
-- **Profiling and Benchmarking Tools**
-  - `scripts/benchmark_ann.py` - ANN parameter profiling across datasets
-  - `scripts/test_hybrid_search_performance.py` - Hybrid search quality metrics:
-    - Precision@5, Precision@10 measurements
-    - Mean Reciprocal Rank (MRR) calculations
-    - Latency profiling (mean, median, p95, p99)
-    - Baseline vs. hybrid vs. reranked comparisons
-  - Performance regression detection
-  - Memory profiling utilities
-
-- **Evaluation Framework**
-  - Search quality metrics (Precision, Recall, MRR, NDCG)
-  - Latency and throughput tracking
-  - HTML and XML coverage reports
-  - JUnit XML output for CI/CD integration
-  - Parallel test execution with `pytest-xdist`
-  - Cache testing guide for embedding providers
-
-#### 📊 Plan Visualization and Comprehensive UI Styling
-
-- **Plan Timeline Visualization**
-  - Interactive draggable timeline component (`PlanTimeline.svelte`)
-  - Visual step indicators with dynamic status colors
-  - Animated pulsing for currently running steps
-  - Connected step visualization with progress lines
-  - Status tracking: pending, running, completed, error
-  - Expandable/collapsible step details
-
-- **Advanced Diff Viewer**
-  - Side-by-side and unified diff display modes (`DiffViewer.svelte`)
-  - Syntax highlighting for all supported languages
-  - Line-by-line change visualization with add/delete markers
-  - Copy functionality for code selections
-  - Binary file and size guards
-
-- **Tool Call Visualization**
-  - Real-time tool execution cards (`ToolCallCard.svelte`)
-  - Knowledge base search visualization with result counts
-  - Success/error/loading state indicators
-  - Expandable/collapsible tool result displays
-  - Metadata display (latency, result count, status)
-
-- **Rich Message Components**
-  - Markdown rendering with code syntax highlighting
-  - Code blocks with one-click copy buttons
-  - User/assistant/system message styling
-  - Error alerts with contextual information
-  - Confirmation dialogs with accessible keyboard controls
-  - Loading states with spinners and skeleton screens
-
-- **Component Library (shadcn/ui)**
-  - 20+ accessible, reusable UI components:
-    - Alert, Alert Dialog, Avatar, Badge
-    - Button, Card, Checkbox, Collapsible
-    - Dialog, Input, Label, Navigation Menu
-    - Progress, Radio Group, Scroll Area
-    - Separator, Skeleton, Tabs, Textarea
-  - Tailwind CSS utility-first styling
-  - Consistent design tokens across all components
-  - Typography system with semantic hierarchy
-  - Responsive layout utilities
-
-- **Theme System**
-  - VSCode theme token integration for native look and feel
-  - Seamless dark/light theme switching
-  - High contrast mode support
-  - Custom color palette with WCAG-compliant contrast ratios
-  - CSS custom properties for theming
 
 #### 📚 Enhanced Knowledge Base Core
 
 - **Advanced Language-Aware Chunking**
+
   - **Python** (`py_chunker.py`): Tree-sitter AST parsing for classes, functions, methods, docstrings
   - **TypeScript/JavaScript** (`ts_chunker.py`): Exports, functions, classes, interfaces, type definitions
   - **Markdown** (`md_chunker.py`): Heading-based hierarchical sectioning (H1-H6)
@@ -264,6 +30,7 @@ This is the first major release of Dolphin, marking a significant milestone in A
   - **Fallback** (`fallback_chunker.py`): Token-windowing with configurable overlap for unsupported languages
 
 - **Hybrid Semantic Search**
+
   - OpenAI embeddings (text-embedding-3-small: 1536-dim, text-embedding-3-large: 3072-dim)
   - LanceDB vector storage with IVF (Inverted File) indexing
   - **Hybrid Search**: BM25 full-text + Vector search with Reciprocal Rank Fusion
@@ -279,6 +46,7 @@ This is the first major release of Dolphin, marking a significant milestone in A
     - Trade-off: 2-3x slower, ~2GB additional install size
 
 - **Advanced Result Ranking**
+
   - **Maximal Marginal Relevance (MMR)**: Balances relevance and diversity
     - Prevents redundant/similar results
     - Configurable lambda parameter (default: 0.7)
@@ -289,6 +57,7 @@ This is the first major release of Dolphin, marking a significant milestone in A
     - Robust to outliers and score scale differences
 
 - **Code Graph Store**
+
   - SQLite-based graph database for code entities and relationships
   - Node types: functions, classes, methods, modules
   - Edge types: calls, imports, inheritance, references
@@ -305,7 +74,47 @@ This is the first major release of Dolphin, marking a significant milestone in A
   - Separate LanceDB collections per embedding model
   - Foreign key constraints for referential integrity
 
-#### 🌐 REST API & MCP Bridge
+#### ⚡ Parallelized Knowledge Base
+
+- **High-Performance Batch Processing**
+
+  - Configurable batch size for embedding API calls (default: 100)
+  - Parallel embedding requests with concurrency control
+  - Rate limit handling with exponential backoff retry logic
+  - Batch processing for cross-encoder reranking (batch size: 32)
+
+- **Concurrent Search Capabilities**
+
+  - 8 parallel search queries supported (for LLM multi-tool calls)
+  - ~300ms p50 search latency (60% faster than target)
+  - ~800ms p95 search latency (60% faster than target)
+  - 10-20 sustained queries per second for single-user workloads
+
+- **Adaptive ANN (Approximate Nearest Neighbor) Tuning**
+
+  - Automatic query-type detection (identifier vs. concept vs. example-based)
+  - Dynamic nprobes adjustment based on dataset size and query patterns
+  - Three preset optimization strategies: speed, accuracy, development
+  - Custom parameter support for fine-tuning
+  - ~40% faster searches with adaptive tuning vs. static parameters
+  - Profiling and benchmarking scripts (`scripts/benchmark_ann.py`)
+
+- **Multi-Level Caching System**
+
+  - Redis support for distributed caching (optional)
+  - In-memory LRU caching for hot queries
+  - 512 MB LanceDB cache (configurable via `LANCE_DB_CACHE_SIZE`)
+  - Embedding deduplication via SHA256 content hashing
+  - Query result caching with TTL
+
+- **Resource Management**
+  - Baseline memory footprint: ~200 MB
+  - Under load (8 concurrent queries): ~500 MB
+  - Per-session spend caps (default: $10 USD)
+  - Token usage tracking and reporting
+  - Graceful handling of rate limits
+
+#### 🌐 REST API
 
 - **Production FastAPI REST API**
   - **5 Core Endpoints**:
@@ -319,24 +128,10 @@ This is the first major release of Dolphin, marking a significant milestone in A
   - Request validation with Pydantic models
   - JSONL logging with automatic rotation
 
-- **MCP Bridge (Published as `dolphin-mcp` v0.1.2)**
-  - **6 MCP Protocol Tools**:
-    1. `search_knowledge` - Semantic code search with inline citations
-    2. `fetch_chunk` - Retrieve specific code chunks by ID
-    3. `fetch_lines` - File slice retrieval by line range
-    4. `get_vector_store_info` - Vector store statistics and health
-    5. `get_metadata` - Chunk metadata without full content
-    6. `open_in_editor` - VS Code URI generation for deep linking
-  - MCP Protocol 2025-06-18 compliance
-  - 50KB content budget with multi-stage trimming and truncation
-  - TypeScript implementation with Zod schema validation
-  - AbortSignal support for request cancellation
-  - Works with Claude Desktop, Continue.dev, and other MCP clients
-  - Dynamic `KB_REST_BASE_URL` reading for flexible deployment
-
 #### 🔧 Configuration & CLI Management
 
 - **Multi-Level Configuration System**
+
   - Repository-specific: `.dolphin/config.toml`
   - User-global: `~/.dolphin/config.toml`
   - Automatic config creation with sensible defaults
@@ -344,6 +139,7 @@ This is the first major release of Dolphin, marking a significant milestone in A
   - Config hierarchy: repo-specific overrides user-global
 
 - **Unified CLI (`dolphin` command)**
+
   - `dolphin init` - Initialize configuration files
   - `dolphin add-repo` - Register a repository for indexing
   - `dolphin index` - Index or reindex repository
@@ -361,9 +157,52 @@ This is the first major release of Dolphin, marking a significant milestone in A
   - Foreign key validation during operations
   - Comprehensive cleanup with warnings for non-critical issues
 
+#### 🧪 Comprehensive Testing Framework
+
+- **Extensive Test Suite (191+ Python Tests)**
+
+  - **Unit tests**: `tests/unit/` - Test individual components
+    - Chunkers (Python, TypeScript, Markdown, SQL, Svelte, fallback): 45+ tests
+    - Embeddings (OpenAI provider, retry logic, stub implementations): 15 tests
+    - Storage layers (SQLite, LanceDB, graph store): 29 tests
+    - Hashing and content deduplication: 12 tests
+    - Scanner and `.gitignore` handling: 18 tests
+    - Token counting utilities: 8 tests
+    - ANN tuning and optimization: Multiple tests
+  - **Integration tests**: `tests/integration/` - Test API endpoints and workflows
+    - Search API integration: 11 tests
+    - Search backend unit tests: 10 tests
+    - MCP endpoints: 12 tests
+    - Rank fusion algorithms: 19 tests
+    - End-to-end pipeline tests: 12 tests
+    - Hybrid search: Multiple tests
+    - KB auto-sync system: Multiple tests
+  - **Run**: `uv run pytest tests/unit/ -v` or `uv run pytest tests/integration/ -v`
+  - **Coverage**: `uv run pytest --cov=kb/src`
+
+- **Profiling and Benchmarking Tools**
+
+  - `scripts/benchmark_ann.py` - ANN parameter profiling across datasets
+  - `scripts/test_hybrid_search_performance.py` - Hybrid search quality metrics:
+    - Precision@5, Precision@10 measurements
+    - Mean Reciprocal Rank (MRR) calculations
+    - Latency profiling (mean, median, p95, p99)
+    - Baseline vs. hybrid vs. reranked comparisons
+  - Performance regression detection
+  - Memory profiling utilities
+
+- **Evaluation Framework**
+  - Search quality metrics (Precision, Recall, MRR, NDCG)
+  - Latency and throughput tracking
+  - HTML and XML coverage reports
+  - JUnit XML output for CI/CD integration
+  - Parallel test execution with `pytest-xdist`
+  - Cache testing guide for embedding providers
+
 #### 🚀 Production-Ready Features
 
 - **Security Hardening**
+
   - Path traversal protection in file serving endpoints
   - Parameterized SQL queries to prevent injection attacks
   - Secure environment variable handling for API keys
@@ -372,6 +211,7 @@ This is the first major release of Dolphin, marking a significant milestone in A
   - CORS configuration for webview security
 
 - **Robust Error Handling**
+
   - Comprehensive error messages with actionable guidance
   - Graceful degradation on service failures
   - Exponential backoff retry logic for transient errors
@@ -388,19 +228,10 @@ This is the first major release of Dolphin, marking a significant milestone in A
   - JSONL structured logging for analysis
   - Warning detection and reporting
 
-- **Comprehensive Documentation**
-  - Architecture documentation (`/docs`)
-  - Testing guide with examples
-  - Accessibility compliance guide
-  - Claude CLI integration specification
-  - API endpoint documentation
-  - MCP bridge usage guide
-  - Git diff vs. file sync comparison document
-  - Phase-by-phase implementation documentation
-
 ### Changed
 
 - **Dependency Optimization**
+
   - Core install reduced from ~2GB to ~200MB
   - Heavy ML dependencies moved to optional extras
   - Reranking: `pip install pb-dolphin[reranking]` (~2GB)
@@ -414,38 +245,22 @@ This is the first major release of Dolphin, marking a significant milestone in A
   - Default embedding provider now "openai" (was "stub")
   - Config hierarchy properly loads user config before system defaults
 
-- **IPC Architecture Improvements**
-  - JSON-RPC framing alignment in AgentCore stdio communication
-  - Improved error propagation between TypeScript and Python layers
-  - Event-driven status updates for better responsiveness
-  - Robust handling of process lifecycle and crashes
-
-- **File Sync Architecture**
-  - Python backend now auto-marks changes as processed (Phase 2)
-  - Path normalization before API synchronization
-  - Improved crash recovery with persistent queues
-  - Better handling of rapid file changes
-
 ### Fixed
 
 - **Configuration Template Issues**
+
   - Fixed `[embedding]` section name (was incorrectly `[embeddings]`)
   - Added missing `default_embed_model` field
   - Added missing `per_session_spend_cap_usd` field at top level
   - Corrected TOML syntax errors for null/default values
 
 - **Database and Storage**
+
   - Foreign key validation during repository initialization
   - Proper cascade deletion order in `rm-repo` operations
   - FTS5 cleanup now uses multi-strategy approach for completeness
   - LanceDB cleanup failures now reported with warnings instead of silent failure
   - Graph pruning query optimization to avoid SQLite parameter limits
-
-- **File Sync and Indexing**
-  - Diff application on empty/new files now works correctly
-  - File watcher path normalization prevents duplicate processing
-  - Metadata updates now persist correctly during conversation saves
-  - Indexing task async handling and TypeScript typings corrected
 
 - **Data Integrity**
   - Active session validation prevents mid-operation deletions
@@ -456,12 +271,14 @@ This is the first major release of Dolphin, marking a significant milestone in A
 ### Performance
 
 - **Search Performance**
+
   - Semantic search latency: ~300ms p50, ~800ms p95 (targets: 600ms/2s) ✅
   - 40% faster searches with adaptive ANN tuning vs. static parameters
   - 40% better precision with hybrid search on code identifiers
   - Optional reranking: 20-30% MRR improvement (at 2-3x latency cost)
 
 - **Scalability Benchmarks**
+
   - **Small repos** (1K files, 50K chunks): ~100MB LanceDB, ~5MB SQLite
   - **Medium repos** (10K files, 500K chunks): ~1GB LanceDB, ~50MB SQLite
   - **Large repos** (100K files, 5M chunks): ~10GB LanceDB, ~500MB SQLite
@@ -476,6 +293,7 @@ This is the first major release of Dolphin, marking a significant milestone in A
 ### Technology Stack
 
 **Backend (Python ≥3.12):**
+
 - FastAPI - REST API framework
 - SQLModel - Type-safe ORM for SQLite
 - LanceDB - Vector database with ANN search
@@ -486,53 +304,25 @@ This is the first major release of Dolphin, marking a significant milestone in A
 - Typer - Beautiful CLI framework
 - pytest - Testing framework
 
-**Frontend (TypeScript/JavaScript):**
-- VSCode Extension API - Editor integration
-- Bun - Fast JavaScript runtime for Agent Core
-- Anthropic SDK - Claude API client
-- SvelteKit - Full-stack web framework
-- Svelte 5 - Reactive UI components
-- Tailwind CSS - Utility-first styling
-- shadcn/ui - Accessible component library
-- Zod - Runtime type validation
-- MCP SDK - Model Context Protocol implementation
-
-**Development & Tooling:**
-- uv - Fast Python package installer and resolver
-- Justfile - Task automation (build, test, lint)
-- Git - Version control and diff-based indexing
-- Prettier - Code formatting
-- ESLint - JavaScript/TypeScript linting
-
 ### Migration Notes
 
 This is a major version release. If upgrading from 0.1.x:
 
 1. **Configuration**: Review and update your `.dolphin/config.toml` files. Some field names have changed and new options are available.
 2. **Dependencies**: If you were using reranking features, reinstall with `pip install pb-dolphin[reranking]`.
-3. **VSCode Extension**: Update to the latest extension version for compatibility with the new MCP bridge and API changes.
-4. **API**: REST API endpoints are backward compatible, but new parameters are available for hybrid search and MMR.
-5. **Database**: Existing SQLite and LanceDB indices are compatible. Consider rebuilding for optimal performance with new features.
-
-### Acknowledgments
-
-This release represents months of development focused on production readiness, accessibility, and user experience. Special thanks to the open-source community and early adopters who provided valuable feedback during the beta period.
-
-For detailed documentation, visit the `/docs` directory in the repository.
+3. **API**: REST API endpoints are backward compatible, but new parameters are available for hybrid search and MMR.
+4. **Database**: Existing SQLite and LanceDB indices are compatible. Consider rebuilding for optimal performance with new features.
 
 ---
 
 ## [0.1.13] - 2025-11-08
 
 ### Fixed
+
 - **MMR Relevance Selection**
   - Configured to work properly
 
-### Changed
-
-- **MCP Bridge Version** bumped to 0.1.2
-  - REST client now reads `KB_REST_BASE_URL` dynamically during runtime
-  - Maintains backward compatibility with production configurations
+---
 
 ## [0.1.12] - 2025-11-04
 
@@ -572,11 +362,15 @@ For detailed documentation, visit the `/docs` directory in the repository.
   - Active session validation prevents mid-operation deletions
   - All cleanup operations validated for completeness
 
-## [0.1.11] - 2025-11-03  
+---
+
+## [0.1.11] - 2025-11-03
 
 ### Fixed
 
 - **Documentation Issues**
+
+---
 
 ## [0.1.10] - 2025-11-03
 
@@ -596,6 +390,8 @@ For detailed documentation, visit the `/docs` directory in the repository.
 - **Install Process**
   - Remediated install-blocking issues
 
+---
+
 ## [0.1.9] - 2025-11-02
 
 ### Added
@@ -606,15 +402,8 @@ For detailed documentation, visit the `/docs` directory in the repository.
   - Semantic search endpoint with configurable parameters
   - Chunk retrieval endpoint
   - File slice retrieval endpoint
-- **MCP Bridge** for Claude Desktop and Continue IDE integration
-  - `search_knowledge` - Semantic code search with citations
-  - `fetch_chunk` - Retrieve specific code chunks
-  - `fetch_lines` - Fetch file slices by line range
-  - `get_vector_store_info` - Vector store statistics
-  - `get_metadata` - Chunk metadata retrieval
-  - `open_in_editor` - Generate VS Code URIs
 - **Comprehensive Testing Infrastructure**
-  - 360+ passing tests (unit + integration)
+  - 191+ passing Python tests (unit + integration)
   - Mock tiktoken for fast unit tests
   - Real tiktoken validation for integration tests
   - Coverage reporting and CI/CD ready
@@ -658,6 +447,8 @@ For detailed documentation, visit the `/docs` directory in the repository.
 - Semantic search latency reduced by ~40% with adaptive ANN tuning
 - Hybrid search improves precision by ~40% on code identifiers
 - Optional reranking improves MRR by 20-30%
+
+---
 
 ## [0.1.8] - 2025-11-01
 
