@@ -3,7 +3,9 @@
   "description": "Dolphin semantic code search",
   "server": {
     "command": "bunx",
-    "args": ["dolphin-mcp"],
+    "args": [
+      "dolphin-mcp"
+    ],
     "env": {
       "DOLPHIN_API_URL": "http://127.0.0.1:7777",
       "LOG_LEVEL": "info",
@@ -11,90 +13,5 @@
       "SNIPPET_FETCH_TIMEOUT_MS": "2000",
       "SNIPPET_FETCH_RETRY_ATTEMPTS": "1"
     }
-  },
-  "tools": [
-    {
-      "name": "search_knowledge",
-      "description": "Semantic code search",
-      "parameters": {
-        "query": {
-          "type": "string",
-          "description": "Search query",
-          "required": true
-        },
-        "repos": {
-          "type": "array",
-          "description": "Repository filters",
-          "items": {"type": "string"}
-        },
-        "top_k": {
-          "type": "number",
-          "description": "Number of results",
-          "default": 8
-        }
-      }
-    },
-    {
-      "name": "fetch_chunk",
-      "description": "Get chunk content by ID",
-      "parameters": {
-        "chunk_id": {
-          "type": "string",
-          "description": "Chunk identifier",
-          "required": true
-        }
-      }
-    },
-    {
-      "name": "fetch_lines",
-      "description": "Get file lines by range",
-      "parameters": {
-        "repo": {
-          "type": "string",
-          "description": "Repository name",
-          "required": true
-        },
-        "path": {
-          "type": "string",
-          "description": "File path",
-          "required": true
-        },
-        "start": {
-          "type": "number",
-          "description": "Start line (1-indexed)",
-          "required": true
-        },
-        "end": {
-          "type": "number",
-          "description": "End line (inclusive)",
-          "required": true
-        }
-      }
-    },
-    {
-      "name": "get_vector_store_info",
-      "description": "Get KB statistics"
-    },
-    {
-      "name": "open_in_editor",
-      "description": "Generate VS Code URI",
-      "parameters": {
-        "repo": {
-          "type": "string",
-          "description": "Repository name",
-          "required": true
-        },
-        "path": {
-          "type": "string",
-          "description": "File path",
-          "required": true
-        },
-        "start_line": {
-          "type": "number",
-          "description": "Start line",
-          "default": 1
-        }
-      }
-    }
-  ]
+  }
 }
