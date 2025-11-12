@@ -5,7 +5,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import * as Collapsible from '$lib/components/ui/collapsible';
-	import { ChevronDown, ChevronRight, FileCode, Info, MessageSquare, ArrowRight, Palette, Loader, Code } from 'lucide-svelte';
+	import { ChevronDown, ChevronRight, FileCode, Info, MessageSquare, ArrowRight, Palette, Loader, Code, Target, Clock } from 'lucide-svelte';
 	import MessageCard from '$lib/components/chat/MessageCard.svelte';
 	import ChatInput from '$lib/components/chat/ChatInput.svelte';
 	import ToolCallCard from '$lib/components/tools/ToolCallCard.svelte';
@@ -16,6 +16,8 @@
 	import GalleryShowcase from '$lib/components/GalleryShowcase.svelte';
 	import AnimationGallery from '$lib/components/AnimationGallery.svelte';
 	import LoadingStates from '$lib/components/LoadingStates.svelte';
+	import EnhancedPlanTimeline from '$lib/components/planning/EnhancedPlanTimeline.svelte';
+	import GoalContext from '$lib/components/planning/GoalContext.svelte';
 	
 	// Sample data
 	let showConfirmDialog = $state(false);
@@ -86,6 +88,111 @@
 	function handleErrorRetry() {
 		console.log('Retrying operation');
 	}
+	
+	// Mock data for EnhancedPlanTimeline
+	const mockPlanPhases = [
+		{
+			id: 'phase-1',
+			name: 'Plan',
+			status: 'completed' as const,
+			steps: [
+				{
+					id: '1-1',
+					description: 'Analyze requirements',
+					status: 'completed' as const,
+					estimatedTime: 300000,
+					actualTime: 280000,
+					context: 'Reviewed authentication specifications'
+				},
+				{
+					id: '1-2',
+					description: 'Design architecture',
+					status: 'completed' as const,
+					estimatedTime: 600000,
+					actualTime: 720000,
+					context: 'Created database schema and API design'
+				}
+			]
+		},
+		{
+			id: 'phase-2',
+			name: 'Exec',
+			status: 'active' as const,
+			steps: [
+				{
+					id: '2-1',
+					description: 'Setup database',
+					status: 'completed' as const,
+					estimatedTime: 400000,
+					actualTime: 350000
+				},
+				{
+					id: '2-2',
+					description: 'Implement JWT auth',
+					status: 'running' as const,
+					estimatedTime: 800000,
+					actualTime: 600000
+				},
+				{
+					id: '2-3',
+					description: 'Add middleware',
+					status: 'pending' as const,
+					estimatedTime: 500000
+				}
+			]
+		},
+		{
+			id: 'phase-3',
+			name: 'Test',
+			status: 'pending' as const,
+			steps: [
+				{
+					id: '3-1',
+					description: 'Write unit tests',
+					status: 'pending' as const,
+					estimatedTime: 600000
+				},
+				{
+					id: '3-2',
+					description: 'Integration testing',
+					status: 'pending' as const,
+					estimatedTime: 400000
+				}
+			]
+		}
+	];
+	
+	// Mock data for GoalContext
+	const mockGoalContext = {
+		currentGoal: 'Build Authentication System',
+		reasoningChain: [
+			{
+				step: 'Identify authentication requirements',
+				reasoning: 'System needs secure user authentication with JWT tokens and optional OAuth',
+				confidence: 0.95
+			},
+			{
+				step: 'Choose JWT over sessions',
+				reasoning: 'JWT provides stateless authentication, better scalability for distributed systems',
+				confidence: 0.85
+			}
+		],
+		alternatives: [
+			{
+				approach: 'Session-based authentication',
+				pros: ['Simpler implementation', 'Server-side control'],
+				cons: ['Not stateless', 'Scaling challenges'],
+				whyNotChosen: 'Does not fit distributed architecture requirements'
+			}
+		],
+		successCriteria: [
+			'Secure password hashing with bcrypt',
+			'JWT tokens with 15-minute expiration',
+			'Rate limiting on auth endpoints'
+		]
+	};
+	
+	let showGoalContext = $state(false);
 </script>
 
 <div class="h-full overflow-auto p-6">
@@ -106,7 +213,7 @@
 
 		<!-- Tabbed Navigation -->
 		<Tabs.Root value="components" class="mb-8">
-			<Tabs.List class="grid w-full grid-cols-4">
+			<Tabs.List class="grid w-full grid-cols-5">
 				<Tabs.Trigger value="components">
 					<Code class="size-4 mr-2" />
 					Components
@@ -118,6 +225,10 @@
 				<Tabs.Trigger value="loading">
 					<Loader class="size-4 mr-2" />
 					Loading States
+				</Tabs.Trigger>
+				<Tabs.Trigger value="planning">
+					<Palette class="size-4 mr-2" />
+					Planning
 				</Tabs.Trigger>
 				<Tabs.Trigger value="featured">
 					<MessageSquare class="size-4 mr-2" />
@@ -140,11 +251,73 @@
 				<LoadingStates />
 			</Tabs.Content>
 
+			<!-- Planning Tab -->
+			<Tabs.Content value="planning" class="space-y-6 mt-6">
+				<Card class="bg-primary/5 border-primary/20">
+					<CardContent class="p-6">
+						<div class="space-y-4">
+							<div>
+								<h3 class="text-xl font-bold mb-2">Phase 2: Planning Visualization System</h3>
+								<p class="text-sm text-muted-foreground mb-4">
+									Interactive planning visualizations including enhanced timeline with accordion and goal context panel showing agent reasoning
+								</p>
+								<div class="flex gap-2 flex-wrap">
+									<Badge variant="outline">Enhanced Timeline</Badge>
+									<Badge variant="outline">Goal Context</Badge>
+									<Badge variant="outline">Reasoning Chain</Badge>
+									<Badge variant="default">Phase 2</Badge>
+								</div>
+							</div>
+						</div>
+					</CardContent>
+				</Card>
+	
+				<GalleryShowcase
+					title="Enhanced Timeline - Grouped by Phases"
+					description="Accordion-based timeline with collapsible sections, time comparisons, and contextual tooltips"
+				>
+					{#snippet children()}
+						<EnhancedPlanTimeline phases={mockPlanPhases} />
+					{/snippet}
+				</GalleryShowcase>
+	
+				<Card>
+					<CardHeader>
+						<CardTitle>Goal Context Panel</CardTitle>
+						<CardDescription>Agent reasoning transparency and decision-making insights</CardDescription>
+					</CardHeader>
+					<CardContent>
+						<Button onclick={() => showGoalContext = true} size="lg">
+							<Target class="size-4 mr-2" />
+							Open Goal Context Panel
+						</Button>
+						
+						<div class="mt-6 text-sm text-muted-foreground space-y-2">
+							<p class="font-semibold text-foreground">Features:</p>
+							<ul class="list-disc list-inside space-y-1 text-xs">
+								<li>Step-by-step reasoning chain with confidence levels</li>
+								<li>Alternative approaches with pros/cons analysis</li>
+								<li>Success criteria checklist</li>
+								<li>Complete transparency into agent thinking</li>
+							</ul>
+						</div>
+					</CardContent>
+				</Card>
+			</Tabs.Content>
+	
 			<!-- Featured Tab -->
 			<Tabs.Content value="featured" class="mt-6">
 				{@render featuredSection()}
 			</Tabs.Content>
 		</Tabs.Root>
+		
+		{#if showGoalContext}
+			<GoalContext
+				{...mockGoalContext}
+				open={showGoalContext}
+				onClose={() => showGoalContext = false}
+			/>
+		{/if}
 	</div>
 </div>
 
