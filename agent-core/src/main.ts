@@ -15,7 +15,9 @@ import { promisify } from "util";
 import { randomBytes } from "crypto";
 import type { Message } from "./llm/claude-tool-executor";
 import { DiscoveryOrchestrator } from "./orchestration/discovery-phase";
-import type { DiscoveryConfig } from "./orchestration/types";
+import { SynthesisPhase } from "./orchestration/synthesis-phase";
+import { PlanningPhase, type PlanningSession } from "./orchestration/planning-phase";
+import type { DiscoveryConfig, DiscoveryResult, SynthesisResult } from "./orchestration/types";
 
 const execAsync = promisify(exec);
 
@@ -61,8 +63,14 @@ class AgentCore {
   // Phase 7: Stdout write queue to prevent message interleaving
   private writeQueue: Promise<void> = Promise.resolve();
 
-  // EP-11: Architect mode discovery orchestrator
+  // EP-11: Architect mode orchestration (3 phases)
   private discoveryOrchestrator: DiscoveryOrchestrator | null = null;
+  private synthesisPhase: SynthesisPhase | null = null;
+  private planningPhase: PlanningPhase | null = null;
+
+  // EP-11: Planning session state
+  private activePlanningSession: PlanningSession | null = null;
+  private currentArchitectPrompt: string | null = null;  // Store original prompt for planning
 
   constructor(workspaceRoot: string, extensionPath?: string) {
     this.workspaceRoot = workspaceRoot;
@@ -131,6 +139,11 @@ class AgentCore {
       discoveryConfig
     );
     console.error("[Agent Core] Discovery Orchestrator initialized");
+
+    // EP-11: Initialize Synthesis and Planning phases
+    this.synthesisPhase = new SynthesisPhase(this.claudeClient);
+    this.planningPhase = new PlanningPhase(this.claudeClient, this.workspaceRoot);
+    console.error("[Agent Core] Synthesis and Planning phases initialized");
 
     // Set up stdio communication using JSON-RPC framing
     let buffer = Buffer.alloc(0);
@@ -397,6 +410,12 @@ class AgentCore {
           this.isFirstUserMessage = false;
         }
 
+        // EP-11: Check for active planning session (user refining plan)
+        if (this.activePlanningSession && request.mode !== "architect") {
+          await this.handlePlanningInteraction(request.content);
+          return;
+        }
+
         // EP-11: Check for architect mode
         if (request.mode === "architect") {
           await this.handleArchitectMode(request);
@@ -558,15 +577,111 @@ class AgentCore {
         delta: discoveryMessage
       });
 
+      console.error("[Architect Mode] Discovery phase completed successfully");
+
+      // Phase 2: Synthesis
+      if (!this.synthesisPhase) {
+        throw new Error("Synthesis phase not initialized");
+      }
+
+      this.sendEvent({
+        type: "content_delta",
+        delta: "\n## 🔍 Synthesis Phase\n\nAnalyzing discovered code and identifying questions...\n\n"
+      });
+
+      const synthesisResult = await this.synthesisPhase.synthesize(
+        request.content,
+        discoveryResult
+      );
+
+      const synthesisMessage = this.formatSynthesisResults(synthesisResult);
+
+      this.sendEvent({
+        type: "content_delta",
+        delta: synthesisMessage
+      });
+
+      console.error("[Architect Mode] Synthesis phase completed successfully");
+
+      // Phase 3: Planning (interactive)
+      if (!this.planningPhase) {
+        throw new Error("Planning phase not initialized");
+      }
+
+      // Check if there are critical questions that need answers first
+      const hasCriticalQuestions = synthesisResult.clarifyingQuestions.some(
+        q => q.priority === "critical" || q.priority === "high"
+      );
+
+      if (hasCriticalQuestions && synthesisResult.clarifyingQuestions.length > 0) {
+        // Ask questions first, wait for user response
+        this.sendEvent({
+          type: "content_delta",
+          delta: "\n## 📋 Planning Phase\n\nI have some questions before creating the plan:\n\n"
+        });
+
+        this.sendEvent({
+          type: "content_delta",
+          delta: this.formatQuestionsForUser(synthesisResult.clarifyingQuestions)
+        });
+
+        this.sendEvent({
+          type: "content_delta",
+          delta: "\n\n*Please answer the questions above, then I'll create a detailed implementation plan.*\n"
+        });
+
+        // Store state for continued planning
+        this.currentArchitectPrompt = request.content;
+
+        // Create a minimal planning session to start
+        this.activePlanningSession = {
+          sessionId: "",
+          status: "refining",
+          currentPlan: null,
+          conversationMessages: []
+        };
+      } else {
+        // No critical questions - proceed directly to planning
+        this.sendEvent({
+          type: "content_delta",
+          delta: "\n## 📋 Planning Phase\n\nGenerating implementation plan...\n\n"
+        });
+
+        const planningSession = await this.planningPhase.startPlanning(
+          request.content,
+          synthesisResult,
+          this.repoName!
+        );
+
+        const planMessage = this.formatPlanningResults(planningSession);
+
+        this.sendEvent({
+          type: "content_delta",
+          delta: planMessage
+        });
+
+        // Store session for refinement
+        this.activePlanningSession = planningSession;
+        this.currentArchitectPrompt = request.content;
+
+        this.sendEvent({
+          type: "content_delta",
+          delta: "\n\n*Review the plan above. Reply with feedback to refine it, or say 'confirm' to save it.*\n"
+        });
+      }
+
       // Update conversation history
       this.conversationHistory.push({
         role: "user",
         content: request.content
       });
 
+      const fullResponse = discoveryMessage + "\n\n" + synthesisMessage +
+        (this.activePlanningSession?.currentPlan ? "\n\n" + this.formatPlanningResults(this.activePlanningSession) : "");
+
       this.conversationHistory.push({
         role: "assistant",
-        content: discoveryMessage
+        content: fullResponse
       });
 
       // Save conversation
@@ -580,13 +695,14 @@ class AgentCore {
         success: true,
         result: {
           mode: "architect",
-          phase: "discovery",
+          phase: this.activePlanningSession?.currentPlan ? "planning" : "synthesis",
           confidence: discoveryResult.confidence,
-          chunksFound: discoveryResult.retrievedChunks.length
+          chunksFound: discoveryResult.retrievedChunks.length,
+          hasActivePlanningSession: this.activePlanningSession !== null
         },
       });
 
-      console.error("[Architect Mode] Discovery phase completed successfully");
+      console.error("[Architect Mode] All phases completed successfully");
     } catch (error: any) {
       console.error("[Architect Mode] Error:", error);
       this.sendEvent({
@@ -601,6 +717,159 @@ class AgentCore {
           ],
           recoverable: true,
         },
+      });
+    }
+  }
+
+  /**
+   * Handle planning interaction - refine or confirm plan
+   */
+  private async handlePlanningInteraction(userMessage: string) {
+    if (!this.activePlanningSession || !this.planningPhase || !this.currentArchitectPrompt) {
+      console.error("[Planning] No active planning session");
+      return;
+    }
+
+    try {
+      // Check if user is confirming the plan
+      const confirmKeywords = ["confirm", "looks good", "lgtm", "approve", "yes let's do it", "proceed", "save it", "save the plan"];
+      const isConfirmation = confirmKeywords.some(keyword =>
+        userMessage.toLowerCase().includes(keyword)
+      );
+
+      if (isConfirmation && this.activePlanningSession.currentPlan) {
+        // Save and confirm plan
+        this.sendEvent({
+          type: "content_delta",
+          delta: "\n## ✅ Confirming Plan\n\nSaving plan to `.dolphin/state/plans/`...\n\n"
+        });
+
+        const savedPlan = await this.planningPhase.confirmPlan(
+          this.activePlanningSession,
+          this.currentArchitectPrompt,
+          this.workspaceRoot
+        );
+
+        this.sendEvent({
+          type: "content_delta",
+          delta: `**Plan saved!**\n\n`
+        });
+
+        this.sendEvent({
+          type: "content_delta",
+          delta: `- **Plan ID**: \`${savedPlan.planId}\`\n`
+        });
+
+        this.sendEvent({
+          type: "content_delta",
+          delta: `- **Location**: \`${savedPlan.path}\`\n`
+        });
+
+        this.sendEvent({
+          type: "content_delta",
+          delta: `- **Tasks**: ${savedPlan.plan.todoList.length}\n\n`
+        });
+
+        this.sendEvent({
+          type: "content_delta",
+          delta: "*The plan is now ready for implementation!*\n"
+        });
+
+        // Clear planning session
+        this.activePlanningSession = null;
+        this.currentArchitectPrompt = null;
+
+        // Update conversation
+        this.conversationHistory.push({
+          role: "user",
+          content: userMessage
+        });
+
+        this.conversationHistory.push({
+          role: "assistant",
+          content: `Plan confirmed and saved to ${savedPlan.path}`
+        });
+
+        if (this.currentConversationId) {
+          await this.saveCurrentConversation();
+        }
+
+        this.sendEvent({
+          type: "task_completed",
+          success: true,
+          result: {
+            mode: "architect",
+            phase: "planning_confirmed",
+            planId: savedPlan.planId,
+            planPath: savedPlan.path
+          }
+        });
+
+        return;
+      }
+
+      // Otherwise, refine the plan
+      this.sendEvent({
+        type: "content_delta",
+        delta: "\n## 🔄 Refining Plan\n\nUpdating based on your feedback...\n\n"
+      });
+
+      const updatedSession = await this.planningPhase.refine(
+        this.activePlanningSession,
+        userMessage,
+        this.currentArchitectPrompt,
+        this.repoName!
+      );
+
+      const planMessage = this.formatPlanningResults(updatedSession);
+
+      this.sendEvent({
+        type: "content_delta",
+        delta: planMessage
+      });
+
+      this.sendEvent({
+        type: "content_delta",
+        delta: "\n\n*Review the updated plan. Reply with more feedback or say 'confirm' to save it.*\n"
+      });
+
+      // Update session
+      this.activePlanningSession = updatedSession;
+
+      // Update conversation
+      this.conversationHistory.push({
+        role: "user",
+        content: userMessage
+      });
+
+      this.conversationHistory.push({
+        role: "assistant",
+        content: planMessage
+      });
+
+      if (this.currentConversationId) {
+        await this.saveCurrentConversation();
+      }
+
+      this.sendEvent({
+        type: "task_completed",
+        success: true,
+        result: {
+          mode: "architect",
+          phase: "planning_refined"
+        }
+      });
+
+    } catch (error: any) {
+      console.error("[Planning] Error during interaction:", error);
+      this.sendEvent({
+        type: "error",
+        error: {
+          code: "PLANNING_ERROR",
+          message: error.message,
+          suggestions: ["Try rephrasing your feedback", "Say 'cancel' to exit planning mode"],
+          recoverable: true
+        }
       });
     }
   }
@@ -669,8 +938,105 @@ class AgentCore {
       }
     }
 
-    parts.push("\n---\n");
-    parts.push("*Phase 1 (Discovery) complete. Phases 2-3 (Synthesis & Planning) coming soon in EP-11.*\n");
+    return parts.join("\n");
+  }
+
+  /**
+   * Format synthesis results into a readable message
+   */
+  private formatSynthesisResults(result: SynthesisResult): string {
+    const parts: string[] = [];
+
+    parts.push("### Analysis\n");
+    parts.push(result.analysis);
+    parts.push("");
+
+    if (result.assumptions.length > 0) {
+      parts.push("\n### Assumptions");
+      result.assumptions.forEach((a) => {
+        const badge = a.confidence === "high" ? "✓" : a.confidence === "medium" ? "~" : "?";
+        parts.push(`${badge} ${a.statement} *(${a.confidence} confidence)*`);
+      });
+      parts.push("");
+    }
+
+    if (result.risks.length > 0) {
+      parts.push("\n### Risks");
+      result.risks.forEach((r) => {
+        const icon = r.severity === "high" ? "⚠️" : r.severity === "medium" ? "⚡" : "ℹ️";
+        parts.push(`${icon} **[${r.severity}]** ${r.description}`);
+        if (r.mitigation) {
+          parts.push(`   *Mitigation*: ${r.mitigation}`);
+        }
+      });
+      parts.push("");
+    }
+
+    return parts.join("\n");
+  }
+
+  /**
+   * Format clarifying questions for user
+   */
+  private formatQuestionsForUser(questions: Array<{question: string; priority: string; reason: string; suggestedAnswers?: string[]}>): string {
+    const parts: string[] = [];
+
+    questions.forEach((q, i) => {
+      const icon = q.priority === "critical" ? "🔴" : q.priority === "high" ? "🟡" : "🟢";
+      parts.push(`${i + 1}. ${icon} **${q.question}**`);
+      parts.push(`   *Why this matters*: ${q.reason}`);
+      if (q.suggestedAnswers && q.suggestedAnswers.length > 0) {
+        parts.push(`   *Options*: ${q.suggestedAnswers.join(", ")}`);
+      }
+      parts.push("");
+    });
+
+    return parts.join("\n");
+  }
+
+  /**
+   * Format planning results into a readable message
+   */
+  private formatPlanningResults(session: PlanningSession): string {
+    if (!session.currentPlan) {
+      return "*Waiting for your answers to generate the plan...*";
+    }
+
+    const plan = session.currentPlan;
+    const parts: string[] = [];
+
+    parts.push(`### ${plan.title}\n`);
+    parts.push(plan.summary);
+    parts.push(`\n**Complexity**: ${plan.estimatedComplexity}`);
+    parts.push("");
+
+    plan.phases.forEach((phase, i) => {
+      parts.push(`\n#### Phase ${i + 1}: ${phase.name}`);
+      parts.push(phase.description);
+      parts.push("");
+
+      if (phase.steps.length > 0) {
+        parts.push("**Tasks:**");
+        phase.steps.forEach((step, j) => {
+          parts.push(`${j + 1}. ${step}`);
+        });
+        parts.push("");
+      }
+
+      if (phase.affectedFiles.length > 0) {
+        parts.push(`**Files**: ${phase.affectedFiles.join(", ")}`);
+        parts.push("");
+      }
+    });
+
+    if (plan.todoList.length > 0) {
+      parts.push("\n### Task Checklist");
+      plan.todoList.forEach((todo) => {
+        const checkbox = todo.status === "completed" ? "[x]" : "[ ]";
+        parts.push(`- ${checkbox} ${todo.description}`);
+      });
+      parts.push("");
+    }
 
     return parts.join("\n");
   }
