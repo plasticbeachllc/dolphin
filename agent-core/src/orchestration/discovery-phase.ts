@@ -81,7 +81,7 @@ export class DiscoveryOrchestrator {
     console.error(`[Discovery] Query: "${context.userQuery}"`);
 
     // Step 1: Generate strategic queries using Claude
-    const queries = await this.queryPlanner.generateQueries({
+    const { queries, usedFallback } = await this.queryPlanner.generateQueries({
       userQuery: context.userQuery,
       conversationHistory: context.conversationHistory,
       maxQueries: this.config.maxQueries
@@ -133,7 +133,7 @@ export class DiscoveryOrchestrator {
     }
 
     // Step 7: Generate summary
-    const summary = this.generateSummary(validated.chunks, graphContext, validated.qualityMetrics);
+    const summary = this.generateSummary(validated.chunks, graphContext, validated.qualityMetrics, usedFallback);
 
     const executionTimeMs = Date.now() - startTime;
     console.error(`[Discovery] Completed in ${executionTimeMs}ms`);
@@ -284,7 +284,8 @@ export class DiscoveryOrchestrator {
   private generateSummary(
     chunks: EnrichedChunk[],
     graphContext: GraphContext | null,
-    metrics: any
+    metrics: any,
+    usedFallback: boolean = false
   ): string {
     const parts: string[] = [];
 
@@ -296,6 +297,10 @@ export class DiscoveryOrchestrator {
 
       const avgScore = metrics.avgScore;
       parts.push(`(avg relevance: ${(avgScore * 100).toFixed(0)}%)`);
+    }
+
+    if (usedFallback) {
+      parts.push(`(using fallback queries)`);
     }
 
     if (graphContext) {

@@ -9,14 +9,14 @@ import * as vscode from "vscode";
 import { AgentBridge } from "../../agent/bridge";
 import * as path from "path";
 
-suite("Architect Mode E2E Tests", function() {
-  this.timeout(60000); // Architect mode can take time for discovery
+describe("Architect Mode E2E Tests", function() {
+  this.timeout(70000); // Extended timeout for agent-core startup
 
   let agentBridge: AgentBridge;
   let outputChannel: vscode.OutputChannel;
   let receivedEvents: any[] = [];
 
-  suiteSetup(async () => {
+  before(async function() {
     outputChannel = vscode.window.createOutputChannel("Dolphin Architect Tests");
     agentBridge = new AgentBridge(outputChannel);
 
@@ -25,18 +25,12 @@ suite("Architect Mode E2E Tests", function() {
     const agentCorePath = path.join(extensionPath, "agent-core/src/main.ts");
 
     outputChannel.appendLine("[Test] Starting agent bridge...");
+    
     await agentBridge.start(agentCorePath, extensionPath);
 
-    // Wait for agent to be ready
-    await new Promise((resolve) => {
-      const disposable = agentBridge.onEvent((event) => {
-        if (event.type === "agent_ready") {
-          outputChannel.appendLine("[Test] Agent ready");
-          disposable.dispose();
-          resolve(event);
-        }
-      });
-    });
+    // Wait for agent to be ready with timeout
+    await agentBridge.waitForReady(60000);
+    outputChannel.appendLine("[Test] Agent ready");
 
     // Set up event collector
     agentBridge.onEvent((event) => {
@@ -45,19 +39,19 @@ suite("Architect Mode E2E Tests", function() {
     });
   });
 
-  suiteTeardown(async () => {
+  after(async () => {
     if (agentBridge) {
       await agentBridge.shutdown();
     }
     outputChannel.dispose();
   });
 
-  setup(() => {
+  beforeEach(() => {
     // Clear events before each test
     receivedEvents = [];
   });
 
-  test("Should execute discovery phase in architect mode", async () => {
+  it("Should execute discovery phase in architect mode", async () => {
     // Send architect mode request
     await agentBridge.sendMessage("How is authentication implemented in this codebase?", "architect");
 
@@ -77,7 +71,7 @@ suite("Architect Mode E2E Tests", function() {
     assert.ok(discoveryContent.includes("Confidence"), "Should include confidence score");
   });
 
-  test("Should generate strategic queries", async () => {
+  it("Should generate strategic queries", async () => {
     await agentBridge.sendMessage("Add rate limiting to API endpoints", "architect");
 
     const completionEvent = await waitForEvent("task_completed", 30000);
@@ -98,7 +92,7 @@ suite("Architect Mode E2E Tests", function() {
     assert.ok(hasStrategies, "Should include query strategies");
   });
 
-  test("Should include graph context when available", async () => {
+  it("Should include graph context when available", async () => {
     await agentBridge.sendMessage("How does the search backend work?", "architect");
 
     const completionEvent = await waitForEvent("task_completed", 30000);
@@ -113,7 +107,7 @@ suite("Architect Mode E2E Tests", function() {
     assert.ok(hasGraphSection, "Should mention graph context");
   });
 
-  test("Should show confidence score in results", async () => {
+  it("Should show confidence score in results", async () => {
     await agentBridge.sendMessage("Find database connection code", "architect");
 
     const completionEvent = await waitForEvent("task_completed", 30000);
@@ -132,7 +126,7 @@ suite("Architect Mode E2E Tests", function() {
     }
   });
 
-  test("Should identify information gaps when relevant", async () => {
+  it("Should identify information gaps when relevant", async () => {
     await agentBridge.sendMessage("Implement blockchain consensus algorithm", "architect");
 
     const completionEvent = await waitForEvent("task_completed", 30000);
@@ -146,7 +140,7 @@ suite("Architect Mode E2E Tests", function() {
     // Note: This test might need adjustment based on actual codebase
   });
 
-  test("Code mode should NOT trigger discovery", async () => {
+  it("Code mode should NOT trigger discovery", async () => {
     await agentBridge.sendMessage("What files exist in src/?", "code");
 
     const completionEvent = await waitForEvent("task_completed", 20000);
@@ -160,7 +154,7 @@ suite("Architect Mode E2E Tests", function() {
     assert.ok(!allContent.includes("Strategic Queries"), "Should not show strategic queries in code mode");
   });
 
-  test("Should show multiple query strategies", async () => {
+  it("Should show multiple query strategies", async () => {
     await agentBridge.sendMessage("Refactor authentication system", "architect");
 
     const completionEvent = await waitForEvent("task_completed", 30000);
@@ -182,7 +176,7 @@ suite("Architect Mode E2E Tests", function() {
     assert.ok(strategyCount >= 2, "Should use at least 2 different query strategies");
   });
 
-  test("Should complete within reasonable time", async function() {
+  it("Should complete within reasonable time", async function() {
     this.timeout(10000); // 10 second timeout for this test
 
     const startTime = Date.now();

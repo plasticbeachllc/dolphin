@@ -336,10 +336,13 @@ export class AgentBridge {
     await this.sendRequest("rename_conversation", { conversationId, newTitle }, 3000);
   }
 
-  private async waitForReady(timeout = 60000): Promise<void> {
+  /**
+   * Wait for agent to be ready (public helper for tests and consumers)
+   */
+  public async waitForReady(timeout = 60000): Promise<void> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        reject(new Error("Agent Core did not become ready within 45s"));
+        reject(new Error("Agent Core did not become ready within 60s"));
       }, timeout);
 
       const disposable = this.onEvent((event) => {

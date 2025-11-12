@@ -4,7 +4,7 @@
  * Tests semantic search, context assembly, and KB error handling
  */
 
-import { describe, it, expect, beforeEach, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { ContextBuilder } from '../../src/context/context-builder';
 import type { ContextBuildParams, KBResult } from '../../src/types/index';
 

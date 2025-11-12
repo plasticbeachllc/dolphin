@@ -146,7 +146,13 @@ export class KBManager {
   }
 
   private findDolphinRoot(workspaceRoot: string, extensionPath?: string): string {
-    // If extension path is provided, derive dolphin root from it
+    // Priority 1: Check if workspaceRoot itself has pyproject.toml (E2E test case)
+    if (fs.existsSync(path.join(workspaceRoot, "pyproject.toml"))) {
+      console.error(`[KB Manager] Using workspace root as dolphin root: ${workspaceRoot}`);
+      return workspaceRoot;
+    }
+
+    // Priority 2: If extension path is provided, derive dolphin root from it
     // Extension is at: dolphin-develop-backend/vscode-extension
     // Dolphin root is: dolphin-develop-backend
     if (extensionPath) {
@@ -157,11 +163,8 @@ export class KBManager {
       }
     }
 
-    // Fallback: Check if workspaceRoot itself has pyproject.toml
-    if (fs.existsSync(path.join(workspaceRoot, "pyproject.toml"))) {
-      return workspaceRoot;
-    }
-
+    // Priority 3: Walk up directory tree to find pyproject.toml
+    const projectRoot = this.findPyprojectToml(workspaceRoot);
     if (projectRoot) {
       console.error(`[KB Manager] Found pyproject.toml at: ${projectRoot}`);
       return projectRoot;

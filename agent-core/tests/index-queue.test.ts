@@ -147,6 +147,24 @@ describe('IndexQueue', () => {
       let pollCount = 0
 
       globalThis.fetch = mock(async (url: string) => {
+        // Check for status endpoint first (more specific than /index)
+        if (url.includes('/status/')) {
+          pollCount++
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              task_id: 'task-123',
+              status: 'processing',
+              progress: 50,
+              total: 100,
+              indexed: 50,
+              skipped: 0
+            })
+          } as Response
+        }
+        
+        // Index endpoint
         if (url.includes('/index')) {
           return {
             ok: true,
@@ -155,26 +173,14 @@ describe('IndexQueue', () => {
           } as Response
         }
 
-        // Status endpoint
-        pollCount++
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            task_id: 'task-123',
-            status: 'processing',
-            progress: 50,
-            total: 100,
-            indexed: 50,
-            skipped: 0
-          })
-        } as Response
+        throw new Error(`Unexpected URL: ${url}`)
       }) as any
 
       await queue.enqueueBatch(['test.ts'])
 
-      // Wait for polling to occur
-      await new Promise(resolve => setTimeout(resolve, 2500))
+      // Wait for polling to occur - need to wait longer than the 2s poll interval
+      // to ensure at least one poll cycle completes
+      await new Promise(resolve => setTimeout(resolve, 3000))
 
       expect(pollCount).toBeGreaterThan(0)
     })
@@ -187,6 +193,23 @@ describe('IndexQueue', () => {
       })
 
       globalThis.fetch = mock(async (url: string) => {
+        // Check for status endpoint first (more specific)
+        if (url.includes('/status/')) {
+          const progress = Math.min(100, progressEvents.length * 25)
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              task_id: 'task-123',
+              status: progress === 100 ? 'completed' : 'processing',
+              progress,
+              total: 100,
+              indexed: progress,
+              skipped: 0
+            })
+          } as Response
+        }
+        
         if (url.includes('/index')) {
           return {
             ok: true,
@@ -195,26 +218,13 @@ describe('IndexQueue', () => {
           } as Response
         }
 
-        // Return increasing progress
-        const progress = Math.min(100, progressEvents.length * 25)
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            task_id: 'task-123',
-            status: progress === 100 ? 'completed' : 'processing',
-            progress,
-            total: 100,
-            indexed: progress,
-            skipped: 0
-          })
-        } as Response
+        throw new Error(`Unexpected URL: ${url}`)
       }) as any
 
       await queue.enqueueBatch(['test.ts'])
 
       // Wait for polling
-      await new Promise(resolve => setTimeout(resolve, 3000))
+      await new Promise(resolve => setTimeout(resolve, 3500))
 
       expect(progressEvents.length).toBeGreaterThan(0)
     })
@@ -227,6 +237,22 @@ describe('IndexQueue', () => {
       })
 
       globalThis.fetch = mock(async (url: string) => {
+        // Check for status endpoint first
+        if (url.includes('/status/')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              task_id: 'task-123',
+              status: 'completed',
+              progress: 100,
+              total: 100,
+              indexed: 95,
+              skipped: 5
+            })
+          } as Response
+        }
+        
         if (url.includes('/index')) {
           return {
             ok: true,
@@ -235,24 +261,13 @@ describe('IndexQueue', () => {
           } as Response
         }
 
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            task_id: 'task-123',
-            status: 'completed',
-            progress: 100,
-            total: 100,
-            indexed: 95,
-            skipped: 5
-          })
-        } as Response
+        throw new Error(`Unexpected URL: ${url}`)
       }) as any
 
       await queue.enqueueBatch(['test.ts'])
 
       // Wait for completion
-      await new Promise(resolve => setTimeout(resolve, 2500))
+      await new Promise(resolve => setTimeout(resolve, 3500))
 
       expect(completeEvent).not.toBeNull()
       expect(completeEvent?.status).toBe('completed')
@@ -268,6 +283,23 @@ describe('IndexQueue', () => {
       })
 
       globalThis.fetch = mock(async (url: string) => {
+        // Check for status endpoint first
+        if (url.includes('/status/')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              task_id: 'task-123',
+              status: 'failed',
+              progress: 50,
+              total: 100,
+              indexed: 45,
+              skipped: 0,
+              error: 'Indexing failed'
+            })
+          } as Response
+        }
+        
         if (url.includes('/index')) {
           return {
             ok: true,
@@ -276,25 +308,13 @@ describe('IndexQueue', () => {
           } as Response
         }
 
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            task_id: 'task-123',
-            status: 'failed',
-            progress: 50,
-            total: 100,
-            indexed: 45,
-            skipped: 0,
-            error: 'Indexing failed'
-          })
-        } as Response
+        throw new Error(`Unexpected URL: ${url}`)
       }) as any
 
       await queue.enqueueBatch(['test.ts'])
 
       // Wait for error
-      await new Promise(resolve => setTimeout(resolve, 2500))
+      await new Promise(resolve => setTimeout(resolve, 3500))
 
       expect(errorEvent).not.toBeNull()
       expect(errorEvent?.message).toContain('Indexing failed')
@@ -302,6 +322,22 @@ describe('IndexQueue', () => {
 
     it('should remove completed tasks from tracking', async () => {
       globalThis.fetch = mock(async (url: string) => {
+        // Check for status endpoint first
+        if (url.includes('/status/')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              task_id: 'task-123',
+              status: 'completed',
+              progress: 100,
+              total: 100,
+              indexed: 100,
+              skipped: 0
+            })
+          } as Response
+        }
+        
         if (url.includes('/index')) {
           return {
             ok: true,
@@ -310,18 +346,7 @@ describe('IndexQueue', () => {
           } as Response
         }
 
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            task_id: 'task-123',
-            status: 'completed',
-            progress: 100,
-            total: 100,
-            indexed: 100,
-            skipped: 0
-          })
-        } as Response
+        throw new Error(`Unexpected URL: ${url}`)
       }) as any
 
       await queue.enqueueBatch(['test.ts'])
@@ -329,7 +354,7 @@ describe('IndexQueue', () => {
       expect(queue.getQueueDepth()).toBe(1)
 
       // Wait for completion
-      await new Promise(resolve => setTimeout(resolve, 2500))
+      await new Promise(resolve => setTimeout(resolve, 3500))
 
       expect(queue.getQueueDepth()).toBe(0)
       expect(queue.isIndexing()).toBe(false)
@@ -339,6 +364,23 @@ describe('IndexQueue', () => {
       let pollCount = 0
 
       globalThis.fetch = mock(async (url: string) => {
+        // Check for status endpoint first
+        if (url.includes('/status/')) {
+          pollCount++
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              task_id: 'task-123',
+              status: 'completed',
+              progress: 100,
+              total: 100,
+              indexed: 100,
+              skipped: 0
+            })
+          } as Response
+        }
+        
         if (url.includes('/index')) {
           return {
             ok: true,
@@ -347,25 +389,13 @@ describe('IndexQueue', () => {
           } as Response
         }
 
-        pollCount++
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            task_id: 'task-123',
-            status: 'completed',
-            progress: 100,
-            total: 100,
-            indexed: 100,
-            skipped: 0
-          })
-        } as Response
+        throw new Error(`Unexpected URL: ${url}`)
       }) as any
 
       await queue.enqueueBatch(['test.ts'])
 
       // Wait for completion
-      await new Promise(resolve => setTimeout(resolve, 2500))
+      await new Promise(resolve => setTimeout(resolve, 3500))
 
       const pollCountBefore = pollCount
 
@@ -373,7 +403,7 @@ describe('IndexQueue', () => {
       await new Promise(resolve => setTimeout(resolve, 3000))
 
       expect(pollCount).toBe(pollCountBefore)
-    })
+    }, 10000) // Increase timeout for this test
 
     it('should handle status check errors gracefully', async () => {
       globalThis.fetch = mock(async (url: string) => {
@@ -395,7 +425,7 @@ describe('IndexQueue', () => {
       await queue.enqueueBatch(['test.ts'])
 
       // Should not crash
-      await new Promise(resolve => setTimeout(resolve, 2500))
+      await new Promise(resolve => setTimeout(resolve, 3500))
 
       // Task should still be tracked
       expect(queue.getQueueDepth()).toBe(1)
@@ -404,12 +434,15 @@ describe('IndexQueue', () => {
 
   describe('getQueueDepth', () => {
     it('should return number of active tasks', async () => {
+      let taskIdCounter = 0
+      
       globalThis.fetch = mock(async (url: string) => {
         if (url.includes('/index')) {
+          taskIdCounter++
           return {
             ok: true,
             status: 200,
-            json: async () => ({ task_id: `task-${Date.now()}` })
+            json: async () => ({ task_id: `task-${taskIdCounter}` })
           } as Response
         }
 
@@ -462,6 +495,23 @@ describe('IndexQueue', () => {
       let pollCount = 0
 
       globalThis.fetch = mock(async (url: string) => {
+        // Check for status endpoint first
+        if (url.includes('/status/')) {
+          pollCount++
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              task_id: 'task-123',
+              status: 'processing',
+              progress: 50,
+              total: 100,
+              indexed: 50,
+              skipped: 0
+            })
+          } as Response
+        }
+        
         if (url.includes('/index')) {
           return {
             ok: true,
@@ -470,25 +520,13 @@ describe('IndexQueue', () => {
           } as Response
         }
 
-        pollCount++
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            task_id: 'task-123',
-            status: 'processing',
-            progress: 50,
-            total: 100,
-            indexed: 50,
-            skipped: 0
-          })
-        } as Response
+        throw new Error(`Unexpected URL: ${url}`)
       }) as any
 
       await queue.enqueueBatch(['test.ts'])
 
       // Wait for some polling
-      await new Promise(resolve => setTimeout(resolve, 2500))
+      await new Promise(resolve => setTimeout(resolve, 3500))
 
       const pollCountBefore = pollCount
 
@@ -499,7 +537,7 @@ describe('IndexQueue', () => {
       await new Promise(resolve => setTimeout(resolve, 3000))
 
       expect(pollCount).toBe(pollCountBefore)
-    })
+    }, 10000) // Increase timeout for this test
 
     it('should clear active tasks', async () => {
       globalThis.fetch = mock(async () => ({
@@ -530,15 +568,17 @@ describe('IndexQueue', () => {
 
   describe('edge cases', () => {
     it('should handle multiple concurrent tasks', async () => {
-      let taskCounter = 0
+      const taskIds: string[] = []
 
       globalThis.fetch = mock(async (url: string) => {
         if (url.includes('/index')) {
-          taskCounter++
+          // Generate unique task ID for each enqueue
+          const taskId = `task-${Date.now()}-${Math.random()}`
+          taskIds.push(taskId)
           return {
             ok: true,
             status: 200,
-            json: async () => ({ task_id: `task-${taskCounter}` })
+            json: async () => ({ task_id: taskId })
           } as Response
         }
 
@@ -566,14 +606,35 @@ describe('IndexQueue', () => {
     })
 
     it('should handle task completion in non-sequential order', async () => {
-      const taskStatuses = new Map([
-        ['task-1', 'processing'],
-        ['task-2', 'processing']
-      ])
+      let taskIdCounter = 0
+      const taskIds: string[] = []
+      const taskStatuses = new Map<string, string>()
 
       globalThis.fetch = mock(async (url: string) => {
+        // Check for status endpoint first
+        if (url.includes('/status/')) {
+          const taskId = url.split('/').pop()!
+          const status = taskStatuses.get(taskId) || 'processing'
+
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              task_id: taskId,
+              status,
+              progress: status === 'completed' ? 100 : 50,
+              total: 100,
+              indexed: status === 'completed' ? 100 : 50,
+              skipped: 0
+            })
+          } as Response
+        }
+        
         if (url.includes('/index')) {
-          const taskId = url.includes('task-1') ? 'task-1' : 'task-2'
+          taskIdCounter++
+          const taskId = `task-${taskIdCounter}`
+          taskIds.push(taskId)
+          taskStatuses.set(taskId, 'processing')
           return {
             ok: true,
             status: 200,
@@ -581,21 +642,7 @@ describe('IndexQueue', () => {
           } as Response
         }
 
-        const taskId = url.split('/').pop()!
-        const status = taskStatuses.get(taskId) || 'completed'
-
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            task_id: taskId,
-            status,
-            progress: status === 'completed' ? 100 : 50,
-            total: 100,
-            indexed: status === 'completed' ? 100 : 50,
-            skipped: 0
-          })
-        } as Response
+        throw new Error(`Unexpected URL: ${url}`)
       }) as any
 
       await queue.enqueueBatch(['file1.ts'])
@@ -604,17 +651,17 @@ describe('IndexQueue', () => {
       expect(queue.getQueueDepth()).toBe(2)
 
       // Complete task-2 first
-      taskStatuses.set('task-2', 'completed')
+      taskStatuses.set(taskIds[1], 'completed')
 
-      await new Promise(resolve => setTimeout(resolve, 2500))
+      await new Promise(resolve => setTimeout(resolve, 3500))
 
       // Complete task-1
-      taskStatuses.set('task-1', 'completed')
+      taskStatuses.set(taskIds[0], 'completed')
 
-      await new Promise(resolve => setTimeout(resolve, 2500))
+      await new Promise(resolve => setTimeout(resolve, 3500))
 
       expect(queue.getQueueDepth()).toBe(0)
-    })
+    }, 10000) // Increase timeout for this test
 
     it('should handle malformed status responses', async () => {
       globalThis.fetch = mock(async (url: string) => {
@@ -637,7 +684,7 @@ describe('IndexQueue', () => {
       await queue.enqueueBatch(['test.ts'])
 
       // Should not crash
-      await new Promise(resolve => setTimeout(resolve, 2500))
+      await new Promise(resolve => setTimeout(resolve, 3500))
     })
   })
 })

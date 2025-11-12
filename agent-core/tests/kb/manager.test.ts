@@ -1,5 +1,5 @@
 // agent-core/tests/kb/manager.test.ts
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { KBManager } from "../../src/kb/manager";
 import * as fs from "fs";
 import * as os from "os";
@@ -111,8 +111,17 @@ describe("KBManager", () => {
 
   describe("Health Check", () => {
     it("should return false when KB not running", async () => {
+      // Mock fetch to simulate KB not responding
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = mock(() => {
+        throw new Error("Connection refused");
+      }) as any;
+
       const healthy = await (manager as any).healthCheck();
       expect(healthy).toBe(false);
+
+      // Restore original fetch
+      globalThis.fetch = originalFetch;
     });
 
     // Note: Testing healthCheck with running KB requires integration test

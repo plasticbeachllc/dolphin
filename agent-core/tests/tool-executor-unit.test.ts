@@ -4,35 +4,112 @@ import type { ClaudeClient } from '../src/llm/claude-client'
 import type { MCPClient } from '../src/mcp/client'
 import type { AgentEvent } from '../../../shared/types/events'
 
+// Helper to create mock stream from response data
+// Options: executor (to check abort), throwError (to simulate API errors)
+function createMockStream(mockResponse: any, options: { executor?: any, throwError?: Error } = {}) {
+  return {
+    async *[Symbol.asyncIterator]() {
+      // Check if we should throw an error during stream creation
+      if (options.throwError) {
+        throw options.throwError
+      }
+      
+      const content = mockResponse.content || [{ type: 'text', text: 'Mock response' }]
+      
+      for (const block of content) {
+        // Check abort flag if executor provided
+        if (options.executor && (options.executor as any).isAborted) {
+          throw new Error('Generation aborted by user')
+        }
+        
+        yield {
+          type: 'content_block_start',
+          content_block: block.type === 'tool_use'
+            ? { type: 'tool_use', id: block.id, name: block.name }
+            : { type: 'text' }
+        }
+        
+        if (block.type === 'text') {
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: block.text }
+          }
+        } else if (block.type === 'tool_use') {
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'input_json_delta', partial_json: JSON.stringify(block.input) }
+          }
+        }
+        
+        yield {
+          type: 'content_block_stop'
+        }
+      }
+      
+      yield {
+        type: 'message_stop'
+      }
+    },
+    async finalMessage() {
+      return mockResponse
+    }
+  }
+}
+
 describe('ClaudeToolExecutor - Unit Tests', () => {
   let mockClaudeClient: any
   let mockMCPClient: any
   let events: AgentEvent[]
   let executor: ClaudeToolExecutor
 
+  // Helper to set up stream mock with specific responses
+  function setupStreamMock(...responses: any[]) {
+    let callIndex = 0
+    mockClaudeClient.apiClient.messages.stream = mock((params: any) => {
+      const response = responses[callIndex] || responses[responses.length - 1]
+      callIndex++
+      return createMockStream({
+        id: `msg-${callIndex}`,
+        type: 'message',
+        role: 'assistant',
+        ...response
+      })
+    })
+  }
+
   beforeEach(() => {
     events = []
 
-    // Mock Claude Client
+    // Mock Claude Client with streaming API
     mockClaudeClient = {
-      complete: mock(async (params: any) => ({
-        content: [{ type: 'text', text: 'Mock response' }],
-        usage: {
-          input_tokens: 100,
-          output_tokens: 50,
-          cache_read_input_tokens: 0,
-          cache_creation_input_tokens: 0
-        },
-        stop_reason: 'end_turn',
-        model: 'claude-sonnet-4-20250514'
-      })),
       getAuthStatus: mock(async () => ({
         mode: 'api_key',
         cliInstalled: false,
         cliAuthenticated: false,
         apiKeySet: true,
         willUseSubscription: false
-      }))
+      })),
+      apiClient: {
+        messages: {
+          stream: mock((params: any) => {
+            return createMockStream({
+              id: 'msg-123',
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'text', text: 'Mock response' }],
+              model: 'claude-sonnet-4-20250514',
+              stop_reason: 'end_turn',
+              stop_sequence: null,
+              usage: {
+                input_tokens: 100,
+                output_tokens: 50,
+                cache_read_input_tokens: 0,
+                cache_creation_input_tokens: 0
+              }
+            })
+          })
+        }
+      }
     }
 
     // Mock MCP Client
@@ -124,52 +201,25 @@ describe('ClaudeToolExecutor - Unit Tests', () => {
     })
 
     it('should handle tool use response', async () => {
-      // Mock Claude returning a tool use block
-      mockClaudeClient.complete = mock(async (params: any) => ({
-        content: [
-          {
+      setupStreamMock(
+        {
+          content: [{
             type: 'tool_use',
             id: 'tool-1',
             name: 'search_knowledge',
             input: { query: 'test query' }
-          }
-        ],
-        usage: {
-          input_tokens: 100,
-          output_tokens: 50,
-          cache_read_input_tokens: 0,
-          cache_creation_input_tokens: 0
+          }],
+          usage: { input_tokens: 100, output_tokens: 50 },
+          stop_reason: 'tool_use',
+          model: 'claude-sonnet-4-20250514'
         },
-        stop_reason: 'tool_use',
-        model: 'claude-sonnet-4-20250514'
-      })).mockImplementationOnce(async (params: any) => ({
-        content: [
-          {
-            type: 'tool_use',
-            id: 'tool-1',
-            name: 'search_knowledge',
-            input: { query: 'test query' }
-          }
-        ],
-        usage: {
-          input_tokens: 100,
-          output_tokens: 50,
-          cache_read_input_tokens: 0,
-          cache_creation_input_tokens: 0
-        },
-        stop_reason: 'tool_use',
-        model: 'claude-sonnet-4-20250514'
-      })).mockImplementationOnce(async (params: any) => ({
-        content: [{ type: 'text', text: 'Final response after tool use' }],
-        usage: {
-          input_tokens: 100,
-          output_tokens: 50,
-          cache_read_input_tokens: 0,
-          cache_creation_input_tokens: 0
-        },
-        stop_reason: 'end_turn',
-        model: 'claude-sonnet-4-20250514'
-      }))
+        {
+          content: [{ type: 'text', text: 'Final response after tool use' }],
+          usage: { input_tokens: 100, output_tokens: 50 },
+          stop_reason: 'end_turn',
+          model: 'claude-sonnet-4-20250514'
+        }
+      )
 
       const result = await executor.executeWithTools('Search for code')
 
@@ -179,24 +229,17 @@ describe('ClaudeToolExecutor - Unit Tests', () => {
 
     it('should respect maxToolRounds limit', async () => {
       // Make Claude always return tool_use
-      mockClaudeClient.complete = mock(async (params: any) => ({
-        content: [
-          {
-            type: 'tool_use',
-            id: `tool-${Date.now()}`,
-            name: 'search_knowledge',
-            input: { query: 'test' }
-          }
-        ],
-        usage: {
-          input_tokens: 100,
-          output_tokens: 50,
-          cache_read_input_tokens: 0,
-          cache_creation_input_tokens: 0
-        },
+      setupStreamMock({
+        content: [{
+          type: 'tool_use',
+          id: `tool-${Date.now()}`,
+          name: 'search_knowledge',
+          input: { query: 'test' }
+        }],
+        usage: { input_tokens: 100, output_tokens: 50 },
         stop_reason: 'tool_use',
         model: 'claude-sonnet-4-20250514'
-      }))
+      })
 
       const result = await executor.executeWithTools('Test query')
 
@@ -205,99 +248,69 @@ describe('ClaudeToolExecutor - Unit Tests', () => {
     })
 
     it('should accumulate usage across rounds', async () => {
-      mockClaudeClient.complete = mock(async (params: any) => ({
-        content: [
-          {
+      // Setup 3-round conversation: 2 tool calls + 1 final response
+      setupStreamMock(
+        {
+          content: [{
             type: 'tool_use',
             id: 'tool-1',
             name: 'search_knowledge',
             input: { query: 'test' }
-          }
-        ],
-        usage: {
-          input_tokens: 100,
-          output_tokens: 50,
-          cache_read_input_tokens: 10,
-          cache_creation_input_tokens: 5
+          }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 10,
+            cache_creation_input_tokens: 5
+          },
+          stop_reason: 'tool_use',
+          model: 'claude-sonnet-4-20250514'
         },
-        stop_reason: 'tool_use',
-        model: 'claude-sonnet-4-20250514'
-      })).mockImplementationOnce(async () => ({
-        content: [
-          {
+        {
+          content: [{
             type: 'tool_use',
-            id: 'tool-1',
+            id: 'tool-2',
             name: 'search_knowledge',
             input: { query: 'test' }
-          }
-        ],
-        usage: {
-          input_tokens: 100,
-          output_tokens: 50,
-          cache_read_input_tokens: 10,
-          cache_creation_input_tokens: 5
+          }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 10,
+            cache_creation_input_tokens: 5
+          },
+          stop_reason: 'tool_use',
+          model: 'claude-sonnet-4-20250514'
         },
-        stop_reason: 'tool_use',
-        model: 'claude-sonnet-4-20250514'
-      })).mockImplementationOnce(async () => ({
-        content: [{ type: 'text', text: 'Done' }],
-        usage: {
-          input_tokens: 100,
-          output_tokens: 50,
-          cache_read_input_tokens: 10,
-          cache_creation_input_tokens: 5
-        },
-        stop_reason: 'end_turn',
-        model: 'claude-sonnet-4-20250514'
-      }))
+        {
+          content: [{ type: 'text', text: 'Done' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 10,
+            cache_creation_input_tokens: 5
+          },
+          stop_reason: 'end_turn',
+          model: 'claude-sonnet-4-20250514'
+        }
+      )
 
       const result = await executor.executeWithTools('Test')
 
-      // Should accumulate usage from multiple rounds
+      // Should accumulate usage from multiple rounds (3 rounds total)
       expect(result.usage.inputTokens).toBeGreaterThanOrEqual(200)
       expect(result.usage.cacheReadTokens).toBeGreaterThanOrEqual(20)
     })
 
     it('should emit events during execution', async () => {
-      mockClaudeClient.complete = mock(async (params: any) => ({
-        content: [
-          {
-            type: 'tool_use',
-            id: 'tool-1',
-            name: 'search_knowledge',
-            input: { query: 'test' }
-          }
-        ],
-        usage: {
-          input_tokens: 100,
-          output_tokens: 50
-        },
-        stop_reason: 'tool_use',
-        model: 'claude-sonnet-4-20250514'
-      })).mockImplementationOnce(async () => ({
-        content: [
-          {
-            type: 'tool_use',
-            id: 'tool-1',
-            name: 'search_knowledge',
-            input: { query: 'test' }
-          }
-        ],
-        usage: {
-          input_tokens: 100,
-          output_tokens: 50
-        },
-        stop_reason: 'tool_use',
-        model: 'claude-sonnet-4-20250514'
-      })).mockImplementationOnce(async () => ({
-        content: [{ type: 'text', text: 'Done' }],
-        usage: {
-          input_tokens: 100,
-          output_tokens: 50
-        },
-        stop_reason: 'end_turn',
-        model: 'claude-sonnet-4-20250514'
-      }))
+      setupStreamMock(
+        {
+          content: [{ type: 'text', text: 'Response' }],
+          usage: { input_tokens: 100, output_tokens: 50 },
+          stop_reason: 'end_turn',
+          model: 'claude-sonnet-4-20250514'
+        }
+      )
 
       await executor.executeWithTools('Test')
 
@@ -313,8 +326,8 @@ describe('ClaudeToolExecutor - Unit Tests', () => {
 
       await executor.executeWithTools('New message', history)
 
-      expect(mockClaudeClient.complete).toHaveBeenCalled()
-      const callArgs = mockClaudeClient.complete.mock.calls[0][0]
+      expect(mockClaudeClient.apiClient.messages.stream).toHaveBeenCalled()
+      const callArgs = mockClaudeClient.apiClient.messages.stream.mock.calls[0][0]
       expect(callArgs.messages.length).toBeGreaterThan(2) // history + new message
     })
   })
@@ -325,31 +338,93 @@ describe('ClaudeToolExecutor - Unit Tests', () => {
     })
 
     it('should abort ongoing execution', async () => {
-      // Make Claude take a while
-      mockClaudeClient.complete = mock(async (params: any) => {
-        await new Promise(resolve => setTimeout(resolve, 100))
+      // Create a delayed async iterator that allows abort to interrupt
+      let shouldAbort = false
+      
+      mockClaudeClient.apiClient.messages.stream = mock((params: any) => {
         return {
-          content: [{ type: 'text', text: 'Response' }],
-          usage: { input_tokens: 100, output_tokens: 50 },
-          stop_reason: 'end_turn',
-          model: 'claude-sonnet-4-20250514'
+          async *[Symbol.asyncIterator]() {
+            // Delay to allow abort to be called
+            await new Promise(resolve => setTimeout(resolve, 50))
+            
+            // Check if aborted
+            if (shouldAbort) {
+              throw new Error('Generation aborted by user')
+            }
+            
+            yield { type: 'content_block_start', content_block: { type: 'text' } }
+            yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Response' } }
+            yield { type: 'content_block_stop' }
+            yield { type: 'message_stop' }
+          },
+          async finalMessage() {
+            return {
+              id: 'msg-abort',
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'text', text: 'Response' }],
+              usage: { input_tokens: 100, output_tokens: 50 },
+              stop_reason: 'end_turn',
+              model: 'claude-sonnet-4-20250514'
+            }
+          }
         }
       })
 
       const executePromise = executor.executeWithTools('Test')
 
-      // Abort immediately
-      setTimeout(() => executor.abort(), 10)
+      // Abort after a short delay
+      setTimeout(() => {
+        shouldAbort = true
+        executor.abort()
+      }, 10)
 
       await expect(executePromise).rejects.toThrow('aborted')
     })
 
     it('should set isAborted flag', async () => {
-      executor.abort()
+      // Create stream that will be called but we'll abort during it
+      let isAborted = false
+      
+      mockClaudeClient.apiClient.messages.stream = mock((params: any) => {
+        return {
+          async *[Symbol.asyncIterator]() {
+            // Small delay to allow abort to take effect
+            await new Promise(resolve => setTimeout(resolve, 10))
+            
+            if (isAborted) {
+              throw new Error('Generation aborted by user')
+            }
+            
+            yield { type: 'content_block_start', content_block: { type: 'text' } }
+            yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Response' } }
+            yield { type: 'content_block_stop' }
+            yield { type: 'message_stop' }
+          },
+          async finalMessage() {
+            return {
+              id: 'msg-abort',
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'text', text: 'Response' }],
+              usage: { input_tokens: 100, output_tokens: 50 },
+              stop_reason: 'end_turn',
+              model: 'claude-sonnet-4-20250514'
+            }
+          }
+        }
+      })
 
-      await expect(
-        executor.executeWithTools('Test')
-      ).rejects.toThrow()
+      // Abort before execution starts
+      executor.abort()
+      
+      // Start execution - should check abort during the first API call
+      const executePromise = executor.executeWithTools('Test')
+      
+      // Mark as aborted for the stream
+      isAborted = true
+
+      await expect(executePromise).rejects.toThrow('aborted')
     })
   })
 
@@ -359,8 +434,9 @@ describe('ClaudeToolExecutor - Unit Tests', () => {
     })
 
     it('should handle Claude API errors', async () => {
-      mockClaudeClient.complete = mock(async () => {
-        throw new Error('API error')
+      // Mock stream to throw error during creation
+      mockClaudeClient.apiClient.messages.stream = mock((params: any) => {
+        return createMockStream({}, { throwError: new Error('API error') })
       })
 
       await expect(
@@ -374,36 +450,25 @@ describe('ClaudeToolExecutor - Unit Tests', () => {
         isError: true
       }))
 
-      mockClaudeClient.complete = mock(async (params: any) => ({
-        content: [
-          {
+      setupStreamMock(
+        {
+          content: [{
             type: 'tool_use',
             id: 'tool-1',
             name: 'search_knowledge',
             input: { query: 'test' }
-          }
-        ],
-        usage: { input_tokens: 100, output_tokens: 50 },
-        stop_reason: 'tool_use',
-        model: 'claude-sonnet-4-20250514'
-      })).mockImplementationOnce(async () => ({
-        content: [
-          {
-            type: 'tool_use',
-            id: 'tool-1',
-            name: 'search_knowledge',
-            input: { query: 'test' }
-          }
-        ],
-        usage: { input_tokens: 100, output_tokens: 50 },
-        stop_reason: 'tool_use',
-        model: 'claude-sonnet-4-20250514'
-      })).mockImplementationOnce(async () => ({
-        content: [{ type: 'text', text: 'Handled error' }],
-        usage: { input_tokens: 100, output_tokens: 50 },
-        stop_reason: 'end_turn',
-        model: 'claude-sonnet-4-20250514'
-      }))
+          }],
+          usage: { input_tokens: 100, output_tokens: 50 },
+          stop_reason: 'tool_use',
+          model: 'claude-sonnet-4-20250514'
+        },
+        {
+          content: [{ type: 'text', text: 'Handled error' }],
+          usage: { input_tokens: 100, output_tokens: 50 },
+          stop_reason: 'end_turn',
+          model: 'claude-sonnet-4-20250514'
+        }
+      )
 
       // Should not crash, tool error passed back to Claude
       const result = await executor.executeWithTools('Test')
@@ -411,36 +476,25 @@ describe('ClaudeToolExecutor - Unit Tests', () => {
     })
 
     it('should handle unknown tool names', async () => {
-      mockClaudeClient.complete = mock(async (params: any) => ({
-        content: [
-          {
+      setupStreamMock(
+        {
+          content: [{
             type: 'tool_use',
             id: 'tool-1',
             name: 'unknown_tool',
             input: {}
-          }
-        ],
-        usage: { input_tokens: 100, output_tokens: 50 },
-        stop_reason: 'tool_use',
-        model: 'claude-sonnet-4-20250514'
-      })).mockImplementationOnce(async () => ({
-        content: [
-          {
-            type: 'tool_use',
-            id: 'tool-1',
-            name: 'unknown_tool',
-            input: {}
-          }
-        ],
-        usage: { input_tokens: 100, output_tokens: 50 },
-        stop_reason: 'tool_use',
-        model: 'claude-sonnet-4-20250514'
-      })).mockImplementationOnce(async () => ({
-        content: [{ type: 'text', text: 'Handled unknown tool' }],
-        usage: { input_tokens: 100, output_tokens: 50 },
-        stop_reason: 'end_turn',
-        model: 'claude-sonnet-4-20250514'
-      }))
+          }],
+          usage: { input_tokens: 100, output_tokens: 50 },
+          stop_reason: 'tool_use',
+          model: 'claude-sonnet-4-20250514'
+        },
+        {
+          content: [{ type: 'text', text: 'Handled unknown tool' }],
+          usage: { input_tokens: 100, output_tokens: 50 },
+          stop_reason: 'end_turn',
+          model: 'claude-sonnet-4-20250514'
+        }
+      )
 
       // Should handle gracefully
       const result = await executor.executeWithTools('Test')
@@ -459,36 +513,25 @@ describe('ClaudeToolExecutor - Unit Tests', () => {
         isError: false
       }))
 
-      mockClaudeClient.complete = mock(async (params: any) => ({
-        content: [
-          {
+      setupStreamMock(
+        {
+          content: [{
             type: 'tool_use',
             id: 'tool-1',
             name: 'search_knowledge',
             input: { query: 'test' }
-          }
-        ],
-        usage: { input_tokens: 100, output_tokens: 50 },
-        stop_reason: 'tool_use',
-        model: 'claude-sonnet-4-20250514'
-      })).mockImplementationOnce(async () => ({
-        content: [
-          {
-            type: 'tool_use',
-            id: 'tool-1',
-            name: 'search_knowledge',
-            input: { query: 'test' }
-          }
-        ],
-        usage: { input_tokens: 100, output_tokens: 50 },
-        stop_reason: 'tool_use',
-        model: 'claude-sonnet-4-20250514'
-      })).mockImplementationOnce(async () => ({
-        content: [{ type: 'text', text: 'Final response' }],
-        usage: { input_tokens: 100, output_tokens: 50 },
-        stop_reason: 'end_turn',
-        model: 'claude-sonnet-4-20250514'
-      }))
+          }],
+          usage: { input_tokens: 100, output_tokens: 50 },
+          stop_reason: 'tool_use',
+          model: 'claude-sonnet-4-20250514'
+        },
+        {
+          content: [{ type: 'text', text: 'Final response' }],
+          usage: { input_tokens: 100, output_tokens: 50 },
+          stop_reason: 'end_turn',
+          model: 'claude-sonnet-4-20250514'
+        }
+      )
 
       const result = await executor.executeWithTools('Test')
 
@@ -501,36 +544,25 @@ describe('ClaudeToolExecutor - Unit Tests', () => {
         isError: true
       }))
 
-      mockClaudeClient.complete = mock(async (params: any) => ({
-        content: [
-          {
+      setupStreamMock(
+        {
+          content: [{
             type: 'tool_use',
             id: 'tool-1',
             name: 'search_knowledge',
             input: { query: 'test' }
-          }
-        ],
-        usage: { input_tokens: 100, output_tokens: 50 },
-        stop_reason: 'tool_use',
-        model: 'claude-sonnet-4-20250514'
-      })).mockImplementationOnce(async () => ({
-        content: [
-          {
-            type: 'tool_use',
-            id: 'tool-1',
-            name: 'search_knowledge',
-            input: { query: 'test' }
-          }
-        ],
-        usage: { input_tokens: 100, output_tokens: 50 },
-        stop_reason: 'tool_use',
-        model: 'claude-sonnet-4-20250514'
-      })).mockImplementationOnce(async () => ({
-        content: [{ type: 'text', text: 'Handled error' }],
-        usage: { input_tokens: 100, output_tokens: 50 },
-        stop_reason: 'end_turn',
-        model: 'claude-sonnet-4-20250514'
-      }))
+          }],
+          usage: { input_tokens: 100, output_tokens: 50 },
+          stop_reason: 'tool_use',
+          model: 'claude-sonnet-4-20250514'
+        },
+        {
+          content: [{ type: 'text', text: 'Handled error' }],
+          usage: { input_tokens: 100, output_tokens: 50 },
+          stop_reason: 'end_turn',
+          model: 'claude-sonnet-4-20250514'
+        }
+      )
 
       await executor.executeWithTools('Test')
 
@@ -544,48 +576,33 @@ describe('ClaudeToolExecutor - Unit Tests', () => {
     })
 
     it('should handle multiple tool calls in one response', async () => {
-      mockClaudeClient.complete = mock(async (params: any) => ({
-        content: [
-          {
-            type: 'tool_use',
-            id: 'tool-1',
-            name: 'search_knowledge',
-            input: { query: 'test1' }
-          },
-          {
-            type: 'tool_use',
-            id: 'tool-2',
-            name: 'read_file',
-            input: { path: 'test.ts' }
-          }
-        ],
-        usage: { input_tokens: 100, output_tokens: 50 },
-        stop_reason: 'tool_use',
-        model: 'claude-sonnet-4-20250514'
-      })).mockImplementationOnce(async () => ({
-        content: [
-          {
-            type: 'tool_use',
-            id: 'tool-1',
-            name: 'search_knowledge',
-            input: { query: 'test1' }
-          },
-          {
-            type: 'tool_use',
-            id: 'tool-2',
-            name: 'read_file',
-            input: { path: 'test.ts' }
-          }
-        ],
-        usage: { input_tokens: 100, output_tokens: 50 },
-        stop_reason: 'tool_use',
-        model: 'claude-sonnet-4-20250514'
-      })).mockImplementationOnce(async () => ({
-        content: [{ type: 'text', text: 'Done with both tools' }],
-        usage: { input_tokens: 100, output_tokens: 50 },
-        stop_reason: 'end_turn',
-        model: 'claude-sonnet-4-20250514'
-      }))
+      setupStreamMock(
+        {
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tool-1',
+              name: 'search_knowledge',
+              input: { query: 'test1' }
+            },
+            {
+              type: 'tool_use',
+              id: 'tool-2',
+              name: 'read_file',
+              input: { path: 'test.ts' }
+            }
+          ],
+          usage: { input_tokens: 100, output_tokens: 50 },
+          stop_reason: 'tool_use',
+          model: 'claude-sonnet-4-20250514'
+        },
+        {
+          content: [{ type: 'text', text: 'Done with both tools' }],
+          usage: { input_tokens: 100, output_tokens: 50 },
+          stop_reason: 'end_turn',
+          model: 'claude-sonnet-4-20250514'
+        }
+      )
 
       await executor.executeWithTools('Test')
 

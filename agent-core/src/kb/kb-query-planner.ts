@@ -71,7 +71,7 @@ export class KBQueryPlanner {
     userQuery: string;
     conversationHistory: Message[];
     maxQueries: number;
-  }): Promise<DiscoveryQuery[]> {
+  }): Promise<{ queries: DiscoveryQuery[], usedFallback: boolean }> {
     const userPrompt = this.buildUserPrompt(params.userQuery, params.maxQueries);
 
     try {
@@ -89,12 +89,18 @@ export class KBQueryPlanner {
       const queries = this.parseQueriesFromResponse(response.content);
 
       // Validate and limit to maxQueries
-      return queries.slice(0, params.maxQueries);
+      return {
+        queries: queries.slice(0, params.maxQueries),
+        usedFallback: false
+      };
     } catch (error: any) {
       console.error("[KBQueryPlanner] Failed to generate queries:", error.message);
 
       // Fallback: Use heuristic query generation
-      return this.generateFallbackQueries(params.userQuery, params.maxQueries);
+      return {
+        queries: this.generateFallbackQueries(params.userQuery, params.maxQueries),
+        usedFallback: true
+      };
     }
   }
 

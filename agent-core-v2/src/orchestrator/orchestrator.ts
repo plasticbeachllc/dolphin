@@ -364,6 +364,11 @@ export class Orchestrator implements IOrchestrator {
       session.workflowIterator = iterator;
 
       for await (const update of iterator) {
+        // Stop processing if session was cancelled
+        if (session.state === 'cancelled') {
+          break;
+        }
+
         // Handle state changes
         if (update.type === 'state_change') {
           this.transitionState(session, update.data.state);
