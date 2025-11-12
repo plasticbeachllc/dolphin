@@ -43,7 +43,7 @@ def initialize_search_backend() -> None:
     """Initialize and configure the search backend and ingestion pipeline based on config."""
     # Load environment variables from .env file
     load_env_file()
-    
+
     config: KBConfig = load_config()
     store_root = config.resolved_store_root()
     provider_type = config.embedding_provider
@@ -59,7 +59,7 @@ def initialize_search_backend() -> None:
             provider_kwargs["batch_size"] = config.embedding_batch_size
 
     print(f"🔧 Initializing search backend with '{provider_type}' provider...", file=sys.stderr)
-    
+
     # Correctly call the stable factory function
     backend = create_search_backend(
         store_root=store_root,
@@ -72,12 +72,12 @@ def initialize_search_backend() -> None:
     set_search_backend(backend)
     set_stores(backend.sql_store, backend.lance_store)
     print(f"✅ Search backend ready (store: {store_root})", file=sys.stderr)
-    
+
     # Initialize ingestion pipeline for full reindex operations
     print(f"🔧 Initializing ingestion pipeline...", file=sys.stderr)
     from ..ingest.pipeline import IngestionPipeline
     from ..store.graph_store import GraphStore
-    
+
     # Create pipeline with same stores as backend
     pipeline = IngestionPipeline(
         config=config,
@@ -95,29 +95,17 @@ async def lifespan(app_instance: FastAPI):
     yield
     reset_search_backend()
 
-# Recreate the app instance to use the lifespan manager
-app_with_lifespan = FastAPI(title="Dolphin Knowledge Store", version="0.1.0", lifespan=lifespan)
+# Update the original app to use the lifespan manager
+app.router.lifespan_context = lifespan
 
-# Add CORS middleware to allow requests from VSCode webviews
-app_with_lifespan.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins (webview origins are dynamic)
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Add Prometheus metrics middleware to the original app
+app.middleware("http")(prometheus_middleware)
 
-# Mount the original app's routes onto the new app
-app_with_lifespan.router.routes.extend(app.routes)
+# Add metrics endpoint to the original app
+app.get("/metrics")(metrics_endpoint)
 
-# Add Prometheus metrics middleware
-app_with_lifespan.middleware("http")(prometheus_middleware)
-
-# Add metrics endpoint
-app_with_lifespan.get("/metrics")(metrics_endpoint)
-
-# Add health check endpoint
-@app_with_lifespan.get("/health")
+# Add health check endpoint to the original app
+@app.get("/health")
 async def health_check():
     """Enhanced health check with component status."""
     return {
@@ -128,6 +116,9 @@ async def health_check():
             "api": "healthy"
         }
     }
+
+# Export the app for uvicorn
+app_with_lifespan = app
 
 def main():
     """Entry point for kb-api command."""
