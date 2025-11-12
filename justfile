@@ -113,11 +113,6 @@ test-verbose: setup-python
 	@echo "🧪 Running tests with verbose output (parallel)..."
 	@uv run pytest -v
 
-# Run tests with coverage reporting
-test-coverage: setup-python
-	@echo "🧪 Running tests with coverage..."
-	@uv run pytest --cov=kb --cov-report=html --cov-report=term-missing
-
 # ==============================================================================
 # Unit Tests - Fast, isolated tests with no external dependencies
 # ==============================================================================
