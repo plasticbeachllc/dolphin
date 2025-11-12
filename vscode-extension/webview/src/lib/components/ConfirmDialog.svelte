@@ -63,11 +63,7 @@
 
 <svelte:window on:keydown={handleKeydown} />
 
-<div
-  class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-  role="presentation"
-  aria-hidden="true"
->
+<div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
   <div
     bind:this={dialogRef}
     role="dialog"
