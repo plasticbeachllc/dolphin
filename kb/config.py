@@ -253,7 +253,7 @@ class KBConfig:
 
         # Always override retrieval config with our constructed one
         config_kwargs['retrieval'] = retrieval_config
-
+        
         # Handle cache settings (support both nested and top-level)
         if cache_data:
             if cache_data.get("enabled") is not None:

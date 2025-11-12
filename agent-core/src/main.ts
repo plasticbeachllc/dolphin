@@ -8,6 +8,7 @@ import { ClaudeToolExecutor } from "./llm/claude-tool-executor";
 import { BasicPlanner } from "./planner/basic-planner";
 import { ConversationStore } from "./storage/conversation-store";
 import type { Conversation, ConversationMessage } from "../../shared/types/state";
+import { IPCTransport } from "../../shared/ipc";
 import * as path from "path";
 import * as fs from "fs";
 import { exec } from "child_process";
@@ -33,11 +34,11 @@ interface Message {
 /**
  * AgentCore handles the main agent logic and IPC with the VS Code extension.
  *
- * Phase 7 IPC Robustness Features:
- * - Properly framed JSON-RPC messages with Content-Length headers
- * - Write queue to prevent message interleaving on stdout
+ * IPC Implementation:
+ * - Uses vscode-jsonrpc for robust message framing (LSP-style)
+ * - Supports pluggable serialization (JSON/MessagePack via DOLPHIN_IPC_FORMAT env var)
+ * - Security hardening: payload size limits, buffer limits, max pending requests
  * - Correlation IDs (requestId) added to all notifications for event tracking
- * - Robust message parsing that handles chunk boundaries
  */
 class AgentCore {
   private version = "0.1.0";
@@ -60,8 +61,8 @@ class AgentCore {
   private isFirstUserMessage = true;
   private loadedConversationId: string | null = null; // Track original conversation for delayed branching
 
-  // Phase 7: Stdout write queue to prevent message interleaving
-  private writeQueue: Promise<void> = Promise.resolve();
+  // IPC Transport
+  private transport: IPCTransport;
 
   // EP-11: Architect mode orchestration (Discovery → Planning)
   private discoveryOrchestrator: DiscoveryOrchestrator | null = null;
@@ -93,9 +94,144 @@ class AgentCore {
       maxTokens: 8000,
       temperature: 1.0,
     });
-    
+
     // Initialize conversation store
     this.conversationStore = new ConversationStore(workspaceRoot);
+
+    // Initialize IPC transport
+    this.transport = new IPCTransport({
+      input: process.stdin,
+      output: process.stdout,
+      serializationFormat: (process.env.DOLPHIN_IPC_FORMAT as any) || 'json',
+      security: {
+        maxMessageSize: 100 * 1024 * 1024, // 100 MB
+        maxBufferSize: 50 * 1024 * 1024,    // 50 MB
+        maxPendingRequests: 1000,
+      },
+      enableMetrics: process.env.DOLPHIN_IPC_METRICS === 'true',
+    });
+
+    // Register method handlers
+    this.setupIPCHandlers();
+  }
+
+  /**
+   * Setup IPC method handlers
+   */
+  private setupIPCHandlers() {
+    this.transport.onMethod('send_message', async (params) => {
+      await this.handleSendMessage(params as ExtensionRequest);
+      return { success: true };
+    });
+
+    this.transport.onMethod('get_auth_status', async () => {
+      return await this.claudeClient.getAuthStatus();
+    });
+
+    this.transport.onMethod('clear_conversation', async () => {
+      this.handleClearConversation();
+      return { success: true };
+    });
+
+    this.transport.onMethod('abort_generation', async () => {
+      this.handleAbortGeneration();
+      return { success: true };
+    });
+
+    this.transport.onMethod('queue_files', async (params) => {
+      const { files, priority = 5 } = params || {};
+
+      if (!this.indexQueue) {
+        throw new Error('Index queue not initialized');
+      }
+
+      if (!files || !Array.isArray(files)) {
+        throw new Error('Invalid params: files array required');
+      }
+
+      this.indexQueue.enqueueBatch(files, priority);
+
+      return {
+        queued: files.length,
+        queueDepth: this.indexQueue.getQueueDepth(),
+      };
+    });
+
+    this.transport.onMethod('get_kb_status', async () => {
+      return {
+        initialized: this.indexQueue !== null,
+        repoName: this.repoName,
+        queueDepth: this.indexQueue?.getQueueDepth() || 0,
+        isIndexing: this.indexQueue?.isIndexing() || false,
+      };
+    });
+
+    this.transport.onMethod('list_conversations', async () => {
+      const conversations = await this.conversationStore.listConversationsWithMetadata();
+      return { conversations };
+    });
+
+    this.transport.onMethod('load_conversation', async (params) => {
+      const { conversationId } = params || {};
+
+      if (!conversationId) {
+        throw new Error('Invalid params: conversationId required');
+      }
+
+      const conversation = await this.conversationStore.loadConversation(conversationId);
+
+      if (!conversation) {
+        throw new Error(`Conversation not found: ${conversationId}`);
+      }
+
+      // Don't branch yet - just load into memory
+      this.loadedConversationId = conversationId;
+      this.isFirstUserMessage = true;
+
+      // Restore conversation history
+      this.conversationHistory = conversation.messages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+
+      return {
+        conversation: conversation,
+        branchInfo: null,
+      };
+    });
+
+    this.transport.onMethod('delete_conversation', async (params) => {
+      const { conversationId } = params || {};
+
+      if (!conversationId) {
+        throw new Error('Invalid params: conversationId required');
+      }
+
+      await this.conversationStore.deleteConversation(conversationId);
+
+      // Clear if it was the current conversation
+      if (this.currentConversationId === conversationId) {
+        this.currentConversationId = null;
+        this.conversationHistory = [];
+        this.isFirstUserMessage = true;
+      }
+
+      return { success: true };
+    });
+
+    this.transport.onMethod('rename_conversation', async (params) => {
+      const { conversationId, newTitle } = params || {};
+
+      if (!conversationId || !newTitle) {
+        throw new Error('Invalid params: conversationId and newTitle required');
+      }
+
+      await this.conversationStore.updateMetadata(conversationId, {
+        title: newTitle,
+      });
+
+      return { success: true };
+    });
   }
 
   async start() {
@@ -213,7 +349,8 @@ class AgentCore {
       capabilities: this.capabilities,
     });
 
-    console.error("[Agent Core] Ready and listening on stdin");
+    const ipcFormat = this.transport.getSerializationFormat();
+    console.error(`[Agent Core] Ready and listening on stdin (using ${ipcFormat} serialization)`);
   }
 
   private async initializeKBWorkspace() {
@@ -328,70 +465,6 @@ class AgentCore {
     }
   }
 
-  private handleMessage(data: string) {
-    try {
-      const message: Message = JSON.parse(data);
-      console.error(`[Agent Core] Received: ${message.method || "response"}`);
-
-      if (message.method === "send_message") {
-        this.handleSendMessage(message.params as ExtensionRequest);
-      } else if (message.method === "get_auth_status") {
-        this.handleGetAuthStatus(message);
-      } else if (message.method === "clear_conversation") {
-        this.handleClearConversation();
-      } else if (message.method === "abort_generation") {
-        this.handleAbortGeneration();
-      } else if (message.method === "queue_files") {
-        this.handleQueueFiles(message);
-      } else if (message.method === "get_kb_status") {
-        this.handleGetKBStatus(message);
-      } else if (message.method === "list_conversations") {
-        void this.handleListConversations(message);
-      } else if (message.method === "load_conversation") {
-        void this.handleLoadConversation(message);
-      } else if (message.method === "delete_conversation") {
-        void this.handleDeleteConversation(message);
-      } else if (message.method === "rename_conversation") {
-        void this.handleRenameConversation(message);
-      }
-    } catch (error) {
-      console.error("[Agent Core] Parse error:", error);
-      this.sendEvent({
-        type: "error",
-        error: {
-          code: "SERVICE_UNAVAILABLE",
-          message: "Failed to parse message",
-          suggestions: ["Check message format"],
-          recoverable: true,
-        },
-      });
-    }
-  }
-
-  private async handleGetAuthStatus(message: Message) {
-    try {
-      const status = await this.claudeClient.getAuthStatus();
-      
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        result: status,
-      };
-      
-      this.sendRPCMessage(response);
-    } catch (error: any) {
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        error: {
-          code: -32603,
-          message: error.message,
-        },
-      };
-      
-      this.sendRPCMessage(response);
-    }
-  }
 
   private async handleSendMessage(request: ExtensionRequest) {
     if (request.type === "send_message") {
@@ -896,93 +969,6 @@ class AgentCore {
     });
   }
 
-  private async handleQueueFiles(message: Message) {
-    try {
-      const { files, priority = 5 } = message.params || {};
-
-      if (!this.indexQueue) {
-        const response: Message = {
-          jsonrpc: "2.0",
-          id: message.id,
-          error: {
-            code: -32603,
-            message: "Index queue not initialized",
-          },
-        };
-        this.sendRPCMessage(response);
-        return;
-      }
-
-      if (!files || !Array.isArray(files)) {
-        const response: Message = {
-          jsonrpc: "2.0",
-          id: message.id,
-          error: {
-            code: -32602,
-            message: "Invalid params: files array required",
-          },
-        };
-        this.sendRPCMessage(response);
-        return;
-      }
-
-      // Queue the files
-      this.indexQueue.enqueueBatch(files, priority);
-
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        result: {
-          queued: files.length,
-          queueDepth: this.indexQueue.getQueueDepth(),
-        },
-      };
-
-      this.sendRPCMessage(response);
-    } catch (error: any) {
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        error: {
-          code: -32603,
-          message: error.message,
-        },
-      };
-
-      this.sendRPCMessage(response);
-    }
-  }
-
-  private async handleGetKBStatus(message: Message) {
-    try {
-      const status = {
-        initialized: this.indexQueue !== null,
-        repoName: this.repoName,
-        queueDepth: this.indexQueue?.getQueueDepth() || 0,
-        isIndexing: this.indexQueue?.isIndexing() || false,
-      };
-
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        result: status,
-      };
-
-      this.sendRPCMessage(response);
-    } catch (error: any) {
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        error: {
-          code: -32603,
-          message: error.message,
-        },
-      };
-
-      this.sendRPCMessage(response);
-    }
-  }
-
   // Phase 5: Conversation Management Methods
   
   private generateConversationId(): string {
@@ -1138,198 +1124,8 @@ class AgentCore {
     console.error(`[Agent Core] Saved conversation: ${this.currentConversationId} (${conversation.messages.length} messages, ${currentTotal + newTokens} total tokens)`);
   }
   
-  // RPC Handlers for Conversation Management
-  
-  private async handleListConversations(message: Message) {
-    try {
-      console.error(`[Agent Core] Listing conversations for request id: ${message.id}`);
-      const conversations = await this.conversationStore.listConversationsWithMetadata();
-      console.error(`[ConversationStore] Returning ${conversations.length} conversations`);
-      
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        result: { conversations },
-      };
-      
-      console.error(`[Agent Core] Sending list response: ${JSON.stringify(response).substring(0, 200)}`);
-      this.sendRPCMessage(response);
-      console.error(`[Agent Core] List response sent`);
-    } catch (error: any) {
-      console.error(`[Agent Core] Error in handleListConversations: ${error.message}`);
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        error: {
-          code: -32603,
-          message: error.message,
-        },
-      };
-      
-      this.sendRPCMessage(response);
-    }
-  }
-  
-  private async handleLoadConversation(message: Message) {
-    try {
-      const { conversationId } = message.params || {};
-      
-      if (!conversationId) {
-        const response: Message = {
-          jsonrpc: "2.0",
-          id: message.id,
-          error: {
-            code: -32602,
-            message: "Invalid params: conversationId required",
-          },
-        };
-        this.sendRPCMessage(response);
-        return;
-      }
-      
-      const conversation = await this.conversationStore.loadConversation(conversationId);
-      
-      if (!conversation) {
-        const response: Message = {
-          jsonrpc: "2.0",
-          id: message.id,
-          error: {
-            code: -32603,
-            message: `Conversation not found: ${conversationId}`,
-          },
-        };
-        this.sendRPCMessage(response);
-        return;
-      }
-      
-      // Don't branch yet - just load into memory
-      // Branching will happen when user sends their first message
-      this.loadedConversationId = conversationId;
-      this.isFirstUserMessage = true; // Will trigger branch on next message
-      
-      // Restore conversation history (convert back to Message format)
-      this.conversationHistory = conversation.messages.map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-      }));
-      
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        result: {
-          conversation: conversation,
-          branchInfo: null, // No branch yet
-        },
-      };
-      
-      this.sendRPCMessage(response);
-      console.error(`[Agent Core] Loaded conversation ${conversationId} (will branch on first message)`);
-    } catch (error: any) {
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        error: {
-          code: -32603,
-          message: error.message,
-        },
-      };
-      
-      this.sendRPCMessage(response);
-    }
-  }
-  
-  private async handleDeleteConversation(message: Message) {
-    try {
-      const { conversationId } = message.params || {};
-      
-      if (!conversationId) {
-        const response: Message = {
-          jsonrpc: "2.0",
-          id: message.id,
-          error: {
-            code: -32602,
-            message: "Invalid params: conversationId required",
-          },
-        };
-        this.sendRPCMessage(response);
-        return;
-      }
-      
-      await this.conversationStore.deleteConversation(conversationId);
-      
-      // Clear if it was the current conversation
-      if (this.currentConversationId === conversationId) {
-        this.currentConversationId = null;
-        this.conversationHistory = [];
-        this.isFirstUserMessage = true;
-      }
-      
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        result: { success: true },
-      };
-      
-      this.sendRPCMessage(response);
-    } catch (error: any) {
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        error: {
-          code: -32603,
-          message: error.message,
-        },
-      };
-      
-      this.sendRPCMessage(response);
-    }
-  }
-  
-  private async handleRenameConversation(message: Message) {
-    try {
-      const { conversationId, newTitle } = message.params || {};
-      
-      if (!conversationId || !newTitle) {
-        const response: Message = {
-          jsonrpc: "2.0",
-          id: message.id,
-          error: {
-            code: -32602,
-            message: "Invalid params: conversationId and newTitle required",
-          },
-        };
-        this.sendRPCMessage(response);
-        return;
-      }
-      
-      await this.conversationStore.updateMetadata(conversationId, {
-        title: newTitle,
-      });
-      
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        result: { success: true },
-      };
-      
-      this.sendRPCMessage(response);
-    } catch (error: any) {
-      const response: Message = {
-        jsonrpc: "2.0",
-        id: message.id,
-        error: {
-          code: -32603,
-          message: error.message,
-        },
-      };
-      
-      this.sendRPCMessage(response);
-    }
-  }
-  
   /**
    * Generate a unique request ID for correlation/logging.
-   * Phase 7: Correlation IDs help track events through the IPC pipeline.
    */
   private generateRequestId(): string {
     return `req-${Date.now()}-${++this.requestIdCounter}`;
@@ -1337,7 +1133,7 @@ class AgentCore {
 
   /**
    * Send an event notification to the extension.
-   * Phase 7: Automatically adds correlation ID (requestId) for event tracking.
+   * Automatically adds correlation ID (requestId) for event tracking.
    */
   private sendEvent(event: AgentEvent) {
     // Add requestId if not already present for correlation/logging
@@ -1346,35 +1142,9 @@ class AgentCore {
       requestId: (event as any).requestId || this.generateRequestId(),
     };
 
-    const message: Message = {
-      jsonrpc: "2.0",
-      method: "notify",
-      params: eventWithId,
-    };
-
-    this.sendRPCMessage(message);
-  }
-
-  /**
-   * Send a JSON-RPC message to stdout with proper framing.
-   * Phase 7: Implements write queuing to prevent message interleaving
-   * and ensure atomic writes. This prevents corruption when multiple
-   * messages are sent rapidly.
-   */
-  private sendRPCMessage(message: Message) {
-    // Queue the write to prevent interleaving
-    this.writeQueue = this.writeQueue.then(() => {
-      return new Promise<void>((resolve) => {
-        const payload = JSON.stringify(message);
-        const contentLength = Buffer.byteLength(payload, "utf-8");
-        const header = `Content-Length: ${contentLength}\r\n\r\n`;
-        const framedMessage = header + payload;
-
-        // Write the complete framed message atomically
-        process.stdout.write(framedMessage, () => {
-          resolve();
-        });
-      });
+    // Send notification via transport (fire-and-forget)
+    this.transport.notify("notify", eventWithId).catch(error => {
+      console.error("[Agent Core] Error sending event:", error);
     });
   }
 
@@ -1382,6 +1152,7 @@ class AgentCore {
     console.error("[Agent Core] Shutting down...");
     this.kbManager.shutdown();
     this.mcpClient.shutdown();
+    this.transport.dispose();
     process.exit(0);
   }
 }

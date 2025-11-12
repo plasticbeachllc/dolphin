@@ -95,7 +95,7 @@ export class KBManager {
   private checkBundledUv(extensionPath: string): boolean {
     const platform = os.platform();
     const arch = os.arch();
-    
+
     let uvName: string;
     if (platform === "darwin") {
       uvName = arch === "arm64" ? "uv-darwin-arm64" : "uv-darwin-x64";
@@ -106,24 +106,43 @@ export class KBManager {
     } else {
       return false;
     }
-    
+
     const uvPath = path.join(extensionPath, "dist", "uv", uvName);
     return fs.existsSync(uvPath);
   }
 
+  /**
+   * Walk up directory tree to find pyproject.toml
+   * Checks both current directory and dolphin subdirectory at each level
+   * @returns Path to directory containing pyproject.toml, or null if not found
+   */
+  private findPyprojectToml(startDir: string): string | null {
+    let currentDir = path.resolve(startDir);
+    const root = path.parse(currentDir).root;
+
+    while (currentDir !== root) {
+      // Check current directory
+      if (fs.existsSync(path.join(currentDir, "pyproject.toml"))) {
+        return currentDir;
+      }
+
+      // Check dolphin subdirectory
+      const dolphinPath = path.join(currentDir, "dolphin");
+      if (fs.existsSync(path.join(dolphinPath, "pyproject.toml"))) {
+        return dolphinPath;
+      }
+
+      // Move up one level
+      const parentDir = path.dirname(currentDir);
+      if (parentDir === currentDir) break; // Reached root
+      currentDir = parentDir;
+    }
+
+    return null;
+  }
+
   private checkDevelopmentSetup(workspaceRoot: string): boolean {
-    // Check if workspace has pyproject.toml directly
-    if (fs.existsSync(path.join(workspaceRoot, "pyproject.toml"))) {
-      return true;
-    }
-    
-    // Check if dolphin subdirectory has pyproject.toml
-    const dolphinPath = path.join(workspaceRoot, "dolphin");
-    if (fs.existsSync(path.join(dolphinPath, "pyproject.toml"))) {
-      return true;
-    }
-    
-    return false;
+    return this.findPyprojectToml(workspaceRoot) !== null;
   }
 
   private findDolphinRoot(workspaceRoot: string, extensionPath?: string): string {
@@ -143,10 +162,9 @@ export class KBManager {
       return workspaceRoot;
     }
 
-    // Check if there's a "dolphin" subdirectory with pyproject.toml
-    const dolphinPath = path.join(workspaceRoot, "dolphin");
-    if (fs.existsSync(path.join(dolphinPath, "pyproject.toml"))) {
-      return dolphinPath;
+    if (projectRoot) {
+      console.error(`[KB Manager] Found pyproject.toml at: ${projectRoot}`);
+      return projectRoot;
     }
 
     // Fallback to workspace root
