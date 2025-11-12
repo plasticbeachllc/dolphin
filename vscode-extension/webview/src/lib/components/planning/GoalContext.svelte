@@ -42,9 +42,7 @@
 	let checkedCriteria = $state<Record<number, boolean>>({});
 	
 	function handleClose() {
-		console.log('handleClose called, open before:', open);
 		open = false;
-		console.log('handleClose called, open after:', open);
 		onClose?.();
 	}
 	
@@ -56,7 +54,6 @@
 </script>
 
 <Sheet.Root bind:open onOpenChange={(isOpen) => {
-	console.log('Sheet.Root onOpenChange:', isOpen, 'current open:', open);
 	if (!isOpen) {
 		handleClose();
 	}
