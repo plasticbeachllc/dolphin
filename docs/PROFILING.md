@@ -32,7 +32,7 @@ This guide provides instructions for profiling Dolphin's performance using the t
 **Python Profiling**:
 ```bash
 # Install py-spy for Python profiling
-pip install py-spy
+uv pip install py-spy
 
 # Verify installation
 py-spy --version
@@ -97,10 +97,10 @@ git clone --depth 1 https://github.com/torvalds/linux large
 **Usage**:
 ```bash
 # Record profiling data
-py-spy record --format speedscope --output profile.json --rate 100 -- python -m kb.cli index /path/to/repo
+py-spy record --format speedscope --output profile.json --rate 100 -- uv run python -m kb.cli index /path/to/repo
 
 # Generate flame graph
-py-spy record --format flamegraph --output flamegraph.svg --rate 100 -- python -m kb.cli index /path/to/repo
+py-spy record --format flamegraph --output flamegraph.svg --rate 100 -- uv run python -m kb.cli index /path/to/repo
 ```
 
 ### clinic.js
@@ -218,7 +218,7 @@ du -sh .                # Repository size
 
 ```bash
 # Remove existing KB database for this repo
-python -m kb.cli drop-repo "$TEST_REPO_SMALL"
+uv run python -m kb.cli drop-repo "$TEST_REPO_SMALL"
 ```
 
 #### Step 3: Run Profiling
@@ -233,7 +233,7 @@ py-spy record \
   --output indexing_small.json \
   --rate 100 \
   --subprocesses \
-  -- python -m kb.cli index "$TEST_REPO_SMALL"
+  -- uv run python -m kb.cli index "$TEST_REPO_SMALL"
 ```
 
 #### Step 4: Extract Metrics
@@ -291,7 +291,7 @@ Top CPU consumers in indexing:
 
 ```bash
 # Start the Knowledge Bank API
-python -m kb.api.server
+uv run python -m kb.api.server
 
 # Verify it's running
 curl http://localhost:8420/health
@@ -601,7 +601,7 @@ docker restart ep6-prometheus
 git clone --depth 1 --single-branch <repo-url>
 
 # Or create a synthetic test repo
-python scripts/generate_test_repo.py --size 1000
+uv run python scripts/generate_test_repo.py --size 1000
 ```
 
 ### Inconsistent Results
