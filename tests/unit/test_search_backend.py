@@ -70,23 +70,87 @@ class TestKnowledgeSearchBackend:
 @pytest.fixture
 def real_backend(tmp_path: Path):
     """Provides a backend with real stores for integration testing."""
-    return create_search_backend(store_root=tmp_path, embedding_provider_type="stub")
+    backend = create_search_backend(store_root=tmp_path, embedding_provider_type="stub")
+    
+    # Initialize database to ensure tables exist
+    backend.sql_store.initialize()
+    
+    # Cleanup: Clear any existing test data from previous runs
+    with backend.sql_store._connect() as conn:
+        from contextlib import closing
+        cur = conn.cursor()
+        # Clear FTS5 table
+        cur.execute("DELETE FROM chunks_fts")
+        # Clear LanceDB tables (requires deleting actual table files)
+        conn.commit()
+    
+    # Clear LanceDB tables for both models
+    try:
+        # Delete any existing tables in LanceDB
+        import shutil
+        lance_path = tmp_path / "lancedb"
+        if lance_path.exists():
+            # Remove tables for small and large models
+            for model_dir in lance_path.glob("*"):
+                if model_dir.is_dir():
+                    shutil.rmtree(model_dir, ignore_errors=True)
+    except Exception:
+        pass  # Best effort cleanup
+    
+    yield backend
+    
+    # Post-test cleanup to ensure no data persists
+    try:
+        with backend.sql_store._connect() as conn:
+            from contextlib import closing
+            cur = conn.cursor()
+            cur.execute("DELETE FROM chunks_fts")
+            conn.commit()
+    except Exception:
+        pass  # Best effort cleanup
 
 class TestSearchBackendIntegration:
     def test_end_to_end_search_flow(self, real_backend: KnowledgeSearchBackend):
         """Test a full search cycle from indexing to retrieval."""
-        # Initialize the database schema first (includes FTS table)
-        real_backend.sql_store.initialize()
+        import logging
         
-        chunks_to_upsert = [{"id": "chunk1", "vector": [0.1] * 1536, "repo": "test-repo", "path": "test.py"}]
+        # Database is already initialized and cleaned by the fixture
+        
+        # Create test content and compute its hash
+        test_content = "some test content"
+        from kb.hashing import hash_text
+        text_hash = hash_text(test_content)
+        
+        # Use production-format chunk ID with computed hash: repo_id:file_id:embed_model:text_hash:start_line:end_line
+        chunk_id = f"10:617:small:{text_hash}:2:3"
+        
+        logging.info(f"Test: Creating chunk with ID: {chunk_id}")
+        logging.info(f"Test: Content hash: {text_hash}")
+        
+        chunks_to_upsert = [{"id": chunk_id, "vector": [0.1] * 1536, "repo": "test-repo", "path": "test.py"}]
         real_backend.lance_store.upsert_chunks("test-repo", chunks_to_upsert, model="small")
         real_backend.sql_store.index_chunk_for_fts(
-            content_id="chunk1", repo="test-repo", path="test.py", content="some test content"
+            content_id=chunk_id, repo="test-repo", path="test.py", content=test_content
         )
+        
+        # Verify FTS indexing worked
+        with real_backend.sql_store._connect() as conn:
+            from contextlib import closing
+            cur = conn.cursor()
+            cur.execute("SELECT content_id, content FROM chunks_fts WHERE repo = 'test-repo'")
+            fts_rows = cur.fetchall()
+            logging.info(f"Test: FTS entries after indexing: {len(fts_rows)}")
+            for row in fts_rows:
+                logging.info(f"  FTS content_id: {row[0]}, content: {row[1][:50]}...")
         
         request = SearchRequest(query="test", top_k=5, embed_model="small")
         results = real_backend.search(request)
         
-        assert len(results) >= 1
-        assert "score" in results[0]
-        assert results[0]["chunk_id"] == "chunk1"
+        logging.info(f"Test: Search returned {len(results)} results")
+        for i, result in enumerate(results):
+            logging.info(f"  Result {i}: chunk_id={result.get('chunk_id')}, score={result.get('score')}, repo={result.get('repo')}, path={result.get('path')}")
+        
+        assert len(results) >= 1, f"Expected at least 1 result, got {len(results)}"
+        assert "score" in results[0], f"Result missing 'score' field: {results[0]}"
+        # Expect the production-format chunk ID
+        assert results[0]["chunk_id"] == chunk_id, f"Expected chunk_id {chunk_id}, got {results[0]['chunk_id']}"

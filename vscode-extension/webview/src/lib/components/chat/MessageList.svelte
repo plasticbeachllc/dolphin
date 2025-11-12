@@ -26,9 +26,18 @@
   let { messages, autoScroll = true }: Props = $props();
   let messagesEndRef = $state<HTMLDivElement>();
   
+  console.log(`[MessageList] Rendering with ${messages.length} messages`);
+  
   $effect(() => {
-    // Trigger on messages length change
-    messages.length;
+    // Only trigger on messages length change, not on array reference change
+    const msgCount = messages.length;
+    
+    // Add a guard to prevent infinite loops during initial render
+    if (msgCount === 0) {
+      return;
+    }
+    
+    console.log(`[MessageList] Effect triggered - message count: ${msgCount}`);
     
     if (autoScroll && messagesEndRef) {
       messagesEndRef.scrollIntoView({ behavior: "smooth" });

@@ -512,3 +512,54 @@ def task_queue_instance():
 
     # Cleanup - clear all tasks
     queue.tasks.clear()
+
+
+# ============================================================================
+# E2E Live Test Fixtures
+# ============================================================================
+
+@pytest.fixture
+def store_root(temp_dir: Path) -> Path:
+    """Temporary store root for E2E live tests."""
+    store_path = temp_dir / "dolphin_store"
+    store_path.mkdir(parents=True, exist_ok=True)
+    return store_path
+
+
+@pytest.fixture
+def repo_path(temp_dir: Path) -> Path:
+    """Create a test repository for E2E live tests."""
+    import subprocess
+    
+    repo_dir = temp_dir / "test_repo"
+    repo_dir.mkdir()
+    
+    # Create simple Python file
+    (repo_dir / "main.py").write_text("""
+def calculate_sum(numbers):
+    return sum(numbers)
+
+class Calculator:
+    def add(self, a, b):
+        return a + b
+""")
+    
+    # Initialize git repo
+    subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "add", "."], cwd=repo_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_dir, check=True, capture_output=True)
+    
+    return repo_dir
+
+
+@pytest.fixture
+def port() -> int:
+    """Find a free port for testing."""
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('', 0))
+        s.listen(1)
+        return s.getsockname()[1]

@@ -8,61 +8,70 @@
   
   let { content }: Props = $props();
   
-  // Track code blocks to render separately
-  let codeBlocks: Array<{ language: string; code: string; id: string }> = $state([]);
-  let processedHtml = $state("");
-  
-  // Process markdown content
-  $effect(() => {
-    if (content) {
-      codeBlocks = [];
-      
-      // Just use marked.parse with default settings (no custom renderer!)
-      const parsed = marked.parse(content, {
-        gfm: true,
-        breaks: true
-      }) as string;
-      
-      // Extract code blocks from the generated HTML
-      const codeBlockRegex = /<pre><code class="language-(\w+)">([\s\S]*?)<\/code><\/pre>/g;
-      let match;
-      let processedContent = parsed;
-      
-      while ((match = codeBlockRegex.exec(parsed)) !== null) {
-        const [fullMatch, language, code] = match;
-        const id = `code-block-${Math.random().toString(36).substr(2, 9)}`;
-        
-        // Decode HTML entities in code
-        const decodedCode = code
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/&amp;/g, '&')
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'");
-        
-        codeBlocks.push({
-          id,
-          language: language || "text",
-          code: decodedCode,
-        });
-        
-        processedContent = processedContent.replace(
-          fullMatch,
-          `<div data-code-block="${id}"></div>`
-        );
-      }
-      
-      processedHtml = processedContent;
+  // Use derived state instead of effect to prevent infinite loops
+  // Generate stable hash from content to use in IDs
+  function hashCode(str: string): string {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
     }
+    return Math.abs(hash).toString(36);
+  }
+  
+  // Process markdown using derived state - only recomputes when content changes
+  let parsed = $derived.by(() => {
+    if (!content) return { html: "", blocks: [] };
+    
+    const contentHash = hashCode(content);
+    const html = marked.parse(content, {
+      gfm: true,
+      breaks: true
+    }) as string;
+    
+    // Extract code blocks from the generated HTML
+    // Use Array.from with matchAll to avoid stateful regex issues
+    const matches = Array.from(html.matchAll(/<pre><code class="language-(\w+)">([\s\S]*?)<\/code><\/pre>/g));
+    
+    let processedContent = html;
+    const blocks: Array<{ language: string; code: string; id: string }> = [];
+    
+    matches.forEach((match, blockIndex) => {
+      const [fullMatch, language, code] = match;
+      // Use stable ID based on content hash and block index
+      const id = `code-block-${contentHash}-${blockIndex}`;
+      
+      // Decode HTML entities in code
+      const decodedCode = code
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
+      
+      blocks.push({
+        id,
+        language: language || "text",
+        code: decodedCode,
+      });
+      
+      processedContent = processedContent.replace(
+        fullMatch,
+        `<div data-code-block="${id}"></div>`
+      );
+    });
+    
+    return { html: processedContent, blocks };
   });
 </script>
 
 <div class="markdown-content">
-  {#each processedHtml.split(/(<div data-code-block="[^"]+"><\/div>)/) as segment}
+  {#each parsed.html.split(/(<div data-code-block="[^"]+"><\/div>)/) as segment}
     {#if segment.match(/^<div data-code-block="([^"]+)"><\/div>$/)}
       {@const match = segment.match(/data-code-block="([^"]+)"/)}
       {@const blockId = match?.[1]}
-      {@const block = codeBlocks.find(b => b.id === blockId)}
+      {@const block = parsed.blocks.find(b => b.id === blockId)}
       {#if block}
         <CodeBlock code={block.code} language={block.language} />
       {/if}
@@ -159,6 +168,11 @@
     padding: 0.5em 1em;
     margin: 1em 0;
     font-style: italic;
+    font-size: 0.875em;
+  }
+  
+  .markdown-content :global(blockquote p) {
+    font-size: inherit;
   }
   
   .markdown-content :global(table) {
