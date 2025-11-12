@@ -120,9 +120,9 @@ class AgentCore {
     // EP-11: Initialize Discovery Orchestrator for architect mode
     const discoveryConfig: DiscoveryConfig = {
       maxQueries: 5,
-      maxResultsPerQuery: 5,
+      maxResultsPerQuery: 8,  // Increased to get more diverse results
       includeGraphContext: true,
-      confidenceThreshold: 0.6,
+      confidenceThreshold: 0.05,  // Lowered from 0.6 to allow more results through (semantic search scores are typically 0.1-0.4)
       timeoutMs: 5000
     };
     this.discoveryOrchestrator = new DiscoveryOrchestrator(
