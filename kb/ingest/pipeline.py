@@ -173,8 +173,17 @@ class IngestionPipeline:
                 # Get all file IDs for this repo
                 cur.execute("SELECT id FROM files WHERE repo_id = ?", (repo_id,))
                 file_ids = [row[0] for row in cur.fetchall()]
-                
-                # Delete chunk locations for these files
+
+                # Delete in correct order respecting foreign key constraints:
+
+                # 1. Delete code graph data (references code_nodes and files)
+                cur.execute("DELETE FROM code_node_aliases WHERE file_id IN (SELECT id FROM files WHERE repo_id = ?)", (repo_id,))
+                cur.execute("DELETE FROM cross_repo_references WHERE file_id IN (SELECT id FROM files WHERE repo_id = ?)", (repo_id,))
+                cur.execute("DELETE FROM code_edges WHERE from_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)", (repo_id,))
+                cur.execute("DELETE FROM code_edges WHERE to_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)", (repo_id,))
+                cur.execute("DELETE FROM code_nodes WHERE repo_id = ?", (repo_id,))
+
+                # 2. Delete chunk locations (references chunk_content)
                 for file_id in file_ids:
                     cur.execute("""
                         DELETE FROM chunk_locations
@@ -182,19 +191,25 @@ class IngestionPipeline:
                             SELECT id FROM chunk_content WHERE file_id = ?
                         )
                     """, (file_id,))
-                
-                # Delete chunk content
+
+                # 3. Delete chunk content (references files)
                 cur.execute("DELETE FROM chunk_content WHERE repo_id = ?", (repo_id,))
-                
-                # Delete from FTS5
+
+                # 4. Delete from FTS5
                 cur.execute("DELETE FROM chunks_fts WHERE repo = ?", (repo_name,))
-                
-                # Delete files
+
+                # 5. Delete file snapshots (references files)
+                cur.execute("DELETE FROM file_snapshots WHERE repo_id = ?", (repo_id,))
+
+                # 6. Delete files
                 cur.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
-                
-                # Delete sessions
+
+                # 7. Delete sessions
                 cur.execute("DELETE FROM sessions WHERE repo_id = ?", (repo_id,))
-                
+
+                # 8. Delete pending changes
+                cur.execute("DELETE FROM pending_changes WHERE repo_id = ?", (repo_id,))
+
                 conn.commit()
                 print(f"  Metadata cleared successfully")
             except Exception as e:
