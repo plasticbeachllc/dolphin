@@ -286,6 +286,38 @@ describe('IPCTransport', () => {
       client.dispose();
       server.dispose();
     });
+
+    test('should enforce message size limit using byte length', async () => {
+      const clientToServer = new PassThrough();
+      const serverToClient = new PassThrough();
+
+      const client = new IPCTransport({
+        input: serverToClient,
+        output: clientToServer,
+        security: { maxMessageSize: 40 },
+      });
+
+      const server = new IPCTransport({
+        input: clientToServer,
+        output: serverToClient,
+      });
+
+      server.onMethod('echo', async (params) => params);
+
+      const multiBytePayload = {
+        data: '😀'.repeat(10),
+      };
+
+      try {
+        await client.request('echo', multiBytePayload);
+        expect(true).toBe(false); // Should not reach here
+      } catch (error: any) {
+        expect(error.message).toContain('Message too large');
+      }
+
+      client.dispose();
+      server.dispose();
+    });
   });
 
   describe('Connection Management', () => {

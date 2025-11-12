@@ -204,8 +204,9 @@ export class IPCTransport {
    * Send a message (internal)
    */
   private async sendMessage(message: VSCodeMessage): Promise<void> {
-    // Security check: estimate message size
-    const estimatedSize = JSON.stringify(message).length;
+    // Security check: estimate message size using actual byte length
+    const serializedMessage = JSON.stringify(message);
+    const estimatedSize = Buffer.byteLength(serializedMessage, 'utf-8');
     if (estimatedSize > this.security.maxMessageSize) {
       throw new Error(
         `Message too large: ${estimatedSize} bytes (max: ${this.security.maxMessageSize})`
