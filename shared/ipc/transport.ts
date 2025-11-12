@@ -79,6 +79,21 @@ export class IPCTransport {
 
     // Set up message listener
     this.reader.listen(this.handleMessage.bind(this));
+
+    // Set up error listeners to prevent crashes
+    this.reader.onError((error) => {
+      console.error('[IPCTransport] Reader error:', error);
+    });
+
+    this.reader.onClose(() => {
+      console.error('[IPCTransport] Reader closed');
+      // Reject all pending requests when reader closes
+      for (const [id, pending] of this.pendingRequests) {
+        clearTimeout(pending.timeout);
+        pending.reject(new Error('Connection closed'));
+      }
+      this.pendingRequests.clear();
+    });
   }
 
   /**
@@ -122,8 +137,17 @@ export class IPCTransport {
       this.pendingRequests.set(id, { resolve, reject, timeout: timer });
     });
 
-    // Send request
-    await this.sendMessage(message);
+    // Send request - if this fails, clean up pending request
+    try {
+      await this.sendMessage(message);
+    } catch (error) {
+      const pending = this.pendingRequests.get(id);
+      if (pending) {
+        clearTimeout(pending.timeout);
+        this.pendingRequests.delete(id);
+      }
+      throw error;
+    }
 
     return promise;
   }
@@ -196,6 +220,12 @@ export class IPCTransport {
    */
   private async handleMessage(message: VSCodeMessage): Promise<void> {
     try {
+      // Validate message structure
+      if (!message || typeof message !== 'object') {
+        console.error('[IPCTransport] Invalid message structure:', message);
+        return;
+      }
+
       // Handle response to our request
       if (message.id !== undefined && (message.result !== undefined || message.error !== undefined)) {
         const pending = this.pendingRequests.get(message.id);
@@ -204,10 +234,18 @@ export class IPCTransport {
           this.pendingRequests.delete(message.id);
 
           if (message.error) {
-            pending.reject(new Error(message.error.message || 'Unknown error'));
+            const errorMessage = message.error.message || 'Unknown error';
+            const error = new Error(errorMessage);
+            // Attach error code and data for better debugging
+            (error as any).code = message.error.code;
+            (error as any).data = message.error.data;
+            pending.reject(error);
           } else {
             pending.resolve(message.result);
           }
+        } else {
+          // Response for unknown request ID - log but don't crash
+          console.warn('[IPCTransport] Received response for unknown request ID:', message.id);
         }
         return;
       }
@@ -229,11 +267,14 @@ export class IPCTransport {
           const result = await handler(message.params);
           await this.respond(message.id, result);
         } catch (error) {
+          // Catch all errors from handlers and send proper error response
+          const errorMessage = error instanceof Error ? error.message : 'Internal error';
+          const errorData = error instanceof Error ? { stack: error.stack } : error;
           await this.respondError(
             message.id,
             -32603,
-            error instanceof Error ? error.message : 'Internal error',
-            error
+            errorMessage,
+            errorData
           );
         }
         return;
@@ -243,19 +284,33 @@ export class IPCTransport {
       if (message.method) {
         const handler = this.messageHandlers.get(message.method);
         if (handler) {
-          await handler(message.params);
+          // Notifications don't send responses, but we should catch errors
+          try {
+            await handler(message.params);
+          } catch (error) {
+            console.error(`[IPCTransport] Error in notification handler '${message.method}':`, error);
+          }
         } else if (this.defaultHandler) {
-          await this.defaultHandler(message);
+          try {
+            await this.defaultHandler(message);
+          } catch (error) {
+            console.error('[IPCTransport] Error in default handler:', error);
+          }
         }
         return;
       }
 
       // Unknown message type
+      console.warn('[IPCTransport] Unknown message type:', message);
       if (this.defaultHandler) {
-        await this.defaultHandler(message);
+        try {
+          await this.defaultHandler(message);
+        } catch (error) {
+          console.error('[IPCTransport] Error in default handler for unknown message:', error);
+        }
       }
     } catch (error) {
-      console.error('[IPCTransport] Error handling message:', error);
+      console.error('[IPCTransport] Fatal error handling message:', error);
     }
   }
 

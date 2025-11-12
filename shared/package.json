@@ -4,6 +4,12 @@
   "type": "module",
   "main": "types/index.ts",
   "types": "types/index.ts",
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testMatch='**/ipc/__tests__/**/*.test.ts' --runInBand",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testMatch='**/ipc/__tests__/**/*.test.ts' --watch",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testMatch='**/ipc/__tests__/**/*.test.ts' --coverage",
+    "benchmark": "node --experimental-specifier-resolution=node --loader ts-node/esm ipc/benchmark.ts"
+  },
   "dependencies": {
     "zod": "^3.23.8",
     "prom-client": "^15.1.0",
