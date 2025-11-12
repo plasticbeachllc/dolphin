@@ -1,0 +1,37 @@
+name: Publish VSCode Extension
+
+on:
+  push:
+    tags:
+      - 'vscode-v*.*.*'  # Triggers on tags like vscode-v0.1.0
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install extension dependencies
+        working-directory: ./vscode-extension
+        run: npm install
+
+      - name: Install webview dependencies
+        working-directory: ./vscode-extension/webview
+        run: bun install
+      
+      - name: Build webview
+        working-directory: ./vscode-extension/webview
+        run: bun run build
+      
+      - name: Publish extension
+        working-directory: ./vscode-extension
+        run: npx vsce publish --pat ${{ secrets.VSCE_PAT }}

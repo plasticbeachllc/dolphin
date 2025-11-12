@@ -343,61 +343,115 @@ For detailed troubleshooting, performance tips, and development workflows, see [
 
 ## Release Process
 
-Dolphin uses Git Flow for release management. Follow these steps to create and publish a new release:
+Dolphin is a monorepo with independently versioned components. Each component (Python package, VSCode extension, MCP bridge) has its own release cadence and version number.
 
-### 1. Start a Release Branch
+### Component Versions
 
-When the `develop` branch is stable and ready for a new release, create a release branch:
+Current versions:
+- **Python Package (PyPI)**: [`0.1.13`](pyproject.toml:7) - `pb-dolphin`
+- **VSCode Extension**: [`0.1.0`](vscode-extension/package.json:5) - `dolphin`
+- **MCP Bridge (npm)**: [`0.1.2`](mcp-bridge/package.json:3) - `dolphin-mcp`
+
+### Independent Release Workflow
+
+Each component is released independently using Git tags with prefixes:
+
+#### 1. Python Package (`py-v*`)
 
 ```bash
-git flow release start <version>
+# Update version in pyproject.toml
+# Run tests
+uv run pytest
+
+# Create and push tag
+git tag py-v0.1.14
+git push origin py-v0.1.14
 ```
 
-Replace `<version>` with the specific version number (e.g., `1.0.0`). This creates a new branch (e.g., `release/1.0.0`) from the `develop` branch.
+This triggers the [`publish-pypi.yml`](.github/workflows/publish-pypi.yml:1) workflow which:
+- Builds the package with `uv build`
+- Publishes to PyPI using trusted publishing
 
-### 2. Publish the Release Branch (Optional)
+**Setup Required**: Configure trusted publishing in PyPI project settings or add `PYPI_API_TOKEN` secret.
 
-If multiple developers need to collaborate on the release or perform testing, publish the release branch to the remote repository:
+#### 2. VSCode Extension (`vscode-v*`)
 
 ```bash
-git flow release publish <version>
+# Update version in vscode-extension/package.json
+# Test extension locally
+
+# Create and push tag
+git tag vscode-v0.1.1
+git push origin vscode-v0.1.1
 ```
 
-### 3. Perform Release-Specific Tasks
+This triggers the [`publish-vscode.yml`](.github/workflows/publish-vscode.yml:1) workflow which:
+- Installs dependencies with npm
+- Builds webview with Bun
+- Publishes to VS Code Marketplace
 
-On the release branch, conduct any final preparations:
+**Setup Required**: Add `VSCE_PAT` (Visual Studio Marketplace Personal Access Token) to repository secrets.
 
-- Update version numbers in `pyproject.toml` and `vscode-extension/package.json`
-- Make last-minute bug fixes specific to this release
-- Run final tests and quality assurance checks
-- Update `CHANGELOG.md` with release notes
-
-### 4. Finish the Release
-
-Once the release branch is stable and ready for deployment, finalize the release:
+#### 3. MCP Bridge (`mcp-v*`)
 
 ```bash
-git flow release finish <version>
+# Update version in mcp-bridge/package.json
+# Run tests
+cd mcp-bridge && bun test
+
+# Create and push tag
+git tag mcp-v0.1.3
+git push origin mcp-v0.1.3
 ```
 
-This command:
-- Merges the release branch into `master` (production-ready code)
-- Tags the `master` branch with the specified version
-- Merges the release branch back into `develop`
-- Deletes the local release branch
+This triggers the [`publish-mcp.yml`](.github/workflows/publish-mcp.yml:1) workflow which:
+- Installs dependencies with Bun
+- Builds package
+- Publishes to npm registry
 
-### 5. Push Changes and Tag
+**Setup Required**: Add `NPM_TOKEN` to repository secrets.
 
-After finishing the release, push the updated branches and tag to the remote repository:
+### Git Flow Integration
+
+For feature development, use standard Git Flow:
 
 ```bash
-git push origin master develop
+# Start feature
+git flow feature start my-feature
+
+# Work on feature...
+# Commit changes
+
+# Finish feature (merges to develop)
+git flow feature finish my-feature
+```
+
+When ready to release a component:
+
+```bash
+# Merge develop to master
+git checkout master
+git merge develop
+git push origin master
+
+# Tag the specific component(s) that changed
+git tag py-v0.1.14      # If Python package changed
+git tag vscode-v0.1.1   # If VSCode extension changed
+git tag mcp-v0.1.3      # If MCP bridge changed
+
+# Push tags to trigger automated publishing
 git push origin --tags
 ```
 
-### 6. Publish to Marketplaces
+### Manual Publishing
 
-The GitHub Actions workflow will automatically publish the VSCode extension when a new release is created on GitHub. To manually publish:
+If you need to publish manually without GitHub Actions:
+
+**Python Package:**
+```bash
+uv build
+uv publish
+```
 
 **VSCode Extension:**
 ```bash
@@ -407,12 +461,21 @@ cd webview && bun install && bun run build && cd ..
 npx vsce publish --pat <your-pat>
 ```
 
-**Python Package (PyPI):**
+**MCP Bridge:**
 ```bash
-# Build and publish using uv
-uv build
-uv publish
+cd mcp-bridge
+bun install
+bun run build
+npm publish --access public
 ```
+
+### Version Bump Guidelines
+
+- **Patch** (0.0.x): Bug fixes, minor changes
+- **Minor** (0.x.0): New features, non-breaking changes
+- **Major** (x.0.0): Breaking API changes
+
+Components can be versioned independently based on their actual changes.
 
 ## License
 
