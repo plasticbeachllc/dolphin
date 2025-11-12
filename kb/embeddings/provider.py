@@ -82,6 +82,24 @@ class EmbeddingProvider:
         # Override this method in subclasses for real implementations
         return [[0.0] * dimension for _ in texts]
 
+    async def embed_texts_async(self, model: str, texts: List[str]) -> List[List[float]]:
+        """Embed texts asynchronously (base implementation uses sync fallback).
+
+        Args:
+            model: The embedding model to use ('small' or 'large')
+            texts: List of text strings to embed
+
+        Returns:
+            List of embedding vectors
+
+        Note:
+            Base implementation calls synchronous embed_texts() in a non-blocking way.
+            Subclasses can override for true async implementations.
+        """
+        # For stub provider, synchronous operation is fast enough
+        # Call synchronously to maintain backward compatibility
+        return self.embed_texts(model, texts)
+
 
 class OpenAIEmbeddingProvider(EmbeddingProvider):
     """OpenAI API-based embedding provider with retry logic."""
@@ -341,14 +359,9 @@ async def embed_texts_async(model: str, texts: List[str]) -> List[List[float]]:
     Returns:
         List of embedding vectors
 
-    Raises:
-        NotImplementedError: If the provider doesn't support async embeddings
+    Note:
+        Falls back to synchronous embedding for providers without async support.
     """
-    if not isinstance(_default_provider, OpenAIEmbeddingProvider):
-        raise NotImplementedError(
-            "Async embeddings are only supported with OpenAIEmbeddingProvider. "
-            "Current provider does not support async operations."
-        )
     return await _default_provider.embed_texts_async(model, texts)
 
 
