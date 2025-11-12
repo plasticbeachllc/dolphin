@@ -10,8 +10,10 @@ import * as fs from "fs/promises";
 
 export class ConversationStore {
   private stateDir: string;
+  private workspaceRoot: string;
 
   constructor(workspaceRoot: string) {
+    this.workspaceRoot = workspaceRoot;
     this.stateDir = path.join(
       workspaceRoot,
       ".dolphin",
@@ -28,7 +30,7 @@ export class ConversationStore {
       this.stateDir,
       `${conversation.conversation.id}.toml`
     );
-    const writer = new TOMLWriter<Conversation>(filepath);
+    const writer = new TOMLWriter<Conversation>(filepath, this.workspaceRoot);
 
     await writer.write(validated);
 
@@ -39,7 +41,7 @@ export class ConversationStore {
 
   async loadConversation(conversationId: string): Promise<Conversation | null> {
     const filepath = path.join(this.stateDir, `${conversationId}.toml`);
-    const writer = new TOMLWriter<Conversation>(filepath);
+    const writer = new TOMLWriter<Conversation>(filepath, this.workspaceRoot);
 
     const data = await writer.read();
     if (!data) return null;
@@ -62,7 +64,7 @@ export class ConversationStore {
 
   async deleteConversation(conversationId: string): Promise<void> {
     const filepath = path.join(this.stateDir, `${conversationId}.toml`);
-    const writer = new TOMLWriter<Conversation>(filepath);
+    const writer = new TOMLWriter<Conversation>(filepath, this.workspaceRoot);
     await writer.delete();
 
     console.error(`[ConversationStore] Deleted conversation: ${conversationId}`);

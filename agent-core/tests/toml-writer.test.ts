@@ -20,7 +20,7 @@ describe("TOMLWriter", () => {
   });
 
   test("writes and reads simple data", async () => {
-    const writer = new TOMLWriter<{ name: string; value: number }>(testFile);
+    const writer = new TOMLWriter<{ name: string; value: number }>(testFile, testDir);
     const data = { name: "test", value: 42 };
 
     await writer.write(data);
@@ -30,13 +30,13 @@ describe("TOMLWriter", () => {
   });
 
   test("returns null for non-existent file", async () => {
-    const writer = new TOMLWriter<any>(testFile);
+    const writer = new TOMLWriter<any>(testFile, testDir);
     const result = await writer.read();
     expect(result).toBeNull();
   });
 
   test("overwrites existing file", async () => {
-    const writer = new TOMLWriter<{ value: number }>(testFile);
+    const writer = new TOMLWriter<{ value: number }>(testFile, testDir);
 
     await writer.write({ value: 1 });
     await writer.write({ value: 2 });
@@ -47,7 +47,7 @@ describe("TOMLWriter", () => {
 
   test("creates parent directories", async () => {
     const nestedFile = path.join(testDir, "nested", "deep", "test.toml");
-    const writer = new TOMLWriter<{ test: boolean }>(nestedFile);
+    const writer = new TOMLWriter<{ test: boolean }>(nestedFile, testDir);
 
     await writer.write({ test: true });
 
@@ -63,7 +63,7 @@ describe("TOMLWriter", () => {
   });
 
   test("exists() returns correct status", async () => {
-    const writer = new TOMLWriter<any>(testFile);
+    const writer = new TOMLWriter<any>(testFile, testDir);
 
     expect(await writer.exists()).toBe(false);
 
@@ -73,7 +73,7 @@ describe("TOMLWriter", () => {
   });
 
   test("delete() removes file", async () => {
-    const writer = new TOMLWriter<any>(testFile);
+    const writer = new TOMLWriter<any>(testFile, testDir);
 
     await writer.write({ test: true });
     expect(await writer.exists()).toBe(true);
@@ -83,14 +83,14 @@ describe("TOMLWriter", () => {
   });
 
   test("delete() handles non-existent file gracefully", async () => {
-    const writer = new TOMLWriter<any>(testFile);
+    const writer = new TOMLWriter<any>(testFile, testDir);
 
     // Should not throw
     await expect(writer.delete()).resolves.toBeUndefined();
   });
 
   test("atomic write prevents corruption", async () => {
-    const writer = new TOMLWriter<{ value: number }>(testFile);
+    const writer = new TOMLWriter<{ value: number }>(testFile, testDir);
 
     // Write initial data
     await writer.write({ value: 1 });
@@ -122,7 +122,7 @@ describe("TOMLWriter", () => {
       }>;
     }
 
-    const writer = new TOMLWriter<ComplexData>(testFile);
+    const writer = new TOMLWriter<ComplexData>(testFile, testDir);
     const data: ComplexData = {
       plan: {
         id: "test-plan-1",
@@ -143,7 +143,7 @@ describe("TOMLWriter", () => {
   });
 
   test("preserves TOML formatting", async () => {
-    const writer = new TOMLWriter<{ title: string; value: number }>(testFile);
+    const writer = new TOMLWriter<{ title: string; value: number }>(testFile, testDir);
     await writer.write({ title: "Test Document", value: 123 });
 
     const content = await fs.readFile(testFile, "utf-8");

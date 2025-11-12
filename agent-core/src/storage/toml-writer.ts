@@ -3,9 +3,16 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as toml from "@iarna/toml";
 import { randomBytes } from "crypto";
+import { PathValidator } from "../../../shared/security/path-validator";
 
 export class TOMLWriter<T> {
-  constructor(private filepath: string) {}
+  private filepath: string;
+
+  constructor(filepath: string, baseDir: string = process.cwd()) {
+    // Validate filepath to prevent directory traversal attacks
+    const validator = new PathValidator({ baseDir });
+    this.filepath = validator.validate(filepath);
+  }
 
   async write(data: T): Promise<void> {
     // Ensure directory exists
