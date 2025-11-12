@@ -363,14 +363,20 @@ class SQLiteMetadataStore:
 
     def begin_session(self, repo_id: int, commit_sha: str, branch: str, embed_model: str) -> int:
         """Create a new ingestion session and return its id."""
+        from datetime import datetime, timezone
+
         with self._connect() as conn, closing(conn.cursor()) as cur:
+            # Use ISO format timestamp for consistency with other timestamp fields
+            created_at = datetime.now(timezone.utc).isoformat()
+
             cur.execute(
                 """
-                INSERT INTO sessions (repo_id, commit_sha, branch, embed_model, status, 
-                                     files_indexed, chunks_indexed, vectors_written, chunks_skipped, chunks_pruned)
-                VALUES (?, ?, ?, ?, 'running', 0, 0, 0, 0, 0)
+                INSERT INTO sessions (repo_id, commit_sha, branch, embed_model, status,
+                                     files_indexed, chunks_indexed, vectors_written, chunks_skipped, chunks_pruned,
+                                     created_at)
+                VALUES (?, ?, ?, ?, 'running', 0, 0, 0, 0, 0, ?)
                 """,
-                (repo_id, commit_sha, branch, embed_model),
+                (repo_id, commit_sha, branch, embed_model, created_at),
             )
             conn.commit()
             return int(cur.lastrowid)
