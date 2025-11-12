@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 import threading
 from contextlib import closing
@@ -8,6 +9,26 @@ from typing import Any
 
 from sqlalchemy import event
 from sqlmodel import SQLModel, create_engine
+
+
+def generate_fts_content_id(repo_id: int, file_id: int, text_hash: str) -> str:
+    """Generate deterministic FTS5 content_id independent of embed_model.
+
+    This ensures that the same text content (identified by repo_id, file_id, text_hash)
+    always gets the same FTS5 content_id, regardless of which embedding model(s)
+    are used to index it. This prevents duplicate FTS5 entries for the same content.
+
+    Args:
+        repo_id: Repository ID
+        file_id: File ID
+        text_hash: SHA-256 hash of chunk text content
+
+    Returns:
+        Deterministic content_id for FTS5 table (32-character hex string)
+    """
+    # Create a stable, deterministic identifier
+    composite = f"{repo_id}:{file_id}:{text_hash}"
+    return hashlib.sha256(composite.encode()).hexdigest()[:32]
 class SQLiteMetadataStore:
     """SQLite-backed metadata store using SQLModel for schema materialization."""
 
@@ -171,6 +192,7 @@ class SQLiteMetadataStore:
                     content_id UNINDEXED,
                     repo UNINDEXED,
                     path UNINDEXED,
+                    text_hash UNINDEXED,
                     content,
                     symbol_name,
                     symbol_path,
@@ -1033,28 +1055,30 @@ class SQLiteMetadataStore:
         content_id: str,
         repo: str,
         path: str,
+        text_hash: str,
         content: str,
         symbol_name: str | None = None,
         symbol_path: str | None = None,
     ) -> None:
         """Index a chunk in the FTS5 table for BM25 search.
-        
+
         Args:
-            content_id: Unique chunk identifier
+            content_id: Deterministic chunk identifier (from generate_fts_content_id)
             repo: Repository name
             path: File path
+            text_hash: SHA-256 hash of chunk content (for joining with chunk_content)
             content: Chunk text content (will be tokenized and stemmed)
             symbol_name: Optional symbol name for exact matching
             symbol_path: Optional fully qualified symbol path
         """
-        
+
         with self._connect() as conn, closing(conn.cursor()) as cur:
             # Upsert: replace if exists, insert if new
             cur.execute("""
                 INSERT OR REPLACE INTO chunks_fts
-                (content_id, repo, path, content, symbol_name, symbol_path)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (content_id, repo, path, content, symbol_name, symbol_path))
+                (content_id, repo, path, text_hash, content, symbol_name, symbol_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (content_id, repo, path, text_hash, content, symbol_name, symbol_path))
             conn.commit()
 
     def bulk_index_chunks_for_fts(
@@ -1062,29 +1086,45 @@ class SQLiteMetadataStore:
         chunks: list[dict[str, Any]],
     ) -> int:
         """Bulk index multiple chunks for better performance.
-        
+
         Args:
             chunks: List of chunk dicts with keys:
-                - content_id, repo, path, content, symbol_name, symbol_path
-        
+                - content_id, repo, path, text_hash, content, symbol_name, symbol_path
+
         Returns:
             Number of chunks indexed
         """
         if not chunks:
             return 0
-        
+
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.executemany("""
                 INSERT OR REPLACE INTO chunks_fts
-                (content_id, repo, path, content, symbol_name, symbol_path)
-                VALUES (?, ?, ?, ?, ?, ?)
+                (content_id, repo, path, text_hash, content, symbol_name, symbol_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, [
-                (c["content_id"], c["repo"], c["path"],
+                (c["content_id"], c["repo"], c["path"], c["text_hash"],
                  c["content"], c.get("symbol_name"), c.get("symbol_path"))
                 for c in chunks
             ])
             conn.commit()
             return len(chunks)
+
+    def rebuild_fts5_table(self) -> None:
+        """Drop and recreate the FTS5 table with updated schema.
+
+        This is useful when migrating to the new deterministic content_id format
+        or when the FTS5 schema changes. After rebuilding, you'll need to
+        re-index all chunks using bulk_index_chunks_for_fts().
+        """
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            # Drop existing FTS5 table if it exists
+            cur.execute("DROP TABLE IF EXISTS chunks_fts")
+            conn.commit()
+
+            # Recreate with new schema
+            self._create_fts5_table_safe(cur)
+            conn.commit()
 
     def get_chunk_by_id(self, chunk_id: str) -> dict[str, Any] | None:
         """Get full chunk metadata by content_id.
@@ -1134,28 +1174,34 @@ class SQLiteMetadataStore:
 
     def get_chunk_contents(self, chunk_ids: list[str]) -> dict[str, str]:
         """Get a mapping of chunk_id to its content.
-        
+
         Tries to fetch content from FTS table first (preferred), but falls back
         to reconstructing content from files if FTS entries don't exist.
+
+        Note: chunk_ids can be either:
+        - Deterministic FTS content_ids (from generate_fts_content_id)
+        - UUID-based chunk_content.id values (legacy)
+
+        This method handles both by joining on text_hash.
         """
         if not chunk_ids:
             return {}
-        
+
         placeholders = ",".join(["?"] * len(chunk_ids))
-        
+
         # Try FTS table first (contains actual chunk content)
+        # Join on text_hash since FTS5 now uses deterministic content_ids
         fts_query = f"""
-            SELECT c.id, fts.content
-            FROM chunk_content c
-            JOIN chunks_fts fts ON c.id = fts.content_id
-            WHERE c.id IN ({placeholders})
+            SELECT fts.content_id, fts.content
+            FROM chunks_fts fts
+            WHERE fts.content_id IN ({placeholders})
         """
-        
+
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(fts_query, chunk_ids)
             rows = cur.fetchall()
             result = {str(row[0]): str(row[1]) for row in rows}
-            
+
             # If all chunks found in FTS, return immediately
             if len(result) == len(chunk_ids):
                 return result

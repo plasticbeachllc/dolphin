@@ -548,6 +548,27 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
         raise HTTPException(status_code=500, detail=f"Failed to register repository: {str(e)}")
 
 
+@app.post("/v1/admin/rebuild-fts5")
+async def rebuild_fts5() -> dict[str, str]:
+    """Rebuild the FTS5 table with updated schema.
+
+    This drops and recreates the FTS5 table. After calling this endpoint,
+    you should trigger a full re-index to populate the FTS5 table with
+    the new deterministic content_ids.
+    """
+    if _sql_store is None:
+        raise HTTPException(status_code=503, detail="SQL store not initialized")
+
+    try:
+        _sql_store.rebuild_fts5_table()
+        return {
+            "status": "success",
+            "message": "FTS5 table rebuilt successfully. Please trigger a re-index to populate it."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to rebuild FTS5 table: {str(e)}")
+
+
 async def _process_index_task(task_id: str, repo_name: str, files: list[str]) -> None:
     """Background task to process file indexing."""
     import asyncio
