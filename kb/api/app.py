@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from .task_queue import TaskStatus, get_task_queue
 from .utils import validate_path_within_repo, GitRepository
+from ..store.sqlite_meta import generate_fts_content_id
 
 # Constants
 EMBEDDING_BATCH_SIZE = 128
@@ -775,10 +776,14 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                                 break
 
                         if chunk_text:
+                            # Generate deterministic FTS5 content_id (independent of embed_model)
+                            fts_content_id = generate_fts_content_id(repo_id, file_id, h)
+
                             fts_chunks.append({
-                                'content_id': content_id,
+                                'content_id': fts_content_id,
                                 'repo': repo_name,
                                 'path': filepath,
+                                'text_hash': h,
                                 'content': chunk_text,
                                 'symbol_name': occ.get('symbol_name'),
                                 'symbol_path': occ.get('symbol_path'),
