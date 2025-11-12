@@ -103,11 +103,15 @@ echo "  Registration complete!"
 # Step 4: Index the repository
 echo ""
 echo "Step 4: Indexing repository..."
-# Count files for information
+# Count files for progress bar
 FILE_COUNT=$(cd "$REPO_PATH" && git ls-files | wc -l | tr -d ' ')
 echo "  Files to index: $FILE_COUNT"
-echo "  (This may take 1-2 minutes...)"
-uv run dolphin kb index "$REPO_NAME" 2>&1 | grep -E "(Indexing complete|Files processed|Chunks indexed)" || true
+echo ""
+(uv run dolphin kb index "$REPO_NAME" 2>&1 | \
+  tee /dev/null | \
+  grep --line-buffered "Chunked.*into.*chunks" | \
+  pv -l -s "$FILE_COUNT" -N "Indexing files" > /dev/null)
+echo ""
 echo "  Indexing complete!"
 
 # Step 5: Start API server
@@ -230,22 +234,25 @@ else
     --duration 60 &
   PYSPY_PID=$!
   
-  # Run searches with numbered progress
-  QUERY_NUM=1
+  # Run searches with progress counter
+  QUERY_NUM=0
   TOTAL_QUERIES=${#QUERIES[@]}
-  for query in "${QUERIES[@]}"; do
-    echo "[$QUERY_NUM/$TOTAL_QUERIES] Searching: $query"
-    START=$(uv run python -c 'import time; print(int(time.time() * 1000))')
-    
-    curl -s -X POST http://localhost:$API_PORT/search \
-      -H "Content-Type: application/json" \
-      -d "{\"query\": \"$query\", \"top_k\": 10}" >> "$LOG_FILE" 2>&1
-    
-    END=$(uv run python -c 'import time; print(int(time.time() * 1000))')
-    LATENCY=$((END - START))
-    echo "  Latency: ${LATENCY}ms" | tee -a "$LOG_FILE"
-    QUERY_NUM=$((QUERY_NUM + 1))
-  done
+  echo "Running searches with progress..."
+  (
+    for query in "${QUERIES[@]}"; do
+      START=$(uv run python -c 'import time; print(int(time.time() * 1000))')
+      
+      curl -s -X POST http://localhost:$API_PORT/search \
+        -H "Content-Type: application/json" \
+        -d "{\"query\": \"$query\", \"top_k\": 10}" >> "$LOG_FILE" 2>&1
+      
+      END=$(uv run python -c 'import time; print(int(time.time() * 1000))')
+      LATENCY=$((END - START))
+      echo "Latency: ${LATENCY}ms" | tee -a "$LOG_FILE"
+      echo "."
+      QUERY_NUM=$((QUERY_NUM + 1))
+    done
+  ) | pv -l -s "$TOTAL_QUERIES" -N "Search queries" > /dev/null
   echo ""
   
   # Wait for py-spy to finish

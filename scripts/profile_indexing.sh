@@ -143,19 +143,21 @@ echo ""
 echo "Counting files in repository..."
 FILE_COUNT=$(cd "$REPO_PATH" && git ls-files | wc -l | tr -d ' ')
 echo "  Files to index: $FILE_COUNT"
-echo "  (Indexing may take several minutes...)"
 echo ""
 
 START_TIME=$(date +%s)
 
-# Run profiling with py-spy
+# Run profiling with py-spy and pv progress bar
 echo "Starting indexing..."
-py-spy record \
+(py-spy record \
   --format speedscope \
   --output "$PROFILE_FILE" \
   --rate 100 \
   --subprocesses \
-  -- uv run dolphin kb index "$REPO_NAME" 2>&1 | tee "$LOG_FILE"
+  -- uv run dolphin kb index "$REPO_NAME" 2>&1 | \
+  tee "$LOG_FILE" | \
+  grep --line-buffered "Chunked.*into.*chunks" | \
+  pv -l -s "$FILE_COUNT" -N "Indexing files" > /dev/null)
 
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
