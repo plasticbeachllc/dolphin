@@ -8,10 +8,15 @@
   }
 
   let { value = $bindable('code'), onValueChange }: Props = $props();
+
+  function handleValueChange(newValue: string) {
+    value = newValue as 'code' | 'architect';
+    onValueChange?.(value);
+  }
 </script>
 
 <div class="mode-selector">
-  <Tabs {value} onValueChange={onValueChange}>
+  <Tabs value={value} onValueChange={handleValueChange}>
     <TabsList class="grid w-full grid-cols-2">
       <TabsTrigger value="code" class="flex items-center gap-2">
         <Code class="h-4 w-4" />
