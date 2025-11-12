@@ -1,0 +1,25 @@
+{
+  "id": "desc-chunking-code",
+  "query": "code that splits files into chunks",
+  "expected_results": [
+    {
+      "file": "kb/chunkers/py_chunker.py",
+      "relevance": 0.9
+    },
+    {
+      "file": "kb/chunkers/ts_chunker.py",
+      "relevance": 0.9
+    },
+    {
+      "file": "kb/chunkers/registry.py",
+      "symbol": "get_chunker",
+      "relevance": 0.8
+    }
+  ],
+  "metadata": {
+    "category": "code-search",
+    "difficulty": "medium",
+    "description": "Find chunking implementations",
+    "tags": ["chunking", "parsing", "description"]
+  }
+}

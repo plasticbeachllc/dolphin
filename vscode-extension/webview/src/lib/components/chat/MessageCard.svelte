@@ -17,11 +17,11 @@
 </script>
 
 <Card.Root
-  class="mb-2 {isUser ? 'ml-auto' : 'mr-auto'} max-w-[85%]"
+  class="mb-2 {isUser ? 'ml-auto' : 'mr-auto'} max-w-[96%] rounded-md"
   role="article"
   aria-label="{isUser ? 'User' : 'Assistant'} message{timestamp ? ' at ' + timestamp : ''}"
 >
-  <Card.Header class="flex flex-row items-center gap-2 pb-2">
+  <Card.Header class="flex flex-row items-center gap-2 pb-1 px-3 pt-2">
     <Avatar.Root class="h-8 w-8" aria-hidden="true">
       <Avatar.Fallback class={isUser ? "bg-blue-500" : "bg-purple-500"}>
         {avatarFallback}
@@ -38,9 +38,9 @@
       {/if}
     </div>
   </Card.Header>
-  <Card.Content class="prose prose-sm max-w-none dark:prose-invert">
+  <Card.Content class="prose prose-sm max-w-none dark:prose-invert px-3 pb-2 pt-0">
     {#if isUser}
-      <div class="whitespace-pre-wrap break-words">
+      <div class="whitespace-pre-wrap break-words text-sm">
         {content}
       </div>
     {:else}

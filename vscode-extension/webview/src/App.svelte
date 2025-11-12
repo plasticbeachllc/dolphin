@@ -4,7 +4,7 @@
   import { MessageList, ChatInput, ChatHeader, ModeSelector, ArchitectModeBanner } from '$lib/components/chat';
   import AppNavigation from '$lib/components/navigation/AppNavigation.svelte';
   import { sendMessage, onMessage, abortGeneration, saveState, getState } from '$lib/api/vscode';
-  import type { AgentEvent } from '../../../shared/types/events';
+  import type { AgentEvent } from '@shared/types/events';
   import SettingsPage from './routes/settings/+page.svelte';
   import ProfilePage from './routes/profile/+page.svelte';
   import ConversationsGallery from './routes/gallery/conversations/+page.svelte';
@@ -85,6 +85,18 @@
 
   // Reference to ChatInput component to programmatically focus it
   let chatInputRef: any = null;
+
+  // Live region for screen reader announcements
+  let liveRegionMessage = $state<string>('');
+
+  // Helper to announce messages to screen readers
+  function announceToScreenReader(message: string) {
+    liveRegionMessage = message;
+    // Clear after announcement to allow repeat announcements
+    setTimeout(() => {
+      liveRegionMessage = '';
+    }, 100);
+  }
 
   // Set up message listener from VS Code extension
   onMount(() => {
@@ -188,6 +200,7 @@
         case 'task_completed':
           isProcessing = false;
           console.log('[App] Task completed:', event.success);
+          announceToScreenReader('Task completed');
           break;
           
         case 'error':
@@ -197,6 +210,7 @@
             content: `**Error:** ${event.error.message}`,
             timestamp: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
           }];
+          announceToScreenReader(`Error: ${event.error.message}`);
           break;
 
         case 'focus_input':
@@ -326,9 +340,9 @@
 <div class="app-container">
   <!-- Loading banner shown until agent is ready -->
   {#if !agentReady}
-    <div class="loading-banner">
+    <div class="loading-banner" role="status" aria-live="polite" aria-atomic="true">
       <div class="loading-content">
-        <div class="loading-spinner"></div>
+        <div class="loading-spinner" aria-hidden="true"></div>
         <div class="loading-text">
           <strong>Starting Dolphin Agent...</strong>
           <span class="loading-subtext">
@@ -411,6 +425,17 @@
       <p>Path: {currentView}</p>
     </div>
   {/if}
+</div>
+
+<!-- Live region for screen reader announcements - Accessibility Guide requirement -->
+<div
+  id="live-region"
+  role="status"
+  aria-live="polite"
+  aria-atomic="true"
+  class="sr-only"
+>
+  {liveRegionMessage}
 </div>
 
 <style>

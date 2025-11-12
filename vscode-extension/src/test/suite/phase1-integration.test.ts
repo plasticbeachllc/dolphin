@@ -24,33 +24,36 @@ describe('Phase 1 Integration Tests', () => {
       assert.ok(extension.isActive, 'Extension should be activated');
     });
 
-    it('Extension should register activation events correctly', () => {
+    it('Extension should use targeted activation (not on startup)', async function () {
+      this.timeout(5000);
+      
       const extension = vscode.extensions.getExtension('pb.dolphin');
       assert.ok(extension, 'Extension should be present');
 
-      // Read package.json to verify activation events
+      // Verify package.json doesn't use onStartupFinished
       const packageJson = extension.packageJSON;
-      const activationEvents = packageJson.activationEvents;
+      const activationEvents = packageJson.activationEvents || [];
 
       assert.ok(
         Array.isArray(activationEvents),
         'Activation events should be an array'
       );
 
-      // Should NOT have onStartupFinished
+      // Should NOT have onStartupFinished - this is the key behavior test
       assert.ok(
         !activationEvents.includes('onStartupFinished'),
         'Should not activate on startup'
       );
 
-      // Should have targeted activation events
+      // Verify that views and commands are properly declared (VSCode will auto-infer activation)
       assert.ok(
-        activationEvents.includes('onView:dolphin.chatView'),
-        'Should activate on view open'
+        packageJson.contributes?.views?.dolphin,
+        'Should have views declared (for auto-activation)'
       );
       assert.ok(
-        activationEvents.some((e: string) => e.includes('onCommand:')),
-        'Should activate on commands'
+        Array.isArray(packageJson.contributes?.commands) &&
+        packageJson.contributes.commands.length > 0,
+        'Should have commands declared (for auto-activation)'
       );
     });
   });

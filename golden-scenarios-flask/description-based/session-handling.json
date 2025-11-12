@@ -1,0 +1,28 @@
+{
+  "id": "flask-desc-session-handling",
+  "query": "session cookie management and serialization",
+  "repo": "pallets/flask@2.3.0",
+  "expected_results": [
+    {
+      "file": "src/flask/sessions.py",
+      "symbol": "SecureCookieSessionInterface",
+      "relevance": 1.0
+    },
+    {
+      "file": "src/flask/sessions.py",
+      "symbol": "SessionInterface",
+      "relevance": 0.9
+    },
+    {
+      "file": "src/flask/globals.py",
+      "symbol": "session",
+      "relevance": 0.7
+    }
+  ],
+  "metadata": {
+    "category": "code-search",
+    "difficulty": "medium",
+    "description": "Find session management implementation",
+    "tags": ["session", "cookies", "description"]
+  }
+}

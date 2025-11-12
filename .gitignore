@@ -28,6 +28,9 @@ tests/reports/*
 .coverage
 coverage.xml
 
+# profiling artifacts
+profiling_results/
+
 # misc
 .DS_Store
 !*.example
@@ -64,3 +67,10 @@ node_modules/
 
 # TypeScript
 *.tsbuildinfo
+
+# Benchmarking & Evaluation
+test-repos/                     # Large test repositories
+test-data/swe_bench_state.json  # Orchestration state (local only)
+test-data/swe_bench_instances.json  # Downloaded instances
+results/                        # Benchmark results
+!results/.gitkeep               # Keep results directory

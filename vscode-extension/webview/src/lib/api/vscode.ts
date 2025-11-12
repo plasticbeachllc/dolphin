@@ -1,7 +1,7 @@
 // vscode-extension/webview/src/lib/api/vscode.ts
 // API for communicating with VS Code extension
 
-import type { AgentEvent } from '../../../../../shared/types/events';
+import type { AgentEvent } from '@shared/types/events';
 
 // VS Code API singleton
 let vscodeApi: any = null;

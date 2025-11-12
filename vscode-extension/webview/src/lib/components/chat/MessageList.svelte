@@ -26,9 +26,18 @@
   let { messages, autoScroll = true }: Props = $props();
   let messagesEndRef = $state<HTMLDivElement>();
   
+  console.log(`[MessageList] Rendering with ${messages.length} messages`);
+  
   $effect(() => {
-    // Trigger on messages length change
-    messages.length;
+    // Only trigger on messages length change, not on array reference change
+    const msgCount = messages.length;
+    
+    // Add a guard to prevent infinite loops during initial render
+    if (msgCount === 0) {
+      return;
+    }
+    
+    console.log(`[MessageList] Effect triggered - message count: ${msgCount}`);
     
     if (autoScroll && messagesEndRef) {
       messagesEndRef.scrollIntoView({ behavior: "smooth" });
@@ -51,8 +60,8 @@
         />
       {:else if message.type === "thinking"}
         <!-- Thinking indicator -->
-        <div class="flex items-center gap-3 text-muted-foreground py-2 px-3">
-          <Loader2 class="h-4 w-4 animate-spin" />
+        <div class="flex items-center gap-3 text-muted-foreground py-2 px-3" role="status" aria-live="polite" aria-label="AI is thinking">
+          <Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />
           <span class="text-sm">Thinking...</span>
         </div>
       {:else}

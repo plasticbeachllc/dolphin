@@ -183,10 +183,11 @@ class TestEndToEndFlow:
         # Get GraphManager
         graph_manager = pipeline.get_graph_manager(repo_id)
 
-        # Verify graph is not loaded yet
-        assert graph_manager._graph is None
+        # After indexing, graph is now automatically loaded (via force_rebuild)
+        # This ensures cache state is accurate
+        assert graph_manager._graph is not None
 
-        # Access graph (triggers lazy loading)
+        # Access graph (should return cached graph)
         graph = graph_manager.get_graph()
 
         # Verify graph was built
@@ -199,6 +200,15 @@ class TestEndToEndFlow:
         # process_data() calls load_data(), transform()
         edges = list(graph.edges())
         assert len(edges) > 0
+        
+        # Test that invalidating cache works
+        graph_manager.invalidate_cache()
+        assert graph_manager._graph is None
+        
+        # Re-accessing rebuilds
+        graph2 = graph_manager.get_graph()
+        assert graph2 is not None
+        assert graph2.number_of_nodes() == graph.number_of_nodes()
 
     def test_metrics_computation(self, pipeline, temp_repo):
         """Test graph metrics computation."""
@@ -451,35 +461,44 @@ class TestPerformance:
     """Test performance characteristics."""
 
     def test_lazy_loading_performance(self, pipeline, temp_repo):
-        """Test that lazy loading minimizes initial overhead."""
+        """Test that cached graph access is fast."""
         import time
 
-        # Index repository
+        # Index repository (which now also builds the graph)
         result = pipeline.index("test_repo", force=True)
         repo_id = result["repo_id"]
 
-        # Get GraphManager (should be fast - no graph loading)
-        start = time.time()
+        # Get GraphManager
         graph_manager = pipeline.get_graph_manager(repo_id)
-        manager_creation_time = time.time() - start
 
-        # Should be very fast (< 10ms)
-        assert manager_creation_time < 0.01
-
-        # First graph access triggers rebuild
+        # Graph is already loaded from indexing, so first access uses cache
         start = time.time()
         graph = graph_manager.get_graph()
         first_access_time = time.time() - start
 
-        # Second access should use cache
+        # Second access should also use cache
         start = time.time()
         graph2 = graph_manager.get_graph()
         second_access_time = time.time() - start
 
-        # Cached access should be much faster
-        assert second_access_time < first_access_time
-        # Should be < 10ms for cached access (relaxed from 1ms for Python overhead)
-        assert second_access_time < 0.01
+        # Both cached accesses should be fast (< 20ms to account for test overhead)
+        assert first_access_time < 0.02
+        assert second_access_time < 0.02
+        
+        # Test invalidation and rebuild
+        graph_manager.invalidate_cache()
+        start = time.time()
+        graph3 = graph_manager.get_graph()
+        rebuild_time = time.time() - start
+        
+        # Rebuild might be slower but still reasonable for small graph
+        assert rebuild_time < 0.5  # 500ms should be plenty for a small graph
+        
+        # After rebuild, cache should work again
+        start = time.time()
+        graph4 = graph_manager.get_graph()
+        cached_again_time = time.time() - start
+        assert cached_again_time < 0.01
 
     def test_metrics_computation_performance(self, pipeline, temp_repo):
         """Test metrics computation performance."""
