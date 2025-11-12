@@ -36,7 +36,7 @@ describe("DiscoveryOrchestrator Integration", () => {
     maxQueries: 3,
     maxResultsPerQuery: 5,
     includeGraphContext: true,
-    confidenceThreshold: 0.05,
+    confidenceThreshold: 0.01,  // Lowered to match RRF score range
     timeoutMs: 5000
   };
 
