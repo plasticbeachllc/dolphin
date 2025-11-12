@@ -83,7 +83,11 @@
     <div class="flex gap-2 justify-end">
       {#each options as opt, index}
         <Button
-          bind:ref={index === 0 ? firstButton : undefined}
+          bind:ref={(el) => {
+            if (index === 0) {
+              firstButton = el;
+            }
+          }}
           size="sm"
           variant={opt.toLowerCase().includes('deny') ? 'destructive' : 'default'}
           onclick={() => onSelect(opt)}
