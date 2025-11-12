@@ -148,18 +148,26 @@ export class DiscoveryOrchestrator {
     repoName: string
   ): Promise<KBSearchResult> {
     try {
+      console.error(`[Discovery] Executing query: "${query.text}" (strategy: ${query.strategy})`);
+
       const result = await this.mcpClient.callTool("search_knowledge", {
         query: query.text,
         repos: [repoName],
         top_k: this.config.maxResultsPerQuery,
+        embed_model: "large",  // Explicitly specify to match indexed model
         include_graph_context: this.config.includeGraphContext,
         score_cutoff: this.config.confidenceThreshold
       });
 
+      console.error(`[Discovery] Query result:`, JSON.stringify(result._meta || {}, null, 2));
+
       // Parse MCP result
-      return this.parseMCPResult(result);
+      const parsed = this.parseMCPResult(result);
+      console.error(`[Discovery] Parsed ${parsed.hits.length} hits from query: "${query.text}"`);
+
+      return parsed;
     } catch (error: any) {
-      console.error(`[Discovery] KB query failed: ${error.message}`);
+      console.error(`[Discovery] KB query failed: ${error.message}`, error);
       return { hits: [] };
     }
   }
