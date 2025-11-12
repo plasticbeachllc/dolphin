@@ -5,7 +5,6 @@ set dotenv-load
 
 # Variables
 HOME := env('HOME')
-MCP_PORT := "8010"
 
 list:
 	just -l
@@ -20,15 +19,9 @@ clean: stop
 # Start all services
 run: start
 
-# Start all services (Ollama, MCP bridge) and wait for readiness
+# Start all services and wait for readiness
 start:
 	@echo "Starting all services..."
-	@just --quiet ollama-start
-	@echo "Waiting for Ollama to become ready..."
-	@TIMEOUT=30; while ! just --quiet ollama-check >/dev/null 2>&1; do \
-		sleep 1; TIMEOUT=$((TIMEOUT-1)); \
-		if [ $TIMEOUT -le 0 ]; then echo "❌ Timed out waiting for Ollama"; exit 1; fi; \
-	done
 	@just --quiet start-mcp-bridge
 	@echo "Waiting for MCP Bridge to listen on port 7777..."
 	@TIMEOUT=30; while ! just --quiet mcp-bridge-check >/dev/null 2>&1; do \
@@ -36,15 +29,13 @@ start:
 		if [ $TIMEOUT -le 0 ]; then echo "❌ Timed out waiting for MCP Bridge"; exit 1; fi; \
 	done
 	@echo "✅ All services are up:"
-	@echo " - Ollama API:       http://localhost:11434"
 	@echo " - Dolphin API:      http://localhost:7777"
-	@echo " - MCP Bridge:       http://localhost:8010"
 
 # Set up the entire project
 setup: setup-env setup-python
 
 # Stop all services
-stop: ollama-stop mcp-bridge-stop
+stop: mcp-bridge-stop
 
 # ==============================================================================
 # Environment Management
@@ -54,45 +45,13 @@ stop: ollama-stop mcp-bridge-stop
 setup-env:
 	@# Check if .env file exists, if not, create it from the template
 	@[ -f .env ] || (echo "Creating .env from .env.template..."; cp .env.template .env)
-	@# Check if GITHUB_PERSONAL_ACCESS_TOKEN is set and not empty
-	@test -n "${GITHUB_PERSONAL_ACCESS_TOKEN}" || (echo "❌ Error: GITHUB_PERSONAL_ACCESS_TOKEN is not set in .env file. Please add it and try again."; exit 1)
+	@# Check if OPENAI_API_KEY is set and not empty
 	@test -n "${OPENAI_API_KEY}" || (echo "❌ Error: OPENAI_API_KEY is not set in .env file. Please add it and try again."; exit 1)
 	@echo "✅ Environment is configured."
 
 # Install Python dependencies from pyproject.toml
 setup-python:
 	uv sync --group test
-
-# ==============================================================================
-# Ollama (Homebrew Services) Management
-# ==============================================================================
-
-# Start Ollama as a background macOS service
-ollama-start:
-	@echo "Starting Ollama via Homebrew services..."
-	brew services start ollama
-
-# Stop the Ollama service
-ollama-stop:
-	@echo "Stopping Ollama via Homebrew services..."
-	brew services stop ollama
-
-# Restart the Ollama service
-ollama-restart:
-	@echo "Restarting Ollama via Homebrew services..."
-	brew services restart ollama
-
-# Show Ollama service status and port
-ollama-status:
-	@echo "Ollama service status:"
-	brew services list | grep -E '^ollama\s' || true
-	@echo "Checking if port 11434 is listening:"
-	lsof -nP -iTCP:11434 -sTCP:LISTEN || true
-
-# Health check for the local Ollama API
-ollama-check:
-	@echo "Checking Ollama API at http://localhost:11434 ..."
-	@curl -sSf http://localhost:11434/api/tags >/dev/null && echo "API reachable" || (echo "API not reachable"; exit 1)
 
 # ==============================================================================
 # MCP Bridge Management
@@ -311,7 +270,7 @@ test-e2e-lenient:
 # Legacy Per-Domain Test Commands
 # ==============================================================================
 
-# Test Python backend (KB, API, Personas) - ALL Python tests
+# Test Python backend (KB, API) - ALL Python tests
 test-e2e-python:
 	@echo "🐍 Testing Python Backend (all tests)..."
 	@uv run pytest tests/ -q --tb=short || (echo "   ❌ Python backend tests failed"; exit 1)
@@ -422,24 +381,6 @@ kb-list-repos:
 kb-reset-all:
 	uv run dolphin kb reset-all
 
-# --- Persona Management (via dolphin personas) ---
-
-# List available personas
-personas-list:
-	uv run dolphin personas preview --list
-
-# Preview specific persona
-personas-preview id:
-	uv run dolphin personas preview --id {{id}} --verbose
-
-# Generate KiloCode configuration
-personas-kilocode:
-	uv run dolphin personas generate --kilocode --verbose
-
-# Generate Continue configuration
-personas-continue:
-	uv run dolphin personas generate --continue --verbose
-
 # --- API Server ---
 
 # Start the Dolphin API server
@@ -536,7 +477,7 @@ flask-setup:
 		uv run python -m kb.cli index pallets/flask
 	@echo "✅ Flask test repo ready"
 
-# ANN Benchmarks (Existing)
+# ANN Benchmarks
 # ------------------------------------------------------------------------------
 
 # Run ANN parameter benchmarks
@@ -633,36 +574,6 @@ build-cli-tools: build
 	@echo "Building CLI tools for version {{VERSION}}..."
 	@echo "✅ Using existing build from dist/ directory"
 
-# Create standalone scripts for local development
-create-scripts:
-	@echo "Creating standalone scripts for local development..."
-	@mkdir -p bin
-	@# Create dolphin script
-	@echo '#!/usr/bin/env bash' > bin/dolphin
-	@echo 'set -e' >> bin/dolphin
-	@echo 'cd "$(dirname "$0")/.."' >> bin/dolphin
-	@echo 'exec uv run dolphin "$@"' >> bin/dolphin
-	@chmod +x bin/dolphin
-	@# Create kb script
-	@echo '#!/usr/bin/env bash' > bin/kb
-	@echo 'set -e' >> bin/kb
-	@echo 'cd "$(dirname "$0")/.."' >> bin/kb
-	@echo 'exec uv run kb "$@"' >> bin/kb
-	@chmod +x bin/kb
-	@# Create kb-api script
-	@echo '#!/usr/bin/env bash' > bin/kb-api
-	@echo 'set -e' >> bin/kb-api
-	@echo 'cd "$(dirname "$0")/.."' >> bin/kb-api
-	@echo 'exec uv run kb-api "$@"' >> bin/kb-api
-	@chmod +x bin/kb-api
-	@# Create personas script
-	@echo '#!/usr/bin/env bash' > bin/personas
-	@echo 'set -e' >> bin/personas
-	@echo 'cd "$(dirname "$0")/.."' >> bin/personas
-	@echo 'exec uv run personas "$@"' >> bin/personas
-	@chmod +x bin/personas
-	@echo "✅ Created standalone scripts in bin/ directory"
-
 # Install MCP bridge dependencies
 install-mcp-bridge:
 	@echo "Installing MCP bridge dependencies..."
@@ -674,7 +585,7 @@ build-mcp-bridge:
 	@cd mcp-bridge && bun build
 
 # Reinstall all tools (full rebuild)
-reinstall-all: install-cli-tools create-scripts install-mcp-bridge build-mcp-bridge
+reinstall-all: install-cli-tools install-mcp-bridge build-mcp-bridge
 	@echo "✅ All CLI tools and MCP bridge reinstalled"
 
 # ==============================================================================
@@ -771,69 +682,6 @@ clean-build:
 
 # Complete clean including build artifacts
 clean-all: clean clean-build
-
-# ==============================================================================
-# Benchmarking and Evaluation
-# ==============================================================================
-
-# Run ANN parameter benchmarks (existing)
-benchmark-ann QUERIES="50" ITERATIONS="50":
-	@echo "Running ANN parameter benchmarks..."
-	@mkdir -p results
-	uv run python scripts/benchmark_ann.py \
-		--queries {{QUERIES}} \
-		--iterations {{ITERATIONS}} \
-		--output results/ann_benchmark.json
-	@echo "✅ Results saved to results/ann_benchmark.json"
-
-# Run retrieval quality evaluation
-eval SCENARIOS="golden-scenarios":
-	@echo "Running retrieval evaluation..."
-	@mkdir -p results
-	uv run python scripts/eval_retrieval.py \
-		--scenarios {{SCENARIOS}} \
-		--output results/eval.json
-	@echo "✅ Results saved to results/eval.json"
-
-# Run evaluation with verbose output
-eval-verbose SCENARIOS="golden-scenarios":
-	@echo "Running retrieval evaluation (verbose)..."
-	@mkdir -p results
-	uv run python scripts/eval_retrieval.py \
-		--scenarios {{SCENARIOS}} \
-		--output results/eval.json \
-		--verbose
-
-# Run quick evaluation (subset of scenarios)
-eval-quick:
-	@echo "Running quick evaluation..."
-	@mkdir -p results
-	uv run python scripts/eval_retrieval.py \
-		--scenarios golden-scenarios/code-search/exact-match \
-		--output results/eval_quick.json
-	@echo "✅ Quick eval complete"
-
-# Compare evaluation results
-compare-eval BASELINE="baseline/eval.json" CURRENT="results/eval.json":
-	@echo "Comparing evaluation results..."
-	uv run python scripts/compare_eval.py \
-		{{BASELINE}} \
-		{{CURRENT}} \
-		--output results/eval_comparison.json
-
-# Run full benchmark suite (ANN + evaluation)
-benchmark-full:
-	@echo "Running full benchmark suite..."
-	@just benchmark-ann
-	@just eval
-	@echo "✅ Full benchmark suite complete"
-
-# Run quick benchmark suite (for CI)
-benchmark-quick:
-	@echo "Running quick benchmark suite..."
-	@just benchmark-ann QUERIES=10 ITERATIONS=10
-	@just eval-quick
-	@echo "✅ Quick benchmark complete"
 
 # ==============================================================================
 # Defaults and Variables
