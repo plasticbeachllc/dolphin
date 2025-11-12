@@ -19,7 +19,7 @@
                 {
                     "id": "dolphin",
                     "title": "Dolphin",
-                    "icon": "resources/dolphin.png"
+                    "icon": "resources/dolphin_simple.png"
                 }
             ]
         },
