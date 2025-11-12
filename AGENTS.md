@@ -16,7 +16,7 @@ Dolphin is a semantic code search and knowledge management system for AI interfa
 
 - [README.md](README.md) - Project overview, quick start, and user guide
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - Technical architecture and implementation status
-- [docs/TESTING-GUIDE.md](docs/TESTING-GUIDE.md) - Testing setup and procedures
+- [TESTING.md](TESTING.md) - Testing setup and procedures
 
 ## Core Principles for Agents
 
