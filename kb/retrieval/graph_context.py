@@ -91,22 +91,26 @@ class GraphContextEnricher:
         Returns:
             Graph context dict or None if no graph data available
         """
-        repo = result.get("repo")
-        path = result.get("path")
-        start_line = result.get("start_line")
-        end_line = result.get("end_line")
-        
-        if not all([repo, path, start_line is not None, end_line is not None]):
-            return None
-        
-        # Get file_id from SQL store
-        repo_info = self.sql_store.get_repo_by_name(repo)
-        if not repo_info:
-            return None
-        
-        repo_id = repo_info["id"]
-        file_id = self.sql_store.get_file_id(repo_id, path)
-        if not file_id:
+        try:
+            repo = result.get("repo")
+            path = result.get("path")
+            start_line = result.get("start_line")
+            end_line = result.get("end_line")
+            
+            if not all([repo, path, start_line is not None, end_line is not None]):
+                return None
+            
+            # Get file_id from SQL store
+            repo_info = self.sql_store.get_repo_by_name(repo)
+            if not repo_info:
+                return None
+            
+            repo_id = repo_info["id"]
+            file_id = self.sql_store.get_file_id(repo_id, path)
+            if not file_id:
+                return None
+        except Exception:
+            # Handle any errors gracefully by returning None
             return None
         
         # Get all nodes for this file

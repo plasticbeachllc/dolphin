@@ -138,10 +138,14 @@ class KnowledgeSearchBackend:
         hits = reciprocal_rank_fusion([vector_filtered, bm25_filtered])
 
         logger.info(f"[SEARCH] After RRF: {len(hits)} results")
-        for i, hit in enumerate(hits[:3]):  # Log first 3 hits
-            rrf_score = hit.get('rrf_score', 0.0)
-            logger.info(f"[SEARCH] Hit {i+1}: chunk_id={hit.get('chunk_id')}, rrf_score={rrf_score}")
+        
+        # Convert rrf_score to score for all hits
+        for hit in hits:
             hit['score'] = hit.pop('rrf_score', 0.0)
+        
+        # Log first 3 hits
+        for i, hit in enumerate(hits[:3]):
+            logger.info(f"[SEARCH] Hit {i+1}: chunk_id={hit.get('chunk_id')}, score={hit.get('score', 0.0)}")
         
         # UNCOMMENTED AND CORRECTED RERANKING LOGIC
         if self.reranker and hits:
@@ -207,7 +211,7 @@ class KnowledgeSearchBackend:
 
         # Hydrate content for all final results
         if final_results:
-            chunk_ids_needing_content = [r['chunk_id'] for r in final_results if 'content' not in r]
+            chunk_ids_needing_content = [r['chunk_id'] for r in final_results if 'content' not in r or not r.get('content')]
             if chunk_ids_needing_content:
                 try:
                     # Use helper to hydrate content
@@ -218,13 +222,21 @@ class KnowledgeSearchBackend:
                         chunk_id = result['chunk_id']
                         if chunk_id in hydrated_content:
                             result['content'] = hydrated_content[chunk_id]
-                            # Also add file_path for compatibility
-                            if 'path' in result and 'file_path' not in result:
-                                result['file_path'] = result['path']
+                        elif 'content' not in result:
+                            # Initialize empty content if not present
+                            result['content'] = ''
+                        # Also add file_path for compatibility
+                        if 'path' in result and 'file_path' not in result:
+                            result['file_path'] = result['path']
                 except Exception as e:
                     # Log error but don't fail the search
                     import logging
                     logging.warning(f"Failed to hydrate content for results: {e}", exc_info=True)
+            else:
+                # Ensure all results have file_path even if no hydration needed
+                for result in final_results:
+                    if 'path' in result and 'file_path' not in result:
+                        result['file_path'] = result['path']
         
         # Enrich with graph context if requested and available
         include_graph = getattr(request, 'include_graph_context', False)
