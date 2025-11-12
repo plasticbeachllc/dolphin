@@ -4,130 +4,11 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Tabs from '$lib/components/ui/tabs';
-	import { Palette, Network, Target, Clock } from 'lucide-svelte';
+	import { Palette, Target, Clock } from 'lucide-svelte';
 	import GalleryShowcase from '$lib/components/GalleryShowcase.svelte';
-	import PlanCanvas from '$lib/components/planning/PlanCanvas.svelte';
+	
 	import EnhancedPlanTimeline from '$lib/components/planning/EnhancedPlanTimeline.svelte';
 	import GoalContext from '$lib/components/planning/GoalContext.svelte';
-	
-	// Mock data for PlanCanvas
-	const mockNodes = [
-		{
-			id: 'goal-1',
-			type: 'goal' as const,
-			label: 'Build Authentication System',
-			status: 'active' as const,
-			x: 400,
-			y: 100,
-			progress: 0.65,
-			children: ['step-1', 'step-2', 'step-3']
-		},
-		{
-			id: 'step-1',
-			type: 'step' as const,
-			label: 'Design Database Schema',
-			status: 'completed' as const,
-			x: 200,
-			y: 250,
-			children: ['action-1', 'action-2']
-		},
-		{
-			id: 'step-2',
-			type: 'step' as const,
-			label: 'Implement JWT Auth',
-			status: 'active' as const,
-			x: 400,
-			y: 250,
-			children: ['action-3', 'action-4']
-		},
-		{
-			id: 'step-3',
-			type: 'step' as const,
-			label: 'Add OAuth Support',
-			status: 'pending' as const,
-			x: 600,
-			y: 250,
-			children: ['action-5']
-		},
-		{
-			id: 'action-1',
-			type: 'action' as const,
-			label: 'Create users table',
-			status: 'completed' as const,
-			x: 150,
-			y: 400,
-			children: []
-		},
-		{
-			id: 'action-2',
-			type: 'action' as const,
-			label: 'Add indexes',
-			status: 'completed' as const,
-			x: 250,
-			y: 400,
-			children: []
-		},
-		{
-			id: 'action-3',
-			type: 'action' as const,
-			label: 'Generate tokens',
-			status: 'completed' as const,
-			x: 350,
-			y: 400,
-			children: ['tool-1']
-		},
-		{
-			id: 'action-4',
-			type: 'action' as const,
-			label: 'Verify middleware',
-			status: 'active' as const,
-			x: 450,
-			y: 400,
-			children: ['tool-2']
-		},
-		{
-			id: 'action-5',
-			type: 'action' as const,
-			label: 'OAuth providers',
-			status: 'pending' as const,
-			x: 600,
-			y: 400,
-			children: []
-		},
-		{
-			id: 'tool-1',
-			type: 'tool' as const,
-			label: 'write_to_file',
-			status: 'completed' as const,
-			x: 350,
-			y: 520,
-			children: [],
-			metadata: { path: 'src/auth/jwt.ts' }
-		},
-		{
-			id: 'tool-2',
-			type: 'tool' as const,
-			label: 'execute_command',
-			status: 'active' as const,
-			x: 450,
-			y: 520,
-			children: [],
-			metadata: { command: 'npm test auth.test.ts' }
-		}
-	];
-	
-	const mockEdges = [
-		{ from: 'goal-1', to: 'step-1' },
-		{ from: 'goal-1', to: 'step-2' },
-		{ from: 'goal-1', to: 'step-3' },
-		{ from: 'step-1', to: 'action-1' },
-		{ from: 'step-1', to: 'action-2' },
-		{ from: 'step-2', to: 'action-3' },
-		{ from: 'step-2', to: 'action-4' },
-		{ from: 'step-3', to: 'action-5' },
-		{ from: 'action-3', to: 'tool-1' },
-		{ from: 'action-4', to: 'tool-2' }
-	];
 	
 	// Mock data for EnhancedPlanTimeline
 	const mockPlanPhases = [
@@ -271,12 +152,8 @@
 		</div>
 
 		<!-- Tabbed Navigation -->
-		<Tabs.Root value="canvas" class="mb-8">
-			<Tabs.List class="grid w-full grid-cols-3">
-				<Tabs.Trigger value="canvas">
-					<Network class="size-4 mr-2" />
-					Plan Canvas
-				</Tabs.Trigger>
+		<Tabs.Root value="timeline" class="mb-8">
+			<Tabs.List class="grid w-full grid-cols-2">
 				<Tabs.Trigger value="timeline">
 					<Clock class="size-4 mr-2" />
 					Enhanced Timeline
@@ -286,68 +163,7 @@
 					Goal Context
 				</Tabs.Trigger>
 			</Tabs.List>
-
-			<!-- Plan Canvas Tab -->
-			<Tabs.Content value="canvas" class="space-y-6 mt-6">
-				<Card class="bg-primary/5 border-primary/20">
-					<CardContent class="p-6">
-						<div class="space-y-4">
-							<div>
-								<h3 class="text-xl font-bold mb-2">2.1 Interactive Plan Canvas ⭐ MUST-HAVE</h3>
-								<p class="text-sm text-muted-foreground mb-4">
-									Node-based graph visualization showing the hierarchical structure of agent planning. Features pan, zoom, and interactive node exploration.
-								</p>
-								<div class="flex gap-2 flex-wrap">
-									<Badge variant="outline">Pan & Zoom</Badge>
-									<Badge variant="outline">Interactive Nodes</Badge>
-									<Badge variant="outline">Real-time Updates</Badge>
-									<Badge variant="outline">Progress Rings</Badge>
-								</div>
-							</div>
-						</div>
-					</CardContent>
-				</Card>
-
-				<GalleryShowcase
-					title="Plan Canvas - Node-Based Visualization"
-					description="Interactive graph showing goal → step → action → tool hierarchy with zoom, pan, and node selection"
-				>
-					{#snippet children()}
-						<PlanCanvas nodes={mockNodes} edges={mockEdges} />
-					{/snippet}
-				</GalleryShowcase>
-
-				<Card>
-					<CardHeader>
-						<CardTitle>Features & Interactions</CardTitle>
-						<CardDescription>What makes this visualization powerful</CardDescription>
-					</CardHeader>
-					<CardContent>
-						<div class="grid md:grid-cols-2 gap-6 text-sm">
-							<div class="space-y-2">
-								<h4 class="font-semibold">Node Types</h4>
-								<ul class="list-disc list-inside space-y-1 text-muted-foreground">
-									<li><strong>Goal:</strong> Top-level objective with progress ring</li>
-									<li><strong>Step:</strong> Sub-tasks with status indicators</li>
-									<li><strong>Action:</strong> Specific operations</li>
-									<li><strong>Tool:</strong> Tool calls with metadata preview</li>
-								</ul>
-							</div>
-							
-							<div class="space-y-2">
-								<h4 class="font-semibold">Interactions</h4>
-								<ul class="list-disc list-inside space-y-1 text-muted-foreground">
-									<li>Click nodes to view details in context panel</li>
-									<li>Drag canvas to pan around large plans</li>
-									<li>Mouse wheel or buttons to zoom in/out</li>
-									<li>Animated edges show data flow</li>
-								</ul>
-							</div>
-						</div>
-					</CardContent>
-				</Card>
-			</Tabs.Content>
-
+	
 			<!-- Enhanced Timeline Tab -->
 			<Tabs.Content value="timeline" class="space-y-6 mt-6">
 				<Card class="bg-primary/5 border-primary/20">

@@ -15,7 +15,7 @@ This framework provides systematic measurement of Dolphin's performance across t
 
 ```bash
 # Benchmark ANN parameters (latency, recall, speedup)
-python scripts/benchmark_ann.py --iterations 100 --output results/ann_benchmark.json
+uv run scripts/benchmark_ann.py --iterations 100 --output results/ann_benchmark.json
 
 # Run full performance suite
 just benchmark-performance
@@ -25,7 +25,7 @@ just benchmark-performance
 
 ```bash
 # Evaluate retrieval quality against golden scenarios
-python scripts/eval_retrieval.py --scenarios golden-scenarios/ --output results/eval.json
+uv run scripts/eval_retrieval.py --scenarios golden-scenarios/ --output results/eval.json
 
 # Run full evaluation suite
 just eval
@@ -43,16 +43,19 @@ just eval
 ## Why Benchmark?
 
 ### Regression Prevention
+
 - Gate changes that degrade performance or quality
 - Track metrics over time to catch regressions early
 - Enforce quality SLAs before merging
 
 ### Informed Optimization
+
 - Identify bottlenecks with data
 - Compare configurations objectively
 - Validate optimization hypotheses
 
 ### Transparency
+
 - Communicate system capabilities clearly
 - Set realistic user expectations
 - Track progress toward goals
@@ -61,22 +64,22 @@ just eval
 
 ### Performance Metrics
 
-| Metric | Definition | Target |
-|--------|-----------|--------|
-| **p50 latency** | Median query response time | < 50ms |
-| **p95 latency** | 95th percentile response time | < 150ms |
-| **p99 latency** | 99th percentile response time | < 300ms |
-| **Throughput** | Queries per second | > 100 QPS |
-| **Recall@10** | Fraction of relevant results found | > 95% |
+| Metric          | Definition                         | Target    |
+| --------------- | ---------------------------------- | --------- |
+| **p50 latency** | Median query response time         | < 50ms    |
+| **p95 latency** | 95th percentile response time      | < 150ms   |
+| **p99 latency** | 99th percentile response time      | < 300ms   |
+| **Throughput**  | Queries per second                 | > 100 QPS |
+| **Recall@10**   | Fraction of relevant results found | > 95%     |
 
 ### Quality Metrics
 
-| Metric | Definition | Target |
-|--------|-----------|--------|
-| **MRR** | Mean Reciprocal Rank | > 0.85 |
-| **P@5** | Precision at 5 results | > 0.80 |
+| Metric   | Definition              | Target |
+| -------- | ----------------------- | ------ |
+| **MRR**  | Mean Reciprocal Rank    | > 0.85 |
+| **P@5**  | Precision at 5 results  | > 0.80 |
 | **P@10** | Precision at 10 results | > 0.70 |
-| **R@10** | Recall at 10 results | > 0.90 |
+| **R@10** | Recall at 10 results    | > 0.90 |
 
 See [Metrics Reference](./metrics.md) for detailed definitions.
 
