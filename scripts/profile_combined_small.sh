@@ -138,6 +138,12 @@ mkdir -p "$TEST_REPOS_DIR"
 git clone "$GITHUB_URL" "$REPO_PATH"
 echo "  Clone complete!"
 
+# Fix git ownership issue (git safe.directory)
+# MUST use absolute path - git won't accept relative paths
+REPO_PATH_ABS=$(cd "$REPO_PATH" && pwd)
+echo "  Configuring git safe.directory: $REPO_PATH_ABS"
+git config --global --add safe.directory "$REPO_PATH_ABS" 2>/dev/null || true
+
 # Step 3: Register with Dolphin KB
 echo ""
 echo "Step 3: Registering repository with Dolphin KB..."
