@@ -26,7 +26,10 @@ def validate_path_within_repo(file_path: Path, repo_root: Path) -> Path:
         resolved_path = file_path.resolve()
         resolved_root = repo_root.resolve()
 
-        if not str(resolved_path).startswith(str(resolved_root)):
+        # Use is_relative_to() to prevent false positives from string prefix matching
+        # e.g., /data/repoA2/secret.txt would incorrectly pass a startswith check
+        # for repo root /data/repoA, but is_relative_to() correctly rejects it
+        if not resolved_path.is_relative_to(resolved_root):
             raise HTTPException(
                 status_code=403,
                 detail=f"Path outside repository: {file_path}"
