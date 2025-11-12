@@ -685,12 +685,17 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                 repo_config=repo_config,
             )
 
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"[DEBUG] File {filepath}: extracted {len(chunks)} chunks")
+
             # Compute text_hash for each chunk
             for chunk in chunks:
                 chunk.text_hash = hash_text(chunk.text)
 
             # Build desired map
             desired = build_desired_map(chunks)
+            logger.info(f"[DEBUG] File {filepath}: desired map has {len(desired)} unique hashes")
             desired_row_ids: set[str] = set()
 
             # Deduplicate by text_hash
@@ -700,6 +705,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             )
             new_hashes = {c.text_hash for c in changed_chunks}
             skipped_occurrences = len(unchanged_chunks)
+            logger.info(f"[DEBUG] File {filepath}: {len(changed_chunks)} changed, {len(unchanged_chunks)} unchanged, {len(new_hashes)} new hashes")
 
             # Embed only new hashes (batched, async to avoid blocking status requests)
             text_hash_to_embedding: dict = {}
@@ -722,6 +728,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             mapping = _sql_store.ensure_content_rows_for_file(
                 repo_id, file_id, embed_model, list(desired.keys())
             )
+            logger.info(f"[DEBUG] File {filepath}: ensure_content_rows_for_file returned mapping with {len(mapping)} entries")
 
             for h, occs in desired.items():
                 cid = mapping.get(h)
@@ -792,12 +799,15 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                                 'symbol_path': occ.get('symbol_path'),
                             })
 
+            logger.info(f"[DEBUG] File {filepath}: prepared {len(payload)} LanceDB vectors and {len(fts_chunks)} FTS5 chunks")
+
             if payload:
                 _lance_store.upsert_chunks(repo_name, payload, model=embed_model)
 
             # Index chunks in FTS5 for BM25 search
             if fts_chunks:
                 _sql_store.bulk_index_chunks_for_fts(fts_chunks)
+                logger.info(f"[DEBUG] File {filepath}: indexed {len(fts_chunks)} chunks in FTS5")
 
             # Prune any stale vectors for this file/model
             if desired_row_ids:
