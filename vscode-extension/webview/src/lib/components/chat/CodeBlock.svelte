@@ -87,7 +87,7 @@
       {/if}
     </button>
   </div>
-  <pre class="code-content"><code class="language-{language} hljs">{@html highlightedCode}</code></pre>
+  <pre class="code-content"><code bind:this={codeElement} class="language-{language} hljs">{code}</code></pre>
 
   <!-- Live region for copy announcements -->
   <div role="status" aria-live="polite" aria-atomic="true" class="sr-only">
