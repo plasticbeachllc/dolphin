@@ -166,9 +166,9 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           break;
           
         case "send_message":
-          this.outputChannel.appendLine(`[DolphinViewProvider] Processing send_message: ${message.content}`);
+          this.outputChannel.appendLine(`[DolphinViewProvider] Processing send_message: ${message.content} (mode: ${message.mode || 'code'})`);
           if (this.agentBridge) {
-            await this.agentBridge.sendMessage(message.content);
+            await this.agentBridge.sendMessage(message.content, message.mode);
           } else {
             this.outputChannel.appendLine(`[DolphinViewProvider] WARNING: agentBridge not available`);
             // Send mock response for testing

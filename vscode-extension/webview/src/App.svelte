@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { MessageList, ChatInput, ChatHeader } from '$lib/components/chat';
+  import { MessageList, ChatInput, ChatHeader, ModeSelector, ArchitectModeBanner } from '$lib/components/chat';
   import AppNavigation from '$lib/components/navigation/AppNavigation.svelte';
   import { sendMessage, onMessage, abortGeneration, saveState, getState } from '$lib/api/vscode';
   import type { AgentEvent } from '../../../shared/types/events';
@@ -79,6 +79,9 @@
   
   // Workspace status - conversations require a workspace
   let hasWorkspace = $state(false);
+
+  // EP-11: Architect mode selection
+  let selectedMode = $state<'code' | 'architect'>('code');
 
   // Reference to ChatInput component to programmatically focus it
   let chatInputRef: any = null;
@@ -276,24 +279,24 @@
   
   async function handleSend(message: string) {
     if (isProcessing) return;
-    
+
     // Hide logo on first message send
     if (!hasUserSentMessage) {
       hasUserSentMessage = true;
       showLogo = false;
     }
-    
+
     // Add user message
     messages = [...messages, {
       role: "user" as const,
       content: message,
       timestamp: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
     }];
-    
+
     isProcessing = true;
-    
-    // Send to VS Code extension
-    sendMessage(message);
+
+    // Send to VS Code extension with selected mode
+    sendMessage(message, selectedMode);
   }
   
   function handleStop() {
@@ -357,8 +360,16 @@
       <div class="messages-container">
         <MessageList messages={displayMessages} />
       </div>
-      
+
       <div class="input-container">
+        {#if agentReady}
+          <ModeSelector bind:value={selectedMode} />
+
+          {#if selectedMode === 'architect'}
+            <ArchitectModeBanner />
+          {/if}
+        {/if}
+
         <ChatInput
           bind:this={chatInputRef}
           onSend={handleSend}
