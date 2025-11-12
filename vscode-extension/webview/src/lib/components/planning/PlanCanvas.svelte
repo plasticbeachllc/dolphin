@@ -35,6 +35,9 @@
 	let panX = $state(0);
 	let panY = $state(0);
 	let selectedNode = $state<PlanNode | null>(null);
+	
+	// Reactive transform string to ensure SVG updates when pan/zoom changes
+	let transformString = $derived(`translate(${panX}, ${panY}) scale(${zoom})`);
 	let isDragging = $state(false);
 	let dragStart = $state({ x: 0, y: 0 });
 	let canvasElement: SVGSVGElement;
@@ -67,21 +70,33 @@
 	}
 	
 	function fitToView() {
+		if (!nodes || nodes.length === 0) return;
+		
 		// Calculate bounds
 		const minX = Math.min(...nodes.map(n => n.x));
 		const maxX = Math.max(...nodes.map(n => n.x));
 		const minY = Math.min(...nodes.map(n => n.y));
 		const maxY = Math.max(...nodes.map(n => n.y));
 		
-		const width = maxX - minX + 200;
-		const height = maxY - minY + 200;
+		// Add padding around content
+		const padding = 100;
+		const contentWidth = maxX - minX + padding * 2;
+		const contentHeight = maxY - minY + padding * 2;
 		
-		// Center the content
-		panX = -minX + 100;
-		panY = -minY + 100;
+		// Calculate zoom to fit (max 1.0 to avoid making nodes too large)
+		zoom = Math.min(containerWidth / contentWidth, containerHeight / contentHeight, 1);
 		
-		// Zoom to fit using actual container dimensions
-		zoom = Math.min(containerWidth / width, containerHeight / height, 1);
+		// Center the content: translate so that content bounds are centered in viewport
+		// We want to move the content so (minX - padding, minY - padding) maps to the center
+		const contentCenterX = minX + (maxX - minX) / 2;
+		const contentCenterY = minY + (maxY - minY) / 2;
+		const viewportCenterX = containerWidth / 2;
+		const viewportCenterY = containerHeight / 2;
+		
+		panX = viewportCenterX / zoom - contentCenterX;
+		panY = viewportCenterY / zoom - contentCenterY;
+		
+		console.log('FitToView:', { minX, maxX, minY, maxY, contentCenterX, contentCenterY, viewportCenterX, viewportCenterY, panX, panY, zoom });
 	}
 	
 	function updateContainerSize() {
@@ -93,6 +108,11 @@
 	
 	onMount(() => {
 		updateContainerSize();
+		
+		// Fit to view after initial render - use requestAnimationFrame for better timing
+		requestAnimationFrame(() => {
+			fitToView();
+		});
 		
 		// Update on window resize
 		const resizeObserver = new ResizeObserver(() => {
@@ -110,13 +130,22 @@
 	
 	function handleMouseDown(e: MouseEvent) {
 		isDragging = true;
-		dragStart = { x: e.clientX - panX, y: e.clientY - panY };
+		// Store the mouse starting position and current pan
+		dragStart = {
+			x: e.clientX,
+			y: e.clientY
+		};
 	}
 	
 	function handleMouseMove(e: MouseEvent) {
 		if (!isDragging) return;
-		panX = e.clientX - dragStart.x;
-		panY = e.clientY - dragStart.y;
+		// Calculate delta and update pan position
+		const dx = (e.clientX - dragStart.x) / zoom;
+		const dy = (e.clientY - dragStart.y) / zoom;
+		panX += dx;
+		panY += dy;
+		// Update drag start for next move
+		dragStart = { x: e.clientX, y: e.clientY };
 	}
 	
 	function handleMouseUp() {
@@ -166,6 +195,7 @@
 <div
 	bind:this={containerElement}
 	class="plan-canvas-container relative h-[600px] w-full overflow-hidden bg-secondary/20 rounded-lg border border-border"
+	style="background: linear-gradient(to bottom, #f0f0f0 0%, #e0e0e0 100%);"
 >
 	<!-- Canvas Controls -->
 	<div class="absolute top-4 right-4 z-10 flex gap-2">
@@ -222,7 +252,7 @@
 		<svg
 			bind:this={canvasElement}
 			class="w-full h-full"
-			style="transform: translate({panX}px, {panY}px) scale({zoom})"
+			viewBox="0 0 {containerWidth} {containerHeight}"
 		>
 			<defs>
 				<!-- Animated gradient for active edges -->
@@ -258,6 +288,7 @@
 				</marker>
 			</defs>
 			
+			<g transform={transformString}>
 			<!-- Edges -->
 			<g class="edges">
 				{#each edges as edge}
@@ -406,6 +437,7 @@
 					</g>
 				{/each}
 			</g>
+				</g>
 		</svg>
 	</div>
 	
