@@ -1,0 +1,25 @@
+{
+  "id": "flask-exact-route-decorator",
+  "query": "route",
+  "repo": "pallets/flask@2.3.0",
+  "expected_results": [
+    {
+      "file": "src/flask/scaffold.py",
+      "symbol": "route",
+      "rank": 1,
+      "relevance": 1.0
+    },
+    {
+      "file": "src/flask/app.py",
+      "symbol": "route",
+      "rank": 2,
+      "relevance": 0.9
+    }
+  ],
+  "metadata": {
+    "category": "code-search",
+    "difficulty": "easy",
+    "description": "Find route decorator implementation",
+    "tags": ["decorator", "routing", "exact-match"]
+  }
+}

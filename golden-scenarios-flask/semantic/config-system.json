@@ -1,0 +1,28 @@
+{
+  "id": "flask-semantic-config-system",
+  "query": "configuration loading from files and environment variables",
+  "repo": "pallets/flask@2.3.0",
+  "expected_results": [
+    {
+      "file": "src/flask/config.py",
+      "symbol": "Config",
+      "relevance": 1.0
+    },
+    {
+      "file": "src/flask/config.py",
+      "symbol": "from_file",
+      "relevance": 0.9
+    },
+    {
+      "file": "src/flask/config.py",
+      "symbol": "from_envvar",
+      "relevance": 0.9
+    }
+  ],
+  "metadata": {
+    "category": "semantic-search",
+    "difficulty": "medium",
+    "description": "Configuration management system",
+    "tags": ["config", "environment", "semantic"]
+  }
+}

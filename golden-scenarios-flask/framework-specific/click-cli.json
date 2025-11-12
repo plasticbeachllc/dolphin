@@ -1,0 +1,28 @@
+{
+  "id": "flask-framework-click-cli",
+  "query": "Click CLI command integration with Flask",
+  "repo": "pallets/flask@2.3.0",
+  "expected_results": [
+    {
+      "file": "src/flask/cli.py",
+      "symbol": "FlaskGroup",
+      "relevance": 1.0
+    },
+    {
+      "file": "src/flask/cli.py",
+      "symbol": "cli",
+      "relevance": 0.9
+    },
+    {
+      "file": "src/flask/app.py",
+      "symbol": "cli",
+      "relevance": 0.8
+    }
+  ],
+  "metadata": {
+    "category": "hybrid-search",
+    "difficulty": "medium",
+    "description": "Click CLI framework integration",
+    "tags": ["click", "cli", "framework"]
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "id": "flask-desc-url-routing",
+  "query": "URL routing and view function dispatch",
+  "repo": "pallets/flask@2.3.0",
+  "expected_results": [
+    {
+      "file": "src/flask/scaffold.py",
+      "symbol": "add_url_rule",
+      "relevance": 1.0
+    },
+    {
+      "file": "src/flask/app.py",
+      "symbol": "dispatch_request",
+      "relevance": 0.9
+    },
+    {
+      "file": "src/flask/scaffold.py",
+      "symbol": "route",
+      "relevance": 0.8
+    }
+  ],
+  "metadata": {
+    "category": "code-search",
+    "difficulty": "medium",
+    "description": "Find URL routing implementation",
+    "tags": ["routing", "dispatch", "description"]
+  }
+}

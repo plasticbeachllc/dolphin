@@ -1,0 +1,33 @@
+{
+  "id": "flask-navigation-blueprint-flow",
+  "query": "Blueprint.register to Flask.register_blueprint flow",
+  "repo": "pallets/flask@2.3.0",
+  "expected_results": [
+    {
+      "file": "src/flask/app.py",
+      "symbol": "register_blueprint",
+      "relevance": 1.0
+    },
+    {
+      "file": "src/flask/blueprints.py",
+      "symbol": "register",
+      "relevance": 1.0
+    },
+    {
+      "file": "src/flask/blueprints.py",
+      "symbol": "Blueprint",
+      "relevance": 0.9
+    },
+    {
+      "file": "src/flask/scaffold.py",
+      "symbol": "Scaffold",
+      "relevance": 0.7
+    }
+  ],
+  "metadata": {
+    "category": "navigation",
+    "difficulty": "hard",
+    "description": "Cross-file blueprint registration flow",
+    "tags": ["navigation", "blueprint", "cross-file"]
+  }
+}

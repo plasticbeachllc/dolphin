@@ -1,0 +1,28 @@
+{
+  "id": "flask-semantic-error-handling",
+  "query": "error handler registration and exception propagation",
+  "repo": "pallets/flask@2.3.0",
+  "expected_results": [
+    {
+      "file": "src/flask/app.py",
+      "symbol": "register_error_handler",
+      "relevance": 1.0
+    },
+    {
+      "file": "src/flask/app.py",
+      "symbol": "handle_exception",
+      "relevance": 0.9
+    },
+    {
+      "file": "src/flask/scaffold.py",
+      "symbol": "errorhandler",
+      "relevance": 0.8
+    }
+  ],
+  "metadata": {
+    "category": "semantic-search",
+    "difficulty": "hard",
+    "description": "Error handling flow across multiple components",
+    "tags": ["error-handling", "exceptions", "semantic"]
+  }
+}

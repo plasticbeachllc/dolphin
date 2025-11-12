@@ -1,0 +1,33 @@
+{
+  "id": "flask-semantic-app-architecture",
+  "query": "how does Flask application initialization and configuration work?",
+  "repo": "pallets/flask@2.3.0",
+  "expected_results": [
+    {
+      "file": "src/flask/app.py",
+      "symbol": "Flask",
+      "relevance": 1.0
+    },
+    {
+      "file": "src/flask/app.py",
+      "symbol": "__init__",
+      "relevance": 1.0
+    },
+    {
+      "file": "src/flask/config.py",
+      "symbol": "Config",
+      "relevance": 0.9
+    },
+    {
+      "file": "src/flask/scaffold.py",
+      "symbol": "Scaffold",
+      "relevance": 0.7
+    }
+  ],
+  "metadata": {
+    "category": "semantic-search",
+    "difficulty": "medium",
+    "description": "Architectural query about application setup",
+    "tags": ["architecture", "initialization", "semantic"]
+  }
+}
