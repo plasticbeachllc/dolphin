@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import subprocess
 import datetime
 from dataclasses import dataclass
@@ -177,14 +178,27 @@ class IngestionPipeline:
                 # Delete in correct order respecting foreign key constraints:
 
                 # 1. Delete code graph data (references code_nodes and files) - if tables exist
-                # Check if code graph tables exist
-                cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='code_nodes'")
-                if cur.fetchone():
+                # Use try-except since these tables may not exist in all schemas
+                try:
                     cur.execute("DELETE FROM code_node_aliases WHERE file_id IN (SELECT id FROM files WHERE repo_id = ?)", (repo_id,))
+                except sqlite3.OperationalError:
+                    pass  # Table doesn't exist
+
+                try:
                     cur.execute("DELETE FROM cross_repo_references WHERE file_id IN (SELECT id FROM files WHERE repo_id = ?)", (repo_id,))
+                except sqlite3.OperationalError:
+                    pass  # Table doesn't exist
+
+                try:
                     cur.execute("DELETE FROM code_edges WHERE from_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)", (repo_id,))
                     cur.execute("DELETE FROM code_edges WHERE to_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)", (repo_id,))
+                except sqlite3.OperationalError:
+                    pass  # Table doesn't exist
+
+                try:
                     cur.execute("DELETE FROM code_nodes WHERE repo_id = ?", (repo_id,))
+                except sqlite3.OperationalError:
+                    pass  # Table doesn't exist
 
                 # 2. Delete chunk locations (references chunk_content)
                 for file_id in file_ids:
@@ -202,9 +216,10 @@ class IngestionPipeline:
                 cur.execute("DELETE FROM chunks_fts WHERE repo = ?", (repo_name,))
 
                 # 5. Delete file snapshots (references files) - if table exists
-                cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='file_snapshots'")
-                if cur.fetchone():
+                try:
                     cur.execute("DELETE FROM file_snapshots WHERE repo_id = ?", (repo_id,))
+                except sqlite3.OperationalError:
+                    pass  # Table doesn't exist
 
                 # 6. Delete files
                 cur.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
@@ -213,9 +228,10 @@ class IngestionPipeline:
                 cur.execute("DELETE FROM sessions WHERE repo_id = ?", (repo_id,))
 
                 # 8. Delete pending changes - if table exists
-                cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pending_changes'")
-                if cur.fetchone():
+                try:
                     cur.execute("DELETE FROM pending_changes WHERE repo_id = ?", (repo_id,))
+                except sqlite3.OperationalError:
+                    pass  # Table doesn't exist
 
                 conn.commit()
                 print(f"  Metadata cleared successfully")
