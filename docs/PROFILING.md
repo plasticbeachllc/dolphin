@@ -168,6 +168,11 @@ open http://localhost:3001
 ./scripts/profile_indexing.sh large
 ```
 
+**Output includes:**
+- Real-time progress bar showing files indexed
+- Actual file count (not estimated)
+- Indexing throughput and timing
+
 Results saved to: `profiling_results/indexing/`
 
 ### 2. Profile Search Queries
@@ -182,6 +187,11 @@ Results saved to: `profiling_results/indexing/`
 # Concurrent users (10 simultaneous)
 ./scripts/profile_search.sh concurrent
 ```
+
+**Output includes:**
+- Progress bar for indexing phase
+- Progress bar for search queries
+- Per-query latency measurements
 
 Results saved to: `profiling_results/search/`
 

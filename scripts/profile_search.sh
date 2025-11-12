@@ -41,6 +41,7 @@ if ! command -v py-spy &> /dev/null; then
   exit 1
 fi
 
+
 # Cleanup function for error handling
 cleanup() {
   local exit_code=$?
@@ -102,7 +103,11 @@ echo "  Registration complete!"
 # Step 4: Index the repository
 echo ""
 echo "Step 4: Indexing repository..."
-uv run dolphin kb index "$REPO_NAME"
+# Count files for information
+FILE_COUNT=$(cd "$REPO_PATH" && git ls-files | wc -l | tr -d ' ')
+echo "  Files to index: $FILE_COUNT"
+echo "  (This may take 1-2 minutes...)"
+uv run dolphin kb index "$REPO_NAME" 2>&1 | grep -E "(Indexing complete|Files processed|Chunks indexed)" || true
 echo "  Indexing complete!"
 
 # Step 5: Start API server
@@ -193,6 +198,7 @@ if [ "$QUERY_TYPE" = "concurrent" ]; then
   done
   
   # Profile the API server during concurrent load
+  # TODO: ensure sleep statement doesn't cause us to miss the action, ensure record shouldn't be called prior to actual queries
   sleep 1  # Let requests start
   py-spy record \
     --pid $API_PID \
@@ -224,9 +230,11 @@ else
     --duration 60 &
   PYSPY_PID=$!
   
-  # Run searches
+  # Run searches with numbered progress
+  QUERY_NUM=1
+  TOTAL_QUERIES=${#QUERIES[@]}
   for query in "${QUERIES[@]}"; do
-    echo "Searching: $query"
+    echo "[$QUERY_NUM/$TOTAL_QUERIES] Searching: $query"
     START=$(uv run python -c 'import time; print(int(time.time() * 1000))')
     
     curl -s -X POST http://localhost:$API_PORT/search \
@@ -235,9 +243,10 @@ else
     
     END=$(uv run python -c 'import time; print(int(time.time() * 1000))')
     LATENCY=$((END - START))
-    echo "Latency: ${LATENCY}ms" | tee -a "$LOG_FILE"
-    echo ""
+    echo "  Latency: ${LATENCY}ms" | tee -a "$LOG_FILE"
+    QUERY_NUM=$((QUERY_NUM + 1))
   done
+  echo ""
   
   # Wait for py-spy to finish
   wait $PYSPY_PID || true
