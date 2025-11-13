@@ -1,10 +1,25 @@
 import * as http from 'http';
 import { AddressInfo } from 'net';
+import {
+  MockSearchRequest,
+  MockSearchResponse,
+  MockSearchResult,
+  MockMetadataResponse,
+  MockChunkResponse,
+  MockHealthResponse,
+  MockKBConfig,
+  AgentEvent,
+  EventHandlerDisposable,
+} from './mock-types';
 
 /**
  * Mock KB API server for testing
  */
 export class MockKBServer {
+  private searchResults: MockSearchResult[] | null = null;
+  private metadata: MockMetadataResponse | null = null;
+  private isHealthy: boolean = true;
+  private chunkData: MockChunkResponse | null = null;
   private server: http.Server | null = null;
   public port = 0;
   private mockSearchResults: any[] | null = null;
@@ -47,41 +62,59 @@ export class MockKBServer {
   }
 
   /**
-   * Set custom search results
+   * Configure mock search results
    */
-  setSearchResults(results: any[]): void {
-    this.mockSearchResults = results;
+  setSearchResults(results: MockSearchResult[]): void {
+    this.searchResults = results;
   }
 
   /**
-   * Set custom metadata
+   * Configure mock metadata
    */
-  setMetadata(metadata: any): void {
-    this.mockMetadata = metadata;
+  setMetadata(metadata: MockMetadataResponse): void {
+    this.metadata = metadata;
   }
 
   /**
-   * Set health status
+   * Configure mock health status
    */
   setHealthy(healthy: boolean): void {
     this.isHealthy = healthy;
   }
 
   /**
-   * Get request history
+   * Configure mock chunk data
    */
-  getRequestHistory(): any[] {
-    return [...this.requestHistory];
+  setChunkData(chunk: MockChunkResponse): void {
+    this.chunkData = chunk;
   }
 
   /**
-   * Reset mock state
+   * Configure all mock settings at once
+   */
+  configure(config: MockKBConfig): void {
+    if (config.searchResults !== undefined) {
+      this.searchResults = config.searchResults;
+    }
+    if (config.metadata !== undefined) {
+      this.metadata = config.metadata;
+    }
+    if (config.health !== undefined) {
+      this.isHealthy = config.health;
+    }
+    if (config.chunkData !== undefined) {
+      this.chunkData = config.chunkData;
+    }
+  }
+
+  /**
+   * Reset all mock configuration to defaults
    */
   reset(): void {
-    this.mockSearchResults = null;
-    this.mockMetadata = null;
+    this.searchResults = null;
+    this.metadata = null;
     this.isHealthy = true;
-    this.requestHistory = [];
+    this.chunkData = null;
   }
 
   /**
@@ -113,13 +146,15 @@ export class MockKBServer {
 
     // Health check
     if (url === '/health' || url === '/') {
-      if (this.isHealthy) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', mock: true }));
-      } else {
-        res.writeHead(503, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'error', mock: true }));
-      }
+      const healthResponse: MockHealthResponse = {
+        status: this.isHealthy ? 'ok' : 'error',
+        mock: true,
+        ...(this.isHealthy ? {} : { error: 'Mock server is unhealthy' }),
+      };
+      res.writeHead(this.isHealthy ? 200 : 503, {
+        'Content-Type': 'application/json',
+      });
+      res.end(JSON.stringify(healthResponse));
       return;
     }
 
@@ -169,41 +204,34 @@ export class MockKBServer {
   /**
    * Generate mock search response
    */
-  private generateMockSearchResponse(request: any): any {
-    // Use custom results if set
-    if (this.mockSearchResults !== null) {
-      return {
-        hits: this.mockSearchResults,
-        total: this.mockSearchResults.length,
-        cursor: null,
-        complete: true,
-        warnings: [],
-      };
-    }
+  private generateMockSearchResponse(
+    request: MockSearchRequest
+  ): MockSearchResponse {
+    // Use configured search results if available, otherwise use defaults
+    const hits: MockSearchResult[] = this.searchResults || [
+      {
+        chunk_id: 'mock-chunk-1',
+        repo: 'test-repo',
+        path: 'src/test.ts',
+        content: 'function testFunction() { return true; }',
+        score: 0.95,
+        line_start: 1,
+        line_end: 3,
+      },
+      {
+        chunk_id: 'mock-chunk-2',
+        repo: 'test-repo',
+        path: 'src/utils.ts',
+        content: 'export const helper = () => {}',
+        score: 0.85,
+        line_start: 5,
+        line_end: 7,
+      },
+    ];
 
-    // Default mock response
     return {
-      hits: [
-        {
-          chunk_id: 'mock-chunk-1',
-          repo: 'test-repo',
-          path: 'src/test.ts',
-          content: 'function testFunction() { return true; }',
-          score: 0.95,
-          line_start: 1,
-          line_end: 3,
-        },
-        {
-          chunk_id: 'mock-chunk-2',
-          repo: 'test-repo',
-          path: 'src/utils.ts',
-          content: 'export const helper = () => {}',
-          score: 0.85,
-          line_start: 5,
-          line_end: 7,
-        },
-      ],
-      total: 2,
+      hits,
+      total: hits.length,
       cursor: null,
       complete: true,
       warnings: [],
@@ -213,43 +241,43 @@ export class MockKBServer {
   /**
    * Generate mock metadata
    */
-  private generateMockMetadata(): any {
-    // Use custom metadata if set
-    if (this.mockMetadata !== null) {
-      return this.mockMetadata;
-    }
-
-    // Default mock metadata
-    return {
-      repos: [
-        {
-          name: 'test-repo',
-          path: '/test/repo',
-          files: 10,
-          chunks: 50,
-        },
-      ],
-      total_chunks: 50,
-      total_files: 10,
-    };
+  private generateMockMetadata(): MockMetadataResponse {
+    // Use configured metadata if available, otherwise use defaults
+    return (
+      this.metadata || {
+        repos: [
+          {
+            name: 'test-repo',
+            path: '/test/repo',
+            files: 10,
+            chunks: 50,
+          },
+        ],
+        total_chunks: 50,
+        total_files: 10,
+      }
+    );
   }
 
   /**
    * Generate mock chunk
    */
-  private generateMockChunk(): any {
-    return {
-      chunk_id: 'mock-chunk-1',
-      repo: 'test-repo',
-      path: 'src/test.ts',
-      content: 'function testFunction() {\n  return true;\n}',
-      line_start: 1,
-      line_end: 3,
-      metadata: {
-        language: 'typescript',
-        size: 45,
-      },
-    };
+  private generateMockChunk(): MockChunkResponse {
+    // Use configured chunk data if available, otherwise use defaults
+    return (
+      this.chunkData || {
+        chunk_id: 'mock-chunk-1',
+        repo: 'test-repo',
+        path: 'src/test.ts',
+        content: 'function testFunction() {\n  return true;\n}',
+        line_start: 1,
+        line_end: 3,
+        metadata: {
+          language: 'typescript',
+          size: 45,
+        },
+      }
+    );
   }
 }
 
@@ -257,18 +285,27 @@ export class MockKBServer {
  * Enhanced MockAgentBridge with full feature support.
  */
 export class MockAgentBridge {
-  private messageHandlers: Map<string, Function> = new Map();
-  private eventHandlers: Map<string, Function[]> = new Map();
-  private messageHistory: any[] = [];
-  private responseQueue: string[] = [];
-  private toolCallQueue: any[] = [];
-  private shouldError: Error | null = null;
+  private handlers: Map<string, (data: AgentEvent) => void> = new Map();
+  private messageHistory: string[] = [];
+  private shouldThrowError: boolean = false;
+  private errorMessage: string = 'Mock error';
 
   /**
    * Send a message (simulates user sending message to agent).
    */
-  async sendMessage(message: string): Promise<void> {
-    this.messageHistory.push({ type: 'user_message', content: message, timestamp: Date.now() });
+  async sendMessage(content: string): Promise<void> {
+    this.messageHistory.push(content);
+
+    if (this.shouldThrowError) {
+      this.emitEvent({
+        type: 'error',
+        error: this.errorMessage,
+      });
+      throw new Error(this.errorMessage);
+    }
+
+    // Simulate async processing
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Simulate processing delay
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -308,7 +345,7 @@ export class MockAgentBridge {
   /**
    * Register event handler (alternative syntax for compatibility)
    */
-  onEvent(handler: (event: any) => void): { dispose: () => void } {
+  onEvent(handler: (event: AgentEvent) => void): EventHandlerDisposable {
     const id = Math.random().toString(36);
     this.messageHandlers.set(id, handler);
 
@@ -318,83 +355,50 @@ export class MockAgentBridge {
   }
 
   /**
-   * Emit event to listeners.
+   * Configure error injection for testing error paths
    */
-  private emit(event: string, data: any): void {
-    // Emit to specific event handlers
-    const handlers = this.eventHandlers.get(event) || [];
-    for (const handler of handlers) {
-      handler(data);
-    }
-
-    // Also emit to onEvent handlers
-    const eventData = { type: event, ...data };
-    this.messageHandlers.forEach((handler) => handler(eventData));
+  setError(shouldThrow: boolean, message: string = 'Mock error'): void {
+    this.shouldThrowError = shouldThrow;
+    this.errorMessage = message;
   }
 
   /**
-   * Get message history.
+   * Get message history for test verification
    */
-  getMessageHistory(): any[] {
+  getMessageHistory(): string[] {
     return [...this.messageHistory];
   }
 
   /**
-   * Get event history.
+   * Clear message history
    */
-  getEventHistory(): any[] {
-    return [...this.messageHistory];
-  }
-
-  /**
-   * Set next response.
-   */
-  setResponse(response: string): void {
-    this.responseQueue.push(response);
-  }
-
-  /**
-   * Set tool calls to emit.
-   */
-  setToolCalls(toolCalls: any[]): void {
-    this.toolCallQueue = toolCalls;
-  }
-
-  /**
-   * Set error to throw.
-   */
-  setError(error: Error): void {
-    this.shouldError = error;
-  }
-
-  /**
-   * Reset all state.
-   */
-  reset(): void {
+  clearHistory(): void {
     this.messageHistory = [];
-    this.responseQueue = [];
-    this.toolCallQueue = [];
-    this.shouldError = null;
-    this.eventHandlers.clear();
   }
 
   /**
-   * Get KB status (mock).
+   * Simulate a tool call event
    */
-  async getKBStatus(): Promise<any> {
-    return {
-      running: true,
-      port: 7778,
-      totalChunks: 1000,
-      repositories: ['test-repo'],
-    };
+  simulateToolCall(toolName: string, toolArgs: any): void {
+    this.emitEvent({
+      type: 'tool_call',
+      toolName,
+      toolArgs,
+    });
+  }
+
+  /**
+   * Emit an event to all handlers
+   */
+  private emitEvent(event: AgentEvent): void {
+    this.handlers.forEach((handler) => handler(event));
   }
 
   /**
    * Shutdown
    */
   shutdown(): void {
-    this.reset();
-    this.messageHandlers.clear();
+    this.handlers.clear();
+    this.messageHistory = [];
   }
 }

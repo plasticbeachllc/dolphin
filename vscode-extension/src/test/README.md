@@ -6,17 +6,20 @@ This directory contains the end-to-end (E2E) testing framework for the Dolphin V
 
 ```
 vscode-extension/src/test/
-├── suite/                      # Test suites
-│   ├── index.ts               # Test suite entry point
-│   ├── extension.test.ts      # Extension activation tests
-│   ├── webview.test.ts        # Webview rendering tests
-│   ├── commands.test.ts       # Command execution tests
-│   └── integration.test.ts    # Integration tests with mock services
-├── helpers/                    # Test utilities
-│   ├── test-utils.ts          # Common test helper functions
-│   └── mock-services.ts       # Mock services (KB API, Agent Bridge)
-├── runTest.ts                 # Test runner (downloads VS Code, runs tests)
-└── README.md                  # This file
+├── suite/                         # Test suites
+│   ├── index.ts                  # Test suite entry point
+│   ├── webview.test.ts           # Webview rendering tests
+│   ├── commands.test.ts          # Command execution tests
+│   ├── integration.test.ts       # Integration tests with mock services
+│   ├── error-handling.test.ts    # Negative test cases for error scenarios
+│   └── kb-lifecycle.test.ts      # Knowledge base lifecycle tests
+├── helpers/                       # Test utilities
+│   ├── test-utils.ts             # Common test helper functions (with HTTP helpers)
+│   ├── mock-services.ts          # Mock services (KB API, Agent Bridge)
+│   └── mock-types.ts             # TypeScript interfaces for mock data
+├── runTest.ts                    # Test runner (downloads VS Code, runs tests)
+├── OBSOLETE_FILES_REMOVED.md     # Documentation of removed obsolete test files
+└── README.md                     # This file
 ```
 
 ## 🚀 Quick Start
@@ -120,7 +123,7 @@ Common utilities for writing tests:
 // Wait for a condition to be true
 await waitFor(() => someCondition, timeout, interval);
 
-// Sleep for a given time
+// Sleep for a given time (use sparingly, prefer waitFor)
 await sleep(1000); // 1 second
 
 // Get Dolphin extension
@@ -140,6 +143,14 @@ await cleanupTestWorkspace(workspaceUri);
 
 // Assert that a value is defined
 assertDefined(value, 'Value should be defined');
+
+// HTTP request helpers with timeout handling (NEW)
+const response = await makeHttpGetRequest<ResponseType>(url, timeout);
+const response = await makeHttpPostRequest<ResponseType>(options, postData, timeout);
+const response = await makeHttpRequest<ResponseType>(options, postData, timeout);
+
+// Command execution with timeout (NEW)
+await assertCommandExecutes('dolphin.someCommand', args, timeout);
 ```
 
 ### Mock Services (`mock-services.ts`)
@@ -152,9 +163,26 @@ A lightweight HTTP server that mocks the Knowledge Base API:
 
 ```typescript
 import { MockKBServer } from '../helpers/mock-services';
+import { MockSearchResult } from '../helpers/mock-types';
 
 const mockServer = new MockKBServer();
 await mockServer.start(7778); // Start on port 7778
+
+// Configure mock responses (NEW)
+mockServer.setSearchResults([
+  {
+    chunk_id: 'chunk-1',
+    repo: 'test-repo',
+    path: 'src/test.ts',
+    content: 'test content',
+    score: 0.95,
+    line_start: 1,
+    line_end: 5,
+  },
+]);
+
+mockServer.setHealthy(false); // Simulate unhealthy server
+mockServer.reset(); // Reset to defaults
 
 // ... run tests ...
 
@@ -162,10 +190,18 @@ await mockServer.stop();
 ```
 
 **Endpoints:**
-- `GET /health` - Health check
-- `POST /search` - Search knowledge base
-- `GET /metadata/:id` - Get metadata
-- `GET /chunks/:id` - Fetch chunk
+- `GET /health` - Health check (configurable status)
+- `POST /search` - Search knowledge base (configurable results)
+- `GET /metadata/:id` - Get metadata (configurable data)
+- `GET /chunks/:id` - Fetch chunk (configurable data)
+
+**Configuration Methods:**
+- `setSearchResults(results)` - Configure mock search results
+- `setMetadata(metadata)` - Configure mock metadata
+- `setHealthy(boolean)` - Set server health status
+- `setChunkData(chunk)` - Configure mock chunk data
+- `configure(config)` - Configure all settings at once
+- `reset()` - Reset all configuration to defaults
 
 #### MockAgentBridge
 
@@ -177,16 +213,37 @@ import { MockAgentBridge } from '../helpers/mock-services';
 const mockBridge = new MockAgentBridge();
 
 // Listen for events
-mockBridge.onEvent((event) => {
+const disposable = mockBridge.onEvent((event) => {
   console.log('Event:', event);
 });
 
 // Send message
 await mockBridge.sendMessage('Hello');
 
+// Configure error injection for testing error paths (NEW)
+mockBridge.setError(true, 'Test error message');
+
+// Verify message history (NEW)
+const history = mockBridge.getMessageHistory();
+console.log('Messages sent:', history);
+
+// Clear history (NEW)
+mockBridge.clearHistory();
+
+// Simulate tool call events (NEW)
+mockBridge.simulateToolCall('search', { query: 'test' });
+
 // Clean up
+disposable.dispose();
 mockBridge.shutdown();
 ```
+
+**New Capabilities:**
+- `setError(shouldThrow, message)` - Configure error injection for negative testing
+- `getMessageHistory()` - Retrieve all sent messages for verification
+- `clearHistory()` - Clear message history
+- `simulateToolCall(toolName, args)` - Emit tool call events
+- Event handlers return disposables for proper cleanup
 
 ## ✍️ Writing New Tests
 
@@ -268,6 +325,55 @@ suite('Integration Tests with Mock KB', () => {
 - Extension activation: 15 seconds
 - Command execution: 10 seconds
 - Simple assertions: 5 seconds (default)
+
+### Async Operations and Sleep Usage
+
+**Best Practice: Minimize arbitrary sleep calls in tests**
+
+The test suite has been refactored to eliminate arbitrary and excessive `sleep()` calls:
+
+- ✅ **Use event-driven waiting** with `waitFor()` instead of `sleep()` whenever possible
+- ✅ **Use HTTP helpers with timeouts** (`makeHttpGetRequest`, `makeHttpPostRequest`) for network operations
+- ✅ **Use `assertCommandExecutes`** helper for command execution with built-in timeout
+- ⚠️ **Controlled sleep usage is acceptable** in shared fixtures and utilities where event-driven waiting is implemented internally
+
+**Sleep Usage Guidelines:**
+
+```typescript
+// ❌ AVOID: Arbitrary sleep calls
+await sleep(5000); // Just hoping something completes
+const result = await someOperation();
+
+// ✅ GOOD: Event-driven waiting
+await waitFor(() => condition, 5000, 100);
+
+// ✅ GOOD: HTTP requests with timeout
+const response = await makeHttpGetRequest(url, 2000);
+
+// ✅ GOOD: Command execution with timeout
+await assertCommandExecutes('dolphin.someCommand', [], 2000);
+
+// ✅ ACCEPTABLE: Controlled sleep in utilities
+async function waitForExtensionReady() {
+  // Internal implementation uses sleep in a controlled manner
+  while (!isReady) {
+    await sleep(checkInterval); // Controlled, event-driven
+  }
+}
+```
+
+**Note on "Sleep Elimination":**
+
+While the refactored tests have eliminated arbitrary/excessive sleep calls from test code, some sleep usage remains in controlled scenarios:
+- Internal polling loops within `waitFor()` function
+- Fallback delays in shared fixtures like `waitForExtensionActivation()`
+- Brief delays (50-100ms) after UI operations that require rendering time
+
+This represents **100% elimination of arbitrary/excessive sleep** calls, not 100% elimination of all sleep usage. The key improvement is that all remaining sleep usage is:
+- Bounded by timeouts
+- Part of event-driven polling
+- Controlled and predictable
+- Located in shared utilities, not individual tests
 
 ### Headless Mode Considerations
 

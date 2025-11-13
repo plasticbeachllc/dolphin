@@ -5,9 +5,22 @@
 
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { setupMockEnvironment, teardownMockEnvironment, resetMocks, getMockEnvironment } from '../helpers/mock-manager';
-import { activateExtension, waitForCondition } from '../helpers/shared-fixtures';
-import { TEST_COMMANDS } from '../helpers/test-constants';
+import {
+  waitForExtensionActivation,
+  sleep,
+  makeHttpGetRequest,
+  makeHttpPostRequest,
+  assertCommandExecutes,
+} from '../helpers/test-utils';
+import { MockKBServer } from '../helpers/mock-services';
+import {
+  MockHealthResponse,
+  MockSearchResponse,
+  MockSearchRequest,
+} from '../helpers/mock-types';
+
+describe('Integration Tests', () => {
+  let mockServer: MockKBServer;
 
 suite('Integration Tests with Mock KB', function() {
   this.timeout(10000);
@@ -31,26 +44,23 @@ suite('Integration Tests with Mock KB', function() {
     assert.ok(kbServer, 'Mock server should be initialized');
     assert.ok(kbServer.port > 0, 'Mock server should have a port assigned');
 
-    // Test health endpoint
-    const http = require('http');
-    const response = await new Promise<any>((resolve, reject) => {
-      const req = http.get(
-        `http://localhost:${kbServer.port}/health`,
-        (res: any) => {
-          let data = '';
-          res.on('data', (chunk: any) => {
-            data += chunk;
-          });
-          res.on('end', () => {
-            resolve({ status: res.statusCode, data: JSON.parse(data) });
-          });
-        }
-      );
-      req.on('error', reject);
-    });
+    // Test health endpoint using the new HTTP helper with timeout
+    const response = await makeHttpGetRequest<MockHealthResponse>(
+      `http://localhost:${mockServer.port}/health`,
+      3000 // 3 second timeout
+    );
 
     assert.strictEqual(response.status, 200, 'Health check should return 200');
-    assert.strictEqual(response.data.status, 'ok', 'Health check should return ok status');
+    assert.strictEqual(
+      response.data.status,
+      'ok',
+      'Health check should return ok status'
+    );
+    assert.strictEqual(
+      response.data.mock,
+      true,
+      'Health check should indicate this is a mock server'
+    );
   });
 
   test('Extension should be active', async () => {
@@ -59,48 +69,41 @@ suite('Integration Tests with Mock KB', function() {
     assert.ok(extension.isActive, 'Extension should be active');
   });
 
-  test('Mock KB API should handle search requests', async () => {
-    const { kbServer } = getMockEnvironment();
-    const http = require('http');
+  it('Mock KB API should handle search requests', async function () {
+    this.timeout(5000);
 
-    const searchRequest = {
+    const searchRequest: MockSearchRequest = {
       query: 'test search',
       top_k: 10,
     };
 
-    const response = await new Promise<any>((resolve, reject) => {
-      const postData = JSON.stringify(searchRequest);
-
-      const options = {
+    const postData = JSON.stringify(searchRequest);
+    const response = await makeHttpPostRequest<MockSearchResponse>(
+      {
         hostname: 'localhost',
         port: kbServer.port,
         path: '/search',
-        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData),
         },
-      };
-
-      const req = http.request(options, (res: any) => {
-        let data = '';
-        res.on('data', (chunk: any) => {
-          data += chunk;
-        });
-        res.on('end', () => {
-          resolve({ status: res.statusCode, data: JSON.parse(data) });
-        });
-      });
-
-      req.on('error', reject);
-      req.write(postData);
-      req.end();
-    });
+      },
+      postData,
+      3000 // 3 second timeout
+    );
 
     assert.strictEqual(response.status, 200, 'Search should return 200');
     assert.ok(response.data.hits, 'Search should return hits');
-    assert.ok(Array.isArray(response.data.hits), 'Hits should be an array');
+    assert.ok(
+      Array.isArray(response.data.hits),
+      'Hits should be an array'
+    );
     assert.ok(response.data.hits.length > 0, 'Should return at least one hit');
+    assert.strictEqual(
+      response.data.complete,
+      true,
+      'Search should be marked as complete'
+    );
   });
 
   test('Complete workflow: Extension activation → Commands → Mock KB', async () => {
