@@ -13,8 +13,8 @@ import { Orchestrator } from "./orchestrator/orchestrator";
 import { EditorWorkflow } from "./workflows/editor-workflow";
 import { ArchitectWorkflow } from "./workflows/architect-workflow";
 import { StateStore } from "./state/state-store";
-import { MCPClient } from "../agent-core/src/mcp/client";
-import { KBManager } from "../agent-core/src/kb/manager";
+import { MCPClient } from "./mcp/mcp-client";
+import { KBManager } from "./kb/kb-manager";
 import * as path from "path";
 
 interface Message {

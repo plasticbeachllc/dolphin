@@ -1,0 +1,152 @@
+// agent-core-v2/src/kb/index-queue.ts
+import { EventEmitter } from "events";
+
+export interface IndexProgress {
+  task_id: string;
+  status: string;
+  progress: number;
+  total: number;
+  indexed: number;
+  skipped: number;
+  error?: string;
+}
+
+/**
+ * Simplified IndexQueue that forwards requests to KB API.
+ * The KB API handles all queueing and background processing internally.
+ */
+export class IndexQueue extends EventEmitter {
+  private kbApiUrl: string;
+  private repoName: string;
+  private activeTasks: Set<string> = new Set();
+  private pollInterval: NodeJS.Timeout | null = null;
+
+  constructor(kbApiUrl: string, repoName: string) {
+    super();
+    this.kbApiUrl = kbApiUrl;
+    this.repoName = repoName;
+  }
+
+  /**
+   * Queue files for indexing. Returns immediately with task ID.
+   */
+  async enqueueBatch(files: string[], priority = 0): Promise<string> {
+    console.error(`[IndexQueue] Queueing ${files.length} files for indexing`);
+
+    const response = await fetch(`${this.kbApiUrl}/v1/index`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo: this.repoName,
+        files,
+        incremental: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Index queue failed (${response.status}): ${errorText}`);
+    }
+
+    const result = await response.json();
+    const taskId = result.task_id;
+
+    console.error(`[IndexQueue] Created task ${taskId} for ${files.length} files`);
+
+    // Track this task
+    this.activeTasks.add(taskId);
+
+    // Start polling for progress if not already polling
+    this.startPolling();
+
+    return taskId;
+  }
+
+  /**
+   * Start polling for task progress.
+   */
+  private startPolling(): void {
+    if (this.pollInterval) return; // Already polling
+
+    this.pollInterval = setInterval(async () => {
+      await this.pollActiveTasks();
+    }, 2000); // Poll every 2 seconds
+  }
+
+  /**
+   * Poll all active tasks for progress updates.
+   */
+  private async pollActiveTasks(): Promise<void> {
+    if (this.activeTasks.size === 0) {
+      // No active tasks, stop polling
+      if (this.pollInterval) {
+        clearInterval(this.pollInterval);
+        this.pollInterval = null;
+      }
+      return;
+    }
+
+    const tasksToRemove: string[] = [];
+
+    for (const taskId of this.activeTasks) {
+      try {
+        const response = await fetch(`${this.kbApiUrl}/v1/index/status/${taskId}`);
+
+        if (!response.ok) {
+          console.error(`[IndexQueue] Failed to get status for task ${taskId}`);
+          continue;
+        }
+
+        const status: IndexProgress = await response.json();
+
+        // Emit progress event
+        this.emit("progress", status.progress);
+
+        // Check if task is complete
+        if (status.status === "completed") {
+          console.error(
+            `[IndexQueue] Task ${taskId} completed: ${status.indexed} indexed, ${status.skipped} skipped`
+          );
+          this.emit("complete", status);
+          tasksToRemove.push(taskId);
+        } else if (status.status === "failed") {
+          console.error(`[IndexQueue] Task ${taskId} failed: ${status.error}`);
+          this.emit("error", new Error(status.error || "Unknown error"));
+          tasksToRemove.push(taskId);
+        }
+      } catch (error: any) {
+        console.error(`[IndexQueue] Error polling task ${taskId}:`, error.message);
+      }
+    }
+
+    // Remove completed/failed tasks
+    for (const taskId of tasksToRemove) {
+      this.activeTasks.delete(taskId);
+    }
+  }
+
+  /**
+   * Get number of active indexing tasks.
+   */
+  getQueueDepth(): number {
+    return this.activeTasks.size;
+  }
+
+  /**
+   * Check if any tasks are being processed.
+   */
+  isIndexing(): boolean {
+    return this.activeTasks.size > 0;
+  }
+
+  /**
+   * Stop polling and clean up.
+   */
+  dispose(): void {
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
+    this.activeTasks.clear();
+  }
+}
