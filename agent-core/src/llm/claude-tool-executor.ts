@@ -1,8 +1,8 @@
 // agent-core/src/llm/claude-tool-executor.ts
 import type Anthropic from "@anthropic-ai/sdk";
 import type { ClaudeClient } from "./claude-client";
-import type { MCPClient } from "../mcp/client";
-import type { AgentEvent } from "../../../shared/types/events";
+import type { MCPClient } from "../mcp/mcp-client";
+import type { AgentEvent } from "../../../../shared/types/events";
 import {
   mapMCPToAnthropic,
   extractToolCalls,
@@ -57,14 +57,14 @@ export class ClaudeToolExecutor {
   constructor(config: ToolExecutorConfig) {
     this.config = config;
   }
-  
+
   /**
    * Abort current generation
    */
   abort() {
     console.error("[ToolExecutor] Abort requested");
     this.isAborted = true;
-    
+
     if (this.abortController) {
       this.abortController.abort();
       this.abortController = null;
@@ -103,7 +103,7 @@ export class ClaudeToolExecutor {
     // Reset abort state
     this.isAborted = false;
     this.abortController = new AbortController();
-    
+
     const messages: Message[] = [
       ...conversationHistory,
       { role: "user", content: userMessage },
@@ -124,12 +124,12 @@ export class ClaudeToolExecutor {
         console.error("[ToolExecutor] Generation aborted by user");
         throw new Error("Generation aborted by user");
       }
-      
+
       console.error(`[ToolExecutor] Round ${toolRound + 1}`);
 
       // Call Claude with tools
       const response = await this.callClaudeWithTools(messages);
-      
+
       // Check if aborted during call
       if (this.isAborted) {
         console.error("[ToolExecutor] Generation aborted during API call");
@@ -167,7 +167,7 @@ export class ClaudeToolExecutor {
 
       // Execute tools in parallel
       const toolResults = await this.executeToolCalls(toolCalls);
-      
+
       // Check if aborted after tool execution
       if (this.isAborted) {
         console.error("[ToolExecutor] Generation aborted after tool execution");
@@ -186,7 +186,7 @@ export class ClaudeToolExecutor {
     if (toolRound >= this.config.maxToolRounds) {
       console.warn("[ToolExecutor] WARNING: Max tool rounds reached");
     }
-    
+
     // Clean up abort controller
     this.abortController = null;
 
@@ -494,7 +494,7 @@ export class ClaudeToolExecutor {
           if (mcpResult.isError) {
             // Extract error message from MCP result
             const errorMessage = mcpResult.content?.[0]?.text || 'Tool execution failed';
-            
+
             // Emit error event
             this.config.onEvent({
               type: "tool_call_completed",
@@ -503,7 +503,7 @@ export class ClaudeToolExecutor {
               error: errorMessage,
               executionTime,
             });
-            
+
             // Return error result to Claude
             return createErrorResult(toolCall.id, new Error(errorMessage));
           }
@@ -553,7 +553,7 @@ export class ClaudeToolExecutor {
    */
   private preprocessToolInput(input: Record<string, any>): Record<string, any> {
     const processed: Record<string, any> = {};
-    
+
     for (const [key, value] of Object.entries(input)) {
       if (typeof value === 'string' && (value.startsWith('[') || value.startsWith('{'))) {
         // Looks like a JSON string, try to parse it
@@ -568,7 +568,7 @@ export class ClaudeToolExecutor {
         processed[key] = value;
       }
     }
-    
+
     return processed;
   }
 

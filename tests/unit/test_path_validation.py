@@ -45,9 +45,10 @@ class TestPathValidationSecurity:
         
         with pytest.raises(HTTPException) as exc_info:
             validate_path_within_repo(outside_file, repo_root)
-        
+
         assert exc_info.value.status_code == 403
-        assert "outside repository" in exc_info.value.detail.lower()
+        # PathValidator rejects with "absolute_path_outside_workspace" or "outside workspace"
+        assert "workspace" in exc_info.value.detail.lower() or "absolute_path_outside_workspace" in exc_info.value.detail.lower()
 
     def test_reject_parent_directory_traversal(self, tmp_path):
         """Test that parent directory traversal is rejected."""
@@ -82,9 +83,10 @@ class TestPathValidationSecurity:
         # This should be rejected
         with pytest.raises(HTTPException) as exc_info:
             validate_path_within_repo(secret_file, repo_a)
-        
+
         assert exc_info.value.status_code == 403
-        assert "outside repository" in exc_info.value.detail.lower()
+        # PathValidator rejects with "absolute_path_outside_workspace" or "outside workspace"
+        assert "workspace" in exc_info.value.detail.lower() or "absolute_path_outside_workspace" in exc_info.value.detail.lower()
 
     def test_reject_prefix_attack_with_suffix(self, tmp_path):
         """Test rejection of paths with prefix plus suffix.
@@ -202,11 +204,12 @@ class TestPathValidationSecurity:
         
         # Path with null byte
         malicious_path = repo_root / "file\x00.txt"
-        
+
         with pytest.raises(HTTPException) as exc_info:
             validate_path_within_repo(malicious_path, repo_root)
-        
-        assert exc_info.value.status_code == 400
+
+        # PathValidator returns 403 for all validation errors
+        assert exc_info.value.status_code == 403
 
     def test_case_sensitive_path_validation(self, tmp_path):
         """Test path validation respects case sensitivity on case-sensitive filesystems."""

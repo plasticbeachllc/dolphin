@@ -1,13 +1,15 @@
 // agent-core/src/storage/plan-store.ts
-import { Plan, PlanSchema } from "../../../shared/types/state";
+import { Plan, PlanSchema } from "../../../../shared/types/state";
 import { TOMLWriter } from "./toml-writer";
 import * as path from "path";
 import * as fs from "fs/promises";
 
 export class PlanStore {
   private stateDir: string;
+  private workspaceRoot: string;
 
   constructor(workspaceRoot: string) {
+    this.workspaceRoot = workspaceRoot;
     this.stateDir = path.join(workspaceRoot, ".dolphin", "state", "plans");
   }
 
@@ -19,7 +21,7 @@ export class PlanStore {
     validated.plan.updated_at = new Date().toISOString();
 
     const filepath = path.join(this.stateDir, `${plan.plan.id}.toml`);
-    const writer = new TOMLWriter<Plan>(filepath);
+    const writer = new TOMLWriter<Plan>(filepath, this.workspaceRoot);
 
     await writer.write(validated);
 
@@ -28,7 +30,7 @@ export class PlanStore {
 
   async loadPlan(planId: string): Promise<Plan | null> {
     const filepath = path.join(this.stateDir, `${planId}.toml`);
-    const writer = new TOMLWriter<Plan>(filepath);
+    const writer = new TOMLWriter<Plan>(filepath, this.workspaceRoot);
 
     const data = await writer.read();
     if (!data) {
@@ -54,7 +56,7 @@ export class PlanStore {
 
   async deletePlan(planId: string): Promise<void> {
     const filepath = path.join(this.stateDir, `${planId}.toml`);
-    const writer = new TOMLWriter<Plan>(filepath);
+    const writer = new TOMLWriter<Plan>(filepath, this.workspaceRoot);
     await writer.delete();
 
     console.error(`[PlanStore] Deleted plan: ${planId}`);

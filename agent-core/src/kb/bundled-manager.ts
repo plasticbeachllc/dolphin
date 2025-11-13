@@ -11,18 +11,18 @@ export class BundledKBManager {
 
   constructor(extensionPath: string) {
     this.extensionPath = extensionPath;
-    
+
     // Get bundled uv binary for current platform
     const platform = this.getPlatformString();
     const uvName = platform.startsWith("win32") ? `uv-${platform}.exe` : `uv-${platform}`;
     this.uvBinary = path.join(extensionPath, "dist", "uv", uvName);
-    
+
     console.error(`[Bundled KB] Looking for uv at: ${this.uvBinary}`);
-    
+
     if (!fs.existsSync(this.uvBinary)) {
       throw new Error(`Unsupported platform: ${platform}. Expected ${this.uvBinary}`);
     }
-    
+
     // Make executable on Unix
     if (process.platform !== "win32") {
       try {
@@ -31,13 +31,13 @@ export class BundledKBManager {
         console.error(`[Bundled KB] Warning: Could not chmod uv binary: ${error.message}`);
       }
     }
-    
+
     // Use extension's global storage for uv cache
     this.cacheDir = path.join(extensionPath, ".uv-cache");
     if (!fs.existsSync(this.cacheDir)) {
       fs.mkdirSync(this.cacheDir, { recursive: true });
     }
-    
+
     console.error(`[Bundled KB] Initialized with platform: ${platform}`);
     console.error(`[Bundled KB] UV binary: ${this.uvBinary}`);
     console.error(`[Bundled KB] Cache directory: ${this.cacheDir}`);
@@ -45,25 +45,25 @@ export class BundledKBManager {
 
   async startServer(): Promise<ChildProcess> {
     console.error("[Bundled KB] Starting KB server with bundled uv...");
-    
+
     // Use local source directory for development
     // This allows hot-reloading of KB code changes without reinstalling the package
     const kbDir = path.join(this.extensionPath, "..", "kb");
-    
+
     // Check if we're in development mode (kb directory exists at expected location)
     const isDevelopment = fs.existsSync(kbDir);
-    
+
     if (isDevelopment) {
       console.error("[Bundled KB] Development mode: using local kb directory at", kbDir);
     } else {
       console.error("[Bundled KB] Production mode: using installed pb-dolphin package");
     }
-    
+
     // Use uv run with inline dependency specification or local directory
     const args = isDevelopment
       ? ["run", "--directory", kbDir, "python", "-m", "kb.cli", "serve"]
       : ["run", "--with", "pb-dolphin", "python", "-m", "kb.cli", "serve"];
-    
+
     const proc = spawn(
       this.uvBinary,
       args,
@@ -76,7 +76,7 @@ export class BundledKBManager {
         },
       }
     );
-    
+
     console.error("[Bundled KB] Server process spawned");
     return proc;
   }
@@ -84,7 +84,7 @@ export class BundledKBManager {
   private getPlatformString(): string {
     const platform = os.platform();
     const arch = os.arch();
-    
+
     if (platform === "darwin") {
       return arch === "arm64" ? "darwin-arm64" : "darwin-x64";
     } else if (platform === "linux") {
@@ -92,7 +92,7 @@ export class BundledKBManager {
     } else if (platform === "win32") {
       return "win32-x64";
     }
-    
+
     throw new Error(`Unsupported platform: ${platform}-${arch}`);
   }
 }

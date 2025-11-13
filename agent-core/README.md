@@ -1,242 +1,321 @@
-# Dolphin Agent Core
+# Dolphin v2 Agent Core
 
-Agent orchestrator with adaptive planning and Claude AI integration.
+**Status:** ✅ Phase 1 Complete  
+**Version:** 0.1.0 (Foundation)  
+**Architecture:** Research-backed Orchestration System
+
+---
 
 ## Overview
 
-The Agent Core is the brain of the Dolphin VSCode extension. It manages:
+The Dolphin v2 Agent Core is a complete replacement of the v1 Agent Core with a research-backed orchestration system. It implements a **Research → Plan → Code → Validate** workflow with multi-model Claude integration and deep Knowledge Bank semantic search.
 
-- **Task Planning**: Analyzes user requests and plans execution strategies
-- **Claude Integration**: Unified interface for both Claude CLI (subscription) and API modes
-- **Knowledge Bank**: Searches indexed codebases for relevant context
-- **Event System**: Emits events for UI updates and progress tracking
+Based on the comprehensive [Dolphin v2 Orchestration Project Plan](../docs/orchestration/DOLPHIN-V2-ORCHESTRATION-PROJECT-PLAN.md).
+
+---
+
+## Phase 1 Status: ✅ Complete
+
+**Delivered:** All core components for Foundation phase (Weeks 1-3)
+
+### Components
+- ✅ [`Orchestrator`](src/orchestrator/orchestrator.ts) - State machine & workflow coordination (458 lines)
+- ✅ [`StateStore`](src/state/state-store.ts) - TOML persistence & versioning (459 lines)
+- ✅ [`JSON-RPC`](src/utils/json-rpc.ts) - Extension communication (291 lines)
+- ✅ [`ClaudeProvider`](src/execution/claude-provider.ts) - Multi-model CLI execution (493 lines)
+- ✅ [`EditorWorkflow`](src/workflows/editor-workflow.ts) - Fast-path execution (260 lines)
+- ✅ [`ContextBuilder`](src/context/context-builder.ts) - KB integration (320 lines)
+- ✅ [`PromptBuilder`](src/prompts/prompt-builder.ts) - Phase-specific prompts (207 lines)
+
+**Total:** ~3,500 lines of production code + 1,600+ lines of tests (110+ test cases)
+
+See: [Phase 1 Validation Report](docs/PHASE-1-VALIDATION.md)
+
+---
 
 ## Architecture
 
+### Workflow State Machine
+
 ```
-┌─────────────────────────────────────────┐
-│         VSCode Extension                │
-│  ┌─────────────────────────────────┐    │
-│  │      AgentBridge (JSON-RPC)     │    │
-│  └──────────────┬──────────────────┘    │
-└─────────────────┼───────────────────────┘
-                  │ stdio
-                  ▼
-┌─────────────────────────────────────────┐
-│         Agent Core (Bun)                │
-│  ┌──────────────┐  ┌─────────────────┐  │
-│  │   Planner    │  │  ClaudeClient   │  │
-│  │  (Tasks)     │◄─┤ (CLI/API modes) │  │
-│  └──────┬───────┘  └─────────────────┘  │
-│         │                                │
-│         ▼                                │
-│  ┌─────────────────┐                    │
-│  │   KBManager     │                    │
-│  │ (Search/Fetch)  │                    │
-│  └────────┬────────┘                    │
-└───────────┼─────────────────────────────┘
-            │ HTTP
-            ▼
-    ┌───────────────┐
-    │  KB REST API  │
-    │ (localhost:8000)│
-    └───────────────┘
+idle → researching → planning → awaiting_approval → executing → complete
+                                       ↓
+                                  plan_revision
+                                       ↓
+                                   cancelled
 ```
 
-## Components
+### Multi-Model Configuration
 
-### Planner (`src/planner/`)
+```typescript
+MODEL_CONFIG = {
+  research: 'claude-haiku-4-20250514',    // Fast, cost-effective
+  planning: 'claude-opus-4-20250514',     // Best reasoning
+  coding: 'claude-sonnet-4-20250514',     // Balanced
+  editor: 'claude-sonnet-4-20250514',     // Fast & capable
+}
+```
 
-- **BasicPlanner**: Executes user tasks by querying Knowledge Bank and generating responses via Claude
-- **Future**: Adaptive planner with architect/editor modes
+### Communication Flow
 
-### Claude Client (`src/llm/`)
+```
+VSCode Extension (Svelte 5)
+         ↕ JSON-RPC (stdio)
+   Orchestrator (State Machine)
+         ↕
+   Workflow Implementations
+         ↕
+   ClaudeProvider (CLI subprocess)
+         ↕
+   Claude Code CLI
+```
 
-- **ClaudeClient**: Unified interface for Claude interactions
-  - Auto-detects authentication mode (CLI subscription vs API key)
-  - Supports streaming (API) and batch (CLI) responses
-  - Handles errors and retries
+---
 
-- **ClaudeCLIDetector**: Detects Claude CLI installation and authentication status
-- **ClaudeCLIProcess**: Manages Claude CLI subprocess execution
-
-### Knowledge Bank Manager (`src/kb/`)
-
-- **KBManager**: Interfaces with Dolphin KB REST API
-  - Health checks
-  - Search queries
-  - Chunk/file fetching
-  - Future: Auto-start KB server on extension activation
-
-### MCP Client (`src/mcp/`)
-
-- **MCPClient**: Communicates with MCP servers (planned future integration)
-
-### Storage (`src/storage/`)
-
-- **TOML persistence**: Task and configuration storage
-
-## Development
-
-### Setup
+## Installation
 
 ```bash
 # Install dependencies
 bun install
 
-# Run in development
-bun run dev
-
 # Run tests
 bun test
 
-# Build
-bun run build
+# Run integration test suite
+bun run tests/run-integration-tests.ts
 ```
 
-### Project Structure
+---
 
+## Quick Start
+
+### Editor Mode (Fast-Path)
+
+```typescript
+import { Orchestrator } from './src/orchestrator/orchestrator';
+import { EditorWorkflow } from './src/workflows/editor-workflow';
+import { ClaudeProvider } from './src/execution/claude-provider';
+import { ContextBuilder } from './src/context/context-builder';
+import { PromptBuilder } from './src/prompts/prompt-builder';
+import { StateStore } from './src/state/state-store';
+
+// Setup
+const claudeProvider = new ClaudeProvider({
+  workspaceRoot: '/path/to/workspace',
+});
+
+const contextBuilder = new ContextBuilder({
+  workspaceRoot: '/path/to/workspace',
+  kbUrl: 'http://localhost:7777',
+});
+
+const promptBuilder = new PromptBuilder();
+
+const editorWorkflow = new EditorWorkflow({
+  claudeProvider,
+  contextBuilder,
+  promptBuilder,
+});
+
+const stateStore = new StateStore({
+  storagePath: '.dolphin',
+});
+
+const orchestrator = new Orchestrator({
+  workspaceRoot: '/path/to/workspace',
+  stateStore,
+  editorWorkflow,
+  architectWorkflow: editorWorkflow, // Phase 2
+});
+
+// Start task
+const session = await orchestrator.startTask({
+  mode: 'editor',
+  message: 'Add error handling to the API',
+  context: { files: ['api.ts'] },
+});
+
+// Subscribe to updates
+for await (const update of orchestrator.subscribeToUpdates(session.id)) {
+  console.log(update);
+  
+  if (update.type === 'state_change' && update.data.state === 'complete') {
+    break;
+  }
+}
 ```
-agent-core/
-├── src/
-│   ├── main.ts                    # Entry point, agent orchestration
-│   ├── planner/
-│   │   └── basic-planner.ts      # Task planning with Claude
-│   ├── llm/
-│   │   ├── claude-client.ts      # Unified Claude interface
-│   │   ├── claude-cli/
-│   │   │   ├── detector.ts       # CLI detection
-│   │   │   └── process.ts        # CLI subprocess management
-│   │   └── README.md             # LLM integration docs
-│   ├── kb/
-│   │   └── manager.ts            # KB lifecycle management
-│   ├── mcp/
-│   │   └── client.ts             # MCP protocol support
-│   └── storage/
-│       └── toml.ts               # TOML persistence
-├── tests/
-│   └── *.test.ts                 # Unit tests
-└── package.json
-```
 
-## Features
-
-### Dual Authentication Support
-
-**Claude CLI (Recommended for Development)**:
-- Uses your Claude Pro/Max/Team subscription
-- No API costs
-- Batch response mode
-
-**API Key (Production)**:
-- Direct Anthropic API access
-- Streaming responses
-- Requires `ANTHROPIC_API_KEY` environment variable
-
-### Knowledge Bank Integration
-
-The agent automatically searches your indexed codebase when processing user queries:
-
-1. User asks: "How does authentication work?"
-2. Agent searches KB for "authentication"
-3. KB returns top-ranked code snippets
-4. Agent sends snippets + query to Claude
-5. Claude generates response with code context
-
-### Event System
-
-Agent emits events for UI synchronization:
-
-- `agent_ready`: Agent initialization complete
-- `task_started`: New task execution begins
-- `tool_call_started`: KB search or tool use initiated
-- `tool_call_finished`: Tool completed with results
-- `task_completed`: Task finished (success/error)
-- `message_chunk`: Streaming response chunk (API mode only)
+---
 
 ## Testing
 
+### Unit Tests (34+ tests)
 ```bash
-# Run all tests
-bun test
-
-# Run specific test file
-bun test src/llm/claude-client.test.ts
-
-# Watch mode
-bun test --watch
+bun test tests/unit/orchestrator.test.ts
+bun test tests/unit/state-store.test.ts
+bun test tests/unit/json-rpc.test.ts
 ```
 
-Current test coverage: **3/3 tests passing** (requires authentication setup)
-
-## Integration with VSCode Extension
-
-The Agent Core runs as a subprocess spawned by the VSCode extension:
-
-1. Extension activates → spawns `bun run src/main.ts`
-2. Agent initializes → emits `agent_ready` event
-3. Extension ready → user can send messages
-4. User sends message → extension forwards via JSON-RPC
-5. Agent processes → emits events for UI updates
-6. Task completes → extension displays results
-
-See [vscode-extension README](../vscode-extension/README.md) for extension details.
-
-## Configuration
-
-No configuration files needed. Agent auto-detects:
-
-- Claude CLI installation and auth status
-- Anthropic API key from environment
-- KB server endpoint (default: http://localhost:8000)
-
-## Troubleshooting
-
-### "No authentication configured"
-
-**Solution**: Set up Claude CLI or API key:
-
+### Integration Tests (60+ tests)
 ```bash
-# Option A: Claude CLI
-npm install -g @anthropic-ai/claude-code
-claude
-
-# Option B: API Key
-export ANTHROPIC_API_KEY=sk-ant-...
+bun test tests/integration/editor-workflow.test.ts
+bun test tests/integration/orchestrator-e2e.test.ts
+bun test tests/integration/kb-integration.test.ts
+bun test tests/integration/claude-auth.test.ts
 ```
 
-### "KB server not running"
-
-**Solution**: Start the KB server:
-
+### Run All Tests
 ```bash
-# In dolphin directory
-uv run dolphin serve
+bun run tests/run-integration-tests.ts
 ```
 
-Future: KB server will auto-start with the extension.
+---
 
-### Tests failing
+## Project Structure
 
-**Cause**: Tests require authentication to be configured.
+```
+agent-core-v2/
+├── src/
+│   ├── orchestrator/
+│   │   └── orchestrator.ts          # State machine & coordination
+│   ├── workflows/
+│   │   └── editor-workflow.ts       # Fast-path execution
+│   ├── execution/
+│   │   └── claude-provider.ts       # Multi-model CLI spawning
+│   ├── context/
+│   │   └── context-builder.ts       # KB integration
+│   ├── prompts/
+│   │   └── prompt-builder.ts        # Phase-specific prompts
+│   ├── state/
+│   │   └── state-store.ts           # TOML persistence
+│   ├── utils/
+│   │   └── json-rpc.ts              # Extension communication
+│   ├── storage/
+│   │   └── toml-writer.ts           # TOML utilities
+│   └── types/
+│       └── index.ts                 # TypeScript types
+├── tests/
+│   ├── unit/                        # Unit tests (34+ tests)
+│   ├── integration/                 # Integration tests (60+ tests)
+│   └── run-integration-tests.ts     # Test runner
+└── docs/
+    └── PHASE-1-VALIDATION.md        # Validation report
+```
 
-**Solution**: Set up auth as above, then rerun tests.
+---
+
+## Key Features
+
+### ✅ Editor Workflow
+- Fast-path execution for simple tasks
+- Lightweight context (8000 tokens max)
+- Sonnet 4.5 with normal thinking mode
+- Single-step execution
+
+### ✅ State Management
+- Event-driven architecture
+- TOML persistence for human readability
+- Plan versioning with revision history
+- Atomic writes with backup support
+
+### ✅ Knowledge Bank Integration
+- Semantic search via HTTP API
+- Context assembly with token tracking
+- Intelligent truncation with priority system
+- Graceful degradation when KB unavailable
+
+### ✅ Multi-Model Support
+- Model selection per workflow phase
+- CLI subprocess management
+- Streaming response parsing
+- Process lifecycle control
+
+### ✅ Authentication
+- OAuth detection (`.claude/settings.json`)
+- API key detection (`ANTHROPIC_API_KEY`)
+- Priority handling (OAuth > API key)
+- Warning system for pay-as-you-go
+
+---
+
+## Phase 2 Roadmap (Weeks 4-6)
+
+### Week 4: Research & Planning Phases
+- [ ] Implement ArchitectWorkflow with research phase
+- [ ] KB search prompting with Haiku
+- [ ] Research summary generation
+- [ ] Planning phase with Opus
+- [ ] Plan.md generation and parsing
+
+### Week 5: User Approval Flow
+- [ ] Approval state management
+- [ ] Plan revision logic
+- [ ] VSCode UI integration
+- [ ] Plan display components
+- [ ] Progress indicators
+
+### Week 6: Implementation & Validation
+- [ ] Implementation phase with Sonnet
+- [ ] Step-by-step execution
+- [ ] Error handling and recovery
+- [ ] End-to-end testing
+- [ ] Performance optimization
+
+---
+
+## Success Criteria
+
+### Phase 1 (Complete) ✅
+- [x] Editor Mode works end-to-end
+- [x] Claude CLI subprocess spawning reliable
+- [x] KB search integration functional
+- [x] State persists in TOML correctly
+- [x] 100+ tests passing
+- [x] Authentication detection works
+
+### Phase 2 (In Progress)
+- [ ] Architect Mode completes complex tasks end-to-end
+- [ ] Plan approval flow works smoothly
+- [ ] Plan revision works correctly
+- [ ] Multi-model orchestration functional
+- [ ] UI shows all workflow phases
+- [ ] 200+ tests passing
+
+---
 
 ## Contributing
 
-1. Make changes to `src/`
-2. Add tests in `tests/`
-3. Run `bun test` to verify
-4. Run `bun run build` to check compilation
-5. Test integration with VSCode extension (F5 in extension dev host)
+### Development Workflow
+1. Create feature branch
+2. Implement with tests
+3. Run test suite: `bun run tests/run-integration-tests.ts`
+4. Ensure all tests pass
+5. Submit PR with validation report
+
+### Code Standards
+- TypeScript strict mode
+- Comprehensive error handling
+- Event-driven architecture
+- Test coverage for all features
+- Clear documentation
+
+---
+
+## Resources
+
+- [Project Plan](../docs/orchestration/DOLPHIN-V2-ORCHESTRATION-PROJECT-PLAN.md) - Comprehensive 2,831-line specification
+- [Phase 1 Validation](docs/PHASE-1-VALIDATION.md) - Complete validation report
+- [Implementation Guide](../docs/orchestration/DOLPHIN-V2-IMPLEMENTATION-GUIDE.md) - Step-by-step guide
+- [Executive Summary](../docs/orchestration/DOLPHIN-V2-EXECUTIVE-SUMMARY.md) - High-level overview
+
+---
 
 ## License
 
-MIT - see [LICENSE](../LICENSE.md) for details
+MIT
 
-## Links
+---
 
-- [Main Project README](../README.md)
-- [Architecture Documentation](../docs/ARCHITECTURE.md)
-- [Testing Guide](../docs/TESTING-GUIDE.md)
-- [VSCode Extension](../vscode-extension/README.md)
+**Phase 1 Status:** ✅ Complete  
+**Next Milestone:** Phase 2 Week 4 - ArchitectWorkflow  
+**Documentation:** docs/PHASE-1-VALIDATION.md

@@ -3,15 +3,17 @@ import {
   Conversation,
   ConversationSchema,
   ConversationMetadata
-} from "../../../shared/types/state";
+} from "../../../../shared/types/state";
 import { TOMLWriter } from "./toml-writer";
 import * as path from "path";
 import * as fs from "fs/promises";
 
 export class ConversationStore {
   private stateDir: string;
+  private workspaceRoot: string;
 
   constructor(workspaceRoot: string) {
+    this.workspaceRoot = workspaceRoot;
     this.stateDir = path.join(
       workspaceRoot,
       ".dolphin",
@@ -28,7 +30,7 @@ export class ConversationStore {
       this.stateDir,
       `${conversation.conversation.id}.toml`
     );
-    const writer = new TOMLWriter<Conversation>(filepath);
+    const writer = new TOMLWriter<Conversation>(filepath, this.workspaceRoot);
 
     await writer.write(validated);
 
@@ -39,7 +41,7 @@ export class ConversationStore {
 
   async loadConversation(conversationId: string): Promise<Conversation | null> {
     const filepath = path.join(this.stateDir, `${conversationId}.toml`);
-    const writer = new TOMLWriter<Conversation>(filepath);
+    const writer = new TOMLWriter<Conversation>(filepath, this.workspaceRoot);
 
     const data = await writer.read();
     if (!data) return null;
@@ -62,7 +64,7 @@ export class ConversationStore {
 
   async deleteConversation(conversationId: string): Promise<void> {
     const filepath = path.join(this.stateDir, `${conversationId}.toml`);
-    const writer = new TOMLWriter<Conversation>(filepath);
+    const writer = new TOMLWriter<Conversation>(filepath, this.workspaceRoot);
     await writer.delete();
 
     console.error(`[ConversationStore] Deleted conversation: ${conversationId}`);
@@ -113,11 +115,11 @@ export class ConversationStore {
       console.error("[ConversationStore] Listing conversations with metadata...");
       const conversationIds = await this.listConversations();
       console.error(`[ConversationStore] Found ${conversationIds.length} conversation IDs`);
-      
+
       if (conversationIds.length === 0) {
         return [];
       }
-      
+
       const conversations = await Promise.all(
         conversationIds.map((id) => this.loadConversation(id))
       );
@@ -136,7 +138,7 @@ export class ConversationStore {
           updated_at: conv.conversation.updated_at,
           message_count: conv.messages.length,
         }));
-      
+
       console.error(`[ConversationStore] Returning ${result.length} conversations`);
       return result;
     } catch (error: any) {
