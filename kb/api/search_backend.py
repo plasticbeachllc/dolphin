@@ -68,8 +68,8 @@ class KnowledgeSearchBackend:
             "method": "search"
         })
 
-        # Log incoming search request at DEBUG level (not INFO)
-        request_logger.debug("Search request received", {
+        # Log incoming search request at INFO level for production observability
+        request_logger.info("Search request received", {
             "query_length": len(request.query),
             "query_preview": request.query[:100],
             "repos": request.repos,

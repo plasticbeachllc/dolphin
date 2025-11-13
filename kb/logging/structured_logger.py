@@ -46,10 +46,10 @@ class StructuredLogger:
     """
 
     # PII patterns to redact
-    _API_KEY_PATTERN = re.compile(r'\b(sk|api|key|token|secret|password|bearer)[-_]?[a-zA-Z0-9]{20,}\b', re.IGNORECASE)
+    _API_KEY_PATTERN = re.compile(r'\b(sk|api|key|token|secret|password|bearer)[-_][a-zA-Z0-9]{20,}\b', re.IGNORECASE)
     _ANTHROPIC_KEY_PATTERN = re.compile(r'sk-ant-[a-zA-Z0-9-]{95,}')
     _OPENAI_KEY_PATTERN = re.compile(r'sk-[a-zA-Z0-9]{48,}')
-    _FILE_PATH_PATTERN = re.compile(r'/(Users|home)/[^/\s]+')
+    _FILE_PATH_PATTERN = re.compile(r'/(Users|home|root)/[^/\s]+')
     _WINDOWS_PATH_PATTERN = re.compile(r'C:\\Users\\[^\\]+')
 
     def __init__(self, name: str, default_context: Optional[Dict[str, Any]] = None):
@@ -95,6 +95,12 @@ class StructuredLogger:
 
     def _sanitize_value(self, value: Any) -> Any:
         """Sanitize a single value for PII.
+
+        Supported types:
+        - str: Pattern-based redaction of API keys, tokens, and file paths
+        - dict: Recursive sanitization with circular reference detection
+        - list/tuple: Element-wise sanitization
+        - Other types (int, float, bool, None, etc.): Returned as-is
 
         Args:
             value: Value to sanitize
@@ -144,7 +150,8 @@ class StructuredLogger:
             sanitized_value = self._sanitize_value(value)
 
             # Then check if key name itself is sensitive
-            if key.lower() in ('password', 'secret', 'authorization'):
+            if key.lower() in ('password', 'passwd', 'secret', 'authorization',
+                              'apikey', 'api_key', 'access_token', 'auth_token'):
                 # These keys should be completely redacted
                 sanitized[key] = '***'
             else:
