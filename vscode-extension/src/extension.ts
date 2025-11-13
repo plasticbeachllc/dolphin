@@ -476,6 +476,16 @@ export async function activate(context: vscode.ExtensionContext) {
 
     vscode.window.showInformationMessage("Dolphin activated! 🐬");
     logger.info("Activation complete");
+
+    // Return extension API for testing and integration
+    return {
+      getAgentBridge: () => agentBridge,
+      getViewProvider: () => viewProvider,
+      getFileWatcher: () => fileWatcher,
+      getStatusBar: () => statusBar,
+      getAutoSyncManager: () => autoSyncManager,
+      getDriftDetector: () => driftDetector,
+    };
   } catch (error: any) {
     const errorMsg = `Dolphin activation failed: ${error.message}`;
     logger.error(errorMsg);

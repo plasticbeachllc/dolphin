@@ -306,10 +306,13 @@ export class MockAgentBridge {
     this.messageHistory.push(content);
 
     if (this.shouldThrowError) {
-      this.emitEvent({
-        type: "error",
+      const errorEvent = {
+        type: "error" as const,
         error: this.errorMessage,
-      });
+      };
+      // Emit to both onEvent and on handlers
+      this.emitEvent(errorEvent);
+      this.messageHandlers.forEach((handler) => handler(errorEvent));
       throw new Error(this.errorMessage);
     }
 
@@ -335,11 +338,6 @@ export class MockAgentBridge {
     const response = this.responseQueue.shift() || "Mock agent response";
     this.emitToHandlers("message_chunk", { content: response });
     this.emitToHandlers("content_delta", { delta: response }); // Legacy compatibility
-    this.messageHistory.push({
-      type: "assistant_message",
-      content: response,
-      timestamp: Date.now(),
-    });
 
     await new Promise((resolve) => setTimeout(resolve, 20));
     this.emitToHandlers("task_completed", { success: true, message: response });
@@ -390,6 +388,9 @@ export class MockAgentBridge {
     if (handlers) {
       handlers.forEach((handler) => handler(data));
     }
+    // Also emit to onEvent handlers
+    const eventData = { type: event, ...data };
+    this.messageHandlers.forEach((handler) => handler(eventData as AgentEvent));
   }
 
   /**

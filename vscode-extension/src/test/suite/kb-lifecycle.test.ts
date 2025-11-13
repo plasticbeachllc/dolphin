@@ -243,14 +243,14 @@ describe("KB Lifecycle Management", function () {
     it("KB configuration keys should exist", () => {
       const config = vscode.workspace.getConfiguration("dolphin");
 
-      // Verify KB-related configuration is defined in package.json
-      const kbDebounce = config.inspect("kb.debounceMs");
-      const kbBatchInterval = config.inspect("kb.batchIntervalMs");
-      const autoSyncEnabled = config.inspect("kb.autoSync.enabled");
+      // Verify KB-related configuration can be accessed
+      const kbDebounce = config.get("kb.debounceMs");
+      const kbBatchInterval = config.get("kb.batchIntervalMs");
+      const autoSyncEnabled = config.get("kb.autoSync.enabled");
 
-      assert.ok(kbDebounce, "kb.debounceMs should be defined");
-      assert.ok(kbBatchInterval, "kb.batchIntervalMs should be defined");
-      assert.ok(autoSyncEnabled, "kb.autoSync.enabled should be defined");
+      assert.ok(kbDebounce !== undefined, "kb.debounceMs should be defined");
+      assert.ok(kbBatchInterval !== undefined, "kb.batchIntervalMs should be defined");
+      assert.ok(autoSyncEnabled !== undefined, "kb.autoSync.enabled should be defined");
     });
 
     it("KB configuration should have valid types", () => {
@@ -260,7 +260,7 @@ describe("KB Lifecycle Management", function () {
       const excludePatterns = config.get<string[]>("kb.excludePatterns");
       const autoSyncEnabled = config.get<boolean>("kb.autoSync.enabled");
 
-      assert.strictEqual(typeof kbDebounce, "number", "debounceMs should be number");
+      assert.strictEqual(typeof kbDebounce, "number", `debounceMs should be number, got ${typeof kbDebounce}`);
       assert.ok(Array.isArray(excludePatterns), "excludePatterns should be array");
       assert.strictEqual(typeof autoSyncEnabled, "boolean", "autoSync.enabled should be boolean");
     });
