@@ -1,40 +1,41 @@
+/**
+ * Integration tests using mock KB server.
+ * Tests the extension with mocked external dependencies.
+ */
+
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { waitForExtensionActivation, sleep } from '../helpers/test-utils';
-import { MockKBServer } from '../helpers/mock-services';
+import { setupMockEnvironment, teardownMockEnvironment, resetMocks, getMockEnvironment } from '../helpers/mock-manager';
+import { activateExtension, waitForCondition } from '../helpers/shared-fixtures';
+import { TEST_COMMANDS } from '../helpers/test-constants';
 
-describe('Integration Tests', () => {
-  let mockServer: MockKBServer;
+suite('Integration Tests with Mock KB', function() {
+  this.timeout(10000);
 
-  before(async function () {
-    this.timeout(5000);
-
-    // Start mock KB API server
-    mockServer = new MockKBServer();
-    await mockServer.start(7778); // Use different port to avoid conflicts
-
-    await waitForExtensionActivation();
-    await sleep(1000);
+  suiteSetup(async () => {
+    await setupMockEnvironment();
+    await activateExtension();
   });
 
-  after(async function () {
-    this.timeout(5000);
-    if (mockServer) {
-      await mockServer.stop();
-    }
+  suiteTeardown(async () => {
+    await teardownMockEnvironment();
   });
 
-  it('Mock KB API server should be running', async function () {
-    this.timeout(5000);
+  setup(() => {
+    resetMocks();
+  });
 
-    assert.ok(mockServer, 'Mock server should be initialized');
-    assert.ok(mockServer.port > 0, 'Mock server should have a port assigned');
+  test('Mock KB API server should be running and healthy', async () => {
+    const { kbServer } = getMockEnvironment();
+
+    assert.ok(kbServer, 'Mock server should be initialized');
+    assert.ok(kbServer.port > 0, 'Mock server should have a port assigned');
 
     // Test health endpoint
     const http = require('http');
     const response = await new Promise<any>((resolve, reject) => {
       const req = http.get(
-        `http://localhost:${mockServer.port}/health`,
+        `http://localhost:${kbServer.port}/health`,
         (res: any) => {
           let data = '';
           res.on('data', (chunk: any) => {
@@ -49,24 +50,17 @@ describe('Integration Tests', () => {
     });
 
     assert.strictEqual(response.status, 200, 'Health check should return 200');
-    assert.strictEqual(
-      response.data.status,
-      'ok',
-      'Health check should return ok status'
-    );
+    assert.strictEqual(response.data.status, 'ok', 'Health check should return ok status');
   });
 
-  it('Extension should activate in workspace with mock server', async function () {
-    this.timeout(5000);
-
+  test('Extension should be active', async () => {
     const extension = vscode.extensions.getExtension('pb.dolphin');
     assert.ok(extension, 'Extension should exist');
     assert.ok(extension.isActive, 'Extension should be active');
   });
 
-  it('Mock KB API should handle search requests', async function () {
-    this.timeout(5000);
-
+  test('Mock KB API should handle search requests', async () => {
+    const { kbServer } = getMockEnvironment();
     const http = require('http');
 
     const searchRequest = {
@@ -79,7 +73,7 @@ describe('Integration Tests', () => {
 
       const options = {
         hostname: 'localhost',
-        port: mockServer.port,
+        port: kbServer.port,
         path: '/search',
         method: 'POST',
         headers: {
@@ -105,14 +99,12 @@ describe('Integration Tests', () => {
 
     assert.strictEqual(response.status, 200, 'Search should return 200');
     assert.ok(response.data.hits, 'Search should return hits');
-    assert.ok(
-      Array.isArray(response.data.hits),
-      'Hits should be an array'
-    );
+    assert.ok(Array.isArray(response.data.hits), 'Hits should be an array');
+    assert.ok(response.data.hits.length > 0, 'Should return at least one hit');
   });
 
-  it('Complete workflow: Extension activation → Webview → Commands', async function () {
-    this.timeout(15000);
+  test('Complete workflow: Extension activation → Commands → Mock KB', async () => {
+    const { kbServer } = getMockEnvironment();
 
     // 1. Verify extension is active
     const extension = vscode.extensions.getExtension('pb.dolphin');
@@ -120,32 +112,34 @@ describe('Integration Tests', () => {
 
     // 2. Verify commands are registered
     const commands = await vscode.commands.getCommands(true);
-    const dolphinCommands = commands.filter((cmd) =>
-      cmd.startsWith('dolphin.')
-    );
-    assert.ok(
-      dolphinCommands.length >= 3,
-      'Dolphin commands should be registered'
-    );
+    const dolphinCommands = commands.filter((cmd) => cmd.startsWith('dolphin.'));
+    assert.ok(dolphinCommands.length >= 10, 'At least 10 Dolphin commands should be registered');
+
+    // Verify specific commands
+    assert.ok(commands.includes(TEST_COMMANDS.FOCUS_INPUT), 'focusInput command should be registered');
+    assert.ok(commands.includes(TEST_COMMANDS.NEW_CONVERSATION), 'newConversation command should be registered');
+    assert.ok(commands.includes(TEST_COMMANDS.KB_SHOW_STATUS), 'KB status command should be registered');
 
     // 3. Verify package.json contributions are correct
     const packageJSON = extension!.packageJSON;
-    assert.ok(
-      packageJSON.contributes.viewsContainers,
-      'Should have viewsContainers'
-    );
+    assert.ok(packageJSON.contributes.viewsContainers, 'Should have viewsContainers');
     assert.ok(packageJSON.contributes.views, 'Should have views');
     assert.ok(packageJSON.contributes.commands, 'Should have commands');
 
-    // 4. Execute a safe command
-    try {
-      await vscode.commands.executeCommand('dolphin.test');
-      assert.ok(true, 'Test command executed successfully');
-    } catch (err) {
-      // Command exists but might fail in headless mode
-      console.log('Test command execution note:', err);
-    }
+    // 4. Verify mock KB is accessible
+    const requestsBefore = kbServer.getRequestHistory().length;
 
-    console.log('✓ Complete workflow test passed');
+    // Make a request to KB
+    const http = require('http');
+    await new Promise((resolve) => {
+      http.get(`http://localhost:${kbServer.port}/health`, (res: any) => {
+        res.on('data', () => {});
+        res.on('end', resolve);
+      });
+    });
+
+    // Verify request was logged
+    const requestsAfter = kbServer.getRequestHistory().length;
+    assert.ok(requestsAfter > requestsBefore, 'KB should have logged the request');
   });
 });
