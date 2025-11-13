@@ -12,12 +12,12 @@
  * 4. Performance monitoring via metrics
  */
 
-import msgpack from 'msgpack5';
+import msgpack from "msgpack5";
 
 /**
  * Serialization format
  */
-export type SerializationFormat = 'json' | 'msgpack';
+export type SerializationFormat = "json" | "msgpack";
 
 /**
  * Serialization metrics for benchmarking
@@ -55,19 +55,19 @@ export interface ISerializer {
  * JSON serializer (default)
  */
 export class JSONSerializer implements ISerializer {
-  readonly format: SerializationFormat = 'json';
+  readonly format: SerializationFormat = "json";
   private lastMetrics: SerializationMetrics | null = null;
 
   serialize(data: any): Buffer {
     const startTime = performance.now();
     const json = JSON.stringify(data);
-    const buffer = Buffer.from(json, 'utf-8');
+    const buffer = Buffer.from(json, "utf-8");
     const endTime = performance.now();
 
     this.lastMetrics = {
       serializeTimeMs: endTime - startTime,
       deserializeTimeMs: 0,
-      originalSize: Buffer.byteLength(JSON.stringify(data), 'utf-8'),
+      originalSize: Buffer.byteLength(JSON.stringify(data), "utf-8"),
       serializedSize: buffer.length,
     };
 
@@ -76,7 +76,7 @@ export class JSONSerializer implements ISerializer {
 
   deserialize(buffer: Buffer): any {
     const startTime = performance.now();
-    const json = buffer.toString('utf-8');
+    const json = buffer.toString("utf-8");
     const data = JSON.parse(json);
     const endTime = performance.now();
 
@@ -96,7 +96,7 @@ export class JSONSerializer implements ISerializer {
  * MessagePack serializer (binary, faster, smaller)
  */
 export class MessagePackSerializer implements ISerializer {
-  readonly format: SerializationFormat = 'msgpack';
+  readonly format: SerializationFormat = "msgpack";
   private codec = msgpack();
   private lastMetrics: SerializationMetrics | null = null;
 
@@ -108,7 +108,7 @@ export class MessagePackSerializer implements ISerializer {
     this.lastMetrics = {
       serializeTimeMs: endTime - startTime,
       deserializeTimeMs: 0,
-      originalSize: Buffer.byteLength(JSON.stringify(data), 'utf-8'), // For comparison
+      originalSize: Buffer.byteLength(JSON.stringify(data), "utf-8"), // For comparison
       serializedSize: buffer.length,
     };
 
@@ -140,14 +140,13 @@ export class SerializerFactory {
    * Create serializer from environment variable or explicit format
    */
   static create(format?: SerializationFormat): ISerializer {
-    const selectedFormat = format ||
-      (process.env.DOLPHIN_IPC_FORMAT as SerializationFormat) ||
-      'json';
+    const selectedFormat =
+      format || (process.env.DOLPHIN_IPC_FORMAT as SerializationFormat) || "json";
 
     switch (selectedFormat) {
-      case 'msgpack':
+      case "msgpack":
         return new MessagePackSerializer();
-      case 'json':
+      case "json":
       default:
         return new JSONSerializer();
     }
@@ -160,7 +159,7 @@ export class SerializerFactory {
     // MessagePack buffers typically start with specific bytes
     // JSON starts with printable ASCII ('{', '[', '"', digits, etc.)
     if (buffer.length === 0) {
-      return 'json'; // Default
+      return "json"; // Default
     }
 
     const firstByte = buffer[0];
@@ -168,16 +167,16 @@ export class SerializerFactory {
     // JSON typically starts with: '{' (123), '[' (91), '"' (34), or digits
     if (
       firstByte === 123 || // {
-      firstByte === 91 ||  // [
-      firstByte === 34 ||  // "
+      firstByte === 91 || // [
+      firstByte === 34 || // "
       (firstByte >= 48 && firstByte <= 57) // 0-9
     ) {
-      return 'json';
+      return "json";
     }
 
     // MessagePack starts with specific marker bytes
     // See: https://github.com/msgpack/msgpack/blob/master/spec.md
-    return 'msgpack';
+    return "msgpack";
   }
 }
 

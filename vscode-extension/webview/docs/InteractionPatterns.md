@@ -54,8 +54,8 @@ Cards that "lift" on hover:
 ### Disabled Hover
 
 ```svelte
-<Button 
-  disabled 
+<Button
+  disabled
   class="disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary"
 >
   Can't click me
@@ -82,6 +82,7 @@ All focusable elements must have visible focus indicators:
 ### Focus Management in Modals
 
 When opening a modal or sheet, focus should:
+
 1. Move to the first focusable element inside
 2. Trap focus within the modal (no tabbing outside)
 3. Return to the trigger element on close
@@ -89,7 +90,7 @@ When opening a modal or sheet, focus should:
 ```svelte
 <script>
   import * as Dialog from "$lib/components/ui/dialog";
-  
+
   // shadcn-svelte Dialog handles this automatically
 </script>
 
@@ -128,7 +129,7 @@ When opening a modal or sheet, focus should:
   let selected = $state(false);
 </script>
 
-<Card.Root 
+<Card.Root
   class="cursor-pointer transition-all duration-150 border-2"
   class:border-primary={selected}
   class:border-border={!selected}
@@ -186,7 +187,7 @@ When opening a modal or sheet, focus should:
 ```svelte
 <script>
   import { Progress } from "$lib/components/ui/progress";
-  
+
   let progress = $state(45);
 </script>
 
@@ -210,16 +211,16 @@ When opening a modal or sheet, focus should:
 
 ```svelte
 <!-- Disabled button -->
-<Button 
-  disabled 
+<Button
+  disabled
   class="disabled:opacity-50 disabled:cursor-not-allowed"
 >
   Disabled
 </Button>
 
 <!-- Disabled input -->
-<Input 
-  disabled 
+<Input
+  disabled
   class="disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-muted"
 />
 
@@ -248,8 +249,8 @@ When opening a modal or sheet, focus should:
 
 <!-- Animated checkbox with label -->
 <div class="flex items-center gap-2">
-  <Checkbox 
-    id="agree" 
+  <Checkbox
+    id="agree"
     class="transition-all duration-150 data-[state=checked]:scale-110"
   />
   <label for="agree" class="text-sm cursor-pointer select-none">
@@ -262,8 +263,8 @@ When opening a modal or sheet, focus should:
 
 ```svelte
 <!-- Pulse when data is updating -->
-<Badge 
-  variant="default" 
+<Badge
+  variant="default"
   class="transition-all"
   class:animate-pulse={isUpdating}
 >
@@ -279,12 +280,12 @@ When opening a modal or sheet, focus should:
   let isOpen = $state(false);
 </script>
 
-<button 
+<button
   onclick={() => isOpen = !isOpen}
   class="flex items-center gap-2"
 >
   <span>Details</span>
-  <ChevronDown 
+  <ChevronDown
     class="size-4 transition-transform duration-200"
     class:rotate-180={isOpen}
   />
@@ -448,7 +449,7 @@ When opening a modal or sheet, focus should:
     <Tabs.Trigger value="tab2">Details</Tabs.Trigger>
     <Tabs.Trigger value="tab3">Settings</Tabs.Trigger>
   </Tabs.List>
-  
+
   <Tabs.Content value="tab1">
     Overview content
   </Tabs.Content>
@@ -478,7 +479,7 @@ When opening a modal or sheet, focus should:
 
 ```svelte
 <!-- Drop zone -->
-<div 
+<div
   class="border-2 border-dashed border-border rounded-lg p-8 transition-colors"
   class:border-primary={isDragOver}
   class:bg-accent/50={isDragOver}
@@ -487,7 +488,7 @@ When opening a modal or sheet, focus should:
 </div>
 
 <!-- Draggable item -->
-<div 
+<div
   draggable="true"
   class="cursor-move transition-opacity"
   class:opacity-50={isDragging}
@@ -593,8 +594,8 @@ When opening a modal or sheet, focus should:
 </script>
 
 <div class="space-y-2">
-  <Input 
-    type="email" 
+  <Input
+    type="email"
     class="border-destructive focus-visible:ring-destructive"
     aria-invalid="true"
     aria-describedby="email-error"
@@ -647,7 +648,7 @@ When opening a modal or sheet, focus should:
 ```svelte
 <!-- Progressive reveal of list items -->
 {#each items as item, i}
-  <div 
+  <div
     class="animate-slide-in-up"
     style="animation-delay: {i * 50}ms"
   >
@@ -686,17 +687,17 @@ For every interactive pattern:
 
 ## Common Patterns Summary
 
-| Pattern | Component | Usage |
-|---------|-----------|-------|
-| Hover feedback | All interactive elements | `hover:bg-accent transition-colors duration-100` |
-| Focus indicator | All focusable elements | `focus-visible:ring-2 focus-visible:ring-ring` |
-| Active state | Buttons, cards | `active:scale-95 transition-transform duration-75` |
-| Disabled state | Forms, buttons | `disabled:opacity-50 disabled:cursor-not-allowed` |
-| Loading state | Cards, lists | Use `Skeleton` component or `animate-pulse` |
-| Tooltip | Icons, abbreviations | `Tooltip` component with `delayDuration={500}` |
-| Popover | Rich content | `Popover` component for clickable content |
-| Modal | Important actions | `Dialog` component with focus management |
-| Side panel | Details view | `Sheet` component, slide from right |
+| Pattern         | Component                | Usage                                              |
+| --------------- | ------------------------ | -------------------------------------------------- |
+| Hover feedback  | All interactive elements | `hover:bg-accent transition-colors duration-100`   |
+| Focus indicator | All focusable elements   | `focus-visible:ring-2 focus-visible:ring-ring`     |
+| Active state    | Buttons, cards           | `active:scale-95 transition-transform duration-75` |
+| Disabled state  | Forms, buttons           | `disabled:opacity-50 disabled:cursor-not-allowed`  |
+| Loading state   | Cards, lists             | Use `Skeleton` component or `animate-pulse`        |
+| Tooltip         | Icons, abbreviations     | `Tooltip` component with `delayDuration={500}`     |
+| Popover         | Rich content             | `Popover` component for clickable content          |
+| Modal           | Important actions        | `Dialog` component with focus management           |
+| Side panel      | Details view             | `Sheet` component, slide from right                |
 
 ## References
 

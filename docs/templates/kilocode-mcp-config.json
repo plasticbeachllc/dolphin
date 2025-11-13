@@ -3,9 +3,7 @@
   "description": "Dolphin semantic code search",
   "server": {
     "command": "bunx",
-    "args": [
-      "dolphin-mcp"
-    ],
+    "args": ["dolphin-mcp"],
     "env": {
       "DOLPHIN_API_URL": "http://127.0.0.1:7777",
       "LOG_LEVEL": "info",

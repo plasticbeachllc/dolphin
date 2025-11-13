@@ -1,7 +1,10 @@
 // agent-core/src/execution/claude-provider.ts
 import type { AgentEvent } from "../../../../shared/types/events";
 import { ClaudeClient, type AuthMode } from "../llm/claude-client";
-import { ClaudeToolExecutor, type Message as ToolExecutorMessage } from "../llm/claude-tool-executor";
+import {
+  ClaudeToolExecutor,
+  type Message as ToolExecutorMessage,
+} from "../llm/claude-tool-executor";
 import { MCPClient } from "../mcp/mcp-client";
 
 export interface ClaudeProviderConfig {
@@ -66,8 +69,8 @@ export class ClaudeProvider {
     if (params.onEvent) {
       executor = new ClaudeToolExecutor({
         claudeClient: this.claudeClient,
-        mcpClient: this.executor['config'].mcpClient,
-        maxToolRounds: this.executor['config'].maxToolRounds,
+        mcpClient: this.executor["config"].mcpClient,
+        maxToolRounds: this.executor["config"].maxToolRounds,
         onEvent: params.onEvent,
       });
 

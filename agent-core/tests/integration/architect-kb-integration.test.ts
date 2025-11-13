@@ -6,28 +6,24 @@
  * research and clarification phases.
  */
 
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import { ArchitectWorkflow } from '../../src/workflows/architect-workflow';
-import { ContextBuilder } from '../../src/context/context-builder';
-import { PromptBuilder } from '../../src/prompts/prompt-builder';
-import type {
-  TaskInput,
-  WorkflowUpdate,
-  ResearchResult,
-} from '../../src/types/index';
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { ArchitectWorkflow } from "../../src/workflows/architect-workflow";
+import { ContextBuilder } from "../../src/context/context-builder";
+import { PromptBuilder } from "../../src/prompts/prompt-builder";
+import type { TaskInput, WorkflowUpdate, ResearchResult } from "../../src/types/index";
 
 // Simple mock Claude provider for integration tests
 class MockClaudeProvider {
   async *execute(params: any) {
     const responses = {
-      'claude-haiku-4-20250514': `Based on the KB search results, I found:
+      "claude-haiku-4-20250514": `Based on the KB search results, I found:
 - Authentication middleware in src/middleware/auth.ts
 - JWT utilities in src/utils/jwt.ts
 - User model in src/models/user.ts
 
 The codebase follows a standard Express.js pattern with middleware-based auth.`,
 
-      'claude-sonnet-4-20250514': `I have reviewed the codebase and understand the authentication patterns.
+      "claude-sonnet-4-20250514": `I have reviewed the codebase and understand the authentication patterns.
 
 Questions for clarification:
 1. Should we extend the existing JWT implementation or replace it?
@@ -35,7 +31,7 @@ Questions for clarification:
 
 [READY_TO_PLAN]`,
 
-      'claude-opus-4-20250514': `## Overview
+      "claude-opus-4-20250514": `## Overview
 Enhance the existing authentication system with additional security features.
 
 ## Files to Modify
@@ -57,26 +53,26 @@ Enhance the existing authentication system with additional security features.
 medium`,
     };
 
-    const response = responses[params.model as keyof typeof responses] || 'Mock response';
+    const response = responses[params.model as keyof typeof responses] || "Mock response";
 
     for (const char of response) {
       yield {
-        type: 'text' as const,
+        type: "text" as const,
         content: char,
       };
     }
   }
 }
 
-describe('ArchitectWorkflow KB Integration', () => {
+describe("ArchitectWorkflow KB Integration", () => {
   let workflow: ArchitectWorkflow;
   let contextBuilder: ContextBuilder;
 
   beforeAll(() => {
     // Setup with real context builder (will use mock KB for testing)
     contextBuilder = new ContextBuilder({
-      workspaceRoot: '/test/workspace',
-      kbUrl: 'http://localhost:7777', // Will be mocked in actual tests
+      workspaceRoot: "/test/workspace",
+      kbUrl: "http://localhost:7777", // Will be mocked in actual tests
     });
 
     const promptBuilder = new PromptBuilder();
@@ -90,11 +86,11 @@ describe('ArchitectWorkflow KB Integration', () => {
     });
   });
 
-  describe('KB Search During Research', () => {
-    test('should perform KB search with task query', async () => {
+  describe("KB Search During Research", () => {
+    test("should perform KB search with task query", async () => {
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Add user authentication with JWT',
+        mode: "architect",
+        message: "Add user authentication with JWT",
         context: {
           files: [],
           folders: [],
@@ -105,8 +101,8 @@ describe('ArchitectWorkflow KB Integration', () => {
       const kbSearchQueries: string[] = [];
 
       for await (const update of workflow.execute(taskInput)) {
-        if (update.type === 'progress' && update.data.phase === 'research') {
-          if (update.data.message?.includes('Searching knowledge base')) {
+        if (update.type === "progress" && update.data.phase === "research") {
+          if (update.data.message?.includes("Searching knowledge base")) {
             // KB search initiated
             kbSearchQueries.push(taskInput.message);
           }
@@ -117,7 +113,7 @@ describe('ArchitectWorkflow KB Integration', () => {
         }
 
         // Break after research phase
-        if (update.type === 'state_change' && update.data.state === 'clarifying') {
+        if (update.type === "state_change" && update.data.state === "clarifying") {
           break;
         }
       }
@@ -127,23 +123,21 @@ describe('ArchitectWorkflow KB Integration', () => {
       expect(researchResult?.kbSearches.length).toBeGreaterThan(0);
     });
 
-    test('should include KB results in research findings', async () => {
+    test("should include KB results in research findings", async () => {
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Implement rate limiting for API endpoints',
+        mode: "architect",
+        message: "Implement rate limiting for API endpoints",
         context: {},
       };
 
       let researchResult: ResearchResult | undefined;
 
       for await (const update of workflow.execute(taskInput)) {
-        if (update.type === 'progress' &&
-            update.data.phase === 'research' &&
-            update.data.result) {
+        if (update.type === "progress" && update.data.phase === "research" && update.data.result) {
           researchResult = update.data.result;
         }
 
-        if (update.type === 'state_change' && update.data.state === 'clarifying') {
+        if (update.type === "state_change" && update.data.state === "clarifying") {
           break;
         }
       }
@@ -153,29 +147,27 @@ describe('ArchitectWorkflow KB Integration', () => {
 
       // Findings should reference codebase insights from KB
       expect(
-        researchResult?.findings.toLowerCase().includes('middleware') ||
-        researchResult?.findings.toLowerCase().includes('auth') ||
-        researchResult?.findings.toLowerCase().includes('jwt')
+        researchResult?.findings.toLowerCase().includes("middleware") ||
+          researchResult?.findings.toLowerCase().includes("auth") ||
+          researchResult?.findings.toLowerCase().includes("jwt")
       ).toBe(true);
     });
 
-    test('should track relevant files from KB search', async () => {
+    test("should track relevant files from KB search", async () => {
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Add authentication middleware',
+        mode: "architect",
+        message: "Add authentication middleware",
         context: {},
       };
 
       let researchResult: ResearchResult | undefined;
 
       for await (const update of workflow.execute(taskInput)) {
-        if (update.type === 'progress' &&
-            update.data.phase === 'research' &&
-            update.data.result) {
+        if (update.type === "progress" && update.data.phase === "research" && update.data.result) {
           researchResult = update.data.result;
         }
 
-        if (update.type === 'state_change' && update.data.state === 'clarifying') {
+        if (update.type === "state_change" && update.data.state === "clarifying") {
           break;
         }
       }
@@ -187,11 +179,11 @@ describe('ArchitectWorkflow KB Integration', () => {
     });
   });
 
-  describe('KB Context in Clarification', () => {
-    test('should maintain KB context through clarification phase', async () => {
+  describe("KB Context in Clarification", () => {
+    test("should maintain KB context through clarification phase", async () => {
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Enhance authentication system',
+        mode: "architect",
+        message: "Enhance authentication system",
         context: {},
       };
 
@@ -201,48 +193,48 @@ describe('ArchitectWorkflow KB Integration', () => {
         updates.push(update);
 
         // Stop after clarification completes
-        if (update.type === 'state_change' && update.data.state === 'planning') {
+        if (update.type === "state_change" && update.data.state === "planning") {
           break;
         }
       }
 
       // Verify both research and clarification phases occurred
-      expect(updates.some(u =>
-        u.type === 'state_change' && u.data.state === 'researching'
-      )).toBe(true);
+      expect(updates.some((u) => u.type === "state_change" && u.data.state === "researching")).toBe(
+        true
+      );
 
-      expect(updates.some(u =>
-        u.type === 'state_change' && u.data.state === 'clarifying'
-      )).toBe(true);
+      expect(updates.some((u) => u.type === "state_change" && u.data.state === "clarifying")).toBe(
+        true
+      );
 
       // Clarification should reference research findings
-      const clarificationUpdates = updates.filter(u =>
-        u.type === 'progress' && u.data.phase === 'clarification'
+      const clarificationUpdates = updates.filter(
+        (u) => u.type === "progress" && u.data.phase === "clarification"
       );
 
       expect(clarificationUpdates.length).toBeGreaterThan(0);
     });
 
-    test('should allow LLM to request additional KB searches during clarification', async () => {
+    test("should allow LLM to request additional KB searches during clarification", async () => {
       // Note: This test verifies the architecture supports it
       // Actual tool calling would require more complex mocking
 
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Refactor authentication system',
+        mode: "architect",
+        message: "Refactor authentication system",
         context: {},
       };
 
       let clarificationStarted = false;
 
       for await (const update of workflow.execute(taskInput)) {
-        if (update.type === 'state_change' && update.data.state === 'clarifying') {
+        if (update.type === "state_change" && update.data.state === "clarifying") {
           clarificationStarted = true;
         }
 
         // In a real scenario with tool calling, we'd see tool_call updates here
         // For now, we just verify clarification phase is reached
-        if (update.type === 'state_change' && update.data.state === 'planning') {
+        if (update.type === "state_change" && update.data.state === "planning") {
           break;
         }
       }
@@ -251,24 +243,22 @@ describe('ArchitectWorkflow KB Integration', () => {
     });
   });
 
-  describe('KB Context in Planning', () => {
-    test('should use KB context to generate grounded plan', async () => {
+  describe("KB Context in Planning", () => {
+    test("should use KB context to generate grounded plan", async () => {
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Add two-factor authentication',
+        mode: "architect",
+        message: "Add two-factor authentication",
         context: {},
       };
 
       let plan: any;
 
       for await (const update of workflow.execute(taskInput)) {
-        if (update.type === 'progress' &&
-            update.data.phase === 'planning' &&
-            update.data.plan) {
+        if (update.type === "progress" && update.data.phase === "planning" && update.data.plan) {
           plan = update.data.plan;
         }
 
-        if (update.type === 'state_change' && update.data.state === 'awaiting_approval') {
+        if (update.type === "state_change" && update.data.state === "awaiting_approval") {
           break;
         }
       }
@@ -279,26 +269,26 @@ describe('ArchitectWorkflow KB Integration', () => {
       expect(plan.filesToModify?.length).toBeGreaterThan(0);
 
       // Files should be realistic paths (not hallucinated)
-      expect(plan.filesToModify?.some((f: string) =>
-        f.includes('.ts') || f.includes('.js')
-      )).toBe(true);
+      expect(plan.filesToModify?.some((f: string) => f.includes(".ts") || f.includes(".js"))).toBe(
+        true
+      );
     });
 
-    test('should include file references in implementation steps', async () => {
+    test("should include file references in implementation steps", async () => {
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Implement session management',
+        mode: "architect",
+        message: "Implement session management",
         context: {},
       };
 
       let plan: any;
 
       for await (const update of workflow.execute(taskInput)) {
-        if (update.type === 'progress' && update.data.plan) {
+        if (update.type === "progress" && update.data.plan) {
           plan = update.data.plan;
         }
 
-        if (update.type === 'state_change' && update.data.state === 'awaiting_approval') {
+        if (update.type === "state_change" && update.data.state === "awaiting_approval") {
           break;
         }
       }
@@ -314,12 +304,12 @@ describe('ArchitectWorkflow KB Integration', () => {
     });
   });
 
-  describe('Context Assembly', () => {
-    test('should respect token limits when building context', async () => {
+  describe("Context Assembly", () => {
+    test("should respect token limits when building context", async () => {
       // This tests that ContextBuilder properly truncates KB results
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Large refactoring task requiring many file changes',
+        mode: "architect",
+        message: "Large refactoring task requiring many file changes",
         context: {
           files: Array.from({ length: 50 }, (_, i) => `src/file${i}.ts`),
         },
@@ -328,13 +318,13 @@ describe('ArchitectWorkflow KB Integration', () => {
       let hasError = false;
 
       for await (const update of workflow.execute(taskInput)) {
-        if (update.type === 'error') {
+        if (update.type === "error") {
           hasError = true;
           break;
         }
 
         // Should complete without token limit errors
-        if (update.type === 'state_change' && update.data.state === 'awaiting_approval') {
+        if (update.type === "state_change" && update.data.state === "awaiting_approval") {
           break;
         }
       }
@@ -342,23 +332,21 @@ describe('ArchitectWorkflow KB Integration', () => {
       expect(hasError).toBe(false);
     });
 
-    test('should prioritize most relevant KB results', async () => {
+    test("should prioritize most relevant KB results", async () => {
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Fix critical authentication vulnerability',
+        mode: "architect",
+        message: "Fix critical authentication vulnerability",
         context: {},
       };
 
       let researchResult: ResearchResult | undefined;
 
       for await (const update of workflow.execute(taskInput)) {
-        if (update.type === 'progress' &&
-            update.data.phase === 'research' &&
-            update.data.result) {
+        if (update.type === "progress" && update.data.phase === "research" && update.data.result) {
           researchResult = update.data.result;
         }
 
-        if (update.type === 'state_change' && update.data.state === 'clarifying') {
+        if (update.type === "state_change" && update.data.state === "clarifying") {
           break;
         }
       }
@@ -370,12 +358,12 @@ describe('ArchitectWorkflow KB Integration', () => {
     });
   });
 
-  describe('Error Scenarios', () => {
-    test('should handle KB unavailability gracefully', async () => {
+  describe("Error Scenarios", () => {
+    test("should handle KB unavailability gracefully", async () => {
       // Create workflow with unreachable KB
       const offlineContextBuilder = new ContextBuilder({
-        workspaceRoot: '/test/workspace',
-        kbUrl: 'http://localhost:9999', // Non-existent
+        workspaceRoot: "/test/workspace",
+        kbUrl: "http://localhost:9999", // Non-existent
       });
 
       const offlineWorkflow = new ArchitectWorkflow({
@@ -385,8 +373,8 @@ describe('ArchitectWorkflow KB Integration', () => {
       });
 
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Test task',
+        mode: "architect",
+        message: "Test task",
         context: {},
       };
 
@@ -395,7 +383,7 @@ describe('ArchitectWorkflow KB Integration', () => {
 
       try {
         for await (const update of offlineWorkflow.execute(taskInput)) {
-          if (update.type === 'progress') {
+          if (update.type === "progress") {
             completedSomePhase = true;
           }
 
@@ -412,23 +400,21 @@ describe('ArchitectWorkflow KB Integration', () => {
       expect(completedSomePhase).toBe(true);
     });
 
-    test('should handle empty KB search results', async () => {
+    test("should handle empty KB search results", async () => {
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Implement blockchain integration', // Likely to return no results
+        mode: "architect",
+        message: "Implement blockchain integration", // Likely to return no results
         context: {},
       };
 
       let researchCompleted = false;
 
       for await (const update of workflow.execute(taskInput)) {
-        if (update.type === 'progress' &&
-            update.data.phase === 'research' &&
-            update.data.result) {
+        if (update.type === "progress" && update.data.phase === "research" && update.data.result) {
           researchCompleted = true;
         }
 
-        if (update.type === 'state_change' && update.data.state === 'clarifying') {
+        if (update.type === "state_change" && update.data.state === "clarifying") {
           break;
         }
       }

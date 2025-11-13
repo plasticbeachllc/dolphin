@@ -13,35 +13,35 @@ All colors are defined using OKLCH color space for better perceptual uniformity 
 ```css
 :root {
   /* Core colors */
-  --background: oklch(1 0 0);                    /* Pure white */
-  --foreground: oklch(0.129 0.042 264.695);      /* Deep slate */
-  --card: oklch(1 0 0);                          /* Pure white */
+  --background: oklch(1 0 0); /* Pure white */
+  --foreground: oklch(0.129 0.042 264.695); /* Deep slate */
+  --card: oklch(1 0 0); /* Pure white */
   --card-foreground: oklch(0.129 0.042 264.695); /* Deep slate */
-  
+
   /* Interactive elements */
-  --primary: oklch(0.208 0.042 265.755);         /* Deep blue */
+  --primary: oklch(0.208 0.042 265.755); /* Deep blue */
   --primary-foreground: oklch(0.984 0.003 247.858); /* Off-white */
-  --secondary: oklch(0.968 0.007 247.896);       /* Light gray */
+  --secondary: oklch(0.968 0.007 247.896); /* Light gray */
   --secondary-foreground: oklch(0.208 0.042 265.755); /* Deep blue */
-  
+
   /* States */
-  --muted: oklch(0.968 0.007 247.896);           /* Light gray */
+  --muted: oklch(0.968 0.007 247.896); /* Light gray */
   --muted-foreground: oklch(0.554 0.046 257.417); /* Medium gray */
-  --accent: oklch(0.968 0.007 247.896);          /* Light gray */
+  --accent: oklch(0.968 0.007 247.896); /* Light gray */
   --accent-foreground: oklch(0.208 0.042 265.755); /* Deep blue */
-  --destructive: oklch(0.577 0.245 27.325);      /* Red */
-  
+  --destructive: oklch(0.577 0.245 27.325); /* Red */
+
   /* Borders and inputs */
-  --border: oklch(0.929 0.013 255.508);          /* Light border */
-  --input: oklch(0.929 0.013 255.508);           /* Light input border */
-  --ring: oklch(0.704 0.04 256.788);             /* Focus ring */
-  
+  --border: oklch(0.929 0.013 255.508); /* Light border */
+  --input: oklch(0.929 0.013 255.508); /* Light input border */
+  --ring: oklch(0.704 0.04 256.788); /* Focus ring */
+
   /* Data visualization (charts) */
-  --chart-1: oklch(0.646 0.222 41.116);          /* Orange */
-  --chart-2: oklch(0.6 0.118 184.704);           /* Cyan */
-  --chart-3: oklch(0.398 0.07 227.392);          /* Blue */
-  --chart-4: oklch(0.828 0.189 84.429);          /* Yellow-green */
-  --chart-5: oklch(0.769 0.188 70.08);           /* Yellow */
+  --chart-1: oklch(0.646 0.222 41.116); /* Orange */
+  --chart-2: oklch(0.6 0.118 184.704); /* Cyan */
+  --chart-3: oklch(0.398 0.07 227.392); /* Blue */
+  --chart-4: oklch(0.828 0.189 84.429); /* Yellow-green */
+  --chart-5: oklch(0.769 0.188 70.08); /* Yellow */
 }
 ```
 
@@ -50,35 +50,35 @@ All colors are defined using OKLCH color space for better perceptual uniformity 
 ```css
 .dark {
   /* Core colors */
-  --background: oklch(0.2 0.015 265);            /* Dark slate */
-  --foreground: oklch(0.95 0.003 247.858);       /* Off-white */
-  --card: oklch(0.25 0.015 265);                 /* Slightly lighter slate */
-  --card-foreground: oklch(0.95 0.003 247.858);  /* Off-white */
-  
+  --background: oklch(0.2 0.015 265); /* Dark slate */
+  --foreground: oklch(0.95 0.003 247.858); /* Off-white */
+  --card: oklch(0.25 0.015 265); /* Slightly lighter slate */
+  --card-foreground: oklch(0.95 0.003 247.858); /* Off-white */
+
   /* Interactive elements */
-  --primary: oklch(0.929 0.013 255.508);         /* Light gray */
+  --primary: oklch(0.929 0.013 255.508); /* Light gray */
   --primary-foreground: oklch(0.208 0.042 265.755); /* Deep blue */
-  --secondary: oklch(0.279 0.041 260.031);       /* Medium slate */
+  --secondary: oklch(0.279 0.041 260.031); /* Medium slate */
   --secondary-foreground: oklch(0.984 0.003 247.858); /* Off-white */
-  
+
   /* States */
-  --muted: oklch(0.279 0.041 260.031);           /* Medium slate */
+  --muted: oklch(0.279 0.041 260.031); /* Medium slate */
   --muted-foreground: oklch(0.704 0.04 256.788); /* Light gray */
-  --accent: oklch(0.279 0.041 260.031);          /* Medium slate */
+  --accent: oklch(0.279 0.041 260.031); /* Medium slate */
   --accent-foreground: oklch(0.984 0.003 247.858); /* Off-white */
-  --destructive: oklch(0.704 0.191 22.216);      /* Bright red */
-  
+  --destructive: oklch(0.704 0.191 22.216); /* Bright red */
+
   /* Borders and inputs */
-  --border: oklch(1 0 0 / 10%);                  /* Transparent white */
-  --input: oklch(1 0 0 / 15%);                   /* Transparent white */
-  --ring: oklch(0.551 0.027 264.364);            /* Blue-gray */
-  
+  --border: oklch(1 0 0 / 10%); /* Transparent white */
+  --input: oklch(1 0 0 / 15%); /* Transparent white */
+  --ring: oklch(0.551 0.027 264.364); /* Blue-gray */
+
   /* Data visualization (charts) */
-  --chart-1: oklch(0.488 0.243 264.376);         /* Purple */
-  --chart-2: oklch(0.696 0.17 162.48);           /* Teal */
-  --chart-3: oklch(0.769 0.188 70.08);           /* Yellow */
-  --chart-4: oklch(0.627 0.265 303.9);           /* Magenta */
-  --chart-5: oklch(0.645 0.246 16.439);          /* Orange */
+  --chart-1: oklch(0.488 0.243 264.376); /* Purple */
+  --chart-2: oklch(0.696 0.17 162.48); /* Teal */
+  --chart-3: oklch(0.769 0.188 70.08); /* Yellow */
+  --chart-4: oklch(0.627 0.265 303.9); /* Magenta */
+  --chart-5: oklch(0.645 0.246 16.439); /* Orange */
 }
 ```
 
@@ -111,15 +111,15 @@ Using Tailwind's default spacing scale (1 unit = 0.25rem = 4px):
 
 ### Common Spacing Values
 
-| Token | Value | Pixels | Usage |
-|-------|-------|--------|-------|
-| `gap-1` | 0.25rem | 4px | Tight spacing |
-| `gap-2` | 0.5rem | 8px | Default gap |
-| `gap-3` | 0.75rem | 12px | Medium gap |
-| `gap-4` | 1rem | 16px | Standard spacing |
-| `gap-6` | 1.5rem | 24px | Large spacing |
-| `gap-8` | 2rem | 32px | XL spacing |
-| `gap-12` | 3rem | 48px | Section spacing |
+| Token    | Value   | Pixels | Usage            |
+| -------- | ------- | ------ | ---------------- |
+| `gap-1`  | 0.25rem | 4px    | Tight spacing    |
+| `gap-2`  | 0.5rem  | 8px    | Default gap      |
+| `gap-3`  | 0.75rem | 12px   | Medium gap       |
+| `gap-4`  | 1rem    | 16px   | Standard spacing |
+| `gap-6`  | 1.5rem  | 24px   | Large spacing    |
+| `gap-8`  | 2rem    | 32px   | XL spacing       |
+| `gap-12` | 3rem    | 48px   | Section spacing  |
 
 ### Component-Specific Spacing
 
@@ -146,10 +146,10 @@ Configured via `--radius` variable (default: 0.625rem = 10px):
 ```css
 :root {
   --radius: 0.625rem; /* Base radius */
-  --radius-sm: calc(var(--radius) - 4px);  /* Small: 6px */
-  --radius-md: calc(var(--radius) - 2px);  /* Medium: 8px */
-  --radius-lg: var(--radius);              /* Large: 10px */
-  --radius-xl: calc(var(--radius) + 4px);  /* XL: 14px */
+  --radius-sm: calc(var(--radius) - 4px); /* Small: 6px */
+  --radius-md: calc(var(--radius) - 2px); /* Medium: 8px */
+  --radius-lg: var(--radius); /* Large: 10px */
+  --radius-xl: calc(var(--radius) + 4px); /* XL: 14px */
 }
 ```
 
@@ -170,35 +170,34 @@ Configured via `--radius` variable (default: 0.625rem = 10px):
 
 ```css
 /* System font stack (default) */
-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 
-             'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 
-             'Helvetica Neue', sans-serif;
+font-family:
+  -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell",
+  "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
 
 /* Monospace (for code) */
-font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 
-             'source-code-pro', monospace;
+font-family: "Monaco", "Menlo", "Ubuntu Mono", "Consolas", "source-code-pro", monospace;
 ```
 
 ### Font Sizes
 
-| Class | Size | Line Height | Usage |
-|-------|------|-------------|-------|
-| `text-xs` | 0.75rem (12px) | 1rem | Captions, labels |
-| `text-sm` | 0.875rem (14px) | 1.25rem | Body text (small) |
-| `text-base` | 1rem (16px) | 1.5rem | Body text |
-| `text-lg` | 1.125rem (18px) | 1.75rem | Large body |
-| `text-xl` | 1.25rem (20px) | 1.75rem | Headings (small) |
-| `text-2xl` | 1.5rem (24px) | 2rem | Headings |
-| `text-3xl` | 1.875rem (30px) | 2.25rem | Large headings |
+| Class       | Size            | Line Height | Usage             |
+| ----------- | --------------- | ----------- | ----------------- |
+| `text-xs`   | 0.75rem (12px)  | 1rem        | Captions, labels  |
+| `text-sm`   | 0.875rem (14px) | 1.25rem     | Body text (small) |
+| `text-base` | 1rem (16px)     | 1.5rem      | Body text         |
+| `text-lg`   | 1.125rem (18px) | 1.75rem     | Large body        |
+| `text-xl`   | 1.25rem (20px)  | 1.75rem     | Headings (small)  |
+| `text-2xl`  | 1.5rem (24px)   | 2rem        | Headings          |
+| `text-3xl`  | 1.875rem (30px) | 2.25rem     | Large headings    |
 
 ### Font Weights
 
-| Class | Weight | Usage |
-|-------|--------|-------|
-| `font-normal` | 400 | Body text |
-| `font-medium` | 500 | Emphasized text |
-| `font-semibold` | 600 | Subheadings |
-| `font-bold` | 700 | Headings |
+| Class           | Weight | Usage           |
+| --------------- | ------ | --------------- |
+| `font-normal`   | 400    | Body text       |
+| `font-medium`   | 500    | Emphasized text |
+| `font-semibold` | 600    | Subheadings     |
+| `font-bold`     | 700    | Headings        |
 
 ## Animation Timing
 
@@ -345,6 +344,7 @@ z-50   /* Tooltips, popovers */
 ### Contrast Ratios
 
 All color combinations meet WCAG 2.1 AA standards:
+
 - Normal text: 4.5:1 minimum
 - Large text (18pt+): 3:1 minimum
 - UI components: 3:1 minimum

@@ -15,13 +15,13 @@ This document outlines a strategic plan to enhance test coverage across the Dolp
 
 ### Current Coverage Overview
 
-| Component | Current Est. | Target | Priority |
-|-----------|-------------|--------|----------|
-| KB (Python) | ~75% | 85% | Medium |
-| Agent Core (TS) | ~60% | 80% | High |
-| VSCode Extension (TS) | ~70% | 80% | High |
-| MCP Bridge (TS) | ~80% | 85% | Low |
-| **E2E Tests** | **0%** | **60%** | **CRITICAL** |
+| Component             | Current Est. | Target  | Priority     |
+| --------------------- | ------------ | ------- | ------------ |
+| KB (Python)           | ~75%         | 85%     | Medium       |
+| Agent Core (TS)       | ~60%         | 80%     | High         |
+| VSCode Extension (TS) | ~70%         | 80%     | High         |
+| MCP Bridge (TS)       | ~80%         | 85%     | Low          |
+| **E2E Tests**         | **0%**       | **60%** | **CRITICAL** |
 
 ### Key Findings
 
@@ -47,12 +47,14 @@ This document outlines a strategic plan to enhance test coverage across the Dolp
 **Step 1: Define critical user journeys** (Day 1)
 
 Key workflows to test:
+
 1. **Full indexing workflow**: Add repo → Index → Search → Verify results
 2. **Search end-to-end**: Query → Retrieval → Ranking → Result validation
 3. **VSCode extension workflow**: Start extension → Send message → Get response
 4. **MCP integration**: Start MCP server → Execute tools → Verify results
 
 **Step 2: Set up E2E test infrastructure** (Day 1-2)
+
 ```bash
 # Create E2E directory structure
 mkdir -p tests/e2e
@@ -70,6 +72,7 @@ mkdir -p tests/fixtures/e2e
 ```
 
 **Step 3: Implement indexing E2E test** (Day 2)
+
 ```python
 # tests/e2e/test_indexing_workflow.py
 """End-to-end tests for complete indexing workflow."""
@@ -157,6 +160,7 @@ def authenticate_with_token(token):
 ```
 
 **Step 4: Implement search E2E test** (Day 3)
+
 ```python
 # tests/e2e/test_search_workflow.py
 """End-to-end tests for search workflow."""
@@ -229,80 +233,79 @@ async def test_hybrid_search_workflow(api_server):
 ```
 
 **Step 5: VSCode extension E2E test** (Day 4)
+
 ```typescript
 // vscode-extension/src/test/suite/e2e.test.ts
 /**
  * End-to-end tests for VSCode extension workflows.
  */
 
-import * as assert from 'assert';
-import * as vscode from 'vscode';
-import { AgentBridge } from '../../agent/bridge';
+import * as assert from "assert";
+import * as vscode from "vscode";
+import { AgentBridge } from "../../agent/bridge";
 
-suite('VSCode Extension E2E Tests', () => {
-    let bridge: AgentBridge;
+suite("VSCode Extension E2E Tests", () => {
+  let bridge: AgentBridge;
 
-    setup(async () => {
-        // Activate extension
-        const ext = vscode.extensions.getExtension('pb.dolphin');
-        await ext?.activate();
+  setup(async () => {
+    // Activate extension
+    const ext = vscode.extensions.getExtension("pb.dolphin");
+    await ext?.activate();
 
-        // Get agent bridge
-        bridge = ext?.exports.agentBridge;
-        assert.ok(bridge, 'Agent bridge should be available');
+    // Get agent bridge
+    bridge = ext?.exports.agentBridge;
+    assert.ok(bridge, "Agent bridge should be available");
 
-        // Wait for agent ready
-        await waitForAgentReady(bridge);
+    // Wait for agent ready
+    await waitForAgentReady(bridge);
+  });
+
+  test("Complete user message workflow", async () => {
+    // Step 1: Send user message
+    const messagePromise = new Promise((resolve) => {
+      bridge.on("task_completed", resolve);
     });
 
-    test('Complete user message workflow', async () => {
-        // Step 1: Send user message
-        const messagePromise = new Promise((resolve) => {
-            bridge.on('task_completed', resolve);
-        });
+    await bridge.sendMessage("Hello! What is this project about?");
 
-        await bridge.sendMessage('Hello! What is this project about?');
+    // Step 2: Wait for completion
+    const result = await messagePromise;
+    assert.ok(result, "Should receive task completion event");
 
-        // Step 2: Wait for completion
-        const result = await messagePromise;
-        assert.ok(result, 'Should receive task completion event');
+    // Step 3: Verify KB was searched
+    const events = bridge.getEventHistory();
+    const toolCalls = events.filter((e) => e.type === "tool_call_started");
+    assert.ok(toolCalls.length > 0, "Should have executed KB search");
 
-        // Step 3: Verify KB was searched
-        const events = bridge.getEventHistory();
-        const toolCalls = events.filter(e => e.type === 'tool_call_started');
-        assert.ok(toolCalls.length > 0, 'Should have executed KB search');
+    // Step 4: Verify response received
+    const response = events.find((e) => e.type === "message_chunk");
+    assert.ok(response, "Should have received response");
+  });
 
-        // Step 4: Verify response received
-        const response = events.find(e => e.type === 'message_chunk');
-        assert.ok(response, 'Should have received response');
+  test("File watcher triggers auto-sync", async () => {
+    // Step 1: Get KB status before change
+    const initialStatus = await bridge.getKBStatus();
+    const initialChunks = initialStatus.totalChunks;
+
+    // Step 2: Create new file in workspace
+    const doc = await vscode.workspace.openTextDocument({
+      content: "function testFunction() { return true; }",
+      language: "typescript",
     });
+    await doc.save();
 
-    test('File watcher triggers auto-sync', async () => {
-        // Step 1: Get KB status before change
-        const initialStatus = await bridge.getKBStatus();
-        const initialChunks = initialStatus.totalChunks;
+    // Step 3: Wait for auto-sync
+    await sleep(3000); // Wait for debounce + indexing
 
-        // Step 2: Create new file in workspace
-        const doc = await vscode.workspace.openTextDocument({
-            content: 'function testFunction() { return true; }',
-            language: 'typescript'
-        });
-        await doc.save();
-
-        // Step 3: Wait for auto-sync
-        await sleep(3000); // Wait for debounce + indexing
-
-        // Step 4: Verify KB was updated
-        const updatedStatus = await bridge.getKBStatus();
-        assert.ok(
-            updatedStatus.totalChunks > initialChunks,
-            'KB should have indexed new file'
-        );
-    });
+    // Step 4: Verify KB was updated
+    const updatedStatus = await bridge.getKBStatus();
+    assert.ok(updatedStatus.totalChunks > initialChunks, "KB should have indexed new file");
+  });
 });
 ```
 
 **Step 6: Run E2E tests** (Day 5)
+
 ```bash
 # Python E2E tests
 uv run pytest tests/e2e/ -v --tb=short
@@ -317,6 +320,7 @@ bun test src/tests/ --serial
 ```
 
 **Success Metrics:**
+
 - ✅ 4+ critical workflows covered
 - ✅ All E2E tests pass consistently
 - ✅ Tests catch integration issues
@@ -333,11 +337,13 @@ bun test src/tests/ --serial
 #### Implementation Steps
 
 **Step 1: Create test file** (Day 1)
+
 ```bash
 touch agent-core/tests/llm/claude-tool-executor.test.ts
 ```
 
 **Step 2: Write comprehensive tests** (Days 1-3)
+
 ```typescript
 // agent-core/tests/llm/claude-tool-executor.test.ts
 import { describe, test, expect, mock } from "bun:test";
@@ -345,108 +351,109 @@ import { ClaudeToolExecutor } from "../../src/llm/claude-tool-executor";
 import type { KBManager } from "../../src/kb/manager";
 
 describe("ClaudeToolExecutor", () => {
-    describe("KB Tool Execution", () => {
-        test("should execute search_knowledge tool", async () => {
-            const mockKB = {
-                search: mock(async (query: string) => ({
-                    results: [
-                        {
-                            content: "Test result",
-                            file_path: "test.ts",
-                            score: 0.9
-                        }
-                    ]
-                }))
-            } as unknown as KBManager;
+  describe("KB Tool Execution", () => {
+    test("should execute search_knowledge tool", async () => {
+      const mockKB = {
+        search: mock(async (query: string) => ({
+          results: [
+            {
+              content: "Test result",
+              file_path: "test.ts",
+              score: 0.9,
+            },
+          ],
+        })),
+      } as unknown as KBManager;
 
-            const executor = new ClaudeToolExecutor(mockKB);
+      const executor = new ClaudeToolExecutor(mockKB);
 
-            const result = await executor.executeTool({
-                name: "search_knowledge",
-                input: { query: "test query" }
-            });
+      const result = await executor.executeTool({
+        name: "search_knowledge",
+        input: { query: "test query" },
+      });
 
-            expect(mockKB.search).toHaveBeenCalledWith("test query");
-            expect(result.results).toHaveLength(1);
-            expect(result.results[0].content).toBe("Test result");
-        });
-
-        test("should handle search_knowledge errors gracefully", async () => {
-            const mockKB = {
-                search: mock(async () => {
-                    throw new Error("KB unavailable");
-                })
-            } as unknown as KBManager;
-
-            const executor = new ClaudeToolExecutor(mockKB);
-
-            const result = await executor.executeTool({
-                name: "search_knowledge",
-                input: { query: "test" }
-            });
-
-            expect(result.error).toBeDefined();
-            expect(result.error).toContain("KB unavailable");
-        });
+      expect(mockKB.search).toHaveBeenCalledWith("test query");
+      expect(result.results).toHaveLength(1);
+      expect(result.results[0].content).toBe("Test result");
     });
 
-    describe("File Operation Tools", () => {
-        test("should execute read_file tool", async () => {
-            const executor = new ClaudeToolExecutor(null);
+    test("should handle search_knowledge errors gracefully", async () => {
+      const mockKB = {
+        search: mock(async () => {
+          throw new Error("KB unavailable");
+        }),
+      } as unknown as KBManager;
 
-            const result = await executor.executeTool({
-                name: "read_file",
-                input: { path: "package.json" }
-            });
+      const executor = new ClaudeToolExecutor(mockKB);
 
-            expect(result.content).toBeDefined();
-            expect(result.content).toContain("name");
-        });
+      const result = await executor.executeTool({
+        name: "search_knowledge",
+        input: { query: "test" },
+      });
 
-        test("should handle read_file for non-existent files", async () => {
-            const executor = new ClaudeToolExecutor(null);
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain("KB unavailable");
+    });
+  });
 
-            const result = await executor.executeTool({
-                name: "read_file",
-                input: { path: "non-existent.txt" }
-            });
+  describe("File Operation Tools", () => {
+    test("should execute read_file tool", async () => {
+      const executor = new ClaudeToolExecutor(null);
 
-            expect(result.error).toBeDefined();
-        });
+      const result = await executor.executeTool({
+        name: "read_file",
+        input: { path: "package.json" },
+      });
+
+      expect(result.content).toBeDefined();
+      expect(result.content).toContain("name");
     });
 
-    describe("Diff Application", () => {
-        test("should apply diff correctly", async () => {
-            const executor = new ClaudeToolExecutor(null);
+    test("should handle read_file for non-existent files", async () => {
+      const executor = new ClaudeToolExecutor(null);
 
-            // Create temp file
-            const tempFile = "/tmp/test-diff.txt";
-            await Bun.write(tempFile, "line 1\nline 2\nline 3");
+      const result = await executor.executeTool({
+        name: "read_file",
+        input: { path: "non-existent.txt" },
+      });
 
-            const result = await executor.executeTool({
-                name: "apply_diff",
-                input: {
-                    file_path: tempFile,
-                    diff: `--- a/test.txt
+      expect(result.error).toBeDefined();
+    });
+  });
+
+  describe("Diff Application", () => {
+    test("should apply diff correctly", async () => {
+      const executor = new ClaudeToolExecutor(null);
+
+      // Create temp file
+      const tempFile = "/tmp/test-diff.txt";
+      await Bun.write(tempFile, "line 1\nline 2\nline 3");
+
+      const result = await executor.executeTool({
+        name: "apply_diff",
+        input: {
+          file_path: tempFile,
+          diff: `--- a/test.txt
 +++ b/test.txt
 @@ -1,3 +1,3 @@
  line 1
 -line 2
 +line 2 modified
- line 3`
-                }
-            });
+ line 3`,
+        },
+      });
 
-            expect(result.success).toBe(true);
+      expect(result.success).toBe(true);
 
-            const content = await Bun.file(tempFile).text();
-            expect(content).toContain("line 2 modified");
-        });
+      const content = await Bun.file(tempFile).text();
+      expect(content).toContain("line 2 modified");
     });
+  });
 });
 ```
 
 **Success Metrics:**
+
 - ✅ 90%+ coverage for tool executor
 - ✅ All tool types tested
 - ✅ Error handling validated
@@ -465,6 +472,7 @@ describe("ClaudeToolExecutor", () => {
 #### Implementation Steps
 
 **Step 1: Pipeline orchestration tests**
+
 ```python
 # tests/integration/test_pipeline_complete.py
 """Integration tests for complete pipeline orchestration."""
@@ -487,6 +495,7 @@ def test_pipeline_with_all_chunkers(tmp_repo):
 ```
 
 **Step 2: Cache integration tests**
+
 ```python
 # tests/integration/test_cache_complete.py
 """Integration tests for cache layer."""
@@ -517,6 +526,7 @@ def test_cache_speeds_up_repeated_queries():
 #### Implementation Steps
 
 **Step 1: Add coverage configuration**
+
 ```toml
 # pyproject.toml
 [tool.coverage.run]
@@ -540,6 +550,7 @@ directory = "tests/reports/htmlcov"
 ```
 
 **Step 2: Update TypeScript test configs**
+
 ```json
 // agent-core/package.json
 {
@@ -552,6 +563,7 @@ directory = "tests/reports/htmlcov"
 ```
 
 **Step 3: Add coverage badges to README**
+
 ```bash
 # Generate coverage badge
 uv run pytest --cov=kb --cov-report=json
@@ -568,28 +580,28 @@ coverage-badge -o coverage.svg -f
 
 ```typescript
 // vscode-extension/src/test/suite/kb-lifecycle.test.ts
-suite('KB Lifecycle Management', () => {
-    test('KB auto-starts on extension activation', async () => {
-        // Extension should start KB server automatically
-        const kbManager = getKBManager();
+suite("KB Lifecycle Management", () => {
+  test("KB auto-starts on extension activation", async () => {
+    // Extension should start KB server automatically
+    const kbManager = getKBManager();
 
-        const status = await kbManager.getStatus();
-        expect(status.running).toBe(true);
-        expect(status.port).toBe(8000);
-    });
+    const status = await kbManager.getStatus();
+    expect(status.running).toBe(true);
+    expect(status.port).toBe(8000);
+  });
 
-    test('KB restarts after crash', async () => {
-        const kbManager = getKBManager();
+  test("KB restarts after crash", async () => {
+    const kbManager = getKBManager();
 
-        // Kill KB process
-        await kbManager.stop();
+    // Kill KB process
+    await kbManager.stop();
 
-        // Wait for auto-restart
-        await sleep(2000);
+    // Wait for auto-restart
+    await sleep(2000);
 
-        const status = await kbManager.getStatus();
-        expect(status.running).toBe(true);
-    });
+    const status = await kbManager.getStatus();
+    expect(status.running).toBe(true);
+  });
 });
 ```
 
@@ -682,31 +694,37 @@ def test_chunk_size_bounds(text, max_size):
 ## Implementation Timeline
 
 ### Week 1: Critical Gaps - Part 1
+
 - **Mon-Tue:** E2E test infrastructure setup
 - **Wed-Thu:** E2E tests (indexing + search workflows)
 - **Fri:** E2E tests (VSCode + MCP workflows)
 
 ### Week 2: Critical Gaps - Part 2
+
 - **Mon-Wed:** Agent Core tool executor tests
 - **Thu-Fri:** KB component integration tests
 
 ### Week 3: Integration Testing
+
 - **Mon-Tue:** KB component integration tests
 - **Wed:** Cache integration tests
 - **Thu-Fri:** VSCode KB lifecycle tests
 
 ### Week 4: Quality Gates
+
 - **Mon:** Coverage reporting setup
 - **Tue:** Coverage thresholds configuration
 - **Wed-Thu:** Test documentation updates
 - **Fri:** Team training + review
 
 ### Week 5: Performance Testing
+
 - **Mon-Tue:** Performance test infrastructure
 - **Wed-Thu:** Benchmark suite implementation
 - **Fri:** Performance baseline establishment
 
 ### Week 6: Advanced Testing
+
 - **Mon-Tue:** Property-based testing setup
 - **Wed-Thu:** Additional property tests
 - **Fri:** Final review + documentation
@@ -717,12 +735,12 @@ def test_chunk_size_bounds(text, max_size):
 
 ### Quantitative Goals
 
-| Metric | Current | Target | Timeline |
-|--------|---------|--------|----------|
-| Overall Coverage | ~65% | 80% | 6 weeks |
-| E2E Test Count | 0 | 10+ | 2 weeks |
-| Test Execution Time | N/A | <10 min | 4 weeks |
-| CI/CD Test Pass Rate | N/A | >95% | 6 weeks |
+| Metric               | Current | Target  | Timeline |
+| -------------------- | ------- | ------- | -------- |
+| Overall Coverage     | ~65%    | 80%     | 6 weeks  |
+| E2E Test Count       | 0       | 10+     | 2 weeks  |
+| Test Execution Time  | N/A     | <10 min | 4 weeks  |
+| CI/CD Test Pass Rate | N/A     | >95%    | 6 weeks  |
 
 ### Qualitative Goals
 
@@ -737,27 +755,35 @@ def test_chunk_size_bounds(text, max_size):
 ## Risk Mitigation
 
 ### Risk 1: Timeline Slippage
+
 **Mitigation:**
+
 - Start with highest-impact items (Phases 1-2)
 - Phase 3 is optional/can be deferred
 - Allocate buffer time for unforeseen issues
 
 ### Risk 2: Test Maintenance Burden
+
 **Mitigation:**
+
 - Focus on stable APIs, not implementation details
 - Use fixtures and helpers to reduce duplication
 - Regular test cleanup sessions
 - Document test patterns
 
 ### Risk 3: False Positives/Flaky Tests
+
 **Mitigation:**
+
 - Avoid timing-dependent assertions
 - Use proper async handling
 - Isolate tests with fixtures
 - Retry logic for network-dependent tests
 
 ### Risk 4: Coverage Metric Gaming
+
 **Mitigation:**
+
 - Focus on meaningful tests, not just coverage numbers
 - Code review emphasizes test quality
 - Measure defect escape rate alongside coverage
@@ -767,12 +793,14 @@ def test_chunk_size_bounds(text, max_size):
 ## Team Requirements
 
 ### Skills Needed
+
 - **Python testing:** pytest, fixtures, mocking
 - **TypeScript testing:** Bun test, VSCode test harness
 - **E2E testing:** Integration patterns, test data management
 - **Performance testing:** Benchmarking, profiling
 
 ### Time Allocation
+
 - **Lead Developer:** 50% time for 6 weeks
 - **2x Engineers:** 25% time for 6 weeks
 - **Code Reviews:** All team members
@@ -784,16 +812,19 @@ def test_chunk_size_bounds(text, max_size):
 ### Ongoing Activities
 
 **Weekly:**
+
 - Monitor coverage trends
 - Review failed tests
 - Update flaky test list
 
 **Monthly:**
+
 - Review and refactor slow tests
 - Update test documentation
 - Clean up unused fixtures
 
 **Quarterly:**
+
 - Performance benchmark review
 - Test strategy retrospective
 - Tool/framework updates
@@ -803,6 +834,7 @@ def test_chunk_size_bounds(text, max_size):
 ## Appendix A: Test Commands Reference
 
 ### Python Tests
+
 ```bash
 # Run all tests
 uv run pytest
@@ -827,6 +859,7 @@ uv run pytest -n auto
 ```
 
 ### TypeScript Tests (Agent Core)
+
 ```bash
 cd agent-core
 
@@ -844,6 +877,7 @@ bun test tests/llm/claude-client.test.ts
 ```
 
 ### TypeScript Tests (VSCode Extension)
+
 ```bash
 cd vscode-extension
 
@@ -858,6 +892,7 @@ npm run test:e2e
 ```
 
 ### TypeScript Tests (MCP Bridge)
+
 ```bash
 cd mcp-bridge
 
@@ -873,6 +908,7 @@ bun test src/tests/search_knowledge.test.ts
 ## Appendix B: CI/CD Integration
 
 ### GitHub Actions Workflow
+
 ```yaml
 name: Test Suite
 
@@ -952,6 +988,7 @@ jobs:
 ### Good Test Characteristics
 
 **FIRST Principles:**
+
 - **Fast:** Tests run quickly (<1s each for unit tests)
 - **Independent:** No test depends on another
 - **Repeatable:** Same result every time
@@ -959,6 +996,7 @@ jobs:
 - **Timely:** Written with code, not after
 
 ### Test Structure (AAA Pattern)
+
 ```python
 def test_example():
     # Arrange: Set up test conditions
@@ -972,6 +1010,7 @@ def test_example():
 ```
 
 ### Test Naming
+
 ```python
 # Good: Describes what is tested and expected outcome
 def test_search_returns_ranked_results_when_query_matches():
@@ -983,13 +1022,16 @@ def test_search():
 ```
 
 ### What to Test
+
 ✅ **Do test:**
+
 - Public APIs and interfaces
 - Edge cases and error conditions
 - Complex business logic
 - Integration points
 
 ❌ **Don't test:**
+
 - Private implementation details
 - Third-party library internals
 - Trivial getters/setters
@@ -999,13 +1041,14 @@ def test_search():
 
 ## Document History
 
-| Version | Date | Author | Changes |
-|---------|------|--------|---------|
-| 1.0 | 2025-11-11 | Claude | Initial draft |
+| Version | Date       | Author | Changes       |
+| ------- | ---------- | ------ | ------------- |
+| 1.0     | 2025-11-11 | Claude | Initial draft |
 
 ---
 
 **Next Steps:**
+
 1. Review this plan with the team
 2. Prioritize based on current sprint commitments
 3. Assign ownership for Phase 1 tasks

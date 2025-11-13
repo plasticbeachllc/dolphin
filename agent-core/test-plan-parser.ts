@@ -3,7 +3,7 @@
  * Run with: npx tsx test-plan-parser.ts
  */
 
-import { parsePlanFromMarkdown, parseLegacyMarkdownPlan } from './src/workflows/plan-parser.js';
+import { parsePlanFromMarkdown, parseLegacyMarkdownPlan } from "./src/workflows/plan-parser.js";
 
 // Test 1: TOML in fenced block
 const test1 = `
@@ -108,15 +108,15 @@ files_to_modify = [
 \`\`\`
 `;
 
-console.log('Testing Plan Parser\n');
-console.log('='.repeat(60));
+console.log("Testing Plan Parser\n");
+console.log("=".repeat(60));
 
 // Run tests
 const tests = [
-  { name: 'Fenced TOML', content: test1 },
-  { name: 'Unlabeled TOML', content: test2 },
-  { name: 'Legacy Markdown', content: test3 },
-  { name: 'TOML with mistakes', content: test4 },
+  { name: "Fenced TOML", content: test1 },
+  { name: "Unlabeled TOML", content: test2 },
+  { name: "Legacy Markdown", content: test3 },
+  { name: "TOML with mistakes", content: test4 },
 ];
 
 for (const test of tests) {
@@ -132,7 +132,7 @@ for (const test of tests) {
     // Try legacy parser
     try {
       const result = parseLegacyMarkdownPlan(test.content);
-      console.log('✓ Parsed with legacy parser (fallback)');
+      console.log("✓ Parsed with legacy parser (fallback)");
       console.log(`  Overview: ${result.overview?.substring(0, 50)}...`);
       console.log(`  Complexity: ${result.complexity}`);
       console.log(`  Files to modify: ${result.files_to_modify?.length || 0}`);
@@ -143,5 +143,5 @@ for (const test of tests) {
   }
 }
 
-console.log('\n' + '='.repeat(60));
-console.log('Tests complete!\n');
+console.log("\n" + "=".repeat(60));
+console.log("Tests complete!\n");

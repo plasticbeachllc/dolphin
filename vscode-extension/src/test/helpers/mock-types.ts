@@ -76,7 +76,7 @@ export interface MockChunkResponse {
  * Mock health check response
  */
 export interface MockHealthResponse {
-  status: 'ok' | 'error';
+  status: "ok" | "error";
   mock: boolean;
   error?: string;
 }
@@ -103,11 +103,7 @@ export interface MockKBConfig {
 /**
  * Agent bridge event types
  */
-export type AgentEventType =
-  | 'content_delta'
-  | 'task_completed'
-  | 'tool_call'
-  | 'error';
+export type AgentEventType = "content_delta" | "task_completed" | "tool_call" | "error";
 
 /**
  * Agent bridge event structure

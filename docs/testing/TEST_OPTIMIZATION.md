@@ -27,11 +27,13 @@ addopts =
 ```
 
 **Benefits**:
+
 - Utilizes multiple CPU cores for test execution
 - Reduces wall-clock time by distributing tests across workers
 - Particularly effective for I/O-bound integration tests
 
 **Trade-offs**:
+
 - Slightly higher memory usage (multiple Python processes)
 - Test output may be less readable during parallel execution
 - Use `just test-sequential` for debugging
@@ -51,22 +53,26 @@ def fast_backend_config(...):
 ```
 
 **Benefits**:
+
 - Eliminates file I/O overhead for database operations
 - Faster test setup and teardown
 - Maintains test isolation through unique in-memory instances
 
 **Usage**:
+
 - Use `fast_backend_config` for tests that don't require persistence
 - Use `integration_backend_config` for tests that need file-based storage
 
 ### 3. Coverage Separation
 
 **Changes**:
+
 - Removed `--cov` flags from default test runs in `pytest.ini`
 - Coverage now only runs with explicit `just test-coverage` command
 - Coverage tests run sequentially (`-n0`) for accuracy
 
 **Benefits**:
+
 - Removes 15-20% overhead from regular test runs
 - Faster feedback during development
 - Coverage still available when explicitly requested
@@ -93,21 +99,21 @@ just test-verbose           # Detailed output
 
 ### Before Optimization
 
-| Test Suite | Time | Execution |
-|-----------|------|-----------|
-| Unit Tests (575 tests) | ~78s | Sequential with coverage |
-| Integration Tests (107 tests) | ~390s (6.5min) | Sequential with coverage |
-| **Total** | **~468s (7.8min)** | **Sequential** |
+| Test Suite                    | Time               | Execution                |
+| ----------------------------- | ------------------ | ------------------------ |
+| Unit Tests (575 tests)        | ~78s               | Sequential with coverage |
+| Integration Tests (107 tests) | ~390s (6.5min)     | Sequential with coverage |
+| **Total**                     | **~468s (7.8min)** | **Sequential**           |
 
 ### After Optimization
 
-| Test Suite | Time | Execution | Improvement |
-|-----------|------|-----------|-------------|
-| Unit Tests (575 tests) | ~40-45s | Parallel, no coverage | **43% faster** |
-| Integration Tests (107 tests) | ~180-200s (3-3.3min) | Parallel, no coverage | **50% faster** |
-| **Total** | **~220-245s (3.7-4min)** | **Parallel** | **~50% faster** |
+| Test Suite                    | Time                     | Execution             | Improvement     |
+| ----------------------------- | ------------------------ | --------------------- | --------------- |
+| Unit Tests (575 tests)        | ~40-45s                  | Parallel, no coverage | **43% faster**  |
+| Integration Tests (107 tests) | ~180-200s (3-3.3min)     | Parallel, no coverage | **50% faster**  |
+| **Total**                     | **~220-245s (3.7-4min)** | **Parallel**          | **~50% faster** |
 
-*Note: Integration test times are projected based on unit test improvements and typical parallelization gains. Actual results depend on CPU core count and test distribution.*
+_Note: Integration test times are projected based on unit test improvements and typical parallelization gains. Actual results depend on CPU core count and test distribution._
 
 ## Test Isolation for Parallel Execution
 
@@ -129,6 +135,7 @@ All tests have been designed with proper isolation to support parallel execution
 ### Parallel Execution Safety
 
 Tests are safe for parallel execution because:
+
 - Each test gets its own temp directory and database
 - LanceDB instances use unique in-memory URIs (e.g., `memory://integration_test_<uuid>`)
 - SQLite databases use either temp files or `:memory:`

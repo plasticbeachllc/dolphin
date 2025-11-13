@@ -3,8 +3,8 @@
  * Ensures consistent mock usage across test suite.
  */
 
-import { MockKBServer, MockAgentBridge } from './mock-services';
-import { MOCK_KB_CONFIG } from './test-constants';
+import { MockKBServer, MockAgentBridge } from "./mock-services";
+import { MOCK_KB_CONFIG } from "./test-constants";
 
 export interface MockEnvironment {
   kbServer: MockKBServer;
@@ -42,7 +42,7 @@ export async function setupMockEnvironment(): Promise<MockEnvironment> {
  */
 export function getMockEnvironment(): MockEnvironment {
   if (!mockEnvironment) {
-    throw new Error('Mock environment not initialized. Call setupMockEnvironment() first.');
+    throw new Error("Mock environment not initialized. Call setupMockEnvironment() first.");
   }
   return mockEnvironment;
 }
@@ -115,6 +115,6 @@ export function configureMockAgent(config: {
   if (config.shouldError && config.error) {
     env.agentBridge.setError(config.error);
   } else if (config.shouldError) {
-    env.agentBridge.setError(new Error('Mock agent error'));
+    env.agentBridge.setError(new Error("Mock agent error"));
   }
 }

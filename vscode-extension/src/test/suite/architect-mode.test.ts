@@ -9,14 +9,14 @@ import * as vscode from "vscode";
 import { AgentBridge } from "../../agent/bridge";
 import * as path from "path";
 
-describe("Architect Mode E2E Tests", function() {
+describe("Architect Mode E2E Tests", function () {
   this.timeout(70000); // Extended timeout for agent-core startup
 
   let agentBridge: AgentBridge;
   let outputChannel: vscode.OutputChannel;
   let receivedEvents: any[] = [];
 
-  before(async function() {
+  before(async function () {
     outputChannel = vscode.window.createOutputChannel("Dolphin Architect Tests");
     agentBridge = new AgentBridge(outputChannel);
 
@@ -25,7 +25,7 @@ describe("Architect Mode E2E Tests", function() {
     const agentCorePath = path.join(extensionPath, "agent-core/src/main.ts");
 
     outputChannel.appendLine("[Test] Starting agent bridge...");
-    
+
     await agentBridge.start(agentCorePath, extensionPath);
 
     // Wait for agent to be ready with timeout
@@ -53,7 +53,10 @@ describe("Architect Mode E2E Tests", function() {
 
   it("Should execute discovery phase in architect mode", async () => {
     // Send architect mode request
-    await agentBridge.sendMessage("How is authentication implemented in this codebase?", "architect");
+    await agentBridge.sendMessage(
+      "How is authentication implemented in this codebase?",
+      "architect"
+    );
 
     // Wait for task completion
     const completionEvent = await waitForEvent("task_completed", 30000);
@@ -63,10 +66,10 @@ describe("Architect Mode E2E Tests", function() {
     assert.strictEqual(completionEvent.result?.mode, "architect", "Should confirm architect mode");
 
     // Check for discovery results in content_delta events
-    const contentEvents = receivedEvents.filter(e => e.type === "content_delta");
+    const contentEvents = receivedEvents.filter((e) => e.type === "content_delta");
     assert.ok(contentEvents.length > 0, "Should receive content_delta events");
 
-    const discoveryContent = contentEvents.map(e => e.delta).join("");
+    const discoveryContent = contentEvents.map((e) => e.delta).join("");
     assert.ok(discoveryContent.includes("Discovery Results"), "Should contain discovery results");
     assert.ok(discoveryContent.includes("Confidence"), "Should include confidence score");
   });
@@ -77,8 +80,8 @@ describe("Architect Mode E2E Tests", function() {
     const completionEvent = await waitForEvent("task_completed", 30000);
     assert.ok(completionEvent, "Should complete");
 
-    const contentEvents = receivedEvents.filter(e => e.type === "content_delta");
-    const allContent = contentEvents.map(e => e.delta).join("");
+    const contentEvents = receivedEvents.filter((e) => e.type === "content_delta");
+    const allContent = contentEvents.map((e) => e.delta).join("");
 
     assert.ok(allContent.includes("Strategic Queries"), "Should show strategic queries section");
 
@@ -98,12 +101,13 @@ describe("Architect Mode E2E Tests", function() {
     const completionEvent = await waitForEvent("task_completed", 30000);
     assert.ok(completionEvent, "Should complete");
 
-    const contentEvents = receivedEvents.filter(e => e.type === "content_delta");
-    const allContent = contentEvents.map(e => e.delta).join("");
+    const contentEvents = receivedEvents.filter((e) => e.type === "content_delta");
+    const allContent = contentEvents.map((e) => e.delta).join("");
 
     // Graph context may or may not be available depending on codebase
     // Just check for the graph context section
-    const hasGraphSection = allContent.includes("Code Graph Context") || allContent.includes("No graph context");
+    const hasGraphSection =
+      allContent.includes("Code Graph Context") || allContent.includes("No graph context");
     assert.ok(hasGraphSection, "Should mention graph context");
   });
 
@@ -113,8 +117,8 @@ describe("Architect Mode E2E Tests", function() {
     const completionEvent = await waitForEvent("task_completed", 30000);
     assert.ok(completionEvent, "Should complete");
 
-    const contentEvents = receivedEvents.filter(e => e.type === "content_delta");
-    const allContent = contentEvents.map(e => e.delta).join("");
+    const contentEvents = receivedEvents.filter((e) => e.type === "content_delta");
+    const allContent = contentEvents.map((e) => e.delta).join("");
 
     // Should have a confidence score (0-100%)
     const confidenceMatch = allContent.match(/Confidence[:\s]*(\d+)%/);
@@ -132,8 +136,8 @@ describe("Architect Mode E2E Tests", function() {
     const completionEvent = await waitForEvent("task_completed", 30000);
     assert.ok(completionEvent, "Should complete");
 
-    const contentEvents = receivedEvents.filter(e => e.type === "content_delta");
-    const allContent = contentEvents.map(e => e.delta).join("");
+    const contentEvents = receivedEvents.filter((e) => e.type === "content_delta");
+    const allContent = contentEvents.map((e) => e.delta).join("");
 
     // For a query unlikely to find results, should show gaps
     const hasGaps = allContent.includes("Information Gaps") || allContent.includes("gaps");
@@ -146,12 +150,15 @@ describe("Architect Mode E2E Tests", function() {
     const completionEvent = await waitForEvent("task_completed", 20000);
     assert.ok(completionEvent, "Should complete");
 
-    const contentEvents = receivedEvents.filter(e => e.type === "content_delta");
-    const allContent = contentEvents.map(e => e.delta).join("");
+    const contentEvents = receivedEvents.filter((e) => e.type === "content_delta");
+    const allContent = contentEvents.map((e) => e.delta).join("");
 
     // Should NOT show discovery phase indicators
     assert.ok(!allContent.includes("Discovery Results"), "Should not show discovery in code mode");
-    assert.ok(!allContent.includes("Strategic Queries"), "Should not show strategic queries in code mode");
+    assert.ok(
+      !allContent.includes("Strategic Queries"),
+      "Should not show strategic queries in code mode"
+    );
   });
 
   it("Should show multiple query strategies", async () => {
@@ -160,14 +167,14 @@ describe("Architect Mode E2E Tests", function() {
     const completionEvent = await waitForEvent("task_completed", 30000);
     assert.ok(completionEvent, "Should complete");
 
-    const contentEvents = receivedEvents.filter(e => e.type === "content_delta");
-    const allContent = contentEvents.map(e => e.delta).join("");
+    const contentEvents = receivedEvents.filter((e) => e.type === "content_delta");
+    const allContent = contentEvents.map((e) => e.delta).join("");
 
     // Count query strategy types
     const strategies = ["broad", "specific", "pattern", "dependency"];
     let strategyCount = 0;
 
-    strategies.forEach(strategy => {
+    strategies.forEach((strategy) => {
       if (allContent.includes(`[${strategy}]`)) {
         strategyCount++;
       }
@@ -176,7 +183,7 @@ describe("Architect Mode E2E Tests", function() {
     assert.ok(strategyCount >= 2, "Should use at least 2 different query strategies");
   });
 
-  it("Should complete within reasonable time", async function() {
+  it("Should complete within reasonable time", async function () {
     this.timeout(10000); // 10 second timeout for this test
 
     const startTime = Date.now();
@@ -200,7 +207,7 @@ describe("Architect Mode E2E Tests", function() {
       }, timeout);
 
       const check = () => {
-        const event = receivedEvents.find(e => e.type === eventType);
+        const event = receivedEvents.find((e) => e.type === eventType);
         if (event) {
           clearTimeout(timer);
           clearInterval(interval);

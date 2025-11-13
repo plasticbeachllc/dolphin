@@ -3,15 +3,25 @@
  * Provides distributed tracing across all Dolphin services.
  */
 
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { Resource } from '@opentelemetry/resources';
-import { SEMRESATTRS_SERVICE_NAME, SEMRESATTRS_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
-import { trace, context, propagation, SpanStatusCode, Span, SpanAttributeValue } from '@opentelemetry/api';
-import { createLogger } from './logger';
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { Resource } from "@opentelemetry/resources";
+import {
+  SEMRESATTRS_SERVICE_NAME,
+  SEMRESATTRS_SERVICE_VERSION,
+} from "@opentelemetry/semantic-conventions";
+import {
+  trace,
+  context,
+  propagation,
+  SpanStatusCode,
+  Span,
+  SpanAttributeValue,
+} from "@opentelemetry/api";
+import { createLogger } from "./logger";
 
-const logger = createLogger('tracing');
+const logger = createLogger("tracing");
 
 /**
  * Allowed types for span attributes.
@@ -24,7 +34,7 @@ export type SpanAttributes = Record<string, SpanAttributeValue>;
  * Uses OTLP HTTP exporter (replaces deprecated Jaeger exporter).
  * Jaeger natively supports OTLP on port 4318.
  */
-export function initTracing(serviceName: string, serviceVersion: string = '1.0.0') {
+export function initTracing(serviceName: string, serviceVersion: string = "1.0.0") {
   const sdk = new NodeSDK({
     resource: new Resource({
       [SEMRESATTRS_SERVICE_NAME]: serviceName,
@@ -32,11 +42,11 @@ export function initTracing(serviceName: string, serviceVersion: string = '1.0.0
     }),
     traceExporter: new OTLPTraceExporter({
       // Jaeger OTLP HTTP endpoint (default: localhost:4318)
-      url: process.env.OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
+      url: process.env.OTLP_ENDPOINT || "http://localhost:4318/v1/traces",
     }),
     instrumentations: [
       getNodeAutoInstrumentations({
-        '@opentelemetry/instrumentation-fs': { enabled: false }, // Too noisy
+        "@opentelemetry/instrumentation-fs": { enabled: false }, // Too noisy
       }),
     ],
   });
@@ -47,12 +57,14 @@ export function initTracing(serviceName: string, serviceVersion: string = '1.0.0
   const shutdown = () => {
     sdk
       .shutdown()
-      .then(() => logger.info('Tracing terminated'))
-      .catch((error) => logger.error('Error terminating tracing', error instanceof Error ? error : undefined));
+      .then(() => logger.info("Tracing terminated"))
+      .catch((error) =>
+        logger.error("Error terminating tracing", error instanceof Error ? error : undefined)
+      );
   };
 
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 
   return sdk;
 }
@@ -65,7 +77,7 @@ export async function traced<T>(
   fn: (span: Span) => Promise<T>,
   attributes?: SpanAttributes
 ): Promise<T> {
-  const tracer = trace.getTracer('dolphin');
+  const tracer = trace.getTracer("dolphin");
 
   return tracer.startActiveSpan(spanName, async (span) => {
     // Add attributes
@@ -84,7 +96,7 @@ export async function traced<T>(
     } catch (error) {
       span.setStatus({
         code: SpanStatusCode.ERROR,
-        message: error instanceof Error ? error.message : 'Unknown error',
+        message: error instanceof Error ? error.message : "Unknown error",
       });
       span.recordException(error as Error);
       throw error;
@@ -133,32 +145,32 @@ export function extractTraceContext(carrier: Record<string, string>): void {
  */
 export const SpanNames = {
   // Conversations
-  CONVERSATION_CREATE: 'conversation.create',
-  CONVERSATION_PLAN: 'conversation.plan',
-  CONVERSATION_EXECUTE: 'conversation.execute',
-  CONVERSATION_COMPLETE: 'conversation.complete',
+  CONVERSATION_CREATE: "conversation.create",
+  CONVERSATION_PLAN: "conversation.plan",
+  CONVERSATION_EXECUTE: "conversation.execute",
+  CONVERSATION_COMPLETE: "conversation.complete",
 
   // Planning
-  MODE_SELECT: 'planner.select_mode',
-  PLAN_GENERATE: 'planner.generate',
-  PLAN_VALIDATE: 'planner.validate',
+  MODE_SELECT: "planner.select_mode",
+  PLAN_GENERATE: "planner.generate",
+  PLAN_VALIDATE: "planner.validate",
 
   // Execution
   STEP_EXECUTE: (stepType: string) => `step.${stepType}`,
   TOOL_CALL: (toolName: string) => `tool.${toolName}`,
 
   // LLM
-  CLAUDE_REQUEST: 'llm.claude',
-  CLAUDE_STREAM: 'llm.claude.stream',
+  CLAUDE_REQUEST: "llm.claude",
+  CLAUDE_STREAM: "llm.claude.stream",
 
   // Context
-  CONTEXT_BUILD: 'context.build',
-  CONTEXT_SUMMARIZE: 'context.summarize',
+  CONTEXT_BUILD: "context.build",
+  CONTEXT_SUMMARIZE: "context.summarize",
 
   // MCP
-  MCP_FILE_READ: 'mcp.file_read',
-  MCP_FILE_WRITE: 'mcp.file_write',
-  MCP_COMMAND_EXEC: 'mcp.command_exec',
-  MCP_KB_SEARCH: 'mcp.kb_search',
-  MCP_ROLLBACK: 'mcp.rollback',
+  MCP_FILE_READ: "mcp.file_read",
+  MCP_FILE_WRITE: "mcp.file_write",
+  MCP_COMMAND_EXEC: "mcp.command_exec",
+  MCP_KB_SEARCH: "mcp.kb_search",
+  MCP_ROLLBACK: "mcp.rollback",
 };

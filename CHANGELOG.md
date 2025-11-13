@@ -476,6 +476,7 @@ This is the first major release of Dolphin, marking a significant milestone in A
 ### Technology Stack
 
 **Backend (Python ≥3.12):**
+
 - FastAPI - REST API framework
 - SQLModel - Type-safe ORM for SQLite
 - LanceDB - Vector database with ANN search
@@ -487,6 +488,7 @@ This is the first major release of Dolphin, marking a significant milestone in A
 - pytest - Testing framework
 
 **Frontend (TypeScript/JavaScript):**
+
 - VSCode Extension API - Editor integration
 - Bun - Fast JavaScript runtime for Agent Core
 - Anthropic SDK - Claude API client
@@ -498,6 +500,7 @@ This is the first major release of Dolphin, marking a significant milestone in A
 - MCP SDK - Model Context Protocol implementation
 
 **Development & Tooling:**
+
 - uv - Fast Python package installer and resolver
 - Justfile - Task automation (build, test, lint)
 - Git - Version control and diff-based indexing
@@ -525,6 +528,7 @@ For detailed documentation, visit the `/docs` directory in the repository.
 ## [0.1.13] - 2025-11-08
 
 ### Fixed
+
 - **MMR Relevance Selection**
   - Configured to work properly
 
@@ -572,7 +576,7 @@ For detailed documentation, visit the `/docs` directory in the repository.
   - Active session validation prevents mid-operation deletions
   - All cleanup operations validated for completeness
 
-## [0.1.11] - 2025-11-03  
+## [0.1.11] - 2025-11-03
 
 ### Fixed
 

@@ -1,13 +1,13 @@
 /**
  * JSON-RPC Communication Layer for Dolphin v2
- * 
+ *
  * Handles framed JSON-RPC message parsing and serialization for
  * stdio-based communication with the VSCode extension.
- * 
+ *
  * Based on: docs/orchestration/DOLPHIN-V2-ORCHESTRATION-PROJECT-PLAN.md
  */
 
-import type { JSONRPCMessage } from '../types/index.js';
+import type { JSONRPCMessage } from "../types/index.js";
 
 /**
  * JSON-RPC handler callback type
@@ -32,14 +32,17 @@ export class JSONRPCParser {
     this.buffer = Buffer.concat([this.buffer, chunk]);
 
     while (true) {
-      const crlfDelimiterIndex = this.buffer.indexOf('\r\n\r\n');
-      const lfDelimiterIndex = this.buffer.indexOf('\n\n');
+      const crlfDelimiterIndex = this.buffer.indexOf("\r\n\r\n");
+      const lfDelimiterIndex = this.buffer.indexOf("\n\n");
 
       let headerEndIndex = -1;
       let delimiterLength = 0;
 
       // Handle both CRLF and LF line endings
-      if (crlfDelimiterIndex !== -1 && (lfDelimiterIndex === -1 || crlfDelimiterIndex <= lfDelimiterIndex)) {
+      if (
+        crlfDelimiterIndex !== -1 &&
+        (lfDelimiterIndex === -1 || crlfDelimiterIndex <= lfDelimiterIndex)
+      ) {
         headerEndIndex = crlfDelimiterIndex;
         delimiterLength = 4;
       } else if (lfDelimiterIndex !== -1) {
@@ -53,7 +56,7 @@ export class JSONRPCParser {
       }
 
       // Parse Content-Length header
-      const header = this.buffer.slice(0, headerEndIndex).toString('utf-8');
+      const header = this.buffer.slice(0, headerEndIndex).toString("utf-8");
       const headers = header.split(/\r?\n/);
       let contentLength: number | undefined;
 
@@ -85,10 +88,10 @@ export class JSONRPCParser {
 
       if (messageBuffer.length > 0) {
         try {
-          const message: JSONRPCMessage = JSON.parse(messageBuffer.toString('utf-8'));
+          const message: JSONRPCMessage = JSON.parse(messageBuffer.toString("utf-8"));
           await this.onMessage(message);
         } catch (error) {
-          console.error('[JSON-RPC] Failed to parse message:', error);
+          console.error("[JSON-RPC] Failed to parse message:", error);
         }
       }
     }
@@ -116,7 +119,7 @@ export class JSONRPCSerializer {
     this.writeQueue = this.writeQueue.then(() => {
       return new Promise<void>((resolve) => {
         const payload = JSON.stringify(message);
-        const contentLength = Buffer.byteLength(payload, 'utf-8');
+        const contentLength = Buffer.byteLength(payload, "utf-8");
         const header = `Content-Length: ${contentLength}\r\n\r\n`;
         const framedMessage = header + payload;
 
@@ -139,9 +142,9 @@ export class JSONRPCSerializer {
     timeout: number = 30000
   ): Promise<any> {
     const id = this.generateId();
-    
+
     const message: JSONRPCMessage = {
-      jsonrpc: '2.0',
+      jsonrpc: "2.0",
       id,
       method,
       params,
@@ -166,7 +169,7 @@ export class JSONRPCSerializer {
    */
   async notify(method: string, params: any, output: NodeJS.WritableStream): Promise<void> {
     const message: JSONRPCMessage = {
-      jsonrpc: '2.0',
+      jsonrpc: "2.0",
       method,
       params,
     };
@@ -179,7 +182,7 @@ export class JSONRPCSerializer {
    */
   async respond(id: string | number, result: any, output: NodeJS.WritableStream): Promise<void> {
     const message: JSONRPCMessage = {
-      jsonrpc: '2.0',
+      jsonrpc: "2.0",
       id,
       result,
     };
@@ -198,7 +201,7 @@ export class JSONRPCSerializer {
     output: NodeJS.WritableStream = process.stdout
   ): Promise<void> {
     const response: JSONRPCMessage = {
-      jsonrpc: '2.0',
+      jsonrpc: "2.0",
       id,
       error: {
         code,
@@ -227,16 +230,13 @@ export class JSONRPCServer {
   private methods: Map<string, (params: any) => Promise<any>> = new Map();
   private output: NodeJS.WritableStream;
 
-  constructor(
-    input: NodeJS.ReadableStream,
-    output: NodeJS.WritableStream
-  ) {
+  constructor(input: NodeJS.ReadableStream, output: NodeJS.WritableStream) {
     this.output = output;
     this.serializer = new JSONRPCSerializer();
     this.parser = new JSONRPCParser(this.handleMessage.bind(this));
 
     // Set up input stream
-    input.on('data', (chunk: Buffer) => {
+    input.on("data", (chunk: Buffer) => {
       this.parser.processChunk(chunk);
     });
   }
@@ -288,7 +288,7 @@ export class JSONRPCServer {
         await this.serializer.respondError(
           message.id,
           -32603,
-          error instanceof Error ? error.message : 'Internal error',
+          error instanceof Error ? error.message : "Internal error",
           error,
           this.output
         );
@@ -297,7 +297,7 @@ export class JSONRPCServer {
     // Handle notifications (no response needed)
     else if (message.method && message.id === undefined) {
       const handler = this.methods.get(message.method);
-      
+
       if (handler) {
         try {
           await handler(message.params);
@@ -307,10 +307,13 @@ export class JSONRPCServer {
       }
     }
     // Handle responses (for outgoing requests)
-    else if (message.id !== undefined && (message.result !== undefined || message.error !== undefined)) {
+    else if (
+      message.id !== undefined &&
+      (message.result !== undefined || message.error !== undefined)
+    ) {
       // Response handling would be implemented here
       // This would typically involve resolving a pending promise
-      console.error('[JSON-RPC] Received response:', message);
+      console.error("[JSON-RPC] Received response:", message);
     }
   }
 }

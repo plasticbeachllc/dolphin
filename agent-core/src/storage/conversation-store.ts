@@ -2,7 +2,7 @@
 import {
   Conversation,
   ConversationSchema,
-  ConversationMetadata
+  ConversationMetadata,
 } from "../../../../shared/types/state";
 import { TOMLWriter } from "./toml-writer";
 import * as path from "path";
@@ -14,29 +14,19 @@ export class ConversationStore {
 
   constructor(workspaceRoot: string) {
     this.workspaceRoot = workspaceRoot;
-    this.stateDir = path.join(
-      workspaceRoot,
-      ".dolphin",
-      "state",
-      "conversations"
-    );
+    this.stateDir = path.join(workspaceRoot, ".dolphin", "state", "conversations");
   }
 
   async saveConversation(conversation: Conversation): Promise<void> {
     const validated = ConversationSchema.parse(conversation);
     validated.conversation.updated_at = new Date().toISOString();
 
-    const filepath = path.join(
-      this.stateDir,
-      `${conversation.conversation.id}.toml`
-    );
+    const filepath = path.join(this.stateDir, `${conversation.conversation.id}.toml`);
     const writer = new TOMLWriter<Conversation>(filepath, this.workspaceRoot);
 
     await writer.write(validated);
 
-    console.error(
-      `[ConversationStore] Saved conversation: ${conversation.conversation.id}`
-    );
+    console.error(`[ConversationStore] Saved conversation: ${conversation.conversation.id}`);
   }
 
   async loadConversation(conversationId: string): Promise<Conversation | null> {
@@ -97,9 +87,7 @@ export class ConversationStore {
     };
 
     await this.saveConversation(conversation);
-    console.error(
-      `[ConversationStore] Updated metadata for: ${conversationId}`
-    );
+    console.error(`[ConversationStore] Updated metadata for: ${conversationId}`);
   }
 
   async listConversationsWithMetadata(): Promise<
@@ -158,13 +146,9 @@ export class ConversationStore {
     }
 
     // Find the branch point
-    const branchIndex = parent.messages.findIndex(
-      (m) => m.id === branchPointMessageId
-    );
+    const branchIndex = parent.messages.findIndex((m) => m.id === branchPointMessageId);
     if (branchIndex === -1) {
-      throw new Error(
-        `Branch point message not found: ${branchPointMessageId}`
-      );
+      throw new Error(`Branch point message not found: ${branchPointMessageId}`);
     }
 
     // Create new conversation with messages up to branch point
@@ -188,9 +172,7 @@ export class ConversationStore {
     };
 
     await this.saveConversation(newConversation);
-    console.error(
-      `[ConversationStore] Branched conversation ${parentId} -> ${newId}`
-    );
+    console.error(`[ConversationStore] Branched conversation ${parentId} -> ${newId}`);
 
     return newConversation;
   }

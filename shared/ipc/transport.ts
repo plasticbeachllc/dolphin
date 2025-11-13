@@ -15,15 +15,15 @@ import {
   type MessageReader,
   type MessageWriter,
   type Message as VSCodeMessage,
-} from 'vscode-jsonrpc/node';
-import { type ISerializer, SerializerFactory, type SerializationFormat } from './serialization';
+} from "vscode-jsonrpc/node";
+import { type ISerializer, SerializerFactory, type SerializationFormat } from "./serialization";
 
 /**
  * Security configuration
  */
 export interface SecurityConfig {
   maxMessageSize?: number; // Max payload size in bytes
-  maxBufferSize?: number;  // Max accumulated buffer size
+  maxBufferSize?: number; // Max accumulated buffer size
   maxPendingRequests?: number; // Max concurrent requests
 }
 
@@ -32,7 +32,7 @@ export interface SecurityConfig {
  */
 const DEFAULT_SECURITY: Required<SecurityConfig> = {
   maxMessageSize: 100 * 1024 * 1024, // 100 MB
-  maxBufferSize: 50 * 1024 * 1024,    // 50 MB
+  maxBufferSize: 50 * 1024 * 1024, // 50 MB
   maxPendingRequests: 1000,
 };
 
@@ -60,11 +60,14 @@ export class IPCTransport {
   private writer: MessageWriter;
   private serializer: ISerializer;
   private security: Required<SecurityConfig>;
-  private pendingRequests = new Map<string | number, {
-    resolve: (value: any) => void;
-    reject: (error: Error) => void;
-    timeout: NodeJS.Timeout;
-  }>();
+  private pendingRequests = new Map<
+    string | number,
+    {
+      resolve: (value: any) => void;
+      reject: (error: Error) => void;
+      timeout: NodeJS.Timeout;
+    }
+  >();
   private messageHandlers: Map<string, MessageHandler> = new Map();
   private defaultHandler?: MessageHandler;
   private enableMetrics: boolean;
@@ -82,15 +85,15 @@ export class IPCTransport {
 
     // Set up error listeners to prevent crashes
     this.reader.onError((error) => {
-      console.error('[IPCTransport] Reader error:', error);
+      console.error("[IPCTransport] Reader error:", error);
     });
 
     this.reader.onClose(() => {
-      console.error('[IPCTransport] Reader closed');
+      console.error("[IPCTransport] Reader closed");
       // Reject all pending requests when reader closes
       for (const [id, pending] of this.pendingRequests) {
         clearTimeout(pending.timeout);
-        pending.reject(new Error('Connection closed'));
+        pending.reject(new Error("Connection closed"));
       }
       this.pendingRequests.clear();
     });
@@ -121,7 +124,7 @@ export class IPCTransport {
     const id = this.generateId();
 
     const message: VSCodeMessage = {
-      jsonrpc: '2.0',
+      jsonrpc: "2.0",
       id,
       method,
       params,
@@ -157,7 +160,7 @@ export class IPCTransport {
    */
   async notify(method: string, params: any): Promise<void> {
     const message: VSCodeMessage = {
-      jsonrpc: '2.0',
+      jsonrpc: "2.0",
       method,
       params,
     };
@@ -170,7 +173,7 @@ export class IPCTransport {
    */
   async respond(id: string | number, result: any): Promise<void> {
     const message: VSCodeMessage = {
-      jsonrpc: '2.0',
+      jsonrpc: "2.0",
       id,
       result,
     };
@@ -188,7 +191,7 @@ export class IPCTransport {
     data?: any
   ): Promise<void> {
     const response: VSCodeMessage = {
-      jsonrpc: '2.0',
+      jsonrpc: "2.0",
       id,
       error: {
         code,
@@ -206,7 +209,7 @@ export class IPCTransport {
   private async sendMessage(message: VSCodeMessage): Promise<void> {
     // Security check: estimate message size using actual byte length
     const serializedMessage = JSON.stringify(message);
-    const estimatedSize = Buffer.byteLength(serializedMessage, 'utf-8');
+    const estimatedSize = Buffer.byteLength(serializedMessage, "utf-8");
     if (estimatedSize > this.security.maxMessageSize) {
       throw new Error(
         `Message too large: ${estimatedSize} bytes (max: ${this.security.maxMessageSize})`
@@ -222,20 +225,23 @@ export class IPCTransport {
   private async handleMessage(message: VSCodeMessage): Promise<void> {
     try {
       // Validate message structure
-      if (!message || typeof message !== 'object') {
-        console.error('[IPCTransport] Invalid message structure:', message);
+      if (!message || typeof message !== "object") {
+        console.error("[IPCTransport] Invalid message structure:", message);
         return;
       }
 
       // Handle response to our request
-      if (message.id !== undefined && (message.result !== undefined || message.error !== undefined)) {
+      if (
+        message.id !== undefined &&
+        (message.result !== undefined || message.error !== undefined)
+      ) {
         const pending = this.pendingRequests.get(message.id);
         if (pending) {
           clearTimeout(pending.timeout);
           this.pendingRequests.delete(message.id);
 
           if (message.error) {
-            const errorMessage = message.error.message || 'Unknown error';
+            const errorMessage = message.error.message || "Unknown error";
             const error = new Error(errorMessage);
             // Attach error code and data for better debugging
             (error as any).code = message.error.code;
@@ -246,7 +252,7 @@ export class IPCTransport {
           }
         } else {
           // Response for unknown request ID - log but don't crash
-          console.warn('[IPCTransport] Received response for unknown request ID:', message.id);
+          console.warn("[IPCTransport] Received response for unknown request ID:", message.id);
         }
         return;
       }
@@ -256,11 +262,7 @@ export class IPCTransport {
         const handler = this.messageHandlers.get(message.method);
 
         if (!handler) {
-          await this.respondError(
-            message.id,
-            -32601,
-            `Method not found: ${message.method}`
-          );
+          await this.respondError(message.id, -32601, `Method not found: ${message.method}`);
           return;
         }
 
@@ -269,14 +271,9 @@ export class IPCTransport {
           await this.respond(message.id, result);
         } catch (error) {
           // Catch all errors from handlers and send proper error response
-          const errorMessage = error instanceof Error ? error.message : 'Internal error';
+          const errorMessage = error instanceof Error ? error.message : "Internal error";
           const errorData = error instanceof Error ? { stack: error.stack } : error;
-          await this.respondError(
-            message.id,
-            -32603,
-            errorMessage,
-            errorData
-          );
+          await this.respondError(message.id, -32603, errorMessage, errorData);
         }
         return;
       }
@@ -289,29 +286,32 @@ export class IPCTransport {
           try {
             await handler(message.params);
           } catch (error) {
-            console.error(`[IPCTransport] Error in notification handler '${message.method}':`, error);
+            console.error(
+              `[IPCTransport] Error in notification handler '${message.method}':`,
+              error
+            );
           }
         } else if (this.defaultHandler) {
           try {
             await this.defaultHandler(message);
           } catch (error) {
-            console.error('[IPCTransport] Error in default handler:', error);
+            console.error("[IPCTransport] Error in default handler:", error);
           }
         }
         return;
       }
 
       // Unknown message type
-      console.warn('[IPCTransport] Unknown message type:', message);
+      console.warn("[IPCTransport] Unknown message type:", message);
       if (this.defaultHandler) {
         try {
           await this.defaultHandler(message);
         } catch (error) {
-          console.error('[IPCTransport] Error in default handler for unknown message:', error);
+          console.error("[IPCTransport] Error in default handler for unknown message:", error);
         }
       }
     } catch (error) {
-      console.error('[IPCTransport] Fatal error handling message:', error);
+      console.error("[IPCTransport] Fatal error handling message:", error);
     }
   }
 
@@ -332,7 +332,7 @@ export class IPCTransport {
     // Reject all pending requests
     for (const [id, pending] of this.pendingRequests) {
       clearTimeout(pending.timeout);
-      pending.reject(new Error('Transport disposed'));
+      pending.reject(new Error("Transport disposed"));
     }
     this.pendingRequests.clear();
   }

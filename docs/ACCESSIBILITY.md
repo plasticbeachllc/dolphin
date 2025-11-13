@@ -197,10 +197,7 @@ const selected = await vscode.window.showQuickPick(items, {
 
 ```typescript
 // Status bar items should be keyboard accessible
-const statusBarItem = vscode.window.createStatusBarItem(
-  vscode.StatusBarAlignment.Right,
-  100
-);
+const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
 statusBarItem.command = "dolphin.showStatus";
 statusBarItem.text = "$(robot) Dolphin";
 statusBarItem.tooltip = "Click to open Dolphin (Ctrl+Alt+D)";
@@ -343,10 +340,7 @@ class MessageStream {
     // Use aria-live region
     const liveRegion = document.getElementById("live-region");
     if (liveRegion) {
-      liveRegion.textContent = `AI response updated: ${content.slice(
-        0,
-        100
-      )}...`;
+      liveRegion.textContent = `AI response updated: ${content.slice(0, 100)}...`;
     }
   }
 }
@@ -506,8 +500,7 @@ VSCode's high contrast themes must be supported:
 // Detect high contrast mode
 const isHighContrast =
   vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.HighContrast ||
-  vscode.window.activeColorTheme.kind ===
-    vscode.ColorThemeKind.HighContrastLight;
+  vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.HighContrastLight;
 
 // Apply appropriate styles
 if (isHighContrast) {
@@ -604,13 +597,7 @@ if (isHighContrast) {
     </main>
 
     <!-- Live region for announcements -->
-    <div
-      id="live-region"
-      role="status"
-      aria-live="polite"
-      aria-atomic="true"
-      class="sr-only"
-    ></div>
+    <div id="live-region" role="status" aria-live="polite" aria-atomic="true" class="sr-only"></div>
   </body>
 </html>
 ```
@@ -821,9 +808,7 @@ import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 test.describe("Webview accessibility", () => {
-  test("should not have automatically detectable accessibility issues", async ({
-    page,
-  }) => {
+  test("should not have automatically detectable accessibility issues", async ({ page }) => {
     await page.goto("http://localhost:3000");
 
     const accessibilityScanResults = await new AxeBuilder({ page })

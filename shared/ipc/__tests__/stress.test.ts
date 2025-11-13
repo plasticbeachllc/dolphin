@@ -2,9 +2,9 @@
  * Stress and load tests for IPC layer
  */
 
-import { describe, test, expect } from 'bun:test';
-import { IPCTransport } from '../transport';
-import { PassThrough } from 'stream';
+import { describe, test, expect } from "bun:test";
+import { IPCTransport } from "../transport";
+import { PassThrough } from "stream";
 
 function createTransportPair() {
   const clientToServer = new PassThrough();
@@ -23,11 +23,11 @@ function createTransportPair() {
   return { client, server };
 }
 
-describe('Stress Tests', () => {
-  test('should handle 10,000 concurrent requests without memory leaks', async () => {
+describe("Stress Tests", () => {
+  test("should handle 10,000 concurrent requests without memory leaks", async () => {
     const { client, server } = createTransportPair();
 
-    server.onMethod('process', async (params) => {
+    server.onMethod("process", async (params) => {
       return { result: params.value * 2 };
     });
 
@@ -35,9 +35,7 @@ describe('Stress Tests', () => {
     const count = 10000;
 
     const results = await Promise.all(
-      Array.from({ length: count }, (_, i) =>
-        client.request('process', { value: i })
-      )
+      Array.from({ length: count }, (_, i) => client.request("process", { value: i }))
     );
 
     expect(results).toHaveLength(count);
@@ -61,10 +59,10 @@ describe('Stress Tests', () => {
     server.dispose();
   }, 30000); // 30 second timeout
 
-  test('should handle sustained load over time', async () => {
+  test("should handle sustained load over time", async () => {
     const { client, server } = createTransportPair();
 
-    server.onMethod('work', async (params) => {
+    server.onMethod("work", async (params) => {
       // Simulate some work
       await new Promise((resolve) => setTimeout(resolve, 1));
       return { processed: params.id };
@@ -77,7 +75,7 @@ describe('Stress Tests', () => {
 
     while (Date.now() - startTime < duration) {
       try {
-        await client.request('work', { id: requestCount });
+        await client.request("work", { id: requestCount });
         requestCount++;
       } catch (error: any) {
         errors.push(error);
@@ -100,16 +98,16 @@ describe('Stress Tests', () => {
     server.dispose();
   }, 10000);
 
-  test('should handle mixed notifications and requests', async () => {
+  test("should handle mixed notifications and requests", async () => {
     const { client, server } = createTransportPair();
 
     const notificationCount = { value: 0 };
 
-    server.onMethod('increment', async () => {
+    server.onMethod("increment", async () => {
       notificationCount.value++;
     });
 
-    server.onMethod('get_count', async () => {
+    server.onMethod("get_count", async () => {
       return { count: notificationCount.value };
     });
 
@@ -118,9 +116,9 @@ describe('Stress Tests', () => {
 
     for (let i = 0; i < 1000; i++) {
       if (i % 2 === 0) {
-        operations.push(client.notify('increment', {}));
+        operations.push(client.notify("increment", {}));
       } else {
-        operations.push(client.request('get_count', {}));
+        operations.push(client.request("get_count", {}));
       }
     }
 
@@ -129,7 +127,7 @@ describe('Stress Tests', () => {
     // Give notifications time to process
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    const finalCount = await client.request('get_count', {});
+    const finalCount = await client.request("get_count", {});
 
     expect(finalCount.count).toBe(500); // 500 notifications
 
@@ -137,15 +135,15 @@ describe('Stress Tests', () => {
     server.dispose();
   });
 
-  test('should handle rapid connect/disconnect cycles', async () => {
+  test("should handle rapid connect/disconnect cycles", async () => {
     const cycles = 100;
 
     for (let i = 0; i < cycles; i++) {
       const { client, server } = createTransportPair();
 
-      server.onMethod('ping', async () => ({ pong: true }));
+      server.onMethod("ping", async () => ({ pong: true }));
 
-      const result = await client.request('ping', {});
+      const result = await client.request("ping", {});
       expect(result).toEqual({ pong: true });
 
       client.dispose();
@@ -156,38 +154,36 @@ describe('Stress Tests', () => {
     expect(true).toBe(true);
   });
 
-  test('should handle large message payloads', async () => {
+  test("should handle large message payloads", async () => {
     const { client, server } = createTransportPair();
 
     // Create 10MB payload
     const largePayload = {
-      data: 'x'.repeat(10 * 1024 * 1024),
+      data: "x".repeat(10 * 1024 * 1024),
     };
 
-    server.onMethod('process_large', async (params) => {
+    server.onMethod("process_large", async (params) => {
       return { size: params.data.length };
     });
 
-    const result = await client.request('process_large', largePayload, 10000);
+    const result = await client.request("process_large", largePayload, 10000);
     expect(result.size).toBe(10 * 1024 * 1024);
 
     client.dispose();
     server.dispose();
   }, 15000);
 
-  test('should handle many concurrent slow requests', async () => {
+  test("should handle many concurrent slow requests", async () => {
     const { client, server } = createTransportPair();
 
-    server.onMethod('slow', async (params) => {
+    server.onMethod("slow", async (params) => {
       await new Promise((resolve) => setTimeout(resolve, 100));
       return { processed: params.id };
     });
 
     const count = 100;
     const results = await Promise.all(
-      Array.from({ length: count }, (_, i) =>
-        client.request('slow', { id: i }, 5000)
-      )
+      Array.from({ length: count }, (_, i) => client.request("slow", { id: i }, 5000))
     );
 
     expect(results).toHaveLength(count);
@@ -197,12 +193,12 @@ describe('Stress Tests', () => {
     server.dispose();
   }, 15000);
 
-  test('should recover from handler errors without affecting other requests', async () => {
+  test("should recover from handler errors without affecting other requests", async () => {
     const { client, server } = createTransportPair();
 
     let successCount = 0;
 
-    server.onMethod('sometimes_fails', async (params) => {
+    server.onMethod("sometimes_fails", async (params) => {
       if (params.id % 10 === 0) {
         throw new Error(`Failed for id ${params.id}`);
       }
@@ -211,13 +207,11 @@ describe('Stress Tests', () => {
     });
 
     const results = await Promise.allSettled(
-      Array.from({ length: 100 }, (_, i) =>
-        client.request('sometimes_fails', { id: i })
-      )
+      Array.from({ length: 100 }, (_, i) => client.request("sometimes_fails", { id: i }))
     );
 
-    const succeeded = results.filter((r) => r.status === 'fulfilled').length;
-    const failed = results.filter((r) => r.status === 'rejected').length;
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.filter((r) => r.status === "rejected").length;
 
     expect(succeeded).toBe(90); // 90% success
     expect(failed).toBe(10); // 10% failure (every 10th)
@@ -227,17 +221,15 @@ describe('Stress Tests', () => {
     server.dispose();
   });
 
-  test('should handle request bursts', async () => {
+  test("should handle request bursts", async () => {
     const { client, server } = createTransportPair();
 
-    server.onMethod('echo', async (params) => params);
+    server.onMethod("echo", async (params) => params);
 
     // Send bursts of 100 requests with pauses in between
     for (let burst = 0; burst < 10; burst++) {
       const results = await Promise.all(
-        Array.from({ length: 100 }, (_, i) =>
-          client.request('echo', { burst, index: i })
-        )
+        Array.from({ length: 100 }, (_, i) => client.request("echo", { burst, index: i }))
       );
 
       expect(results).toHaveLength(100);
@@ -252,17 +244,17 @@ describe('Stress Tests', () => {
   });
 });
 
-describe('Edge Cases', () => {
-  test('should handle requests with circular references (should throw)', async () => {
+describe("Edge Cases", () => {
+  test("should handle requests with circular references (should throw)", async () => {
     const { client, server } = createTransportPair();
 
-    server.onMethod('process', async (params) => params);
+    server.onMethod("process", async (params) => params);
 
     const circular: any = { a: 1 };
     circular.self = circular;
 
     try {
-      await client.request('process', circular);
+      await client.request("process", circular);
       expect(true).toBe(false); // Should not reach here
     } catch (error: any) {
       // JSON.stringify will throw on circular references
@@ -273,92 +265,92 @@ describe('Edge Cases', () => {
     server.dispose();
   });
 
-  test('should handle requests with special characters', async () => {
+  test("should handle requests with special characters", async () => {
     const { client, server } = createTransportPair();
 
-    server.onMethod('echo', async (params) => params);
+    server.onMethod("echo", async (params) => params);
 
     const specialChars = {
       null: null,
       undefined: undefined,
-      emptyString: '',
-      whitespace: '   \n\t\r   ',
-      quotes: '"Hello" and \'World\'',
-      backslashes: 'C:\\Users\\Test\\',
-      unicode: '🚀 你好 مرحبا',
-      control: '\x00\x01\x02',
-      newlines: 'Line1\nLine2\rLine3\r\nLine4',
+      emptyString: "",
+      whitespace: "   \n\t\r   ",
+      quotes: "\"Hello\" and 'World'",
+      backslashes: "C:\\Users\\Test\\",
+      unicode: "🚀 你好 مرحبا",
+      control: "\x00\x01\x02",
+      newlines: "Line1\nLine2\rLine3\r\nLine4",
     };
 
-    const result = await client.request('echo', specialChars);
+    const result = await client.request("echo", specialChars);
 
     // Note: undefined gets removed by JSON.stringify
     expect(result.null).toBe(null);
-    expect(result.emptyString).toBe('');
-    expect(result.quotes).toBe('"Hello" and \'World\'');
-    expect(result.unicode).toBe('🚀 你好 مرحبا');
+    expect(result.emptyString).toBe("");
+    expect(result.quotes).toBe("\"Hello\" and 'World'");
+    expect(result.unicode).toBe("🚀 你好 مرحبا");
 
     client.dispose();
     server.dispose();
   });
 
-  test('should handle very deep nested objects', async () => {
+  test("should handle very deep nested objects", async () => {
     const { client, server } = createTransportPair();
 
-    server.onMethod('echo', async (params) => params);
+    server.onMethod("echo", async (params) => params);
 
     // Create deeply nested object
-    let obj: any = { value: 'bottom' };
+    let obj: any = { value: "bottom" };
     for (let i = 0; i < 100; i++) {
       obj = { nested: obj };
     }
 
-    const result = await client.request('echo', obj);
+    const result = await client.request("echo", obj);
 
     // Verify structure is preserved
     let current = result;
     for (let i = 0; i < 100; i++) {
-      expect(current).toHaveProperty('nested');
+      expect(current).toHaveProperty("nested");
       current = current.nested;
     }
-    expect(current.value).toBe('bottom');
+    expect(current.value).toBe("bottom");
 
     client.dispose();
     server.dispose();
   });
 
-  test('should handle requests with very long strings', async () => {
+  test("should handle requests with very long strings", async () => {
     const { client, server } = createTransportPair();
 
-    server.onMethod('length', async (params) => {
+    server.onMethod("length", async (params) => {
       return { length: params.text.length };
     });
 
-    const longString = 'x'.repeat(1000000); // 1 million characters
+    const longString = "x".repeat(1000000); // 1 million characters
 
-    const result = await client.request('length', { text: longString });
+    const result = await client.request("length", { text: longString });
     expect(result.length).toBe(1000000);
 
     client.dispose();
     server.dispose();
   });
 
-  test('should handle simultaneous timeout and response', async () => {
+  test("should handle simultaneous timeout and response", async () => {
     const { client, server } = createTransportPair();
 
-    server.onMethod('delayed', async (params) => {
+    server.onMethod("delayed", async (params) => {
       await new Promise((resolve) => setTimeout(resolve, params.delay));
       return { done: true };
     });
 
     // Request with delay slightly longer than timeout
-    const promise = client.request('delayed', { delay: 150 }, 100);
+    const promise = client.request("delayed", { delay: 150 }, 100);
 
     try {
       await promise;
       expect(true).toBe(false); // Should timeout
     } catch (error: any) {
-      expect(error.message).toContain('timeout');
+      expect(error.message).toContain("timeout");
     }
 
     // Pending request should be cleaned up
@@ -369,31 +361,31 @@ describe('Edge Cases', () => {
     server.dispose();
   });
 
-  test('should handle handler that returns undefined', async () => {
+  test("should handle handler that returns undefined", async () => {
     const { client, server } = createTransportPair();
 
-    server.onMethod('return_undefined', async () => {
+    server.onMethod("return_undefined", async () => {
       return undefined;
     });
 
-    const result = await client.request('return_undefined', {});
+    const result = await client.request("return_undefined", {});
     expect(result).toBe(undefined);
 
     client.dispose();
     server.dispose();
   });
 
-  test('should handle handler that returns Promise<void>', async () => {
+  test("should handle handler that returns Promise<void>", async () => {
     const { client, server } = createTransportPair();
 
     let sideEffect = 0;
 
-    server.onMethod('side_effect', async () => {
+    server.onMethod("side_effect", async () => {
       sideEffect++;
       // Implicitly returns undefined (Promise<void>)
     });
 
-    const result = await client.request('side_effect', {});
+    const result = await client.request("side_effect", {});
     expect(result).toBe(undefined);
     expect(sideEffect).toBe(1);
 
@@ -401,15 +393,15 @@ describe('Edge Cases', () => {
     server.dispose();
   });
 
-  test('should handle request IDs wrapping around', async () => {
+  test("should handle request IDs wrapping around", async () => {
     const { client, server } = createTransportPair();
 
-    server.onMethod('test', async (params) => params);
+    server.onMethod("test", async (params) => params);
 
     // Simulate many requests to potentially wrap counter
     // (In practice, Date.now() makes this unlikely, but we test the logic)
     for (let i = 0; i < 1000; i++) {
-      const result = await client.request('test', { index: i });
+      const result = await client.request("test", { index: i });
       expect(result.index).toBe(i);
     }
 
@@ -418,11 +410,11 @@ describe('Edge Cases', () => {
   });
 });
 
-describe('Memory Leak Detection', () => {
-  test('should not leak memory with many short-lived requests', async () => {
+describe("Memory Leak Detection", () => {
+  test("should not leak memory with many short-lived requests", async () => {
     const { client, server } = createTransportPair();
 
-    server.onMethod('echo', async (params) => params);
+    server.onMethod("echo", async (params) => params);
 
     const iterations = 5;
     const requestsPerIteration = 1000;
@@ -431,7 +423,7 @@ describe('Memory Leak Detection', () => {
     for (let i = 0; i < iterations; i++) {
       await Promise.all(
         Array.from({ length: requestsPerIteration }, (_, j) =>
-          client.request('echo', { iteration: i, index: j })
+          client.request("echo", { iteration: i, index: j })
         )
       );
 
@@ -451,7 +443,10 @@ describe('Memory Leak Detection', () => {
     const lastReading = memoryReadings[memoryReadings.length - 1];
     const growthMB = (lastReading - firstReading) / 1024 / 1024;
 
-    console.log('Memory readings (MB):', memoryReadings.map((m) => (m / 1024 / 1024).toFixed(2)));
+    console.log(
+      "Memory readings (MB):",
+      memoryReadings.map((m) => (m / 1024 / 1024).toFixed(2))
+    );
     console.log(`Total growth: ${growthMB.toFixed(2)} MB`);
 
     // Memory growth should be minimal (less than 50MB)
@@ -461,14 +456,14 @@ describe('Memory Leak Detection', () => {
     server.dispose();
   }, 30000);
 
-  test('should cleanup timeouts properly', async () => {
+  test("should cleanup timeouts properly", async () => {
     const { client, server } = createTransportPair();
 
-    server.onMethod('echo', async () => ({ done: true }));
+    server.onMethod("echo", async () => ({ done: true }));
 
     // Create many requests with timeouts
     for (let i = 0; i < 100; i++) {
-      await client.request('echo', {}, 10000); // 10s timeout
+      await client.request("echo", {}, 10000); // 10s timeout
     }
 
     // All timeouts should be cleared

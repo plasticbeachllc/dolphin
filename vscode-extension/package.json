@@ -1,261 +1,265 @@
 {
-    "name": "dolphin",
-    "displayName": "Dolphin AI",
-    "description": "AI coding assistant with semantic code search",
-    "version": "0.1.0",
-    "publisher": "pb",
-    "icon": "resources/dolphin_vscode.png",
-    "engines": {
-        "vscode": "^1.96.0"
+  "name": "dolphin",
+  "displayName": "Dolphin AI",
+  "description": "AI coding assistant with semantic code search",
+  "version": "0.1.0",
+  "publisher": "pb",
+  "icon": "resources/dolphin_vscode.png",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "dolphin",
+          "title": "Dolphin",
+          "icon": "resources/dolphin_simple.png"
+        }
+      ]
     },
-    "categories": [
-        "Other"
+    "views": {
+      "dolphin": [
+        {
+          "type": "webview",
+          "id": "dolphin.chatView",
+          "name": "Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "dolphin.focusInput",
+        "title": "Dolphin: Focus Input"
+      },
+      {
+        "command": "dolphin.newConversation",
+        "title": "Dolphin: New Conversation"
+      },
+      {
+        "command": "dolphin.setApiKey",
+        "title": "Dolphin: Set API Key"
+      },
+      {
+        "command": "dolphin.test",
+        "title": "Dolphin: Test"
+      },
+      {
+        "command": "dolphin.kb.showStatus",
+        "title": "Dolphin: Show KB Status"
+      },
+      {
+        "command": "dolphin.kb.restart",
+        "title": "Dolphin: Restart Knowledge Base"
+      },
+      {
+        "command": "dolphin.askAboutSelection",
+        "title": "Dolphin: Ask About Selection"
+      },
+      {
+        "command": "dolphin.refactorSelection",
+        "title": "Dolphin: Refactor Selection"
+      },
+      {
+        "command": "dolphin.askAboutFile",
+        "title": "Dolphin: Ask About This File"
+      },
+      {
+        "command": "dolphin.askAboutFolder",
+        "title": "Dolphin: Ask About This Folder"
+      },
+      {
+        "command": "dolphin.applyDiff",
+        "title": "Dolphin: Apply Diff"
+      }
     ],
-    "main": "./out/extension.js",
-    "activationEvents": [],
-    "contributes": {
-        "viewsContainers": {
-            "activitybar": [
-                {
-                    "id": "dolphin",
-                    "title": "Dolphin",
-                    "icon": "resources/dolphin_simple.png"
-                }
-            ]
+    "configuration": {
+      "title": "Dolphin",
+      "properties": {
+        "dolphin.kb.debounceMs": {
+          "type": "number",
+          "default": 2000,
+          "description": "Milliseconds to wait after file change before indexing"
         },
-        "views": {
-            "dolphin": [
-                {
-                    "type": "webview",
-                    "id": "dolphin.chatView",
-                    "name": "Chat"
-                }
-            ]
+        "dolphin.kb.batchIntervalMs": {
+          "type": "number",
+          "default": 5000,
+          "description": "Milliseconds between batch processing intervals"
         },
-        "commands": [
-            {
-                "command": "dolphin.focusInput",
-                "title": "Dolphin: Focus Input"
-            },
-            {
-                "command": "dolphin.newConversation",
-                "title": "Dolphin: New Conversation"
-            },
-            {
-                "command": "dolphin.setApiKey",
-                "title": "Dolphin: Set API Key"
-            },
-            {
-                "command": "dolphin.test",
-                "title": "Dolphin: Test"
-            },
-            {
-                "command": "dolphin.kb.showStatus",
-                "title": "Dolphin: Show KB Status"
-            },
-            {
-                "command": "dolphin.kb.restart",
-                "title": "Dolphin: Restart Knowledge Base"
-            },
-            {
-                "command": "dolphin.askAboutSelection",
-                "title": "Dolphin: Ask About Selection"
-            },
-            {
-                "command": "dolphin.refactorSelection",
-                "title": "Dolphin: Refactor Selection"
-            },
-            {
-                "command": "dolphin.askAboutFile",
-                "title": "Dolphin: Ask About This File"
-            },
-            {
-                "command": "dolphin.askAboutFolder",
-                "title": "Dolphin: Ask About This Folder"
-            },
-            {
-                "command": "dolphin.applyDiff",
-                "title": "Dolphin: Apply Diff"
-            }
-        ],
-        "configuration": {
-            "title": "Dolphin",
-            "properties": {
-                "dolphin.kb.debounceMs": {
-                    "type": "number",
-                    "default": 2000,
-                    "description": "Milliseconds to wait after file change before indexing"
-                },
-                "dolphin.kb.batchIntervalMs": {
-                    "type": "number",
-                    "default": 5000,
-                    "description": "Milliseconds between batch processing intervals"
-                },
-                "dolphin.kb.excludePatterns": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "default": [
-                        "**/node_modules/**",
-                        "**/dist/**",
-                        "**/build/**",
-                        "**/.git/**",
-                        "**/out/**",
-                        "**/*.min.js"
-                    ],
-                    "description": "Patterns to exclude from automatic indexing"
-                },
-                "dolphin.kb.autoSync.enabled": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Enable automatic synchronization of file changes"
-                },
-                "dolphin.kb.autoSync.mode": {
-                    "type": "string",
-                    "enum": [
-                        "off",
-                        "manual",
-                        "smart",
-                        "aggressive"
-                    ],
-                    "default": "smart",
-                    "enumDescriptions": [
-                        "Disabled - manual reindex only",
-                        "Notify user, require confirmation",
-                        "Auto-sync after idle period (recommended)",
-                        "Immediate incremental indexing"
-                    ],
-                    "description": "Auto-sync mode for file changes"
-                },
-                "dolphin.kb.autoSync.idleTimeMs": {
-                    "type": "number",
-                    "default": 30000,
-                    "description": "Idle time threshold in milliseconds before triggering auto-sync (smart mode)"
-                },
-                "dolphin.kb.autoSync.maxBatchSize": {
-                    "type": "number",
-                    "default": 100,
-                    "description": "Maximum number of files to process per auto-sync batch"
-                },
-                "dolphin.kb.autoSync.checkIntervalMs": {
-                    "type": "number",
-                    "default": 30000,
-                    "description": "Interval in milliseconds to check for pending changes"
-                },
-                "dolphin.model": {
-                    "type": "string",
-                    "default": "claude-sonnet-4-5-20250929",
-                    "description": "Claude model to use for chat"
-                },
-                "dolphin.maxTokens": {
-                    "type": "number",
-                    "default": 8192,
-                    "description": "Maximum tokens for responses"
-                },
-                "dolphin.temperature": {
-                    "type": "number",
-                    "default": 1,
-                    "minimum": 0,
-                    "maximum": 1,
-                    "description": "Temperature for response generation (0-1)"
-                },
-                "dolphin.useTools": {
-                    "type": "boolean",
-                    "default": true,
-                    "description": "Enable tool use (file operations, search, etc.)"
-                },
-                "dolphin.enableTelemetry": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Enable anonymous usage telemetry"
-                },
-                "dolphin.logLevel": {
-                    "type": "string",
-                    "enum": [
-                        "error",
-                        "warn",
-                        "info",
-                        "debug"
-                    ],
-                    "default": "info",
-                    "description": "Logging verbosity level"
-                }
-            }
+        "dolphin.kb.excludePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/node_modules/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/.git/**",
+            "**/out/**",
+            "**/*.min.js"
+          ],
+          "description": "Patterns to exclude from automatic indexing"
         },
-        "menus": {
-            "editor/context": [
-                {
-                    "command": "dolphin.askAboutSelection",
-                    "when": "editorHasSelection",
-                    "group": "dolphin@1"
-                },
-                {
-                    "command": "dolphin.refactorSelection",
-                    "when": "editorHasSelection",
-                    "group": "dolphin@2"
-                }
-            ],
-            "explorer/context": [
-                {
-                    "command": "dolphin.askAboutFile",
-                    "when": "!explorerResourceIsFolder",
-                    "group": "dolphin@1"
-                },
-                {
-                    "command": "dolphin.askAboutFolder",
-                    "when": "explorerResourceIsFolder",
-                    "group": "dolphin@1"
-                }
-            ]
+        "dolphin.kb.autoSync.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic synchronization of file changes"
         },
-        "keybindings": [
-            {
-                "command": "dolphin.focusInput",
-                "key": "ctrl+l",
-                "mac": "cmd+l",
-                "when": "dolphin.chatViewVisible"
-            },
-            {
-                "command": "dolphin.newConversation",
-                "key": "ctrl+shift+n",
-                "mac": "cmd+shift+n",
-                "when": "dolphin.chatViewVisible"
-            },
-            {
-                "command": "dolphin.askAboutSelection",
-                "key": "ctrl+shift+a",
-                "mac": "cmd+shift+a",
-                "when": "editorHasSelection"
-            },
-            {
-                "command": "dolphin.kb.showStatus",
-                "key": "ctrl+shift+k",
-                "mac": "cmd+shift+k",
-                "when": "!editorTextFocus"
-            }
-        ]
+        "dolphin.kb.autoSync.mode": {
+          "type": "string",
+          "enum": [
+            "off",
+            "manual",
+            "smart",
+            "aggressive"
+          ],
+          "default": "smart",
+          "enumDescriptions": [
+            "Disabled - manual reindex only",
+            "Notify user, require confirmation",
+            "Auto-sync after idle period (recommended)",
+            "Immediate incremental indexing"
+          ],
+          "description": "Auto-sync mode for file changes"
+        },
+        "dolphin.kb.autoSync.idleTimeMs": {
+          "type": "number",
+          "default": 30000,
+          "description": "Idle time threshold in milliseconds before triggering auto-sync (smart mode)"
+        },
+        "dolphin.kb.autoSync.maxBatchSize": {
+          "type": "number",
+          "default": 100,
+          "description": "Maximum number of files to process per auto-sync batch"
+        },
+        "dolphin.kb.autoSync.checkIntervalMs": {
+          "type": "number",
+          "default": 30000,
+          "description": "Interval in milliseconds to check for pending changes"
+        },
+        "dolphin.model": {
+          "type": "string",
+          "default": "claude-sonnet-4-5-20250929",
+          "description": "Claude model to use for chat"
+        },
+        "dolphin.maxTokens": {
+          "type": "number",
+          "default": 8192,
+          "description": "Maximum tokens for responses"
+        },
+        "dolphin.temperature": {
+          "type": "number",
+          "default": 1,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Temperature for response generation (0-1)"
+        },
+        "dolphin.useTools": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable tool use (file operations, search, etc.)"
+        },
+        "dolphin.enableTelemetry": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable anonymous usage telemetry"
+        },
+        "dolphin.logLevel": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warn",
+            "info",
+            "debug"
+          ],
+          "default": "info",
+          "description": "Logging verbosity level"
+        }
+      }
     },
-    "scripts": {
-        "vscode:prepublish": "npm run compile",
-        "compile": "tsc -p ./",
-        "watch": "tsc -watch -p ./",
-        "pretest": "npm run compile",
-        "test": "vscode-test",
-        "package": "vsce package"
+    "menus": {
+      "editor/context": [
+        {
+          "command": "dolphin.askAboutSelection",
+          "when": "editorHasSelection",
+          "group": "dolphin@1"
+        },
+        {
+          "command": "dolphin.refactorSelection",
+          "when": "editorHasSelection",
+          "group": "dolphin@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "dolphin.askAboutFile",
+          "when": "!explorerResourceIsFolder",
+          "group": "dolphin@1"
+        },
+        {
+          "command": "dolphin.askAboutFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "dolphin@1"
+        }
+      ]
     },
-    "devDependencies": {
-        "@types/mocha": "^10.0.10",
-        "@types/node": "^22.10.0",
-        "@types/vscode": "^1.96.0",
-        "@vscode/test-cli": "^0.0.12",
-        "@vscode/test-electron": "^2.5.2",
-        "@vscode/vsce": "^3.2.1",
-        "glob": "^11.0.0",
-        "mocha": "^10.8.2",
-        "typescript": "^5.7.2"
-    },
-    "dependencies": {
-        "vscode-jsonrpc": "^8.2.1"
-    }
+    "keybindings": [
+      {
+        "command": "dolphin.focusInput",
+        "key": "ctrl+l",
+        "mac": "cmd+l",
+        "when": "dolphin.chatViewVisible"
+      },
+      {
+        "command": "dolphin.newConversation",
+        "key": "ctrl+shift+n",
+        "mac": "cmd+shift+n",
+        "when": "dolphin.chatViewVisible"
+      },
+      {
+        "command": "dolphin.askAboutSelection",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a",
+        "when": "editorHasSelection"
+      },
+      {
+        "command": "dolphin.kb.showStatus",
+        "key": "ctrl+shift+k",
+        "mac": "cmd+shift+k",
+        "when": "!editorTextFocus"
+      }
+    ]
+  },
+  "scripts": {
+      "vscode:prepublish": "npm run compile",
+      "compile": "tsc -p ./",
+      "watch": "tsc -watch -p ./",
+      "pretest": "npm run compile",
+      "test": "vscode-test",
+      "package": "vsce package",
+      "lint": "bun x eslint ."
+  },
+  "devDependencies": {
+      "@types/mocha": "^10.0.10",
+      "@types/node": "^22.10.0",
+      "@types/vscode": "^1.96.0",
+      "@typescript-eslint/eslint-plugin": "^7.17.0",
+      "@typescript-eslint/parser": "^7.17.0",
+      "@vscode/test-cli": "^0.0.12",
+      "@vscode/test-electron": "^2.5.2",
+      "@vscode/vsce": "^3.2.1",
+      "eslint": "^9.8.0",
+      "glob": "^11.0.0",
+      "mocha": "^10.8.2",
+      "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "vscode-jsonrpc": "^8.2.1"
+  }
 }

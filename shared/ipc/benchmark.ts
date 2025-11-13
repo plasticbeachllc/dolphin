@@ -8,7 +8,7 @@
  *   node benchmark.ts
  */
 
-import { JSONSerializer, MessagePackSerializer, MetricsCollector } from './serialization';
+import { JSONSerializer, MessagePackSerializer, MetricsCollector } from "./serialization";
 
 interface BenchmarkResult {
   format: string;
@@ -29,17 +29,17 @@ function generatePayload(sizeBytes: number): any {
 
   const data: any = {
     timestamp: Date.now(),
-    type: 'benchmark_message',
+    type: "benchmark_message",
     metadata: {
-      version: '1.0',
-      source: 'benchmark',
+      version: "1.0",
+      source: "benchmark",
     },
-    payload: '',
+    payload: "",
   };
 
   // Fill with random data to reach target size
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let payload = '';
+  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let payload = "";
   for (let i = 0; i < targetChars; i++) {
     payload += chars.charAt(Math.floor(Math.random() * chars.length));
   }
@@ -80,7 +80,7 @@ function runBenchmark(
 
     // Verify roundtrip
     if (JSON.stringify(decoded) !== JSON.stringify(payload)) {
-      throw new Error('Roundtrip verification failed!');
+      throw new Error("Roundtrip verification failed!");
     }
   }
 
@@ -106,34 +106,34 @@ function runBenchmark(
  * Format results as table
  */
 function printResults(results: BenchmarkResult[]) {
-  console.log('\n📊 Serialization Benchmark Results\n');
-  console.log('═'.repeat(120));
+  console.log("\n📊 Serialization Benchmark Results\n");
+  console.log("═".repeat(120));
   console.log(
-    'Format'.padEnd(12) +
-    'Payload'.padEnd(12) +
-    'Iterations'.padEnd(12) +
-    'Serialize'.padEnd(14) +
-    'Deserialize'.padEnd(14) +
-    'Total'.padEnd(14) +
-    'Size'.padEnd(12) +
-    'Throughput'
+    "Format".padEnd(12) +
+      "Payload".padEnd(12) +
+      "Iterations".padEnd(12) +
+      "Serialize".padEnd(14) +
+      "Deserialize".padEnd(14) +
+      "Total".padEnd(14) +
+      "Size".padEnd(12) +
+      "Throughput"
   );
-  console.log('═'.repeat(120));
+  console.log("═".repeat(120));
 
   for (const result of results) {
     console.log(
       result.format.padEnd(12) +
-      `${(result.payloadSize / 1024).toFixed(1)} KB`.padEnd(12) +
-      result.iterations.toString().padEnd(12) +
-      `${result.avgSerializeMs.toFixed(3)} ms`.padEnd(14) +
-      `${result.avgDeserializeMs.toFixed(3)} ms`.padEnd(14) +
-      `${result.avgTotalMs.toFixed(3)} ms`.padEnd(14) +
-      `${result.avgPayloadBytes} B`.padEnd(12) +
-      `${Math.floor(result.throughputMsgPerSec)} msg/s`
+        `${(result.payloadSize / 1024).toFixed(1)} KB`.padEnd(12) +
+        result.iterations.toString().padEnd(12) +
+        `${result.avgSerializeMs.toFixed(3)} ms`.padEnd(14) +
+        `${result.avgDeserializeMs.toFixed(3)} ms`.padEnd(14) +
+        `${result.avgTotalMs.toFixed(3)} ms`.padEnd(14) +
+        `${result.avgPayloadBytes} B`.padEnd(12) +
+        `${Math.floor(result.throughputMsgPerSec)} msg/s`
     );
   }
 
-  console.log('═'.repeat(120) + '\n');
+  console.log("═".repeat(120) + "\n");
 }
 
 /**
@@ -143,10 +143,15 @@ function printComparison(jsonResult: BenchmarkResult, msgpackResult: BenchmarkRe
   const serializeSpeedup = jsonResult.avgSerializeMs / msgpackResult.avgSerializeMs;
   const deserializeSpeedup = jsonResult.avgDeserializeMs / msgpackResult.avgDeserializeMs;
   const totalSpeedup = jsonResult.avgTotalMs / msgpackResult.avgTotalMs;
-  const sizeReduction = ((jsonResult.avgPayloadBytes - msgpackResult.avgPayloadBytes) / jsonResult.avgPayloadBytes) * 100;
-  const throughputIncrease = ((msgpackResult.throughputMsgPerSec - jsonResult.throughputMsgPerSec) / jsonResult.throughputMsgPerSec) * 100;
+  const sizeReduction =
+    ((jsonResult.avgPayloadBytes - msgpackResult.avgPayloadBytes) / jsonResult.avgPayloadBytes) *
+    100;
+  const throughputIncrease =
+    ((msgpackResult.throughputMsgPerSec - jsonResult.throughputMsgPerSec) /
+      jsonResult.throughputMsgPerSec) *
+    100;
 
-  console.log('📈 MessagePack vs JSON Comparison\n');
+  console.log("📈 MessagePack vs JSON Comparison\n");
   console.log(`  Serialize:     ${serializeSpeedup.toFixed(2)}x faster`);
   console.log(`  Deserialize:   ${deserializeSpeedup.toFixed(2)}x faster`);
   console.log(`  Total:         ${totalSpeedup.toFixed(2)}x faster`);
@@ -158,13 +163,13 @@ function printComparison(jsonResult: BenchmarkResult, msgpackResult: BenchmarkRe
  * Main benchmark
  */
 async function main() {
-  console.log('🚀 Starting IPC Serialization Benchmarks...\n');
+  console.log("🚀 Starting IPC Serialization Benchmarks...\n");
 
   const payloadSizes = [
-    1 * 1024,      // 1 KB - small messages
-    10 * 1024,     // 10 KB - medium messages
-    100 * 1024,    // 100 KB - large messages
-    1024 * 1024,   // 1 MB - very large messages
+    1 * 1024, // 1 KB - small messages
+    10 * 1024, // 10 KB - medium messages
+    100 * 1024, // 100 KB - large messages
+    1024 * 1024, // 1 MB - very large messages
   ];
 
   const iterations = 1000;
@@ -184,8 +189,8 @@ async function main() {
     }
 
     // Run benchmarks
-    const jsonResult = runBenchmark('JSON', jsonSerializer, payload, iterations);
-    const msgpackResult = runBenchmark('MessagePack', msgpackSerializer, payload, iterations);
+    const jsonResult = runBenchmark("JSON", jsonSerializer, payload, iterations);
+    const msgpackResult = runBenchmark("MessagePack", msgpackSerializer, payload, iterations);
 
     allResults.push(jsonResult, msgpackResult);
 
@@ -196,11 +201,11 @@ async function main() {
   printResults(allResults);
 
   // Summary
-  console.log('✅ Benchmark complete!\n');
-  console.log('💡 Recommendations:');
-  console.log('   - Use JSON for small payloads (< 1 KB) or when debugging');
-  console.log('   - Use MessagePack for high throughput or large payloads (> 10 KB)');
-  console.log('   - Set DOLPHIN_IPC_FORMAT=msgpack to enable MessagePack\n');
+  console.log("✅ Benchmark complete!\n");
+  console.log("💡 Recommendations:");
+  console.log("   - Use JSON for small payloads (< 1 KB) or when debugging");
+  console.log("   - Use MessagePack for high throughput or large payloads (> 10 KB)");
+  console.log("   - Set DOLPHIN_IPC_FORMAT=msgpack to enable MessagePack\n");
 }
 
 // Run benchmark

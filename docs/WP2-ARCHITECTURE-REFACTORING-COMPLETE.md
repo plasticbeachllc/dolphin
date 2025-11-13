@@ -9,6 +9,7 @@
 ## Executive Summary
 
 Successfully consolidated agent-core V1 and V2 into a single, production-ready module with enhanced architecture:
+
 - **Research → Clarification → Planning** workflow for complex tasks
 - **Single-phase fast-path** workflow for simple edits
 - **PathValidator security** (WP1) preserved throughout
@@ -20,12 +21,15 @@ Successfully consolidated agent-core V1 and V2 into a single, production-ready m
 ## Completed Phases
 
 ### ✅ Phase 1: Preparation (Commit: eccea78)
+
 - Created working branch
 - Documented V1 (18 files) and V2 (9 files) state
 - Mapped component dependencies
 
 ### ✅ Phase 2: Component Migration (Commit: eccea78)
+
 **Moved 14 files from agent-core V1 → V2:**
+
 - **MCP & KB**: mcp-client.ts, kb-manager.ts, index-queue.ts, bundled-manager.ts
 - **LLM**: claude-client.ts, claude-cli-detector.ts, claude-cli-process.ts, claude-tool-executor.ts, diff-generator.ts, tool-utils.ts
 - **Storage**: toml-writer.ts, conversation-store.ts, plan-store.ts
@@ -35,16 +39,19 @@ Successfully consolidated agent-core V1 and V2 into a single, production-ready m
 ### ✅ Phase 3: Architecture Simplification (Commit: f788408)
 
 **ClaudeProvider Refactored**: 509 → 125 lines
+
 - Thin wrapper around ClaudeToolExecutor
 - Clean interface for workflows
 - Maintains flexibility for future changes
 
 **EditorWorkflow Implemented**: 195 lines
+
 - Single-phase execution for simple tasks
 - Fast-path with 8K token context limit
 - Direct execution without clarification phase
 
 **ArchitectWorkflow Implemented**: 426 lines (later enhanced to 1093 lines)
+
 - Multi-phase execution for complex tasks
 - Research → Planning → Execution flow
 - Later enhanced with Clarification phase (from develop-architect merge)
@@ -52,6 +59,7 @@ Successfully consolidated agent-core V1 and V2 into a single, production-ready m
 ### ✅ Phase 4: Main.ts Integration (Commit: d59fb74)
 
 **Complete component initialization (11 components):**
+
 1. ClaudeClient (unified API + CLI)
 2. ClaudeProvider (wrapper)
 3. ContextBuilder (KB + files)
@@ -69,12 +77,14 @@ Successfully consolidated agent-core V1 and V2 into a single, production-ready m
 ### ✅ Phase 5: Merge develop-architect (Commit: 045e19f)
 
 **Successfully merged with conflict resolution:**
+
 - **architect-workflow.ts**: Accepted develop-architect's complete rewrite with clarification phase
 - **state-store.ts**: Kept PathValidator + added Zod validation
 - **kb/api/utils.py**: Kept PathValidator for security
 - **kb/store/sqlite_meta.py**: Combined generate_fts_content_id + PathValidator
 
 **Key enhancements from develop-architect:**
+
 - Research → **Clarification** → Planning flow (new interactive phase!)
 - Q&A loop with `[READY_TO_PLAN]` signal
 - TOML plan parsing with robust markdown fallback
@@ -86,6 +96,7 @@ Successfully consolidated agent-core V1 and V2 into a single, production-ready m
 ### ✅ Phase 6: Directory Consolidation (Commit: bb7dd15)
 
 **Complete consolidation:**
+
 - Removed old `agent-core/` (V1) directory
 - Renamed `agent-core-v2/` → `agent-core/`
 - Updated package.json: `@dolphin/agent-core-v2` → `@dolphin/agent-core`
@@ -96,11 +107,13 @@ Successfully consolidated agent-core V1 and V2 into a single, production-ready m
 ### ✅ Phase 7: Validation
 
 **Python Tests: 845/845 PASSING (100%)**
+
 - Unit tests: 845 passed, 1 skipped
 - Path validation security: 14/14 tests passing (WP1 verified)
 - Integration tests: Available but skipped (require tiktoken encoding data)
 
 **TypeScript Tests: Suite Available**
+
 - **Unit Tests** (4 files):
   - `architect-workflow.test.ts` - Workflow phase testing
   - `json-rpc.test.ts` - Protocol handling
@@ -116,6 +129,7 @@ Successfully consolidated agent-core V1 and V2 into a single, production-ready m
   - `orchestrator-e2e.test.ts` - End-to-end orchestration
 
 **To run TypeScript tests:**
+
 ```bash
 cd agent-core && bun test
 ```
@@ -123,6 +137,7 @@ cd agent-core && bun test
 ### ✅ Phase 8: Documentation & Infrastructure
 
 **SessionStart Hook Created**: (Commits: 02f23e0, 4ce3465)
+
 - Automatic dependency installation for Claude Code on the web
 - Installs uv (Python package manager)
 - Installs bun (JavaScript runtime)
@@ -130,6 +145,7 @@ cd agent-core && bun test
 - Only runs in remote environments (`CLAUDE_CODE_REMOTE=true`)
 
 **Updated .gitignore**:
+
 - Changed `.claude/` → `.claude/*`
 - Added exceptions for SessionStart hook files
 
@@ -181,11 +197,13 @@ agent-core/
 ### Workflow Flow
 
 #### EditorWorkflow (Fast-Path)
+
 ```
 Input → Context Build (8K tokens) → Prompt Build → Execute → Save State → Done
 ```
 
 #### ArchitectWorkflow (Complex Tasks)
+
 ```
 Input → Research Phase (KB search, findings)
       ↓
@@ -199,6 +217,7 @@ Input → Research Phase (KB search, findings)
 ### Security (WP1 Preserved)
 
 **PathValidator used in:**
+
 - `agent-core/src/llm/diff-generator.ts` - File diff generation
 - `agent-core/src/storage/toml-writer.ts` - TOML file writes
 - `agent-core/src/storage/conversation-store.ts` - Conversation persistence
@@ -208,6 +227,7 @@ Input → Research Phase (KB search, findings)
 - `kb/store/sqlite_meta.py` - File content reading
 
 **Protection against:**
+
 - Directory traversal attacks (`../`)
 - Absolute paths outside workspace
 - Null byte injection
@@ -233,13 +253,13 @@ eccea78 - Phase 2 Complete: Move & consolidate V1 components into V2
 
 ## Test Coverage Summary
 
-| Domain | Tests | Status | Coverage |
-|--------|-------|--------|----------|
-| **Python Unit** | 845 tests | ✅ PASSING | 100% (845/845) |
-| **Python Integration** | N/A | ⚠️ Skipped | Requires tiktoken |
-| **TypeScript Unit** | 4 files | 📦 Available | Run with `bun test` |
-| **TypeScript Integration** | 6 files | 📦 Available | Run with `bun test` |
-| **Path Validation (WP1)** | 14 tests | ✅ PASSING | 100% (14/14) |
+| Domain                     | Tests     | Status       | Coverage            |
+| -------------------------- | --------- | ------------ | ------------------- |
+| **Python Unit**            | 845 tests | ✅ PASSING   | 100% (845/845)      |
+| **Python Integration**     | N/A       | ⚠️ Skipped   | Requires tiktoken   |
+| **TypeScript Unit**        | 4 files   | 📦 Available | Run with `bun test` |
+| **TypeScript Integration** | 6 files   | 📦 Available | Run with `bun test` |
+| **Path Validation (WP1)**  | 14 tests  | ✅ PASSING   | 100% (14/14)        |
 
 **Total Python Tests Passing**: 845/845 (100%)
 **Security Tests Passing**: 14/14 (100%)
@@ -248,14 +268,14 @@ eccea78 - Phase 2 Complete: Move & consolidate V1 components into V2
 
 ## Lines of Code
 
-| Component | Lines | Purpose |
-|-----------|-------|---------|
-| ArchitectWorkflow | 1,093 | Research → Clarification → Planning |
-| EditorWorkflow | 195 | Single-phase fast-path |
-| ClaudeProvider | 125 | Thin wrapper around executor |
-| Orchestrator | ~350 | State machine coordination |
-| StateStore | ~450 | TOML persistence with PathValidator |
-| **Total Core** | ~1,830 | Main workflow & orchestration |
+| Component         | Lines  | Purpose                             |
+| ----------------- | ------ | ----------------------------------- |
+| ArchitectWorkflow | 1,093  | Research → Clarification → Planning |
+| EditorWorkflow    | 195    | Single-phase fast-path              |
+| ClaudeProvider    | 125    | Thin wrapper around executor        |
+| Orchestrator      | ~350   | State machine coordination          |
+| StateStore        | ~450   | TOML persistence with PathValidator |
+| **Total Core**    | ~1,830 | Main workflow & orchestration       |
 
 ---
 
@@ -273,12 +293,14 @@ eccea78 - Phase 2 Complete: Move & consolidate V1 components into V2
 ## Next Steps
 
 ### For Production Deployment
+
 1. ✅ Merge this branch into main/develop
 2. Run full TypeScript test suite: `cd agent-core && bun test`
 3. Validate end-to-end flows with real Claude API
 4. Monitor performance metrics (latency, token usage)
 
 ### For Future Enhancement
+
 - Consider async mode for SessionStart hook (faster startup, potential race conditions)
 - Add metrics/telemetry to workflows for observability
 - Implement plan approval UI in VSCode extension
@@ -302,6 +324,7 @@ eccea78 - Phase 2 Complete: Move & consolidate V1 components into V2
 ## Conclusion
 
 WP2 Architecture Refactoring is **COMPLETE**. The agent-core module is now:
+
 - Fully consolidated (V1 removed, V2 renamed to agent-core)
 - Enhanced with clarification phase for complex tasks
 - Secured with PathValidator throughout (WP1)

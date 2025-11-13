@@ -36,7 +36,7 @@ export class DolphinCodeActionProvider implements vscode.CodeActionProvider {
     explainAction.command = {
       command: "dolphin.explainCode",
       title: "Explain with Dolphin",
-      arguments: [selection, fileName, language]
+      arguments: [selection, fileName, language],
     };
     actions.push(explainAction);
 
@@ -48,7 +48,7 @@ export class DolphinCodeActionProvider implements vscode.CodeActionProvider {
     refactorAction.command = {
       command: "dolphin.refactorCode",
       title: "Refactor with Dolphin",
-      arguments: [selection, fileName, language]
+      arguments: [selection, fileName, language],
     };
     actions.push(refactorAction);
 
@@ -60,7 +60,7 @@ export class DolphinCodeActionProvider implements vscode.CodeActionProvider {
     testAction.command = {
       command: "dolphin.addTests",
       title: "Add tests with Dolphin",
-      arguments: [selection, fileName, language]
+      arguments: [selection, fileName, language],
     };
     actions.push(testAction);
 
@@ -72,7 +72,7 @@ export class DolphinCodeActionProvider implements vscode.CodeActionProvider {
     documentAction.command = {
       command: "dolphin.documentCode",
       title: "Document with Dolphin",
-      arguments: [selection, fileName, language]
+      arguments: [selection, fileName, language],
     };
     actions.push(documentAction);
 

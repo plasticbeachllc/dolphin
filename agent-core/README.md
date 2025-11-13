@@ -19,6 +19,7 @@ Based on the comprehensive [Dolphin v2 Orchestration Project Plan](../docs/orche
 **Delivered:** All core components for Foundation phase (Weeks 1-3)
 
 ### Components
+
 - ✅ [`Orchestrator`](src/orchestrator/orchestrator.ts) - State machine & workflow coordination (458 lines)
 - ✅ [`StateStore`](src/state/state-store.ts) - TOML persistence & versioning (459 lines)
 - ✅ [`JSON-RPC`](src/utils/json-rpc.ts) - Extension communication (291 lines)
@@ -49,11 +50,11 @@ idle → researching → planning → awaiting_approval → executing → comple
 
 ```typescript
 MODEL_CONFIG = {
-  research: 'claude-haiku-4-20250514',    // Fast, cost-effective
-  planning: 'claude-opus-4-20250514',     // Best reasoning
-  coding: 'claude-sonnet-4-20250514',     // Balanced
-  editor: 'claude-sonnet-4-20250514',     // Fast & capable
-}
+  research: "claude-haiku-4-20250514", // Fast, cost-effective
+  planning: "claude-opus-4-20250514", // Best reasoning
+  coding: "claude-sonnet-4-20250514", // Balanced
+  editor: "claude-sonnet-4-20250514", // Fast & capable
+};
 ```
 
 ### Communication Flow
@@ -92,21 +93,21 @@ bun run tests/run-integration-tests.ts
 ### Editor Mode (Fast-Path)
 
 ```typescript
-import { Orchestrator } from './src/orchestrator/orchestrator';
-import { EditorWorkflow } from './src/workflows/editor-workflow';
-import { ClaudeProvider } from './src/execution/claude-provider';
-import { ContextBuilder } from './src/context/context-builder';
-import { PromptBuilder } from './src/prompts/prompt-builder';
-import { StateStore } from './src/state/state-store';
+import { Orchestrator } from "./src/orchestrator/orchestrator";
+import { EditorWorkflow } from "./src/workflows/editor-workflow";
+import { ClaudeProvider } from "./src/execution/claude-provider";
+import { ContextBuilder } from "./src/context/context-builder";
+import { PromptBuilder } from "./src/prompts/prompt-builder";
+import { StateStore } from "./src/state/state-store";
 
 // Setup
 const claudeProvider = new ClaudeProvider({
-  workspaceRoot: '/path/to/workspace',
+  workspaceRoot: "/path/to/workspace",
 });
 
 const contextBuilder = new ContextBuilder({
-  workspaceRoot: '/path/to/workspace',
-  kbUrl: 'http://localhost:7777',
+  workspaceRoot: "/path/to/workspace",
+  kbUrl: "http://localhost:7777",
 });
 
 const promptBuilder = new PromptBuilder();
@@ -118,11 +119,11 @@ const editorWorkflow = new EditorWorkflow({
 });
 
 const stateStore = new StateStore({
-  storagePath: '.dolphin',
+  storagePath: ".dolphin",
 });
 
 const orchestrator = new Orchestrator({
-  workspaceRoot: '/path/to/workspace',
+  workspaceRoot: "/path/to/workspace",
   stateStore,
   editorWorkflow,
   architectWorkflow: editorWorkflow, // Phase 2
@@ -130,16 +131,16 @@ const orchestrator = new Orchestrator({
 
 // Start task
 const session = await orchestrator.startTask({
-  mode: 'editor',
-  message: 'Add error handling to the API',
-  context: { files: ['api.ts'] },
+  mode: "editor",
+  message: "Add error handling to the API",
+  context: { files: ["api.ts"] },
 });
 
 // Subscribe to updates
 for await (const update of orchestrator.subscribeToUpdates(session.id)) {
   console.log(update);
-  
-  if (update.type === 'state_change' && update.data.state === 'complete') {
+
+  if (update.type === "state_change" && update.data.state === "complete") {
     break;
   }
 }
@@ -150,6 +151,7 @@ for await (const update of orchestrator.subscribeToUpdates(session.id)) {
 ## Testing
 
 ### Unit Tests (34+ tests)
+
 ```bash
 bun test tests/unit/orchestrator.test.ts
 bun test tests/unit/state-store.test.ts
@@ -157,6 +159,7 @@ bun test tests/unit/json-rpc.test.ts
 ```
 
 ### Integration Tests (60+ tests)
+
 ```bash
 bun test tests/integration/editor-workflow.test.ts
 bun test tests/integration/orchestrator-e2e.test.ts
@@ -165,6 +168,7 @@ bun test tests/integration/claude-auth.test.ts
 ```
 
 ### Run All Tests
+
 ```bash
 bun run tests/run-integration-tests.ts
 ```
@@ -207,30 +211,35 @@ agent-core-v2/
 ## Key Features
 
 ### ✅ Editor Workflow
+
 - Fast-path execution for simple tasks
 - Lightweight context (8000 tokens max)
 - Sonnet 4.5 with normal thinking mode
 - Single-step execution
 
 ### ✅ State Management
+
 - Event-driven architecture
 - TOML persistence for human readability
 - Plan versioning with revision history
 - Atomic writes with backup support
 
 ### ✅ Knowledge Bank Integration
+
 - Semantic search via HTTP API
 - Context assembly with token tracking
 - Intelligent truncation with priority system
 - Graceful degradation when KB unavailable
 
 ### ✅ Multi-Model Support
+
 - Model selection per workflow phase
 - CLI subprocess management
 - Streaming response parsing
 - Process lifecycle control
 
 ### ✅ Authentication
+
 - OAuth detection (`.claude/settings.json`)
 - API key detection (`ANTHROPIC_API_KEY`)
 - Priority handling (OAuth > API key)
@@ -241,6 +250,7 @@ agent-core-v2/
 ## Phase 2 Roadmap (Weeks 4-6)
 
 ### Week 4: Research & Planning Phases
+
 - [ ] Implement ArchitectWorkflow with research phase
 - [ ] KB search prompting with Haiku
 - [ ] Research summary generation
@@ -248,6 +258,7 @@ agent-core-v2/
 - [ ] Plan.md generation and parsing
 
 ### Week 5: User Approval Flow
+
 - [ ] Approval state management
 - [ ] Plan revision logic
 - [ ] VSCode UI integration
@@ -255,6 +266,7 @@ agent-core-v2/
 - [ ] Progress indicators
 
 ### Week 6: Implementation & Validation
+
 - [ ] Implementation phase with Sonnet
 - [ ] Step-by-step execution
 - [ ] Error handling and recovery
@@ -266,6 +278,7 @@ agent-core-v2/
 ## Success Criteria
 
 ### Phase 1 (Complete) ✅
+
 - [x] Editor Mode works end-to-end
 - [x] Claude CLI subprocess spawning reliable
 - [x] KB search integration functional
@@ -274,6 +287,7 @@ agent-core-v2/
 - [x] Authentication detection works
 
 ### Phase 2 (In Progress)
+
 - [ ] Architect Mode completes complex tasks end-to-end
 - [ ] Plan approval flow works smoothly
 - [ ] Plan revision works correctly
@@ -286,6 +300,7 @@ agent-core-v2/
 ## Contributing
 
 ### Development Workflow
+
 1. Create feature branch
 2. Implement with tests
 3. Run test suite: `bun run tests/run-integration-tests.ts`
@@ -293,6 +308,7 @@ agent-core-v2/
 5. Submit PR with validation report
 
 ### Code Standards
+
 - TypeScript strict mode
 - Comprehensive error handling
 - Event-driven architecture

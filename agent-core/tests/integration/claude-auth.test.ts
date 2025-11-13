@@ -1,17 +1,17 @@
 /**
  * Integration tests for Claude CLI authentication
- * 
+ *
  * Tests authentication detection and management
  */
 
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { ClaudeProvider, AuthManager } from '../../src/execution/claude-provider';
-import { existsSync, writeFileSync, mkdirSync, unlinkSync, rmdirSync } from 'fs';
-import { join } from 'path';
-import { homedir } from 'os';
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { ClaudeProvider, AuthManager } from "../../src/execution/claude-provider";
+import { existsSync, writeFileSync, mkdirSync, unlinkSync, rmdirSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
 
-describe('Claude Authentication Integration', () => {
-  const testSettingsPath = join(homedir(), '.claude-test', 'settings.json');
+describe("Claude Authentication Integration", () => {
+  const testSettingsPath = join(homedir(), ".claude-test", "settings.json");
   const originalApiKey = process.env.ANTHROPIC_API_KEY;
 
   beforeEach(() => {
@@ -43,22 +43,22 @@ describe('Claude Authentication Integration', () => {
     }
   });
 
-  describe('AuthManager', () => {
+  describe("AuthManager", () => {
     let authManager: AuthManager;
 
     beforeEach(() => {
       authManager = new AuthManager();
     });
 
-    it('should detect OAuth authentication', async () => {
+    it("should detect OAuth authentication", async () => {
       // Create mock settings file
-      const settingsDir = join(homedir(), '.claude');
+      const settingsDir = join(homedir(), ".claude");
       if (!existsSync(settingsDir)) {
         mkdirSync(settingsDir, { recursive: true });
       }
-      
-      const settingsPath = join(settingsDir, 'settings.json');
-      writeFileSync(settingsPath, JSON.stringify({ token: 'mock-token' }));
+
+      const settingsPath = join(settingsDir, "settings.json");
+      writeFileSync(settingsPath, JSON.stringify({ token: "mock-token" }));
 
       // Remove API key
       delete process.env.ANTHROPIC_API_KEY;
@@ -66,8 +66,8 @@ describe('Claude Authentication Integration', () => {
       const status = await authManager.detectAuthStatus();
 
       expect(status.authenticated).toBe(true);
-      expect(status.mode).toBe('subscription');
-      expect(status.source).toBe('Claude CLI OAuth');
+      expect(status.mode).toBe("subscription");
+      expect(status.source).toBe("Claude CLI OAuth");
 
       // Cleanup
       try {
@@ -77,42 +77,42 @@ describe('Claude Authentication Integration', () => {
       }
     });
 
-    it('should detect API key authentication', async () => {
+    it("should detect API key authentication", async () => {
       // Remove OAuth settings
-      const settingsPath = join(homedir(), '.claude', 'settings.json');
+      const settingsPath = join(homedir(), ".claude", "settings.json");
       if (existsSync(settingsPath)) {
         unlinkSync(settingsPath);
       }
 
       // Set API key
-      process.env.ANTHROPIC_API_KEY = 'sk-test-key';
+      process.env.ANTHROPIC_API_KEY = "sk-test-key";
 
       const status = await authManager.detectAuthStatus();
 
       expect(status.authenticated).toBe(true);
-      expect(status.mode).toBe('api_key');
-      expect(status.source).toBe('ANTHROPIC_API_KEY');
-      expect(status.warning).toContain('pay-as-you-go');
+      expect(status.mode).toBe("api_key");
+      expect(status.source).toBe("ANTHROPIC_API_KEY");
+      expect(status.warning).toContain("pay-as-you-go");
     });
 
-    it('should prefer OAuth over API key', async () => {
+    it("should prefer OAuth over API key", async () => {
       // Create OAuth settings
-      const settingsDir = join(homedir(), '.claude');
+      const settingsDir = join(homedir(), ".claude");
       if (!existsSync(settingsDir)) {
         mkdirSync(settingsDir, { recursive: true });
       }
-      
-      const settingsPath = join(settingsDir, 'settings.json');
-      writeFileSync(settingsPath, JSON.stringify({ token: 'mock-token' }));
+
+      const settingsPath = join(settingsDir, "settings.json");
+      writeFileSync(settingsPath, JSON.stringify({ token: "mock-token" }));
 
       // Also set API key
-      process.env.ANTHROPIC_API_KEY = 'sk-test-key';
+      process.env.ANTHROPIC_API_KEY = "sk-test-key";
 
       const status = await authManager.detectAuthStatus();
 
       expect(status.authenticated).toBe(true);
-      expect(status.mode).toBe('subscription');
-      expect(status.warning).toContain('ANTHROPIC_API_KEY ignored');
+      expect(status.mode).toBe("subscription");
+      expect(status.warning).toContain("ANTHROPIC_API_KEY ignored");
 
       // Cleanup
       try {
@@ -122,9 +122,9 @@ describe('Claude Authentication Integration', () => {
       }
     });
 
-    it('should detect no authentication', async () => {
+    it("should detect no authentication", async () => {
       // Remove both OAuth and API key
-      const settingsPath = join(homedir(), '.claude', 'settings.json');
+      const settingsPath = join(homedir(), ".claude", "settings.json");
       if (existsSync(settingsPath)) {
         unlinkSync(settingsPath);
       }
@@ -133,13 +133,13 @@ describe('Claude Authentication Integration', () => {
       const status = await authManager.detectAuthStatus();
 
       expect(status.authenticated).toBe(false);
-      expect(status.mode).toBe('none');
+      expect(status.mode).toBe("none");
       expect(status.error).toBeDefined();
     });
 
-    it('should throw error when not authenticated', async () => {
+    it("should throw error when not authenticated", async () => {
       // Remove both OAuth and API key
-      const settingsPath = join(homedir(), '.claude', 'settings.json');
+      const settingsPath = join(homedir(), ".claude", "settings.json");
       if (existsSync(settingsPath)) {
         unlinkSync(settingsPath);
       }
@@ -150,53 +150,53 @@ describe('Claude Authentication Integration', () => {
       }).toThrow(/not authenticated/);
     });
 
-    it('should warn about API key usage', async () => {
+    it("should warn about API key usage", async () => {
       // Remove OAuth
-      const settingsPath = join(homedir(), '.claude', 'settings.json');
+      const settingsPath = join(homedir(), ".claude", "settings.json");
       if (existsSync(settingsPath)) {
         unlinkSync(settingsPath);
       }
 
       // Set API key
-      process.env.ANTHROPIC_API_KEY = 'sk-test-key';
+      process.env.ANTHROPIC_API_KEY = "sk-test-key";
 
       // Mock console.warn
       const originalWarn = console.warn;
       const warnings: string[] = [];
       console.warn = mock((...args: any[]) => {
-        warnings.push(args.join(' '));
+        warnings.push(args.join(" "));
       });
 
       await authManager.ensureAuthenticated();
 
       // Should have warned about pay-as-you-go
-      expect(warnings.some(w => w.includes('pay-as-you-go'))).toBe(true);
+      expect(warnings.some((w) => w.includes("pay-as-you-go"))).toBe(true);
 
       // Restore console.warn
       console.warn = originalWarn;
     });
   });
 
-  describe('ClaudeProvider Authentication', () => {
+  describe("ClaudeProvider Authentication", () => {
     let provider: ClaudeProvider;
 
     beforeEach(() => {
       provider = new ClaudeProvider({
-        workspaceRoot: '/test/workspace',
+        workspaceRoot: "/test/workspace",
       });
     });
 
-    it('should detect auth status', async () => {
+    it("should detect auth status", async () => {
       const status = await provider.detectAuthStatus();
 
       expect(status).toBeDefined();
-      expect(typeof status.authenticated).toBe('boolean');
+      expect(typeof status.authenticated).toBe("boolean");
       expect(status.mode).toBeDefined();
     });
 
-    it('should ensure authentication before execution', async () => {
+    it("should ensure authentication before execution", async () => {
       // Remove all auth
-      const settingsPath = join(homedir(), '.claude', 'settings.json');
+      const settingsPath = join(homedir(), ".claude", "settings.json");
       if (existsSync(settingsPath)) {
         unlinkSync(settingsPath);
       }
@@ -208,31 +208,34 @@ describe('Claude Authentication Integration', () => {
     });
   });
 
-  describe('Authentication States', () => {
-    it('should handle OAuth subscription state', async () => {
+  describe("Authentication States", () => {
+    it("should handle OAuth subscription state", async () => {
       const authManager = new AuthManager();
 
       // Create OAuth settings
-      const settingsDir = join(homedir(), '.claude');
+      const settingsDir = join(homedir(), ".claude");
       if (!existsSync(settingsDir)) {
         mkdirSync(settingsDir, { recursive: true });
       }
-      
-      const settingsPath = join(settingsDir, 'settings.json');
-      writeFileSync(settingsPath, JSON.stringify({
-        token: 'mock-token',
-        subscription: {
-          plan: 'pro',
-          status: 'active',
-        },
-      }));
+
+      const settingsPath = join(settingsDir, "settings.json");
+      writeFileSync(
+        settingsPath,
+        JSON.stringify({
+          token: "mock-token",
+          subscription: {
+            plan: "pro",
+            status: "active",
+          },
+        })
+      );
 
       delete process.env.ANTHROPIC_API_KEY;
 
       const status = await authManager.detectAuthStatus();
 
       expect(status.authenticated).toBe(true);
-      expect(status.mode).toBe('subscription');
+      expect(status.mode).toBe("subscription");
 
       // Cleanup
       try {
@@ -242,29 +245,29 @@ describe('Claude Authentication Integration', () => {
       }
     });
 
-    it('should handle API key state', async () => {
+    it("should handle API key state", async () => {
       const authManager = new AuthManager();
 
       // Remove OAuth
-      const settingsPath = join(homedir(), '.claude', 'settings.json');
+      const settingsPath = join(homedir(), ".claude", "settings.json");
       if (existsSync(settingsPath)) {
         unlinkSync(settingsPath);
       }
 
-      process.env.ANTHROPIC_API_KEY = 'sk-ant-api03-1234567890';
+      process.env.ANTHROPIC_API_KEY = "sk-ant-api03-1234567890";
 
       const status = await authManager.detectAuthStatus();
 
       expect(status.authenticated).toBe(true);
-      expect(status.mode).toBe('api_key');
-      expect(status.source).toBe('ANTHROPIC_API_KEY');
+      expect(status.mode).toBe("api_key");
+      expect(status.source).toBe("ANTHROPIC_API_KEY");
     });
 
-    it('should handle no auth state', async () => {
+    it("should handle no auth state", async () => {
       const authManager = new AuthManager();
 
       // Remove all auth
-      const settingsPath = join(homedir(), '.claude', 'settings.json');
+      const settingsPath = join(homedir(), ".claude", "settings.json");
       if (existsSync(settingsPath)) {
         unlinkSync(settingsPath);
       }
@@ -273,31 +276,31 @@ describe('Claude Authentication Integration', () => {
       const status = await authManager.detectAuthStatus();
 
       expect(status.authenticated).toBe(false);
-      expect(status.mode).toBe('none');
+      expect(status.mode).toBe("none");
       expect(status.error).toBeDefined();
     });
   });
 
-  describe('Authentication Warnings', () => {
-    it('should warn when both auth methods present', async () => {
+  describe("Authentication Warnings", () => {
+    it("should warn when both auth methods present", async () => {
       const authManager = new AuthManager();
 
       // Create OAuth settings
-      const settingsDir = join(homedir(), '.claude');
+      const settingsDir = join(homedir(), ".claude");
       if (!existsSync(settingsDir)) {
         mkdirSync(settingsDir, { recursive: true });
       }
-      
-      const settingsPath = join(settingsDir, 'settings.json');
-      writeFileSync(settingsPath, JSON.stringify({ token: 'mock-token' }));
+
+      const settingsPath = join(settingsDir, "settings.json");
+      writeFileSync(settingsPath, JSON.stringify({ token: "mock-token" }));
 
       // Also set API key
-      process.env.ANTHROPIC_API_KEY = 'sk-test-key';
+      process.env.ANTHROPIC_API_KEY = "sk-test-key";
 
       const status = await authManager.detectAuthStatus();
 
       expect(status.warning).toBeDefined();
-      expect(status.warning).toContain('ignored');
+      expect(status.warning).toContain("ignored");
 
       // Cleanup
       try {
@@ -307,26 +310,26 @@ describe('Claude Authentication Integration', () => {
       }
     });
 
-    it('should warn about pay-as-you-go with API key', async () => {
+    it("should warn about pay-as-you-go with API key", async () => {
       const authManager = new AuthManager();
 
       // Remove OAuth
-      const settingsPath = join(homedir(), '.claude', 'settings.json');
+      const settingsPath = join(homedir(), ".claude", "settings.json");
       if (existsSync(settingsPath)) {
         unlinkSync(settingsPath);
       }
 
-      process.env.ANTHROPIC_API_KEY = 'sk-test-key';
+      process.env.ANTHROPIC_API_KEY = "sk-test-key";
 
       const status = await authManager.detectAuthStatus();
 
       expect(status.warning).toBeDefined();
-      expect(status.warning).toContain('pay-as-you-go');
+      expect(status.warning).toContain("pay-as-you-go");
     });
   });
 
-  describe('Error Handling', () => {
-    it('should handle missing .claude directory', async () => {
+  describe("Error Handling", () => {
+    it("should handle missing .claude directory", async () => {
       const authManager = new AuthManager();
 
       // Ensure .claude directory doesn't exist (it likely does in real environment)
@@ -336,20 +339,20 @@ describe('Claude Authentication Integration', () => {
       const status = await authManager.detectAuthStatus();
 
       // Should detect as not authenticated
-      expect(typeof status.authenticated).toBe('boolean');
+      expect(typeof status.authenticated).toBe("boolean");
     });
 
-    it('should handle corrupted settings file', async () => {
+    it("should handle corrupted settings file", async () => {
       const authManager = new AuthManager();
 
       // Create corrupted settings file
-      const settingsDir = join(homedir(), '.claude');
+      const settingsDir = join(homedir(), ".claude");
       if (!existsSync(settingsDir)) {
         mkdirSync(settingsDir, { recursive: true });
       }
-      
-      const settingsPath = join(settingsDir, 'settings.json');
-      writeFileSync(settingsPath, 'invalid json {{{');
+
+      const settingsPath = join(settingsDir, "settings.json");
+      writeFileSync(settingsPath, "invalid json {{{");
 
       delete process.env.ANTHROPIC_API_KEY;
 
@@ -358,7 +361,7 @@ describe('Claude Authentication Integration', () => {
 
       // Should treat as authenticated via OAuth since file exists
       expect(status.authenticated).toBe(true);
-      expect(status.mode).toBe('subscription');
+      expect(status.mode).toBe("subscription");
 
       // Cleanup
       try {

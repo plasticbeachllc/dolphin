@@ -7,11 +7,11 @@
 
 ## Implementation Status
 
-| Phase | Status | Completion Date | Tests Added |
-|-------|--------|----------------|-------------|
-| Phase 1: Critical Path Testing | ✅ Complete | 2025-11-12 | 160+ tests |
-| Phase 2: Utility & Support Code | ✅ Complete | 2025-11-12 | 150+ tests |
-| Phase 3: Type Validation & Schema Tests | ⏳ Pending | - | - |
+| Phase                                   | Status      | Completion Date | Tests Added |
+| --------------------------------------- | ----------- | --------------- | ----------- |
+| Phase 1: Critical Path Testing          | ✅ Complete | 2025-11-12      | 160+ tests  |
+| Phase 2: Utility & Support Code         | ✅ Complete | 2025-11-12      | 150+ tests  |
+| Phase 3: Type Validation & Schema Tests | ⏳ Pending  | -               | -           |
 
 ### Phase 1 Deliverables (✅ Complete)
 
@@ -22,6 +22,7 @@
 - ✅ `agent-core/tests/index-queue.test.ts` - 30+ tests for index queue
 
 **Coverage Impact:**
+
 - kb/ingest/lang.py: 0% → 100%
 - kb/api/server.py: Partial → ~90%
 - mcp-bridge/rest/client.ts: 0% → ~85%
@@ -35,6 +36,7 @@
 - ✅ `mcp-bridge/src/tests/util.test.ts` - 90+ tests for config, language, and logger utilities
 
 **Coverage Impact:**
+
 - kb/ingest/graph_helpers.py: Integration only → ~95%
 - kb/retrieval/graph_context.py: Integration only → ~90%
 - mcp-bridge/util/config.ts: 0% → ~90%
@@ -76,22 +78,22 @@ This document outlines a comprehensive plan to improve test coverage across the 
 
 ### High Priority (Production-Critical)
 
-| Component | Lines | Current Coverage | Risk Level | Impact |
-|-----------|-------|------------------|------------|--------|
-| kb/api/server.py | 109 | None | 🔴 Critical | Server initialization failures |
-| kb/ingest/cli.py | 869 | None | 🔴 Critical | CLI workflow breakage |
-| agent-core/llm/claude-tool-executor.ts | 572 | None | 🔴 Critical | Tool execution failures |
-| mcp-bridge/rest/client.ts | 159 | None | 🔴 Critical | API communication failures |
-| agent-core/kb/index-queue.ts | 152 | None | 🔴 Critical | Queue failures, race conditions |
+| Component                              | Lines | Current Coverage | Risk Level  | Impact                          |
+| -------------------------------------- | ----- | ---------------- | ----------- | ------------------------------- |
+| kb/api/server.py                       | 109   | None             | 🔴 Critical | Server initialization failures  |
+| kb/ingest/cli.py                       | 869   | None             | 🔴 Critical | CLI workflow breakage           |
+| agent-core/llm/claude-tool-executor.ts | 572   | None             | 🔴 Critical | Tool execution failures         |
+| mcp-bridge/rest/client.ts              | 159   | None             | 🔴 Critical | API communication failures      |
+| agent-core/kb/index-queue.ts           | 152   | None             | 🔴 Critical | Queue failures, race conditions |
 
 ### Medium Priority (Partial Coverage)
 
-| Component | Lines | Current Coverage | Issue |
-|-----------|-------|------------------|-------|
-| kb/ingest/graph_helpers.py | 190 | Integration only | No unit tests for individual functions |
-| kb/retrieval/graph_context.py | 393 | Integration only | No method-level testing |
-| mcp-bridge/util/config.ts | 177 | None | Configuration errors |
-| agent-core/llm/tool-utils.ts | 118 | None | Utility function failures |
+| Component                     | Lines | Current Coverage | Issue                                  |
+| ----------------------------- | ----- | ---------------- | -------------------------------------- |
+| kb/ingest/graph_helpers.py    | 190   | Integration only | No unit tests for individual functions |
+| kb/retrieval/graph_context.py | 393   | Integration only | No method-level testing                |
+| mcp-bridge/util/config.ts     | 177   | None             | Configuration errors                   |
+| agent-core/llm/tool-utils.ts  | 118   | None             | Utility function failures              |
 
 ### Low Priority (Type Definitions & Utilities)
 
@@ -284,6 +286,7 @@ class TestInitializeSearchBackend:
 ```
 
 **Success Criteria:**
+
 - ✅ All initialization paths tested
 - ✅ Environment variable handling validated
 - ✅ Fallback behavior verified
@@ -407,6 +410,7 @@ class TestClassifyLanguage:
 ```
 
 **Success Criteria:**
+
 - ✅ All language mappings validated
 - ✅ Edge cases handled (no extension, unknown, case sensitivity)
 - ✅ Special filenames tested
@@ -423,196 +427,197 @@ class TestClassifyLanguage:
 #### Test Cases to Implement
 
 ```typescript
-import { describe, it, expect, beforeAll, afterAll, mock } from 'bun:test'
-import { RestClient } from '../rest/client'
-import { startMockRest } from './mockServer'
+import { describe, it, expect, beforeAll, afterAll, mock } from "bun:test";
+import { RestClient } from "../rest/client";
+import { startMockRest } from "./mockServer";
 
-let stop: () => Promise<void>
+let stop: () => Promise<void>;
 
 beforeAll(async () => {
-  stop = await startMockRest(7778)
-})
+  stop = await startMockRest(7778);
+});
 
 afterAll(async () => {
-  await stop?.()
-})
+  await stop?.();
+});
 
-describe('RestClient', () => {
-  describe('constructor', () => {
-    it('should create client with default baseUrl', () => {
-      const client = new RestClient()
-      expect(client).toBeDefined()
+describe("RestClient", () => {
+  describe("constructor", () => {
+    it("should create client with default baseUrl", () => {
+      const client = new RestClient();
+      expect(client).toBeDefined();
       // Default should be localhost:7677
-    })
+    });
 
-    it('should create client with custom baseUrl', () => {
-      const client = new RestClient('http://localhost:7778')
-      expect(client).toBeDefined()
-    })
+    it("should create client with custom baseUrl", () => {
+      const client = new RestClient("http://localhost:7778");
+      expect(client).toBeDefined();
+    });
 
-    it('should handle baseUrl with trailing slash', () => {
-      const client = new RestClient('http://localhost:7778/')
-      expect(client).toBeDefined()
-    })
-  })
+    it("should handle baseUrl with trailing slash", () => {
+      const client = new RestClient("http://localhost:7778/");
+      expect(client).toBeDefined();
+    });
+  });
 
-  describe('search', () => {
-    it('should make successful search request', async () => {
-      const client = new RestClient('http://localhost:7778')
+  describe("search", () => {
+    it("should make successful search request", async () => {
+      const client = new RestClient("http://localhost:7778");
       const result = await client.search({
-        query: 'test query',
-        top_k: 10
-      })
+        query: "test query",
+        top_k: 10,
+      });
 
-      expect(result).toBeDefined()
-      expect(result.hits).toBeDefined()
-      expect(Array.isArray(result.hits)).toBe(true)
-    })
+      expect(result).toBeDefined();
+      expect(result.hits).toBeDefined();
+      expect(Array.isArray(result.hits)).toBe(true);
+    });
 
-    it('should pass all search parameters correctly', async () => {
-      const client = new RestClient('http://localhost:7778')
+    it("should pass all search parameters correctly", async () => {
+      const client = new RestClient("http://localhost:7778");
       const result = await client.search({
-        query: 'test',
+        query: "test",
         top_k: 20,
-        repos: ['repo1', 'repo2'],
-        path_prefix: ['src/'],
-        score_cutoff: 0.5
-      })
+        repos: ["repo1", "repo2"],
+        path_prefix: ["src/"],
+        score_cutoff: 0.5,
+      });
 
-      expect(result).toBeDefined()
-    })
+      expect(result).toBeDefined();
+    });
 
-    it('should handle search with cursor', async () => {
-      const client = new RestClient('http://localhost:7778')
+    it("should handle search with cursor", async () => {
+      const client = new RestClient("http://localhost:7778");
       const result = await client.search({
-        query: 'test',
-        cursor: 'cursor-token-123'
-      })
+        query: "test",
+        cursor: "cursor-token-123",
+      });
 
-      expect(result).toBeDefined()
-    })
+      expect(result).toBeDefined();
+    });
 
-    it('should throw error on 404', async () => {
-      const client = new RestClient('http://localhost:7778')
-
-      await expect(async () => {
-        await client.search({ query: 'trigger-404' })
-      }).toThrow()
-    })
-
-    it('should throw error on 500', async () => {
-      const client = new RestClient('http://localhost:7778')
+    it("should throw error on 404", async () => {
+      const client = new RestClient("http://localhost:7778");
 
       await expect(async () => {
-        await client.search({ query: 'trigger-500' })
-      }).toThrow()
-    })
-  })
+        await client.search({ query: "trigger-404" });
+      }).toThrow();
+    });
 
-  describe('getRepos', () => {
-    it('should fetch list of repositories', async () => {
-      const client = new RestClient('http://localhost:7778')
-      const repos = await client.getRepos()
+    it("should throw error on 500", async () => {
+      const client = new RestClient("http://localhost:7778");
 
-      expect(Array.isArray(repos)).toBe(true)
-    })
-  })
+      await expect(async () => {
+        await client.search({ query: "trigger-500" });
+      }).toThrow();
+    });
+  });
 
-  describe('getMetadata', () => {
-    it('should fetch file metadata', async () => {
-      const client = new RestClient('http://localhost:7778')
+  describe("getRepos", () => {
+    it("should fetch list of repositories", async () => {
+      const client = new RestClient("http://localhost:7778");
+      const repos = await client.getRepos();
+
+      expect(Array.isArray(repos)).toBe(true);
+    });
+  });
+
+  describe("getMetadata", () => {
+    it("should fetch file metadata", async () => {
+      const client = new RestClient("http://localhost:7778");
       const metadata = await client.getMetadata({
-        repo: 'test-repo',
-        path: 'src/test.ts'
-      })
+        repo: "test-repo",
+        path: "src/test.ts",
+      });
 
-      expect(metadata).toBeDefined()
-    })
-  })
+      expect(metadata).toBeDefined();
+    });
+  });
 
-  describe('fetchChunk', () => {
-    it('should fetch chunk by hash', async () => {
-      const client = new RestClient('http://localhost:7778')
+  describe("fetchChunk", () => {
+    it("should fetch chunk by hash", async () => {
+      const client = new RestClient("http://localhost:7778");
       const chunk = await client.fetchChunk({
-        chunk_hash: 'abc123'
-      })
+        chunk_hash: "abc123",
+      });
 
-      expect(chunk).toBeDefined()
-      expect(chunk.content).toBeDefined()
-    })
-  })
+      expect(chunk).toBeDefined();
+      expect(chunk.content).toBeDefined();
+    });
+  });
 
-  describe('fetchLines', () => {
-    it('should fetch file lines', async () => {
-      const client = new RestClient('http://localhost:7778')
+  describe("fetchLines", () => {
+    it("should fetch file lines", async () => {
+      const client = new RestClient("http://localhost:7778");
       const lines = await client.fetchLines({
-        repo: 'test-repo',
-        path: 'src/test.ts',
+        repo: "test-repo",
+        path: "src/test.ts",
         start_line: 1,
-        end_line: 10
-      })
+        end_line: 10,
+      });
 
-      expect(lines).toBeDefined()
-      expect(lines.content).toBeDefined()
-    })
-  })
+      expect(lines).toBeDefined();
+      expect(lines.content).toBeDefined();
+    });
+  });
 
-  describe('error handling', () => {
-    it('should handle network errors gracefully', async () => {
-      const client = new RestClient('http://localhost:9999') // wrong port
+  describe("error handling", () => {
+    it("should handle network errors gracefully", async () => {
+      const client = new RestClient("http://localhost:9999"); // wrong port
 
       await expect(async () => {
-        await client.search({ query: 'test' })
-      }).toThrow()
-    })
+        await client.search({ query: "test" });
+      }).toThrow();
+    });
 
-    it('should handle timeout', async () => {
-      const client = new RestClient('http://localhost:7778', { timeout: 100 })
+    it("should handle timeout", async () => {
+      const client = new RestClient("http://localhost:7778", { timeout: 100 });
 
       // Mock server should have a slow endpoint for this test
       await expect(async () => {
-        await client.search({ query: 'slow-query' })
-      }).toThrow()
-    })
+        await client.search({ query: "slow-query" });
+      }).toThrow();
+    });
 
-    it('should include error details in thrown errors', async () => {
-      const client = new RestClient('http://localhost:7778')
+    it("should include error details in thrown errors", async () => {
+      const client = new RestClient("http://localhost:7778");
 
       try {
-        await client.search({ query: 'trigger-500' })
-        expect(false).toBe(true) // Should not reach here
+        await client.search({ query: "trigger-500" });
+        expect(false).toBe(true); // Should not reach here
       } catch (error) {
-        expect(error.message).toContain('500')
+        expect(error.message).toContain("500");
       }
-    })
-  })
+    });
+  });
 
-  describe('retry logic', () => {
-    it('should retry on transient failures', async () => {
-      const client = new RestClient('http://localhost:7778', {
+  describe("retry logic", () => {
+    it("should retry on transient failures", async () => {
+      const client = new RestClient("http://localhost:7778", {
         retries: 3,
-        retryDelay: 100
-      })
+        retryDelay: 100,
+      });
 
       // Mock server should succeed on 2nd attempt
-      const result = await client.search({ query: 'retry-test' })
-      expect(result).toBeDefined()
-    })
+      const result = await client.search({ query: "retry-test" });
+      expect(result).toBeDefined();
+    });
 
-    it('should give up after max retries', async () => {
-      const client = new RestClient('http://localhost:7778', {
-        retries: 2
-      })
+    it("should give up after max retries", async () => {
+      const client = new RestClient("http://localhost:7778", {
+        retries: 2,
+      });
 
       await expect(async () => {
-        await client.search({ query: 'always-fail' })
-      }).toThrow()
-    })
-  })
-})
+        await client.search({ query: "always-fail" });
+      }).toThrow();
+    });
+  });
+});
 ```
 
 **Success Criteria:**
+
 - ✅ All API methods tested
 - ✅ Error handling validated
 - ✅ Retry logic verified
@@ -629,294 +634,293 @@ describe('RestClient', () => {
 #### Test Cases to Add
 
 ```typescript
-import { describe, it, expect, beforeEach, mock } from 'bun:test'
-import { ClaudeToolExecutor } from '../src/llm/claude-tool-executor'
-import type { ToolUseBlock } from '@anthropic-ai/sdk/resources'
+import { describe, it, expect, beforeEach, mock } from "bun:test";
+import { ClaudeToolExecutor } from "../src/llm/claude-tool-executor";
+import type { ToolUseBlock } from "@anthropic-ai/sdk/resources";
 
-describe('ClaudeToolExecutor - Core Execution', () => {
-  let executor: ClaudeToolExecutor
+describe("ClaudeToolExecutor - Core Execution", () => {
+  let executor: ClaudeToolExecutor;
 
   beforeEach(() => {
     executor = new ClaudeToolExecutor({
-      workingDirectory: '/tmp/test',
+      workingDirectory: "/tmp/test",
       kbManager: null, // Mock KB manager
-      mcpClient: null  // Mock MCP client
-    })
-  })
+      mcpClient: null, // Mock MCP client
+    });
+  });
 
-  describe('executeTool', () => {
-    it('should execute bash tool successfully', async () => {
+  describe("executeTool", () => {
+    it("should execute bash tool successfully", async () => {
       const toolUse: ToolUseBlock = {
-        type: 'tool_use',
-        id: 'tool-1',
-        name: 'bash',
-        input: { command: 'echo "hello"' }
-      }
+        type: "tool_use",
+        id: "tool-1",
+        name: "bash",
+        input: { command: 'echo "hello"' },
+      };
 
-      const result = await executor.executeTool(toolUse)
+      const result = await executor.executeTool(toolUse);
 
-      expect(result.type).toBe('tool_result')
-      expect(result.tool_use_id).toBe('tool-1')
-      expect(result.content).toContain('hello')
-      expect(result.is_error).toBe(false)
-    })
+      expect(result.type).toBe("tool_result");
+      expect(result.tool_use_id).toBe("tool-1");
+      expect(result.content).toContain("hello");
+      expect(result.is_error).toBe(false);
+    });
 
-    it('should handle tool execution errors', async () => {
+    it("should handle tool execution errors", async () => {
       const toolUse: ToolUseBlock = {
-        type: 'tool_use',
-        id: 'tool-2',
-        name: 'bash',
-        input: { command: 'exit 1' }
-      }
+        type: "tool_use",
+        id: "tool-2",
+        name: "bash",
+        input: { command: "exit 1" },
+      };
 
-      const result = await executor.executeTool(toolUse)
+      const result = await executor.executeTool(toolUse);
 
-      expect(result.is_error).toBe(true)
-    })
+      expect(result.is_error).toBe(true);
+    });
 
-    it('should handle unknown tool gracefully', async () => {
+    it("should handle unknown tool gracefully", async () => {
       const toolUse: ToolUseBlock = {
-        type: 'tool_use',
-        id: 'tool-3',
-        name: 'unknown_tool',
-        input: {}
-      }
+        type: "tool_use",
+        id: "tool-3",
+        name: "unknown_tool",
+        input: {},
+      };
 
-      const result = await executor.executeTool(toolUse)
+      const result = await executor.executeTool(toolUse);
 
-      expect(result.is_error).toBe(true)
-      expect(result.content).toContain('Unknown tool')
-    })
-  })
+      expect(result.is_error).toBe(true);
+      expect(result.content).toContain("Unknown tool");
+    });
+  });
 
-  describe('read_file tool', () => {
-    it('should read file successfully', async () => {
+  describe("read_file tool", () => {
+    it("should read file successfully", async () => {
       // Create temp file
-      const tmpFile = '/tmp/test-read.txt'
-      await Bun.write(tmpFile, 'test content')
+      const tmpFile = "/tmp/test-read.txt";
+      await Bun.write(tmpFile, "test content");
 
       const toolUse: ToolUseBlock = {
-        type: 'tool_use',
-        id: 'tool-4',
-        name: 'read_file',
-        input: { file_path: tmpFile }
-      }
+        type: "tool_use",
+        id: "tool-4",
+        name: "read_file",
+        input: { file_path: tmpFile },
+      };
 
-      const result = await executor.executeTool(toolUse)
+      const result = await executor.executeTool(toolUse);
 
-      expect(result.is_error).toBe(false)
-      expect(result.content).toContain('test content')
-    })
+      expect(result.is_error).toBe(false);
+      expect(result.content).toContain("test content");
+    });
 
-    it('should handle file not found', async () => {
+    it("should handle file not found", async () => {
       const toolUse: ToolUseBlock = {
-        type: 'tool_use',
-        id: 'tool-5',
-        name: 'read_file',
-        input: { file_path: '/nonexistent/file.txt' }
-      }
+        type: "tool_use",
+        id: "tool-5",
+        name: "read_file",
+        input: { file_path: "/nonexistent/file.txt" },
+      };
 
-      const result = await executor.executeTool(toolUse)
+      const result = await executor.executeTool(toolUse);
 
-      expect(result.is_error).toBe(true)
-    })
+      expect(result.is_error).toBe(true);
+    });
 
-    it('should respect line limit and offset', async () => {
-      const tmpFile = '/tmp/test-lines.txt'
-      await Bun.write(tmpFile, 'line1\nline2\nline3\nline4\nline5')
+    it("should respect line limit and offset", async () => {
+      const tmpFile = "/tmp/test-lines.txt";
+      await Bun.write(tmpFile, "line1\nline2\nline3\nline4\nline5");
 
       const toolUse: ToolUseBlock = {
-        type: 'tool_use',
-        id: 'tool-6',
-        name: 'read_file',
+        type: "tool_use",
+        id: "tool-6",
+        name: "read_file",
         input: {
           file_path: tmpFile,
           offset: 1,
-          limit: 2
-        }
-      }
+          limit: 2,
+        },
+      };
 
-      const result = await executor.executeTool(toolUse)
+      const result = await executor.executeTool(toolUse);
 
-      expect(result.is_error).toBe(false)
-      expect(result.content).toContain('line2')
-      expect(result.content).toContain('line3')
-      expect(result.content).not.toContain('line1')
-      expect(result.content).not.toContain('line4')
-    })
-  })
+      expect(result.is_error).toBe(false);
+      expect(result.content).toContain("line2");
+      expect(result.content).toContain("line3");
+      expect(result.content).not.toContain("line1");
+      expect(result.content).not.toContain("line4");
+    });
+  });
 
-  describe('write_file tool', () => {
-    it('should write file successfully', async () => {
-      const tmpFile = '/tmp/test-write.txt'
+  describe("write_file tool", () => {
+    it("should write file successfully", async () => {
+      const tmpFile = "/tmp/test-write.txt";
 
       const toolUse: ToolUseBlock = {
-        type: 'tool_use',
-        id: 'tool-7',
-        name: 'write_file',
+        type: "tool_use",
+        id: "tool-7",
+        name: "write_file",
         input: {
           file_path: tmpFile,
-          content: 'new content'
-        }
-      }
+          content: "new content",
+        },
+      };
 
-      const result = await executor.executeTool(toolUse)
+      const result = await executor.executeTool(toolUse);
 
-      expect(result.is_error).toBe(false)
+      expect(result.is_error).toBe(false);
 
       // Verify file was written
-      const content = await Bun.file(tmpFile).text()
-      expect(content).toBe('new content')
-    })
+      const content = await Bun.file(tmpFile).text();
+      expect(content).toBe("new content");
+    });
 
-    it('should handle write permission errors', async () => {
+    it("should handle write permission errors", async () => {
       const toolUse: ToolUseBlock = {
-        type: 'tool_use',
-        id: 'tool-8',
-        name: 'write_file',
+        type: "tool_use",
+        id: "tool-8",
+        name: "write_file",
         input: {
-          file_path: '/root/readonly/file.txt',
-          content: 'content'
-        }
-      }
+          file_path: "/root/readonly/file.txt",
+          content: "content",
+        },
+      };
 
-      const result = await executor.executeTool(toolUse)
+      const result = await executor.executeTool(toolUse);
 
-      expect(result.is_error).toBe(true)
-    })
-  })
+      expect(result.is_error).toBe(true);
+    });
+  });
 
-  describe('edit_file tool', () => {
-    it('should edit file successfully', async () => {
-      const tmpFile = '/tmp/test-edit.txt'
-      await Bun.write(tmpFile, 'original content')
-
-      const toolUse: ToolUseBlock = {
-        type: 'tool_use',
-        id: 'tool-9',
-        name: 'edit_file',
-        input: {
-          file_path: tmpFile,
-          old_string: 'original',
-          new_string: 'modified'
-        }
-      }
-
-      const result = await executor.executeTool(toolUse)
-
-      expect(result.is_error).toBe(false)
-
-      const content = await Bun.file(tmpFile).text()
-      expect(content).toBe('modified content')
-    })
-
-    it('should handle old_string not found', async () => {
-      const tmpFile = '/tmp/test-edit-notfound.txt'
-      await Bun.write(tmpFile, 'content')
+  describe("edit_file tool", () => {
+    it("should edit file successfully", async () => {
+      const tmpFile = "/tmp/test-edit.txt";
+      await Bun.write(tmpFile, "original content");
 
       const toolUse: ToolUseBlock = {
-        type: 'tool_use',
-        id: 'tool-10',
-        name: 'edit_file',
+        type: "tool_use",
+        id: "tool-9",
+        name: "edit_file",
         input: {
           file_path: tmpFile,
-          old_string: 'nonexistent',
-          new_string: 'new'
-        }
-      }
+          old_string: "original",
+          new_string: "modified",
+        },
+      };
 
-      const result = await executor.executeTool(toolUse)
+      const result = await executor.executeTool(toolUse);
 
-      expect(result.is_error).toBe(true)
-      expect(result.content).toContain('not found')
-    })
-  })
+      expect(result.is_error).toBe(false);
 
-  describe('search_knowledge tool', () => {
-    it('should delegate to KB manager', async () => {
+      const content = await Bun.file(tmpFile).text();
+      expect(content).toBe("modified content");
+    });
+
+    it("should handle old_string not found", async () => {
+      const tmpFile = "/tmp/test-edit-notfound.txt";
+      await Bun.write(tmpFile, "content");
+
+      const toolUse: ToolUseBlock = {
+        type: "tool_use",
+        id: "tool-10",
+        name: "edit_file",
+        input: {
+          file_path: tmpFile,
+          old_string: "nonexistent",
+          new_string: "new",
+        },
+      };
+
+      const result = await executor.executeTool(toolUse);
+
+      expect(result.is_error).toBe(true);
+      expect(result.content).toContain("not found");
+    });
+  });
+
+  describe("search_knowledge tool", () => {
+    it("should delegate to KB manager", async () => {
       const mockKbManager = {
         search: mock(async (query: string) => ({
-          hits: [{ repo: 'test', path: 'file.ts', snippet: 'code' }]
-        }))
-      }
+          hits: [{ repo: "test", path: "file.ts", snippet: "code" }],
+        })),
+      };
 
       const executor = new ClaudeToolExecutor({
-        workingDirectory: '/tmp/test',
+        workingDirectory: "/tmp/test",
         kbManager: mockKbManager,
-        mcpClient: null
-      })
+        mcpClient: null,
+      });
 
       const toolUse: ToolUseBlock = {
-        type: 'tool_use',
-        id: 'tool-11',
-        name: 'search_knowledge',
-        input: { query: 'test query' }
-      }
+        type: "tool_use",
+        id: "tool-11",
+        name: "search_knowledge",
+        input: { query: "test query" },
+      };
 
-      const result = await executor.executeTool(toolUse)
+      const result = await executor.executeTool(toolUse);
 
-      expect(result.is_error).toBe(false)
-      expect(mockKbManager.search).toHaveBeenCalledWith('test query')
-    })
+      expect(result.is_error).toBe(false);
+      expect(mockKbManager.search).toHaveBeenCalledWith("test query");
+    });
 
-    it('should handle KB manager not available', async () => {
+    it("should handle KB manager not available", async () => {
       const toolUse: ToolUseBlock = {
-        type: 'tool_use',
-        id: 'tool-12',
-        name: 'search_knowledge',
-        input: { query: 'test' }
-      }
+        type: "tool_use",
+        id: "tool-12",
+        name: "search_knowledge",
+        input: { query: "test" },
+      };
 
-      const result = await executor.executeTool(toolUse)
+      const result = await executor.executeTool(toolUse);
 
-      expect(result.is_error).toBe(true)
-      expect(result.content).toContain('not available')
-    })
-  })
+      expect(result.is_error).toBe(true);
+      expect(result.content).toContain("not available");
+    });
+  });
 
-  describe('concurrent execution', () => {
-    it('should handle multiple tools in parallel', async () => {
+  describe("concurrent execution", () => {
+    it("should handle multiple tools in parallel", async () => {
       const tools: ToolUseBlock[] = [
-        { type: 'tool_use', id: '1', name: 'bash', input: { command: 'echo "1"' } },
-        { type: 'tool_use', id: '2', name: 'bash', input: { command: 'echo "2"' } },
-        { type: 'tool_use', id: '3', name: 'bash', input: { command: 'echo "3"' } }
-      ]
+        { type: "tool_use", id: "1", name: "bash", input: { command: 'echo "1"' } },
+        { type: "tool_use", id: "2", name: "bash", input: { command: 'echo "2"' } },
+        { type: "tool_use", id: "3", name: "bash", input: { command: 'echo "3"' } },
+      ];
 
-      const results = await Promise.all(
-        tools.map(tool => executor.executeTool(tool))
-      )
+      const results = await Promise.all(tools.map((tool) => executor.executeTool(tool)));
 
-      expect(results).toHaveLength(3)
-      expect(results.every(r => !r.is_error)).toBe(true)
-    })
-  })
+      expect(results).toHaveLength(3);
+      expect(results.every((r) => !r.is_error)).toBe(true);
+    });
+  });
 
-  describe('timeout handling', () => {
-    it('should timeout long-running commands', async () => {
+  describe("timeout handling", () => {
+    it("should timeout long-running commands", async () => {
       const toolUse: ToolUseBlock = {
-        type: 'tool_use',
-        id: 'tool-13',
-        name: 'bash',
-        input: { command: 'sleep 10' }
-      }
+        type: "tool_use",
+        id: "tool-13",
+        name: "bash",
+        input: { command: "sleep 10" },
+      };
 
       const executor = new ClaudeToolExecutor({
-        workingDirectory: '/tmp/test',
+        workingDirectory: "/tmp/test",
         kbManager: null,
         mcpClient: null,
-        timeout: 1000 // 1 second timeout
-      })
+        timeout: 1000, // 1 second timeout
+      });
 
-      const result = await executor.executeTool(toolUse)
+      const result = await executor.executeTool(toolUse);
 
-      expect(result.is_error).toBe(true)
-      expect(result.content).toContain('timeout')
-    }, 5000)
-  })
-})
+      expect(result.is_error).toBe(true);
+      expect(result.content).toContain("timeout");
+    }, 5000);
+  });
+});
 ```
 
 **Success Criteria:**
+
 - ✅ All tool types tested (bash, read_file, write_file, edit_file, search_knowledge)
 - ✅ Error handling validated
 - ✅ Concurrent execution tested
@@ -933,192 +937,193 @@ describe('ClaudeToolExecutor - Core Execution', () => {
 #### Test Cases to Implement
 
 ```typescript
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test'
-import { IndexQueue } from '../src/kb/index-queue'
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { IndexQueue } from "../src/kb/index-queue";
 
-describe('IndexQueue', () => {
-  let queue: IndexQueue
+describe("IndexQueue", () => {
+  let queue: IndexQueue;
 
   beforeEach(() => {
     queue = new IndexQueue({
       maxConcurrent: 2,
-      maxRetries: 3
-    })
-  })
+      maxRetries: 3,
+    });
+  });
 
   afterEach(() => {
-    queue.shutdown()
-  })
+    queue.shutdown();
+  });
 
-  describe('enqueue', () => {
-    it('should enqueue and process task', async () => {
-      const mockTask = mock(async () => 'result')
+  describe("enqueue", () => {
+    it("should enqueue and process task", async () => {
+      const mockTask = mock(async () => "result");
 
-      const result = await queue.enqueue('task-1', mockTask)
+      const result = await queue.enqueue("task-1", mockTask);
 
-      expect(result).toBe('result')
-      expect(mockTask).toHaveBeenCalled()
-    })
+      expect(result).toBe("result");
+      expect(mockTask).toHaveBeenCalled();
+    });
 
-    it('should not enqueue duplicate task', async () => {
+    it("should not enqueue duplicate task", async () => {
       const mockTask = mock(async () => {
-        await new Promise(resolve => setTimeout(resolve, 100))
-        return 'result'
-      })
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return "result";
+      });
 
-      const promise1 = queue.enqueue('task-1', mockTask)
-      const promise2 = queue.enqueue('task-1', mockTask)
+      const promise1 = queue.enqueue("task-1", mockTask);
+      const promise2 = queue.enqueue("task-1", mockTask);
 
-      await Promise.all([promise1, promise2])
+      await Promise.all([promise1, promise2]);
 
       // Task should only be called once
-      expect(mockTask).toHaveBeenCalledTimes(1)
-    })
-  })
+      expect(mockTask).toHaveBeenCalledTimes(1);
+    });
+  });
 
-  describe('concurrency control', () => {
-    it('should respect maxConcurrent limit', async () => {
-      let concurrent = 0
-      let maxConcurrent = 0
+  describe("concurrency control", () => {
+    it("should respect maxConcurrent limit", async () => {
+      let concurrent = 0;
+      let maxConcurrent = 0;
 
       const task = async () => {
-        concurrent++
-        maxConcurrent = Math.max(maxConcurrent, concurrent)
-        await new Promise(resolve => setTimeout(resolve, 50))
-        concurrent--
-      }
+        concurrent++;
+        maxConcurrent = Math.max(maxConcurrent, concurrent);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        concurrent--;
+      };
 
-      const promises = []
+      const promises = [];
       for (let i = 0; i < 5; i++) {
-        promises.push(queue.enqueue(`task-${i}`, task))
+        promises.push(queue.enqueue(`task-${i}`, task));
       }
 
-      await Promise.all(promises)
+      await Promise.all(promises);
 
-      expect(maxConcurrent).toBeLessThanOrEqual(2)
-    })
-  })
+      expect(maxConcurrent).toBeLessThanOrEqual(2);
+    });
+  });
 
-  describe('retry logic', () => {
-    it('should retry failed tasks', async () => {
-      let attempts = 0
+  describe("retry logic", () => {
+    it("should retry failed tasks", async () => {
+      let attempts = 0;
       const mockTask = mock(async () => {
-        attempts++
+        attempts++;
         if (attempts < 3) {
-          throw new Error('Transient failure')
+          throw new Error("Transient failure");
         }
-        return 'success'
-      })
+        return "success";
+      });
 
-      const result = await queue.enqueue('retry-task', mockTask)
+      const result = await queue.enqueue("retry-task", mockTask);
 
-      expect(result).toBe('success')
-      expect(attempts).toBe(3)
-    })
+      expect(result).toBe("success");
+      expect(attempts).toBe(3);
+    });
 
-    it('should give up after maxRetries', async () => {
+    it("should give up after maxRetries", async () => {
       const mockTask = mock(async () => {
-        throw new Error('Permanent failure')
-      })
+        throw new Error("Permanent failure");
+      });
 
       await expect(async () => {
-        await queue.enqueue('fail-task', mockTask)
-      }).toThrow('Permanent failure')
+        await queue.enqueue("fail-task", mockTask);
+      }).toThrow("Permanent failure");
 
-      expect(mockTask).toHaveBeenCalledTimes(4) // initial + 3 retries
-    })
-  })
+      expect(mockTask).toHaveBeenCalledTimes(4); // initial + 3 retries
+    });
+  });
 
-  describe('priority queue', () => {
-    it('should process high priority tasks first', async () => {
-      const order: number[] = []
+  describe("priority queue", () => {
+    it("should process high priority tasks first", async () => {
+      const order: number[] = [];
 
       const task = (id: number) => async () => {
-        order.push(id)
-        await new Promise(resolve => setTimeout(resolve, 10))
-      }
+        order.push(id);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      };
 
       // Queue with concurrency 1
-      const singleQueue = new IndexQueue({ maxConcurrent: 1 })
+      const singleQueue = new IndexQueue({ maxConcurrent: 1 });
 
-      singleQueue.enqueue('low-1', task(1), { priority: 1 })
-      singleQueue.enqueue('high-1', task(2), { priority: 10 })
-      singleQueue.enqueue('low-2', task(3), { priority: 1 })
-      singleQueue.enqueue('high-2', task(4), { priority: 10 })
+      singleQueue.enqueue("low-1", task(1), { priority: 1 });
+      singleQueue.enqueue("high-1", task(2), { priority: 10 });
+      singleQueue.enqueue("low-2", task(3), { priority: 1 });
+      singleQueue.enqueue("high-2", task(4), { priority: 10 });
 
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // High priority tasks should be processed first
-      expect(order[0]).toBe(1) // First one starts immediately
-      expect(order[1]).toBe(2) // High priority
-      expect(order[2]).toBe(4) // High priority
-      expect(order[3]).toBe(3) // Low priority
+      expect(order[0]).toBe(1); // First one starts immediately
+      expect(order[1]).toBe(2); // High priority
+      expect(order[2]).toBe(4); // High priority
+      expect(order[3]).toBe(3); // Low priority
 
-      singleQueue.shutdown()
-    })
-  })
+      singleQueue.shutdown();
+    });
+  });
 
-  describe('status tracking', () => {
-    it('should track task status', async () => {
+  describe("status tracking", () => {
+    it("should track task status", async () => {
       const task = async () => {
-        await new Promise(resolve => setTimeout(resolve, 50))
-        return 'done'
-      }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return "done";
+      };
 
-      const promise = queue.enqueue('status-task', task)
+      const promise = queue.enqueue("status-task", task);
 
-      expect(queue.getStatus('status-task')).toBe('pending')
+      expect(queue.getStatus("status-task")).toBe("pending");
 
-      await new Promise(resolve => setTimeout(resolve, 25))
-      expect(queue.getStatus('status-task')).toBe('running')
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      expect(queue.getStatus("status-task")).toBe("running");
 
-      await promise
-      expect(queue.getStatus('status-task')).toBe('completed')
-    })
+      await promise;
+      expect(queue.getStatus("status-task")).toBe("completed");
+    });
 
-    it('should mark failed tasks as failed', async () => {
+    it("should mark failed tasks as failed", async () => {
       const task = async () => {
-        throw new Error('Task failed')
-      }
+        throw new Error("Task failed");
+      };
 
       try {
-        await queue.enqueue('fail-status', task)
+        await queue.enqueue("fail-status", task);
       } catch (e) {
         // Expected
       }
 
-      expect(queue.getStatus('fail-status')).toBe('failed')
-    })
-  })
+      expect(queue.getStatus("fail-status")).toBe("failed");
+    });
+  });
 
-  describe('shutdown', () => {
-    it('should wait for running tasks to complete', async () => {
-      let taskCompleted = false
+  describe("shutdown", () => {
+    it("should wait for running tasks to complete", async () => {
+      let taskCompleted = false;
 
       const task = async () => {
-        await new Promise(resolve => setTimeout(resolve, 100))
-        taskCompleted = true
-      }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        taskCompleted = true;
+      };
 
-      queue.enqueue('shutdown-task', task)
+      queue.enqueue("shutdown-task", task);
 
-      await queue.shutdown()
+      await queue.shutdown();
 
-      expect(taskCompleted).toBe(true)
-    })
+      expect(taskCompleted).toBe(true);
+    });
 
-    it('should reject new tasks after shutdown', async () => {
-      await queue.shutdown()
+    it("should reject new tasks after shutdown", async () => {
+      await queue.shutdown();
 
       await expect(async () => {
-        await queue.enqueue('post-shutdown', async () => {})
-      }).toThrow('Queue is shutting down')
-    })
-  })
-})
+        await queue.enqueue("post-shutdown", async () => {});
+      }).toThrow("Queue is shutting down");
+    });
+  });
+});
 ```
 
 **Success Criteria:**
+
 - ✅ Queue operations tested
 - ✅ Concurrency limits verified
 - ✅ Retry logic validated
@@ -1449,102 +1454,102 @@ class TestGraphContextEnricher:
 **Estimated Time:** 4 hours
 
 ```typescript
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
-import { loadConfig, getRestApiUrl } from '../util/config'
-import { logger, initLogger } from '../util/logger'
-import { detectLanguage, formatLanguageForDisplay } from '../util/language'
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { loadConfig, getRestApiUrl } from "../util/config";
+import { logger, initLogger } from "../util/logger";
+import { detectLanguage, formatLanguageForDisplay } from "../util/language";
 
-describe('Config Utilities', () => {
-  describe('loadConfig', () => {
-    it('should load default config', () => {
-      const config = loadConfig()
+describe("Config Utilities", () => {
+  describe("loadConfig", () => {
+    it("should load default config", () => {
+      const config = loadConfig();
 
-      expect(config).toBeDefined()
-      expect(config.restApiUrl).toBeDefined()
-    })
+      expect(config).toBeDefined();
+      expect(config.restApiUrl).toBeDefined();
+    });
 
-    it('should use environment variable override', () => {
-      process.env.DOLPHIN_API_URL = 'http://custom:9999'
+    it("should use environment variable override", () => {
+      process.env.DOLPHIN_API_URL = "http://custom:9999";
 
-      const config = loadConfig()
+      const config = loadConfig();
 
-      expect(config.restApiUrl).toBe('http://custom:9999')
+      expect(config.restApiUrl).toBe("http://custom:9999");
 
-      delete process.env.DOLPHIN_API_URL
-    })
-  })
+      delete process.env.DOLPHIN_API_URL;
+    });
+  });
 
-  describe('getRestApiUrl', () => {
-    it('should return default URL', () => {
-      const url = getRestApiUrl()
-      expect(url).toBe('http://localhost:7677')
-    })
+  describe("getRestApiUrl", () => {
+    it("should return default URL", () => {
+      const url = getRestApiUrl();
+      expect(url).toBe("http://localhost:7677");
+    });
 
-    it('should handle custom port', () => {
-      process.env.DOLPHIN_PORT = '8888'
+    it("should handle custom port", () => {
+      process.env.DOLPHIN_PORT = "8888";
 
-      const url = getRestApiUrl()
-      expect(url).toContain('8888')
+      const url = getRestApiUrl();
+      expect(url).toContain("8888");
 
-      delete process.env.DOLPHIN_PORT
-    })
-  })
-})
+      delete process.env.DOLPHIN_PORT;
+    });
+  });
+});
 
-describe('Logger Utilities', () => {
+describe("Logger Utilities", () => {
   beforeEach(async () => {
-    await initLogger()
-  })
+    await initLogger();
+  });
 
-  it('should log info messages', () => {
+  it("should log info messages", () => {
     expect(() => {
-      logger.info('test message')
-    }).not.toThrow()
-  })
+      logger.info("test message");
+    }).not.toThrow();
+  });
 
-  it('should log errors', () => {
+  it("should log errors", () => {
     expect(() => {
-      logger.error('error message')
-    }).not.toThrow()
-  })
+      logger.error("error message");
+    }).not.toThrow();
+  });
 
-  it('should log with context', () => {
+  it("should log with context", () => {
     expect(() => {
-      logger.info('message', { context: 'test', data: 123 })
-    }).not.toThrow()
-  })
-})
+      logger.info("message", { context: "test", data: 123 });
+    }).not.toThrow();
+  });
+});
 
-describe('Language Utilities', () => {
-  describe('detectLanguage', () => {
-    it('should detect Python files', () => {
-      expect(detectLanguage('test.py')).toBe('python')
-      expect(detectLanguage('/path/to/script.py')).toBe('python')
-    })
+describe("Language Utilities", () => {
+  describe("detectLanguage", () => {
+    it("should detect Python files", () => {
+      expect(detectLanguage("test.py")).toBe("python");
+      expect(detectLanguage("/path/to/script.py")).toBe("python");
+    });
 
-    it('should detect TypeScript files', () => {
-      expect(detectLanguage('App.tsx')).toBe('typescriptreact')
-      expect(detectLanguage('config.ts')).toBe('typescript')
-    })
+    it("should detect TypeScript files", () => {
+      expect(detectLanguage("App.tsx")).toBe("typescriptreact");
+      expect(detectLanguage("config.ts")).toBe("typescript");
+    });
 
-    it('should detect JavaScript files', () => {
-      expect(detectLanguage('app.js')).toBe('javascript')
-      expect(detectLanguage('Component.jsx')).toBe('javascriptreact')
-    })
+    it("should detect JavaScript files", () => {
+      expect(detectLanguage("app.js")).toBe("javascript");
+      expect(detectLanguage("Component.jsx")).toBe("javascriptreact");
+    });
 
-    it('should handle unknown extensions', () => {
-      expect(detectLanguage('file.xyz')).toBe('text')
-    })
-  })
+    it("should handle unknown extensions", () => {
+      expect(detectLanguage("file.xyz")).toBe("text");
+    });
+  });
 
-  describe('formatLanguageForDisplay', () => {
-    it('should format language names', () => {
-      expect(formatLanguageForDisplay('python')).toBe('Python')
-      expect(formatLanguageForDisplay('typescript')).toBe('TypeScript')
-      expect(formatLanguageForDisplay('typescriptreact')).toBe('TypeScript React')
-    })
-  })
-})
+  describe("formatLanguageForDisplay", () => {
+    it("should format language names", () => {
+      expect(formatLanguageForDisplay("python")).toBe("Python");
+      expect(formatLanguageForDisplay("typescript")).toBe("TypeScript");
+      expect(formatLanguageForDisplay("typescriptreact")).toBe("TypeScript React");
+    });
+  });
+});
 ```
 
 ---
@@ -1823,6 +1828,7 @@ mcp-bridge/src/tests/
 ### Running Tests
 
 **Python:**
+
 ```bash
 # All tests
 pytest
@@ -1839,6 +1845,7 @@ pytest -n auto
 ```
 
 **TypeScript:**
+
 ```bash
 # agent-core
 cd agent-core
@@ -1855,6 +1862,7 @@ bun test --coverage
 ### Test Quality Checklist
 
 Every test should:
+
 - ✅ Have a clear, descriptive name
 - ✅ Test one specific behavior
 - ✅ Be independent (no test interdependencies)
@@ -1866,6 +1874,7 @@ Every test should:
 ### Mocking Best Practices
 
 **Python:**
+
 ```python
 from unittest.mock import Mock, patch, MagicMock
 
@@ -1884,16 +1893,17 @@ def test_file_check(mock_exists):
 ```
 
 **TypeScript:**
+
 ```typescript
-import { mock } from 'bun:test'
+import { mock } from "bun:test";
 
 // Mock functions
-const mockFunction = mock(async (arg) => 'result')
+const mockFunction = mock(async (arg) => "result");
 
 // Mock modules
 const mockKbManager = {
-  search: mock(async (query) => ({ hits: [] }))
-}
+  search: mock(async (query) => ({ hits: [] })),
+};
 ```
 
 ---
@@ -1903,6 +1913,7 @@ const mockKbManager = {
 ### 1. Test-Driven Development (TDD)
 
 For new features:
+
 1. Write failing test first
 2. Implement minimal code to pass
 3. Refactor while keeping tests green
@@ -1971,13 +1982,13 @@ def test_language_detection(extension, expected_lang):
 
 ### Coverage Targets
 
-| Component | Current | Target | Priority |
-|-----------|---------|--------|----------|
-| kb/api | 75% | 95% | 🔴 Critical |
-| kb/ingest | 57% | 85% | 🔴 Critical |
-| kb/retrieval | 60% | 85% | 🟡 High |
-| agent-core | 50% | 80% | 🔴 Critical |
-| mcp-bridge | 45% | 75% | 🟡 High |
+| Component    | Current | Target | Priority    |
+| ------------ | ------- | ------ | ----------- |
+| kb/api       | 75%     | 95%    | 🔴 Critical |
+| kb/ingest    | 57%     | 85%    | 🔴 Critical |
+| kb/retrieval | 60%     | 85%    | 🟡 High     |
+| agent-core   | 50%     | 80%    | 🔴 Critical |
+| mcp-bridge   | 45%     | 75%    | 🟡 High     |
 
 ### Test Execution Targets
 
@@ -1989,6 +2000,7 @@ def test_language_detection(extension, expected_lang):
 ### CI/CD Integration
 
 Add to GitHub Actions:
+
 ```yaml
 name: Test Coverage
 
@@ -2017,6 +2029,7 @@ jobs:
 ### Quality Gates
 
 Before merging code:
+
 - ✅ All tests pass
 - ✅ Coverage doesn't decrease
 - ✅ No new linter warnings
@@ -2027,22 +2040,26 @@ Before merging code:
 ## Timeline and Milestones
 
 ### Week 1
+
 - ✅ Server initialization tests (Day 1-2)
 - ✅ Language classification tests (Day 2)
 - ✅ REST client tests (Day 3-4)
 - ✅ Tool executor tests (Day 4-5)
 
 ### Week 2
+
 - ✅ Index queue tests (Day 1-2)
 - ✅ Graph helpers unit tests (Day 3-4)
 - ✅ Graph context unit tests (Day 4-5)
 
 ### Week 3
+
 - ✅ MCP utility tests (Day 1-2)
 - ✅ SQL model tests (Day 3)
 - ✅ CLI workflow tests (Day 4-5)
 
 ### Week 4
+
 - ✅ E2E tests (Day 1-2)
 - ✅ Coverage validation (Day 3)
 - ✅ CI/CD integration (Day 4)
@@ -2053,16 +2070,21 @@ Before merging code:
 ## Risks and Mitigation
 
 ### Risk 1: Time Overrun
+
 **Mitigation:** Prioritize Phase 1 (critical path) first. Phases 2-3 can be spread across multiple sprints.
 
 ### Risk 2: Breaking Existing Tests
+
 **Mitigation:** Run full test suite after each new test file. Fix immediately.
 
 ### Risk 3: Low ROI on Some Tests
+
 **Mitigation:** Focus on high-complexity, high-risk modules first. Skip trivial type-only modules if time-constrained.
 
 ### Risk 4: Flaky Tests
+
 **Mitigation:**
+
 - Use deterministic mocks
 - Set explicit timeouts
 - Avoid time-based assertions
@@ -2083,19 +2105,23 @@ Before merging code:
 ## Appendix: Tools and Resources
 
 ### Testing Frameworks
+
 - **Python:** pytest, pytest-cov, pytest-mock, faker
 - **TypeScript:** Bun test, vitest (alternative)
 
 ### Coverage Tools
+
 - **Python:** coverage.py, pytest-cov
 - **TypeScript:** c8, nyc
 
 ### CI/CD Integration
+
 - GitHub Actions
 - GitLab CI
 - CircleCI
 
 ### Documentation
+
 - [pytest documentation](https://docs.pytest.org/)
 - [Bun test documentation](https://bun.sh/docs/test)
 - [Testing best practices](https://testingjavascript.com/)

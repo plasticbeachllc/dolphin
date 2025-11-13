@@ -6,6 +6,7 @@
 **Status:** In Progress
 
 **Changelog:**
+
 - v1.1: Updated WP1 with comprehensive file operation audit, simplified WP2 (no backward compatibility needed), added CI/CD to WP6
 - v1.0: Initial specification
 
@@ -37,16 +38,17 @@ This document provides actionable specifications for addressing architectural, c
 
 ### Priority Matrix
 
-| Priority | Work Package | Complexity | Impact | Risk |
-|----------|-------------|------------|--------|------|
-| P0 | WP1: Critical Security Fixes | Low | Critical | Low |
-| P1 | WP3: Code Quality (Error Handling) | Medium | High | Low |
-| P1 | WP4: Precision Enhancements | Medium | High | Low |
-| P2 | WP2: Architecture Refactoring | Medium | High | Low |
-| P2 | WP5: Performance Optimization | Medium | Medium | Low |
-| P3 | WP6: Style & CI/CD | Low | Medium | Low |
+| Priority | Work Package                       | Complexity | Impact   | Risk |
+| -------- | ---------------------------------- | ---------- | -------- | ---- |
+| P0       | WP1: Critical Security Fixes       | Low        | Critical | Low  |
+| P1       | WP3: Code Quality (Error Handling) | Medium     | High     | Low  |
+| P1       | WP4: Precision Enhancements        | Medium     | High     | Low  |
+| P2       | WP2: Architecture Refactoring      | Medium     | High     | Low  |
+| P2       | WP5: Performance Optimization      | Medium     | Medium   | Low  |
+| P3       | WP6: Style & CI/CD                 | Low        | Medium   | Low  |
 
 **Execution Order:**
+
 1. WP1 (Security) - Immediate (Days 1-3)
 2. WP3 (Error Handling) - Days 4-6
 3. WP4 (Precision) - Days 7-9
@@ -65,12 +67,15 @@ This document provides actionable specifications for addressing architectural, c
 **Current State - Comprehensive Audit:**
 
 #### TypeScript/JavaScript File Operations:
+
 ✅ **Already Has Validation:**
+
 - `mcp-bridge/src/tools/file-write.ts` (lines 23-42) - workspace boundary check
 - `mcp-bridge/src/tools/read-files.ts` (lines 39-42) - workspace check
 - `agent-core-v2/src/state/state-store.ts` (lines 513-524) - path validation helper
 
 ❌ **Needs Validation:**
+
 - `agent-core/src/storage/toml-writer.ts` - NO validation, accepts any filepath
 - `agent-core/src/kb/manager.ts` - potential file operations
 - `agent-core/src/llm/diff-generator.ts` - file write operations
@@ -79,7 +84,9 @@ This document provides actionable specifications for addressing architectural, c
 - `agent-core-v2/src/context/context-builder.ts` - may read files
 
 #### Python File Operations:
+
 ❌ **Needs Validation:**
+
 - `kb/api/app.py:654` - `file_path.read_text()` - NO validation
 - `kb/config.py:34,51` - template file read/write - NO validation
 - `kb/store/sqlite_meta.py:1183` - `full_path.read_text()` - NO validation
@@ -88,6 +95,7 @@ This document provides actionable specifications for addressing architectural, c
 - Any script in `scripts/` directory
 
 **Risk Assessment:**
+
 - **High Risk:** `agent-core/src/storage/toml-writer.ts` (accepts user-controlled paths)
 - **High Risk:** `kb/api/app.py:654` (reads arbitrary file paths)
 - **Medium Risk:** Config/template operations (typically internal paths)
@@ -107,8 +115,8 @@ This document provides actionable specifications for addressing architectural, c
  * Prevents path traversal attacks and validates file access.
  */
 
-import { resolve, relative, normalize } from 'path';
-import { existsSync, statSync, lstatSync } from 'fs';
+import { resolve, relative, normalize } from "path";
+import { existsSync, statSync, lstatSync } from "fs";
 
 export interface PathValidationOptions {
   /** Base directory that paths must be relative to */
@@ -123,7 +131,7 @@ export interface PathValidationOptions {
   /** Allowed file extensions (e.g., ['.ts', '.js']). Empty = all allowed */
   allowedExtensions?: string[];
 
-  /** Disallowed patterns (glob-style, e.g., '**/node_modules/**') */
+  /** Disallowed patterns (glob-style, e.g., '**/ node_modules /**') */;
   disallowedPatterns?: string[];
 }
 
@@ -134,7 +142,7 @@ export class PathValidationError extends Error {
     public readonly attemptedPath: string
   ) {
     super(message);
-    this.name = 'PathValidationError';
+    this.name = "PathValidationError";
   }
 }
 
@@ -149,10 +157,10 @@ export class PathValidator {
     const { baseDir, allowSymlinks = false, mustExist = false } = options;
 
     // Reject absolute paths that don't start with baseDir
-    if (path.startsWith('/') && !path.startsWith(baseDir)) {
+    if (path.startsWith("/") && !path.startsWith(baseDir)) {
       throw new PathValidationError(
         `Absolute path outside base directory: ${path}`,
-        'PATH_TRAVERSAL',
+        "PATH_TRAVERSAL",
         path
       );
     }
@@ -165,21 +173,17 @@ export class PathValidator {
     // Check for path traversal
     const relativePath = relative(resolvedBase, resolvedPath);
 
-    if (relativePath.startsWith('..') || resolve(resolvedBase, relativePath) !== resolvedPath) {
+    if (relativePath.startsWith("..") || resolve(resolvedBase, relativePath) !== resolvedPath) {
       throw new PathValidationError(
         `Path traversal detected: ${path} escapes base directory ${baseDir}`,
-        'PATH_TRAVERSAL',
+        "PATH_TRAVERSAL",
         path
       );
     }
 
     // Check if path exists (if required)
     if (mustExist && !existsSync(resolvedPath)) {
-      throw new PathValidationError(
-        `Path does not exist: ${path}`,
-        'PATH_NOT_FOUND',
-        path
-      );
+      throw new PathValidationError(`Path does not exist: ${path}`, "PATH_NOT_FOUND", path);
     }
 
     // Check symlinks (use lstat to detect symlinks before resolution)
@@ -188,7 +192,7 @@ export class PathValidator {
       if (stats.isSymbolicLink()) {
         throw new PathValidationError(
           `Symbolic links not allowed: ${path}`,
-          'SYMLINK_DISALLOWED',
+          "SYMLINK_DISALLOWED",
           path
         );
       }
@@ -196,11 +200,11 @@ export class PathValidator {
 
     // Check file extensions
     if (options.allowedExtensions && options.allowedExtensions.length > 0) {
-      const ext = normalizedPath.substring(normalizedPath.lastIndexOf('.'));
+      const ext = normalizedPath.substring(normalizedPath.lastIndexOf("."));
       if (!options.allowedExtensions.includes(ext)) {
         throw new PathValidationError(
-          `File extension ${ext} not allowed. Allowed: ${options.allowedExtensions.join(', ')}`,
-          'INVALID_EXTENSION',
+          `File extension ${ext} not allowed. Allowed: ${options.allowedExtensions.join(", ")}`,
+          "INVALID_EXTENSION",
           path
         );
       }
@@ -208,12 +212,12 @@ export class PathValidator {
 
     // Check disallowed patterns
     if (options.disallowedPatterns) {
-      const minimatch = require('minimatch');
+      const minimatch = require("minimatch");
       for (const pattern of options.disallowedPatterns) {
         if (minimatch.minimatch(relativePath, pattern)) {
           throw new PathValidationError(
             `Path matches disallowed pattern ${pattern}: ${path}`,
-            'PATTERN_DISALLOWED',
+            "PATTERN_DISALLOWED",
             path
           );
         }
@@ -228,14 +232,17 @@ export class PathValidator {
    * Returns validated paths or throws on first error.
    */
   static validateBatch(paths: string[], options: PathValidationOptions): string[] {
-    return paths.map(p => this.validate(p, options));
+    return paths.map((p) => this.validate(p, options));
   }
 
   /**
    * Check if a path is safe without throwing.
    * Returns { valid: boolean, error?: string, resolvedPath?: string }
    */
-  static check(path: string, options: PathValidationOptions): {
+  static check(
+    path: string,
+    options: PathValidationOptions
+  ): {
     valid: boolean;
     error?: string;
     resolvedPath?: string;
@@ -246,7 +253,7 @@ export class PathValidator {
     } catch (err) {
       return {
         valid: false,
-        error: err instanceof Error ? err.message : String(err)
+        error: err instanceof Error ? err.message : String(err),
       };
     }
   }
@@ -256,58 +263,56 @@ export class PathValidator {
 **Tests:** `shared/security/__tests__/path-validator.test.ts`
 
 ```typescript
-import { PathValidator, PathValidationError } from '../path-validator';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import { PathValidator, PathValidationError } from "../path-validator";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 
-describe('PathValidator', () => {
-  const baseDir = '/home/user/project';
+describe("PathValidator", () => {
+  const baseDir = "/home/user/project";
 
-  describe('Path Traversal Protection', () => {
-    it('should reject .. traversal', () => {
-      expect(() =>
-        PathValidator.validate('../etc/passwd', { baseDir })
-      ).toThrow(PathValidationError);
+  describe("Path Traversal Protection", () => {
+    it("should reject .. traversal", () => {
+      expect(() => PathValidator.validate("../etc/passwd", { baseDir })).toThrow(
+        PathValidationError
+      );
     });
 
-    it('should reject absolute paths outside base', () => {
-      expect(() =>
-        PathValidator.validate('/etc/passwd', { baseDir })
-      ).toThrow(PathValidationError);
+    it("should reject absolute paths outside base", () => {
+      expect(() => PathValidator.validate("/etc/passwd", { baseDir })).toThrow(PathValidationError);
     });
 
-    it('should reject URL-encoded traversal', () => {
-      expect(() =>
-        PathValidator.validate('%2e%2e/etc/passwd', { baseDir })
-      ).toThrow(PathValidationError);
+    it("should reject URL-encoded traversal", () => {
+      expect(() => PathValidator.validate("%2e%2e/etc/passwd", { baseDir })).toThrow(
+        PathValidationError
+      );
     });
 
-    it('should reject double-encoded traversal', () => {
-      expect(() =>
-        PathValidator.validate('..%252F..%252Fetc/passwd', { baseDir })
-      ).toThrow(PathValidationError);
+    it("should reject double-encoded traversal", () => {
+      expect(() => PathValidator.validate("..%252F..%252Fetc/passwd", { baseDir })).toThrow(
+        PathValidationError
+      );
     });
 
-    it('should accept valid relative paths', () => {
-      const result = PathValidator.validate('src/index.ts', { baseDir });
-      expect(result).toBe('/home/user/project/src/index.ts');
+    it("should accept valid relative paths", () => {
+      const result = PathValidator.validate("src/index.ts", { baseDir });
+      expect(result).toBe("/home/user/project/src/index.ts");
     });
 
-    it('should accept paths with dots in filename', () => {
-      const result = PathValidator.validate('src/file.test.ts', { baseDir });
-      expect(result).toBe('/home/user/project/src/file.test.ts');
+    it("should accept paths with dots in filename", () => {
+      const result = PathValidator.validate("src/file.test.ts", { baseDir });
+      expect(result).toBe("/home/user/project/src/file.test.ts");
     });
   });
 
-  describe('Symlink Protection', () => {
+  describe("Symlink Protection", () => {
     let tempDir: string;
     let symlinkPath: string;
 
     beforeEach(() => {
-      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-'));
-      symlinkPath = path.join(tempDir, 'test-symlink');
-      fs.symlinkSync('/etc/passwd', symlinkPath);
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "test-"));
+      symlinkPath = path.join(tempDir, "test-symlink");
+      fs.symlinkSync("/etc/passwd", symlinkPath);
     });
 
     afterEach(() => {
@@ -315,88 +320,86 @@ describe('PathValidator', () => {
       fs.rmdirSync(tempDir);
     });
 
-    it('should reject symlinks when disallowed', () => {
+    it("should reject symlinks when disallowed", () => {
       const relativePath = path.relative(tempDir, symlinkPath);
       expect(() =>
         PathValidator.validate(relativePath, { baseDir: tempDir, allowSymlinks: false })
       ).toThrow(PathValidationError);
     });
 
-    it('should allow symlinks when explicitly enabled', () => {
+    it("should allow symlinks when explicitly enabled", () => {
       const relativePath = path.relative(tempDir, symlinkPath);
       const result = PathValidator.validate(relativePath, {
         baseDir: tempDir,
-        allowSymlinks: true
+        allowSymlinks: true,
       });
       expect(result).toBeDefined();
     });
   });
 
-  describe('Extension Filtering', () => {
-    it('should reject disallowed extensions', () => {
+  describe("Extension Filtering", () => {
+    it("should reject disallowed extensions", () => {
       expect(() =>
-        PathValidator.validate('malicious.exe', {
+        PathValidator.validate("malicious.exe", {
           baseDir,
-          allowedExtensions: ['.ts', '.js', '.json']
+          allowedExtensions: [".ts", ".js", ".json"],
         })
       ).toThrow(PathValidationError);
     });
 
-    it('should allow whitelisted extensions', () => {
-      const result = PathValidator.validate('src/index.ts', {
+    it("should allow whitelisted extensions", () => {
+      const result = PathValidator.validate("src/index.ts", {
         baseDir,
-        allowedExtensions: ['.ts', '.js', '.json']
+        allowedExtensions: [".ts", ".js", ".json"],
       });
-      expect(result).toBe('/home/user/project/src/index.ts');
+      expect(result).toBe("/home/user/project/src/index.ts");
     });
   });
 
-  describe('Pattern Filtering', () => {
-    it('should reject disallowed patterns', () => {
+  describe("Pattern Filtering", () => {
+    it("should reject disallowed patterns", () => {
       expect(() =>
-        PathValidator.validate('node_modules/evil/index.js', {
+        PathValidator.validate("node_modules/evil/index.js", {
           baseDir,
-          disallowedPatterns: ['**/node_modules/**']
+          disallowedPatterns: ["**/node_modules/**"],
         })
       ).toThrow(PathValidationError);
     });
 
-    it('should allow paths not matching patterns', () => {
-      const result = PathValidator.validate('src/index.ts', {
+    it("should allow paths not matching patterns", () => {
+      const result = PathValidator.validate("src/index.ts", {
         baseDir,
-        disallowedPatterns: ['**/node_modules/**']
+        disallowedPatterns: ["**/node_modules/**"],
       });
-      expect(result).toBe('/home/user/project/src/index.ts');
+      expect(result).toBe("/home/user/project/src/index.ts");
     });
   });
 
-  describe('Batch Validation', () => {
-    it('should validate multiple paths successfully', () => {
-      const paths = ['src/a.ts', 'src/b.ts', 'lib/c.js'];
+  describe("Batch Validation", () => {
+    it("should validate multiple paths successfully", () => {
+      const paths = ["src/a.ts", "src/b.ts", "lib/c.js"];
       const results = PathValidator.validateBatch(paths, { baseDir });
       expect(results).toHaveLength(3);
-      expect(results[0]).toContain('/project/src/a.ts');
+      expect(results[0]).toContain("/project/src/a.ts");
     });
 
-    it('should throw on first invalid path in batch', () => {
-      const paths = ['src/a.ts', '../etc/passwd', 'src/b.ts'];
-      expect(() =>
-        PathValidator.validateBatch(paths, { baseDir })
-      ).toThrow(PathValidationError);
+    it("should throw on first invalid path in batch", () => {
+      const paths = ["src/a.ts", "../etc/passwd", "src/b.ts"];
+      expect(() => PathValidator.validateBatch(paths, { baseDir })).toThrow(PathValidationError);
     });
   });
 
-  describe('Safe Check Method', () => {
-    it('should return valid=true for safe paths', () => {
-      const result = PathValidator.check('src/index.ts', { baseDir });
+  describe("Safe Check Method", () => {
+    it("should return valid=true for safe paths", () => {
+      const result = PathValidator.check("src/index.ts", { baseDir });
       expect(result.valid).toBe(true);
       expect(result.resolvedPath).toBeDefined();
     });
 
-    it('should return valid=false for unsafe paths', () => {
-      const result = PathValidator.check('../etc/passwd', { baseDir });
+    it("should return valid=false for unsafe paths", () => {
+      const result = PathValidator.check("../etc/passwd", { baseDir });
       expect(result.valid).toBe(false);
-      expect(result.error).toContain('Path traversal');
+      expect(result.error).toContain("Path traversal");
     });
   });
 });
@@ -679,6 +682,7 @@ except PathValidationError as e:
 3. **All other file operations** - Apply similar pattern
 
 **Acceptance Criteria:**
+
 - [ ] PathValidator implemented for TypeScript with 100% test coverage
 - [ ] PathValidator implemented for Python with 100% test coverage
 - [ ] All 20+ identified file operation locations updated
@@ -687,6 +691,7 @@ except PathValidationError as e:
 - [ ] Documentation: security guidelines for file operations
 
 **Estimated Effort:** 3 days
+
 - Day 1: Implement PathValidator modules + comprehensive tests
 - Day 2: Apply to all TypeScript/JS file operations
 - Day 3: Apply to all Python file operations + penetration testing
@@ -707,17 +712,17 @@ except PathValidationError as e:
 
 **Ensure V2 has ALL V1 capabilities:**
 
-| V1 Capability | V2 Status | Notes |
-|---------------|-----------|-------|
-| Basic task execution | ✅ Present | EditorWorkflow |
-| KB search integration | ✅ Present | ContextBuilder |
-| Claude CLI auth | ✅ Present | ClaudeProvider |
-| Streaming responses | ✅ Present | AsyncIterator pattern |
-| State persistence | ✅ Present | StateStore (TOML) |
-| Conversation history | ✅ Present | Built into StateStore |
-| Tool execution | ✅ Present | ClaudeProvider.execute |
-| Architect mode | ✅ Present | ArchitectWorkflow (V2 only) |
-| Multi-model | ✅ Present | Model selection per phase (V2 only) |
+| V1 Capability         | V2 Status  | Notes                               |
+| --------------------- | ---------- | ----------------------------------- |
+| Basic task execution  | ✅ Present | EditorWorkflow                      |
+| KB search integration | ✅ Present | ContextBuilder                      |
+| Claude CLI auth       | ✅ Present | ClaudeProvider                      |
+| Streaming responses   | ✅ Present | AsyncIterator pattern               |
+| State persistence     | ✅ Present | StateStore (TOML)                   |
+| Conversation history  | ✅ Present | Built into StateStore               |
+| Tool execution        | ✅ Present | ClaudeProvider.execute              |
+| Architect mode        | ✅ Present | ArchitectWorkflow (V2 only)         |
+| Multi-model           | ✅ Present | Model selection per phase (V2 only) |
 
 **Verdict:** V2 is feature-complete superset of V1. Safe to delete V1.
 
@@ -726,6 +731,7 @@ except PathValidationError as e:
 **Timeline:** Immediate (no gradual migration needed)
 
 **Steps:**
+
 1. **Audit dependencies** - Ensure nothing in vscode-extension imports from agent-core
 2. **Update vscode-extension** - Point to agent-core-v2
 3. **Delete agent-core/** entirely
@@ -738,11 +744,11 @@ except PathValidationError as e:
 
 ```typescript
 // BEFORE:
-import { AgentCore } from '../../../agent-core/src/main';
+import { AgentCore } from "../../../agent-core/src/main";
 
 // AFTER:
-import { Orchestrator } from '../../../agent-core-v2/src/orchestrator/orchestrator';
-import { EditorWorkflow } from '../../../agent-core-v2/src/workflows/editor-workflow';
+import { Orchestrator } from "../../../agent-core-v2/src/orchestrator/orchestrator";
+import { EditorWorkflow } from "../../../agent-core-v2/src/workflows/editor-workflow";
 
 export class AgentBridge {
   private orchestrator: Orchestrator;
@@ -750,17 +756,17 @@ export class AgentBridge {
   constructor(workspaceRoot: string) {
     this.orchestrator = new Orchestrator({
       workspaceRoot,
-      defaultWorkflow: 'editor', // Use fast editor workflow by default
-      stateStore: new StateStore({ storagePath: '.dolphin' })
+      defaultWorkflow: "editor", // Use fast editor workflow by default
+      stateStore: new StateStore({ storagePath: ".dolphin" }),
     });
   }
 
   async sendMessage(message: string, context: any) {
     // Use V2 orchestrator
     for await (const update of this.orchestrator.executeTask({
-      mode: 'editor',
+      mode: "editor",
       message,
-      context
+      context,
     })) {
       this.handleUpdate(update);
     }
@@ -769,6 +775,7 @@ export class AgentBridge {
 ```
 
 **Deletion:**
+
 ```bash
 # Delete entire agent-core V1 directory
 rm -rf agent-core/
@@ -779,6 +786,7 @@ rm -rf agent-core/
 ```
 
 **Acceptance Criteria:**
+
 - [ ] agent-core/ directory deleted
 - [ ] vscode-extension uses agent-core-v2 exclusively
 - [ ] All tests pass after deletion
@@ -787,6 +795,7 @@ rm -rf agent-core/
 - [ ] Build and deployment scripts updated
 
 **Estimated Effort:** 1 day
+
 - Audit dependencies: 2 hours
 - Update vscode-extension: 3 hours
 - Delete & cleanup: 1 hour
@@ -805,6 +814,7 @@ rm -rf agent-core/
 [Keep original specification for Issue 2.2 - no changes needed]
 
 **Acceptance Criteria:**
+
 - [ ] Phase interface defined
 - [ ] ResearchPhase extracted (~120 lines)
 - [ ] ClarificationPhase extracted (~130 lines)
@@ -944,7 +954,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Install dependencies
         run: |
@@ -1126,17 +1136,17 @@ repos:
 
 ```javascript
 #!/usr/bin/env node
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
-const coverageFile = path.join(__dirname, '../coverage/coverage-summary.json');
-const coverage = JSON.parse(fs.readFileSync(coverageFile, 'utf8'));
+const coverageFile = path.join(__dirname, "../coverage/coverage-summary.json");
+const coverage = JSON.parse(fs.readFileSync(coverageFile, "utf8"));
 
 const thresholds = {
   branches: 90,
   functions: 90,
   lines: 90,
-  statements: 90
+  statements: 90,
 };
 
 const total = coverage.total;
@@ -1158,10 +1168,11 @@ if (failed) {
   process.exit(1);
 }
 
-console.log('✅ All coverage thresholds met');
+console.log("✅ All coverage thresholds met");
 ```
 
 **Acceptance Criteria:**
+
 - [ ] GitHub Actions workflow created and passing
 - [ ] Pre-commit hooks installed and working
 - [ ] Security scans pass (no vulnerabilities)
@@ -1173,6 +1184,7 @@ console.log('✅ All coverage thresholds met');
 - [ ] Docker build tested in CI
 
 **Estimated Effort:** 2 days
+
 - Day 1: Create workflows, configure tools
 - Day 2: Test, debug, document
 
@@ -1183,15 +1195,18 @@ console.log('✅ All coverage thresholds met');
 ### Simplified Timeline (16 days total)
 
 **Week 1 (Days 1-5): Critical Fixes**
+
 - Day 1-3: WP1 - Universal path validation
 - Day 4-5: WP3.1 - Structured logging (TypeScript)
 
 **Week 2 (Days 6-10): Quality & Precision**
+
 - Day 6-7: WP3.1 - Structured logging (Python) + WP3.2 - Config constants
 - Day 8-9: WP4.2 - Token counting
 - Day 10: WP5.2 - Single-pass processing
 
 **Week 3 (Days 11-16): Architecture & Infrastructure**
+
 - Day 11-12: WP5.1 - Connection pooling
 - Day 13: WP2.1 - Delete V1
 - Day 14-15: WP2.2 - Phase extraction
@@ -1206,18 +1221,21 @@ console.log('✅ All coverage thresholds met');
 ## Testing Requirements
 
 ### Security Testing
+
 - [ ] Path traversal penetration tests (automated + manual)
 - [ ] Fuzzing with malicious inputs
 - [ ] Dependency audit (npm audit + pip-audit)
 - [ ] Secret scanning (trufflehog)
 
 ### Performance Testing
+
 - [ ] Load testing (simulate 1000 concurrent queries)
 - [ ] Stress testing (10K+ queries/sec)
 - [ ] Memory profiling (no leaks)
 - [ ] Latency benchmarks (p50, p95, p99)
 
 ### Functional Testing
+
 - [ ] All existing tests pass
 - [ ] New functionality >95% coverage
 - [ ] Integration tests for all refactored components
@@ -1228,17 +1246,20 @@ console.log('✅ All coverage thresholds met');
 ## Success Metrics
 
 ### Performance
+
 - [ ] Search latency p95 < 500ms
 - [ ] Concurrent query throughput >2000/sec
 - [ ] Memory usage <2GB per instance
 
 ### Quality
+
 - [ ] Zero critical security vulnerabilities
 - [ ] Test coverage >90%
 - [ ] Code duplication <5%
 - [ ] All CI checks passing
 
 ### Developer Experience
+
 - [ ] Clear error messages with context
 - [ ] Comprehensive security guidelines
 - [ ] Automated quality enforcement
@@ -1249,11 +1270,13 @@ console.log('✅ All coverage thresholds met');
 ## Dependencies
 
 ### External Dependencies
+
 - `minimatch` - for path pattern matching
 - `trufflesecurity/trufflehog` - secret scanning
 - `pip-audit` - Python dependency scanning
 
 ### Internal Dependencies
+
 - None - no backward compatibility needed
 
 ---
@@ -1261,6 +1284,7 @@ console.log('✅ All coverage thresholds met');
 ### Code Review Checklist
 
 Before merging any changes:
+
 - [ ] All tests pass (unit + integration + security)
 - [ ] Code coverage maintained (>90%)
 - [ ] Documentation updated
@@ -1272,10 +1296,10 @@ Before merging any changes:
 
 **Document Changelog:**
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.1 | 2025-11-12 | Updated WP1 with comprehensive audit, simplified WP2 (no V1 compat), added CI/CD to WP6 |
-| 1.0 | 2025-11-12 | Initial specification |
+| Version | Date       | Changes                                                                                 |
+| ------- | ---------- | --------------------------------------------------------------------------------------- |
+| 1.1     | 2025-11-12 | Updated WP1 with comprehensive audit, simplified WP2 (no V1 compat), added CI/CD to WP6 |
+| 1.0     | 2025-11-12 | Initial specification                                                                   |
 
 ---
 

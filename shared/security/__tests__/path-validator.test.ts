@@ -3,11 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import {
-  PathValidator,
-  PathValidationError,
-  PathValidationOptions,
-} from "../path-validator";
+import { PathValidator, PathValidationError, PathValidationOptions } from "../path-validator";
 
 describe("PathValidator", () => {
   let testDir: string;
@@ -25,10 +21,7 @@ describe("PathValidator", () => {
 
     // Create a symlink for testing
     try {
-      fs.symlinkSync(
-        path.join(testDir, "file.txt"),
-        path.join(testDir, "symlink.txt")
-      );
+      fs.symlinkSync(path.join(testDir, "file.txt"), path.join(testDir, "symlink.txt"));
     } catch {
       // Symlink creation might fail on some systems, tests will be skipped
     }
@@ -47,9 +40,9 @@ describe("PathValidator", () => {
     });
 
     it("should throw if baseDir does not exist", () => {
-      expect(
-        () => new PathValidator({ baseDir: "/nonexistent/path" })
-      ).toThrow("Base directory does not exist");
+      expect(() => new PathValidator({ baseDir: "/nonexistent/path" })).toThrow(
+        "Base directory does not exist"
+      );
     });
 
     it("should normalize baseDir", () => {
@@ -83,33 +76,23 @@ describe("PathValidator", () => {
 
   describe("validate - path traversal attacks", () => {
     it("should reject simple parent directory traversal", () => {
-      expect(() => validator.validate("../etc/passwd")).toThrow(
-        PathValidationError
-      );
+      expect(() => validator.validate("../etc/passwd")).toThrow(PathValidationError);
     });
 
     it("should reject multiple parent directory traversal", () => {
-      expect(() => validator.validate("../../etc/passwd")).toThrow(
-        PathValidationError
-      );
+      expect(() => validator.validate("../../etc/passwd")).toThrow(PathValidationError);
     });
 
     it("should reject traversal in middle of path", () => {
-      expect(() => validator.validate("subdir/../../etc/passwd")).toThrow(
-        PathValidationError
-      );
+      expect(() => validator.validate("subdir/../../etc/passwd")).toThrow(PathValidationError);
     });
 
     it("should reject complex traversal attempt", () => {
-      expect(() =>
-        validator.validate("subdir/../../../etc/passwd")
-      ).toThrow(PathValidationError);
+      expect(() => validator.validate("subdir/../../../etc/passwd")).toThrow(PathValidationError);
     });
 
     it("should reject traversal with mixed separators", () => {
-      expect(() => validator.validate("subdir\\../../../etc/passwd")).toThrow(
-        PathValidationError
-      );
+      expect(() => validator.validate("subdir\\../../../etc/passwd")).toThrow(PathValidationError);
     });
 
     it("should allow valid parent reference that stays in workspace", () => {
@@ -118,29 +101,21 @@ describe("PathValidator", () => {
     });
 
     it("should reject absolute path outside workspace", () => {
-      expect(() => validator.validate("/etc/passwd")).toThrow(
-        PathValidationError
-      );
+      expect(() => validator.validate("/etc/passwd")).toThrow(PathValidationError);
     });
   });
 
   describe("validate - URL encoding attacks", () => {
     it("should reject URL-encoded path traversal (%2e%2e/)", () => {
-      expect(() => validator.validate("%2e%2e/etc/passwd")).toThrow(
-        PathValidationError
-      );
+      expect(() => validator.validate("%2e%2e/etc/passwd")).toThrow(PathValidationError);
     });
 
     it("should reject double URL-encoded traversal", () => {
-      expect(() => validator.validate("%252e%252e/etc/passwd")).toThrow(
-        PathValidationError
-      );
+      expect(() => validator.validate("%252e%252e/etc/passwd")).toThrow(PathValidationError);
     });
 
     it("should reject mixed encoding traversal", () => {
-      expect(() => validator.validate("..%2f..%2fetc/passwd")).toThrow(
-        PathValidationError
-      );
+      expect(() => validator.validate("..%2f..%2fetc/passwd")).toThrow(PathValidationError);
     });
 
     it("should handle valid URL-encoded filename", () => {
@@ -158,15 +133,11 @@ describe("PathValidator", () => {
 
   describe("validate - null byte attacks", () => {
     it("should reject path with null byte", () => {
-      expect(() => validator.validate("file.txt\0.jpg")).toThrow(
-        PathValidationError
-      );
+      expect(() => validator.validate("file.txt\0.jpg")).toThrow(PathValidationError);
     });
 
     it("should reject path with null byte in middle", () => {
-      expect(() => validator.validate("sub\0dir/file.txt")).toThrow(
-        PathValidationError
-      );
+      expect(() => validator.validate("sub\0dir/file.txt")).toThrow(PathValidationError);
     });
   });
 
@@ -177,9 +148,7 @@ describe("PathValidator", () => {
         return;
       }
 
-      expect(() => validator.validate("symlink.txt")).toThrow(
-        PathValidationError
-      );
+      expect(() => validator.validate("symlink.txt")).toThrow(PathValidationError);
     });
 
     it("should allow symlinks when enabled", () => {
@@ -365,24 +334,20 @@ describe("PathValidator", () => {
     });
 
     it("should throw on invalid path", () => {
-      expect(() =>
-        PathValidator.validate("../etc/passwd", { baseDir: testDir })
-      ).toThrow(PathValidationError);
+      expect(() => PathValidator.validate("../etc/passwd", { baseDir: testDir })).toThrow(
+        PathValidationError
+      );
     });
   });
 
   describe("real-world attack vectors", () => {
     it("should reject Windows-style UNC paths", () => {
-      expect(() => validator.validate("\\\\server\\share\\file")).toThrow(
-        PathValidationError
-      );
+      expect(() => validator.validate("\\\\server\\share\\file")).toThrow(PathValidationError);
     });
 
     it("should reject Unicode normalization attacks", () => {
       // U+2024 (one dot leader) looks like "." but is different
-      expect(() => validator.validate("\u2024\u2024/etc/passwd")).toThrow(
-        PathValidationError
-      );
+      expect(() => validator.validate("\u2024\u2024/etc/passwd")).toThrow(PathValidationError);
     });
 
     it("should reject paths with consecutive slashes", () => {

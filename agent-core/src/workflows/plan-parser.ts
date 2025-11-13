@@ -8,42 +8,52 @@
  * 4. Strict parsing and schema validation
  */
 
-import { marked } from 'marked';
-import * as TOML from 'toml';
-import { z } from 'zod';
+import { marked } from "marked";
+import * as TOML from "toml";
+import { z } from "zod";
 
 /**
  * Zod schema for plan TOML structure
  */
-const PlanSchema = z.object({
-  plan_version: z.number().int().default(1),
+const PlanSchema = z
+  .object({
+    plan_version: z.number().int().default(1),
 
-  overview: z.string().min(10).optional(),
+    overview: z.string().min(10).optional(),
 
-  complexity: z.enum(['low', 'medium', 'high']).default('medium'),
+    complexity: z.enum(["low", "medium", "high"]).default("medium"),
 
-  estimated_tokens: z.number().int().positive().optional(),
-
-  files_to_modify: z.array(z.string().min(1)).default([]),
-
-  files_to_create: z.array(z.string().min(1)).default([]),
-
-  steps: z.array(z.object({
-    id: z.number().int().positive(),
-    description: z.string().min(1),
-    files: z.array(z.string()).default([]),
     estimated_tokens: z.number().int().positive().optional(),
-  })).default([]),
 
-  dependencies: z.array(z.string()).default([]),
+    files_to_modify: z.array(z.string().min(1)).default([]),
 
-  risks: z.array(z.object({
-    description: z.string().min(1),
-    mitigation: z.string().optional(),
-  })).default([]),
+    files_to_create: z.array(z.string().min(1)).default([]),
 
-  generated_at: z.string().datetime().optional(),
-}).strict();
+    steps: z
+      .array(
+        z.object({
+          id: z.number().int().positive(),
+          description: z.string().min(1),
+          files: z.array(z.string()).default([]),
+          estimated_tokens: z.number().int().positive().optional(),
+        })
+      )
+      .default([]),
+
+    dependencies: z.array(z.string()).default([]),
+
+    risks: z
+      .array(
+        z.object({
+          description: z.string().min(1),
+          mitigation: z.string().optional(),
+        })
+      )
+      .default([]),
+
+    generated_at: z.string().datetime().optional(),
+  })
+  .strict();
 
 export type PlanToml = z.infer<typeof PlanSchema>;
 
@@ -67,7 +77,9 @@ export function parsePlanFromMarkdown(md: string): ParseResult {
   const candidates = collectTomlCandidates(md);
 
   if (candidates.length === 0) {
-    throw new Error('No plausible TOML found in plan markdown. Expected a TOML code block with plan structure.');
+    throw new Error(
+      "No plausible TOML found in plan markdown. Expected a TOML code block with plan structure."
+    );
   }
 
   const errors: Array<{ where: string; err: unknown }> = [];
@@ -100,24 +112,24 @@ function collectTomlCandidates(md: string): Candidate[] {
   // Pass 1: Explicit TOML fences
   const tokens = marked.lexer(md, { gfm: true });
   for (const token of tokens) {
-    if (token.type === 'code') {
-      const lang = (token as any).lang?.toLowerCase() || '';
+    if (token.type === "code") {
+      const lang = (token as any).lang?.toLowerCase() || "";
       const text = (token as any).text as string;
 
-      if (lang === 'toml') {
-        out.push(scoreCandidate(text, 'fenced:toml'));
+      if (lang === "toml") {
+        out.push(scoreCandidate(text, "fenced:toml"));
       }
     }
   }
 
   // Pass 2: Unlabeled code fences that look like TOML
   for (const token of tokens) {
-    if (token.type === 'code') {
-      const lang = (token as any).lang?.toLowerCase() || '';
+    if (token.type === "code") {
+      const lang = (token as any).lang?.toLowerCase() || "";
       const text = (token as any).text as string;
 
       if (!lang && looksLikeToml(text)) {
-        out.push(scoreCandidate(text, 'fenced:unlabeled'));
+        out.push(scoreCandidate(text, "fenced:unlabeled"));
       }
     }
   }
@@ -125,11 +137,11 @@ function collectTomlCandidates(md: string): Candidate[] {
   // Pass 3: Free-text TOML (greedy but safe)
   const freeText = findFreeTextToml(md);
   if (freeText) {
-    out.push(scoreCandidate(freeText, 'free-text'));
+    out.push(scoreCandidate(freeText, "free-text"));
   }
 
   // Deduplicate identical candidates
-  const dedup = new Map(out.map(c => [c.src, c]));
+  const dedup = new Map(out.map((c) => [c.src, c]));
   return [...dedup.values()];
 }
 
@@ -141,18 +153,18 @@ function scoreCandidate(src: string, where: string): Candidate {
   const n = lines.length || 1;
 
   // Key-value pairs (e.g., "key = value")
-  const kvCount = lines.filter(l => /^\s*[\w.+-]+\s*=\s*.+$/.test(l)).length;
+  const kvCount = lines.filter((l) => /^\s*[\w.+-]+\s*=\s*.+$/.test(l)).length;
   const kvRatio = kvCount / n;
 
   // Table headers (e.g., "[section]")
-  const tblCount = lines.filter(l => /^\s*\[[^\]\n]+\]\s*$/.test(l)).length;
+  const tblCount = lines.filter((l) => /^\s*\[[^\]\n]+\]\s*$/.test(l)).length;
   const tblRatio = tblCount / n;
 
   // Penalty for stray fences inside the block
   const badFence = /```/.test(src) ? -0.25 : 0;
 
   // Penalty for unrealistic length
-  const lenPenalty = (n > 10000 || n < 3) ? -0.5 : 0;
+  const lenPenalty = n > 10000 || n < 3 ? -0.5 : 0;
 
   // Weighted score
   const score = 0.6 * kvRatio + 0.3 * tblRatio + badFence + lenPenalty;
@@ -165,8 +177,8 @@ function scoreCandidate(src: string, where: string): Candidate {
  */
 function looksLikeToml(s: string): boolean {
   const lines = s.split(/\r?\n/);
-  const kv = lines.filter(l => /^\s*[\w.+-]+\s*=\s*.+$/.test(l)).length;
-  const tbl = lines.filter(l => /^\s*\[[^\]\n]+\]\s*$/.test(l)).length;
+  const kv = lines.filter((l) => /^\s*[\w.+-]+\s*=\s*.+$/.test(l)).length;
+  const tbl = lines.filter((l) => /^\s*\[[^\]\n]+\]\s*$/.test(l)).length;
   return kv + tbl >= 2;
 }
 
@@ -177,7 +189,7 @@ function findFreeTextToml(md: string): string | null {
   // Grab from first table header to next blank line block or end
   const m = md.match(/^\s*\[[^\]\n]+\][\s\S]+?(?:\n```|\n{2,}|\n#+\s|\s*$)/m);
   if (m) {
-    return m[0].replace(/```+.*$/s, '').trim();
+    return m[0].replace(/```+.*$/s, "").trim();
   }
 
   // Fallback: gather consecutive key=value lines
@@ -195,23 +207,23 @@ function normalizeToml(t: string): string {
   s = s.replace(/[""]/g, '"').replace(/['']/g, "'");
 
   // Trailing commas before ] or } (invalid in TOML)
-  s = s.replace(/,\s*(\]|\})/g, '$1');
+  s = s.replace(/,\s*(\]|\})/g, "$1");
 
   // Lowercase booleans
-  s = s.replace(/\b(True|False)\b/g, m => m.toLowerCase());
-  s = s.replace(/\b(Inf|NaN)\b/g, m => m.toLowerCase());
+  s = s.replace(/\b(True|False)\b/g, (m) => m.toLowerCase());
+  s = s.replace(/\b(Inf|NaN)\b/g, (m) => m.toLowerCase());
 
   // Tabs → spaces
-  s = s.replace(/\t/g, '  ');
+  s = s.replace(/\t/g, "  ");
 
   // Strip accidental fences in the block
-  s = s.replace(/^\s*```+\s*\w*\s*$/gm, '');
+  s = s.replace(/^\s*```+\s*\w*\s*$/gm, "");
 
   // Trim BOM
-  s = s.replace(/^\uFEFF/, '');
+  s = s.replace(/^\uFEFF/, "");
 
   // Strip stray leading/trailing underscores in numbers
-  s = s.replace(/(?<=\D)_(\d)/g, '$1').replace(/(\d)_(?=\D|$)/g, '$1');
+  s = s.replace(/(?<=\D)_(\d)/g, "$1").replace(/(\d)_(?=\D|$)/g, "$1");
 
   return s.trim();
 }
@@ -224,8 +236,8 @@ export function parseLegacyMarkdownPlan(content: string): Partial<PlanToml> {
   const filesToModify: string[] = [];
   const filesToCreate: string[] = [];
   const steps: Array<{ id: number; description: string; files: string[] }> = [];
-  let overview = '';
-  let complexity: 'low' | 'medium' | 'high' = 'medium';
+  let overview = "";
+  let complexity: "low" | "medium" | "high" = "medium";
 
   // Extract overview
   const overviewMatch = content.match(/##?\s*(?:Overview|Summary)\s*\n\n([\s\S]*?)(?:\n##|$)/i);
@@ -236,7 +248,7 @@ export function parseLegacyMarkdownPlan(content: string): Partial<PlanToml> {
   // Extract files to modify
   const modifyMatch = content.match(/##?\s*Files?\s+to\s+Modify\s*\n([\s\S]*?)(?:\n##|$)/i);
   if (modifyMatch) {
-    const fileLines = modifyMatch[1].split('\n');
+    const fileLines = modifyMatch[1].split("\n");
     for (const line of fileLines) {
       const fileMatch = line.match(/[-*]\s*`?([a-zA-Z0-9_/.]+\.[a-zA-Z0-9]+)`?/);
       if (fileMatch) {
@@ -248,7 +260,7 @@ export function parseLegacyMarkdownPlan(content: string): Partial<PlanToml> {
   // Extract files to create
   const createMatch = content.match(/##?\s*Files?\s+to\s+Create\s*\n([\s\S]*?)(?:\n##|$)/i);
   if (createMatch) {
-    const fileLines = createMatch[1].split('\n');
+    const fileLines = createMatch[1].split("\n");
     for (const line of fileLines) {
       const fileMatch = line.match(/[-*]\s*`?([a-zA-Z0-9_/.]+\.[a-zA-Z0-9]+)`?/);
       if (fileMatch) {
@@ -258,9 +270,11 @@ export function parseLegacyMarkdownPlan(content: string): Partial<PlanToml> {
   }
 
   // Extract steps
-  const stepsMatch = content.match(/##?\s*(?:Steps|Implementation\s+Steps?)\s*\n([\s\S]*?)(?:\n##|$)/i);
+  const stepsMatch = content.match(
+    /##?\s*(?:Steps|Implementation\s+Steps?)\s*\n([\s\S]*?)(?:\n##|$)/i
+  );
   if (stepsMatch) {
-    const stepLines = stepsMatch[1].split('\n');
+    const stepLines = stepsMatch[1].split("\n");
     let stepId = 1;
     for (const line of stepLines) {
       const stepMatch = line.match(/^\s*\d+\.\s+(.+)$/);
@@ -277,7 +291,7 @@ export function parseLegacyMarkdownPlan(content: string): Partial<PlanToml> {
   // Extract complexity
   const complexityMatch = content.match(/complexity:?\s*(low|medium|high)/i);
   if (complexityMatch) {
-    complexity = complexityMatch[1].toLowerCase() as 'low' | 'medium' | 'high';
+    complexity = complexityMatch[1].toLowerCase() as "low" | "medium" | "high";
   }
 
   return {

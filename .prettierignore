@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+out/
+build/
+**/dist/
+**/out/
+**/build/
+
+# Bun
+bun.lock
+**/bun.lock
+
+# Python
+*.pyc
+__pycache__/
+*.egg-info/
+.pytest_cache/
+
+# Lock files
+package-lock.json
+uv.lock
+
+# Git
+.git/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Data
+test-data/
+golden-scenarios/
+golden-scenarios-flask/

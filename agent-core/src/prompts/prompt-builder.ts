@@ -1,9 +1,9 @@
 /**
  * PromptBuilder - System Prompts for Dolphin v2
- * 
+ *
  * Constructs phase-specific prompts with appropriate system instructions,
  * context, and tool descriptions.
- * 
+ *
  * Based on: docs/orchestration/DOLPHIN-V2-ORCHESTRATION-PROJECT-PLAN.md
  */
 
@@ -13,7 +13,7 @@ import type {
   ImplementationPromptParams,
   EditorPromptParams,
   Context,
-} from '../types/index.js';
+} from "../types/index.js";
 
 /**
  * System prompt for research phase
@@ -208,29 +208,29 @@ Begin now.
   // =============================================================================
 
   private formatContext(context: Context): string {
-    let formatted = '';
+    let formatted = "";
 
     if (context.kbResults && context.kbResults.length > 0) {
-      formatted += '## Knowledge Bank Search Results\n\n';
+      formatted += "## Knowledge Bank Search Results\n\n";
       for (const result of context.kbResults) {
         formatted += `### ${result.file}:${result.startLine}-${result.endLine}\n`;
-        formatted += '```' + result.language + '\n';
-        formatted += result.content + '\n';
-        formatted += '```\n\n';
+        formatted += "```" + result.language + "\n";
+        formatted += result.content + "\n";
+        formatted += "```\n\n";
       }
     }
 
     if (context.files && context.files.length > 0) {
-      formatted += '## Current Files\n\n';
+      formatted += "## Current Files\n\n";
       for (const file of context.files) {
         formatted += `### ${file.path}\n`;
-        formatted += '```' + file.language + '\n';
-        formatted += file.content + '\n';
-        formatted += '```\n\n';
+        formatted += "```" + file.language + "\n";
+        formatted += file.content + "\n";
+        formatted += "```\n\n";
       }
     }
 
-    return formatted || 'No context provided.';
+    return formatted || "No context provided.";
   }
 
   private formatResearch(research: any): string {
@@ -241,15 +241,15 @@ ${research.findings}
 
 ## KB Searches Performed
 
-${research.kbSearches.map((s: any) => `- ${s.query} (${s.resultsCount} results)`).join('\n')}
+${research.kbSearches.map((s: any) => `- ${s.query} (${s.resultsCount} results)`).join("\n")}
 
 ## Relevant Files
 
-${research.relevantFiles.map((f: string) => `- ${f}`).join('\n')}
+${research.relevantFiles.map((f: string) => `- ${f}`).join("\n")}
 `;
   }
 
   private formatPlan(plan: any): string {
-    return plan.content || 'No plan content provided.';
+    return plan.content || "No plan content provided.";
   }
 }

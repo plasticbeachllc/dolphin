@@ -13,6 +13,7 @@
 ### 1. Install Dependencies
 
 #### Python (KB API)
+
 ```bash
 cd /path/to/dolphin
 uv pip install -e .
@@ -21,6 +22,7 @@ pip install prometheus-client opentelemetry-api opentelemetry-sdk opentelemetry-
 ```
 
 #### TypeScript (Shared utilities)
+
 ```bash
 cd shared
 npm install
@@ -36,11 +38,13 @@ cd observability
 ```
 
 **Verify all services are running:**
+
 ```bash
 ./manage.sh status
 ```
 
 You should see:
+
 - ✅ dolphin-prometheus (port 9090)
 - ✅ dolphin-jaeger (port 16686)
 - ✅ dolphin-loki (port 3100)
@@ -49,11 +53,11 @@ You should see:
 
 ### 3. Access Web UIs
 
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| Grafana | http://localhost:3000 | admin / admin (⚠️ **Change in production!**) |
-| Prometheus | http://localhost:9090 | - |
-| Jaeger | http://localhost:16686 | - |
+| Service    | URL                    | Credentials                                  |
+| ---------- | ---------------------- | -------------------------------------------- |
+| Grafana    | http://localhost:3000  | admin / admin (⚠️ **Change in production!**) |
+| Prometheus | http://localhost:9090  | -                                            |
+| Jaeger     | http://localhost:16686 | -                                            |
 
 ### 4. Configure Grafana
 
@@ -70,6 +74,7 @@ uv run kb-api
 ```
 
 Verify metrics:
+
 ```bash
 curl http://localhost:8000/metrics
 curl http://localhost:8000/health
@@ -102,13 +107,14 @@ Edit `observability/prometheus/prometheus.yml`:
 
 ```yaml
 scrape_configs:
-  - job_name: 'kb-api'
+  - job_name: "kb-api"
     static_configs:
-      - targets: ['host.docker.internal:8000']  # Change port if needed
-    scrape_interval: 10s  # Adjust scrape frequency
+      - targets: ["host.docker.internal:8000"] # Change port if needed
+    scrape_interval: 10s # Adjust scrape frequency
 ```
 
 Restart Prometheus:
+
 ```bash
 ./manage.sh restart
 ```
@@ -116,17 +122,19 @@ Restart Prometheus:
 ### Customize Retention Periods
 
 **Prometheus** (default: 7 days):
+
 ```yaml
 # observability/prometheus/prometheus.yml
 command:
-  - '--storage.tsdb.retention.time=7d'  # Adjust as needed
+  - "--storage.tsdb.retention.time=7d" # Adjust as needed
 ```
 
 **Loki** (default: 30 days):
+
 ```yaml
 # observability/loki/loki-config.yml
 limits_config:
-  retention_period: 720h  # 30 days
+  retention_period: 720h # 30 days
 ```
 
 ## Security Considerations
@@ -145,6 +153,7 @@ limits_config:
 The `/metrics` endpoints are **unauthenticated by default** for simplicity. For production:
 
 **Option 1: Network isolation** (recommended for internal tools)
+
 ```bash
 # Only allow Prometheus to access metrics
 iptables -A INPUT -p tcp --dport 8000 -s <prometheus_ip> -j ACCEPT
@@ -152,6 +161,7 @@ iptables -A INPUT -p tcp --dport 8000 -j DROP
 ```
 
 **Option 2: Add authentication middleware**
+
 ```python
 # kb/api/middleware/auth.py
 from fastapi import Security, HTTPException
@@ -171,6 +181,7 @@ async def metrics_endpoint():
 ```
 
 **Option 3: API key header**
+
 ```python
 async def verify_api_key(x_api_key: str = Header(None)):
     if x_api_key != os.getenv("METRICS_API_KEY"):
@@ -190,6 +201,7 @@ grafana:
 ```
 
 Then set in `.env`:
+
 ```bash
 GRAFANA_ADMIN_USER=your_admin_user
 GRAFANA_ADMIN_PASSWORD=your_secure_password
@@ -241,18 +253,20 @@ docker compose logs grafana | grep provision
 Observability stack uses ~2GB RAM by default. To reduce:
 
 1. **Lower Prometheus retention:**
+
    ```yaml
    --storage.tsdb.retention.time=3d
    ```
 
 2. **Reduce scrape frequency:**
+
    ```yaml
-   scrape_interval: 30s  # Instead of 10s
+   scrape_interval: 30s # Instead of 10s
    ```
 
 3. **Limit Loki retention:**
    ```yaml
-   retention_period: 168h  # 7 days instead of 30
+   retention_period: 168h # 7 days instead of 30
    ```
 
 ### Disk Space Issues
@@ -273,13 +287,14 @@ docker volume rm dolphin_loki_data
 
 Expected overhead from observability:
 
-| Component | Baseline | With Observability | Overhead |
-|-----------|----------|-------------------|----------|
-| KB API Latency | 45ms | 47ms | +2ms (4%) |
-| Memory per Service | 120MB | 135MB | +15MB (12%) |
-| Disk Usage | - | ~2GB/week | - |
+| Component          | Baseline | With Observability | Overhead    |
+| ------------------ | -------- | ------------------ | ----------- |
+| KB API Latency     | 45ms     | 47ms               | +2ms (4%)   |
+| Memory per Service | 120MB    | 135MB              | +15MB (12%) |
+| Disk Usage         | -        | ~2GB/week          | -           |
 
 **Recommendations:**
+
 - Acceptable for development and production
 - Monitor disk usage and adjust retention
 - Consider sampling for high-throughput services

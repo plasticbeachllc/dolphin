@@ -93,9 +93,7 @@ export class MCPClient {
           this.pendingRequests.delete(message.id);
 
           if (message.error) {
-            pending.reject(
-              new Error(message.error.message || "Tool call failed")
-            );
+            pending.reject(new Error(message.error.message || "Tool call failed"));
           } else {
             pending.resolve(message.result);
           }

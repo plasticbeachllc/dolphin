@@ -13,6 +13,7 @@ Comprehensive hardening of the Dolphin IPC layer with production-grade error han
 **Location:** `transport.ts:101-138`
 
 **Before:**
+
 ```typescript
 async request(method: string, params: any, timeout: number = 30000) {
   const id = this.generateId();
@@ -28,6 +29,7 @@ async request(method: string, params: any, timeout: number = 30000) {
 ```
 
 **After:**
+
 ```typescript
 async request(method: string, params: any, timeout: number = 30000) {
   const id = this.generateId();
@@ -60,6 +62,7 @@ async request(method: string, params: any, timeout: number = 30000) {
 **Issue:** Uncaught errors could crash the process
 
 **Improvements:**
+
 - ✅ Added error listeners on reader (prevents crashes)
 - ✅ Added close listener (cleanup pending requests)
 - ✅ Wrapped all handler calls in try-catch
@@ -67,6 +70,7 @@ async request(method: string, params: any, timeout: number = 30000) {
 - ✅ Defensive validation of message structure
 
 **Code:**
+
 ```typescript
 constructor(config: TransportConfig) {
   // ... setup ...
@@ -93,6 +97,7 @@ constructor(config: TransportConfig) {
 ### 3. Robust Message Handling
 
 **Improvements:**
+
 - ✅ Validate message structure before processing
 - ✅ Handle unknown request IDs gracefully (log, don't crash)
 - ✅ Attach error code and data to rejected promises
@@ -100,6 +105,7 @@ constructor(config: TransportConfig) {
 - ✅ Handle unknown message types gracefully
 
 **Before:**
+
 ```typescript
 private async handleMessage(message: VSCodeMessage) {
   if (message.id && pending) {
@@ -113,6 +119,7 @@ private async handleMessage(message: VSCodeMessage) {
 ```
 
 **After:**
+
 ```typescript
 private async handleMessage(message: VSCodeMessage) {
   // Validate message structure
@@ -151,6 +158,7 @@ private async handleMessage(message: VSCodeMessage) {
 ### Comprehensive Test Suite (140+ tests)
 
 **Files:**
+
 - `__tests__/serialization.test.ts` - 70+ tests for serializers
 - `__tests__/transport.test.ts` - 50+ tests for IPCTransport
 - `__tests__/stress.test.ts` - 20+ tests for edge cases and load
@@ -158,6 +166,7 @@ private async handleMessage(message: VSCodeMessage) {
 **Coverage Areas:**
 
 #### Unit Tests (serialization.test.ts)
+
 - ✅ JSON serialization: simple, nested, arrays, nulls, unicode, special chars
 - ✅ MessagePack serialization: all JSON cases + binary data
 - ✅ Performance comparison: 2-3x faster, 30% smaller
@@ -166,6 +175,7 @@ private async handleMessage(message: VSCodeMessage) {
 - ✅ Error handling: invalid JSON/MessagePack
 
 #### Integration Tests (transport.test.ts)
+
 - ✅ Basic communication: notifications, requests, concurrent ops
 - ✅ Error handling: unknown methods, timeouts, handler errors
 - ✅ Security: message size limits, pending request limits
@@ -176,6 +186,7 @@ private async handleMessage(message: VSCodeMessage) {
 - ✅ Performance: > 100 req/s throughput
 
 #### Stress Tests (stress.test.ts)
+
 - ✅ Load: 10,000 concurrent requests, sustained load over 5s
 - ✅ Memory: < 100MB growth for 10K requests, leak detection
 - ✅ Large payloads: 10MB messages, 1M character strings
@@ -184,6 +195,7 @@ private async handleMessage(message: VSCodeMessage) {
 - ✅ Reliability: timeout races, error recovery, handler exceptions
 
 **Test Metrics:**
+
 - **Total tests:** 140+
 - **Coverage:** 97%
 - **Performance:** > 1,000 req/s throughput
@@ -199,12 +211,13 @@ private async handleMessage(message: VSCodeMessage) {
 ```typescript
 const DEFAULT_SECURITY: Required<SecurityConfig> = {
   maxMessageSize: 100 * 1024 * 1024, // 100 MB
-  maxBufferSize: 50 * 1024 * 1024,    // 50 MB
+  maxBufferSize: 50 * 1024 * 1024, // 50 MB
   maxPendingRequests: 1000,
 };
 ```
 
 **Protection:**
+
 - ✅ Prevents memory exhaustion attacks
 - ✅ Rejects messages over 100MB
 - ✅ Configurable per transport instance
@@ -212,6 +225,7 @@ const DEFAULT_SECURITY: Required<SecurityConfig> = {
 ### 2. Request Throttling
 
 **Protection:**
+
 - ✅ Max 1,000 concurrent pending requests
 - ✅ Throws error when limit exceeded
 - ✅ Prevents resource exhaustion
@@ -219,6 +233,7 @@ const DEFAULT_SECURITY: Required<SecurityConfig> = {
 ### 3. Connection Lifecycle
 
 **Protection:**
+
 - ✅ Cleanup pending requests on dispose
 - ✅ Cleanup pending requests on connection close
 - ✅ Clear all timeouts properly
@@ -227,6 +242,7 @@ const DEFAULT_SECURITY: Required<SecurityConfig> = {
 ### 4. Error Information Sanitization
 
 **Consideration:**
+
 - Error stack traces attached to error responses
 - May expose internal paths in production
 - **Recommendation:** Add production mode that sanitizes errors
@@ -238,11 +254,13 @@ const DEFAULT_SECURITY: Required<SecurityConfig> = {
 ### Benchmarks Included
 
 **Serialization Benchmark** (`ipc/benchmark.ts`):
+
 - Tests JSON vs MessagePack for 1KB, 10KB, 100KB, 1MB payloads
 - Measures serialize time, deserialize time, payload size
 - Generates comparison reports
 
 **Expected Results:**
+
 ```
 📊 Serialization Benchmark Results
 
@@ -263,6 +281,7 @@ MessagePack 1.0 KB      0.051 ms     0.042 ms      0.093 ms     715 B        107
 **Test:** 1,000 concurrent requests with echo handler
 
 **Results:**
+
 - Throughput: > 1,000 req/s
 - Latency: < 1ms per request
 - Memory: < 50MB for 1,000 requests
@@ -337,15 +356,16 @@ const transport = new IPCTransport({
 });
 
 // Monitor pending requests
-console.log('Pending:', transport.getPendingRequestCount());
+console.log("Pending:", transport.getPendingRequestCount());
 
 // Check serialization format
-console.log('Format:', transport.getSerializationFormat());
+console.log("Format:", transport.getSerializationFormat());
 ```
 
 ### Debug Logging
 
 All error paths log to console.error with prefixes:
+
 - `[IPCTransport]` - Transport-level events
 - `[IPCTransport] Reader error:` - Stream errors
 - `[IPCTransport] Reader closed` - Connection closed
@@ -357,6 +377,7 @@ All error paths log to console.error with prefixes:
 ## Production Readiness Checklist
 
 ### Critical Requirements ✅
+
 - [x] Memory leak prevention
 - [x] Error handling (all paths)
 - [x] Connection lifecycle management
@@ -365,18 +386,21 @@ All error paths log to console.error with prefixes:
 - [x] Documentation
 
 ### Security Requirements ✅
+
 - [x] Payload size limits
 - [x] Request throttling
 - [x] Input validation
 - [x] Error sanitization (partially)
 
 ### Performance Requirements ✅
+
 - [x] > 100 req/s throughput
 - [x] < 100MB memory for 10K requests
 - [x] Proper timeout handling
 - [x] No memory leaks
 
 ### Monitoring Requirements ✅
+
 - [x] Pending request count
 - [x] Error logging
 - [x] Connection state tracking
@@ -389,11 +413,13 @@ All error paths log to console.error with prefixes:
 ### 1. MessagePack Integration
 
 **Current State:**
+
 - SerializerFactory exists but not used by transport
 - vscode-jsonrpc uses JSON internally
 - MessagePack would require custom reader/writer implementation
 
 **Future Work:**
+
 - Implement custom MessageReader/MessageWriter
 - Wrap streams with MessagePack encoding/decoding
 - Add protocol negotiation
@@ -401,10 +427,12 @@ All error paths log to console.error with prefixes:
 ### 2. Test Runner Dependency
 
 **Current State:**
+
 - Tests written for Bun test runner
 - Not compatible with Node.js test runners yet
 
 **Workaround:**
+
 - Install Bun for testing
 - Core logic battle-tested via vscode-jsonrpc
 - Manual verification possible
@@ -412,10 +440,12 @@ All error paths log to console.error with prefixes:
 ### 3. Error Sanitization
 
 **Current State:**
+
 - Stack traces included in error responses
 - May expose internal paths
 
 **Recommendation:**
+
 - Add production mode flag
 - Sanitize errors in production
 - Keep detailed errors in development
@@ -427,15 +457,17 @@ All error paths log to console.error with prefixes:
 ### Regular Checks
 
 1. **Run full test suite before releases**
+
    ```bash
    cd shared && bun test ipc/__tests__
    ```
 
 2. **Monitor for memory leaks in production**
+
    ```typescript
    setInterval(() => {
-     console.log('Pending requests:', transport.getPendingRequestCount());
-     console.log('Memory:', process.memoryUsage().heapUsed / 1024 / 1024, 'MB');
+     console.log("Pending requests:", transport.getPendingRequestCount());
+     console.log("Memory:", process.memoryUsage().heapUsed / 1024 / 1024, "MB");
    }, 60000);
    ```
 
@@ -447,6 +479,7 @@ All error paths log to console.error with prefixes:
 ### Performance Monitoring
 
 Add metrics collection:
+
 ```typescript
 const transport = new IPCTransport({
   input: process.stdin,
@@ -456,7 +489,7 @@ const transport = new IPCTransport({
 
 // Log metrics periodically
 setInterval(() => {
-  console.log('IPC metrics:', {
+  console.log("IPC metrics:", {
     pending: transport.getPendingRequestCount(),
     format: transport.getSerializationFormat(),
   });

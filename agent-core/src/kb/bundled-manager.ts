@@ -64,18 +64,14 @@ export class BundledKBManager {
       ? ["run", "--directory", kbDir, "python", "-m", "kb.cli", "serve"]
       : ["run", "--with", "pb-dolphin", "python", "-m", "kb.cli", "serve"];
 
-    const proc = spawn(
-      this.uvBinary,
-      args,
-      {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          UV_CACHE_DIR: this.cacheDir,       // Use extension's cache
-          PYTHONUNBUFFERED: "1",
-        },
-      }
-    );
+    const proc = spawn(this.uvBinary, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        UV_CACHE_DIR: this.cacheDir, // Use extension's cache
+        PYTHONUNBUFFERED: "1",
+      },
+    });
 
     console.error("[Bundled KB] Server process spawned");
     return proc;

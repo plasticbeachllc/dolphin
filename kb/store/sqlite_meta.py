@@ -310,11 +310,24 @@ class SQLiteMetadataStore:
                     # Log warning but don't fail initialization for existing databases
                     print(f"Warning: Found {count} orphaned records in {check_name}")
 
-    def record_repo(self, name: str, path: Path, *, default_embed_model: str = "small") -> None:
+    def record_repo(self, name: str, path: Path | str, *, default_embed_model: str = "small") -> None:
         """Insert or update a repo registration.
 
         Uses raw sqlite3 for simplicity; models are already materialized.
+        
+        Note: Resolves the path to handle macOS symlinks (/var -> /private/var)
+        to ensure path validation consistency across the system.
+        
+        Args:
+            name: Repository name
+            path: Repository root path (Path object or string)
+            default_embed_model: Default embedding model to use
         """
+        # Convert string to Path if needed and resolve to handle macOS symlinks
+        # This ensures consistency with PathValidator which also resolves paths
+        path_obj = Path(path) if isinstance(path, str) else path
+        resolved_path = path_obj.resolve()
+        
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 """
@@ -325,7 +338,7 @@ class SQLiteMetadataStore:
                   default_embed_model=excluded.default_embed_model,
                   updated_at=datetime('now')
                 """,
-                (name, str(path), default_embed_model),
+                (name, str(resolved_path), default_embed_model),
             )
             conn.commit()
 
@@ -998,7 +1011,7 @@ class SQLiteMetadataStore:
                 (int(file_id),)
             )
             rows = cur.fetchall() or []
-            return [{"id": str(r[0])} for r in rows] if rows else None
+            return [{"id": str(r[0])} for r in rows]
 
     def bm25_search(
         self,

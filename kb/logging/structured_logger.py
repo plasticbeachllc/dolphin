@@ -109,9 +109,10 @@ class StructuredLogger:
             Sanitized value with PII redacted
         """
         if isinstance(value, str):
-            # Redact API keys and secrets
+            # Apply specific patterns FIRST to preserve key prefixes, then generic pattern
             value = self._ANTHROPIC_KEY_PATTERN.sub('sk-ant-***', value)
             value = self._OPENAI_KEY_PATTERN.sub('sk-***', value)
+            # Apply generic pattern last (won't re-match already sanitized keys)
             value = self._API_KEY_PATTERN.sub(r'\1-***', value)
 
             # Redact file paths (remove username)
@@ -151,7 +152,7 @@ class StructuredLogger:
 
             # Then check if key name itself is sensitive
             if key.lower() in ('password', 'passwd', 'secret', 'authorization',
-                              'apikey', 'api_key', 'access_token', 'auth_token'):
+                              'apikey', 'access_token', 'auth_token'):
                 # These keys should be completely redacted
                 sanitized[key] = '***'
             else:

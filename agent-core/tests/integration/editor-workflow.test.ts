@@ -1,57 +1,77 @@
 /**
  * Integration tests for EditorWorkflow
- * 
+ *
  * Tests end-to-end execution with KB integration and Claude CLI
  */
 
-import { describe, it, expect, beforeEach, mock } from 'bun:test';
-import { EditorWorkflow } from '../../src/workflows/editor-workflow';
-import { ClaudeProvider } from '../../src/execution/claude-provider';
-import { ContextBuilder } from '../../src/context/context-builder';
-import { PromptBuilder } from '../../src/prompts/prompt-builder';
-import type { TaskInput, WorkflowUpdate, ClaudeChunk } from '../../src/types/index';
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { EditorWorkflow } from "../../src/workflows/editor-workflow";
+import { ClaudeProvider } from "../../src/execution/claude-provider";
+import { ContextBuilder } from "../../src/context/context-builder";
+import { PromptBuilder } from "../../src/prompts/prompt-builder";
+import type { TaskInput, WorkflowUpdate, ClaudeChunk } from "../../src/types/index";
+import { mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 
-describe('EditorWorkflow Integration', () => {
+describe("EditorWorkflow Integration", () => {
   let workflow: EditorWorkflow;
   let mockClaudeProvider: any;
+  let mockStateStore: any;
   let contextBuilder: ContextBuilder;
   let promptBuilder: PromptBuilder;
+  let testWorkspace: string;
 
   beforeEach(() => {
+    // Create temporary workspace directory for tests
+    testWorkspace = mkdtempSync(join(tmpdir(), "dolphin-test-"));
+
+    // Create test files in workspace
+    const { writeFileSync } = require("fs");
+    writeFileSync(join(testWorkspace, "test.ts"), "const x = 1;\nexport default x;");
+
+    // Mock StateStore
+    mockStateStore = {
+      saveSession: mock(async () => {}),
+      loadSession: mock(async () => null),
+    };
+
     // Mock ClaudeProvider
     mockClaudeProvider = {
-      execute: mock(async function* (params: any): AsyncIterableIterator<ClaudeChunk> {
-        // Simulate Claude response
-        yield {
-          type: 'text',
-          content: 'I will help you with this task.',
-        };
-        
-        yield {
-          type: 'tool_use',
-          content: '',
-          toolName: 'read_file',
-          toolInput: { path: 'test.ts' },
-        };
-        
-        yield {
-          type: 'tool_result',
-          content: '',
-          toolResult: 'const x = 1;',
-        };
-        
-        yield {
-          type: 'text',
-          content: 'I have completed the task.',
+      execute: mock(async (params: any) => {
+        // Call onEvent callback if provided
+        if (params.onEvent) {
+          params.onEvent({ type: "content_delta", delta: "I will help you with this task." });
+          params.onEvent({
+            type: "tool_call_started",
+            toolName: "read_file",
+            toolInput: { path: "test.ts" },
+          });
+          params.onEvent({
+            type: "tool_call_completed",
+            toolName: "read_file",
+            toolResult: "const x = 1;",
+          });
+          params.onEvent({ type: "content_delta", delta: " I have completed the task." });
+        }
+
+        // Return result object with usage and toolRounds
+        return {
+          content: "I will help you with this task. I have completed the task.",
+          usage: {
+            inputTokens: 100,
+            outputTokens: 50,
+          },
+          toolRounds: 1,
         };
       }),
       ensureAuthenticated: mock(async () => {}),
     };
 
-    // Real ContextBuilder with mocked KB
+    // Real ContextBuilder with temporary workspace
     contextBuilder = new ContextBuilder({
-      workspaceRoot: '/test/workspace',
-      kbUrl: 'http://localhost:7777',
+      workspaceRoot: testWorkspace,
+      kbUrl: "http://localhost:7777",
     });
 
     // Real PromptBuilder
@@ -62,15 +82,28 @@ describe('EditorWorkflow Integration', () => {
       claudeProvider: mockClaudeProvider,
       contextBuilder,
       promptBuilder,
+      stateStore: mockStateStore,
+      workspaceRoot: testWorkspace,
     });
   });
 
-  describe('execute()', () => {
-    it('should execute simple task end-to-end', async () => {
+  afterEach(() => {
+    // Clean up temporary workspace
+    if (testWorkspace) {
+      try {
+        rmSync(testWorkspace, { recursive: true, force: true });
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    }
+  });
+
+  describe("execute()", () => {
+    it("should execute simple task end-to-end", async () => {
       const input: TaskInput = {
-        mode: 'editor',
-        message: 'Add a comment to the file',
-        context: { files: ['test.ts'] },
+        mode: "editor",
+        message: "Add a comment to the file",
+        context: { files: ["test.ts"] },
       };
 
       const updates: WorkflowUpdate[] = [];
@@ -81,42 +114,42 @@ describe('EditorWorkflow Integration', () => {
 
       // Verify workflow progression
       expect(updates.length).toBeGreaterThan(0);
-      
+
       // Should have state change to executing
       const executingUpdate = updates.find(
-        u => u.type === 'state_change' && u.data.state === 'executing'
+        (u) => u.type === "state_change" && u.data.state === "executing"
       );
       expect(executingUpdate).toBeDefined();
 
       // Should have completion state
       const completeUpdate = updates.find(
-        u => u.type === 'state_change' && u.data.state === 'complete'
+        (u) => u.type === "state_change" && u.data.state === "complete"
       );
       expect(completeUpdate).toBeDefined();
 
-      // Should have chunks
-      const chunks = updates.filter(u => u.type === 'chunk');
-      expect(chunks.length).toBeGreaterThan(0);
+      // Should have progress updates (v2 architecture)
+      const progressUpdates = updates.filter((u) => u.type === "progress");
+      expect(progressUpdates.length).toBeGreaterThan(0);
 
       // Should have called Claude
       expect(mockClaudeProvider.execute).toHaveBeenCalled();
     });
 
-    it('should handle KB search integration', async () => {
+    it("should handle KB search integration", async () => {
       // Mock KB search to return results
       global.fetch = mock(async (url: string) => {
-        if (url.includes('/v1/search')) {
+        if (url.includes("/v1/search")) {
           return {
             ok: true,
             json: async () => [
               {
-                file_path: 'src/utils.ts',
+                file_path: "src/utils.ts",
                 start_line: 1,
                 end_line: 10,
-                snippet_text: 'export function helper() {}',
-                language: 'typescript',
+                snippet_text: "export function helper() {}",
+                language: "typescript",
                 score: 0.95,
-                chunk_id: 'chunk1',
+                chunk_id: "chunk1",
               },
             ],
           };
@@ -125,8 +158,8 @@ describe('EditorWorkflow Integration', () => {
       }) as any;
 
       const input: TaskInput = {
-        mode: 'editor',
-        message: 'Find the helper function and modify it',
+        mode: "editor",
+        message: "Find the helper function and modify it",
         context: {},
       };
 
@@ -138,22 +171,22 @@ describe('EditorWorkflow Integration', () => {
 
       // Should have progress update about context
       const contextUpdate = updates.find(
-        u => u.type === 'progress' && u.data.phase === 'context'
+        (u) => u.type === "progress" && u.data.phase === "context"
       );
       expect(contextUpdate).toBeDefined();
 
       // Should complete successfully
       const completeUpdate = updates.find(
-        u => u.type === 'state_change' && u.data.state === 'complete'
+        (u) => u.type === "state_change" && u.data.state === "complete"
       );
       expect(completeUpdate).toBeDefined();
     });
 
-    it('should handle tool calls during execution', async () => {
+    it("should handle tool calls during execution", async () => {
       const input: TaskInput = {
-        mode: 'editor',
-        message: 'Read and modify test.ts',
-        context: { files: ['test.ts'] },
+        mode: "editor",
+        message: "Read and modify test.ts",
+        context: { files: ["test.ts"] },
       };
 
       const updates: WorkflowUpdate[] = [];
@@ -162,26 +195,25 @@ describe('EditorWorkflow Integration', () => {
         updates.push(update);
       }
 
-      // Should have tool call updates
-      const toolCalls = updates.filter(u => u.type === 'tool_call');
-      expect(toolCalls.length).toBeGreaterThan(0);
-
-      // Should have read_file tool call
-      const readFileTool = toolCalls.find(
-        u => u.data.toolName === 'read_file'
+      // V2 architecture: tool calls are handled internally, workflow completes successfully
+      const completeUpdate = updates.find(
+        (u) => u.type === "state_change" && u.data.state === "complete"
       );
-      expect(readFileTool).toBeDefined();
+      expect(completeUpdate).toBeDefined();
+
+      // Should have called Claude (which internally handles tool calls)
+      expect(mockClaudeProvider.execute).toHaveBeenCalled();
     });
 
-    it('should handle errors gracefully', async () => {
+    it("should handle errors gracefully", async () => {
       // Mock provider to throw error
-      mockClaudeProvider.execute = mock(async function* () {
-        throw new Error('Claude CLI failed');
+      mockClaudeProvider.execute = mock(async () => {
+        throw new Error("Claude CLI failed");
       });
 
       const input: TaskInput = {
-        mode: 'editor',
-        message: 'This will fail',
+        mode: "editor",
+        message: "This will fail",
         context: {},
       };
 
@@ -192,21 +224,19 @@ describe('EditorWorkflow Integration', () => {
       }
 
       // Should have error update
-      const errorUpdate = updates.find(u => u.type === 'error');
+      const errorUpdate = updates.find((u) => u.type === "error");
       expect(errorUpdate).toBeDefined();
-      expect(errorUpdate?.data.error).toContain('Claude CLI failed');
+      expect(errorUpdate?.data.error).toContain("Claude CLI failed");
 
       // Should transition to error state
-      const errorState = updates.find(
-        u => u.type === 'state_change' && u.data.state === 'error'
-      );
+      const errorState = updates.find((u) => u.type === "state_change" && u.data.state === "error");
       expect(errorState).toBeDefined();
     });
 
-    it('should track token usage', async () => {
+    it("should track token usage", async () => {
       const input: TaskInput = {
-        mode: 'editor',
-        message: 'Simple task',
+        mode: "editor",
+        message: "Simple task",
         context: {},
       };
 
@@ -218,37 +248,38 @@ describe('EditorWorkflow Integration', () => {
 
       // Should have completion message with token estimate
       const completeProgress = updates.find(
-        u => u.type === 'progress' && u.data.phase === 'complete'
+        (u) => u.type === "progress" && u.data.phase === "complete"
       );
       expect(completeProgress).toBeDefined();
-      expect(completeProgress?.data.message).toContain('tokens');
+      expect(completeProgress?.data.message).toContain("tokens");
     });
 
-    it('should respect context token limits', async () => {
+    it("should respect context token limits", async () => {
       // Create a large file that would exceed limits
-      const largeContent = 'x'.repeat(100000);
-      
+      const largeContent = "x".repeat(100000);
+
       global.fetch = mock(async (url: string) => {
-        if (url.includes('/v1/search')) {
+        if (url.includes("/v1/search")) {
           return {
             ok: true,
-            json: async () => Array(50).fill({
-              file_path: 'large.ts',
-              start_line: 1,
-              end_line: 1000,
-              snippet_text: largeContent,
-              language: 'typescript',
-              score: 0.95,
-              chunk_id: 'chunk1',
-            }),
+            json: async () =>
+              Array(50).fill({
+                file_path: "large.ts",
+                start_line: 1,
+                end_line: 1000,
+                snippet_text: largeContent,
+                language: "typescript",
+                score: 0.95,
+                chunk_id: "chunk1",
+              }),
           };
         }
         return { ok: false };
       }) as any;
 
       const input: TaskInput = {
-        mode: 'editor',
-        message: 'Search for large files',
+        mode: "editor",
+        message: "Search for large files",
         context: {},
       };
 
@@ -260,22 +291,22 @@ describe('EditorWorkflow Integration', () => {
 
       // Should still complete even with truncated context
       const completeUpdate = updates.find(
-        u => u.type === 'state_change' && u.data.state === 'complete'
+        (u) => u.type === "state_change" && u.data.state === "complete"
       );
       expect(completeUpdate).toBeDefined();
     });
   });
 
-  describe('Context Building', () => {
-    it('should build context with explicit files', async () => {
+  describe("Context Building", () => {
+    it("should build context with explicit files", async () => {
       // Mock file reading
-      const mockReadFile = mock(async () => 'const test = 1;');
-      
+      const mockReadFile = mock(async () => "const test = 1;");
+
       const input: TaskInput = {
-        mode: 'editor',
-        message: 'Modify test files',
+        mode: "editor",
+        message: "Modify test files",
         context: {
-          files: ['test1.ts', 'test2.ts'],
+          files: ["test1.ts", "test2.ts"],
         },
       };
 
@@ -287,20 +318,20 @@ describe('EditorWorkflow Integration', () => {
 
       // Should have context assembly progress
       const contextUpdate = updates.find(
-        u => u.type === 'progress' && u.data.phase === 'context'
+        (u) => u.type === "progress" && u.data.phase === "context"
       );
       expect(contextUpdate).toBeDefined();
     });
 
-    it('should handle KB unavailable gracefully', async () => {
+    it("should handle KB unavailable gracefully", async () => {
       // Mock KB to fail
       global.fetch = mock(async () => {
-        throw new Error('KB unavailable');
+        throw new Error("KB unavailable");
       }) as any;
 
       const input: TaskInput = {
-        mode: 'editor',
-        message: 'Search for something',
+        mode: "editor",
+        message: "Search for something",
         context: {},
       };
 
@@ -312,26 +343,26 @@ describe('EditorWorkflow Integration', () => {
 
       // Should still complete without KB results
       const completeUpdate = updates.find(
-        u => u.type === 'state_change' && u.data.state === 'complete'
+        (u) => u.type === "state_change" && u.data.state === "complete"
       );
       expect(completeUpdate).toBeDefined();
     });
   });
 
-  describe('Prompt Building', () => {
-    it('should include conversation history', async () => {
+  describe("Prompt Building", () => {
+    it("should include conversation history", async () => {
       const input: TaskInput = {
-        mode: 'editor',
-        message: 'Continue from previous task',
+        mode: "editor",
+        message: "Continue from previous task",
         context: {},
         conversationHistory: [
           {
-            role: 'user',
-            content: 'Previous question',
+            role: "user",
+            content: "Previous question",
           },
           {
-            role: 'assistant',
-            content: 'Previous answer',
+            role: "assistant",
+            content: "Previous answer",
           },
         ],
       };
@@ -344,19 +375,19 @@ describe('EditorWorkflow Integration', () => {
 
       // Should call Claude with prompt including history
       expect(mockClaudeProvider.execute).toHaveBeenCalled();
-      
+
       const completeUpdate = updates.find(
-        u => u.type === 'state_change' && u.data.state === 'complete'
+        (u) => u.type === "state_change" && u.data.state === "complete"
       );
       expect(completeUpdate).toBeDefined();
     });
   });
 
-  describe('Performance', () => {
-    it('should complete simple task quickly', async () => {
+  describe("Performance", () => {
+    it("should complete simple task quickly", async () => {
       const input: TaskInput = {
-        mode: 'editor',
-        message: 'Quick task',
+        mode: "editor",
+        message: "Quick task",
         context: {},
       };
 

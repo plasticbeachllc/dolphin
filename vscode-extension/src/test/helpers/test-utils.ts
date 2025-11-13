@@ -1,6 +1,6 @@
-import * as vscode from 'vscode';
-import * as http from 'http';
-import { HttpTestResponse } from './mock-types';
+import * as vscode from "vscode";
+import * as http from "http";
+import { HttpTestResponse } from "./mock-types";
 
 /**
  * Wait for a condition to be true with timeout
@@ -31,7 +31,7 @@ export function sleep(ms: number): Promise<void> {
  * Get the Dolphin extension
  */
 export function getDolphinExtension(): vscode.Extension<any> | undefined {
-  return vscode.extensions.getExtension('pb.dolphin');
+  return vscode.extensions.getExtension("pb.dolphin");
 }
 
 /**
@@ -44,7 +44,7 @@ export async function waitForExtensionActivation(
   const extension = getDolphinExtension();
 
   if (!extension) {
-    throw new Error('Dolphin extension not found');
+    throw new Error("Dolphin extension not found");
   }
 
   if (!extension.isActive) {
@@ -77,12 +77,9 @@ export async function getWebview(viewId: string, timeout = 5000): Promise<void> 
  * Create a temporary workspace folder for testing
  */
 export async function createTestWorkspace(): Promise<vscode.Uri> {
-  const tmpDir = require('os').tmpdir();
-  const testDir = require('path').join(
-    tmpDir,
-    `dolphin-test-${Date.now()}`
-  );
-  const fs = require('fs').promises;
+  const tmpDir = require("os").tmpdir();
+  const testDir = require("path").join(tmpDir, `dolphin-test-${Date.now()}`);
+  const fs = require("fs").promises;
 
   await fs.mkdir(testDir, { recursive: true });
 
@@ -93,11 +90,11 @@ export async function createTestWorkspace(): Promise<vscode.Uri> {
  * Clean up test workspace
  */
 export async function cleanupTestWorkspace(uri: vscode.Uri): Promise<void> {
-  const fs = require('fs').promises;
+  const fs = require("fs").promises;
   try {
     await fs.rm(uri.fsPath, { recursive: true, force: true });
   } catch (err) {
-    console.warn('Failed to cleanup test workspace:', err);
+    console.warn("Failed to cleanup test workspace:", err);
   }
 }
 
@@ -109,7 +106,7 @@ export function assertDefined<T>(
   message?: string
 ): asserts value is T {
   if (value === undefined || value === null) {
-    throw new Error(message || 'Expected value to be defined');
+    throw new Error(message || "Expected value to be defined");
   }
 }
 
@@ -127,7 +124,7 @@ export function captureOutputChannel(name: string): {
   // you'd need to hook into the actual output channel.
 
   return {
-    getContent: () => content.join('\n'),
+    getContent: () => content.join("\n"),
     dispose: () => {},
   };
 }
@@ -144,13 +141,13 @@ export async function makeHttpGetRequest<T = any>(
 ): Promise<HttpTestResponse<T>> {
   return new Promise((resolve, reject) => {
     const req = http.get(url, (res) => {
-      let data = '';
+      let data = "";
 
-      res.on('data', (chunk) => {
+      res.on("data", (chunk) => {
         data += chunk;
       });
 
-      res.on('end', () => {
+      res.on("end", () => {
         try {
           const parsedData = data ? JSON.parse(data) : null;
           resolve({
@@ -160,7 +157,9 @@ export async function makeHttpGetRequest<T = any>(
           });
         } catch (err) {
           reject(
-            new Error(`Failed to parse JSON response: ${err instanceof Error ? err.message : String(err)}`)
+            new Error(
+              `Failed to parse JSON response: ${err instanceof Error ? err.message : String(err)}`
+            )
           );
         }
       });
@@ -169,12 +168,12 @@ export async function makeHttpGetRequest<T = any>(
     // Set timeout
     req.setTimeout(timeout);
 
-    req.on('timeout', () => {
+    req.on("timeout", () => {
       req.destroy();
       reject(new Error(`Request timed out after ${timeout}ms`));
     });
 
-    req.on('error', (err) => {
+    req.on("error", (err) => {
       reject(err);
     });
   });
@@ -196,16 +195,16 @@ export async function makeHttpPostRequest<T = any>(
     const req = http.request(
       {
         ...options,
-        method: 'POST',
+        method: "POST",
       },
       (res) => {
-        let data = '';
+        let data = "";
 
-        res.on('data', (chunk) => {
+        res.on("data", (chunk) => {
           data += chunk;
         });
 
-        res.on('end', () => {
+        res.on("end", () => {
           try {
             const parsedData = data ? JSON.parse(data) : null;
             resolve({
@@ -215,7 +214,9 @@ export async function makeHttpPostRequest<T = any>(
             });
           } catch (err) {
             reject(
-              new Error(`Failed to parse JSON response: ${err instanceof Error ? err.message : String(err)}`)
+              new Error(
+                `Failed to parse JSON response: ${err instanceof Error ? err.message : String(err)}`
+              )
             );
           }
         });
@@ -225,12 +226,12 @@ export async function makeHttpPostRequest<T = any>(
     // Set timeout
     req.setTimeout(timeout);
 
-    req.on('timeout', () => {
+    req.on("timeout", () => {
       req.destroy();
       reject(new Error(`Request timed out after ${timeout}ms`));
     });
 
-    req.on('error', (err) => {
+    req.on("error", (err) => {
       reject(err);
     });
 
@@ -255,13 +256,13 @@ export async function makeHttpRequest<T = any>(
 ): Promise<HttpTestResponse<T>> {
   return new Promise((resolve, reject) => {
     const req = http.request(options, (res) => {
-      let data = '';
+      let data = "";
 
-      res.on('data', (chunk) => {
+      res.on("data", (chunk) => {
         data += chunk;
       });
 
-      res.on('end', () => {
+      res.on("end", () => {
         try {
           const parsedData = data ? JSON.parse(data) : null;
           resolve({
@@ -271,7 +272,9 @@ export async function makeHttpRequest<T = any>(
           });
         } catch (err) {
           reject(
-            new Error(`Failed to parse JSON response: ${err instanceof Error ? err.message : String(err)}`)
+            new Error(
+              `Failed to parse JSON response: ${err instanceof Error ? err.message : String(err)}`
+            )
           );
         }
       });
@@ -280,12 +283,12 @@ export async function makeHttpRequest<T = any>(
     // Set timeout
     req.setTimeout(timeout);
 
-    req.on('timeout', () => {
+    req.on("timeout", () => {
       req.destroy();
       reject(new Error(`Request timed out after ${timeout}ms`));
     });
 
-    req.on('error', (err) => {
+    req.on("error", (err) => {
       reject(err);
     });
 

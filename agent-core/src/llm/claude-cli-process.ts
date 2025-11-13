@@ -74,16 +74,35 @@ export async function* runClaudeCode(
   // Build CLI arguments (matching Kilocode's implementation)
   const args = [
     "-p", // Programmatic mode
-    "--system-prompt", systemPrompt,
+    "--system-prompt",
+    systemPrompt,
     "--verbose",
-    "--output-format", "stream-json",
-    "--disallowedTools", [
-      "Task", "Bash", "Glob", "Grep", "LS", "exit_plan_mode",
-      "Read", "Edit", "MultiEdit", "Write", "NotebookRead",
-      "NotebookEdit", "WebFetch", "TodoRead", "TodoWrite",
-      "WebSearch", "ExitPlanMode", "BashOutput", "KillBash"
+    "--output-format",
+    "stream-json",
+    "--disallowedTools",
+    [
+      "Task",
+      "Bash",
+      "Glob",
+      "Grep",
+      "LS",
+      "exit_plan_mode",
+      "Read",
+      "Edit",
+      "MultiEdit",
+      "Write",
+      "NotebookRead",
+      "NotebookEdit",
+      "WebFetch",
+      "TodoRead",
+      "TodoWrite",
+      "WebSearch",
+      "ExitPlanMode",
+      "BashOutput",
+      "KillBash",
     ].join(","),
-    "--max-turns", "1", // Dolphin handles recursion
+    "--max-turns",
+    "1", // Dolphin handles recursion
   ];
 
   if (model) {
@@ -230,9 +249,7 @@ function attemptParseChunk(data: string): ClaudeCodeMessage | null {
 /**
  * Higher-level interface that collects streaming responses into a single result
  */
-export async function executeClaudeCode(
-  options: ClaudeCLIOptions
-): Promise<ClaudeCLIResponse> {
+export async function executeClaudeCode(options: ClaudeCLIOptions): Promise<ClaudeCLIResponse> {
   let content = "";
   let usage = {
     input_tokens: 0,
@@ -271,8 +288,10 @@ export async function executeClaudeCode(
       // Update usage
       usage.input_tokens += message.usage.input_tokens;
       usage.output_tokens += message.usage.output_tokens;
-      usage.cache_read_tokens = (usage.cache_read_tokens || 0) + ((message.usage as any).cache_read_input_tokens || 0);
-      usage.cache_write_tokens = (usage.cache_write_tokens || 0) + ((message.usage as any).cache_creation_input_tokens || 0);
+      usage.cache_read_tokens =
+        (usage.cache_read_tokens || 0) + ((message.usage as any).cache_read_input_tokens || 0);
+      usage.cache_write_tokens =
+        (usage.cache_write_tokens || 0) + ((message.usage as any).cache_creation_input_tokens || 0);
 
       stop_reason = message.stop_reason || undefined;
       continue;

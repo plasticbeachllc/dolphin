@@ -48,13 +48,17 @@ export class KBManager {
         console.error(`[KB Manager] Dolphin root: ${dolphinRoot}`);
 
         // Development: Use system uv with dolphin project directory
-        this.process = spawn("uv", ["run", "--directory", dolphinRoot, "python", "-m", "kb.cli", "serve"], {
-          stdio: ["ignore", "pipe", "pipe"],
-          env: {
-            ...process.env,
-            PYTHONUNBUFFERED: "1",
-          },
-        });
+        this.process = spawn(
+          "uv",
+          ["run", "--directory", dolphinRoot, "python", "-m", "kb.cli", "serve"],
+          {
+            stdio: ["ignore", "pipe", "pipe"],
+            env: {
+              ...process.env,
+              PYTHONUNBUFFERED: "1",
+            },
+          }
+        );
       } else {
         // Fallback: shouldn't happen
         throw new Error("Neither bundled uv nor development environment found");

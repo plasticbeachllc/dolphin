@@ -20,13 +20,13 @@ import type {
   ClarificationResponse,
   Plan,
   KBSearch,
-} from '../types/index.js';
+} from "../types/index.js";
 
-import type { ContextBuilder } from '../context/context-builder.js';
-import type { PromptBuilder } from '../prompts/prompt-builder.js';
-import type { ClaudeProvider } from '../execution/claude-provider.js';
-import { MODELS, CHARS_PER_TOKEN, DEFAULT_MAX_CLARIFICATION_TURNS } from './constants.js';
-import { parsePlanFromMarkdown, parseLegacyMarkdownPlan } from './plan-parser.js';
+import type { ContextBuilder } from "../context/context-builder.js";
+import type { PromptBuilder } from "../prompts/prompt-builder.js";
+import type { ClaudeProvider } from "../execution/claude-provider.js";
+import { MODELS, CHARS_PER_TOKEN, DEFAULT_MAX_CLARIFICATION_TURNS } from "./constants.js";
+import { parsePlanFromMarkdown, parseLegacyMarkdownPlan } from "./plan-parser.js";
 
 export interface ArchitectWorkflowConfig {
   claudeProvider: ClaudeProvider;
@@ -60,10 +60,10 @@ export class ArchitectWorkflow implements IWorkflow {
       // Phase 1: Research - Discover codebase context
       // ========================================================================
       yield {
-        type: 'state_change',
+        type: "state_change",
         sessionId,
         timestamp: new Date().toISOString(),
-        data: { state: 'researching' },
+        data: { state: "researching" },
       };
 
       const research = yield* this.executeResearchPhase(sessionId, input);
@@ -72,62 +72,52 @@ export class ArchitectWorkflow implements IWorkflow {
       // Phase 2: Clarification - Interactive Q&A loop
       // ========================================================================
       yield {
-        type: 'state_change',
+        type: "state_change",
         sessionId,
         timestamp: new Date().toISOString(),
-        data: { state: 'clarifying' },
+        data: { state: "clarifying" },
       };
 
-      const clarification = yield* this.executeClarificationPhase(
-        sessionId,
-        input,
-        research
-      );
+      const clarification = yield* this.executeClarificationPhase(sessionId, input, research);
 
       // ========================================================================
       // Phase 3: Planning - Generate structured plan
       // ========================================================================
       yield {
-        type: 'state_change',
+        type: "state_change",
         sessionId,
         timestamp: new Date().toISOString(),
-        data: { state: 'planning' },
+        data: { state: "planning" },
       };
 
-      const plan = yield* this.executePlanningPhase(
-        sessionId,
-        input,
-        research,
-        clarification
-      );
+      const plan = yield* this.executePlanningPhase(sessionId, input, research, clarification);
 
       // ========================================================================
       // Phase 4: Await User Approval
       // ========================================================================
       yield {
-        type: 'state_change',
+        type: "state_change",
         sessionId,
         timestamp: new Date().toISOString(),
-        data: { state: 'awaiting_approval' },
+        data: { state: "awaiting_approval" },
       };
 
       yield {
-        type: 'progress',
+        type: "progress",
         sessionId,
         timestamp: new Date().toISOString(),
         data: {
-          phase: 'planning',
-          message: 'Plan ready for review',
+          phase: "planning",
+          message: "Plan ready for review",
           plan,
         },
       };
 
       // Note: Orchestrator will handle approval/rejection flow
       // This workflow yields and waits for orchestrator to resume
-
     } catch (error) {
       yield {
-        type: 'error',
+        type: "error",
         sessionId,
         timestamp: new Date().toISOString(),
         data: {
@@ -152,12 +142,12 @@ export class ArchitectWorkflow implements IWorkflow {
     const relevantFiles: string[] = [];
 
     yield {
-      type: 'progress',
+      type: "progress",
       sessionId,
       timestamp: new Date().toISOString(),
       data: {
-        phase: 'research',
-        message: 'Searching knowledge base for relevant context...',
+        phase: "research",
+        message: "Searching knowledge base for relevant context...",
       },
     };
 
@@ -167,7 +157,7 @@ export class ArchitectWorkflow implements IWorkflow {
       files: input.context.files,
       maxTokens: 12000,
       includeRepoMap: false,
-      scope: 'architect',
+      scope: "architect",
     });
 
     // Track KB searches
@@ -191,35 +181,35 @@ export class ArchitectWorkflow implements IWorkflow {
     });
 
     yield {
-      type: 'progress',
+      type: "progress",
       sessionId,
       timestamp: new Date().toISOString(),
       data: {
-        phase: 'research',
-        message: 'Analyzing codebase and generating research findings...',
+        phase: "research",
+        message: "Analyzing codebase and generating research findings...",
       },
     };
 
     // Execute research with Haiku (fast, cost-effective)
-    let findings = '';
+    let findings = "";
     for await (const chunk of this.config.claudeProvider.execute({
       model: MODELS.RESEARCH,
       prompt: researchPrompt,
       systemPrompt: this.getResearchSystemPrompt(),
       context,
-      thinkingMode: 'normal',
+      thinkingMode: "normal",
     })) {
-      if (chunk.type === 'text') {
+      if (chunk.type === "text") {
         findings += chunk.content;
 
         yield {
-          type: 'chunk',
+          type: "chunk",
           sessionId,
           timestamp: new Date().toISOString(),
           data: {
-            type: 'text',
+            type: "text",
             content: chunk.content,
-            phase: 'research',
+            phase: "research",
           },
         };
       }
@@ -235,11 +225,11 @@ export class ArchitectWorkflow implements IWorkflow {
     };
 
     yield {
-      type: 'progress',
+      type: "progress",
       sessionId,
       timestamp: new Date().toISOString(),
       data: {
-        phase: 'research',
+        phase: "research",
         message: `Research complete. Found ${relevantFiles.length} relevant files.`,
         result,
       },
@@ -263,83 +253,86 @@ export class ArchitectWorkflow implements IWorkflow {
     const responses: ClarificationResponse[] = [];
     let conversationTurns = 0;
     let readyForPlanning = false;
-    let conversationHistory: Array<{role: 'user' | 'assistant'; content: string}> = [];
+    let conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [];
 
     // Initial clarification prompt with research context
     conversationHistory.push({
-      role: 'user',
+      role: "user",
       content: this.buildInitialClarificationPrompt(input, research),
     });
 
     yield {
-      type: 'progress',
+      type: "progress",
       sessionId,
       timestamp: new Date().toISOString(),
       data: {
-        phase: 'clarification',
-        message: 'Initiating clarification phase...',
+        phase: "clarification",
+        message: "Initiating clarification phase...",
       },
     };
 
     // Clarification loop: continue until LLM signals ready or max turns
     while (conversationTurns < this.maxClarificationTurns && !readyForPlanning) {
       if (this.aborted) {
-        throw new Error('Workflow aborted');
+        throw new Error("Workflow aborted");
       }
 
       conversationTurns++;
 
       yield {
-        type: 'progress',
+        type: "progress",
         sessionId,
         timestamp: new Date().toISOString(),
         data: {
-          phase: 'clarification',
+          phase: "clarification",
           message: `Clarification turn ${conversationTurns}/${this.maxClarificationTurns}`,
         },
       };
 
       // Execute clarification with Sonnet (good reasoning, balanced cost)
-      let llmResponse = '';
+      let llmResponse = "";
       for await (const chunk of this.config.claudeProvider.execute({
         model: MODELS.CLARIFICATION,
         prompt: conversationHistory[conversationHistory.length - 1].content,
         systemPrompt: this.getClarificationSystemPrompt(conversationTurns),
-        thinkingMode: 'normal',
+        thinkingMode: "normal",
       })) {
-        if (chunk.type === 'text') {
+        if (chunk.type === "text") {
           llmResponse += chunk.content;
 
           yield {
-            type: 'chunk',
+            type: "chunk",
             sessionId,
             timestamp: new Date().toISOString(),
             data: {
-              type: 'text',
+              type: "text",
               content: chunk.content,
-              phase: 'clarification',
+              phase: "clarification",
             },
           };
         }
       }
 
       conversationHistory.push({
-        role: 'assistant',
+        role: "assistant",
         content: llmResponse,
       });
 
       // Check if LLM is ready to plan
       // Signal: LLM includes [READY_TO_PLAN] marker or reaches max turns
-      if (llmResponse.includes('[READY_TO_PLAN]') || conversationTurns >= this.maxClarificationTurns) {
+      if (
+        llmResponse.includes("[READY_TO_PLAN]") ||
+        conversationTurns >= this.maxClarificationTurns
+      ) {
         readyForPlanning = true;
 
         yield {
-          type: 'progress',
+          type: "progress",
           sessionId,
           timestamp: new Date().toISOString(),
           data: {
-            phase: 'clarification',
-            message: 'Clarification complete. Proceeding to planning...',
+            phase: "clarification",
+            message: "Clarification complete. Proceeding to planning...",
           },
         };
 
@@ -355,11 +348,11 @@ export class ArchitectWorkflow implements IWorkflow {
       // For now, we'll simulate by checking if there are questions
       if (parsedQuestions.length > 0) {
         yield {
-          type: 'progress',
+          type: "progress",
           sessionId,
           timestamp: new Date().toISOString(),
           data: {
-            phase: 'clarification',
+            phase: "clarification",
             message: `${parsedQuestions.length} clarifying questions`,
             questions: parsedQuestions,
           },
@@ -386,12 +379,12 @@ export class ArchitectWorkflow implements IWorkflow {
 
     // Yield progress update with result so orchestrator can capture it
     yield {
-      type: 'progress',
+      type: "progress",
       sessionId,
       timestamp: new Date().toISOString(),
       data: {
-        phase: 'clarification',
-        message: 'Clarification phase complete',
+        phase: "clarification",
+        message: "Clarification phase complete",
         result,
       },
     };
@@ -412,12 +405,12 @@ export class ArchitectWorkflow implements IWorkflow {
     clarification: ClarificationResult
   ): AsyncGenerator<WorkflowUpdate, Plan, unknown> {
     yield {
-      type: 'progress',
+      type: "progress",
       sessionId,
       timestamp: new Date().toISOString(),
       data: {
-        phase: 'planning',
-        message: 'Generating implementation plan...',
+        phase: "planning",
+        message: "Generating implementation plan...",
       },
     };
 
@@ -427,7 +420,7 @@ export class ArchitectWorkflow implements IWorkflow {
       files: research.relevantFiles,
       maxTokens: 16000,
       includeRepoMap: true,
-      scope: 'architect',
+      scope: "architect",
       researchFindings: research,
     });
 
@@ -440,25 +433,25 @@ export class ArchitectWorkflow implements IWorkflow {
     });
 
     // Execute planning with Opus (best reasoning)
-    let planContent = '';
+    let planContent = "";
     for await (const chunk of this.config.claudeProvider.execute({
       model: MODELS.PLANNING,
       prompt: planningPrompt,
       systemPrompt: this.getPlanningSystemPrompt(),
       context,
-      thinkingMode: 'extended',
+      thinkingMode: "extended",
     })) {
-      if (chunk.type === 'text') {
+      if (chunk.type === "text") {
         planContent += chunk.content;
 
         yield {
-          type: 'chunk',
+          type: "chunk",
           sessionId,
           timestamp: new Date().toISOString(),
           data: {
-            type: 'text',
+            type: "text",
             content: chunk.content,
-            phase: 'planning',
+            phase: "planning",
           },
         };
       }
@@ -466,7 +459,7 @@ export class ArchitectWorkflow implements IWorkflow {
 
     // Parse plan from markdown with robust TOML extraction
     let parsedPlan: any;
-    let parseSource = 'toml';
+    let parseSource = "toml";
 
     try {
       // Try robust TOML parsing first
@@ -476,15 +469,18 @@ export class ArchitectWorkflow implements IWorkflow {
       console.log(`[ArchitectWorkflow] Plan parsed from ${result.source}`);
     } catch (tomlError) {
       // Fallback to legacy markdown parsing
-      console.warn('[ArchitectWorkflow] TOML parsing failed, using legacy markdown parser:', tomlError);
+      console.warn(
+        "[ArchitectWorkflow] TOML parsing failed, using legacy markdown parser:",
+        tomlError
+      );
       parsedPlan = parseLegacyMarkdownPlan(planContent);
-      parseSource = 'legacy-markdown';
+      parseSource = "legacy-markdown";
     }
 
     // Convert TOML snake_case to Plan camelCase
     const plan: Plan = {
       version: 1,
-      status: 'pending_approval',
+      status: "pending_approval",
       createdAt: new Date().toISOString(),
       model: MODELS.PLANNING,
       tokensUsed: Math.floor(planContent.length / CHARS_PER_TOKEN),
@@ -492,21 +488,22 @@ export class ArchitectWorkflow implements IWorkflow {
       content: planContent,
       filesToModify: parsedPlan.files_to_modify || parsedPlan.filesToModify || [],
       filesToCreate: parsedPlan.files_to_create || parsedPlan.filesToCreate || [],
-      steps: (parsedPlan.steps || []).map((s: any) =>
-        typeof s === 'string' ? s : s.description
-      ),
-      complexity: parsedPlan.complexity || 'medium',
-      estimatedTokens: parsedPlan.estimated_tokens || parsedPlan.estimatedTokens || Math.floor(planContent.length / CHARS_PER_TOKEN),
+      steps: (parsedPlan.steps || []).map((s: any) => (typeof s === "string" ? s : s.description)),
+      complexity: parsedPlan.complexity || "medium",
+      estimatedTokens:
+        parsedPlan.estimated_tokens ||
+        parsedPlan.estimatedTokens ||
+        Math.floor(planContent.length / CHARS_PER_TOKEN),
       overview: parsedPlan.overview,
     };
 
     yield {
-      type: 'progress',
+      type: "progress",
       sessionId,
       timestamp: new Date().toISOString(),
       data: {
-        phase: 'planning',
-        message: 'Plan generated successfully',
+        phase: "planning",
+        message: "Plan generated successfully",
         plan,
       },
     };
@@ -521,14 +518,14 @@ export class ArchitectWorkflow implements IWorkflow {
     const questions: ClarificationQuestion[] = [];
 
     // Look for question patterns (lines ending with ?)
-    const lines = response.split('\n');
+    const lines = response.split("\n");
     for (const line of lines) {
       const trimmed = line.trim();
-      if (trimmed.endsWith('?') && trimmed.length > 10) {
+      if (trimmed.endsWith("?") && trimmed.length > 10) {
         questions.push({
           question: trimmed,
-          priority: 'medium',
-          reason: 'Requires clarification',
+          priority: "medium",
+          reason: "Requires clarification",
         });
       }
     }
@@ -536,14 +533,10 @@ export class ArchitectWorkflow implements IWorkflow {
     return questions;
   }
 
-
   /**
    * Helper: Build initial clarification prompt
    */
-  private buildInitialClarificationPrompt(
-    input: TaskInput,
-    research: ResearchResult
-  ): string {
+  private buildInitialClarificationPrompt(input: TaskInput, research: ResearchResult): string {
     return `# Task
 ${input.message}
 
@@ -551,7 +544,7 @@ ${input.message}
 ${research.findings}
 
 # Relevant Files
-${research.relevantFiles.map(f => `- ${f}`).join('\n')}
+${research.relevantFiles.map((f) => `- ${f}`).join("\n")}
 
 # Your Role
 You are in the clarification phase. Your goal is to ask any clarifying questions needed to fully understand the task before generating an implementation plan.
@@ -593,9 +586,10 @@ Be concise but thorough. Your findings will guide the planning phase.`;
    * System prompt for clarification phase
    */
   private getClarificationSystemPrompt(turnNumber: number): string {
-    const urgencyNote = turnNumber >= 2
-      ? '\n\nNote: You have limited remaining turns. Prioritize the most critical questions.'
-      : '';
+    const urgencyNote =
+      turnNumber >= 2
+        ? "\n\nNote: You have limited remaining turns. Prioritize the most critical questions."
+        : "";
 
     return `You are an expert software architect in the clarification phase.
 

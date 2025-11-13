@@ -3,17 +3,17 @@
  * These fixtures provide common functionality for extension testing.
  */
 
-import * as vscode from 'vscode';
-import * as assert from 'assert';
-import { sleep } from './test-utils';
+import * as vscode from "vscode";
+import * as assert from "assert";
+import { sleep } from "./test-utils";
 
 /**
  * Extension activation fixture with proper waiting.
  * Use this instead of duplicating activation logic in every test.
  */
 export async function activateExtension(): Promise<vscode.Extension<any>> {
-  const ext = vscode.extensions.getExtension('pb.dolphin');
-  assert.ok(ext, 'Extension should be installed');
+  const ext = vscode.extensions.getExtension("pb.dolphin");
+  assert.ok(ext, "Extension should be installed");
 
   if (!ext.isActive) {
     await ext.activate();
@@ -54,10 +54,7 @@ export async function assertCommandExists(
   shouldExecute: boolean = false
 ): Promise<void> {
   const commands = await vscode.commands.getCommands(true);
-  assert.ok(
-    commands.includes(commandId),
-    `Command ${commandId} should be registered`
-  );
+  assert.ok(commands.includes(commandId), `Command ${commandId} should be registered`);
 
   if (shouldExecute) {
     // Actually try to execute the command
@@ -78,10 +75,7 @@ export async function assertCommandsExist(
   const commands = await vscode.commands.getCommands(true);
 
   for (const commandId of commandIds) {
-    assert.ok(
-      commands.includes(commandId),
-      `Command ${commandId} should be registered`
-    );
+    assert.ok(commands.includes(commandId), `Command ${commandId} should be registered`);
   }
 
   if (shouldExecute) {
@@ -96,14 +90,11 @@ export async function assertCommandsExist(
  * Use this to verify configuration schema.
  */
 export function assertConfigurationExists(keys: string[]): void {
-  const config = vscode.workspace.getConfiguration('dolphin');
+  const config = vscode.workspace.getConfiguration("dolphin");
 
   for (const key of keys) {
     const info = config.inspect(key);
-    assert.ok(
-      info !== undefined,
-      `Configuration key 'dolphin.${key}' should exist`
-    );
+    assert.ok(info !== undefined, `Configuration key 'dolphin.${key}' should exist`);
   }
 }
 
@@ -121,7 +112,7 @@ export async function waitForCondition(
 ): Promise<void> {
   const timeout = options.timeout ?? 5000;
   const interval = options.interval ?? 100;
-  const timeoutMessage = options.timeoutMessage ?? 'Condition not met within timeout';
+  const timeoutMessage = options.timeoutMessage ?? "Condition not met within timeout";
 
   const startTime = Date.now();
 
@@ -141,11 +132,11 @@ export async function waitForCondition(
  */
 export async function createTestDocument(
   content: string,
-  language: string = 'typescript'
+  language: string = "typescript"
 ): Promise<vscode.TextDocument> {
   const doc = await vscode.workspace.openTextDocument({
     content,
-    language
+    language,
   });
   return doc;
 }
@@ -154,7 +145,7 @@ export async function createTestDocument(
  * Get extension exports with type safety.
  */
 export function getExtensionExports<T = any>(): T | undefined {
-  const ext = vscode.extensions.getExtension('pb.dolphin');
+  const ext = vscode.extensions.getExtension("pb.dolphin");
   if (!ext?.isActive) {
     return undefined;
   }
@@ -170,6 +161,6 @@ export async function waitForWebviewReady(timeout: number = 5000): Promise<void>
       const exports = getExtensionExports();
       return exports?.webviewProvider !== undefined;
     },
-    { timeout, timeoutMessage: 'Webview provider not ready' }
+    { timeout, timeoutMessage: "Webview provider not ready" }
   );
 }

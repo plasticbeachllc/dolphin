@@ -6,18 +6,13 @@
  * Based on: docs/orchestration/DOLPHIN-V2-ORCHESTRATION-PROJECT-PLAN.md
  */
 
-import * as TOML from '@iarna/toml';
-import { readFile, writeFile, mkdir, readdir, unlink, stat } from 'fs/promises';
-import { join, dirname, resolve, relative } from 'path';
-import { existsSync } from 'fs';
-import { PathValidator } from '../../../shared/security/path-validator';
-import { z } from 'zod';
-import type {
-  TaskSession,
-  Plan,
-  SessionSummary,
-  StateStoreConfig,
-} from '../types/index.js';
+import * as TOML from "@iarna/toml";
+import { readFile, writeFile, mkdir, readdir, unlink, stat } from "fs/promises";
+import { join, dirname, resolve, relative } from "path";
+import { existsSync } from "fs";
+import { PathValidator } from "../../../shared/security/path-validator";
+import { z } from "zod";
+import type { TaskSession, Plan, SessionSummary, StateStoreConfig } from "../types/index.js";
 
 /**
  * TOML-serializable session format
@@ -125,65 +120,85 @@ const SessionTOMLSchema = z.object({
       selection: z.string(),
     }),
   }),
-  research: z.object({
-    completed_at: z.string(),
-    model: z.string(),
-    tokens_used: z.number(),
-    findings: z.string(),
-    kb_searches: z.array(z.object({
-      query: z.string(),
-      results_count: z.number(),
-      top_result: z.string().optional(),
-    })),
-  }).optional(),
-  clarification: z.object({
-    completed_at: z.string(),
-    model: z.string(),
-    tokens_used: z.number(),
-    conversation_turns: z.number(),
-    ready_for_planning: z.boolean(),
-    final_context: z.string(),
-    questions: z.array(z.object({
-      question: z.string(),
-      priority: z.string(),
-      reason: z.string(),
-    })),
-    responses: z.array(z.object({
-      answers: z.string(),
-      timestamp: z.string(),
-    })),
-  }).optional(),
-  plan: z.object({
-    version: z.number(),
-    status: z.string(),
-    created_at: z.string(),
-    approved_at: z.string().optional(),
-    model: z.string(),
-    tokens_used: z.number(),
-    estimated_cost: z.number(),
-    content_path: z.string(),
-    revisions: z.array(z.object({
+  research: z
+    .object({
+      completed_at: z.string(),
+      model: z.string(),
+      tokens_used: z.number(),
+      findings: z.string(),
+      kb_searches: z.array(
+        z.object({
+          query: z.string(),
+          results_count: z.number(),
+          top_result: z.string().optional(),
+        })
+      ),
+    })
+    .optional(),
+  clarification: z
+    .object({
+      completed_at: z.string(),
+      model: z.string(),
+      tokens_used: z.number(),
+      conversation_turns: z.number(),
+      ready_for_planning: z.boolean(),
+      final_context: z.string(),
+      questions: z.array(
+        z.object({
+          question: z.string(),
+          priority: z.string(),
+          reason: z.string(),
+        })
+      ),
+      responses: z.array(
+        z.object({
+          answers: z.string(),
+          timestamp: z.string(),
+        })
+      ),
+    })
+    .optional(),
+  plan: z
+    .object({
       version: z.number(),
-      created_at: z.string(),
-      rejected_at: z.string().optional(),
-      rejected_reason: z.string().optional(),
-      content_path: z.string(),
-    })).optional(),
-  }).optional(),
-  execution: z.object({
-    started_at: z.string(),
-    completed_at: z.string().optional(),
-    model: z.string(),
-    tokens_used: z.number(),
-    cost: z.number(),
-    steps: z.array(z.object({
-      step_number: z.number(),
-      description: z.string(),
       status: z.string(),
-      started_at: z.string().optional(),
+      created_at: z.string(),
+      approved_at: z.string().optional(),
+      model: z.string(),
+      tokens_used: z.number(),
+      estimated_cost: z.number(),
+      content_path: z.string(),
+      revisions: z
+        .array(
+          z.object({
+            version: z.number(),
+            created_at: z.string(),
+            rejected_at: z.string().optional(),
+            rejected_reason: z.string().optional(),
+            content_path: z.string(),
+          })
+        )
+        .optional(),
+    })
+    .optional(),
+  execution: z
+    .object({
+      started_at: z.string(),
       completed_at: z.string().optional(),
-    })),
-  }).optional(),
+      model: z.string(),
+      tokens_used: z.number(),
+      cost: z.number(),
+      steps: z.array(
+        z.object({
+          step_number: z.number(),
+          description: z.string(),
+          status: z.string(),
+          started_at: z.string().optional(),
+          completed_at: z.string().optional(),
+        })
+      ),
+    })
+    .optional(),
   metadata: z.object({
     total_tokens: z.number(),
     total_cost: z.number(),
@@ -205,10 +220,10 @@ export class StateStore {
   private plansValidator: PathValidator | null = null;
 
   constructor(config: StateStoreConfig = {}) {
-    this.storagePath = config.storagePath || '.dolphin';
-    this.sessionsDir = join(this.storagePath, 'sessions');
-    this.plansDir = join(this.storagePath, 'plans');
-    this.conversationsDir = join(this.storagePath, 'conversations');
+    this.storagePath = config.storagePath || ".dolphin";
+    this.sessionsDir = join(this.storagePath, "sessions");
+    this.plansDir = join(this.storagePath, "plans");
+    this.conversationsDir = join(this.storagePath, "conversations");
 
     // Ensure directories exist first, then initialize validators
     this.ensureDirectories();
@@ -238,12 +253,7 @@ export class StateStore {
    * Ensure storage directories exist
    */
   private async ensureDirectories(): Promise<void> {
-    const dirs = [
-      this.storagePath,
-      this.sessionsDir,
-      this.plansDir,
-      this.conversationsDir,
-    ];
+    const dirs = [this.storagePath, this.sessionsDir, this.plansDir, this.conversationsDir];
 
     for (const dir of dirs) {
       if (!existsSync(dir)) {
@@ -263,7 +273,7 @@ export class StateStore {
     const sessionPath = validator.validate(`${session.id}.toml`);
     const toml = this.serializeSession(session);
 
-    await writeFile(sessionPath, toml, 'utf-8');
+    await writeFile(sessionPath, toml, "utf-8");
   }
 
   /**
@@ -279,7 +289,7 @@ export class StateStore {
     }
 
     try {
-      const toml = await readFile(sessionPath, 'utf-8');
+      const toml = await readFile(sessionPath, "utf-8");
       return await this.deserializeSession(toml);
     } catch (error) {
       console.error(`[StateStore] Failed to load session ${sessionId}:`, error);
@@ -297,7 +307,7 @@ export class StateStore {
     // Validate path to prevent directory traversal attacks
     const validator = this.getPlansValidator();
     const planPath = validator.validate(`plan_${sessionId}_v${plan.version}.md`);
-    await writeFile(planPath, plan.content, 'utf-8');
+    await writeFile(planPath, plan.content, "utf-8");
 
     // Update session with plan metadata
     const session = await this.loadSession(sessionId);
@@ -323,13 +333,13 @@ export class StateStore {
 
     const planVersion = version || session.plan.version;
     const planPath = join(this.plansDir, `plan_${sessionId}_v${planVersion}.md`);
-    
+
     if (!existsSync(planPath)) {
       return null;
     }
 
     try {
-      const content = await readFile(planPath, 'utf-8');
+      const content = await readFile(planPath, "utf-8");
       return {
         ...session.plan,
         content,
@@ -345,28 +355,26 @@ export class StateStore {
    */
   async listSessions(): Promise<SessionSummary[]> {
     await this.ensureDirectories();
-    
+
     try {
       const files = await readdir(this.sessionsDir);
-      const sessionFiles = files.filter(f => f.endsWith('.toml'));
-      
+      const sessionFiles = files.filter((f) => f.endsWith(".toml"));
+
       const summaries: SessionSummary[] = [];
-      
+
       for (const file of sessionFiles) {
-        const sessionId = file.replace('.toml', '');
+        const sessionId = file.replace(".toml", "");
         const session = await this.loadSession(sessionId);
-        
+
         if (session) {
           summaries.push(this.toSummary(session));
         }
       }
-      
+
       // Sort by most recent first
-      return summaries.sort((a, b) => 
-        b.updatedAt.getTime() - a.updatedAt.getTime()
-      );
+      return summaries.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     } catch (error) {
-      console.error('[StateStore] Failed to list sessions:', error);
+      console.error("[StateStore] Failed to list sessions:", error);
       return [];
     }
   }
@@ -384,8 +392,8 @@ export class StateStore {
     // Delete associated plan files
     try {
       const planFiles = await readdir(this.plansDir);
-      const sessionPlans = planFiles.filter(f => f.startsWith(`plan_${sessionId}_`));
-      
+      const sessionPlans = planFiles.filter((f) => f.startsWith(`plan_${sessionId}_`));
+
       for (const planFile of sessionPlans) {
         await unlink(join(this.plansDir, planFile));
       }
@@ -403,25 +411,25 @@ export class StateStore {
     storageSize: number;
   }> {
     await this.ensureDirectories();
-    
+
     const sessionFiles = await readdir(this.sessionsDir);
     const planFiles = await readdir(this.plansDir);
-    
+
     let storageSize = 0;
-    
+
     // Calculate storage size
     for (const file of sessionFiles) {
       const filePath = join(this.sessionsDir, file);
       const stats = await stat(filePath);
       storageSize += stats.size;
     }
-    
+
     for (const file of planFiles) {
       const filePath = join(this.plansDir, file);
       const stats = await stat(filePath);
       storageSize += stats.size;
     }
-    
+
     return {
       totalSessions: sessionFiles.length,
       totalPlans: planFiles.length,
@@ -450,7 +458,7 @@ export class StateStore {
         context: {
           files: session.input.context.files || [],
           folders: session.input.context.folders || [],
-          selection: session.input.context.selection || '',
+          selection: session.input.context.selection || "",
         },
       },
       metadata: {
@@ -469,7 +477,7 @@ export class StateStore {
         model: session.research.model,
         tokens_used: session.research.tokensUsed,
         findings: session.research.findings,
-        kb_searches: session.research.kbSearches.map(s => ({
+        kb_searches: session.research.kbSearches.map((s) => ({
           query: s.query,
           results_count: s.resultsCount,
           top_result: s.topResult,
@@ -486,12 +494,12 @@ export class StateStore {
         conversation_turns: session.clarification.conversationTurns,
         ready_for_planning: session.clarification.readyForPlanning,
         final_context: session.clarification.finalContext,
-        questions: session.clarification.questions.map(q => ({
+        questions: session.clarification.questions.map((q) => ({
           question: q.question,
           priority: q.priority,
           reason: q.reason,
         })),
-        responses: session.clarification.responses.map(r => ({
+        responses: session.clarification.responses.map((r) => ({
           answers: r.answers,
           timestamp: r.timestamp,
         })),
@@ -508,7 +516,7 @@ export class StateStore {
         model: session.plan.model,
         tokens_used: session.plan.tokensUsed,
         estimated_cost: session.plan.estimatedCost,
-        content_path: session.plan.contentPath || '',
+        content_path: session.plan.contentPath || "",
         revisions: session.plan.revisions,
       };
     }
@@ -521,7 +529,7 @@ export class StateStore {
         model: session.execution.model,
         tokens_used: session.execution.tokensUsed,
         cost: session.execution.cost,
-        steps: session.execution.steps.map(s => ({
+        steps: session.execution.steps.map((s) => ({
           step_number: s.stepNumber,
           description: s.description,
           status: s.status,
@@ -544,8 +552,10 @@ export class StateStore {
     const relativePath = relative(resolvedDir, resolvedPath);
 
     // Check if path escapes the expected directory
-    if (relativePath.startsWith('..') || resolve(relativePath) === resolvedPath) {
-      throw new Error(`Invalid file path: ${filePath} is outside expected directory ${expectedDir}`);
+    if (relativePath.startsWith("..") || resolve(relativePath) === resolvedPath) {
+      throw new Error(
+        `Invalid file path: ${filePath} is outside expected directory ${expectedDir}`
+      );
     }
 
     return resolvedPath;
@@ -565,7 +575,7 @@ export class StateStore {
     }
 
     const obj = validationResult.data;
-    
+
     const session: TaskSession = {
       id: obj.session.id,
       mode: obj.session.mode,
@@ -576,7 +586,7 @@ export class StateStore {
         context: {
           files: obj.input.context.files || [],
           folders: obj.input.context.folders || [],
-          selection: obj.input.context.selection || '',
+          selection: obj.input.context.selection || "",
         },
       },
       metadata: {
@@ -628,7 +638,7 @@ export class StateStore {
     // Add plan if present
     if (obj.plan) {
       // Load plan content from file with security validation
-      let planContent = '';
+      let planContent = "";
       let loadError: string | undefined;
 
       if (obj.plan.content_path) {
@@ -637,16 +647,19 @@ export class StateStore {
           const validatedPath = this.validatePath(obj.plan.content_path, this.plansDir);
 
           if (existsSync(validatedPath)) {
-            planContent = await readFile(validatedPath, 'utf-8');
+            planContent = await readFile(validatedPath, "utf-8");
           } else {
             loadError = `Plan file not found: ${obj.plan.content_path}`;
             console.error(`[StateStore] ${loadError}`);
           }
         } catch (error) {
           loadError = error instanceof Error ? error.message : String(error);
-          console.error(`[StateStore] Failed to load plan content from ${obj.plan.content_path}:`, error);
+          console.error(
+            `[StateStore] Failed to load plan content from ${obj.plan.content_path}:`,
+            error
+          );
           // Throw on security violations
-          if (loadError.includes('outside expected directory')) {
+          if (loadError.includes("outside expected directory")) {
             throw new Error(`Security violation: ${loadError}`);
           }
         }
@@ -665,7 +678,7 @@ export class StateStore {
         filesToModify: [],
         filesToCreate: [],
         steps: [],
-        complexity: 'medium',
+        complexity: "medium",
         estimatedTokens: 0,
         revisions: obj.plan.revisions,
         // Add metadata about load failures
@@ -702,7 +715,7 @@ export class StateStore {
     // Generate title from first message or plan
     let title = session.input.message.substring(0, 50);
     if (title.length < session.input.message.length) {
-      title += '...';
+      title += "...";
     }
 
     return {

@@ -52,11 +52,13 @@ npm run test:all
 ### First Time Setup
 
 1. **Install dependencies:**
+
    ```bash
    npm install
    ```
 
 2. **Build the webview:**
+
    ```bash
    cd webview
    bun install
@@ -65,6 +67,7 @@ npm run test:all
    ```
 
 3. **Compile the extension:**
+
    ```bash
    npm run compile
    ```
@@ -133,7 +136,7 @@ const extension = getDolphinExtension();
 const extension = await waitForExtensionActivation();
 
 // Get a webview
-await getWebview('dolphin.chatView');
+await getWebview("dolphin.chatView");
 
 // Create test workspace
 const workspaceUri = await createTestWorkspace();
@@ -142,7 +145,7 @@ const workspaceUri = await createTestWorkspace();
 await cleanupTestWorkspace(workspaceUri);
 
 // Assert that a value is defined
-assertDefined(value, 'Value should be defined');
+assertDefined(value, "Value should be defined");
 
 // HTTP request helpers with timeout handling (NEW)
 const response = await makeHttpGetRequest<ResponseType>(url, timeout);
@@ -150,7 +153,7 @@ const response = await makeHttpPostRequest<ResponseType>(options, postData, time
 const response = await makeHttpRequest<ResponseType>(options, postData, timeout);
 
 // Command execution with timeout (NEW)
-await assertCommandExecutes('dolphin.someCommand', args, timeout);
+await assertCommandExecutes("dolphin.someCommand", args, timeout);
 ```
 
 ### Mock Services (`mock-services.ts`)
@@ -162,8 +165,8 @@ Mock implementations for testing:
 A lightweight HTTP server that mocks the Knowledge Base API:
 
 ```typescript
-import { MockKBServer } from '../helpers/mock-services';
-import { MockSearchResult } from '../helpers/mock-types';
+import { MockKBServer } from "../helpers/mock-services";
+import { MockSearchResult } from "../helpers/mock-types";
 
 const mockServer = new MockKBServer();
 await mockServer.start(7778); // Start on port 7778
@@ -171,10 +174,10 @@ await mockServer.start(7778); // Start on port 7778
 // Configure mock responses (NEW)
 mockServer.setSearchResults([
   {
-    chunk_id: 'chunk-1',
-    repo: 'test-repo',
-    path: 'src/test.ts',
-    content: 'test content',
+    chunk_id: "chunk-1",
+    repo: "test-repo",
+    path: "src/test.ts",
+    content: "test content",
     score: 0.95,
     line_start: 1,
     line_end: 5,
@@ -190,12 +193,14 @@ await mockServer.stop();
 ```
 
 **Endpoints:**
+
 - `GET /health` - Health check (configurable status)
 - `POST /search` - Search knowledge base (configurable results)
 - `GET /metadata/:id` - Get metadata (configurable data)
 - `GET /chunks/:id` - Fetch chunk (configurable data)
 
 **Configuration Methods:**
+
 - `setSearchResults(results)` - Configure mock search results
 - `setMetadata(metadata)` - Configure mock metadata
 - `setHealthy(boolean)` - Set server health status
@@ -208,30 +213,30 @@ await mockServer.stop();
 A mock implementation of the Agent Bridge for testing:
 
 ```typescript
-import { MockAgentBridge } from '../helpers/mock-services';
+import { MockAgentBridge } from "../helpers/mock-services";
 
 const mockBridge = new MockAgentBridge();
 
 // Listen for events
 const disposable = mockBridge.onEvent((event) => {
-  console.log('Event:', event);
+  console.log("Event:", event);
 });
 
 // Send message
-await mockBridge.sendMessage('Hello');
+await mockBridge.sendMessage("Hello");
 
 // Configure error injection for testing error paths (NEW)
-mockBridge.setError(true, 'Test error message');
+mockBridge.setError(true, "Test error message");
 
 // Verify message history (NEW)
 const history = mockBridge.getMessageHistory();
-console.log('Messages sent:', history);
+console.log("Messages sent:", history);
 
 // Clear history (NEW)
 mockBridge.clearHistory();
 
 // Simulate tool call events (NEW)
-mockBridge.simulateToolCall('search', { query: 'test' });
+mockBridge.simulateToolCall("search", { query: "test" });
 
 // Clean up
 disposable.dispose();
@@ -239,6 +244,7 @@ mockBridge.shutdown();
 ```
 
 **New Capabilities:**
+
 - `setError(shouldThrow, message)` - Configure error injection for negative testing
 - `getMessageHistory()` - Retrieve all sent messages for verification
 - `clearHistory()` - Clear message history
@@ -250,11 +256,11 @@ mockBridge.shutdown();
 ### Basic Test Structure
 
 ```typescript
-import * as assert from 'assert';
-import * as vscode from 'vscode';
-import { waitForExtensionActivation, sleep } from '../helpers/test-utils';
+import * as assert from "assert";
+import * as vscode from "vscode";
+import { waitForExtensionActivation, sleep } from "../helpers/test-utils";
 
-suite('My Test Suite', () => {
+suite("My Test Suite", () => {
   suiteSetup(async function () {
     // Setup before all tests in this suite
     this.timeout(15000);
@@ -265,17 +271,17 @@ suite('My Test Suite', () => {
     // Cleanup after all tests in this suite
   });
 
-  test('My test case', async function () {
+  test("My test case", async function () {
     this.timeout(10000);
 
     // Arrange
-    const extension = vscode.extensions.getExtension('pb.dolphin');
+    const extension = vscode.extensions.getExtension("pb.dolphin");
 
     // Act
-    const result = await vscode.commands.executeCommand('dolphin.test');
+    const result = await vscode.commands.executeCommand("dolphin.test");
 
     // Assert
-    assert.ok(extension, 'Extension should exist');
+    assert.ok(extension, "Extension should exist");
   });
 });
 ```
@@ -283,9 +289,9 @@ suite('My Test Suite', () => {
 ### Testing with Mock Services
 
 ```typescript
-import { MockKBServer } from '../helpers/mock-services';
+import { MockKBServer } from "../helpers/mock-services";
 
-suite('Integration Tests with Mock KB', () => {
+suite("Integration Tests with Mock KB", () => {
   let mockServer: MockKBServer;
 
   suiteSetup(async function () {
@@ -298,7 +304,7 @@ suite('Integration Tests with Mock KB', () => {
     await mockServer.stop();
   });
 
-  test('Should interact with mock KB API', async function () {
+  test("Should interact with mock KB API", async function () {
     // Your test here
   });
 });
@@ -351,7 +357,7 @@ await waitFor(() => condition, 5000, 100);
 const response = await makeHttpGetRequest(url, 2000);
 
 // ✅ GOOD: Command execution with timeout
-await assertCommandExecutes('dolphin.someCommand', [], 2000);
+await assertCommandExecutes("dolphin.someCommand", [], 2000);
 
 // ✅ ACCEPTABLE: Controlled sleep in utilities
 async function waitForExtensionReady() {
@@ -365,11 +371,13 @@ async function waitForExtensionReady() {
 **Note on "Sleep Elimination":**
 
 While the refactored tests have eliminated arbitrary/excessive sleep calls from test code, some sleep usage remains in controlled scenarios:
+
 - Internal polling loops within `waitFor()` function
 - Fallback delays in shared fixtures like `waitForExtensionActivation()`
 - Brief delays (50-100ms) after UI operations that require rendering time
 
 This represents **100% elimination of arbitrary/excessive sleep** calls, not 100% elimination of all sleep usage. The key improvement is that all remaining sleep usage is:
+
 - Bounded by timeouts
 - Part of event-driven polling
 - Controlled and predictable
@@ -401,6 +409,7 @@ Some tests may behave differently in headless mode (CI environments):
 **Problem:** `npm test` fails with module not found
 
 **Solution:**
+
 ```bash
 npm install
 npm run compile
@@ -411,6 +420,7 @@ npm run compile
 **Problem:** Extension activation timeout
 
 **Solution:**
+
 - Check that the webview is built: `cd webview && bun run build`
 - Increase timeout in test: `this.timeout(20000)`
 - Check for errors in the Output channel
@@ -420,6 +430,7 @@ npm run compile
 **Problem:** Webview focus commands fail
 
 **Solution:**
+
 - These may fail in headless mode (expected)
 - Tests should check for command registration instead
 - Use the pattern from `webview.test.ts`
@@ -429,18 +440,21 @@ npm run compile
 **Problem:** Mock server port conflicts
 
 **Solution:**
+
 - Use a different port: `mockServer.start(7779)`
 - Ensure previous tests clean up servers properly
 
 ## 📊 Coverage Goals
 
 Current coverage:
+
 - ✅ Extension activation
 - ✅ Command registration
 - ✅ Webview contributions
 - ✅ Mock service integration
 
 Future improvements:
+
 - [ ] Webview messaging (webview ↔ extension)
 - [ ] Agent Core integration (full flow)
 - [ ] File operations through MCP
@@ -504,30 +518,30 @@ When adding new tests:
 ### Example: Testing Extension Activation
 
 ```typescript
-test('Extension should activate successfully', async function () {
+test("Extension should activate successfully", async function () {
   this.timeout(15000);
 
   const extension = await waitForExtensionActivation();
 
-  assert.ok(extension, 'Extension should be defined');
-  assert.strictEqual(extension.isActive, true, 'Extension should be activated');
+  assert.ok(extension, "Extension should be defined");
+  assert.strictEqual(extension.isActive, true, "Extension should be activated");
 });
 ```
 
 ### Example: Testing Commands
 
 ```typescript
-test('Should execute command', async function () {
+test("Should execute command", async function () {
   this.timeout(10000);
 
   await waitForExtensionActivation();
 
   try {
-    await vscode.commands.executeCommand('dolphin.test');
-    assert.ok(true, 'Command executed successfully');
+    await vscode.commands.executeCommand("dolphin.test");
+    assert.ok(true, "Command executed successfully");
   } catch (err) {
     const commands = await vscode.commands.getCommands(true);
-    assert.ok(commands.includes('dolphin.test'), 'Command should be registered');
+    assert.ok(commands.includes("dolphin.test"), "Command should be registered");
   }
 });
 ```
@@ -535,40 +549,42 @@ test('Should execute command', async function () {
 ### Example: Testing with Mock Server
 
 ```typescript
-test('Should handle search request', async function () {
+test("Should handle search request", async function () {
   this.timeout(5000);
 
-  const http = require('http');
-  const searchRequest = { query: 'test', top_k: 10 };
+  const http = require("http");
+  const searchRequest = { query: "test", top_k: 10 };
 
   const response = await new Promise((resolve, reject) => {
     const postData = JSON.stringify(searchRequest);
     const options = {
-      hostname: 'localhost',
+      hostname: "localhost",
       port: mockServer.port,
-      path: '/search',
-      method: 'POST',
+      path: "/search",
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData),
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(postData),
       },
     };
 
     const req = http.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
+      let data = "";
+      res.on("data", (chunk) => {
+        data += chunk;
+      });
+      res.on("end", () => {
         resolve({ status: res.statusCode, data: JSON.parse(data) });
       });
     });
 
-    req.on('error', reject);
+    req.on("error", reject);
     req.write(postData);
     req.end();
   });
 
-  assert.strictEqual(response.status, 200, 'Should return 200');
-  assert.ok(Array.isArray(response.data.hits), 'Should return hits array');
+  assert.strictEqual(response.status, 200, "Should return 200");
+  assert.ok(Array.isArray(response.data.hits), "Should return hits array");
 });
 ```
 

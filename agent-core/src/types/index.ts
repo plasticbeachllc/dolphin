@@ -10,28 +10,28 @@
 /**
  * Workflow execution modes
  */
-export type WorkflowMode = 'editor' | 'architect';
+export type WorkflowMode = "editor" | "architect";
 
 /**
  * State machine states for workflow execution
  */
 export type WorkflowState =
-  | 'idle'
-  | 'researching'
-  | 'clarifying'
-  | 'planning'
-  | 'awaiting_approval'
-  | 'plan_revision'
-  | 'executing'
-  | 'validating'
-  | 'complete'
-  | 'cancelled'
-  | 'error';
+  | "idle"
+  | "researching"
+  | "clarifying"
+  | "planning"
+  | "awaiting_approval"
+  | "plan_revision"
+  | "executing"
+  | "validating"
+  | "complete"
+  | "cancelled"
+  | "error";
 
 /**
  * Workflow phase identifiers
  */
-export type WorkflowPhase = 'research' | 'planning' | 'implementation' | 'validation';
+export type WorkflowPhase = "research" | "planning" | "implementation" | "validation";
 
 // =============================================================================
 // Task Input & Context
@@ -60,7 +60,7 @@ export interface TaskInput {
  * Message format for conversation history
  */
 export interface Message {
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string | ContentBlock[];
 }
 
@@ -68,7 +68,7 @@ export interface Message {
  * Content block for structured messages
  */
 export interface ContentBlock {
-  type: 'text' | 'thinking' | 'tool_use' | 'tool_result';
+  type: "text" | "thinking" | "tool_use" | "tool_result";
   text?: string;
   content?: string;
   tool_use_id?: string;
@@ -112,12 +112,12 @@ export interface TaskSession {
 /**
  * Plan status
  */
-export type PlanStatus = 'pending_approval' | 'approved' | 'rejected' | 'cancelled';
+export type PlanStatus = "pending_approval" | "approved" | "rejected" | "cancelled";
 
 /**
  * Plan complexity estimate
  */
-export type PlanComplexity = 'low' | 'medium' | 'high';
+export type PlanComplexity = "low" | "medium" | "high";
 
 /**
  * Plan revision history entry
@@ -143,7 +143,7 @@ export interface Plan {
   estimatedCost: number;
   content: string;
   contentPath?: string;
-  
+
   // Parsed plan fields
   overview?: string;
   filesToModify: string[];
@@ -151,7 +151,7 @@ export interface Plan {
   steps: string[];
   complexity: PlanComplexity;
   estimatedTokens: number;
-  
+
   // Revision history
   revisions?: PlanRevision[];
 }
@@ -203,7 +203,7 @@ export interface ResearchResult {
  */
 export interface ClarificationQuestion {
   question: string;
-  priority: 'critical' | 'high' | 'medium' | 'low';
+  priority: "critical" | "high" | "medium" | "low";
   reason: string;
 }
 
@@ -236,7 +236,7 @@ export interface ClarificationResult {
 /**
  * Execution step status
  */
-export type ExecutionStepStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
+export type ExecutionStepStatus = "pending" | "in_progress" | "completed" | "failed";
 
 /**
  * Individual execution step
@@ -309,21 +309,21 @@ export interface ContextBuildParams {
  * Claude model identifiers
  */
 export type ClaudeModel =
-  | 'claude-opus-4-20250514'
-  | 'claude-sonnet-4-20250514'
-  | 'claude-haiku-4-20250514';
+  | "claude-opus-4-20250514"
+  | "claude-sonnet-4-20250514"
+  | "claude-haiku-4-20250514";
 
 /**
  * Thinking mode for Claude
  */
-export type ThinkingMode = 'normal' | 'extended';
+export type ThinkingMode = "normal" | "extended";
 
 /**
  * Authentication status
  */
 export interface AuthStatus {
   authenticated: boolean;
-  mode: 'api_key' | 'subscription' | 'claude_cli' | 'none';
+  mode: "api_key" | "subscription" | "claude_cli" | "none";
   source?: string;
   warning?: string;
   error?: string;
@@ -353,7 +353,7 @@ export interface ExecutionParams {
 /**
  * Claude response chunk types
  */
-export type ChunkType = 'text' | 'thinking' | 'tool_use' | 'tool_result';
+export type ChunkType = "text" | "thinking" | "tool_use" | "tool_result";
 
 /**
  * Claude response chunk
@@ -373,12 +373,7 @@ export interface ClaudeChunk {
 /**
  * Workflow update event types
  */
-export type WorkflowUpdateType =
-  | 'state_change'
-  | 'progress'
-  | 'tool_call'
-  | 'chunk'
-  | 'error';
+export type WorkflowUpdateType = "state_change" | "progress" | "tool_call" | "chunk" | "error";
 
 /**
  * Workflow update event
@@ -398,7 +393,7 @@ export interface WorkflowUpdate {
  * JSON-RPC message
  */
 export interface JSONRPCMessage {
-  jsonrpc: '2.0';
+  jsonrpc: "2.0";
   id?: string | number;
   method?: string;
   params?: any;
@@ -495,11 +490,11 @@ export interface IOrchestrator {
   rejectTask(sessionId: string, feedback?: string): Promise<void>;
   revisePlan(sessionId: string, feedback: string): Promise<void>;
   cancelTask(sessionId: string): Promise<void>;
-  
+
   // State queries
   getSession(sessionId: string): Promise<TaskSession | null>;
   getCurrentPhase(sessionId: string): Promise<WorkflowPhase>;
-  
+
   // Event streaming
   subscribeToUpdates(sessionId: string): AsyncIterableIterator<WorkflowUpdate>;
 }
@@ -562,6 +557,6 @@ export interface FileSlice {
  * KB health status
  */
 export interface HealthStatus {
-  status: 'ok' | 'degraded' | 'unavailable';
+  status: "ok" | "degraded" | "unavailable";
   details?: string;
 }

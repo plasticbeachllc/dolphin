@@ -4,7 +4,7 @@
 **Date**: November 11, 2025
 **Status**: Phase 1 Complete, Phase 2-4 Planned
 **Timeline**: 3-4 weeks (Week 1 completed)
-**Branch**: `develop-architect`  
+**Branch**: `develop-architect`
 
 ---
 
@@ -13,6 +13,7 @@
 ### Current State
 
 Architect mode currently has **optional** Knowledge Bank (KB) integration:
+
 - Manual KB search only when authentication fails
 - No systematic discovery phase
 - KB results appended as context but not enforced
@@ -22,6 +23,7 @@ Architect mode currently has **optional** Knowledge Bank (KB) integration:
 ### Problem Statement
 
 Architect mode lacks a **mandatory discovery phase** that:
+
 1. **Systematically searches KB** for relevant codebase context before planning
 2. **Enforces semantic understanding** of existing code patterns and architecture
 3. **Prevents hallucination** by grounding responses in actual codebase
@@ -100,17 +102,18 @@ if (authStatus.mode === "api_key" || authStatus.mode === "claude_cli") {
   // Manual orchestration - KB search happens ONCE if no auth
   const kbResult = await this.mcpClient.callTool("search_knowledge", {
     query: request.content,
-    top_k: 3
+    top_k: 3,
   });
-  
+
   await this.planner.processMessage({
     userMessage: request.content,
-    kbResults: kbContext
+    kbResults: kbContext,
   });
 }
 ```
 
 **Problems:**
+
 - KB search is **optional** and **single-pass**
 - No strategic query planning
 - No graph-aware context enrichment
@@ -126,24 +129,24 @@ if (request.mode === "architect") {
     userQuery: request.content,
     workspaceRoot: this.workspaceRoot,
     repoName: this.repoName,
-    conversationHistory: this.conversationHistory
+    conversationHistory: this.conversationHistory,
   });
-  
+
   // Phase 2: SYNTHESIS (Enhanced)
   const synthesisResult = await this.synthesisOrchestrator.analyze({
     userQuery: request.content,
     discoveredContext: discoveryResult,
-    conversationHistory: this.conversationHistory
+    conversationHistory: this.conversationHistory,
   });
-  
+
   // Phase 3: PLANNING (Context-Grounded)
   const plan = await this.planningOrchestrator.generate({
     userQuery: request.content,
     discoveryContext: discoveryResult,
     synthesisInsights: synthesisResult,
-    conversationHistory: this.conversationHistory
+    conversationHistory: this.conversationHistory,
   });
-  
+
   // Present plan to user
   this.sendEvent({ type: "plan_ready", plan });
 }
@@ -203,11 +206,11 @@ agent-core/src/
 // agent-core/src/orchestration/discovery-phase.ts
 
 export interface DiscoveryConfig {
-  maxQueries: number;              // Default: 5
-  maxResultsPerQuery: number;      // Default: 5
-  includeGraphContext: boolean;    // Default: true
-  confidenceThreshold: number;     // Default: 0.6
-  timeoutMs: number;               // Default: 5000
+  maxQueries: number; // Default: 5
+  maxResultsPerQuery: number; // Default: 5
+  includeGraphContext: boolean; // Default: true
+  confidenceThreshold: number; // Default: 0.6
+  timeoutMs: number; // Default: 5000
 }
 
 export interface DiscoveryQuery {
@@ -222,7 +225,7 @@ export interface DiscoveryResult {
   retrievedChunks: EnrichedChunk[];
   graphContext: GraphContext | null;
   confidence: number;
-  gaps: string[];                  // Identified information gaps
+  gaps: string[]; // Identified information gaps
   summary: string;
   executionTimeMs: number;
 }
@@ -235,7 +238,7 @@ export class DiscoveryOrchestrator {
     private resultValidator: KBResultValidator,
     private config: DiscoveryConfig
   ) {}
-  
+
   async execute(params: {
     userQuery: string;
     workspaceRoot: string;
@@ -243,46 +246,43 @@ export class DiscoveryOrchestrator {
     conversationHistory: Message[];
   }): Promise<DiscoveryResult> {
     const startTime = Date.now();
-    
+
     // Step 1: Generate strategic queries
     const queries = await this.queryPlanner.generateQueries({
       userQuery: params.userQuery,
       conversationHistory: params.conversationHistory,
-      maxQueries: this.config.maxQueries
+      maxQueries: this.config.maxQueries,
     });
-    
+
     console.error(`[Discovery] Generated ${queries.length} strategic queries`);
-    
+
     // Step 2: Execute queries in parallel
     const searchResults = await Promise.all(
-      queries.map(query => this.executeKBQuery(query, params.repoName))
+      queries.map((query) => this.executeKBQuery(query, params.repoName))
     );
-    
+
     // Step 3: Aggregate and deduplicate results
     const aggregatedChunks = this.aggregateResults(searchResults);
-    
+
     // Step 4: Enrich with graph context if available
     let graphContext: GraphContext | null = null;
     if (this.config.includeGraphContext) {
-      graphContext = await this.contextEnricher.enrichWithGraph(
-        aggregatedChunks,
-        params.repoName
-      );
+      graphContext = await this.contextEnricher.enrichWithGraph(aggregatedChunks, params.repoName);
     }
-    
+
     // Step 5: Validate and score results
     const validated = await this.resultValidator.validate({
       chunks: aggregatedChunks,
       userQuery: params.userQuery,
-      graphContext
+      graphContext,
     });
-    
+
     // Step 6: Identify gaps
     const gaps = this.identifyGaps(params.userQuery, validated.chunks);
-    
+
     // Step 7: Generate summary
     const summary = this.generateSummary(validated.chunks, graphContext);
-    
+
     return {
       queries,
       retrievedChunks: validated.chunks,
@@ -290,30 +290,25 @@ export class DiscoveryOrchestrator {
       confidence: validated.overallConfidence,
       gaps,
       summary,
-      executionTimeMs: Date.now() - startTime
+      executionTimeMs: Date.now() - startTime,
     };
   }
-  
-  private async executeKBQuery(
-    query: DiscoveryQuery,
-    repoName: string
-  ): Promise<KBSearchResult> {
+
+  private async executeKBQuery(query: DiscoveryQuery, repoName: string): Promise<KBSearchResult> {
     return await this.mcpClient.callTool("search_knowledge", {
       query: query.text,
       repos: [repoName],
       top_k: this.config.maxResultsPerQuery,
       include_graph_context: this.config.includeGraphContext,
-      score_cutoff: this.config.confidenceThreshold
+      score_cutoff: this.config.confidenceThreshold,
     });
   }
-  
-  private aggregateResults(
-    results: KBSearchResult[]
-  ): EnrichedChunk[] {
+
+  private aggregateResults(results: KBSearchResult[]): EnrichedChunk[] {
     // Deduplicate by chunk_id
     const seen = new Set<string>();
     const aggregated: EnrichedChunk[] = [];
-    
+
     for (const result of results) {
       for (const hit of result.hits) {
         if (!seen.has(hit.chunk_id)) {
@@ -322,48 +317,42 @@ export class DiscoveryOrchestrator {
         }
       }
     }
-    
+
     // Sort by relevance score
     return aggregated.sort((a, b) => b.score - a.score);
   }
-  
-  private identifyGaps(
-    userQuery: string,
-    chunks: EnrichedChunk[]
-  ): string[] {
+
+  private identifyGaps(userQuery: string, chunks: EnrichedChunk[]): string[] {
     const gaps: string[] = [];
-    
+
     // Heuristics for gap detection
     if (chunks.length === 0) {
       gaps.push("No relevant code found in knowledge base");
     }
-    
+
     // TODO: More sophisticated gap detection
     // - Missing file types (e.g., "needs tests but none found")
     // - Missing dependencies (e.g., "references module X but not found")
     // - Low confidence scores
-    
+
     return gaps;
   }
-  
-  private generateSummary(
-    chunks: EnrichedChunk[],
-    graphContext: GraphContext | null
-  ): string {
+
+  private generateSummary(chunks: EnrichedChunk[], graphContext: GraphContext | null): string {
     const parts: string[] = [];
-    
+
     parts.push(`Found ${chunks.length} relevant code chunks`);
-    
+
     if (graphContext) {
       parts.push(
         `Graph context: ${graphContext.nodes.length} nodes, ` +
-        `${graphContext.edges.length} relationships`
+          `${graphContext.edges.length} relationships`
       );
     }
-    
-    const files = new Set(chunks.map(c => c.path));
+
+    const files = new Set(chunks.map((c) => c.path));
     parts.push(`Across ${files.size} files`);
-    
+
     return parts.join(". ");
   }
 }
@@ -404,7 +393,7 @@ export interface SynthesisResult {
 export interface Assumption {
   statement: string;
   confidence: "high" | "medium" | "low";
-  basedOn: string[];  // Source attributions
+  basedOn: string[]; // Source attributions
   needsValidation: boolean;
 }
 
@@ -420,28 +409,25 @@ export class SynthesisOrchestrator {
     private claudeClient: ClaudeClient,
     private config: { maxTokens: number; temperature: number }
   ) {}
-  
+
   async analyze(params: {
     userQuery: string;
     discoveredContext: DiscoveryResult;
     conversationHistory: Message[];
   }): Promise<SynthesisResult> {
     const prompt = this.buildSynthesisPrompt(params);
-    
+
     const response = await this.claudeClient.complete({
       system: SYNTHESIS_SYSTEM_PROMPT,
-      messages: [
-        ...params.conversationHistory,
-        { role: "user", content: prompt }
-      ],
+      messages: [...params.conversationHistory, { role: "user", content: prompt }],
       maxTokens: this.config.maxTokens,
-      temperature: this.config.temperature
+      temperature: this.config.temperature,
     });
-    
+
     // Parse structured response
     return this.parseResponse(response.content);
   }
-  
+
   private buildSynthesisPrompt(params: {
     userQuery: string;
     discoveredContext: DiscoveryResult;
@@ -462,17 +448,17 @@ Analyze the user's request in light of the discovered codebase context:
 
 Format your response as JSON matching the SynthesisResult interface.`;
   }
-  
+
   private formatDiscoveryContext(discovery: DiscoveryResult): string {
     const parts: string[] = [];
-    
+
     parts.push(`## Summary\n${discovery.summary}`);
     parts.push(`## Confidence: ${(discovery.confidence * 100).toFixed(0)}%`);
-    
+
     if (discovery.gaps.length > 0) {
-      parts.push(`## Information Gaps\n${discovery.gaps.map(g => `- ${g}`).join('\n')}`);
+      parts.push(`## Information Gaps\n${discovery.gaps.map((g) => `- ${g}`).join("\n")}`);
     }
-    
+
     parts.push(`## Retrieved Code Context`);
     for (const chunk of discovery.retrievedChunks.slice(0, 10)) {
       parts.push(`\n### ${chunk.repo}/${chunk.path}#L${chunk.start_line}-L${chunk.end_line}`);
@@ -482,33 +468,33 @@ Format your response as JSON matching the SynthesisResult interface.`;
       parts.push(`**Score**: ${chunk.score.toFixed(2)}`);
       parts.push(`\`\`\`${chunk.language}\n${chunk.snippet}\n\`\`\``);
     }
-    
+
     if (discovery.graphContext) {
       parts.push(`\n## Graph Context\n${this.formatGraphContext(discovery.graphContext)}`);
     }
-    
-    return parts.join('\n\n');
+
+    return parts.join("\n\n");
   }
-  
+
   private formatGraphContext(graph: GraphContext): string {
     // Format graph nodes and relationships for context
     const parts: string[] = [];
-    
+
     parts.push(`**Entities**: ${graph.nodes.length}`);
     parts.push(`**Relationships**: ${graph.edges.length}`);
-    
+
     // Group relationships by type
     const byType = new Map<string, number>();
     for (const edge of graph.edges) {
       byType.set(edge.type, (byType.get(edge.type) || 0) + 1);
     }
-    
-    parts.push('\n**Relationship Types**:');
+
+    parts.push("\n**Relationship Types**:");
     for (const [type, count] of byType.entries()) {
       parts.push(`- ${type}: ${count}`);
     }
-    
-    return parts.join('\n');
+
+    return parts.join("\n");
   }
 }
 ```
@@ -577,7 +563,7 @@ export class PlanningOrchestrator {
     private claudeClient: ClaudeClient,
     private config: { maxTokens: number; temperature: number }
   ) {}
-  
+
   async generate(params: {
     userQuery: string;
     discoveryContext: DiscoveryResult;
@@ -585,20 +571,17 @@ export class PlanningOrchestrator {
     conversationHistory: Message[];
   }): Promise<Plan> {
     const prompt = this.buildPlanningPrompt(params);
-    
+
     const response = await this.claudeClient.complete({
       system: PLANNING_SYSTEM_PROMPT,
-      messages: [
-        ...params.conversationHistory,
-        { role: "user", content: prompt }
-      ],
+      messages: [...params.conversationHistory, { role: "user", content: prompt }],
       maxTokens: this.config.maxTokens,
-      temperature: this.config.temperature
+      temperature: this.config.temperature,
     });
-    
+
     return this.parsePlan(response.content);
   }
-  
+
   private buildPlanningPrompt(params: {
     userQuery: string;
     discoveryContext: DiscoveryResult;
@@ -643,6 +626,7 @@ Create a detailed, actionable implementation plan that:
 #### Tasks
 
 1. **Create Orchestration Module**
+
    ```bash
    mkdir -p agent-core/src/orchestration
    touch agent-core/src/orchestration/types.ts
@@ -666,6 +650,7 @@ Create a detailed, actionable implementation plan that:
    - E2E test with sample architect request
 
 **Deliverables:**
+
 - ✅ Orchestration module structure
 - ✅ Basic discovery phase working
 - ✅ Integration with existing flow
@@ -678,6 +663,7 @@ Create a detailed, actionable implementation plan that:
 #### Tasks
 
 1. **KB Query Planner**
+
    ```typescript
    // agent-core/src/kb/kb-query-planner.ts
    export class KBQueryPlanner {
@@ -685,7 +671,7 @@ Create a detailed, actionable implementation plan that:
        userQuery: string;
        conversationHistory: Message[];
        maxQueries: number;
-     }): DiscoveryQuery[]
+     }): DiscoveryQuery[];
    }
    ```
 
@@ -696,6 +682,7 @@ Create a detailed, actionable implementation plan that:
    - Dependency queries: Related components
 
 3. **Result Validation**
+
    ```typescript
    // agent-core/src/kb/kb-result-validator.ts
    export class KBResultValidator {
@@ -703,7 +690,7 @@ Create a detailed, actionable implementation plan that:
        chunks: EnrichedChunk[];
        userQuery: string;
        graphContext?: GraphContext;
-     }): ValidationResult
+     }): ValidationResult;
    }
    ```
 
@@ -714,6 +701,7 @@ Create a detailed, actionable implementation plan that:
    - Gap analysis
 
 **Deliverables:**
+
 - ✅ Intelligent query generation
 - ✅ Multi-strategy search execution
 - ✅ Result validation with confidence scoring
@@ -738,6 +726,7 @@ Create a detailed, actionable implementation plan that:
    - Markdown formatting
 
 3. **Specialized Prompts**
+
    ```typescript
    // agent-core/src/llm/architect-prompts.ts
    export const DISCOVERY_PROMPT = `...`;
@@ -751,6 +740,7 @@ Create a detailed, actionable implementation plan that:
    - Stream plan sections incrementally
 
 **Deliverables:**
+
 - ✅ Complete 3-phase workflow
 - ✅ Specialized prompts for each phase
 - ✅ Streaming for better UX
@@ -775,6 +765,7 @@ Create a detailed, actionable implementation plan that:
    - Mermaid diagrams for architecture
 
 3. **Configuration**
+
    ```typescript
    // agent-core/src/orchestration/config.ts
    export interface ArchitectModeConfig {
@@ -791,6 +782,7 @@ Create a detailed, actionable implementation plan that:
    - Example workflows
 
 **Deliverables:**
+
 - ✅ Optimized performance (<3s discovery)
 - ✅ Enhanced UI with progress tracking
 - ✅ Configuration options
@@ -860,32 +852,32 @@ describe("DiscoveryOrchestrator", () => {
   test("generates multiple strategic queries", async () => {
     const queries = await queryPlanner.generateQueries({
       userQuery: "Add user authentication",
-      maxQueries: 5
+      maxQueries: 5,
     });
-    
+
     expect(queries).toHaveLength(5);
     expect(queries[0].strategy).toBe("broad");
     expect(queries[1].strategy).toBe("specific");
   });
-  
+
   test("deduplicates KB results by chunk_id", async () => {
     const results = [
       { hits: [{ chunk_id: "A" }, { chunk_id: "B" }] },
-      { hits: [{ chunk_id: "B" }, { chunk_id: "C" }] }
+      { hits: [{ chunk_id: "B" }, { chunk_id: "C" }] },
     ];
-    
+
     const aggregated = discovery.aggregateResults(results);
-    
+
     expect(aggregated).toHaveLength(3);
-    expect(aggregated.map(c => c.chunk_id)).toEqual(["A", "B", "C"]);
+    expect(aggregated.map((c) => c.chunk_id)).toEqual(["A", "B", "C"]);
   });
-  
+
   test("identifies gaps when no results found", async () => {
     const result = await discovery.execute({
       userQuery: "Add blockchain integration",
-      repoName: "test-repo"
+      repoName: "test-repo",
     });
-    
+
     expect(result.gaps).toContain("No relevant code found in knowledge base");
   });
 });
@@ -899,22 +891,22 @@ describe("DiscoveryOrchestrator", () => {
 describe("Architect Mode E2E", () => {
   test("complete architect workflow", async () => {
     const orchestrator = new ArchitectOrchestrator(...);
-    
+
     const result = await orchestrator.execute({
       userQuery: "Add rate limiting to REST API endpoints",
       workspaceRoot: "/test/repo",
       repoName: "test-api"
     });
-    
+
     // Verify discovery phase
     expect(result.discovery.queries.length).toBeGreaterThan(0);
     expect(result.discovery.retrievedChunks.length).toBeGreaterThan(0);
     expect(result.discovery.confidence).toBeGreaterThan(0.5);
-    
+
     // Verify synthesis phase
     expect(result.synthesis.assumptions.length).toBeGreaterThan(0);
     expect(result.synthesis.clarifyingQuestions.length).toBeGreaterThanOrEqual(0);
-    
+
     // Verify planning phase
     expect(result.plan.phases.length).toBeGreaterThan(0);
     expect(result.plan.todoList.length).toBeGreaterThan(0);
@@ -930,9 +922,10 @@ describe("Architect Mode E2E", () => {
 ### Backward Compatibility
 
 1. **Feature Flag**
+
    ```typescript
    const USE_ENHANCED_ARCHITECT = process.env.ARCHITECT_MODE_ENHANCED === "true";
-   
+
    if (USE_ENHANCED_ARCHITECT && request.mode === "architect") {
      // New 3-phase orchestration
    } else {
@@ -959,6 +952,7 @@ Architect mode now includes **automatic codebase discovery**:
 ⚡ **Fast**: Complete discovery in <3 seconds
 
 **What this means for you:**
+
 - More accurate recommendations
 - Fewer hallucinations or incorrect suggestions
 - Plans that reference your actual code files
@@ -971,14 +965,14 @@ Architect mode now includes **automatic codebase discovery**:
 
 ### Quantitative Metrics
 
-| Metric | Target | Measurement Method |
-|--------|--------|-------------------|
-| **Discovery Execution Rate** | 100% | All architect requests trigger discovery |
-| **Context Quality** | 80%+ | Plans reference actual codebase entities |
-| **Hallucination Reduction** | 90% | Non-existent code recommendations decrease |
-| **Discovery Latency** | <3s (p95) | Time from request to discovery complete |
-| **Query Success Rate** | 85%+ | % of queries returning relevant results |
-| **User Satisfaction** | 4.5/5 | Post-interaction survey |
+| Metric                       | Target    | Measurement Method                         |
+| ---------------------------- | --------- | ------------------------------------------ |
+| **Discovery Execution Rate** | 100%      | All architect requests trigger discovery   |
+| **Context Quality**          | 80%+      | Plans reference actual codebase entities   |
+| **Hallucination Reduction**  | 90%       | Non-existent code recommendations decrease |
+| **Discovery Latency**        | <3s (p95) | Time from request to discovery complete    |
+| **Query Success Rate**       | 85%+      | % of queries returning relevant results    |
+| **User Satisfaction**        | 4.5/5     | Post-interaction survey                    |
 
 ### Qualitative Assessment
 
@@ -1006,6 +1000,7 @@ metrics.recordUserFeedback(rating, comments);
 **Impact**: High - Blocks entire workflow
 
 **Mitigation**:
+
 - Set aggressive timeout (5s default)
 - Graceful degradation to basic search
 - Cache frequently accessed context
@@ -1016,6 +1011,7 @@ metrics.recordUserFeedback(rating, comments);
 **Impact**: Medium - Plan quality suffers
 
 **Mitigation**:
+
 - Confidence scoring with thresholds
 - Fallback to broader queries
 - Explicitly flag low-confidence plans
@@ -1026,6 +1022,7 @@ metrics.recordUserFeedback(rating, comments);
 **Impact**: Medium - Miss opportunities for innovation
 
 **Mitigation**:
+
 - Balance KB context with Claude's knowledge
 - Encourage exploration of new patterns
 - Synthesis phase identifies limitations
@@ -1036,6 +1033,7 @@ metrics.recordUserFeedback(rating, comments);
 **Impact**: Medium - User experience degradation
 
 **Mitigation**:
+
 - Parallel query execution
 - Result caching
 - Progressive enhancement (show results as available)
@@ -1076,12 +1074,13 @@ const graphDiscovery = await discovery.executeWithGraph({
   graphQueries: [
     "impact_analysis:auth_middleware",
     "dependency_tree:user_service",
-    "call_graph:login_endpoint"
-  ]
+    "call_graph:login_endpoint",
+  ],
 });
 ```
 
 **Benefits:**
+
 - Impact analysis during discovery
 - Dependency-aware context
 - Architecture visualization
@@ -1124,9 +1123,7 @@ const graphDiscovery = await discovery.executeWithGraph({
     }
   ],
   "confidence": 0.85,
-  "gaps": [
-    "No existing JWT library found - need to add dependency"
-  ],
+  "gaps": ["No existing JWT library found - need to add dependency"],
   "summary": "Found 12 relevant code chunks across 5 files. Graph context: 24 nodes, 18 relationships."
 }
 ```
@@ -1222,6 +1219,7 @@ See implementation in branch: `develop-architect`
    - End-to-end testing
 
 **Files Changed**:
+
 - `shared/types/events.ts` - Added mode field
 - `agent-core/src/main.ts` - Added architect mode handling
 - `agent-core/src/orchestration/` - New directory (2 files)

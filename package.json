@@ -7,8 +7,7 @@
     "vscode-extension/webview",
     "agent-core",
     "mcp-bridge",
-    "shared",
-    "golden-scenarios"
+    "shared"
   ],
   "scripts": {
     "setup": "npm install && cd vscode-extension/webview && bun install && cd ../.. && cd agent-core && bun install && cd .. && cd mcp-bridge && bun install",
@@ -23,9 +22,12 @@
     "test:all": "npm run test:agent && npm run test:mcp && npm run test:kb && npm run test:e2e",
     "clean": "rm -rf vscode-extension/out vscode-extension/webview/build agent-core/dist",
     "dev:extension": "cd vscode-extension && npm run watch",
-    "dev:webview": "cd vscode-extension/webview && bun run dev"
+    "dev:webview": "cd vscode-extension/webview && bun run dev",
+    "lint:all": "cd mcp-bridge && bun run lint && cd ../agent-core && bun run lint && cd ../vscode-extension && bun run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,svelte}\""
   },
   "devDependencies": {
+    "prettier": "^3.4.2",
     "typescript": "^5.7.2"
   },
   "dependencies": {

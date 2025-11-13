@@ -46,7 +46,7 @@ class AgentCoreV2 {
     "conversation_persistence",
     "architect_mode",
     "multi_model",
-    "workflow_streaming"
+    "workflow_streaming",
   ];
 
   private orchestrator: Orchestrator;
@@ -148,9 +148,7 @@ class AgentCoreV2 {
 
     // List available tools
     const tools = await this.mcpClient.listTools();
-    console.error(
-      `[Agent Core V2] Available tools: ${tools.map((t: any) => t.name).join(", ")}`
-    );
+    console.error(`[Agent Core V2] Available tools: ${tools.map((t: any) => t.name).join(", ")}`);
 
     // Check Claude authentication
     const authStatus = await this.claudeProvider.getAuthStatus();
@@ -173,7 +171,10 @@ class AgentCoreV2 {
         let headerEndIndex = -1;
         let delimiterLength = 0;
 
-        if (crlfDelimiterIndex !== -1 && (lfDelimiterIndex === -1 || crlfDelimiterIndex <= lfDelimiterIndex)) {
+        if (
+          crlfDelimiterIndex !== -1 &&
+          (lfDelimiterIndex === -1 || crlfDelimiterIndex <= lfDelimiterIndex)
+        ) {
           headerEndIndex = crlfDelimiterIndex;
           delimiterLength = 4;
         } else if (lfDelimiterIndex !== -1) {
@@ -270,9 +271,7 @@ class AgentCoreV2 {
         // Stream updates to extension in background
         (async () => {
           try {
-            for await (const update of this.orchestrator.subscribeToUpdates(
-              session.id
-            )) {
+            for await (const update of this.orchestrator.subscribeToUpdates(session.id)) {
               this.sendEvent({
                 type: "workflow_update",
                 data: update,
@@ -316,18 +315,12 @@ class AgentCoreV2 {
 
       case "rejectTask":
       case "reject_task":
-        await this.orchestrator.rejectTask(
-          request.params.sessionId,
-          request.params.feedback
-        );
+        await this.orchestrator.rejectTask(request.params.sessionId, request.params.feedback);
         return { success: true };
 
       case "requestRevision":
       case "request_revision":
-        await this.orchestrator.revisePlan(
-          request.params.sessionId,
-          request.params.feedback
-        );
+        await this.orchestrator.revisePlan(request.params.sessionId, request.params.feedback);
         return { success: true };
 
       case "cancelTask":

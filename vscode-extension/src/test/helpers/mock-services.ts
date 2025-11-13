@@ -1,5 +1,5 @@
-import * as http from 'http';
-import { AddressInfo } from 'net';
+import * as http from "http";
+import { AddressInfo } from "net";
 import {
   MockSearchRequest,
   MockSearchResponse,
@@ -10,7 +10,7 @@ import {
   MockKBConfig,
   AgentEvent,
   EventHandlerDisposable,
-} from './mock-types';
+} from "./mock-types";
 
 /**
  * Mock KB API server for testing
@@ -22,9 +22,6 @@ export class MockKBServer {
   private chunkData: MockChunkResponse | null = null;
   private server: http.Server | null = null;
   public port = 0;
-  private mockSearchResults: any[] | null = null;
-  private mockMetadata: any | null = null;
-  private isHealthy: boolean = true;
   private requestHistory: any[] = [];
 
   /**
@@ -34,7 +31,7 @@ export class MockKBServer {
     return new Promise((resolve, reject) => {
       this.server = http.createServer(this.handleRequest.bind(this));
 
-      this.server.on('error', reject);
+      this.server.on("error", reject);
 
       this.server.listen(port, () => {
         const addr = this.server!.address() as AddressInfo;
@@ -52,7 +49,7 @@ export class MockKBServer {
     return new Promise((resolve) => {
       if (this.server) {
         this.server.close(() => {
-          console.log('Mock KB API server stopped');
+          console.log("Mock KB API server stopped");
           resolve();
         });
       } else {
@@ -115,16 +112,21 @@ export class MockKBServer {
     this.metadata = null;
     this.isHealthy = true;
     this.chunkData = null;
+    this.requestHistory = [];
+  }
+
+  /**
+   * Get request history for testing
+   */
+  getRequestHistory(): any[] {
+    return [...this.requestHistory];
   }
 
   /**
    * Handle HTTP requests
    */
-  private handleRequest(
-    req: http.IncomingMessage,
-    res: http.ServerResponse
-  ): void {
-    const url = req.url || '';
+  private handleRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
+    const url = req.url || "";
 
     // Log request
     this.requestHistory.push({
@@ -134,95 +136,93 @@ export class MockKBServer {
     });
 
     // CORS headers for testing
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-    if (req.method === 'OPTIONS') {
+    if (req.method === "OPTIONS") {
       res.writeHead(200);
       res.end();
       return;
     }
 
     // Health check
-    if (url === '/health' || url === '/') {
+    if (url === "/health" || url === "/") {
       const healthResponse: MockHealthResponse = {
-        status: this.isHealthy ? 'ok' : 'error',
+        status: this.isHealthy ? "ok" : "error",
         mock: true,
-        ...(this.isHealthy ? {} : { error: 'Mock server is unhealthy' }),
+        ...(this.isHealthy ? {} : { error: "Mock server is unhealthy" }),
       };
       res.writeHead(this.isHealthy ? 200 : 503, {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       });
       res.end(JSON.stringify(healthResponse));
       return;
     }
 
     // Search endpoint
-    if (url.startsWith('/search') && req.method === 'POST') {
-      let body = '';
-      req.on('data', (chunk) => {
+    if (url.startsWith("/search") && req.method === "POST") {
+      let body = "";
+      req.on("data", (chunk) => {
         body += chunk;
       });
 
-      req.on('end', () => {
+      req.on("end", () => {
         try {
           const searchRequest = JSON.parse(body);
           const response = this.generateMockSearchResponse(searchRequest);
 
-          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(response));
         } catch (err) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid request' }));
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid request" }));
         }
       });
       return;
     }
 
     // Get metadata endpoint
-    if (url.startsWith('/metadata/') && req.method === 'GET') {
+    if (url.startsWith("/metadata/") && req.method === "GET") {
       const response = this.generateMockMetadata();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(response));
       return;
     }
 
     // Fetch chunk endpoint
-    if (url.startsWith('/chunks/') && req.method === 'GET') {
+    if (url.startsWith("/chunks/") && req.method === "GET") {
       const response = this.generateMockChunk();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(response));
       return;
     }
 
     // Not found
-    res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not found' }));
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Not found" }));
   }
 
   /**
    * Generate mock search response
    */
-  private generateMockSearchResponse(
-    request: MockSearchRequest
-  ): MockSearchResponse {
+  private generateMockSearchResponse(request: MockSearchRequest): MockSearchResponse {
     // Use configured search results if available, otherwise use defaults
     const hits: MockSearchResult[] = this.searchResults || [
       {
-        chunk_id: 'mock-chunk-1',
-        repo: 'test-repo',
-        path: 'src/test.ts',
-        content: 'function testFunction() { return true; }',
+        chunk_id: "mock-chunk-1",
+        repo: "test-repo",
+        path: "src/test.ts",
+        content: "function testFunction() { return true; }",
         score: 0.95,
         line_start: 1,
         line_end: 3,
       },
       {
-        chunk_id: 'mock-chunk-2',
-        repo: 'test-repo',
-        path: 'src/utils.ts',
-        content: 'export const helper = () => {}',
+        chunk_id: "mock-chunk-2",
+        repo: "test-repo",
+        path: "src/utils.ts",
+        content: "export const helper = () => {}",
         score: 0.85,
         line_start: 5,
         line_end: 7,
@@ -247,8 +247,8 @@ export class MockKBServer {
       this.metadata || {
         repos: [
           {
-            name: 'test-repo',
-            path: '/test/repo',
+            name: "test-repo",
+            path: "/test/repo",
             files: 10,
             chunks: 50,
           },
@@ -266,14 +266,14 @@ export class MockKBServer {
     // Use configured chunk data if available, otherwise use defaults
     return (
       this.chunkData || {
-        chunk_id: 'mock-chunk-1',
-        repo: 'test-repo',
-        path: 'src/test.ts',
-        content: 'function testFunction() {\n  return true;\n}',
+        chunk_id: "mock-chunk-1",
+        repo: "test-repo",
+        path: "src/test.ts",
+        content: "function testFunction() {\n  return true;\n}",
         line_start: 1,
         line_end: 3,
         metadata: {
-          language: 'typescript',
+          language: "typescript",
           size: 45,
         },
       }
@@ -286,9 +286,14 @@ export class MockKBServer {
  */
 export class MockAgentBridge {
   private handlers: Map<string, (data: AgentEvent) => void> = new Map();
-  private messageHistory: string[] = [];
+  private messageHistory: any[] = [];
   private shouldThrowError: boolean = false;
-  private errorMessage: string = 'Mock error';
+  private errorMessage: string = "Mock error";
+  private shouldError: Error | null = null;
+  private toolCallQueue: any[] = [];
+  private responseQueue: string[] = [];
+  private eventHandlers: Map<string, Function[]> = new Map();
+  private messageHandlers: Map<string, (event: AgentEvent) => void> = new Map();
 
   /**
    * Send a message (simulates user sending message to agent).
@@ -298,7 +303,7 @@ export class MockAgentBridge {
 
     if (this.shouldThrowError) {
       this.emitEvent({
-        type: 'error',
+        type: "error",
         error: this.errorMessage,
       });
       throw new Error(this.errorMessage);
@@ -308,28 +313,32 @@ export class MockAgentBridge {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Simulate processing delay
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     if (this.shouldError) {
-      this.emit('error', this.shouldError);
+      this.emitToHandlers("error", this.shouldError);
       throw this.shouldError;
     }
 
     // Emit tool calls if configured
     for (const toolCall of this.toolCallQueue) {
-      this.emit('tool_call_started', toolCall);
-      await new Promise(resolve => setTimeout(resolve, 20));
-      this.emit('tool_call_completed', { ...toolCall, result: 'mock result' });
+      this.emitToHandlers("tool_call_started", toolCall);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      this.emitToHandlers("tool_call_completed", { ...toolCall, result: "mock result" });
     }
 
     // Emit response
-    const response = this.responseQueue.shift() || 'Mock agent response';
-    this.emit('message_chunk', { content: response });
-    this.emit('content_delta', { delta: response }); // Legacy compatibility
-    this.messageHistory.push({ type: 'assistant_message', content: response, timestamp: Date.now() });
+    const response = this.responseQueue.shift() || "Mock agent response";
+    this.emitToHandlers("message_chunk", { content: response });
+    this.emitToHandlers("content_delta", { delta: response }); // Legacy compatibility
+    this.messageHistory.push({
+      type: "assistant_message",
+      content: response,
+      timestamp: Date.now(),
+    });
 
-    await new Promise(resolve => setTimeout(resolve, 20));
-    this.emit('task_completed', { success: true, message: response });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    this.emitToHandlers("task_completed", { success: true, message: response });
   }
 
   /**
@@ -357,7 +366,7 @@ export class MockAgentBridge {
   /**
    * Configure error injection for testing error paths
    */
-  setError(shouldThrow: boolean, message: string = 'Mock error'): void {
+  setError(shouldThrow: boolean, message: string = "Mock error"): void {
     this.shouldThrowError = shouldThrow;
     this.errorMessage = message;
   }
@@ -365,8 +374,18 @@ export class MockAgentBridge {
   /**
    * Get message history for test verification
    */
-  getMessageHistory(): string[] {
+  getMessageHistory(): any[] {
     return [...this.messageHistory];
+  }
+
+  /**
+   * Emit to registered event handlers
+   */
+  private emitToHandlers(event: string, data: any): void {
+    const handlers = this.eventHandlers.get(event);
+    if (handlers) {
+      handlers.forEach((handler) => handler(data));
+    }
   }
 
   /**
@@ -381,7 +400,7 @@ export class MockAgentBridge {
    */
   simulateToolCall(toolName: string, toolArgs: any): void {
     this.emitEvent({
-      type: 'tool_call',
+      type: "tool_call",
       toolName,
       toolArgs,
     });

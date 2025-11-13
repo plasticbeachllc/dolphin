@@ -46,7 +46,7 @@ Dolphin provides secure `PathValidator` classes for both TypeScript and Python t
 #### TypeScript Usage
 
 ```typescript
-import { PathValidator } from '../../../shared/security/path-validator';
+import { PathValidator } from "../../../shared/security/path-validator";
 
 // Basic usage
 const validator = new PathValidator({ baseDir: workspaceRoot });
@@ -55,14 +55,14 @@ const safePath = validator.validate(userInputPath);
 // With options
 const validator = new PathValidator({
   baseDir: workspaceRoot,
-  allowSymlinks: false,           // Reject symlinks (default)
-  mustExist: false,                // Don't require file to exist (default)
-  allowedExtensions: ['.ts', '.js'], // Only allow specific extensions
-  disallowedPatterns: ['^\.'],    // Reject hidden files
-  errorPrefix: 'Security violation' // Custom error messages
+  allowSymlinks: false, // Reject symlinks (default)
+  mustExist: false, // Don't require file to exist (default)
+  allowedExtensions: [".ts", ".js"], // Only allow specific extensions
+  disallowedPatterns: ["^\."], // Reject hidden files
+  errorPrefix: "Security violation", // Custom error messages
 });
 
-const safePath = validator.validate('src/file.ts');
+const safePath = validator.validate("src/file.ts");
 ```
 
 #### Python Usage
@@ -93,6 +93,7 @@ safe_path = validator.validate('src/module.py')
 ### When to Use PathValidator
 
 **ALWAYS use PathValidator when:**
+
 - Reading file paths from user input
 - Accepting file paths from API requests
 - Processing file paths from external sources (MCP tools, etc.)
@@ -100,11 +101,13 @@ safe_path = validator.validate('src/module.py')
 - Any operation that could access files outside the workspace
 
 **Examples that REQUIRE validation:**
+
 - ✅ `TOMLWriter(userFilePath, workspace)` - validates path
 - ✅ `fs.readFile(validator.validate(inputPath))`
 - ✅ `file_path.read_text()` where file_path from user
 
 **Safe operations that DON'T need validation:**
+
 - ✅ Reading bundled templates: `Path(__file__).parent / 'template.toml'`
 - ✅ Hardcoded paths: `Path.home() / '.dolphin' / 'config.toml'`
 - ✅ System paths: `os.tmpdir()`
@@ -119,14 +122,14 @@ safe_path = validator.validate('src/module.py')
 // ❌ UNSAFE - No validation
 async function readUserFile(filepath: string, workspace: string) {
   const fullPath = path.join(workspace, filepath);
-  return await fs.readFile(fullPath, 'utf-8');
+  return await fs.readFile(fullPath, "utf-8");
 }
 
 // ✅ SAFE - With validation
 async function readUserFile(filepath: string, workspace: string) {
   const validator = new PathValidator({ baseDir: workspace });
   const safePath = validator.validate(filepath);
-  return await fs.readFile(safePath, 'utf-8');
+  return await fs.readFile(safePath, "utf-8");
 }
 ```
 
@@ -149,13 +152,13 @@ def read_user_file(filepath: str, repo_root: Path) -> str:
 
 The following operations are particularly vulnerable if not properly validated:
 
-| Operation | TypeScript | Python | Risk Level |
-|-----------|-----------|---------|------------|
-| Read file | `fs.readFile()`, `fs.readFileSync()` | `Path.read_text()`, `open()` | HIGH |
-| Write file | `fs.writeFile()`, `fs.writeFileSync()` | `Path.write_text()`, `open()` | CRITICAL |
-| Delete file | `fs.unlink()`, `fs.unlinkSync()` | `Path.unlink()`, `os.remove()` | CRITICAL |
-| Check existence | `fs.existsSync()`, `fs.access()` | `Path.exists()` | MEDIUM |
-| List directory | `fs.readdir()`, `fs.readdirSync()` | `Path.iterdir()`, `os.listdir()` | MEDIUM |
+| Operation       | TypeScript                             | Python                           | Risk Level |
+| --------------- | -------------------------------------- | -------------------------------- | ---------- |
+| Read file       | `fs.readFile()`, `fs.readFileSync()`   | `Path.read_text()`, `open()`     | HIGH       |
+| Write file      | `fs.writeFile()`, `fs.writeFileSync()` | `Path.write_text()`, `open()`    | CRITICAL   |
+| Delete file     | `fs.unlink()`, `fs.unlinkSync()`       | `Path.unlink()`, `os.remove()`   | CRITICAL   |
+| Check existence | `fs.existsSync()`, `fs.access()`       | `Path.exists()`                  | MEDIUM     |
+| List directory  | `fs.readdir()`, `fs.readdirSync()`     | `Path.iterdir()`, `os.listdir()` | MEDIUM     |
 
 ---
 
@@ -309,16 +312,17 @@ async function handleFileUpload(
   // Validate path
   const validator = new PathValidator({
     baseDir: workspaceRoot,
-    allowedExtensions: ['.txt', '.json', '.md'],
-    disallowedPatterns: ['^\\.', '.*\\.tmp$'], // No hidden or temp files
+    allowedExtensions: [".txt", ".json", ".md"],
+    disallowedPatterns: ["^\\.", ".*\\.tmp$"], // No hidden or temp files
   });
 
   try {
     const safePath = validator.validate(uploadPath);
 
     // Additional security: check file size
-    if (content.length > 10 * 1024 * 1024) { // 10MB limit
-      throw new Error('File too large');
+    if (content.length > 10 * 1024 * 1024) {
+      // 10MB limit
+      throw new Error("File too large");
     }
 
     // Write file
@@ -327,7 +331,7 @@ async function handleFileUpload(
   } catch (error) {
     if (error instanceof PathValidationError) {
       console.error(`Security: blocked upload attempt - ${error.reason}`);
-      throw new Error('Invalid file path');
+      throw new Error("Invalid file path");
     }
     throw error;
   }
@@ -400,6 +404,7 @@ def read_repo_file(repo_id: int, file_path: str) -> str:
 ## Updates and Maintenance
 
 This document should be updated when:
+
 - New attack vectors are discovered
 - PathValidator implementation changes
 - New security patterns are established

@@ -1,15 +1,10 @@
 // agent-core/src/workflows/editor-workflow.ts
-import type {
-  IWorkflow,
-  TaskInput,
-  WorkflowUpdate,
-  Context,
-} from '../types/index';
-import type { ClaudeProvider } from '../execution/claude-provider';
-import type { ContextBuilder } from '../context/context-builder';
-import type { PromptBuilder } from '../prompts/prompt-builder';
-import type { StateStore } from '../state/state-store';
-import type { AgentEvent } from '../../../../shared/types/events';
+import type { IWorkflow, TaskInput, WorkflowUpdate, Context } from "../types/index";
+import type { ClaudeProvider } from "../execution/claude-provider";
+import type { ContextBuilder } from "../context/context-builder";
+import type { PromptBuilder } from "../prompts/prompt-builder";
+import type { StateStore } from "../state/state-store";
+import type { AgentEvent } from "../../../../shared/types/events";
 
 /**
  * Configuration for EditorWorkflow
@@ -48,14 +43,14 @@ export class EditorWorkflow implements IWorkflow {
     try {
       // State: Idle → Executing
       yield {
-        type: 'state_change',
+        type: "state_change",
         sessionId,
         timestamp: new Date().toISOString(),
-        data: { state: 'executing' },
+        data: { state: "executing" },
       };
 
       // Step 1: Build context (lightweight for editor mode)
-      console.error('[EditorWorkflow] Building context...');
+      console.error("[EditorWorkflow] Building context...");
 
       const context = await this.config.contextBuilder.build({
         files: input.context.files || [],
@@ -64,17 +59,17 @@ export class EditorWorkflow implements IWorkflow {
       });
 
       yield {
-        type: 'progress',
+        type: "progress",
         sessionId,
         timestamp: new Date().toISOString(),
         data: {
-          phase: 'context',
+          phase: "context",
           message: `Context assembled: ${context.kbResults.length} KB results, ${context.files.length} files`,
         },
       };
 
       // Step 2: Build prompt
-      console.error('[EditorWorkflow] Building prompt...');
+      console.error("[EditorWorkflow] Building prompt...");
 
       const systemPrompt = this.config.promptBuilder.buildEditorPrompt({
         message: input.message,
@@ -83,9 +78,9 @@ export class EditorWorkflow implements IWorkflow {
       });
 
       // Step 3: Execute with Claude (using event-driven approach)
-      console.error('[EditorWorkflow] Executing with Claude Sonnet...');
+      console.error("[EditorWorkflow] Executing with Claude Sonnet...");
 
-      let textContent = '';
+      let textContent = "";
       const startTime = Date.now();
 
       // Collect events and forward them
@@ -94,12 +89,12 @@ export class EditorWorkflow implements IWorkflow {
         conversationHistory: input.conversationHistory,
         onEvent: (event: AgentEvent) => {
           // Forward content_delta events
-          if (event.type === 'content_delta') {
+          if (event.type === "content_delta") {
             textContent += event.delta;
           }
 
           // Forward tool events
-          if (event.type === 'tool_call_started' || event.type === 'tool_call_completed') {
+          if (event.type === "tool_call_started" || event.type === "tool_call_completed") {
             // Event will be sent via the iterator
           }
         },
@@ -109,30 +104,30 @@ export class EditorWorkflow implements IWorkflow {
 
       // Step 4: Complete
       yield {
-        type: 'progress',
+        type: "progress",
         sessionId,
         timestamp: new Date().toISOString(),
         data: {
-          phase: 'complete',
+          phase: "complete",
           message: `Task completed in ${executionTime}ms (${result.usage.inputTokens + result.usage.outputTokens} tokens, ${result.toolRounds} tool rounds)`,
         },
       };
 
       yield {
-        type: 'state_change',
+        type: "state_change",
         sessionId,
         timestamp: new Date().toISOString(),
-        data: { state: 'complete' },
+        data: { state: "complete" },
       };
 
       // Step 5: Save state
       try {
         await this.config.stateStore.saveSession({
           id: sessionId,
-          mode: 'editor',
-          state: 'complete',
+          mode: "editor",
+          state: "complete",
           metadata: {
-            modelUsed: ['claude-sonnet-4-20250514'],
+            modelUsed: ["claude-sonnet-4-20250514"],
             tokensUsed: result.usage.inputTokens + result.usage.outputTokens,
             estimatedCost: 0, // TODO: calculate based on mode
             startedAt: new Date(startTime).toISOString(),
@@ -141,15 +136,14 @@ export class EditorWorkflow implements IWorkflow {
           input,
         });
       } catch (error) {
-        console.error('[EditorWorkflow] Failed to save state:', error);
+        console.error("[EditorWorkflow] Failed to save state:", error);
         // Don't fail the workflow if state save fails
       }
-
     } catch (error) {
-      console.error('[EditorWorkflow] Error:', error);
+      console.error("[EditorWorkflow] Error:", error);
 
       yield {
-        type: 'error',
+        type: "error",
         sessionId,
         timestamp: new Date().toISOString(),
         data: {
@@ -159,10 +153,10 @@ export class EditorWorkflow implements IWorkflow {
       };
 
       yield {
-        type: 'state_change',
+        type: "state_change",
         sessionId,
         timestamp: new Date().toISOString(),
-        data: { state: 'error' },
+        data: { state: "error" },
       };
     }
   }
@@ -177,13 +171,23 @@ export class EditorWorkflow implements IWorkflow {
   private extractSearchIntent(message: string): string | undefined {
     // Simple heuristics to determine if KB search would be helpful
     const searchKeywords = [
-      'find', 'search', 'look for', 'locate', 'where',
-      'how does', 'how is', 'what is', 'explain',
-      'show me', 'implement', 'add', 'modify',
+      "find",
+      "search",
+      "look for",
+      "locate",
+      "where",
+      "how does",
+      "how is",
+      "what is",
+      "explain",
+      "show me",
+      "implement",
+      "add",
+      "modify",
     ];
 
     const lowerMessage = message.toLowerCase();
-    const hasSearchKeyword = searchKeywords.some(keyword => lowerMessage.includes(keyword));
+    const hasSearchKeyword = searchKeywords.some((keyword) => lowerMessage.includes(keyword));
 
     if (hasSearchKeyword) {
       // Extract main topic from message

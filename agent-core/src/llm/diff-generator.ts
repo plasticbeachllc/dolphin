@@ -1,17 +1,41 @@
 // agent-core/src/llm/diff-generator.ts
-import * as Diff from 'diff';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { PathValidator } from '../../../../shared/security/path-validator';
-import type { FileDiff, DiffHunk } from '../../../../shared/types/events';
+import * as Diff from "diff";
+import * as fs from "fs/promises";
+import * as path from "path";
+import { PathValidator } from "../../../../shared/security/path-validator";
+import type { FileDiff, DiffHunk } from "../../../../shared/types/events";
 
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB
 const BINARY_FILE_EXTENSIONS = new Set([
-  '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.webp', '.svg',
-  '.pdf', '.zip', '.tar', '.gz', '.7z', '.rar',
-  '.mp3', '.mp4', '.avi', '.mov', '.mkv', '.wav',
-  '.exe', '.dll', '.so', '.dylib',
-  '.woff', '.woff2', '.ttf', '.eot', '.otf'
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".bmp",
+  ".ico",
+  ".webp",
+  ".svg",
+  ".pdf",
+  ".zip",
+  ".tar",
+  ".gz",
+  ".7z",
+  ".rar",
+  ".mp3",
+  ".mp4",
+  ".avi",
+  ".mov",
+  ".mkv",
+  ".wav",
+  ".exe",
+  ".dll",
+  ".so",
+  ".dylib",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".eot",
+  ".otf",
 ]);
 
 /**
@@ -36,21 +60,23 @@ function isBinaryFile(filePath: string, content?: Buffer): boolean {
  * Creates a special FileDiff for new file creation
  */
 function createNewFileDiff(filePath: string, content: string): FileDiff {
-  const lines = content.split('\n');
+  const lines = content.split("\n");
   const additions = lines.length;
 
   return {
-    oldFileName: '/dev/null',
+    oldFileName: "/dev/null",
     newFileName: filePath,
     additions,
     deletions: 0,
-    hunks: [{
-      oldStart: 0,
-      oldLines: 0,
-      newStart: 1,
-      newLines: additions,
-      lines: lines.map(line => `+${line}`)
-    }]
+    hunks: [
+      {
+        oldStart: 0,
+        oldLines: 0,
+        newStart: 1,
+        newLines: additions,
+        lines: lines.map((line) => `+${line}`),
+      },
+    ],
   };
 }
 
@@ -61,17 +87,19 @@ function createBinaryNewFileDiff(filePath: string, newSize: number): FileDiff {
   const message = `Binary file created: ${formatBytes(newSize)}`;
 
   return {
-    oldFileName: '/dev/null',
+    oldFileName: "/dev/null",
     newFileName: filePath,
     additions: 0,
     deletions: 0,
-    hunks: [{
-      oldStart: 1,
-      oldLines: 0,
-      newStart: 1,
-      newLines: 0,
-      lines: [` ${message}`]
-    }]
+    hunks: [
+      {
+        oldStart: 1,
+        oldLines: 0,
+        newStart: 1,
+        newLines: 0,
+        lines: [` ${message}`],
+      },
+    ],
   };
 }
 
@@ -83,17 +111,19 @@ function createTruncatedNewFileDiff(filePath: string, fileSize: number): FileDif
   const subMessage = `   The file was created successfully, but the diff is too large to display.`;
 
   return {
-    oldFileName: '/dev/null',
+    oldFileName: "/dev/null",
     newFileName: filePath,
     additions: 0,
     deletions: 0,
-    hunks: [{
-      oldStart: 1,
-      oldLines: 0,
-      newStart: 1,
-      newLines: 0,
-      lines: [` ${message}`, ` ${subMessage}`]
-    }]
+    hunks: [
+      {
+        oldStart: 1,
+        oldLines: 0,
+        newStart: 1,
+        newLines: 0,
+        lines: [` ${message}`, ` ${subMessage}`],
+      },
+    ],
   };
 }
 
@@ -108,13 +138,15 @@ function createBinaryFileDiff(filePath: string, oldSize: number, newSize: number
     newFileName: filePath,
     additions: 0,
     deletions: 0,
-    hunks: [{
-      oldStart: 1,
-      oldLines: 1,
-      newStart: 1,
-      newLines: 1,
-      lines: [` ${message}`]
-    }]
+    hunks: [
+      {
+        oldStart: 1,
+        oldLines: 1,
+        newStart: 1,
+        newLines: 1,
+        lines: [` ${message}`],
+      },
+    ],
   };
 }
 
@@ -130,13 +162,15 @@ function createTruncatedFileDiff(filePath: string, fileSize: number): FileDiff {
     newFileName: filePath,
     additions: 0,
     deletions: 0,
-    hunks: [{
-      oldStart: 1,
-      oldLines: 0,
-      newStart: 1,
-      newLines: 0,
-      lines: [` ${message}`, ` ${subMessage}`]
-    }]
+    hunks: [
+      {
+        oldStart: 1,
+        oldLines: 0,
+        newStart: 1,
+        newLines: 0,
+        lines: [` ${message}`, ` ${subMessage}`],
+      },
+    ],
   };
 }
 
@@ -144,9 +178,9 @@ function createTruncatedFileDiff(filePath: string, fileSize: number): FileDiff {
  * Formats bytes to human-readable size
  */
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
+  if (bytes === 0) return "0 B";
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const sizes = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 }
@@ -156,7 +190,7 @@ function formatBytes(bytes: number): string {
  */
 function parseUnifiedDiff(diffString: string): DiffHunk[] {
   const hunks: DiffHunk[] = [];
-  const lines = diffString.split('\n');
+  const lines = diffString.split("\n");
 
   let currentHunk: DiffHunk | null = null;
   let i = 0;
@@ -183,9 +217,12 @@ function parseUnifiedDiff(diffString: string): DiffHunk[] {
         oldLines,
         newStart,
         newLines,
-        lines: []
+        lines: [],
       };
-    } else if (currentHunk && (line.startsWith(' ') || line.startsWith('+') || line.startsWith('-'))) {
+    } else if (
+      currentHunk &&
+      (line.startsWith(" ") || line.startsWith("+") || line.startsWith("-"))
+    ) {
       // Add line to current hunk
       currentHunk.lines.push(line);
     }
@@ -217,7 +254,7 @@ export async function generateFileDiff(
   try {
     // Handle new file creation
     if (oldContent === null) {
-      const newBuffer = Buffer.from(newContent, 'utf-8');
+      const newBuffer = Buffer.from(newContent, "utf-8");
       const newSize = newBuffer.byteLength;
 
       if (isBinaryFile(filePath, newBuffer)) {
@@ -234,27 +271,21 @@ export async function generateFileDiff(
     // Check for binary files
     const isBinary = isBinaryFile(filePath);
     if (isBinary) {
-      const oldSize = Buffer.byteLength(oldContent, 'utf-8');
-      const newSize = Buffer.byteLength(newContent, 'utf-8');
+      const oldSize = Buffer.byteLength(oldContent, "utf-8");
+      const newSize = Buffer.byteLength(newContent, "utf-8");
       return createBinaryFileDiff(filePath, oldSize, newSize);
     }
 
     // Check file size limits
-    const newSize = Buffer.byteLength(newContent, 'utf-8');
-    const oldSize = Buffer.byteLength(oldContent, 'utf-8');
+    const newSize = Buffer.byteLength(newContent, "utf-8");
+    const oldSize = Buffer.byteLength(oldContent, "utf-8");
 
     if (newSize > MAX_FILE_SIZE || oldSize > MAX_FILE_SIZE) {
       return createTruncatedFileDiff(filePath, Math.max(oldSize, newSize));
     }
 
     // Generate unified diff using the diff library
-    const patch = Diff.createPatch(
-      filePath,
-      oldContent,
-      newContent,
-      'before',
-      'after'
-    );
+    const patch = Diff.createPatch(filePath, oldContent, newContent, "before", "after");
 
     // Parse the unified diff
     const hunks = parseUnifiedDiff(patch);
@@ -265,8 +296,8 @@ export async function generateFileDiff(
 
     for (const hunk of hunks) {
       for (const line of hunk.lines) {
-        if (line.startsWith('+')) additions++;
-        if (line.startsWith('-')) deletions++;
+        if (line.startsWith("+")) additions++;
+        if (line.startsWith("-")) deletions++;
       }
     }
 
@@ -275,7 +306,7 @@ export async function generateFileDiff(
       newFileName: filePath,
       additions,
       deletions,
-      hunks
+      hunks,
     };
   } catch (error) {
     console.warn(`Failed to generate diff for ${filePath}:`, error);
@@ -317,7 +348,7 @@ export async function generateFileWriteDiff(
       try {
         // Validate backup path as well
         const validatedBackupPath = validator.validate(toolResult.backup_path);
-        oldContent = await fs.readFile(validatedBackupPath, 'utf-8');
+        oldContent = await fs.readFile(validatedBackupPath, "utf-8");
       } catch (error) {
         console.warn(`Failed to read backup file ${toolResult.backup_path}:`, error);
       }
@@ -332,7 +363,7 @@ export async function generateFileWriteDiff(
 
     return generateFileDiff(filePath, oldContent, newContent);
   } catch (error) {
-    console.warn('Failed to generate file_write diff:', error);
+    console.warn("Failed to generate file_write diff:", error);
     return null;
   }
 }

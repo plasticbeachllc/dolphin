@@ -1,16 +1,16 @@
 /**
  * End-to-end integration tests for Orchestrator
- * 
+ *
  * Tests full workflow execution with state management and persistence
  */
 
-import { describe, it, expect, beforeEach, mock } from 'bun:test';
-import { Orchestrator } from '../../src/orchestrator/orchestrator';
-import { EditorWorkflow } from '../../src/workflows/editor-workflow';
-import { StateStore } from '../../src/state/state-store';
-import type { TaskInput, TaskSession, WorkflowUpdate } from '../../src/types/index';
+import { describe, it, expect, beforeEach, mock } from "bun:test";
+import { Orchestrator } from "../../src/orchestrator/orchestrator";
+import { EditorWorkflow } from "../../src/workflows/editor-workflow";
+import { StateStore } from "../../src/state/state-store";
+import type { TaskInput, TaskSession, WorkflowUpdate } from "../../src/types/index";
 
-describe('Orchestrator End-to-End', () => {
+describe("Orchestrator End-to-End", () => {
   let orchestrator: Orchestrator;
   let mockStateStore: any;
   let mockEditorWorkflow: any;
@@ -20,7 +20,7 @@ describe('Orchestrator End-to-End', () => {
     // Mock StateStore
     mockStateStore = {
       saveSession: mock(async (session: TaskSession) => {
-        console.log('[Test] Saving session:', session.id);
+        console.log("[Test] Saving session:", session.id);
       }),
       loadSession: mock(async (sessionId: string) => null),
       savePlan: mock(async () => {}),
@@ -31,27 +31,27 @@ describe('Orchestrator End-to-End', () => {
     mockEditorWorkflow = {
       execute: mock(async function* (input: TaskInput): AsyncIterableIterator<WorkflowUpdate> {
         yield {
-          type: 'state_change',
-          sessionId: 'test',
+          type: "state_change",
+          sessionId: "test",
           timestamp: new Date().toISOString(),
-          data: { state: 'executing' },
+          data: { state: "executing" },
         };
-        
+
         yield {
-          type: 'chunk',
-          sessionId: 'test',
+          type: "chunk",
+          sessionId: "test",
           timestamp: new Date().toISOString(),
-          data: { type: 'text', content: 'Working on it...' },
+          data: { type: "text", content: "Working on it..." },
         };
-        
+
         // Simulate some work
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
         yield {
-          type: 'state_change',
-          sessionId: 'test',
+          type: "state_change",
+          sessionId: "test",
           timestamp: new Date().toISOString(),
-          data: { state: 'complete' },
+          data: { state: "complete" },
         };
       }),
     };
@@ -61,56 +61,56 @@ describe('Orchestrator End-to-End', () => {
       execute: mock(async function* (input: TaskInput): AsyncIterableIterator<WorkflowUpdate> {
         // Research phase
         yield {
-          type: 'state_change',
-          sessionId: 'test',
+          type: "state_change",
+          sessionId: "test",
           timestamp: new Date().toISOString(),
-          data: { state: 'researching' },
+          data: { state: "researching" },
         };
-        
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
         yield {
-          type: 'progress',
-          sessionId: 'test',
+          type: "progress",
+          sessionId: "test",
           timestamp: new Date().toISOString(),
           data: {
-            phase: 'research',
+            phase: "research",
             result: {
-              findings: 'Found relevant files',
-              relevantFiles: ['file1.ts', 'file2.ts'],
-              kbSearches: [{ query: 'test', resultsCount: 5 }],
+              findings: "Found relevant files",
+              relevantFiles: ["file1.ts", "file2.ts"],
+              kbSearches: [{ query: "test", resultsCount: 5 }],
             },
           },
         };
 
         // Planning phase
         yield {
-          type: 'state_change',
-          sessionId: 'test',
+          type: "state_change",
+          sessionId: "test",
           timestamp: new Date().toISOString(),
-          data: { state: 'planning' },
+          data: { state: "planning" },
         };
-        
-        await new Promise(resolve => setTimeout(resolve, 50));
-        
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
         yield {
-          type: 'progress',
-          sessionId: 'test',
+          type: "progress",
+          sessionId: "test",
           timestamp: new Date().toISOString(),
           data: {
-            phase: 'planning',
+            phase: "planning",
             plan: {
               version: 1,
-              status: 'pending_approval',
+              status: "pending_approval",
               createdAt: new Date().toISOString(),
-              model: 'claude-opus-4-20250514',
+              model: "claude-opus-4-20250514",
               tokensUsed: 1500,
               estimatedCost: 0.45,
-              content: '# Implementation Plan\n\nDetailed plan here...',
-              filesToModify: ['file1.ts'],
-              filesToCreate: ['file2.ts'],
-              steps: ['Step 1', 'Step 2'],
-              complexity: 'medium',
+              content: "# Implementation Plan\n\nDetailed plan here...",
+              filesToModify: ["file1.ts"],
+              filesToCreate: ["file2.ts"],
+              steps: ["Step 1", "Step 2"],
+              complexity: "medium",
               estimatedTokens: 8000,
             },
           },
@@ -118,10 +118,10 @@ describe('Orchestrator End-to-End', () => {
 
         // Await approval
         yield {
-          type: 'state_change',
-          sessionId: 'test',
+          type: "state_change",
+          sessionId: "test",
           timestamp: new Date().toISOString(),
-          data: { state: 'awaiting_approval' },
+          data: { state: "awaiting_approval" },
         };
 
         // Note: Workflow will block here until approval
@@ -130,26 +130,26 @@ describe('Orchestrator End-to-End', () => {
     };
 
     orchestrator = new Orchestrator({
-      workspaceRoot: '/test/workspace',
+      workspaceRoot: "/test/workspace",
       stateStore: mockStateStore,
       editorWorkflow: mockEditorWorkflow,
       architectWorkflow: mockArchitectWorkflow,
     });
   });
 
-  describe('Editor Mode Flow', () => {
-    it('should complete editor mode task end-to-end', async () => {
+  describe("Editor Mode Flow", () => {
+    it("should complete editor mode task end-to-end", async () => {
       const input: TaskInput = {
-        mode: 'editor',
-        message: 'Add a comment to the file',
-        context: { files: ['test.ts'] },
+        mode: "editor",
+        message: "Add a comment to the file",
+        context: { files: ["test.ts"] },
       };
 
       // Start task
       const session = await orchestrator.startTask(input);
       expect(session.id).toBeDefined();
-      expect(session.mode).toBe('editor');
-      expect(session.state).toBe('idle');
+      expect(session.mode).toBe("editor");
+      expect(session.state).toBe("idle");
 
       // Subscribe to updates
       const updates: WorkflowUpdate[] = [];
@@ -157,8 +157,8 @@ describe('Orchestrator End-to-End', () => {
 
       for await (const update of subscription) {
         updates.push(update);
-        
-        if (update.type === 'state_change' && update.data.state === 'complete') {
+
+        if (update.type === "state_change" && update.data.state === "complete") {
           break;
         }
       }
@@ -168,13 +168,13 @@ describe('Orchestrator End-to-End', () => {
 
       // Should have executing state
       const executingUpdate = updates.find(
-        u => u.type === 'state_change' && u.data.state === 'executing'
+        (u) => u.type === "state_change" && u.data.state === "executing"
       );
       expect(executingUpdate).toBeDefined();
 
       // Should have complete state
       const completeUpdate = updates.find(
-        u => u.type === 'state_change' && u.data.state === 'complete'
+        (u) => u.type === "state_change" && u.data.state === "complete"
       );
       expect(completeUpdate).toBeDefined();
 
@@ -182,10 +182,10 @@ describe('Orchestrator End-to-End', () => {
       expect(mockStateStore.saveSession).toHaveBeenCalled();
     });
 
-    it('should handle cancellation', async () => {
+    it("should handle cancellation", async () => {
       const input: TaskInput = {
-        mode: 'editor',
-        message: 'Task to cancel',
+        mode: "editor",
+        message: "Task to cancel",
         context: {},
       };
 
@@ -196,19 +196,19 @@ describe('Orchestrator End-to-End', () => {
 
       // Check session state
       const updatedSession = await orchestrator.getSession(session.id);
-      expect(updatedSession?.state).toBe('cancelled');
+      expect(updatedSession?.state).toBe("cancelled");
     });
 
-    it('should track multiple concurrent sessions', async () => {
+    it("should track multiple concurrent sessions", async () => {
       const input1: TaskInput = {
-        mode: 'editor',
-        message: 'Task 1',
+        mode: "editor",
+        message: "Task 1",
         context: {},
       };
 
       const input2: TaskInput = {
-        mode: 'editor',
-        message: 'Task 2',
+        mode: "editor",
+        message: "Task 2",
         context: {},
       };
 
@@ -226,16 +226,16 @@ describe('Orchestrator End-to-End', () => {
     });
   });
 
-  describe('Architect Mode Flow', () => {
-    it('should reach awaiting_approval state', async () => {
+  describe("Architect Mode Flow", () => {
+    it("should reach awaiting_approval state", async () => {
       const input: TaskInput = {
-        mode: 'architect',
-        message: 'Add authentication to the API',
-        context: { files: ['api.ts'] },
+        mode: "architect",
+        message: "Add authentication to the API",
+        context: { files: ["api.ts"] },
       };
 
       const session = await orchestrator.startTask(input);
-      
+
       // Subscribe to updates
       const updates: WorkflowUpdate[] = [];
       const subscription = orchestrator.subscribeToUpdates(session.id);
@@ -244,8 +244,8 @@ describe('Orchestrator End-to-End', () => {
       const updatePromise = (async () => {
         for await (const update of subscription) {
           updates.push(update);
-          
-          if (update.type === 'state_change' && update.data.state === 'awaiting_approval') {
+
+          if (update.type === "state_change" && update.data.state === "awaiting_approval") {
             break;
           }
         }
@@ -256,101 +256,101 @@ describe('Orchestrator End-to-End', () => {
 
       // Verify progression
       const researchUpdate = updates.find(
-        u => u.type === 'state_change' && u.data.state === 'researching'
+        (u) => u.type === "state_change" && u.data.state === "researching"
       );
       expect(researchUpdate).toBeDefined();
 
       const planningUpdate = updates.find(
-        u => u.type === 'state_change' && u.data.state === 'planning'
+        (u) => u.type === "state_change" && u.data.state === "planning"
       );
       expect(planningUpdate).toBeDefined();
 
       const approvalUpdate = updates.find(
-        u => u.type === 'state_change' && u.data.state === 'awaiting_approval'
+        (u) => u.type === "state_change" && u.data.state === "awaiting_approval"
       );
       expect(approvalUpdate).toBeDefined();
 
       // Should have plan
       const planProgress = updates.find(
-        u => u.type === 'progress' && u.data.phase === 'planning'
+        (u) => u.type === "progress" && u.data.phase === "planning"
       );
       expect(planProgress).toBeDefined();
       expect(planProgress?.data.plan).toBeDefined();
     });
 
-    it('should handle plan approval', async () => {
+    it("should handle plan approval", async () => {
       const input: TaskInput = {
-        mode: 'architect',
-        message: 'Implement feature',
+        mode: "architect",
+        message: "Implement feature",
         context: {},
       };
 
       const session = await orchestrator.startTask(input);
-      
+
       // Wait for awaiting_approval state
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       // Approve the plan
       await orchestrator.approveTask(session.id);
 
       // Verify plan status
       const updatedSession = await orchestrator.getSession(session.id);
-      expect(updatedSession?.plan?.status).toBe('approved');
+      expect(updatedSession?.plan?.status).toBe("approved");
       expect(updatedSession?.plan?.approvedAt).toBeDefined();
     });
 
-    it('should handle plan rejection', async () => {
+    it("should handle plan rejection", async () => {
       const input: TaskInput = {
-        mode: 'architect',
-        message: 'Implement feature',
+        mode: "architect",
+        message: "Implement feature",
         context: {},
       };
 
       const session = await orchestrator.startTask(input);
-      
+
       // Wait for awaiting_approval state
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       // Reject the plan
-      await orchestrator.rejectTask(session.id, 'Plan is incomplete');
+      await orchestrator.rejectTask(session.id, "Plan is incomplete");
 
       // Verify session state
       const updatedSession = await orchestrator.getSession(session.id);
-      expect(updatedSession?.state).toBe('cancelled');
-      expect(updatedSession?.plan?.status).toBe('rejected');
+      expect(updatedSession?.state).toBe("cancelled");
+      expect(updatedSession?.plan?.status).toBe("rejected");
       expect(updatedSession?.plan?.revisions?.length).toBe(1);
-      expect(updatedSession?.plan?.revisions?.[0].rejectedReason).toBe('Plan is incomplete');
+      expect(updatedSession?.plan?.revisions?.[0].rejectedReason).toBe("Plan is incomplete");
     });
 
-    it('should handle plan revision request', async () => {
+    it("should handle plan revision request", async () => {
       const input: TaskInput = {
-        mode: 'architect',
-        message: 'Implement feature',
+        mode: "architect",
+        message: "Implement feature",
         context: {},
       };
 
       const session = await orchestrator.startTask(input);
-      
+
       // Wait for awaiting_approval state
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       // Request revision
-      await orchestrator.revisePlan(session.id, 'Add error handling');
+      await orchestrator.revisePlan(session.id, "Add error handling");
 
       // Verify session state
       const updatedSession = await orchestrator.getSession(session.id);
-      expect(updatedSession?.state).toBe('plan_revision');
-      expect(updatedSession?.plan?.status).toBe('rejected');
+      expect(updatedSession?.state).toBe("plan_revision");
+      expect(updatedSession?.plan?.status).toBe("rejected");
       expect(updatedSession?.plan?.revisions?.length).toBe(1);
-      expect(updatedSession?.plan?.revisions?.[0].rejectedReason).toBe('Add error handling');
+      expect(updatedSession?.plan?.revisions?.[0].rejectedReason).toBe("Add error handling");
     });
   });
 
-  describe('State Persistence', () => {
-    it('should persist session on creation', async () => {
+  describe("State Persistence", () => {
+    it("should persist session on creation", async () => {
       const input: TaskInput = {
-        mode: 'editor',
-        message: 'Test persistence',
+        mode: "editor",
+        message: "Test persistence",
         context: {},
       };
 
@@ -359,32 +359,32 @@ describe('Orchestrator End-to-End', () => {
       expect(mockStateStore.saveSession).toHaveBeenCalled();
     });
 
-    it('should persist plan when generated', async () => {
+    it("should persist plan when generated", async () => {
       const input: TaskInput = {
-        mode: 'architect',
-        message: 'Generate plan',
+        mode: "architect",
+        message: "Generate plan",
         context: {},
       };
 
       const session = await orchestrator.startTask(input);
-      
+
       // Wait for plan to be generated
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       expect(mockStateStore.savePlan).toHaveBeenCalled();
     });
 
-    it('should persist session after approval', async () => {
+    it("should persist session after approval", async () => {
       const input: TaskInput = {
-        mode: 'architect',
-        message: 'Test approval persistence',
+        mode: "architect",
+        message: "Test approval persistence",
         context: {},
       };
 
       const session = await orchestrator.startTask(input);
-      
+
       // Wait for awaiting_approval
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       // Reset mock call count
       mockStateStore.saveSession.mockClear();
@@ -397,54 +397,54 @@ describe('Orchestrator End-to-End', () => {
     });
   });
 
-  describe('Error Handling', () => {
-    it('should handle workflow errors gracefully', async () => {
+  describe("Error Handling", () => {
+    it("should handle workflow errors gracefully", async () => {
       // Mock workflow to throw error
       mockEditorWorkflow.execute = mock(async function* () {
         yield {
-          type: 'state_change',
-          sessionId: 'test',
+          type: "state_change",
+          sessionId: "test",
           timestamp: new Date().toISOString(),
-          data: { state: 'executing' },
+          data: { state: "executing" },
         };
-        
-        throw new Error('Workflow execution failed');
+
+        throw new Error("Workflow execution failed");
       });
 
       const input: TaskInput = {
-        mode: 'editor',
-        message: 'This will fail',
+        mode: "editor",
+        message: "This will fail",
         context: {},
       };
 
       const session = await orchestrator.startTask(input);
-      
+
       // Wait for error to propagate
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Session should be in error state
       const updatedSession = await orchestrator.getSession(session.id);
-      expect(updatedSession?.state).toBe('error');
+      expect(updatedSession?.state).toBe("error");
     });
 
-    it('should throw error for invalid session operations', async () => {
+    it("should throw error for invalid session operations", async () => {
       await expect(async () => {
-        await orchestrator.approveTask('nonexistent-session');
-      }).toThrow('Session not found');
+        await orchestrator.approveTask("nonexistent-session");
+      }).toThrow("Session not found");
 
       await expect(async () => {
-        await orchestrator.rejectTask('nonexistent-session');
-      }).toThrow('Session not found');
+        await orchestrator.rejectTask("nonexistent-session");
+      }).toThrow("Session not found");
 
       await expect(async () => {
-        await orchestrator.cancelTask('nonexistent-session');
-      }).toThrow('Session not found');
+        await orchestrator.cancelTask("nonexistent-session");
+      }).toThrow("Session not found");
     });
 
-    it('should throw error for invalid state transitions', async () => {
+    it("should throw error for invalid state transitions", async () => {
       const input: TaskInput = {
-        mode: 'editor',
-        message: 'Test invalid transition',
+        mode: "editor",
+        message: "Test invalid transition",
         context: {},
       };
 
@@ -457,29 +457,29 @@ describe('Orchestrator End-to-End', () => {
     });
   });
 
-  describe('Phase Tracking', () => {
-    it('should correctly map states to phases', async () => {
+  describe("Phase Tracking", () => {
+    it("should correctly map states to phases", async () => {
       const input: TaskInput = {
-        mode: 'architect',
-        message: 'Track phases',
+        mode: "architect",
+        message: "Track phases",
         context: {},
       };
 
       const session = await orchestrator.startTask(input);
-      
+
       // Wait for researching state
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       const phase = await orchestrator.getCurrentPhase(session.id);
-      expect(['research', 'planning']).toContain(phase);
+      expect(["research", "planning"]).toContain(phase);
     });
   });
 
-  describe('Event Streaming', () => {
-    it('should stream all workflow events', async () => {
+  describe("Event Streaming", () => {
+    it("should stream all workflow events", async () => {
       const input: TaskInput = {
-        mode: 'editor',
-        message: 'Stream events',
+        mode: "editor",
+        message: "Stream events",
         context: {},
       };
 
@@ -487,11 +487,11 @@ describe('Orchestrator End-to-End', () => {
       const events: WorkflowUpdate[] = [];
 
       const subscription = orchestrator.subscribeToUpdates(session.id);
-      
+
       for await (const update of subscription) {
         events.push(update);
-        
-        if (update.type === 'state_change' && update.data.state === 'complete') {
+
+        if (update.type === "state_change" && update.data.state === "complete") {
           break;
         }
       }
@@ -500,11 +500,11 @@ describe('Orchestrator End-to-End', () => {
       expect(events.length).toBeGreaterThan(2);
 
       // Should have state changes
-      const stateChanges = events.filter(e => e.type === 'state_change');
+      const stateChanges = events.filter((e) => e.type === "state_change");
       expect(stateChanges.length).toBeGreaterThan(0);
 
       // Should have chunks
-      const chunks = events.filter(e => e.type === 'chunk');
+      const chunks = events.filter((e) => e.type === "chunk");
       expect(chunks.length).toBeGreaterThan(0);
     });
   });

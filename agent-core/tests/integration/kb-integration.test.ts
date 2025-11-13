@@ -1,21 +1,21 @@
 /**
  * Integration tests for Knowledge Bank integration
- * 
+ *
  * Tests semantic search, context assembly, and KB error handling
  */
 
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { ContextBuilder } from '../../src/context/context-builder';
-import type { ContextBuildParams, KBResult } from '../../src/types/index';
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { ContextBuilder } from "../../src/context/context-builder";
+import type { ContextBuildParams, KBResult } from "../../src/types/index";
 
-describe('Knowledge Bank Integration', () => {
+describe("Knowledge Bank Integration", () => {
   let contextBuilder: ContextBuilder;
   let originalFetch: typeof fetch;
 
   beforeEach(() => {
     contextBuilder = new ContextBuilder({
-      workspaceRoot: '/test/workspace',
-      kbUrl: 'http://localhost:7777',
+      workspaceRoot: "/test/workspace",
+      kbUrl: "http://localhost:7777",
     });
 
     // Save original fetch
@@ -27,31 +27,31 @@ describe('Knowledge Bank Integration', () => {
     global.fetch = originalFetch;
   });
 
-  describe('KB Search', () => {
-    it('should search KB successfully', async () => {
+  describe("KB Search", () => {
+    it("should search KB successfully", async () => {
       // Mock successful KB search
       global.fetch = mock(async (url: string) => {
-        if (url.includes('/v1/search')) {
+        if (url.includes("/v1/search")) {
           return {
             ok: true,
             json: async () => [
               {
-                file_path: 'src/utils.ts',
+                file_path: "src/utils.ts",
                 start_line: 10,
                 end_line: 25,
                 snippet_text: 'export function helper() {\n  return "test";\n}',
-                language: 'typescript',
+                language: "typescript",
                 score: 0.95,
-                chunk_id: 'chunk_123',
+                chunk_id: "chunk_123",
               },
               {
-                file_path: 'src/lib.ts',
+                file_path: "src/lib.ts",
                 start_line: 1,
                 end_line: 15,
                 snippet_text: 'import { helper } from "./utils";',
-                language: 'typescript',
+                language: "typescript",
                 score: 0.85,
-                chunk_id: 'chunk_456',
+                chunk_id: "chunk_456",
               },
             ],
           };
@@ -60,7 +60,7 @@ describe('Knowledge Bank Integration', () => {
       }) as any;
 
       const params: ContextBuildParams = {
-        searchQuery: 'helper function',
+        searchQuery: "helper function",
         files: [],
         maxTokens: 10000,
       };
@@ -68,19 +68,19 @@ describe('Knowledge Bank Integration', () => {
       const context = await contextBuilder.build(params);
 
       expect(context.kbResults.length).toBe(2);
-      expect(context.kbResults[0].file).toBe('src/utils.ts');
+      expect(context.kbResults[0].file).toBe("src/utils.ts");
       expect(context.kbResults[0].score).toBe(0.95);
-      expect(context.kbResults[0].language).toBe('typescript');
+      expect(context.kbResults[0].language).toBe("typescript");
     });
 
-    it('should handle KB unavailable gracefully', async () => {
+    it("should handle KB unavailable gracefully", async () => {
       // Mock KB failure
       global.fetch = mock(async () => {
-        throw new Error('Connection refused');
+        throw new Error("Connection refused");
       }) as any;
 
       const params: ContextBuildParams = {
-        searchQuery: 'test query',
+        searchQuery: "test query",
         files: [],
         maxTokens: 10000,
       };
@@ -92,15 +92,15 @@ describe('Knowledge Bank Integration', () => {
       expect(context.truncated).toBe(false);
     });
 
-    it('should handle KB HTTP errors', async () => {
+    it("should handle KB HTTP errors", async () => {
       // Mock HTTP error
       global.fetch = mock(async () => ({
         ok: false,
-        statusText: 'Internal Server Error',
+        statusText: "Internal Server Error",
       })) as any;
 
       const params: ContextBuildParams = {
-        searchQuery: 'test query',
+        searchQuery: "test query",
         files: [],
         maxTokens: 10000,
       };
@@ -111,17 +111,17 @@ describe('Knowledge Bank Integration', () => {
       expect(context.kbResults.length).toBe(0);
     });
 
-    it('should handle malformed KB responses', async () => {
+    it("should handle malformed KB responses", async () => {
       // Mock malformed response
       global.fetch = mock(async () => ({
         ok: true,
         json: async () => {
-          throw new Error('Invalid JSON');
+          throw new Error("Invalid JSON");
         },
       })) as any;
 
       const params: ContextBuildParams = {
-        searchQuery: 'test query',
+        searchQuery: "test query",
         files: [],
         maxTokens: 10000,
       };
@@ -133,27 +133,27 @@ describe('Knowledge Bank Integration', () => {
     });
   });
 
-  describe('Context Assembly', () => {
-    it('should combine KB results and files', async () => {
+  describe("Context Assembly", () => {
+    it("should combine KB results and files", async () => {
       // Mock KB search
       global.fetch = mock(async () => ({
         ok: true,
         json: async () => [
           {
-            file_path: 'kb-result.ts',
+            file_path: "kb-result.ts",
             start_line: 1,
             end_line: 10,
-            snippet_text: 'KB content',
-            language: 'typescript',
+            snippet_text: "KB content",
+            language: "typescript",
             score: 0.9,
-            chunk_id: 'chunk_1',
+            chunk_id: "chunk_1",
           },
         ],
       })) as any;
 
       const params: ContextBuildParams = {
-        searchQuery: 'test',
-        files: ['explicit-file.ts'],
+        searchQuery: "test",
+        files: ["explicit-file.ts"],
         maxTokens: 10000,
       };
 
@@ -164,24 +164,24 @@ describe('Knowledge Bank Integration', () => {
       expect(context.files.length).toBeGreaterThanOrEqual(0); // May fail to load file in test
     });
 
-    it('should track total tokens', async () => {
+    it("should track total tokens", async () => {
       global.fetch = mock(async () => ({
         ok: true,
         json: async () => [
           {
-            file_path: 'test.ts',
+            file_path: "test.ts",
             start_line: 1,
             end_line: 50,
-            snippet_text: 'x'.repeat(1000), // ~250 tokens
-            language: 'typescript',
+            snippet_text: "x".repeat(1000), // ~250 tokens
+            language: "typescript",
             score: 0.9,
-            chunk_id: 'chunk_1',
+            chunk_id: "chunk_1",
           },
         ],
       })) as any;
 
       const params: ContextBuildParams = {
-        searchQuery: 'test',
+        searchQuery: "test",
         files: [],
         maxTokens: 10000,
       };
@@ -192,24 +192,25 @@ describe('Knowledge Bank Integration', () => {
     });
   });
 
-  describe('Token Management', () => {
-    it('should truncate context when exceeding token limit', async () => {
+  describe("Token Management", () => {
+    it("should truncate context when exceeding token limit", async () => {
       // Mock large KB results
       global.fetch = mock(async () => ({
         ok: true,
-        json: async () => Array(100).fill({
-          file_path: 'large.ts',
-          start_line: 1,
-          end_line: 100,
-          snippet_text: 'x'.repeat(1000), // ~250 tokens each
-          language: 'typescript',
-          score: 0.9,
-          chunk_id: 'chunk_1',
-        }),
+        json: async () =>
+          Array(100).fill({
+            file_path: "large.ts",
+            start_line: 1,
+            end_line: 100,
+            snippet_text: "x".repeat(1000), // ~250 tokens each
+            language: "typescript",
+            score: 0.9,
+            chunk_id: "chunk_1",
+          }),
       })) as any;
 
       const params: ContextBuildParams = {
-        searchQuery: 'test',
+        searchQuery: "test",
         files: [],
         maxTokens: 5000, // Much less than total
       };
@@ -222,23 +223,24 @@ describe('Knowledge Bank Integration', () => {
       expect(context.kbResults.length).toBeLessThan(100);
     });
 
-    it('should prioritize explicit files over KB results', async () => {
+    it("should prioritize explicit files over KB results", async () => {
       global.fetch = mock(async () => ({
         ok: true,
-        json: async () => Array(50).fill({
-          file_path: 'kb.ts',
-          start_line: 1,
-          end_line: 100,
-          snippet_text: 'x'.repeat(1000),
-          language: 'typescript',
-          score: 0.9,
-          chunk_id: 'chunk_1',
-        }),
+        json: async () =>
+          Array(50).fill({
+            file_path: "kb.ts",
+            start_line: 1,
+            end_line: 100,
+            snippet_text: "x".repeat(1000),
+            language: "typescript",
+            score: 0.9,
+            chunk_id: "chunk_1",
+          }),
       })) as any;
 
       const params: ContextBuildParams = {
-        searchQuery: 'test',
-        files: ['important.ts'], // Explicit file
+        searchQuery: "test",
+        files: ["important.ts"], // Explicit file
         maxTokens: 1000, // Very limited
       };
 
@@ -250,42 +252,42 @@ describe('Knowledge Bank Integration', () => {
       expect(context.kbResults.length).toBeLessThan(50);
     });
 
-    it('should sort KB results by score', async () => {
+    it("should sort KB results by score", async () => {
       global.fetch = mock(async () => ({
         ok: true,
         json: async () => [
           {
-            file_path: 'low.ts',
+            file_path: "low.ts",
             start_line: 1,
             end_line: 10,
-            snippet_text: 'content',
-            language: 'typescript',
+            snippet_text: "content",
+            language: "typescript",
             score: 0.5,
-            chunk_id: 'chunk_1',
+            chunk_id: "chunk_1",
           },
           {
-            file_path: 'high.ts',
+            file_path: "high.ts",
             start_line: 1,
             end_line: 10,
-            snippet_text: 'content',
-            language: 'typescript',
+            snippet_text: "content",
+            language: "typescript",
             score: 0.95,
-            chunk_id: 'chunk_2',
+            chunk_id: "chunk_2",
           },
           {
-            file_path: 'medium.ts',
+            file_path: "medium.ts",
             start_line: 1,
             end_line: 10,
-            snippet_text: 'content',
-            language: 'typescript',
+            snippet_text: "content",
+            language: "typescript",
             score: 0.7,
-            chunk_id: 'chunk_3',
+            chunk_id: "chunk_3",
           },
         ],
       })) as any;
 
       const params: ContextBuildParams = {
-        searchQuery: 'test',
+        searchQuery: "test",
         files: [],
         maxTokens: 500, // Limited, will need to truncate
       };
@@ -299,61 +301,61 @@ describe('Knowledge Bank Integration', () => {
     });
   });
 
-  describe('Language Detection', () => {
-    it('should detect language from file extensions', async () => {
+  describe("Language Detection", () => {
+    it("should detect language from file extensions", async () => {
       global.fetch = mock(async () => ({
         ok: true,
         json: async () => [
           {
-            file_path: 'test.ts',
+            file_path: "test.ts",
             start_line: 1,
             end_line: 10,
-            snippet_text: 'code',
-            language: 'typescript',
+            snippet_text: "code",
+            language: "typescript",
             score: 0.9,
-            chunk_id: 'chunk_1',
+            chunk_id: "chunk_1",
           },
           {
-            file_path: 'script.py',
+            file_path: "script.py",
             start_line: 1,
             end_line: 10,
-            snippet_text: 'code',
-            language: 'python',
+            snippet_text: "code",
+            language: "python",
             score: 0.9,
-            chunk_id: 'chunk_2',
+            chunk_id: "chunk_2",
           },
         ],
       })) as any;
 
       const params: ContextBuildParams = {
-        searchQuery: 'test',
+        searchQuery: "test",
         files: [],
         maxTokens: 10000,
       };
 
       const context = await contextBuilder.build(params);
 
-      expect(context.kbResults[0].language).toBe('typescript');
-      expect(context.kbResults[1].language).toBe('python');
+      expect(context.kbResults[0].language).toBe("typescript");
+      expect(context.kbResults[1].language).toBe("python");
     });
   });
 
-  describe('Performance', () => {
-    it('should complete search within reasonable time', async () => {
+  describe("Performance", () => {
+    it("should complete search within reasonable time", async () => {
       global.fetch = mock(async () => {
         // Simulate network delay
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
         return {
           ok: true,
           json: async () => [
             {
-              file_path: 'test.ts',
+              file_path: "test.ts",
               start_line: 1,
               end_line: 10,
-              snippet_text: 'content',
-              language: 'typescript',
+              snippet_text: "content",
+              language: "typescript",
               score: 0.9,
-              chunk_id: 'chunk_1',
+              chunk_id: "chunk_1",
             },
           ],
         };
@@ -362,7 +364,7 @@ describe('Knowledge Bank Integration', () => {
       const startTime = Date.now();
 
       const params: ContextBuildParams = {
-        searchQuery: 'test',
+        searchQuery: "test",
         files: [],
         maxTokens: 10000,
       };
@@ -376,15 +378,15 @@ describe('Knowledge Bank Integration', () => {
     });
   });
 
-  describe('Edge Cases', () => {
-    it('should handle empty search results', async () => {
+  describe("Edge Cases", () => {
+    it("should handle empty search results", async () => {
       global.fetch = mock(async () => ({
         ok: true,
         json: async () => [],
       })) as any;
 
       const params: ContextBuildParams = {
-        searchQuery: 'nonexistent',
+        searchQuery: "nonexistent",
         files: [],
         maxTokens: 10000,
       };
@@ -396,9 +398,9 @@ describe('Knowledge Bank Integration', () => {
       expect(context.truncated).toBe(false);
     });
 
-    it('should handle missing searchQuery', async () => {
+    it("should handle missing searchQuery", async () => {
       const params: ContextBuildParams = {
-        files: ['test.ts'],
+        files: ["test.ts"],
         maxTokens: 10000,
       };
 
@@ -408,24 +410,24 @@ describe('Knowledge Bank Integration', () => {
       expect(context.kbResults.length).toBe(0);
     });
 
-    it('should handle zero token limit', async () => {
+    it("should handle zero token limit", async () => {
       global.fetch = mock(async () => ({
         ok: true,
         json: async () => [
           {
-            file_path: 'test.ts',
+            file_path: "test.ts",
             start_line: 1,
             end_line: 10,
-            snippet_text: 'content',
-            language: 'typescript',
+            snippet_text: "content",
+            language: "typescript",
             score: 0.9,
-            chunk_id: 'chunk_1',
+            chunk_id: "chunk_1",
           },
         ],
       })) as any;
 
       const params: ContextBuildParams = {
-        searchQuery: 'test',
+        searchQuery: "test",
         files: [],
         maxTokens: 0,
       };

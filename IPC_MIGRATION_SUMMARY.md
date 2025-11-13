@@ -5,12 +5,14 @@
 ### 1. ✅ Migrated to `vscode-jsonrpc` (Short-term Improvement)
 
 **Before:**
+
 - Custom Content-Length parsing (~200 lines of code in `agent-core/src/main.ts`)
 - Manual buffer management and framing
 - Custom write queue implementation
 - Potential edge cases and bugs
 
 **After:**
+
 - Industry-standard `vscode-jsonrpc` library (used by LSP, VSCode)
 - Battle-tested message framing
 - Built-in backpressure handling
@@ -18,6 +20,7 @@
 - **Reduced codebase by ~300 lines**
 
 **Files Changed:**
+
 - `agent-core/src/main.ts`: Replaced custom parsing with IPCTransport
 - `shared/package.json`: Added `vscode-jsonrpc` and `msgpack5` dependencies
 
@@ -35,6 +38,7 @@ shared/ipc/
 ```
 
 **Key Features:**
+
 - **Pluggable serializers**: Switch between JSON and MessagePack via env var
 - **Security hardening**: Max payload size, buffer limits, request throttling
 - **Performance monitoring**: Built-in metrics collection
@@ -49,6 +53,7 @@ export DOLPHIN_IPC_FORMAT=msgpack
 ```
 
 **Performance Gains:**
+
 - 2-3x faster serialization/deserialization
 - 30% smaller payloads
 - Better throughput (6,500 → 15,000 msg/s for 1KB messages)
@@ -57,12 +62,12 @@ export DOLPHIN_IPC_FORMAT=msgpack
 
 **Added Protection Against:**
 
-| Threat | Mitigation |
-|--------|------------|
-| Memory exhaustion | `maxMessageSize: 100 MB` |
-| Buffer overflow | `maxBufferSize: 50 MB` |
+| Threat              | Mitigation                 |
+| ------------------- | -------------------------- |
+| Memory exhaustion   | `maxMessageSize: 100 MB`   |
+| Buffer overflow     | `maxBufferSize: 50 MB`     |
 | Resource exhaustion | `maxPendingRequests: 1000` |
-| DoS attacks | Request throttling |
+| DoS attacks         | Request throttling         |
 
 ### 5. ✅ Created Comprehensive Documentation
 
@@ -75,28 +80,31 @@ export DOLPHIN_IPC_FORMAT=msgpack
 ## Benefits Summary
 
 ### Security ✅
-| Before | After |
-|--------|-------|
-| No payload limits | ✅ 100 MB max message size |
-| No buffer limits | ✅ 50 MB max buffer size |
-| Unbounded requests | ✅ 1000 max concurrent requests |
+
+| Before                  | After                             |
+| ----------------------- | --------------------------------- |
+| No payload limits       | ✅ 100 MB max message size        |
+| No buffer limits        | ✅ 50 MB max buffer size          |
+| Unbounded requests      | ✅ 1000 max concurrent requests   |
 | No parameter validation | ⚠️ Can add Zod schemas (optional) |
 
 ### Speed ✅
-| Metric | Before | After (JSON) | After (MessagePack) |
-|--------|--------|--------------|---------------------|
-| Latency (1KB) | ~0.3 ms | ~0.3 ms | **~0.1 ms** (3x faster) |
-| Throughput | ~6,000 msg/s | ~6,500 msg/s | **~15,000 msg/s** (2.3x faster) |
-| Payload size | 1024 B | 1024 B | **715 B** (30% smaller) |
+
+| Metric        | Before       | After (JSON) | After (MessagePack)             |
+| ------------- | ------------ | ------------ | ------------------------------- |
+| Latency (1KB) | ~0.3 ms      | ~0.3 ms      | **~0.1 ms** (3x faster)         |
+| Throughput    | ~6,000 msg/s | ~6,500 msg/s | **~15,000 msg/s** (2.3x faster) |
+| Payload size  | 1024 B       | 1024 B       | **715 B** (30% smaller)         |
 
 ### Reliability ✅
-| Feature | Before | After |
-|---------|--------|-------|
-| Message framing | Custom (bug-prone) | ✅ LSP-standard (battle-tested) |
-| Backpressure | Manual | ✅ Built-in |
-| Error recovery | Basic | ✅ Graceful degradation |
-| Pending request cleanup | Manual | ✅ Automatic on dispose |
-| Write queue | Custom | ✅ Built-in to vscode-jsonrpc |
+
+| Feature                 | Before             | After                           |
+| ----------------------- | ------------------ | ------------------------------- |
+| Message framing         | Custom (bug-prone) | ✅ LSP-standard (battle-tested) |
+| Backpressure            | Manual             | ✅ Built-in                     |
+| Error recovery          | Basic              | ✅ Graceful degradation         |
+| Pending request cleanup | Manual             | ✅ Automatic on dispose         |
+| Write queue             | Custom             | ✅ Built-in to vscode-jsonrpc   |
 
 ---
 
@@ -161,12 +169,14 @@ MessagePack 1.0 KB      1000        0.051 ms      0.042 ms      0.093 ms      71
 ## Recommendations
 
 ### When to Use JSON
+
 - ✅ Development and debugging (human-readable)
 - ✅ Small messages (< 1 KB)
 - ✅ Low-frequency communication (< 100 msg/s)
 - ✅ Need to inspect traffic with simple tools
 
 ### When to Use MessagePack
+
 - ✅ Production deployment (better performance)
 - ✅ Large messages (> 10 KB)
 - ✅ High-frequency communication (> 100 msg/s)
@@ -174,6 +184,7 @@ MessagePack 1.0 KB      1000        0.051 ms      0.042 ms      0.093 ms      71
 - ✅ Battery/CPU efficiency is important
 
 ### Security Best Practices
+
 1. **Always set payload limits** based on your use case
 2. **Monitor pending request count** to detect issues early
 3. **Add parameter validation** for untrusted inputs (use Zod schemas)
@@ -206,18 +217,21 @@ Currently uses JSONL (newline-delimited JSON). Options:
 ## Future Enhancements
 
 ### Short-term (1-2 weeks)
+
 - [ ] Migrate agent-core-v2 to IPCTransport
 - [ ] Add unit tests for new IPC layer
 - [ ] Add integration tests (end-to-end)
 - [ ] Add Zod schema validation for method parameters
 
 ### Medium-term (1-2 months)
+
 - [ ] Add heartbeat mechanism (detect dead processes)
 - [ ] Add circuit breaker for auto-restart
 - [ ] Add structured logging with levels
 - [ ] Add IPC traffic monitoring dashboard
 
 ### Long-term (3-6 months)
+
 - [ ] Protocol negotiation (auto-select best format)
 - [ ] Compression support (gzip, brotli)
 - [ ] Protocol Buffers serialization
@@ -245,6 +259,7 @@ bun run src/main.ts /path/to/workspace
 ```
 
 Should see:
+
 ```
 [Agent Core] Ready and listening on stdin (using msgpack serialization)
 ```
@@ -256,11 +271,13 @@ Should see:
 If issues are encountered:
 
 1. **Revert agent-core changes:**
+
    ```bash
    git checkout HEAD~1 agent-core/src/main.ts
    ```
 
 2. **Rebuild:**
+
    ```bash
    cd agent-core && npm run build
    ```
@@ -281,7 +298,7 @@ const transport = new IPCTransport({
 });
 
 // Check pending requests
-console.log('Pending:', transport.getPendingRequestCount());
+console.log("Pending:", transport.getPendingRequestCount());
 ```
 
 ### Monitor in Production
@@ -331,6 +348,7 @@ A: MessagePack overhead is only worth it for payloads > 1 KB
 - Backward-compatible (no breaking changes)
 
 **Next Steps:**
+
 1. Test in development environment
 2. Run benchmarks to verify performance
 3. Enable MessagePack for production (optional)

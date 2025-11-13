@@ -5,37 +5,33 @@
  * with real-world scenarios and edge cases.
  */
 
-import { describe, test, expect, beforeEach, afterAll } from 'bun:test';
-import { Orchestrator } from '../../src/orchestrator/orchestrator';
-import { ArchitectWorkflow } from '../../src/workflows/architect-workflow';
-import { EditorWorkflow } from '../../src/workflows/editor-workflow';
-import { StateStore } from '../../src/state/state-store';
-import { ContextBuilder } from '../../src/context/context-builder';
-import { PromptBuilder } from '../../src/prompts/prompt-builder';
-import type {
-  TaskInput,
-  TaskSession,
-  WorkflowUpdate,
-} from '../../src/types/index';
-import { mkdtemp, rm } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { describe, test, expect, beforeEach, afterAll } from "bun:test";
+import { Orchestrator } from "../../src/orchestrator/orchestrator";
+import { ArchitectWorkflow } from "../../src/workflows/architect-workflow";
+import { EditorWorkflow } from "../../src/workflows/editor-workflow";
+import { StateStore } from "../../src/state/state-store";
+import { ContextBuilder } from "../../src/context/context-builder";
+import { PromptBuilder } from "../../src/prompts/prompt-builder";
+import type { TaskInput, TaskSession, WorkflowUpdate } from "../../src/types/index";
+import { mkdtemp, rm } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
 
 // Comprehensive mock Claude provider
 class E2EMockClaudeProvider {
   private scenario: string;
 
-  constructor(scenario: string = 'happy_path') {
+  constructor(scenario: string = "happy_path") {
     this.scenario = scenario;
   }
 
   async *execute(params: any) {
     const { model } = params;
 
-    let response = '';
+    let response = "";
 
-    if (this.scenario === 'happy_path') {
-      if (model === 'claude-haiku-4-20250514') {
+    if (this.scenario === "happy_path") {
+      if (model === "claude-haiku-4-20250514") {
         response = `# Research Findings
 
 ## Codebase Architecture
@@ -57,8 +53,7 @@ The application uses a standard Express.js architecture with the following key c
 - src/middleware/auth.ts - Authentication middleware
 - src/routes/auth.ts - Auth endpoints (login, register, refresh)
 - src/models/user.ts - User model and validation`;
-
-      } else if (model === 'claude-sonnet-4-20250514') {
+      } else if (model === "claude-sonnet-4-20250514") {
         response = `I've reviewed the research findings and have a good understanding of the current authentication system.
 
 I have a few clarifying questions to ensure the implementation meets your needs:
@@ -73,8 +68,7 @@ Based on typical security best practices, I recommend:
 - Architecture that supports 2FA addition later
 
 If you're comfortable with these defaults, I'm [READY_TO_PLAN]`;
-
-      } else if (model === 'claude-opus-4-20250514') {
+      } else if (model === "claude-opus-4-20250514") {
         response = `## Overview
 
 Enhance the authentication system with rate limiting, improved token management, and security hardening. The implementation will extend the existing JWT-based auth system while maintaining backward compatibility.
@@ -201,37 +195,37 @@ If issues arise:
 - Token rotation preventing reuse attacks
 - Response times under 100ms for auth endpoints`;
       }
-    } else if (this.scenario === 'needs_multiple_clarifications') {
-      if (model === 'claude-haiku-4-20250514') {
-        response = 'Basic research findings about authentication system.';
-      } else if (model === 'claude-sonnet-4-20250514') {
+    } else if (this.scenario === "needs_multiple_clarifications") {
+      if (model === "claude-haiku-4-20250514") {
+        response = "Basic research findings about authentication system.";
+      } else if (model === "claude-sonnet-4-20250514") {
         // First clarification turn
         response = `I need to understand a few things:
 
 1. What specific security vulnerability are we addressing?
 2. What is the current authentication method?`;
       }
-    } else if (this.scenario === 'max_turns_reached') {
-      if (model === 'claude-haiku-4-20250514') {
-        response = 'Research complete';
-      } else if (model === 'claude-sonnet-4-20250514') {
+    } else if (this.scenario === "max_turns_reached") {
+      if (model === "claude-haiku-4-20250514") {
+        response = "Research complete";
+      } else if (model === "claude-sonnet-4-20250514") {
         // Never sends [READY_TO_PLAN], forcing max turns
-        response = 'I have some more questions about the implementation...';
-      } else if (model === 'claude-opus-4-20250514') {
-        response = '## Plan\nImplementation details based on available information.';
+        response = "I have some more questions about the implementation...";
+      } else if (model === "claude-opus-4-20250514") {
+        response = "## Plan\nImplementation details based on available information.";
       }
     }
 
     for (const char of response) {
       yield {
-        type: 'text' as const,
+        type: "text" as const,
         content: char,
       };
     }
   }
 }
 
-describe('ArchitectWorkflow E2E', () => {
+describe("ArchitectWorkflow E2E", () => {
   let tempDir: string;
   let stateStore: StateStore;
   let orchestrator: Orchestrator;
@@ -239,19 +233,19 @@ describe('ArchitectWorkflow E2E', () => {
 
   beforeEach(async () => {
     // Create temporary directory for state storage
-    tempDir = await mkdtemp(join(tmpdir(), 'dolphin-test-'));
+    tempDir = await mkdtemp(join(tmpdir(), "dolphin-test-"));
     tempDirs.push(tempDir);
 
     stateStore = new StateStore({
-      storagePath: join(tempDir, '.dolphin'),
+      storagePath: join(tempDir, ".dolphin"),
     });
   });
 
-  const createOrchestrator = (scenario: string = 'happy_path') => {
+  const createOrchestrator = (scenario: string = "happy_path") => {
     const claudeProvider = new E2EMockClaudeProvider(scenario);
     const contextBuilder = new ContextBuilder({
       workspaceRoot: tempDir,
-      kbUrl: 'http://localhost:7777',
+      kbUrl: "http://localhost:7777",
     });
     const promptBuilder = new PromptBuilder();
 
@@ -276,22 +270,22 @@ describe('ArchitectWorkflow E2E', () => {
     });
   };
 
-  describe('Happy Path Flow', () => {
-    test('should complete full workflow from research to plan approval', async () => {
-      orchestrator = createOrchestrator('happy_path');
+  describe("Happy Path Flow", () => {
+    test("should complete full workflow from research to plan approval", async () => {
+      orchestrator = createOrchestrator("happy_path");
 
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Enhance authentication system with rate limiting and token rotation',
+        mode: "architect",
+        message: "Enhance authentication system with rate limiting and token rotation",
         context: {
-          files: ['src/auth/jwt.ts', 'src/middleware/auth.ts'],
+          files: ["src/auth/jwt.ts", "src/middleware/auth.ts"],
         },
       };
 
       const session = await orchestrator.startTask(taskInput);
       expect(session.id).toBeDefined();
-      expect(session.mode).toBe('architect');
-      expect(session.state).toBe('idle');
+      expect(session.mode).toBe("architect");
+      expect(session.state).toBe("idle");
 
       const phases: string[] = [];
       const states: string[] = [];
@@ -299,12 +293,12 @@ describe('ArchitectWorkflow E2E', () => {
 
       // Subscribe to updates
       for await (const update of orchestrator.subscribeToUpdates(session.id)) {
-        if (update.type === 'state_change') {
+        if (update.type === "state_change") {
           states.push(update.data.state);
           console.error(`State: ${update.data.state}`);
         }
 
-        if (update.type === 'progress') {
+        if (update.type === "progress") {
           if (update.data.phase && !phases.includes(update.data.phase)) {
             phases.push(update.data.phase);
             console.error(`Phase: ${update.data.phase}`);
@@ -312,45 +306,45 @@ describe('ArchitectWorkflow E2E', () => {
         }
 
         // Stop at awaiting_approval
-        if (update.type === 'state_change' && update.data.state === 'awaiting_approval') {
+        if (update.type === "state_change" && update.data.state === "awaiting_approval") {
           break;
         }
       }
 
       // Verify complete flow
-      expect(states).toContain('researching');
-      expect(states).toContain('clarifying');
-      expect(states).toContain('planning');
-      expect(states).toContain('awaiting_approval');
+      expect(states).toContain("researching");
+      expect(states).toContain("clarifying");
+      expect(states).toContain("planning");
+      expect(states).toContain("awaiting_approval");
 
-      expect(phases).toContain('research');
-      expect(phases).toContain('clarification');
-      expect(phases).toContain('planning');
+      expect(phases).toContain("research");
+      expect(phases).toContain("clarification");
+      expect(phases).toContain("planning");
 
       // Check final session state
       finalSession = await orchestrator.getSession(session.id);
-      expect(finalSession?.state).toBe('awaiting_approval');
+      expect(finalSession?.state).toBe("awaiting_approval");
       expect(finalSession?.research).toBeDefined();
       expect(finalSession?.clarification).toBeDefined();
       expect(finalSession?.plan).toBeDefined();
 
       // Verify plan content
       const plan = finalSession?.plan;
-      expect(plan?.status).toBe('pending_approval');
+      expect(plan?.status).toBe("pending_approval");
       expect(plan?.filesToModify?.length).toBeGreaterThan(0);
       expect(plan?.filesToCreate?.length).toBeGreaterThan(0);
       expect(plan?.steps?.length).toBeGreaterThan(0);
-      expect(plan?.complexity).toBe('medium');
-      expect(plan?.content).toContain('rate limiting');
-      expect(plan?.content).toContain('token rotation');
+      expect(plan?.complexity).toBe("medium");
+      expect(plan?.content).toContain("rate limiting");
+      expect(plan?.content).toContain("token rotation");
     });
 
-    test('should persist session state through workflow', async () => {
-      orchestrator = createOrchestrator('happy_path');
+    test("should persist session state through workflow", async () => {
+      orchestrator = createOrchestrator("happy_path");
 
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Add 2FA authentication',
+        mode: "architect",
+        message: "Add 2FA authentication",
         context: {},
       };
 
@@ -358,7 +352,7 @@ describe('ArchitectWorkflow E2E', () => {
 
       // Collect updates until planning completes
       for await (const update of orchestrator.subscribeToUpdates(session.id)) {
-        if (update.type === 'state_change' && update.data.state === 'awaiting_approval') {
+        if (update.type === "state_change" && update.data.state === "awaiting_approval") {
           break;
         }
       }
@@ -377,13 +371,13 @@ describe('ArchitectWorkflow E2E', () => {
     });
   });
 
-  describe('Clarification Scenarios', () => {
-    test('should handle immediate [READY_TO_PLAN] signal', async () => {
-      orchestrator = createOrchestrator('happy_path');
+  describe("Clarification Scenarios", () => {
+    test("should handle immediate [READY_TO_PLAN] signal", async () => {
+      orchestrator = createOrchestrator("happy_path");
 
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Simple authentication fix',
+        mode: "architect",
+        message: "Simple authentication fix",
         context: {},
       };
 
@@ -391,13 +385,15 @@ describe('ArchitectWorkflow E2E', () => {
       let clarificationTurns = 0;
 
       for await (const update of orchestrator.subscribeToUpdates(session.id)) {
-        if (update.type === 'progress' &&
-            update.data.phase === 'clarification' &&
-            update.data.message?.includes('turn')) {
+        if (
+          update.type === "progress" &&
+          update.data.phase === "clarification" &&
+          update.data.message?.includes("turn")
+        ) {
           clarificationTurns++;
         }
 
-        if (update.type === 'state_change' && update.data.state === 'awaiting_approval') {
+        if (update.type === "state_change" && update.data.state === "awaiting_approval") {
           break;
         }
       }
@@ -406,12 +402,12 @@ describe('ArchitectWorkflow E2E', () => {
       expect(clarificationTurns).toBeLessThanOrEqual(1);
     });
 
-    test('should enforce max clarification turns', async () => {
-      orchestrator = createOrchestrator('max_turns_reached');
+    test("should enforce max clarification turns", async () => {
+      orchestrator = createOrchestrator("max_turns_reached");
 
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Complex multi-system integration',
+        mode: "architect",
+        message: "Complex multi-system integration",
         context: {},
       };
 
@@ -420,17 +416,19 @@ describe('ArchitectWorkflow E2E', () => {
       let reachedPlanning = false;
 
       for await (const update of orchestrator.subscribeToUpdates(session.id)) {
-        if (update.type === 'progress' &&
-            update.data.phase === 'clarification' &&
-            update.data.message?.includes('turn')) {
+        if (
+          update.type === "progress" &&
+          update.data.phase === "clarification" &&
+          update.data.message?.includes("turn")
+        ) {
           clarificationTurns++;
         }
 
-        if (update.type === 'state_change' && update.data.state === 'planning') {
+        if (update.type === "state_change" && update.data.state === "planning") {
           reachedPlanning = true;
         }
 
-        if (update.type === 'state_change' && update.data.state === 'awaiting_approval') {
+        if (update.type === "state_change" && update.data.state === "awaiting_approval") {
           break;
         }
       }
@@ -441,13 +439,13 @@ describe('ArchitectWorkflow E2E', () => {
     });
   });
 
-  describe('Plan Management', () => {
-    test('should approve plan and transition to complete', async () => {
-      orchestrator = createOrchestrator('happy_path');
+  describe("Plan Management", () => {
+    test("should approve plan and transition to complete", async () => {
+      orchestrator = createOrchestrator("happy_path");
 
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Add authentication',
+        mode: "architect",
+        message: "Add authentication",
         context: {},
       };
 
@@ -455,7 +453,7 @@ describe('ArchitectWorkflow E2E', () => {
 
       // Wait for awaiting_approval
       for await (const update of orchestrator.subscribeToUpdates(session.id)) {
-        if (update.type === 'state_change' && update.data.state === 'awaiting_approval') {
+        if (update.type === "state_change" && update.data.state === "awaiting_approval") {
           break;
         }
       }
@@ -464,16 +462,16 @@ describe('ArchitectWorkflow E2E', () => {
       await orchestrator.approveTask(session.id);
 
       const approvedSession = await orchestrator.getSession(session.id);
-      expect(approvedSession?.plan?.status).toBe('approved');
+      expect(approvedSession?.plan?.status).toBe("approved");
       expect(approvedSession?.plan?.approvedAt).toBeDefined();
     });
 
-    test('should reject plan and transition to cancelled', async () => {
-      orchestrator = createOrchestrator('happy_path');
+    test("should reject plan and transition to cancelled", async () => {
+      orchestrator = createOrchestrator("happy_path");
 
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Add feature',
+        mode: "architect",
+        message: "Add feature",
         context: {},
       };
 
@@ -481,25 +479,25 @@ describe('ArchitectWorkflow E2E', () => {
 
       // Wait for awaiting_approval
       for await (const update of orchestrator.subscribeToUpdates(session.id)) {
-        if (update.type === 'state_change' && update.data.state === 'awaiting_approval') {
+        if (update.type === "state_change" && update.data.state === "awaiting_approval") {
           break;
         }
       }
 
       // Reject the plan
-      await orchestrator.rejectTask(session.id, 'Plan needs more detail');
+      await orchestrator.rejectTask(session.id, "Plan needs more detail");
 
       const rejectedSession = await orchestrator.getSession(session.id);
-      expect(rejectedSession?.state).toBe('cancelled');
-      expect(rejectedSession?.plan?.status).toBe('rejected');
+      expect(rejectedSession?.state).toBe("cancelled");
+      expect(rejectedSession?.plan?.status).toBe("rejected");
     });
 
-    test('should request plan revision', async () => {
-      orchestrator = createOrchestrator('happy_path');
+    test("should request plan revision", async () => {
+      orchestrator = createOrchestrator("happy_path");
 
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Add feature',
+        mode: "architect",
+        message: "Add feature",
         context: {},
       };
 
@@ -507,38 +505,35 @@ describe('ArchitectWorkflow E2E', () => {
 
       // Wait for awaiting_approval
       for await (const update of orchestrator.subscribeToUpdates(session.id)) {
-        if (update.type === 'state_change' && update.data.state === 'awaiting_approval') {
+        if (update.type === "state_change" && update.data.state === "awaiting_approval") {
           break;
         }
       }
 
       // Request revision
-      await orchestrator.revisePlan(
-        session.id,
-        'Please add more detail about error handling'
-      );
+      await orchestrator.revisePlan(session.id, "Please add more detail about error handling");
 
       const revisedSession = await orchestrator.getSession(session.id);
-      expect(revisedSession?.state).toBe('plan_revision');
+      expect(revisedSession?.state).toBe("plan_revision");
       expect(revisedSession?.plan?.revisions?.length).toBeGreaterThan(0);
     });
   });
 
-  describe('State Persistence', () => {
-    test('should save complete workflow state to TOML', async () => {
-      orchestrator = createOrchestrator('happy_path');
+  describe("State Persistence", () => {
+    test("should save complete workflow state to TOML", async () => {
+      orchestrator = createOrchestrator("happy_path");
 
       const taskInput: TaskInput = {
-        mode: 'architect',
-        message: 'Implement feature',
-        context: { files: ['src/app.ts'] },
+        mode: "architect",
+        message: "Implement feature",
+        context: { files: ["src/app.ts"] },
       };
 
       const session = await orchestrator.startTask(taskInput);
 
       // Complete workflow
       for await (const update of orchestrator.subscribeToUpdates(session.id)) {
-        if (update.type === 'state_change' && update.data.state === 'awaiting_approval') {
+        if (update.type === "state_change" && update.data.state === "awaiting_approval") {
           break;
         }
       }
@@ -548,7 +543,7 @@ describe('ArchitectWorkflow E2E', () => {
 
       expect(reloaded).toBeDefined();
       expect(reloaded?.id).toBe(session.id);
-      expect(reloaded?.mode).toBe('architect');
+      expect(reloaded?.mode).toBe("architect");
       expect(reloaded?.input.message).toBe(taskInput.message);
       expect(reloaded?.research?.findings).toBeTruthy();
       expect(reloaded?.clarification?.conversationTurns).toBeGreaterThan(0);

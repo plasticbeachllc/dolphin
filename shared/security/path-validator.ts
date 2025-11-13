@@ -101,11 +101,7 @@ export class PathValidator {
 
     // Reject paths with null bytes (directory traversal technique)
     if (decodedPath.includes("\0")) {
-      throw new PathValidationError(
-        `${prefix}: null byte in path`,
-        inputPath,
-        "null_byte"
-      );
+      throw new PathValidationError(`${prefix}: null byte in path`, inputPath, "null_byte");
     }
 
     // Reject absolute paths that don't start with baseDir
@@ -126,8 +122,7 @@ export class PathValidator {
 
     // Critical: Check if resolved path escapes baseDir
     const relativePath = path.relative(this.baseDir, normalizedPath);
-    const escapesWorkspace =
-      relativePath.startsWith("..") || path.isAbsolute(relativePath);
+    const escapesWorkspace = relativePath.startsWith("..") || path.isAbsolute(relativePath);
 
     if (escapesWorkspace) {
       throw new PathValidationError(
@@ -139,11 +134,7 @@ export class PathValidator {
 
     // Check if path exists (if required)
     if (this.options.mustExist && !fs.existsSync(normalizedPath)) {
-      throw new PathValidationError(
-        `${prefix}: path does not exist`,
-        inputPath,
-        "not_found"
-      );
+      throw new PathValidationError(`${prefix}: path does not exist`, inputPath, "not_found");
     }
 
     // Check for symlinks (if not allowed)
@@ -151,11 +142,7 @@ export class PathValidator {
       try {
         const stats = fs.lstatSync(normalizedPath);
         if (stats.isSymbolicLink()) {
-          throw new PathValidationError(
-            `${prefix}: symlinks not allowed`,
-            inputPath,
-            "symlink"
-          );
+          throw new PathValidationError(`${prefix}: symlinks not allowed`, inputPath, "symlink");
         }
       } catch (error) {
         if (error instanceof PathValidationError) {
@@ -168,9 +155,7 @@ export class PathValidator {
     // Check file extension (if specified)
     if (this.options.allowedExtensions) {
       const ext = path.extname(normalizedPath).toLowerCase();
-      const allowed = this.options.allowedExtensions.map((e) =>
-        e.toLowerCase()
-      );
+      const allowed = this.options.allowedExtensions.map((e) => e.toLowerCase());
       if (!allowed.includes(ext)) {
         throw new PathValidationError(
           `${prefix}: file extension '${ext}' not allowed`,
