@@ -242,6 +242,66 @@ Check localhost:8000/health
 - Location: `.dolphin/conversations/`
 - Features: Branching, metadata tracking, full history
 
+**Architect Mode (EP-11)**:
+- **Purpose**: Systematic KB discovery for better planning and code understanding
+- **Location**: `agent-core/src/orchestration/`
+- **Status**: Phase 1 (Discovery) implemented, Phases 2-3 (Synthesis & Planning) in progress
+
+**3-Phase Orchestration Workflow**:
+
+```
+Phase 1: DISCOVERY (Implemented ✅)
+  ├─ Strategic query generation using Claude
+  ├─ Multi-query parallel execution
+  ├─ Graph-aware context enrichment
+  ├─ Result validation & confidence scoring
+  └─ Information gap identification
+
+Phase 2: SYNTHESIS (Planned)
+  ├─ Context analysis with KB results
+  ├─ Assumption extraction
+  ├─ Clarifying question generation
+  └─ Risk identification
+
+Phase 3: PLANNING (Planned)
+  ├─ Context-grounded plan generation
+  ├─ Specific file/function references
+  ├─ Todo list creation
+  └─ Architecture validation
+```
+
+**Discovery Phase Components**:
+- `orchestration/discovery-phase.ts` - Main discovery orchestrator
+- `kb/kb-query-planner.ts` - Claude-powered strategic query generation
+- `kb/kb-context-enricher.ts` - Graph context aggregation
+- `kb/kb-result-validator.ts` - Confidence scoring and gap detection
+- `orchestration/types.ts` - Shared type definitions
+
+**Key Features**:
+- **Claude-Powered Queries**: Uses Claude to generate 3-5 strategic queries per request
+- **Graph Intelligence**: Leverages code graph (EP-3) for relationship discovery
+- **Confidence Scoring**: Multi-factor confidence calculation (0-1 scale)
+- **Gap Detection**: Identifies missing information or low-quality results
+- **Parallel Execution**: Runs multiple KB queries concurrently
+- **Deduplication**: Aggregates and deduplicates results by chunk ID
+
+**Configuration**:
+```typescript
+{
+  maxQueries: 5,              // Number of strategic queries
+  maxResultsPerQuery: 5,      // Results per query
+  includeGraphContext: true,  // Enable graph enrichment
+  confidenceThreshold: 0.6,   // Minimum chunk score
+  timeoutMs: 5000            // Discovery phase timeout
+}
+```
+
+**Performance Targets**:
+- Discovery phase: <3s (p95)
+- Query generation: <500ms
+- Multi-query execution: Parallel, <2s total
+- Confidence calculation: Real-time
+
 ### 4. VSCode Extension (TypeScript/Svelte)
 
 **Location**: `vscode-extension/`
@@ -595,6 +655,31 @@ Columns:
 - ✅ KB lifecycle management (auto-start)
 - ✅ Conversation history panel
 - ✅ Context menu commands
+
+### 🚧 EP-11 In Progress: Architect Mode KB Discovery
+
+**Phase 1 (Foundation) - Completed ✅:**
+- ✅ Orchestration module structure
+- ✅ Discovery phase implementation
+- ✅ Claude-powered query planner
+- ✅ Graph-aware context enricher
+- ✅ Result validator with confidence scoring
+- ✅ Integration with main.ts
+- ✅ Unit tests (10+ tests covering all components)
+- ✅ Integration tests (full discovery workflow)
+- ✅ Documentation updates
+
+**Phase 2-4 - Planned:**
+- 🔜 Synthesis phase (analysis & questions)
+- 🔜 Planning phase (implementation plans)
+- 🔜 UI enhancements for architect mode
+- 🔜 Streaming progress indicators
+
+**Test Coverage:**
+- `kb-query-planner.test.ts` - Query generation tests
+- `kb-result-validator.test.ts` - Validation and scoring tests
+- `kb-context-enricher.test.ts` - Graph enrichment tests
+- `discovery-orchestrator.test.ts` - Full workflow integration tests
 
 ### 🔜 Future Enhancements
 
