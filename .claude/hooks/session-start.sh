@@ -51,10 +51,6 @@ echo "📦 Installing agent-core dependencies..."
 cd "$CLAUDE_PROJECT_DIR/agent-core"
 bun install
 
-echo "📦 Installing agent-core-v2 dependencies..."
-cd "$CLAUDE_PROJECT_DIR/agent-core-v2"
-bun install
-
 echo "📦 Installing mcp-bridge dependencies..."
 cd "$CLAUDE_PROJECT_DIR/mcp-bridge"
 bun install

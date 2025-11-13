@@ -12,7 +12,7 @@ const execCommand = (
     const args = command.split(" ");
     const cmd = args[0];
     const cmdArgs = args.slice(1);
-    
+
     const proc = spawn(cmd, cmdArgs, {
       shell: false,
       timeout: timeoutMs,
@@ -39,7 +39,7 @@ const execCommand = (
     proc.on("close", (code) => {
       clearTimeout(timeout);
       if (timedOut) return;
-      
+
       if (code !== 0) {
         reject(new Error(`Command failed with code ${code}`));
       } else {

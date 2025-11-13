@@ -1,4 +1,4 @@
-// agent-core-v2/src/execution/claude-provider.ts
+// agent-core/src/execution/claude-provider.ts
 import type { AgentEvent } from "../../../../shared/types/events";
 import { ClaudeClient, type AuthMode } from "../llm/claude-client";
 import { ClaudeToolExecutor, type Message as ToolExecutorMessage } from "../llm/claude-tool-executor";

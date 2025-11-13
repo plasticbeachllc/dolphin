@@ -1,4 +1,4 @@
-// agent-core-v2/src/workflows/editor-workflow.ts
+// agent-core/src/workflows/editor-workflow.ts
 import type {
   IWorkflow,
   TaskInput,

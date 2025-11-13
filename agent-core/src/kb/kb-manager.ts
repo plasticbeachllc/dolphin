@@ -1,4 +1,4 @@
-// agent-core/src/kb/manager.ts
+// agent-core/src/kb/kb-manager.ts
 import { spawn, ChildProcess } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
@@ -43,10 +43,10 @@ export class KBManager {
         this.process = await bundled.startServer();
       } else if (hasDevelopmentSetup) {
         console.error("[KB Manager] Development mode: using system uv");
-        // Find dolphin root - prefer extension path if available
-        const dolphinRoot = this.findDolphinRoot(workspaceRoot, extensionPath);
+        // Find dolphin root (could be workspace or subdirectory)
+        const dolphinRoot = this.findDolphinRoot(workspaceRoot);
         console.error(`[KB Manager] Dolphin root: ${dolphinRoot}`);
-        
+
         // Development: Use system uv with dolphin project directory
         this.process = spawn("uv", ["run", "--directory", dolphinRoot, "python", "-m", "kb.cli", "serve"], {
           stdio: ["ignore", "pipe", "pipe"],
@@ -111,63 +111,31 @@ export class KBManager {
     return fs.existsSync(uvPath);
   }
 
-  /**
-   * Walk up directory tree to find pyproject.toml
-   * Checks both current directory and dolphin subdirectory at each level
-   * @returns Path to directory containing pyproject.toml, or null if not found
-   */
-  private findPyprojectToml(startDir: string): string | null {
-    let currentDir = path.resolve(startDir);
-    const root = path.parse(currentDir).root;
-
-    while (currentDir !== root) {
-      // Check current directory
-      if (fs.existsSync(path.join(currentDir, "pyproject.toml"))) {
-        return currentDir;
-      }
-
-      // Check dolphin subdirectory
-      const dolphinPath = path.join(currentDir, "dolphin");
-      if (fs.existsSync(path.join(dolphinPath, "pyproject.toml"))) {
-        return dolphinPath;
-      }
-
-      // Move up one level
-      const parentDir = path.dirname(currentDir);
-      if (parentDir === currentDir) break; // Reached root
-      currentDir = parentDir;
+  private checkDevelopmentSetup(workspaceRoot: string): boolean {
+    // Check if workspace has pyproject.toml directly
+    if (fs.existsSync(path.join(workspaceRoot, "pyproject.toml"))) {
+      return true;
     }
 
-    return null;
+    // Check if dolphin subdirectory has pyproject.toml
+    const dolphinPath = path.join(workspaceRoot, "dolphin");
+    if (fs.existsSync(path.join(dolphinPath, "pyproject.toml"))) {
+      return true;
+    }
+
+    return false;
   }
 
-  private checkDevelopmentSetup(workspaceRoot: string): boolean {
-    return this.findPyprojectToml(workspaceRoot) !== null;
-  }
-
-  private findDolphinRoot(workspaceRoot: string, extensionPath?: string): string {
-    // Priority 1: Check if workspaceRoot itself has pyproject.toml (E2E test case)
+  private findDolphinRoot(workspaceRoot: string): string {
+    // Check if workspaceRoot itself has pyproject.toml
     if (fs.existsSync(path.join(workspaceRoot, "pyproject.toml"))) {
-      console.error(`[KB Manager] Using workspace root as dolphin root: ${workspaceRoot}`);
       return workspaceRoot;
     }
 
-    // Priority 2: If extension path is provided, derive dolphin root from it
-    // Extension is at: dolphin-develop-backend/vscode-extension
-    // Dolphin root is: dolphin-develop-backend
-    if (extensionPath) {
-      const parentDir = path.dirname(extensionPath);
-      if (fs.existsSync(path.join(parentDir, "pyproject.toml"))) {
-        console.error(`[KB Manager] Using dolphin root from extension path: ${parentDir}`);
-        return parentDir;
-      }
-    }
-
-    // Priority 3: Walk up directory tree to find pyproject.toml
-    const projectRoot = this.findPyprojectToml(workspaceRoot);
-    if (projectRoot) {
-      console.error(`[KB Manager] Found pyproject.toml at: ${projectRoot}`);
-      return projectRoot;
+    // Check if there's a "dolphin" subdirectory with pyproject.toml
+    const dolphinPath = path.join(workspaceRoot, "dolphin");
+    if (fs.existsSync(path.join(dolphinPath, "pyproject.toml"))) {
+      return dolphinPath;
     }
 
     // Fallback to workspace root

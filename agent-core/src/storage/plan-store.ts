@@ -1,5 +1,5 @@
 // agent-core/src/storage/plan-store.ts
-import { Plan, PlanSchema } from "../../../shared/types/state";
+import { Plan, PlanSchema } from "../../../../shared/types/state";
 import { TOMLWriter } from "./toml-writer";
 import * as path from "path";
 import * as fs from "fs/promises";

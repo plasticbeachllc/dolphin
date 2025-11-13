@@ -2,8 +2,8 @@
 import * as Diff from 'diff';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { PathValidator } from '../../../shared/security/path-validator';
-import type { FileDiff, DiffHunk } from '../../../shared/types/events';
+import { PathValidator } from '../../../../shared/security/path-validator';
+import type { FileDiff, DiffHunk } from '../../../../shared/types/events';
 
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB
 const BINARY_FILE_EXTENSIONS = new Set([

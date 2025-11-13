@@ -117,7 +117,7 @@ test-unit-all:
 	@echo ""
 	@just test-unit-python
 	@just test-unit-agent-core
-	@just test-unit-agent-core-v2
+	@just test-unit-agent-core
 	@just test-unit-extension
 	@just test-unit-webview
 	@echo ""
@@ -136,9 +136,9 @@ test-unit-agent-core:
 	@echo "   ✅ Agent Core unit tests passed"
 
 # Run Agent Core V2 unit tests
-test-unit-agent-core-v2:
+test-unit-agent-core:
 	@echo "🤖 Testing Agent Core V2 unit tests..."
-	@cd agent-core-v2 && bun test tests/unit/ --bail || (echo "   ❌ Agent Core V2 unit tests failed"; exit 1)
+	@cd agent-core && bun test tests/unit/ --bail || (echo "   ❌ Agent Core V2 unit tests failed"; exit 1)
 	@echo "   ✅ Agent Core V2 unit tests passed"
 
 # Run VSCode Extension unit tests
@@ -163,7 +163,7 @@ test-integration-all:
 	@echo ""
 	@just test-integration-python
 	@just test-integration-agent-core
-	@just test-integration-agent-core-v2
+	@just test-integration-agent-core
 	@just test-integration-extension
 	@just test-integration-mcp-bridge
 	@echo ""
@@ -182,9 +182,9 @@ test-integration-agent-core:
 	@echo "   ✅ Agent Core integration tests passed"
 
 # Run Agent Core V2 integration tests
-test-integration-agent-core-v2:
+test-integration-agent-core:
 	@echo "🤖 Testing Agent Core V2 integration tests..."
-	@cd agent-core-v2 && bun test tests/integration/claude-auth.test.ts tests/integration/kb-integration.test.ts --bail || (echo "   ❌ Agent Core V2 integration tests failed"; exit 1)
+	@cd agent-core && bun test tests/integration/claude-auth.test.ts tests/integration/kb-integration.test.ts --bail || (echo "   ❌ Agent Core V2 integration tests failed"; exit 1)
 	@echo "   ✅ Agent Core V2 integration tests passed"
 
 # Run VSCode Extension integration tests
@@ -208,7 +208,7 @@ test-e2e-all:
 	@echo "🚀 Running all end-to-end tests..."
 	@echo ""
 	@just test-e2e-extension-full
-	@just test-e2e-agent-core-v2
+	@just test-e2e-agent-core
 	@echo ""
 	@echo "✅ All end-to-end tests passed!"
 
@@ -219,9 +219,9 @@ test-e2e-extension-full:
 	@echo "   ✅ Extension E2E tests passed"
 
 # Run Agent Core V2 e2e tests
-test-e2e-agent-core-v2:
+test-e2e-agent-core:
 	@echo "🤖 Testing Agent Core V2 E2E tests..."
-	@cd agent-core-v2 && bun test tests/integration/orchestrator-e2e.test.ts tests/integration/editor-workflow.test.ts --bail || (echo "   ❌ Agent Core V2 E2E tests failed"; exit 1)
+	@cd agent-core && bun test tests/integration/orchestrator-e2e.test.ts tests/integration/editor-workflow.test.ts --bail || (echo "   ❌ Agent Core V2 E2E tests failed"; exit 1)
 	@echo "   ✅ Agent Core V2 E2E tests passed"
 
 # ==============================================================================

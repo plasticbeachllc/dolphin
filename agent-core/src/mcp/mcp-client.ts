@@ -1,4 +1,4 @@
-// agent-core-v2/src/mcp/mcp-client.ts
+// agent-core/src/mcp/mcp-client.ts
 import { spawn, ChildProcess } from "child_process";
 
 interface MCPMessage {

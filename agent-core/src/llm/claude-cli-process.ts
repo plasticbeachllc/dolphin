@@ -94,7 +94,7 @@ export async function* runClaudeCode(
   // (Let CLI use subscription mode)
   const env = { ...process.env };
   delete env.ANTHROPIC_API_KEY; // Remove API key to force subscription mode
-  
+
   const child = spawn("claude", args, {
     stdio: ["pipe", "pipe", "pipe"],
     cwd: cwd || process.cwd(),
@@ -198,24 +198,24 @@ function parseChunk(
   // If we have partial data, append to it
   if (processState.partialData) {
     processState.partialData += data;
-    
+
     const chunk = attemptParseChunk(processState.partialData);
-    
+
     if (!chunk) {
       return null;
     }
-    
+
     processState.partialData = null;
     return chunk;
   }
 
   // Try to parse current data
   const chunk = attemptParseChunk(data);
-  
+
   if (!chunk) {
     processState.partialData = data;
   }
-  
+
   return chunk;
 }
 
@@ -273,7 +273,7 @@ export async function executeClaudeCode(
       usage.output_tokens += message.usage.output_tokens;
       usage.cache_read_tokens = (usage.cache_read_tokens || 0) + ((message.usage as any).cache_read_input_tokens || 0);
       usage.cache_write_tokens = (usage.cache_write_tokens || 0) + ((message.usage as any).cache_creation_input_tokens || 0);
-      
+
       stop_reason = message.stop_reason || undefined;
       continue;
     }

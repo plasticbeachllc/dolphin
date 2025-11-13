@@ -3,7 +3,7 @@ import {
   Conversation,
   ConversationSchema,
   ConversationMetadata
-} from "../../../shared/types/state";
+} from "../../../../shared/types/state";
 import { TOMLWriter } from "./toml-writer";
 import * as path from "path";
 import * as fs from "fs/promises";
@@ -115,11 +115,11 @@ export class ConversationStore {
       console.error("[ConversationStore] Listing conversations with metadata...");
       const conversationIds = await this.listConversations();
       console.error(`[ConversationStore] Found ${conversationIds.length} conversation IDs`);
-      
+
       if (conversationIds.length === 0) {
         return [];
       }
-      
+
       const conversations = await Promise.all(
         conversationIds.map((id) => this.loadConversation(id))
       );
@@ -138,7 +138,7 @@ export class ConversationStore {
           updated_at: conv.conversation.updated_at,
           message_count: conv.messages.length,
         }));
-      
+
       console.error(`[ConversationStore] Returning ${result.length} conversations`);
       return result;
     } catch (error: any) {
