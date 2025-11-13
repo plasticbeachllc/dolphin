@@ -7,20 +7,20 @@ import * as assert from "assert";
 import * as vscode from "vscode";
 import { activateExtension } from "../helpers/shared-fixtures";
 
-suite("Extension Activation", function () {
+describe("Extension Activation", function () {
   this.timeout(10000);
 
-  test("Extension should be present", () => {
+  it("Extension should be present", () => {
     const ext = vscode.extensions.getExtension("pb.dolphin");
     assert.ok(ext, "Extension should be installed");
   });
 
-  test("Extension should activate successfully", async () => {
+  it("Extension should activate successfully", async () => {
     const ext = await activateExtension();
     assert.ok(ext.isActive, "Extension should be active");
   });
 
-  test("Extension should provide exports", async () => {
+  it("Extension should provide exports", async () => {
     const ext = await activateExtension();
     const exports = ext.exports;
 
@@ -29,7 +29,7 @@ suite("Extension Activation", function () {
     // This test just verifies that exports exist
   });
 
-  test("Extension should have correct package metadata", () => {
+  it("Extension should have correct package metadata", () => {
     const ext = vscode.extensions.getExtension("pb.dolphin");
     assert.ok(ext, "Extension should be installed");
 
@@ -39,7 +39,7 @@ suite("Extension Activation", function () {
     assert.ok(packageJSON.version, "Should have version");
   });
 
-  test("Extension should register activity bar view", () => {
+  it("Extension should register activity bar view", () => {
     const ext = vscode.extensions.getExtension("pb.dolphin");
     assert.ok(ext, "Extension should be installed");
 
@@ -58,7 +58,7 @@ suite("Extension Activation", function () {
     assert.strictEqual(dolphinContainer.title, "Dolphin", "Container title should be Dolphin");
   });
 
-  test("Extension should register chat view", () => {
+  it("Extension should register chat view", () => {
     const ext = vscode.extensions.getExtension("pb.dolphin");
     assert.ok(ext, "Extension should be installed");
 

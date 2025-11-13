@@ -7,14 +7,14 @@ import * as assert from "assert";
 import { TEST_COMMANDS } from "../helpers/test-constants";
 import { assertCommandsExist, activateExtension } from "../helpers/shared-fixtures";
 
-suite("Command Registration", function () {
+describe("Command Registration", function () {
   this.timeout(10000);
 
-  suiteSetup(async () => {
+  before(async () => {
     await activateExtension();
   });
 
-  test("All Phase 1 commands should be registered", async () => {
+  it("All Phase 1 commands should be registered", async () => {
     const phase1Commands = [
       TEST_COMMANDS.FOCUS_INPUT,
       TEST_COMMANDS.NEW_CONVERSATION,
@@ -25,7 +25,7 @@ suite("Command Registration", function () {
     await assertCommandsExist(phase1Commands);
   });
 
-  test("All Phase 2 commands should be registered", async () => {
+  it("All Phase 2 commands should be registered", async () => {
     const phase2Commands = [
       TEST_COMMANDS.ASK_ABOUT_SELECTION,
       TEST_COMMANDS.REFACTOR_SELECTION,
@@ -37,13 +37,13 @@ suite("Command Registration", function () {
     await assertCommandsExist(phase2Commands);
   });
 
-  test("All KB commands should be registered", async () => {
+  it("All KB commands should be registered", async () => {
     const kbCommands = [TEST_COMMANDS.KB_SHOW_STATUS, TEST_COMMANDS.KB_RESTART];
 
     await assertCommandsExist(kbCommands);
   });
 
-  test("Total command count should be at least 11", async () => {
+  it("Total command count should be at least 11", async () => {
     const allCommands = Object.values(TEST_COMMANDS);
 
     assert.ok(

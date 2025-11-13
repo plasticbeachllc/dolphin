@@ -294,6 +294,10 @@ export class MockAgentBridge {
   private responseQueue: string[] = [];
   private eventHandlers: Map<string, Function[]> = new Map();
   private messageHandlers: Map<string, (event: AgentEvent) => void> = new Map();
+  public mockResponse: any = null;
+  public mockToolCalls: any[] = [];
+  public mockError: Error | null = null;
+  public mockConnected: boolean = true;
 
   /**
    * Send a message (simulates user sending message to agent).
@@ -411,6 +415,51 @@ export class MockAgentBridge {
    */
   private emitEvent(event: AgentEvent): void {
     this.handlers.forEach((handler) => handler(event));
+  }
+
+  /**
+   * Reset mock state between tests
+   */
+  reset(): void {
+    this.handlers.clear();
+    this.messageHistory = [];
+    this.shouldThrowError = false;
+    this.errorMessage = "Mock error";
+    this.shouldError = null;
+    this.toolCallQueue = [];
+    this.responseQueue = [];
+    this.eventHandlers.clear();
+    this.messageHandlers.clear();
+    this.mockResponse = null;
+    this.mockToolCalls = [];
+    this.mockError = null;
+    this.mockConnected = true;
+  }
+
+  /**
+   * Set mock response for tests
+   */
+  setResponse(response: any): void {
+    this.mockResponse = response;
+    if (typeof response === 'string') {
+      this.responseQueue.push(response);
+    }
+  }
+
+  /**
+   * Set mock tool calls for tests
+   */
+  setToolCalls(toolCalls: any[]): void {
+    this.mockToolCalls = toolCalls;
+    this.toolCallQueue = [...toolCalls];
+  }
+
+  /**
+   * Wait for agent to be ready (mock implementation for tests)
+   */
+  async waitForReady(timeout = 60000): Promise<void> {
+    // Mock always ready
+    return Promise.resolve();
   }
 
   /**

@@ -6,6 +6,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    if: |
+      github.actor != 'python-linter[bot]' &&
+      github.actor != 'typescript-linter[bot]'
     steps:
       - uses: actions/checkout@v4
         with:

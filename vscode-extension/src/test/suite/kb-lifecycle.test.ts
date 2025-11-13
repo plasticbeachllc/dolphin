@@ -19,24 +19,24 @@ import {
 } from "../helpers/shared-fixtures";
 import { TEST_COMMANDS } from "../helpers/test-constants";
 
-suite("KB Lifecycle Management", function () {
+describe("KB Lifecycle Management", function () {
   this.timeout(10000);
 
-  suiteSetup(async () => {
+  before(async () => {
     await setupMockEnvironment();
     await activateExtension();
   });
 
-  suiteTeardown(async () => {
+  after(async () => {
     await teardownMockEnvironment();
   });
 
-  setup(() => {
+  beforeEach(() => {
     resetMocks();
   });
 
-  suite("KB Server Health", () => {
-    test("Mock KB server should be running", async () => {
+  describe("KB Server Health", () => {
+    it("Mock KB server should be running", async () => {
       const { kbServer } = getMockEnvironment();
 
       assert.ok(kbServer, "KB server mock should be initialized");
@@ -44,7 +44,7 @@ suite("KB Lifecycle Management", function () {
       assert.strictEqual(kbServer.port, 7778, "Should use configured test port");
     });
 
-    test("KB server should respond to health checks", async () => {
+    it("KB server should respond to health checks", async () => {
       const { kbServer } = getMockEnvironment();
 
       // Configure KB as healthy
@@ -67,7 +67,7 @@ suite("KB Lifecycle Management", function () {
       assert.strictEqual(response.data.status, "ok", "Should return ok status");
     });
 
-    test("KB server should report unhealthy state when configured", async () => {
+    it("KB server should report unhealthy state when configured", async () => {
       const { kbServer } = getMockEnvironment();
 
       // Configure KB as unhealthy
@@ -91,30 +91,30 @@ suite("KB Lifecycle Management", function () {
     });
   });
 
-  suite("KB Commands", () => {
-    test("KB status command should be registered", async () => {
+  describe("KB Commands", () => {
+    it("KB status command should be registered", async () => {
       await assertCommandExists(TEST_COMMANDS.KB_SHOW_STATUS);
     });
 
-    test("KB restart command should be registered", async () => {
+    it("KB restart command should be registered", async () => {
       await assertCommandExists(TEST_COMMANDS.KB_RESTART);
     });
 
-    test("KB status command should execute", async () => {
+    it("KB status command should execute", async () => {
       // Command should execute without throwing
       await vscode.commands.executeCommand(TEST_COMMANDS.KB_SHOW_STATUS);
       // If we get here, command executed (may or may not show UI in headless mode)
     });
 
-    test("KB restart command should execute", async () => {
+    it("KB restart command should execute", async () => {
       // Command should execute without throwing
       await vscode.commands.executeCommand(TEST_COMMANDS.KB_RESTART);
       // If we get here, command executed
     });
   });
 
-  suite("KB API Operations", () => {
-    test("KB should handle search requests", async () => {
+  describe("KB API Operations", () => {
+    it("KB should handle search requests", async () => {
       const { kbServer } = getMockEnvironment();
 
       configureMockKB({
@@ -170,7 +170,7 @@ suite("KB Lifecycle Management", function () {
       );
     });
 
-    test("KB should return metadata", async () => {
+    it("KB should return metadata", async () => {
       const { kbServer } = getMockEnvironment();
 
       configureMockKB({
@@ -199,7 +199,7 @@ suite("KB Lifecycle Management", function () {
       assert.strictEqual(response.data.total_chunks, 25, "Should return configured total");
     });
 
-    test("KB should log request history", async () => {
+    it("KB should log request history", async () => {
       const { kbServer } = getMockEnvironment();
 
       const requestsBefore = kbServer.getRequestHistory().length;
@@ -239,8 +239,8 @@ suite("KB Lifecycle Management", function () {
     });
   });
 
-  suite("KB Configuration", () => {
-    test("KB configuration keys should exist", () => {
+  describe("KB Configuration", () => {
+    it("KB configuration keys should exist", () => {
       const config = vscode.workspace.getConfiguration("dolphin");
 
       // Verify KB-related configuration is defined in package.json
@@ -253,7 +253,7 @@ suite("KB Lifecycle Management", function () {
       assert.ok(autoSyncEnabled, "kb.autoSync.enabled should be defined");
     });
 
-    test("KB configuration should have valid types", () => {
+    it("KB configuration should have valid types", () => {
       const config = vscode.workspace.getConfiguration("dolphin");
 
       const kbDebounce = config.get<number>("kb.debounceMs");
@@ -266,8 +266,8 @@ suite("KB Lifecycle Management", function () {
     });
   });
 
-  suite("KB Performance", () => {
-    test("KB status checks should be fast", async () => {
+  describe("KB Performance", () => {
+    it("KB status checks should be fast", async () => {
       const { kbServer } = getMockEnvironment();
 
       const startTime = Date.now();
@@ -286,7 +286,7 @@ suite("KB Lifecycle Management", function () {
       assert.ok(elapsed < 1000, `Health check took ${elapsed}ms, should be < 1000ms`);
     });
 
-    test("KB search should be reasonably fast", async () => {
+    it("KB search should be reasonably fast", async () => {
       const { kbServer } = getMockEnvironment();
 
       const startTime = Date.now();

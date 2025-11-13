@@ -20,23 +20,13 @@ async function main() {
     console.log("Extension path:", extensionDevelopmentPath);
     console.log("Tests path:", extensionTestsPath);
     console.log("Workspace path:", workspacePath);
-    console.log("Using VS Code 1.85.0 (last version with working test args)");
+    console.log("Using VS Code stable version (>= 1.96.0)");
 
     await runTests({
       extensionDevelopmentPath,
       extensionTestsPath,
-      version: "1.85.0", // Last stable version that works with @vscode/test-electron args
-      launchArgs: [
-        workspacePath, // Open dolphin project root as workspace
-        "--disable-extensions", // Disable other extensions
-        "--verbose", // Enable verbose logging
-        "--log",
-        "trace", // Enable trace logging
-      ],
-      extensionTestsEnv: {
-        ELECTRON_ENABLE_LOGGING: "1",
-        VSCODE_LOG_LEVEL: "trace",
-      },
+      version: "stable", // Use stable version (>= 1.96.0 required by extension)
+      // No custom launch args - use defaults for compatibility with all VSCode versions
     });
 
     console.log("All tests passed!");

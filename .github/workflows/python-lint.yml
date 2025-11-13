@@ -6,6 +6,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    if: |
+      github.actor != 'python-linter[bot]' &&
+      github.actor != 'typescript-linter[bot]'
     strategy:
       matrix:
         python-version: ["3.13"]

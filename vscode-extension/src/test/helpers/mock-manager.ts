@@ -66,7 +66,7 @@ export async function teardownMockEnvironment(): Promise<void> {
 export function resetMocks(): void {
   if (mockEnvironment) {
     mockEnvironment.agentBridge.reset();
-    // KB server doesn't need reset as it's stateless
+    mockEnvironment.kbServer.reset();
   }
 }
 
@@ -113,8 +113,9 @@ export function configureMockAgent(config: {
   }
 
   if (config.shouldError && config.error) {
-    env.agentBridge.setError(config.error);
+    env.agentBridge.setError(true, config.error.message);
+    env.agentBridge.mockError = config.error;
   } else if (config.shouldError) {
-    env.agentBridge.setError(new Error("Mock agent error"));
+    env.agentBridge.setError(true, "Mock agent error");
   }
 }

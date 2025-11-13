@@ -22,23 +22,23 @@ import {
 describe('Integration Tests', () => {
   let mockServer: MockKBServer;
 
-  suite('Integration Tests with Mock KB', function () {
-  this.timeout(10000);
+  describe('Integration Tests with Mock KB', function () {
+    this.timeout(10000);
 
-  suiteSetup(async () => {
-    await setupMockEnvironment();
-    await activateExtension();
-  });
+    before(async () => {
+      await setupMockEnvironment();
+      await activateExtension();
+    });
 
-  suiteTeardown(async () => {
-    await teardownMockEnvironment();
-  });
+    after(async () => {
+      await teardownMockEnvironment();
+    });
 
-  setup(() => {
-    resetMocks();
-  });
+    beforeEach(() => {
+      resetMocks();
+    });
 
-    test('Mock KB API server should be running and healthy', async () => {
+    it('Mock KB API server should be running and healthy', async () => {
       assert.ok(mockServer, 'Mock server should be initialized');
       assert.ok(mockServer.port > 0, 'Mock server should have a port assigned');
 
@@ -61,13 +61,13 @@ describe('Integration Tests', () => {
       );
     });
 
-    test('Extension should be active', async () => {
+    it('Extension should be active', async () => {
       const extension = vscode.extensions.getExtension('pb.dolphin');
       assert.ok(extension, 'Extension should exist');
       assert.ok(extension.isActive, 'Extension should be active');
     });
 
-    test('Mock KB API should handle search requests', async function () {
+    it('Mock KB API should handle search requests', async function () {
       this.timeout(5000);
 
       const searchRequest: MockSearchRequest = {
@@ -101,7 +101,7 @@ describe('Integration Tests', () => {
       );
     });
 
-    test('Complete workflow: Extension activation → Commands → Mock KB', async () => {
+    it('Complete workflow: Extension activation → Commands → Mock KB', async () => {
       // 1. Verify extension is active
       const extension = vscode.extensions.getExtension('pb.dolphin');
       assert.ok(extension?.isActive, 'Extension should be active');
@@ -150,27 +150,26 @@ describe('Integration Tests', () => {
       const requestsAfter = mockServer.getRequestHistory().length;
       assert.ok(requestsAfter > requestsBefore, 'KB should have logged the request');
     });
-  });
-
-  // Placeholder helper functions - these should be implemented properly
-  async function setupMockEnvironment() {
+    // Placeholder helper functions - these should be implemented properly
+    async function setupMockEnvironment() {
     mockServer = new MockKBServer();
     await mockServer.start();
-  }
+    }
 
-  async function teardownMockEnvironment() {
+    async function teardownMockEnvironment() {
     if (mockServer) {
       await mockServer.stop();
     }
-  }
+    }
 
-  async function activateExtension() {
+    async function activateExtension() {
     await waitForExtensionActivation();
-  }
+    }
 
-  function resetMocks() {
+    function resetMocks() {
     if (mockServer) {
       mockServer.reset();
+      }
     }
-  }
+  });
 });
