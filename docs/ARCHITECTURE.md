@@ -4,7 +4,7 @@ Technical architecture and implementation status for the Dolphin AI enablement p
 
 **Version**: 0.1.13
 **Status**: Beta (Production Ready for Core Components)
-**Last Updated**: 2025-11-10
+**Last Updated**: 2025-11-13 (WP2 Agent-Core V2 Consolidation Complete)
 
 ---
 
@@ -208,99 +208,129 @@ Check localhost:8000/health
 
 ### 3. Agent Core (TypeScript/Bun)
 
-**Location**: `agent-core/`
+**Location**: `agent-core/` *(V2 Architecture - Consolidated as of WP2)*
 
-**Purpose**: Intelligent agent orchestrator that manages Claude AI interactions, coordinates knowledge base searches, and handles conversation persistence.
+**Purpose**: Intelligent agent orchestrator that manages Claude AI interactions, coordinates knowledge base searches, and handles conversation persistence with dual-workflow architecture.
+
+**V2 Architecture Overview**:
+Agent-core has been fully consolidated from V1/V2 split into a unified module with:
+- Research → Clarification → Planning workflow for complex tasks
+- Single-phase fast-path workflow for simple edits
+- PathValidator security (WP1) throughout all file operations
+- JSON-RPC stdio communication with VSCode extension
+- State machine orchestrator coordinating workflow execution
 
 **Key Features**:
 - Dual authentication support (Claude CLI subscription or API key)
 - JSON-RPC communication with VSCode extension
 - Automatic KB server lifecycle management (health checks, auto-start)
-- Conversation persistence in TOML format
-- Task planning and execution
+- Session and plan persistence in TOML format with PathValidator security
+- Two workflow modes: Editor (fast) and Architect (comprehensive)
 - Tool execution with MCP integration
 - Robust message framing with Content-Length headers
-- Write queue to prevent message interleaving
+- Background async event streaming
 
-**Components**:
-- `src/main.ts` - Entry point, JSON-RPC IPC handler
-- `src/llm/` - Claude API/CLI integration and tool execution
-- `src/planner/` - Task planning and orchestration
-- `src/kb/manager.ts` - KB lifecycle management (health checks, auto-start)
-- `src/storage/` - Conversation persistence (TOML format)
-- `src/mcp/` - MCP protocol client for tool calls
+**Core Components**:
+- `src/main.ts` - JSON-RPC stdio entry point, component initialization
+- `src/workflows/` - Dual workflow architecture (Editor + Architect)
+- `src/orchestrator/orchestrator.ts` - State machine coordinator
+- `src/execution/claude-provider.ts` - Thin wrapper around tool executor (125 lines)
+- `src/llm/` - Claude API/CLI integration and agentic tool execution
+- `src/context/context-builder.ts` - KB + file context aggregation
+- `src/prompts/prompt-builder.ts` - System prompt generation
+- `src/state/state-store.ts` - TOML session persistence with PathValidator
+- `src/kb/kb-manager.ts` - KB lifecycle with process locking
+- `src/storage/` - Conversation and plan persistence (TOML with PathValidator)
+- `src/mcp/mcp-client.ts` - MCP protocol client for tool calls
 
 **Technologies**:
 - **Bun** - Fast JavaScript runtime
 - **Anthropic SDK** - Claude API integration
-- **Zod** - Schema validation
-- **@iarna/toml** - TOML persistence for conversations
+- **Zod** - Schema validation for state
+- **@iarna/toml** - TOML persistence for conversations and state
 - **diff** - Diff generation for code changes
+- **vscode-jsonrpc** - JSON-RPC protocol implementation
 
-**Conversation Storage**:
-- Format: TOML with metadata and messages
-- Location: `.dolphin/conversations/`
-- Features: Branching, metadata tracking, full history
-
-**Architect Mode (EP-11)**:
-- **Purpose**: Systematic KB discovery for better planning and code understanding
-- **Location**: `agent-core/src/orchestration/`
-- **Status**: Phase 1 (Discovery) implemented, Phases 2-3 (Synthesis & Planning) in progress
-
-**3-Phase Orchestration Workflow**:
+**Dual Workflow Architecture**:
 
 ```
-Phase 1: DISCOVERY (Implemented ✅)
-  ├─ Strategic query generation using Claude
-  ├─ Multi-query parallel execution
-  ├─ Graph-aware context enrichment
-  ├─ Result validation & confidence scoring
-  └─ Information gap identification
-
-Phase 2: SYNTHESIS (Planned)
-  ├─ Context analysis with KB results
-  ├─ Assumption extraction
-  ├─ Clarifying question generation
-  └─ Risk identification
-
-Phase 3: PLANNING (Planned)
-  ├─ Context-grounded plan generation
-  ├─ Specific file/function references
-  ├─ Todo list creation
-  └─ Architecture validation
+┌─────────────────────────────────────────────────────────┐
+│                      Orchestrator                        │
+│                   (State Machine)                        │
+└──────────┬────────────────────────────┬─────────────────┘
+           │                            │
+           ▼                            ▼
+  ┌──────────────────┐        ┌──────────────────────┐
+  │ EditorWorkflow   │        │ ArchitectWorkflow    │
+  │   (Fast Path)    │        │  (Complex Tasks)     │
+  └──────────────────┘        └──────────────────────┘
+           │                            │
+     Single Phase              Research → Clarification
+     8K tokens                      → Planning
+     <1s latency                    16K+ tokens
+                                    Interactive Q&A
 ```
 
-**Discovery Phase Components**:
-- `orchestration/discovery-phase.ts` - Main discovery orchestrator
-- `kb/kb-query-planner.ts` - Claude-powered strategic query generation
-- `kb/kb-context-enricher.ts` - Graph context aggregation
-- `kb/kb-result-validator.ts` - Confidence scoring and gap detection
-- `orchestration/types.ts` - Shared type definitions
-
-**Key Features**:
-- **Claude-Powered Queries**: Uses Claude to generate 3-5 strategic queries per request
-- **Graph Intelligence**: Leverages code graph (EP-3) for relationship discovery
-- **Confidence Scoring**: Multi-factor confidence calculation (0-1 scale)
-- **Gap Detection**: Identifies missing information or low-quality results
-- **Parallel Execution**: Runs multiple KB queries concurrently
-- **Deduplication**: Aggregates and deduplicates results by chunk ID
-
-**Configuration**:
-```typescript
-{
-  maxQueries: 5,              // Number of strategic queries
-  maxResultsPerQuery: 5,      // Results per query
-  includeGraphContext: true,  // Enable graph enrichment
-  confidenceThreshold: 0.6,   // Minimum chunk score
-  timeoutMs: 5000            // Discovery phase timeout
-}
+**EditorWorkflow (Fast Path)** - 195 lines:
 ```
+Input → Context (8K tokens) → Prompt → Execute → Save → Done
+```
+- For simple edits and quick tasks
+- Direct execution without planning phase
+- Optimized for low latency
+
+**ArchitectWorkflow (Complex Tasks)** - 1,093 lines:
+```
+Phase 1: RESEARCH
+  ├─ KB search for relevant context
+  ├─ File discovery
+  └─ Findings summarization
+
+Phase 2: CLARIFICATION (Interactive Q&A)
+  ├─ LLM generates clarifying questions
+  ├─ User provides answers
+  ├─ Iterative refinement (max 3 turns)
+  └─ Signal [READY_TO_PLAN] when complete
+
+Phase 3: PLANNING
+  ├─ TOML-based plan generation
+  ├─ Markdown fallback parser
+  ├─ Files to modify/create
+  ├─ Step-by-step implementation
+  └─ Complexity estimate
+```
+
+**Workflow Components**:
+- `workflows/architect-workflow.ts` - Multi-phase research/clarification/planning
+- `workflows/editor-workflow.ts` - Single-phase fast execution
+- `workflows/constants.ts` - Model configs, token ratios, defaults
+- `workflows/plan-parser.ts` - TOML and markdown plan parsing
+
+**Session Storage**:
+- Format: TOML with Zod validation
+- Location: `.dolphin/state/sessions/`
+- Security: PathValidator prevents directory traversal
+- Features: Research results, clarification history, plans
+
+**Plan Storage**:
+- Format: Markdown with TOML metadata
+- Location: `.dolphin/state/plans/`
+- Security: PathValidator on all file operations
+- Features: Versioning, approval workflow
+
+**Security (WP1 Integration)**:
+All file operations use PathValidator to prevent:
+- Directory traversal attacks (`../`)
+- Absolute paths outside workspace
+- Null byte injection
+- Symlink attacks
+- Prefix attacks (repoA vs repoA2)
 
 **Performance Targets**:
-- Discovery phase: <3s (p95)
-- Query generation: <500ms
-- Multi-query execution: Parallel, <2s total
-- Confidence calculation: Real-time
+- EditorWorkflow: <1s (p95)
+- ArchitectWorkflow Research: <3s (p95)
+- Clarification turn: <2s per Q&A
+- Planning phase: <5s (p95)
 
 ### 4. VSCode Extension (TypeScript/Svelte)
 
