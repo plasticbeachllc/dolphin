@@ -3,12 +3,6 @@ set -euo pipefail
 
 # SessionStart hook for Dolphin project
 # Installs dependencies for Python backend and TypeScript/Bun components
-
-# Only run in remote environments (Claude Code on the web)
-if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
-  exit 0
-fi
-
 echo "🐬 Setting up Dolphin development environment..."
 
 # ============================================================================
