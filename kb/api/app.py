@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from .task_queue import TaskStatus, get_task_queue
 from .utils import validate_path_within_repo, GitRepository
+from ..store.sqlite_meta import generate_fts_content_id
 
 # Constants
 EMBEDDING_BATCH_SIZE = 128
@@ -548,6 +549,27 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
         raise HTTPException(status_code=500, detail=f"Failed to register repository: {str(e)}")
 
 
+@app.post("/v1/admin/rebuild-fts5")
+async def rebuild_fts5() -> dict[str, str]:
+    """Rebuild the FTS5 table with updated schema.
+
+    This drops and recreates the FTS5 table. After calling this endpoint,
+    you should trigger a full re-index to populate the FTS5 table with
+    the new deterministic content_ids.
+    """
+    if _sql_store is None:
+        raise HTTPException(status_code=503, detail="SQL store not initialized")
+
+    try:
+        _sql_store.rebuild_fts5_table()
+        return {
+            "status": "success",
+            "message": "FTS5 table rebuilt successfully. Please trigger a re-index to populate it."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to rebuild FTS5 table: {str(e)}")
+
+
 async def _process_index_task(task_id: str, repo_name: str, files: list[str]) -> None:
     """Background task to process file indexing."""
     import asyncio
@@ -598,7 +620,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
         from ..chunkers.registry import detect_language_from_extension, chunk_file as chunk_file_with_config
         from ..chunkers.repo_config import load_repo_chunking_config
         from ..hashing import hash_text
-        from ..embeddings.provider import embed_texts_with_retry
+        from ..embeddings.provider import embed_texts_async
         from ..ingest._helpers import build_desired_map, representative_text_for_hash
 
         # Get commit info for provenance
@@ -663,12 +685,17 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                 repo_config=repo_config,
             )
 
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"[DEBUG] File {filepath}: extracted {len(chunks)} chunks")
+
             # Compute text_hash for each chunk
             for chunk in chunks:
                 chunk.text_hash = hash_text(chunk.text)
 
             # Build desired map
             desired = build_desired_map(chunks)
+            logger.info(f"[DEBUG] File {filepath}: desired map has {len(desired)} unique hashes")
             desired_row_ids: set[str] = set()
 
             # Deduplicate by text_hash
@@ -678,8 +705,9 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             )
             new_hashes = {c.text_hash for c in changed_chunks}
             skipped_occurrences = len(unchanged_chunks)
+            logger.info(f"[DEBUG] File {filepath}: {len(changed_chunks)} changed, {len(unchanged_chunks)} unchanged, {len(new_hashes)} new hashes")
 
-            # Embed only new hashes (batched)
+            # Embed only new hashes (batched, async to avoid blocking status requests)
             text_hash_to_embedding: dict = {}
             if new_hashes:
                 hashes_list = sorted(new_hashes)
@@ -690,13 +718,17 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                     ]
                     if not texts_to_embed:
                         continue
-                    vectors = embed_texts_with_retry(embed_model, texts_to_embed)
+                    # Use async embedding to keep event loop responsive
+                    vectors = await embed_texts_async(embed_model, texts_to_embed)
                     text_hash_to_embedding.update(dict(zip(batch_hashes, vectors)))
+                    # Yield to event loop after each batch to handle status requests
+                    await asyncio.sleep(0)
 
             # Upsert metadata and locations
             mapping = _sql_store.ensure_content_rows_for_file(
                 repo_id, file_id, embed_model, list(desired.keys())
             )
+            logger.info(f"[DEBUG] File {filepath}: ensure_content_rows_for_file returned mapping with {len(mapping)} entries")
 
             for h, occs in desired.items():
                 cid = mapping.get(h)
@@ -712,17 +744,42 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                 (ch.start_line, ch.end_line): getattr(ch, 'token_count', 0) for ch in chunks
             }
 
-            # Persist vectors to LanceDB
+            # Persist vectors to LanceDB and prepare FTS5 chunks
             payload = []
             fts_chunks = []
             for h, occs in desired.items():
                 content_id = mapping.get(h)
                 vec = text_hash_to_embedding.get(h)
+
+                # Prepare chunk for FTS5 indexing (once per hash, independent of vector status)
+                # FTS5 is for BM25 text search and should work even without embeddings
+                if content_id:
+                    chunk_text = None
+                    for chunk in chunks:
+                        if chunk.text_hash == h:
+                            chunk_text = chunk.text
+                            break
+
+                    if chunk_text:
+                        # Generate deterministic FTS5 content_id (independent of embed_model)
+                        fts_content_id = generate_fts_content_id(repo_id, file_id, h)
+
+                        fts_chunks.append({
+                            'content_id': fts_content_id,
+                            'repo': repo_name,
+                            'path': filepath,
+                            'text_hash': h,
+                            'content': chunk_text,
+                            'symbol_name': occs[0].get('symbol_name') if occs else None,
+                            'symbol_path': occs[0].get('symbol_path') if occs else None,
+                        })
+
+                # Build LanceDB payload for chunks with vectors
                 for idx_occ, occ in enumerate(occs):
                     row_id = f"{repo_id}:{file_id}:{embed_model}:{h}:{occ['start_line']}:{occ['end_line']}"
                     desired_row_ids.add(row_id)
                     if vec is None:
-                        continue  # unchanged hash
+                        continue  # unchanged hash, skip vector storage
                     payload.append({
                         'id': row_id,
                         'vector': vec,
@@ -745,23 +802,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                         'created_at': datetime.datetime.now(datetime.timezone.utc),
                     })
 
-                    # Prepare chunk for FTS5 indexing (first occurrence only)
-                    if content_id and idx_occ == 0:
-                        chunk_text = None
-                        for chunk in chunks:
-                            if chunk.text_hash == h:
-                                chunk_text = chunk.text
-                                break
-
-                        if chunk_text:
-                            fts_chunks.append({
-                                'content_id': content_id,
-                                'repo': repo_name,
-                                'path': filepath,
-                                'content': chunk_text,
-                                'symbol_name': occ.get('symbol_name'),
-                                'symbol_path': occ.get('symbol_path'),
-                            })
+            logger.info(f"[DEBUG] File {filepath}: prepared {len(payload)} LanceDB vectors and {len(fts_chunks)} FTS5 chunks")
 
             if payload:
                 _lance_store.upsert_chunks(repo_name, payload, model=embed_model)
@@ -769,6 +810,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             # Index chunks in FTS5 for BM25 search
             if fts_chunks:
                 _sql_store.bulk_index_chunks_for_fts(fts_chunks)
+                logger.info(f"[DEBUG] File {filepath}: indexed {len(fts_chunks)} chunks in FTS5")
 
             # Prune any stale vectors for this file/model
             if desired_row_ids:

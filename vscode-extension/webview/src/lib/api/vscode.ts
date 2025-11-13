@@ -35,11 +35,12 @@ export function getVSCodeAPI() {
 }
 
 // Send message to extension
-export function sendMessage(message: string) {
+export function sendMessage(message: string, mode?: 'code' | 'architect') {
 	const api = getVSCodeAPI();
 	api.postMessage({
 		type: 'send_message',
 		content: message,
+		mode: mode || 'code',
 		timestamp: Date.now()
 	});
 }

@@ -21,6 +21,13 @@ let logger: Logger;
 let autoSyncManager: AutoSyncManager | null = null;
 let driftDetector: DriftDetector | null = null;
 
+/**
+ * Get the active agent bridge instance (for testing)
+ */
+export function getAgentBridge(): AgentBridge | null {
+  return agentBridge;
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   // Create output channel for logging (shared by extension and agent bridge)
   outputChannel = vscode.window.createOutputChannel("Dolphin");
@@ -265,9 +272,43 @@ export async function activate(context: vscode.ExtensionContext) {
       }),
 
       vscode.commands.registerCommand("dolphin.kb.restart", async () => {
-        vscode.window.showInformationMessage(
-          "KB restart not yet implemented. Please restart VSCode to restart KB."
-        );
+        if (!agentBridge) {
+          vscode.window.showErrorMessage("Agent not initialized");
+          return;
+        }
+
+        try {
+          outputChannel.appendLine("[KB Restart] Shutting down agent and KB...");
+          
+          // Shutdown existing agent (this also shuts down KB)
+          agentBridge.shutdown();
+          
+          // Wait a moment for cleanup
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Restart agent (which will restart KB)
+          outputChannel.appendLine("[KB Restart] Restarting agent and KB...");
+          agentBridge = new AgentBridge(outputChannel);
+          
+          const agentCorePath = context.asAbsolutePath(
+            path.join("..", "agent-core", "src", "main.ts")
+          );
+          const extensionPath = context.extensionPath;
+          const apiKey = await context.secrets.get('dolphin.apiKey');
+          
+          await agentBridge.start(agentCorePath, extensionPath, apiKey);
+          
+          // Update view provider with new bridge
+          if (viewProvider) {
+            (viewProvider as any).agentBridge = agentBridge;
+          }
+          
+          outputChannel.appendLine("[KB Restart] Agent and KB restarted successfully");
+          vscode.window.showInformationMessage("KB restarted successfully");
+        } catch (error: any) {
+          outputChannel.appendLine(`[KB Restart] Failed: ${error.message}`);
+          vscode.window.showErrorMessage(`Failed to restart KB: ${error.message}`);
+        }
       })
     );
 

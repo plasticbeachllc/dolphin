@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import logging
 import sqlite3
 import threading
 from contextlib import closing
@@ -9,6 +11,29 @@ from typing import Any
 from sqlalchemy import event
 from sqlmodel import SQLModel, create_engine
 from kb.security import PathValidator
+
+
+def generate_fts_content_id(repo_id: int, file_id: int, text_hash: str) -> str:
+    """Generate deterministic FTS5 content_id independent of embed_model.
+
+    This ensures that the same text content (identified by repo_id, file_id, text_hash)
+    always gets the same FTS5 content_id, regardless of which embedding model(s)
+    are used to index it. This prevents duplicate FTS5 entries for the same content.
+
+    Args:
+        repo_id: Repository ID
+        file_id: File ID
+        text_hash: SHA-256 hash of chunk text content
+
+    Returns:
+        Deterministic content_id for FTS5 table (32-character hex string)
+    """
+    # Create a stable, deterministic identifier
+    composite = f"{repo_id}:{file_id}:{text_hash}"
+    return hashlib.sha256(composite.encode()).hexdigest()[:32]
+
+
+logger = logging.getLogger(__name__)
 class SQLiteMetadataStore:
     """SQLite-backed metadata store using SQLModel for schema materialization."""
 
@@ -40,26 +65,32 @@ class SQLiteMetadataStore:
 
     def initialize(self) -> None:
         """Thread-safe enhanced initialization with proper validation and error handling."""
+        logger.info("[SQLiteMeta] initialize() called")
         # Fast path: check if already initialized
         if self._initialized:
+            logger.info("[SQLiteMeta] Already initialized, skipping")
             return
         
         # Use lock to prevent concurrent initialization
         with self._init_lock:
             # Double-check pattern: another thread might have initialized while we were waiting
             if self._initialized:
+                logger.info("[SQLiteMeta] Already initialized (double-check), skipping")
                 return
-            
+
             try:
+                logger.info("[SQLiteMeta] Starting initialization...")
                 self._initializing = True
-                
+
                 engine = self._engine()
-                
+
                 # Import models at call time to register them with SQLModel.metadata
                 from . import sql_models as _models  # noqa: F401
-                
+
                 # Create all tables if they don't exist (via SQLModel models)
+                logger.info("[SQLiteMeta] Creating SQLModel tables...")
                 SQLModel.metadata.create_all(engine)
+                logger.info("[SQLiteMeta] SQLModel tables created")
                 
                 # Validate foreign key support and constraints
                 with self._connect() as conn, closing(conn.cursor()) as cur:
@@ -92,20 +123,26 @@ class SQLiteMetadataStore:
                         
                         # Validate table schema
                         self._validate_table_schema(cur, table)
-                    
+
+                    logger.info("[SQLiteMeta] Table validation complete, creating FTS5 tables...")
+
                     # Robust FTS5 creation with version checking
                     self._create_fts5_table_safe(cur)
-                    
+
                     # Create code graph FTS5 index for symbol search
                     self._create_code_graph_fts5_safe(cur)
-                    
+
+                    logger.info("[SQLiteMeta] FTS5 tables created, committing...")
                     conn.commit()
-                
+                    logger.info("[SQLiteMeta] Changes committed")
+
                 # Post-initialization validation
+                logger.info("[SQLiteMeta] Validating database integrity...")
                 self._validate_database_integrity()
-                
+
                 # Mark as successfully initialized
                 self._initialized = True
+                logger.info("[SQLiteMeta] ✅ Initialization complete")
                 
             finally:
                 self._initializing = False
@@ -141,17 +178,41 @@ class SQLiteMetadataStore:
     def _create_fts5_table_safe(self, cur) -> None:
         """Safely create FTS5 table with version and feature detection."""
         import sqlite3
-        
+
+        logger.info("[FTS5 Migration] _create_fts5_table_safe() called")
+
         # Check SQLite version and FTS5 support
         cur.execute("SELECT sqlite_version()")
         sqlite_version = cur.fetchone()[0]
-        
-        # Check if FTS5 is available
+        logger.info(f"[FTS5 Migration] SQLite version: {sqlite_version}")
+
+        # Check if FTS5 is available and handle schema migration
         try:
+            # Check if table already exists
             cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
-            if cur.fetchone():
-                return  # Already exists
-            
+            table_exists = cur.fetchone()
+            logger.info(f"[FTS5 Migration] Table exists: {bool(table_exists)}")
+
+            if table_exists:
+                # Test if it has the text_hash column by trying to use it
+                # PRAGMA table_info doesn't work reliably with FTS5 virtual tables
+                logger.info("[FTS5 Migration] Testing for text_hash column...")
+                try:
+                    cur.execute("SELECT text_hash FROM chunks_fts LIMIT 0")
+                    logger.info("[FTS5 Migration] text_hash column exists - schema is up to date")
+                    return  # Already has correct schema
+                except sqlite3.OperationalError as e:
+                    logger.info(f"[FTS5 Migration] SELECT text_hash failed: {e}")
+                    error_msg = str(e).lower()
+                    if "text_hash" in error_msg and ("no column" in error_msg or "no such column" in error_msg):
+                        # Old schema - drop and recreate
+                        logger.warning("[FTS5 Migration] 🔄 Migrating FTS5 table to new schema (adding text_hash column)...")
+                        cur.execute("DROP TABLE chunks_fts")
+                        logger.info("[FTS5 Migration] Dropped old chunks_fts table")
+                        # Fall through to creation below
+                    else:
+                        raise
+
             # Test FTS5 support
             cur.execute("CREATE VIRTUAL TABLE IF NOT EXISTS _fts5_test USING fts5(x)")
             cur.execute("DROP TABLE _fts5_test")
@@ -166,19 +227,23 @@ class SQLiteMetadataStore:
                 raise RuntimeError(f"FTS5 test failed: {e}")
         
         # Create FTS5 table with proper schema
+        logger.info("[FTS5 Migration] Creating chunks_fts table with new schema...")
         try:
             cur.execute("""
                 CREATE VIRTUAL TABLE chunks_fts USING fts5(
                     content_id UNINDEXED,
                     repo UNINDEXED,
                     path UNINDEXED,
+                    text_hash UNINDEXED,
                     content,
                     symbol_name,
                     symbol_path,
                     tokenize='porter unicode61'
                 )
             """)
+            logger.info("[FTS5 Migration] ✅ chunks_fts table created successfully")
         except sqlite3.OperationalError as e:
+            logger.error(f"[FTS5 Migration] ❌ Failed to create FTS5 table: {e}")
             raise RuntimeError(f"Failed to create FTS5 table: {e}")
     
     def _create_code_graph_fts5_safe(self, cur) -> None:
@@ -364,14 +429,20 @@ class SQLiteMetadataStore:
 
     def begin_session(self, repo_id: int, commit_sha: str, branch: str, embed_model: str) -> int:
         """Create a new ingestion session and return its id."""
+        from datetime import datetime, timezone
+
         with self._connect() as conn, closing(conn.cursor()) as cur:
+            # Use ISO format timestamp for consistency with other timestamp fields
+            created_at = datetime.now(timezone.utc).isoformat()
+
             cur.execute(
                 """
-                INSERT INTO sessions (repo_id, commit_sha, branch, embed_model, status, 
-                                     files_indexed, chunks_indexed, vectors_written, chunks_skipped, chunks_pruned)
-                VALUES (?, ?, ?, ?, 'running', 0, 0, 0, 0, 0)
+                INSERT INTO sessions (repo_id, commit_sha, branch, embed_model, status,
+                                     files_indexed, chunks_indexed, vectors_written, chunks_skipped, chunks_pruned,
+                                     created_at)
+                VALUES (?, ?, ?, ?, 'running', 0, 0, 0, 0, 0, ?)
                 """,
-                (repo_id, commit_sha, branch, embed_model),
+                (repo_id, commit_sha, branch, embed_model, created_at),
             )
             conn.commit()
             return int(cur.lastrowid)
@@ -1028,28 +1099,30 @@ class SQLiteMetadataStore:
         content_id: str,
         repo: str,
         path: str,
+        text_hash: str,
         content: str,
         symbol_name: str | None = None,
         symbol_path: str | None = None,
     ) -> None:
         """Index a chunk in the FTS5 table for BM25 search.
-        
+
         Args:
-            content_id: Unique chunk identifier
+            content_id: Deterministic chunk identifier (from generate_fts_content_id)
             repo: Repository name
             path: File path
+            text_hash: SHA-256 hash of chunk content (for joining with chunk_content)
             content: Chunk text content (will be tokenized and stemmed)
             symbol_name: Optional symbol name for exact matching
             symbol_path: Optional fully qualified symbol path
         """
-        
+
         with self._connect() as conn, closing(conn.cursor()) as cur:
             # Upsert: replace if exists, insert if new
             cur.execute("""
                 INSERT OR REPLACE INTO chunks_fts
-                (content_id, repo, path, content, symbol_name, symbol_path)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (content_id, repo, path, content, symbol_name, symbol_path))
+                (content_id, repo, path, text_hash, content, symbol_name, symbol_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (content_id, repo, path, text_hash, content, symbol_name, symbol_path))
             conn.commit()
 
     def bulk_index_chunks_for_fts(
@@ -1057,33 +1130,77 @@ class SQLiteMetadataStore:
         chunks: list[dict[str, Any]],
     ) -> int:
         """Bulk index multiple chunks for better performance.
-        
+
         Args:
             chunks: List of chunk dicts with keys:
-                - content_id, repo, path, content, symbol_name, symbol_path
-        
+                - content_id, repo, path, text_hash, content, symbol_name, symbol_path
+
         Returns:
             Number of chunks indexed
         """
         if not chunks:
             return 0
-        
+
         with self._connect() as conn, closing(conn.cursor()) as cur:
+            # Runtime schema migration check - ensure FTS5 table has text_hash column
+            # This catches cases where initialize() was already called before the migration was added
+            import sqlite3
+            try:
+                cur.execute("SELECT text_hash FROM chunks_fts LIMIT 0")
+            except sqlite3.OperationalError as e:
+                error_msg = str(e).lower()
+                if "text_hash" in error_msg and ("no column" in error_msg or "no such column" in error_msg):
+                    logger.warning(f"[FTS5 Migration] Runtime check: text_hash column missing ({e}), migrating now...")
+                    cur.execute("DROP TABLE IF EXISTS chunks_fts")
+                    cur.execute("""
+                        CREATE VIRTUAL TABLE chunks_fts USING fts5(
+                            content_id UNINDEXED,
+                            repo UNINDEXED,
+                            path UNINDEXED,
+                            text_hash UNINDEXED,
+                            content,
+                            symbol_name,
+                            symbol_path,
+                            tokenize='porter unicode61'
+                        )
+                    """)
+                    conn.commit()
+                    logger.info("[FTS5 Migration] Runtime migration complete")
+                else:
+                    raise
+
+            # Proceed with bulk insert
             cur.executemany("""
                 INSERT OR REPLACE INTO chunks_fts
-                (content_id, repo, path, content, symbol_name, symbol_path)
-                VALUES (?, ?, ?, ?, ?, ?)
+                (content_id, repo, path, text_hash, content, symbol_name, symbol_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, [
-                (c["content_id"], c["repo"], c["path"],
+                (c["content_id"], c["repo"], c["path"], c["text_hash"],
                  c["content"], c.get("symbol_name"), c.get("symbol_path"))
                 for c in chunks
             ])
             conn.commit()
             return len(chunks)
 
+    def rebuild_fts5_table(self) -> None:
+        """Drop and recreate the FTS5 table with updated schema.
+
+        This is useful when migrating to the new deterministic content_id format
+        or when the FTS5 schema changes. After rebuilding, you'll need to
+        re-index all chunks using bulk_index_chunks_for_fts().
+        """
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            # Drop existing FTS5 table if it exists
+            cur.execute("DROP TABLE IF EXISTS chunks_fts")
+            conn.commit()
+
+            # Recreate with new schema
+            self._create_fts5_table_safe(cur)
+            conn.commit()
+
     def get_chunk_by_id(self, chunk_id: str) -> dict[str, Any] | None:
         """Get full chunk metadata by content_id.
-        
+
         Returns:
             Dict with chunk metadata or None if not found
         """
@@ -1127,30 +1244,114 @@ class SQLiteMetadataStore:
                 "symbol_path": row[11],
             }
 
+    def get_chunk_by_content_identity(
+        self,
+        repo_id: int,
+        file_id: int,
+        text_hash: str,
+    ) -> dict[str, Any] | None:
+        """Get chunk metadata using deterministic FTS identity components."""
+
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute(
+                """
+                SELECT
+                    cc.id,
+                    cc.text_hash,
+                    cc.embed_model,
+                    cc.first_indexed_at,
+                    cc.last_indexed_at,
+                    f.path,
+                    f.language
+                FROM chunk_content cc
+                JOIN files f ON cc.file_id = f.id
+                WHERE cc.repo_id = ? AND cc.file_id = ? AND cc.text_hash = ?
+                ORDER BY
+                    CASE WHEN cc.last_indexed_at IS NOT NULL THEN 0 ELSE 1 END,
+                    cc.last_indexed_at DESC
+                LIMIT 1
+                """,
+                (repo_id, file_id, text_hash),
+            )
+
+            row = cur.fetchone()
+            if not row:
+                return None
+
+            content_id = str(row[0])
+            metadata: dict[str, Any] = {
+                "chunk_id": content_id,
+                "text_hash": str(row[1]),
+                "embed_model": str(row[2]),
+                "first_indexed_at": row[3],
+                "last_indexed_at": row[4],
+                "path": str(row[5]),
+                "language": row[6],
+            }
+
+            cur.execute(
+                """
+                SELECT
+                    start_line,
+                    end_line,
+                    symbol_kind,
+                    symbol_name,
+                    symbol_path
+                FROM chunk_locations
+                WHERE content_id = ?
+                ORDER BY
+                    CASE WHEN last_seen_at IS NOT NULL THEN 0 ELSE 1 END,
+                    last_seen_at DESC,
+                    start_line ASC
+                LIMIT 1
+                """,
+                (content_id,),
+            )
+            location = cur.fetchone()
+
+            if location:
+                metadata.update(
+                    {
+                        "start_line": int(location[0]) if location[0] is not None else None,
+                        "end_line": int(location[1]) if location[1] is not None else None,
+                        "symbol_kind": location[2],
+                        "symbol_name": location[3],
+                        "symbol_path": location[4],
+                    }
+                )
+
+            return metadata
+
     def get_chunk_contents(self, chunk_ids: list[str]) -> dict[str, str]:
         """Get a mapping of chunk_id to its content.
-        
+
         Tries to fetch content from FTS table first (preferred), but falls back
         to reconstructing content from files if FTS entries don't exist.
+
+        Note: chunk_ids can be either:
+        - Deterministic FTS content_ids (from generate_fts_content_id)
+        - UUID-based chunk_content.id values (legacy)
+
+        This method handles both by joining on text_hash.
         """
         if not chunk_ids:
             return {}
-        
+
         placeholders = ",".join(["?"] * len(chunk_ids))
-        
+
         # Try FTS table first (contains actual chunk content)
+        # Join on text_hash since FTS5 now uses deterministic content_ids
         fts_query = f"""
-            SELECT c.id, fts.content
-            FROM chunk_content c
-            JOIN chunks_fts fts ON c.id = fts.content_id
-            WHERE c.id IN ({placeholders})
+            SELECT fts.content_id, fts.content
+            FROM chunks_fts fts
+            WHERE fts.content_id IN ({placeholders})
         """
-        
+
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(fts_query, chunk_ids)
             rows = cur.fetchall()
             result = {str(row[0]): str(row[1]) for row in rows}
-            
+
             # If all chunks found in FTS, return immediately
             if len(result) == len(chunk_ids):
                 return result

@@ -1,145 +1,155 @@
-// agent-core-v2/src/workflows/architect-workflow.ts
+/**
+ * ArchitectWorkflow - Research → Clarification → Planning workflow
+ *
+ * Implements a structured approach to complex coding tasks:
+ * 1. Research: Discover relevant codebase context via KB searches
+ * 2. Clarification: Interactive Q&A loop to refine understanding
+ * 3. Planning: Generate structured implementation plan
+ *
+ * Key difference from EditorWorkflow: Includes mandatory clarification phase
+ * to ensure LLM has complete context before generating plan.
+ */
+
 import type {
   IWorkflow,
   TaskInput,
   WorkflowUpdate,
-  Context,
   ResearchResult,
+  ClarificationResult,
+  ClarificationQuestion,
+  ClarificationResponse,
   Plan,
-} from '../types/index';
-import type { ClaudeProvider } from '../execution/claude-provider';
-import type { ContextBuilder } from '../context/context-builder';
-import type { PromptBuilder } from '../prompts/prompt-builder';
-import type { StateStore } from '../state/state-store';
-import type { AgentEvent } from '../../../../shared/types/events';
-import { PlanStore } from '../storage/plan-store';
+  KBSearch,
+} from '../types/index.js';
 
-/**
- * Configuration for ArchitectWorkflow
- */
+import type { ContextBuilder } from '../context/context-builder.js';
+import type { PromptBuilder } from '../prompts/prompt-builder.js';
+import type { ClaudeProvider } from '../execution/claude-provider.js';
+import { MODELS, CHARS_PER_TOKEN, DEFAULT_MAX_CLARIFICATION_TURNS } from './constants.js';
+import { parsePlanFromMarkdown, parseLegacyMarkdownPlan } from './plan-parser.js';
+
 export interface ArchitectWorkflowConfig {
   claudeProvider: ClaudeProvider;
   contextBuilder: ContextBuilder;
   promptBuilder: PromptBuilder;
-  stateStore: StateStore;
-  planStore: PlanStore;
-  workspaceRoot: string;
+  maxClarificationTurns?: number;
 }
 
 /**
- * ArchitectWorkflow implements multi-phase execution for complex tasks
- *
- * Workflow Phases:
- * 1. Research → Explore codebase and understand requirements
- * 2. Planning → Create detailed implementation plan
- * 3. Approval → Wait for user approval
- * 4. Execution → Implement the approved plan
- * 5. Validation → Verify changes and run tests
+ * ArchitectWorkflow orchestrates the research → clarification → planning flow
  */
 export class ArchitectWorkflow implements IWorkflow {
   private config: ArchitectWorkflowConfig;
+  private maxClarificationTurns: number;
+  private aborted = false;
 
   constructor(config: ArchitectWorkflowConfig) {
     this.config = config;
+    this.maxClarificationTurns = config.maxClarificationTurns || DEFAULT_MAX_CLARIFICATION_TURNS;
   }
 
   /**
    * Execute the architect workflow
    */
   async *execute(input: TaskInput): AsyncIterableIterator<WorkflowUpdate> {
-    const sessionId = `arch_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const sessionId = `architect_${Date.now()}`;
+    this.aborted = false;
 
     try {
-      // Phase 1: Research
-      yield* this.researchPhase(sessionId, input);
-
-      // Phase 2: Planning
-      const plan = yield* this.planningPhase(sessionId, input);
-
-      // Phase 3: Await Approval (orchestrator handles this)
+      // ========================================================================
+      // Phase 1: Research - Discover codebase context
+      // ========================================================================
       yield {
         type: 'state_change',
         sessionId,
         timestamp: new Date().toISOString(),
-        data: { state: 'awaiting_approval', plan },
+        data: { state: 'researching' },
       };
 
-      // Execution continues after approval (orchestrator will resume)
+      const research = yield* this.executeResearchPhase(sessionId, input);
+
+      // ========================================================================
+      // Phase 2: Clarification - Interactive Q&A loop
+      // ========================================================================
+      yield {
+        type: 'state_change',
+        sessionId,
+        timestamp: new Date().toISOString(),
+        data: { state: 'clarifying' },
+      };
+
+      const clarification = yield* this.executeClarificationPhase(
+        sessionId,
+        input,
+        research
+      );
+
+      // ========================================================================
+      // Phase 3: Planning - Generate structured plan
+      // ========================================================================
+      yield {
+        type: 'state_change',
+        sessionId,
+        timestamp: new Date().toISOString(),
+        data: { state: 'planning' },
+      };
+
+      const plan = yield* this.executePlanningPhase(
+        sessionId,
+        input,
+        research,
+        clarification
+      );
+
+      // ========================================================================
+      // Phase 4: Await User Approval
+      // ========================================================================
+      yield {
+        type: 'state_change',
+        sessionId,
+        timestamp: new Date().toISOString(),
+        data: { state: 'awaiting_approval' },
+      };
+
+      yield {
+        type: 'progress',
+        sessionId,
+        timestamp: new Date().toISOString(),
+        data: {
+          phase: 'planning',
+          message: 'Plan ready for review',
+          plan,
+        },
+      };
+
+      // Note: Orchestrator will handle approval/rejection flow
+      // This workflow yields and waits for orchestrator to resume
 
     } catch (error) {
-      console.error('[ArchitectWorkflow] Error:', error);
-
       yield {
         type: 'error',
         sessionId,
         timestamp: new Date().toISOString(),
         data: {
           error: error instanceof Error ? error.message : String(error),
-          recoverable: false,
-        },
-      };
-
-      yield {
-        type: 'state_change',
-        sessionId,
-        timestamp: new Date().toISOString(),
-        data: { state: 'error' },
-      };
-    }
-  }
-
-  /**
-   * Execute plan after approval (called by orchestrator)
-   */
-  async *executeApprovedPlan(
-    sessionId: string,
-    plan: Plan,
-    input: TaskInput
-  ): AsyncIterableIterator<WorkflowUpdate> {
-    try {
-      // Phase 4: Execution
-      yield* this.executionPhase(sessionId, plan, input);
-
-      // Phase 5: Complete
-      yield {
-        type: 'state_change',
-        sessionId,
-        timestamp: new Date().toISOString(),
-        data: { state: 'complete' },
-      };
-
-    } catch (error) {
-      console.error('[ArchitectWorkflow] Execution error:', error);
-
-      yield {
-        type: 'error',
-        sessionId,
-        timestamp: new Date().toISOString(),
-        data: {
-          error: error instanceof Error ? error.message : String(error),
-          recoverable: true,
         },
       };
     }
   }
 
-  // =============================================================================
-  // Phase Implementations
-  // =============================================================================
-
   /**
-   * Phase 1: Research the codebase
+   * Phase 1: Research Phase
+   * - Execute KB searches to understand codebase
+   * - Identify relevant files and patterns
+   * - Summarize findings
    */
-  private async *researchPhase(
+  private async *executeResearchPhase(
     sessionId: string,
     input: TaskInput
-  ): AsyncIterableIterator<WorkflowUpdate> {
-    yield {
-      type: 'state_change',
-      sessionId,
-      timestamp: new Date().toISOString(),
-      data: { state: 'researching' },
-    };
+  ): AsyncGenerator<WorkflowUpdate, ResearchResult, unknown> {
+    const startTime = Date.now();
+    const kbSearches: KBSearch[] = [];
+    const relevantFiles: string[] = [];
 
     yield {
       type: 'progress',
@@ -147,45 +157,81 @@ export class ArchitectWorkflow implements IWorkflow {
       timestamp: new Date().toISOString(),
       data: {
         phase: 'research',
-        message: 'Starting codebase research...',
+        message: 'Searching knowledge base for relevant context...',
       },
     };
 
-    // Build initial context
+    // Build context with KB search
     const context = await this.config.contextBuilder.build({
-      files: input.context.files || [],
       searchQuery: input.message,
-      maxTokens: 20000, // Larger context for research
+      files: input.context.files,
+      maxTokens: 12000,
+      includeRepoMap: false,
+      scope: 'architect',
     });
 
-    // Build research prompt
+    // Track KB searches
+    for (const kbResult of context.kbResults) {
+      if (!relevantFiles.includes(kbResult.file)) {
+        relevantFiles.push(kbResult.file);
+      }
+    }
+
+    kbSearches.push({
+      query: input.message,
+      resultsCount: context.kbResults.length,
+      topResult: context.kbResults[0]?.file,
+    });
+
+    // Generate research prompt and execute with Claude
     const researchPrompt = this.config.promptBuilder.buildResearchPrompt({
       task: input.message,
       context,
-      systemPrompt: '', // PromptBuilder includes system prompt
+      systemPrompt: this.getResearchSystemPrompt(),
     });
 
-    // Execute research with Claude
-    const startTime = Date.now();
-    let researchFindings = '';
-
-    const result = await this.config.claudeProvider.execute({
-      message: researchPrompt,
-      conversationHistory: input.conversationHistory,
-      onEvent: (event: AgentEvent) => {
-        if (event.type === 'content_delta') {
-          researchFindings += event.delta;
-        }
+    yield {
+      type: 'progress',
+      sessionId,
+      timestamp: new Date().toISOString(),
+      data: {
+        phase: 'research',
+        message: 'Analyzing codebase and generating research findings...',
       },
-    });
+    };
 
-    const research: ResearchResult = {
+    // Execute research with Haiku (fast, cost-effective)
+    let findings = '';
+    for await (const chunk of this.config.claudeProvider.execute({
+      model: MODELS.RESEARCH,
+      prompt: researchPrompt,
+      systemPrompt: this.getResearchSystemPrompt(),
+      context,
+      thinkingMode: 'normal',
+    })) {
+      if (chunk.type === 'text') {
+        findings += chunk.content;
+
+        yield {
+          type: 'chunk',
+          sessionId,
+          timestamp: new Date().toISOString(),
+          data: {
+            type: 'text',
+            content: chunk.content,
+            phase: 'research',
+          },
+        };
+      }
+    }
+
+    const result: ResearchResult = {
       completedAt: new Date().toISOString(),
-      model: 'claude-sonnet-4-20250514',
-      tokensUsed: result.usage.inputTokens + result.usage.outputTokens,
-      findings: researchFindings,
-      kbSearches: [], // TODO: track KB searches from tool calls
-      relevantFiles: context.files.map(f => f.path),
+      model: MODELS.RESEARCH,
+      tokensUsed: Math.floor(findings.length / CHARS_PER_TOKEN),
+      findings,
+      kbSearches,
+      relevantFiles,
     };
 
     yield {
@@ -194,109 +240,265 @@ export class ArchitectWorkflow implements IWorkflow {
       timestamp: new Date().toISOString(),
       data: {
         phase: 'research',
-        message: `Research complete (${result.usage.inputTokens + result.usage.outputTokens} tokens, ${Date.now() - startTime}ms)`,
-        research,
+        message: `Research complete. Found ${relevantFiles.length} relevant files.`,
+        result,
       },
     };
+
+    return result;
   }
 
   /**
-   * Phase 2: Create implementation plan
+   * Phase 2: Clarification Phase
+   * - Interactive Q&A loop with the LLM
+   * - LLM can ask questions and continue using KB tools
+   * - Continues until LLM signals ready OR max turns reached
    */
-  private async *planningPhase(
+  private async *executeClarificationPhase(
     sessionId: string,
-    input: TaskInput
-  ): AsyncIterableIterator<Plan> {
+    input: TaskInput,
+    research: ResearchResult
+  ): AsyncGenerator<WorkflowUpdate, ClarificationResult, unknown> {
+    const questions: ClarificationQuestion[] = [];
+    const responses: ClarificationResponse[] = [];
+    let conversationTurns = 0;
+    let readyForPlanning = false;
+    let conversationHistory: Array<{role: 'user' | 'assistant'; content: string}> = [];
+
+    // Initial clarification prompt with research context
+    conversationHistory.push({
+      role: 'user',
+      content: this.buildInitialClarificationPrompt(input, research),
+    });
+
     yield {
-      type: 'state_change',
+      type: 'progress',
       sessionId,
       timestamp: new Date().toISOString(),
-      data: { state: 'planning' },
+      data: {
+        phase: 'clarification',
+        message: 'Initiating clarification phase...',
+      },
     };
 
+    // Clarification loop: continue until LLM signals ready or max turns
+    while (conversationTurns < this.maxClarificationTurns && !readyForPlanning) {
+      if (this.aborted) {
+        throw new Error('Workflow aborted');
+      }
+
+      conversationTurns++;
+
+      yield {
+        type: 'progress',
+        sessionId,
+        timestamp: new Date().toISOString(),
+        data: {
+          phase: 'clarification',
+          message: `Clarification turn ${conversationTurns}/${this.maxClarificationTurns}`,
+        },
+      };
+
+      // Execute clarification with Sonnet (good reasoning, balanced cost)
+      let llmResponse = '';
+      for await (const chunk of this.config.claudeProvider.execute({
+        model: MODELS.CLARIFICATION,
+        prompt: conversationHistory[conversationHistory.length - 1].content,
+        systemPrompt: this.getClarificationSystemPrompt(conversationTurns),
+        thinkingMode: 'normal',
+      })) {
+        if (chunk.type === 'text') {
+          llmResponse += chunk.content;
+
+          yield {
+            type: 'chunk',
+            sessionId,
+            timestamp: new Date().toISOString(),
+            data: {
+              type: 'text',
+              content: chunk.content,
+              phase: 'clarification',
+            },
+          };
+        }
+      }
+
+      conversationHistory.push({
+        role: 'assistant',
+        content: llmResponse,
+      });
+
+      // Check if LLM is ready to plan
+      // Signal: LLM includes [READY_TO_PLAN] marker or reaches max turns
+      if (llmResponse.includes('[READY_TO_PLAN]') || conversationTurns >= this.maxClarificationTurns) {
+        readyForPlanning = true;
+
+        yield {
+          type: 'progress',
+          sessionId,
+          timestamp: new Date().toISOString(),
+          data: {
+            phase: 'clarification',
+            message: 'Clarification complete. Proceeding to planning...',
+          },
+        };
+
+        break;
+      }
+
+      // Parse questions from LLM response
+      const parsedQuestions = this.parseQuestionsFromResponse(llmResponse);
+      questions.push(...parsedQuestions);
+
+      // Wait for user response
+      // Note: In practice, this would be an event emitted to UI
+      // For now, we'll simulate by checking if there are questions
+      if (parsedQuestions.length > 0) {
+        yield {
+          type: 'progress',
+          sessionId,
+          timestamp: new Date().toISOString(),
+          data: {
+            phase: 'clarification',
+            message: `${parsedQuestions.length} clarifying questions`,
+            questions: parsedQuestions,
+          },
+        };
+
+        // This is where we'd wait for user input in the real implementation
+        // For the MVP, we'll treat no response as a signal to continue with what we have
+        break;
+      }
+    }
+
+    const result: ClarificationResult = {
+      completedAt: new Date().toISOString(),
+      model: MODELS.CLARIFICATION,
+      tokensUsed: Math.floor(
+        conversationHistory.reduce((sum, msg) => sum + msg.content.length, 0) / CHARS_PER_TOKEN
+      ),
+      conversationTurns,
+      questions,
+      responses,
+      readyForPlanning,
+      finalContext: conversationHistory[conversationHistory.length - 1].content,
+    };
+
+    // Yield progress update with result so orchestrator can capture it
+    yield {
+      type: 'progress',
+      sessionId,
+      timestamp: new Date().toISOString(),
+      data: {
+        phase: 'clarification',
+        message: 'Clarification phase complete',
+        result,
+      },
+    };
+
+    return result;
+  }
+
+  /**
+   * Phase 3: Planning Phase
+   * - Generate structured implementation plan
+   * - Parse plan into TOML-compatible structure
+   * - Include file references, steps, complexity estimate
+   */
+  private async *executePlanningPhase(
+    sessionId: string,
+    input: TaskInput,
+    research: ResearchResult,
+    clarification: ClarificationResult
+  ): AsyncGenerator<WorkflowUpdate, Plan, unknown> {
     yield {
       type: 'progress',
       sessionId,
       timestamp: new Date().toISOString(),
       data: {
         phase: 'planning',
-        message: 'Creating implementation plan...',
+        message: 'Generating implementation plan...',
       },
     };
 
-    // Build planning context
+    // Build context for planning
     const context = await this.config.contextBuilder.build({
-      files: input.context.files || [],
-      maxTokens: 15000,
+      searchQuery: input.message,
+      files: research.relevantFiles,
+      maxTokens: 16000,
+      includeRepoMap: true,
+      scope: 'architect',
+      researchFindings: research,
     });
 
-    // TODO: Include research findings
-    const research: ResearchResult = {
-      completedAt: new Date().toISOString(),
-      model: 'claude-sonnet-4-20250514',
-      tokensUsed: 0,
-      findings: '',
-      kbSearches: [],
-      relevantFiles: [],
-    };
-
-    // Build planning prompt
+    // Generate planning prompt
     const planningPrompt = this.config.promptBuilder.buildPlanningPrompt({
       task: input.message,
       research,
       context,
-      systemPrompt: '',
+      systemPrompt: this.getPlanningSystemPrompt(),
     });
 
-    // Execute planning with Claude Opus (best reasoning)
-    const startTime = Date.now();
+    // Execute planning with Opus (best reasoning)
     let planContent = '';
+    for await (const chunk of this.config.claudeProvider.execute({
+      model: MODELS.PLANNING,
+      prompt: planningPrompt,
+      systemPrompt: this.getPlanningSystemPrompt(),
+      context,
+      thinkingMode: 'extended',
+    })) {
+      if (chunk.type === 'text') {
+        planContent += chunk.content;
 
-    const result = await this.config.claudeProvider.execute({
-      message: planningPrompt,
-      conversationHistory: [],
-      onEvent: (event: AgentEvent) => {
-        if (event.type === 'content_delta') {
-          planContent += event.delta;
-        }
-      },
-    });
+        yield {
+          type: 'chunk',
+          sessionId,
+          timestamp: new Date().toISOString(),
+          data: {
+            type: 'text',
+            content: chunk.content,
+            phase: 'planning',
+          },
+        };
+      }
+    }
 
-    // Parse plan
+    // Parse plan from markdown with robust TOML extraction
+    let parsedPlan: any;
+    let parseSource = 'toml';
+
+    try {
+      // Try robust TOML parsing first
+      const result = parsePlanFromMarkdown(planContent);
+      parsedPlan = result.plan;
+      parseSource = result.source;
+      console.log(`[ArchitectWorkflow] Plan parsed from ${result.source}`);
+    } catch (tomlError) {
+      // Fallback to legacy markdown parsing
+      console.warn('[ArchitectWorkflow] TOML parsing failed, using legacy markdown parser:', tomlError);
+      parsedPlan = parseLegacyMarkdownPlan(planContent);
+      parseSource = 'legacy-markdown';
+    }
+
+    // Convert TOML snake_case to Plan camelCase
     const plan: Plan = {
       version: 1,
       status: 'pending_approval',
       createdAt: new Date().toISOString(),
-      model: 'claude-opus-4-20250514',
-      tokensUsed: result.usage.inputTokens + result.usage.outputTokens,
-      estimatedCost: 0, // TODO: calculate
+      model: MODELS.PLANNING,
+      tokensUsed: Math.floor(planContent.length / CHARS_PER_TOKEN),
+      estimatedCost: 0.015, // Rough estimate for Opus
       content: planContent,
-      filesToModify: this.extractFilesToModify(planContent),
-      filesToCreate: this.extractFilesToCreate(planContent),
-      steps: this.extractSteps(planContent),
-      complexity: this.estimateComplexity(planContent),
-      estimatedTokens: this.estimateImplementationTokens(planContent),
+      filesToModify: parsedPlan.files_to_modify || parsedPlan.filesToModify || [],
+      filesToCreate: parsedPlan.files_to_create || parsedPlan.filesToCreate || [],
+      steps: (parsedPlan.steps || []).map((s: any) =>
+        typeof s === 'string' ? s : s.description
+      ),
+      complexity: parsedPlan.complexity || 'medium',
+      estimatedTokens: parsedPlan.estimated_tokens || parsedPlan.estimatedTokens || Math.floor(planContent.length / CHARS_PER_TOKEN),
+      overview: parsedPlan.overview,
     };
-
-    // Save plan
-    await this.config.planStore.savePlan({
-      schema_version: '1.0',
-      plan: {
-        id: `plan_${sessionId}`,
-        created_at: plan.createdAt,
-        updated_at: plan.createdAt,
-        task_description: input.message,
-        model_used: plan.model,
-        status: 'pending_approval',
-      },
-      content: plan.content,
-      metadata: {
-        files_to_modify: plan.filesToModify,
-        files_to_create: plan.filesToCreate,
-        estimated_complexity: plan.complexity,
-        estimated_tokens: plan.estimatedTokens,
-      },
-    });
 
     yield {
       type: 'progress',
@@ -304,7 +506,7 @@ export class ArchitectWorkflow implements IWorkflow {
       timestamp: new Date().toISOString(),
       data: {
         phase: 'planning',
-        message: `Plan created (${plan.tokensUsed} tokens)`,
+        message: 'Plan generated successfully',
         plan,
       },
     };
@@ -313,119 +515,181 @@ export class ArchitectWorkflow implements IWorkflow {
   }
 
   /**
-   * Phase 4: Execute the approved plan
+   * Helper: Parse questions from LLM response
    */
-  private async *executionPhase(
-    sessionId: string,
-    plan: Plan,
-    input: TaskInput
-  ): AsyncIterableIterator<WorkflowUpdate> {
-    yield {
-      type: 'state_change',
-      sessionId,
-      timestamp: new Date().toISOString(),
-      data: { state: 'executing' },
-    };
+  private parseQuestionsFromResponse(response: string): ClarificationQuestion[] {
+    const questions: ClarificationQuestion[] = [];
 
-    yield {
-      type: 'progress',
-      sessionId,
-      timestamp: new Date().toISOString(),
-      data: {
-        phase: 'implementation',
-        message: 'Starting implementation...',
-      },
-    };
-
-    // Build execution context
-    const context = await this.config.contextBuilder.build({
-      files: [...plan.filesToModify, ...plan.filesToCreate],
-      maxTokens: 25000, // Large context for implementation
-    });
-
-    // Build implementation prompt
-    const implementationPrompt = this.config.promptBuilder.buildImplementationPrompt({
-      plan,
-      context,
-      systemPrompt: '',
-    });
-
-    // Execute implementation with Claude
-    const startTime = Date.now();
-
-    const result = await this.config.claudeProvider.execute({
-      message: implementationPrompt,
-      conversationHistory: [],
-      onEvent: (event: AgentEvent) => {
-        // Forward all events
-        // Tool execution events are particularly important here
-      },
-    });
-
-    const executionTime = Date.now() - startTime;
-
-    yield {
-      type: 'progress',
-      sessionId,
-      timestamp: new Date().toISOString(),
-      data: {
-        phase: 'implementation',
-        message: `Implementation complete (${result.usage.inputTokens + result.usage.outputTokens} tokens, ${executionTime}ms, ${result.toolRounds} tool rounds)`,
-      },
-    };
-
-    // Save final state
-    try {
-      await this.config.stateStore.saveSession({
-        id: sessionId,
-        mode: 'architect',
-        state: 'complete',
-        plan,
-        metadata: {
-          modelUsed: ['claude-opus-4-20250514', 'claude-sonnet-4-20250514'],
-          tokensUsed: result.usage.inputTokens + result.usage.outputTokens + plan.tokensUsed,
-          estimatedCost: 0,
-          startedAt: plan.createdAt,
-          completedAt: new Date().toISOString(),
-        },
-        input,
-      });
-    } catch (error) {
-      console.error('[ArchitectWorkflow] Failed to save state:', error);
+    // Look for question patterns (lines ending with ?)
+    const lines = response.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.endsWith('?') && trimmed.length > 10) {
+        questions.push({
+          question: trimmed,
+          priority: 'medium',
+          reason: 'Requires clarification',
+        });
+      }
     }
+
+    return questions;
   }
 
-  // =============================================================================
-  // Helper Methods
-  // =============================================================================
 
-  private extractFilesToModify(planContent: string): string[] {
-    // Simple regex to find file paths (improve later)
-    const matches = planContent.match(/(?:modify|update|change|edit)\s+[`']?([a-zA-Z0-9_\-/.]+\.[a-z]+)[`']?/gi);
-    return matches ? Array.from(new Set(matches.map(m => m.split(/[`'\s]+/).pop() || ''))) : [];
+  /**
+   * Helper: Build initial clarification prompt
+   */
+  private buildInitialClarificationPrompt(
+    input: TaskInput,
+    research: ResearchResult
+  ): string {
+    return `# Task
+${input.message}
+
+# Research Findings
+${research.findings}
+
+# Relevant Files
+${research.relevantFiles.map(f => `- ${f}`).join('\n')}
+
+# Your Role
+You are in the clarification phase. Your goal is to ask any clarifying questions needed to fully understand the task before generating an implementation plan.
+
+Review the research findings and identify:
+1. Any ambiguities in the requirements
+2. Missing information about the codebase
+3. Technical decisions that need to be made
+4. Potential edge cases or constraints
+
+Ask clear, specific questions. You can also use KB tools to search for more context if needed.
+
+When you have all the information needed to create a comprehensive plan, respond with [READY_TO_PLAN] at the end of your message.`;
   }
 
-  private extractFilesToCreate(planContent: string): string[] {
-    const matches = planContent.match(/(?:create|add|new)\s+[`']?([a-zA-Z0-9_\-/.]+\.[a-z]+)[`']?/gi);
-    return matches ? Array.from(new Set(matches.map(m => m.split(/[`'\s]+/).pop() || ''))) : [];
+  /**
+   * System prompt for research phase
+   */
+  private getResearchSystemPrompt(): string {
+    return `You are an expert software architect conducting research on a codebase.
+
+Your task:
+1. Review the provided code snippets and context
+2. Identify relevant patterns, architectures, and conventions
+3. Summarize key findings that will inform the implementation
+4. Note any potential challenges or constraints
+
+Focus on:
+- Existing architecture patterns
+- Code organization and structure
+- Dependencies and integrations
+- Testing approaches
+- Common conventions and best practices
+
+Be concise but thorough. Your findings will guide the planning phase.`;
   }
 
-  private extractSteps(planContent: string): string[] {
-    // Extract numbered steps (improve later)
-    const steps = planContent.match(/^\d+\.\s+(.+)$/gm);
-    return steps || [];
+  /**
+   * System prompt for clarification phase
+   */
+  private getClarificationSystemPrompt(turnNumber: number): string {
+    const urgencyNote = turnNumber >= 2
+      ? '\n\nNote: You have limited remaining turns. Prioritize the most critical questions.'
+      : '';
+
+    return `You are an expert software architect in the clarification phase.
+
+Your goal: Ask clarifying questions to ensure you have complete understanding before planning.
+
+Guidelines:
+- Ask specific, actionable questions
+- Focus on ambiguities and unknowns
+- Prioritize questions by importance
+- Use KB tools if you need more code context
+- When ready to plan, end your message with [READY_TO_PLAN]${urgencyNote}
+
+Be efficient with questions - ask what's essential, not everything possible.`;
   }
 
-  private estimateComplexity(planContent: string): 'low' | 'medium' | 'high' {
-    const wordCount = planContent.split(/\s+/).length;
-    if (wordCount < 500) return 'low';
-    if (wordCount < 1500) return 'medium';
-    return 'high';
+  /**
+   * System prompt for planning phase
+   */
+  private getPlanningSystemPrompt(): string {
+    return `You are an expert software architect creating an implementation plan.
+
+CRITICAL: Your plan MUST be provided as a TOML code block. Use this exact structure:
+
+\`\`\`toml
+plan_version = 1
+
+overview = """
+Brief summary of the approach and key decisions.
+Explain the overall strategy and important architectural choices.
+"""
+
+complexity = "medium"  # Options: "low", "medium", "high"
+
+estimated_tokens = 5000  # Rough estimate of implementation tokens
+
+files_to_modify = [
+  "path/to/file1.ts",
+  "path/to/file2.ts"
+]
+
+files_to_create = [
+  "path/to/new-file1.ts",
+  "path/to/new-file2.ts"
+]
+
+[[steps]]
+id = 1
+description = "First concrete step with specific actions"
+files = ["path/to/file1.ts"]
+estimated_tokens = 500
+
+[[steps]]
+id = 2
+description = "Second step that builds on the first"
+files = ["path/to/file2.ts"]
+estimated_tokens = 1000
+
+# Add more steps as needed
+
+[[risks]]
+description = "Potential risk or challenge"
+mitigation = "How to mitigate this risk"
+
+# Add dependencies if needed
+dependencies = ["package-name"]
+
+generated_at = "2025-01-15T10:30:00Z"
+\`\`\`
+
+REQUIREMENTS:
+- MUST use TOML format in a fenced code block labeled \`toml\`
+- Use snake_case for all keys (not camelCase)
+- Each step MUST have: id (sequential), description, files array
+- Complexity MUST be one of: "low", "medium", "high"
+- Overview MUST be a clear multi-line string using triple quotes
+- Steps MUST use [[steps]] array-of-tables syntax
+- File paths MUST be actual paths from the codebase
+- Be specific and actionable in step descriptions
+
+Guidelines:
+- Reference specific files, functions, and classes from the codebase
+- Follow existing architecture patterns
+- Consider error handling and edge cases
+- Think about testing strategy
+- Order steps by logical dependencies
+- Estimate tokens realistically (consider file size and complexity)
+
+You may include explanatory markdown before or after the TOML block, but the plan data MUST be in TOML format.`;
   }
 
-  private estimateImplementationTokens(planContent: string): number {
-    // Rough estimate: plan tokens * 3-5x for implementation
-    const planTokens = Math.ceil(planContent.length / 4);
-    return planTokens * 4;
+  /**
+   * Abort the workflow
+   */
+  public abort(): void {
+    this.aborted = true;
   }
 }

@@ -14,7 +14,6 @@ import typer
 
 # Import subcommand apps
 from kb.ingest.cli import app as kb_app
-from personas.src.personas import app as personas_app
 from kb.api.server import app_with_lifespan
 
 # Import kb CLI functions for top-level commands
@@ -56,7 +55,6 @@ def dolphin_callback(version: bool = typer.Option(False, "--version", "-v", help
 
 # Add subcommand apps
 app.add_typer(kb_app, name="kb", help="Knowledge base management commands")
-app.add_typer(personas_app, name="personas", help="Persona management and generation commands")
 
 
 # ==============================================================================

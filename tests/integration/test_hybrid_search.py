@@ -43,6 +43,7 @@ def populated_backend():
                 'content_id': 'vec1',
                 'repo': 'test-repo',
                 'path': 'src/user_controller.py',
+                'text_hash': 'hashvec1',
                 'content': 'class UserController handles authentication and login functionality',
                 'symbol_name': 'UserController',
                 'symbol_path': 'controllers.UserController'
@@ -51,6 +52,7 @@ def populated_backend():
                 'content_id': 'bm251',
                 'repo': 'test-repo',
                 'path': 'src/auth_middleware.py',
+                'text_hash': 'hashbm251',
                 'content': 'middleware for JWT token validation and authentication flow',
                 'symbol_name': 'AuthMiddleware',
                 'symbol_path': 'middleware.AuthMiddleware'
@@ -59,6 +61,7 @@ def populated_backend():
                 'content_id': 'both1',
                 'repo': 'test-repo',
                 'path': 'src/auth_service.py',
+                'text_hash': 'hashboth1',
                 'content': 'UserController service for authentication and JWT validation',
                 'symbol_name': 'AuthService',
                 'symbol_path': 'services.AuthService'

@@ -112,16 +112,18 @@ export class ContextBuilder {
 
       const results: SearchResult[] = await response.json();
 
-      // Transform to KBResult format
-      return results.map(r => ({
-        file: r.file_path,
-        startLine: r.start_line,
-        endLine: r.end_line,
-        content: r.snippet_text,
-        language: r.language,
-        score: r.score,
-        chunkId: r.chunk_id,
-      }));
+      // Transform to KBResult format and sort by score (descending)
+      return results
+        .map(r => ({
+          file: r.file_path,
+          startLine: r.start_line,
+          endLine: r.end_line,
+          content: r.snippet_text,
+          language: r.language,
+          score: r.score,
+          chunkId: r.chunk_id,
+        }))
+        .sort((a, b) => b.score - a.score);
     } catch (error) {
       console.error('[ContextBuilder] KB search error:', error);
       return [];

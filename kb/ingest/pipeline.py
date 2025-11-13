@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import subprocess
 import datetime
 from dataclasses import dataclass
@@ -11,6 +12,7 @@ from pathspec import PathSpec
 from ..config import KBConfig
 from ..store import LanceDBStore, SQLiteMetadataStore
 from ..store.graph_store import GraphStore
+from ..store.sqlite_meta import generate_fts_content_id
 from ..graph_intelligence.graph_manager import GraphManager
 from ..ingest.scanner import FileCandidate, scan_repo
 from ..ignores import build_ignore_set, load_repo_ignores
@@ -134,13 +136,13 @@ class IngestionPipeline:
 
     def _drop_repo_index(self, repo_id: int, repo_name: str) -> None:
         """Drop all indexed data for a repository (vectors and metadata).
-        
+
         This clears:
         - All chunk content and locations from metadata
         - All vectors from LanceDB (both small and large models)
         - All FTS5 index entries
         - All code graph data (nodes and edges)
-        
+
         Args:
             repo_id: Repository ID
             repo_name: Repository name
@@ -152,7 +154,7 @@ class IngestionPipeline:
                 self.lancedb.delete_repo(repo_name, model=model)
             except Exception as e:
                 print(f"  Warning: Could not delete {model} vectors: {e}")
-        
+
         # Delete code graph data
         if self.graph_store:
             print(f"  Clearing code graph data...")
@@ -161,19 +163,44 @@ class IngestionPipeline:
                 print(f"  Deleted {nodes_deleted} graph nodes and associated edges")
             except Exception as e:
                 print(f"  Warning: Could not delete graph data: {e}")
-        
+
         # Delete from metadata database
         print(f"  Clearing metadata...")
         with self.metadata._connect() as conn:
             from contextlib import closing
             cur = conn.cursor()
-            
+
+            # Helper to check if table exists
+            def table_exists(table_name: str) -> bool:
+                cur.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                    (table_name,)
+                )
+                return cur.fetchone() is not None
+
             try:
                 # Get all file IDs for this repo
                 cur.execute("SELECT id FROM files WHERE repo_id = ?", (repo_id,))
                 file_ids = [row[0] for row in cur.fetchall()]
-                
-                # Delete chunk locations for these files
+
+                # Delete in correct order respecting foreign key constraints:
+
+                # 1. Delete code graph data (references code_nodes and files)
+                # Check table existence first to avoid swallowing real FK errors
+                if table_exists("code_node_aliases"):
+                    cur.execute("DELETE FROM code_node_aliases WHERE file_id IN (SELECT id FROM files WHERE repo_id = ?)", (repo_id,))
+
+                if table_exists("cross_repo_references"):
+                    cur.execute("DELETE FROM cross_repo_references WHERE file_id IN (SELECT id FROM files WHERE repo_id = ?)", (repo_id,))
+
+                if table_exists("code_edges"):
+                    cur.execute("DELETE FROM code_edges WHERE source_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)", (repo_id,))
+                    cur.execute("DELETE FROM code_edges WHERE target_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)", (repo_id,))
+
+                if table_exists("code_nodes"):
+                    cur.execute("DELETE FROM code_nodes WHERE repo_id = ?", (repo_id,))
+
+                # 2. Delete chunk locations (references chunk_content)
                 for file_id in file_ids:
                     cur.execute("""
                         DELETE FROM chunk_locations
@@ -181,19 +208,27 @@ class IngestionPipeline:
                             SELECT id FROM chunk_content WHERE file_id = ?
                         )
                     """, (file_id,))
-                
-                # Delete chunk content
+
+                # 3. Delete chunk content (references files)
                 cur.execute("DELETE FROM chunk_content WHERE repo_id = ?", (repo_id,))
-                
-                # Delete from FTS5
+
+                # 4. Delete from FTS5
                 cur.execute("DELETE FROM chunks_fts WHERE repo = ?", (repo_name,))
-                
-                # Delete files
+
+                # 5. Delete file snapshots (references files)
+                if table_exists("file_snapshots"):
+                    cur.execute("DELETE FROM file_snapshots WHERE repo_id = ?", (repo_id,))
+
+                # 6. Delete files
                 cur.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
-                
-                # Delete sessions
+
+                # 7. Delete sessions
                 cur.execute("DELETE FROM sessions WHERE repo_id = ?", (repo_id,))
-                
+
+                # 8. Delete pending changes
+                if table_exists("pending_changes"):
+                    cur.execute("DELETE FROM pending_changes WHERE repo_id = ?", (repo_id,))
+
                 conn.commit()
                 print(f"  Metadata cleared successfully")
             except Exception as e:
@@ -570,12 +605,16 @@ class IngestionPipeline:
                                     if chunk.text_hash == h:
                                         chunk_text = chunk.text
                                         break
-                                
+
                                 if chunk_text:
+                                    # Generate deterministic FTS5 content_id (independent of embed_model)
+                                    fts_content_id = generate_fts_content_id(repo_id, file_id, h)
+
                                     fts_chunks.append({
-                                        'content_id': content_id,
+                                        'content_id': fts_content_id,
                                         'repo': repo_name,
                                         'path': path,
+                                        'text_hash': h,
                                         'content': chunk_text,
                                         'symbol_name': occ.get('symbol_name'),
                                         'symbol_path': occ.get('symbol_path'),
