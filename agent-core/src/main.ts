@@ -256,7 +256,8 @@ class AgentCoreV2 {
     console.error(`[Agent Core V2] Handling request: ${request.method}`);
 
     switch (request.method) {
-      case "sendMessage": {
+      case "sendMessage":
+      case "send_message": {
         const { message, context, mode = "editor" } = request.params;
 
         // Start task with orchestrator
@@ -286,29 +287,35 @@ class AgentCoreV2 {
       }
 
       case "getCapabilities":
+      case "get_capabilities":
         return {
           version: this.version,
           capabilities: this.capabilities,
         };
 
       case "getConversations":
+      case "get_conversations":
         // TODO: Implement conversation listing via StateStore
         return [];
 
       case "loadConversation":
+      case "load_conversation":
         const { conversationId } = request.params;
         const session = await this.orchestrator.getSession(conversationId);
         return session;
 
       case "deleteConversation":
+      case "delete_conversation":
         // TODO: Implement conversation deletion via StateStore
         return { success: true };
 
       case "approveTask":
+      case "approve_task":
         await this.orchestrator.approveTask(request.params.sessionId);
         return { success: true };
 
       case "rejectTask":
+      case "reject_task":
         await this.orchestrator.rejectTask(
           request.params.sessionId,
           request.params.feedback
@@ -316,6 +323,7 @@ class AgentCoreV2 {
         return { success: true };
 
       case "requestRevision":
+      case "request_revision":
         await this.orchestrator.revisePlan(
           request.params.sessionId,
           request.params.feedback
@@ -323,6 +331,7 @@ class AgentCoreV2 {
         return { success: true };
 
       case "cancelTask":
+      case "cancel_task":
         await this.orchestrator.cancelTask(request.params.sessionId);
         return { success: true };
 
