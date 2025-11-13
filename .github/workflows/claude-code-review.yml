@@ -47,7 +47,7 @@ jobs:
             - Security concerns
             - Test coverage
 
-            Use the repository's AGENTS.md for guidance on style, conventions, and existing tools. 
+            Use the repository's AGENTS.md for guidance on style, conventions, and existing tools.
 
             Be constructive and direct in your feedback. Focus on actionable improvements that should be made prior to merging.
 

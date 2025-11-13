@@ -47,16 +47,19 @@ The Dolphin VSCode Extension brings AI-powered code assistance directly into you
 ### Components
 
 **Extension** (`src/extension.ts`)
+
 - VSCode extension entry point
 - Manages webview lifecycle
 - Spawns Agent Core subprocess
 
 **AgentBridge** (`src/agent/bridge.ts`)
+
 - JSON-RPC communication with Agent Core
 - Request/response handling
 - Event stream management
 
 **Webview** (`webview/`)
+
 - SvelteKit-based UI
 - Chat interface with message history
 - Tool call visualization
@@ -64,6 +67,7 @@ The Dolphin VSCode Extension brings AI-powered code assistance directly into you
 - Component gallery for testing
 
 **Agent Core** (`../agent-core/`)
+
 - Separate Bun-based process
 - Handles Claude AI interactions
 - Manages Knowledge Bank queries
@@ -358,16 +362,19 @@ cd .. && uv run dolphin serve
 ### Making Changes
 
 **Extension Code** (`src/`):
+
 1. Edit TypeScript files
 2. Changes auto-compile if `npm run watch` is running
 3. Reload extension: Cmd+R / Ctrl+R in Extension Development Host
 
 **Webview UI** (`webview/`):
+
 1. Edit Svelte components
 2. Run `bun run build` to rebuild
 3. Reload extension to see changes
 
 **Agent Core** (`../agent-core/`):
+
 1. Edit TypeScript files
 2. Restart extension to pick up changes
 3. See [agent-core README](../agent-core/README.md)
@@ -384,18 +391,21 @@ cd .. && uv run dolphin serve
 ## Roadmap
 
 ### Current (Week 1)
+
 - ✅ Basic chat interface
 - ✅ Claude CLI integration
 - ✅ KB search integration
 - ✅ Auth status UI
 
 ### Near-term (Week 2-6)
+
 - ⏳ KB auto-start (lifecycle management)
 - ⏳ Extension packaging
 - ⏳ Production hardening
 - ⏳ Marketplace publication
 
 ### Future
+
 - Multi-file editing
 - Diff preview and apply
 - Code generation

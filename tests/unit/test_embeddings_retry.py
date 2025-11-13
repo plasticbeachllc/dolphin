@@ -2,14 +2,9 @@
 
 import time
 import types
-
 import pytest
 
-from kb.embeddings.provider import (
-    EmbeddingProvider,
-    _default_provider,
-    embed_texts_with_retry,
-)
+from kb.embeddings.provider import EmbeddingProvider, embed_texts_with_retry, set_default_provider
 from kb.ingest.error_logging import with_retry
 
 
@@ -30,11 +25,9 @@ def test_embed_texts_with_retry_success_after_retries(monkeypatch):
                 raise RuntimeError("temporary failure")
             return self._zeroes(self.model_dimensions[model], len(texts))
 
-    # Swap default provider
+    # Swap default provider using the new context-aware API
     flaky = FlakyProvider()
-    monkeypatch.setattr(
-        "kb.embeddings.provider._default_provider", flaky, raising=False
-    )
+    set_default_provider(flaky)
 
     vecs = embed_texts_with_retry("small", ["a", "b"])
     assert len(vecs) == 2
@@ -47,9 +40,7 @@ def test_embed_texts_with_retry_exhausts_attempts(monkeypatch):
         def embed_texts(self, model, texts):  # type: ignore[override]
             raise RuntimeError("hard failure")
 
-    monkeypatch.setattr(
-        "kb.embeddings.provider._default_provider", AlwaysFailProvider(), raising=False
-    )
+    set_default_provider(AlwaysFailProvider())
 
     with pytest.raises(RuntimeError):
         embed_texts_with_retry("small", ["a"])

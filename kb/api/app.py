@@ -11,7 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .task_queue import TaskStatus, get_task_queue
-from .utils import GitRepository, validate_path_within_repo
+from .utils import validate_path_within_repo, GitRepository
+from ..store.sqlite_meta import generate_fts_content_id
 
 # Constants
 EMBEDDING_BATCH_SIZE = 128
@@ -32,7 +33,6 @@ app.add_middleware(
 _sql_store = None
 _lance_store = None
 _pipeline = None
-
 
 def set_stores(sql_store, lance_store):
     """Set the SQL and Lance stores for API endpoints."""
@@ -89,7 +89,8 @@ class SearchBackend(Protocol):
 
     def search(
         self, request: SearchRequest
-    ) -> Sequence[dict[str, object]] | Awaitable[Sequence[dict[str, object]]]: ...
+    ) -> Sequence[dict[str, object]] | Awaitable[Sequence[dict[str, object]]]:
+        ...
 
 
 class _EmptySearchBackend:
@@ -156,22 +157,22 @@ async def health(check: str = Query(default="shallow")) -> dict[str, object]:
 async def search(request: SearchRequest) -> dict[str, object]:
     """Dispatch the search request to the configured backend."""
     backend = get_search_backend()
-
+    
     # Extract ANN configuration from request if provided
-    if hasattr(request, "ann_strategy") and request.ann_strategy:
+    if hasattr(request, 'ann_strategy') and request.ann_strategy:
         # Create temporary config for this request
         temp_config_data = {}
         if request.ann_strategy:
-            temp_config_data["ann_strategy"] = request.ann_strategy
+            temp_config_data['ann_strategy'] = request.ann_strategy
         if request.ann_nprobes:
-            temp_config_data["ann_nprobes"] = request.ann_nprobes
+            temp_config_data['ann_nprobes'] = request.ann_nprobes
         if request.ann_refine_factor:
-            temp_config_data["ann_refine_factor"] = request.ann_refine_factor
-
+            temp_config_data['ann_refine_factor'] = request.ann_refine_factor
+        
         # Set on backend temporarily if it supports per-request config
-        if hasattr(backend, "set_request_ann_config"):
+        if hasattr(backend, 'set_request_ann_config'):
             backend.set_request_ann_config(temp_config_data)
-
+    
     started = perf_counter()
     raw_hits = backend.search(request)
     hits: Iterable[dict[str, object]]
@@ -181,7 +182,7 @@ async def search(request: SearchRequest) -> dict[str, object]:
         hits = raw_hits
     hits_list = list(hits)
     latency_ms = int((perf_counter() - started) * 1000)
-
+    
     # Include ANN config in response meta if it was used
     meta = {
         "top_k": request.top_k,
@@ -191,14 +192,14 @@ async def search(request: SearchRequest) -> dict[str, object]:
         "mmr_enabled": request.mmr_enabled,
         "mmr_lambda": request.mmr_lambda,
     }
-
+    
     if request.ann_strategy:
         meta["ann_strategy"] = request.ann_strategy
         if request.ann_nprobes:
             meta["ann_nprobes"] = request.ann_nprobes
         if request.ann_refine_factor:
             meta["ann_refine_factor"] = request.ann_refine_factor
-
+    
     return {
         "hits": hits_list,
         "meta": meta,
@@ -230,26 +231,21 @@ async def list_repos() -> dict[str, list[dict[str, object]]]:
                 file_count = cur.fetchone()[0]
 
                 # Count chunks for this repo
-                cur.execute(
-                    "SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,)
-                )
+                cur.execute("SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,))
                 chunk_count = cur.fetchone()[0]
 
-                repos.append(
-                    {
-                        "name": name,
-                        "path": root_path,
-                        "default_embed_model": default_model,
-                        "files": file_count,
-                        "chunks": chunk_count,
-                    }
-                )
+                repos.append({
+                    "name": name,
+                    "path": root_path,
+                    "default_embed_model": default_model,
+                    "files": file_count,
+                    "chunks": chunk_count
+                })
 
         return {"repos": repos}
 
     except Exception as e:
         import logging
-
         logging.error("Failed to list repositories", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
@@ -302,14 +298,13 @@ async def fetch_chunk(chunk_id: str) -> dict[str, object]:
             "symbol_name": metadata.get("symbol_name"),
             "symbol_path": metadata.get("symbol_path"),
             "token_count": metadata.get("token_count"),
-            "resource_link": f"kb://{metadata.get('repo')}/{metadata.get('path')}#L{metadata.get('start_line')}-L{metadata.get('end_line')}",
+            "resource_link": f"kb://{metadata.get('repo')}/{metadata.get('path')}#L{metadata.get('start_line')}-L{metadata.get('end_line')}"
         }
 
     except HTTPException:
         raise
     except Exception as e:
         import logging
-
         logging.error(f"Error fetching chunk {chunk_id}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error fetching chunk: {str(e)}")
 
@@ -319,7 +314,7 @@ async def fetch_file_slice(
     repo: str = Query(..., description="Repository name"),
     path: str = Query(..., description="File path relative to repo root"),
     start: int = Query(1, description="Start line (1-indexed, inclusive)"),
-    end: int = Query(..., description="End line (1-indexed, inclusive)"),
+    end: int = Query(..., description="End line (1-indexed, inclusive)")
 ) -> dict[str, object]:
     """Fetch a slice of a file by line range."""
     if _sql_store is None:
@@ -352,7 +347,7 @@ async def fetch_file_slice(
 
         # Read file and extract lines
         try:
-            with open(full_path, "r", encoding="utf-8") as f:
+            with open(full_path, 'r', encoding='utf-8') as f:
                 all_lines = f.readlines()
 
             # Convert to 0-indexed
@@ -365,7 +360,7 @@ async def fetch_file_slice(
                 selected_lines = all_lines[start_idx:end_idx]
 
             # Join lines
-            content = "".join(selected_lines)
+            content = ''.join(selected_lines)
 
             return {
                 "repo": repo,
@@ -375,7 +370,7 @@ async def fetch_file_slice(
                 "content": content,
                 "lang": lang,
                 "source": "disk",
-                "total_lines": len(all_lines),
+                "total_lines": len(all_lines)
             }
 
         except UnicodeDecodeError:
@@ -385,7 +380,6 @@ async def fetch_file_slice(
         raise
     except Exception as e:
         import logging
-
         logging.error(f"Error reading file: {file_path}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
 
@@ -429,7 +423,6 @@ class IndexStatusResponse(BaseModel):
 
 class RepoStatsResponse(BaseModel):
     """Repository statistics for cost estimation and UI display."""
-
     name: str
     path: str
     files_count: int
@@ -442,7 +435,6 @@ class RepoStatsResponse(BaseModel):
 
 class ReindexRequest(BaseModel):
     """Request to trigger a full or incremental reindex."""
-
     mode: str = "incremental"  # "full" or "incremental"
     confirmed: bool = False
     clear_existing: bool = False
@@ -450,7 +442,6 @@ class ReindexRequest(BaseModel):
 
 class ReindexResponse(BaseModel):
     """Response from reindex trigger."""
-
     task_id: str
     mode: str
     message: str
@@ -463,7 +454,6 @@ class ReindexResponse(BaseModel):
 
 class FileChange(BaseModel):
     """Individual file change."""
-
     file_path: str
     change_type: str
     old_path: str | None = None
@@ -471,40 +461,34 @@ class FileChange(BaseModel):
 
 class PendingChangeRequest(BaseModel):
     """Request to record pending file changes."""
-
     changes: list[FileChange]
 
 
 class PendingChangeResponse(BaseModel):
     """Response from recording pending changes."""
-
     recorded: int
     message: str
 
 
 class PendingChangesListResponse(BaseModel):
     """Response with list of pending changes."""
-
     changes: list[dict[str, object]]
     total: int
 
 
 class MarkProcessedRequest(BaseModel):
     """Request to mark changes as processed."""
-
     change_ids: list[int]
 
 
 class MarkProcessedResponse(BaseModel):
     """Response from marking changes as processed."""
-
     processed: int
     message: str
 
 
 class DriftDetectionResponse(BaseModel):
     """Response from drift detection."""
-
     drift_events: list[dict[str, object]]
     total: int
 
@@ -525,58 +509,71 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
             repo_id=existing["id"],
             name=request.name,
             path=existing["root_path"],
-            message=f"Repository '{request.name}' already registered",
+            message=f"Repository '{request.name}' already registered"
         )
 
     # Validate path exists
     repo_path = Path(request.path)
     if not repo_path.exists():
-        raise HTTPException(
-            status_code=400, detail=f"Path does not exist: {request.path}"
-        )
+        raise HTTPException(status_code=400, detail=f"Path does not exist: {request.path}")
 
     if not repo_path.is_dir():
-        raise HTTPException(
-            status_code=400, detail=f"Path is not a directory: {request.path}"
-        )
+        raise HTTPException(status_code=400, detail=f"Path is not a directory: {request.path}")
 
     # Register the repository
     try:
         # Resolve and normalize path (macOS /var -> /private/var handling)
         resolved_path = repo_path.resolve()
-
+        
         _sql_store.record_repo(
             name=request.name,
             path=resolved_path,
-            default_embed_model=request.default_embed_model,
+            default_embed_model=request.default_embed_model
         )
 
         # Get the registered repo to retrieve its ID
         repo = _sql_store.get_repo_by_name(request.name)
         if not repo:
-            raise HTTPException(
-                status_code=500, detail="Failed to retrieve registered repository"
-            )
+            raise HTTPException(status_code=500, detail="Failed to retrieve registered repository")
 
         # Return normalized path from database to ensure consistency
         return RegisterRepoResponse(
             repo_id=repo["id"],
             name=request.name,
             path=repo["root_path"],
-            message=f"Repository '{request.name}' registered successfully",
+            message=f"Repository '{request.name}' registered successfully"
         )
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to register repository: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to register repository: {str(e)}")
+
+
+@app.post("/v1/admin/rebuild-fts5")
+async def rebuild_fts5() -> dict[str, str]:
+    """Rebuild the FTS5 table with updated schema.
+
+    This drops and recreates the FTS5 table. After calling this endpoint,
+    you should trigger a full re-index to populate the FTS5 table with
+    the new deterministic content_ids.
+    """
+    if _sql_store is None:
+        raise HTTPException(status_code=503, detail="SQL store not initialized")
+
+    try:
+        _sql_store.rebuild_fts5_table()
+        return {
+            "status": "success",
+            "message": "FTS5 table rebuilt successfully. Please trigger a re-index to populate it."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to rebuild FTS5 table: {str(e)}")
 
 
 async def _process_index_task(task_id: str, repo_name: str, files: list[str]) -> None:
     """Background task to process file indexing."""
     import asyncio
-
+    
     task_queue = get_task_queue()
 
     try:
@@ -613,24 +610,18 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             await task_queue.update_task(
                 task_id,
                 status=TaskStatus.COMPLETED,
-                result={
-                    "indexed": 0,
-                    "skipped": len(files),
-                    "message": "No valid files to index",
-                },
+                result={"indexed": 0, "skipped": len(files), "message": "No valid files to index"}
             )
             return
 
         # Process files
         import subprocess
-
-        from ..chunkers.registry import chunk_file as chunk_file_with_config
-        from ..chunkers.registry import detect_language_from_extension
-        from ..chunkers.repo_config import load_repo_chunking_config
-        from ..embeddings.provider import embed_texts_with_retry
-        from ..hashing import hash_text
-        from ..ingest._helpers import build_desired_map, representative_text_for_hash
         from ..ingest.dedup import ChunkDeduplicator
+        from ..chunkers.registry import detect_language_from_extension, chunk_file as chunk_file_with_config
+        from ..chunkers.repo_config import load_repo_chunking_config
+        from ..hashing import hash_text
+        from ..embeddings.provider import embed_texts_async
+        from ..ingest._helpers import build_desired_map, representative_text_for_hash
 
         # Get commit info for provenance
         git_repo = GitRepository(root)
@@ -644,12 +635,15 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
 
         # Track initial snapshots for post-index validation (Phase 3)
         import hashlib
-
         initial_snapshots = {}
 
         for idx, filepath in enumerate(valid_files, 1):
             # Update progress with current file and yield to event loop
-            await task_queue.update_task(task_id, progress=idx, current_file=filepath)
+            await task_queue.update_task(
+                task_id,
+                progress=idx,
+                current_file=filepath
+            )
             await asyncio.sleep(0)  # Yield to event loop to handle status requests
 
             file_path = root / filepath
@@ -661,7 +655,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                 initial_snapshots[filepath] = {
                     "mtime_ns": stat.st_mtime_ns,
                     "size_bytes": stat.st_size,
-                    "content_hash": hashlib.sha256(file_bytes).hexdigest(),
+                    "content_hash": hashlib.sha256(file_bytes).hexdigest()
                 }
             except Exception:
                 continue  # Skip file if we can't read it
@@ -673,7 +667,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                 ext=file_path.suffix,
                 language=None,  # Will be detected by chunker
                 is_binary=False,
-                size_bytes=file_path.stat().st_size,
+                size_bytes=file_path.stat().st_size
             )
 
             # Determine language and chunk the file
@@ -691,42 +685,50 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                 repo_config=repo_config,
             )
 
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"[DEBUG] File {filepath}: extracted {len(chunks)} chunks")
+
             # Compute text_hash for each chunk
             for chunk in chunks:
                 chunk.text_hash = hash_text(chunk.text)
 
             # Build desired map
             desired = build_desired_map(chunks)
+            logger.info(f"[DEBUG] File {filepath}: desired map has {len(desired)} unique hashes")
             desired_row_ids: set[str] = set()
 
             # Deduplicate by text_hash
             chunk_deduplicator = ChunkDeduplicator(_sql_store)
-            changed_chunks, unchanged_chunks = (
-                chunk_deduplicator.filter_unchanged_chunks(
-                    chunks, repo_id, file_id, embed_model
-                )
+            changed_chunks, unchanged_chunks = chunk_deduplicator.filter_unchanged_chunks(
+                chunks, repo_id, file_id, embed_model
             )
             new_hashes = {c.text_hash for c in changed_chunks}
             skipped_occurrences = len(unchanged_chunks)
+            logger.info(f"[DEBUG] File {filepath}: {len(changed_chunks)} changed, {len(unchanged_chunks)} unchanged, {len(new_hashes)} new hashes")
 
-            # Embed only new hashes (batched)
+            # Embed only new hashes (batched, async to avoid blocking status requests)
             text_hash_to_embedding: dict = {}
             if new_hashes:
                 hashes_list = sorted(new_hashes)
                 for i in range(0, len(hashes_list), EMBEDDING_BATCH_SIZE):
-                    batch_hashes = hashes_list[i : i + EMBEDDING_BATCH_SIZE]
+                    batch_hashes = hashes_list[i:i+EMBEDDING_BATCH_SIZE]
                     texts_to_embed = [
                         representative_text_for_hash(h, chunks) for h in batch_hashes
                     ]
                     if not texts_to_embed:
                         continue
-                    vectors = embed_texts_with_retry(embed_model, texts_to_embed)
+                    # Use async embedding to keep event loop responsive
+                    vectors = await embed_texts_async(embed_model, texts_to_embed)
                     text_hash_to_embedding.update(dict(zip(batch_hashes, vectors)))
+                    # Yield to event loop after each batch to handle status requests
+                    await asyncio.sleep(0)
 
             # Upsert metadata and locations
             mapping = _sql_store.ensure_content_rows_for_file(
                 repo_id, file_id, embed_model, list(desired.keys())
             )
+            logger.info(f"[DEBUG] File {filepath}: ensure_content_rows_for_file returned mapping with {len(mapping)} entries")
 
             for h, occs in desired.items():
                 cid = mapping.get(h)
@@ -739,66 +741,68 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
 
             # Build token count lookup
             occ_token_counts = {
-                (ch.start_line, ch.end_line): getattr(ch, "token_count", 0)
-                for ch in chunks
+                (ch.start_line, ch.end_line): getattr(ch, 'token_count', 0) for ch in chunks
             }
 
-            # Persist vectors to LanceDB
+            # Persist vectors to LanceDB and prepare FTS5 chunks
             payload = []
             fts_chunks = []
             for h, occs in desired.items():
                 content_id = mapping.get(h)
                 vec = text_hash_to_embedding.get(h)
+
+                # Prepare chunk for FTS5 indexing (once per hash, independent of vector status)
+                # FTS5 is for BM25 text search and should work even without embeddings
+                if content_id:
+                    chunk_text = None
+                    for chunk in chunks:
+                        if chunk.text_hash == h:
+                            chunk_text = chunk.text
+                            break
+
+                    if chunk_text:
+                        # Generate deterministic FTS5 content_id (independent of embed_model)
+                        fts_content_id = generate_fts_content_id(repo_id, file_id, h)
+
+                        fts_chunks.append({
+                            'content_id': fts_content_id,
+                            'repo': repo_name,
+                            'path': filepath,
+                            'text_hash': h,
+                            'content': chunk_text,
+                            'symbol_name': occs[0].get('symbol_name') if occs else None,
+                            'symbol_path': occs[0].get('symbol_path') if occs else None,
+                        })
+
+                # Build LanceDB payload for chunks with vectors
                 for idx_occ, occ in enumerate(occs):
                     row_id = f"{repo_id}:{file_id}:{embed_model}:{h}:{occ['start_line']}:{occ['end_line']}"
                     desired_row_ids.add(row_id)
                     if vec is None:
-                        continue  # unchanged hash
-                    payload.append(
-                        {
-                            "id": row_id,
-                            "vector": vec,
-                            "repo": repo_name,
-                            "path": filepath,
-                            "start_line": occ["start_line"],
-                            "end_line": occ["end_line"],
-                            "text_hash": h,
-                            "commit": commit_sha,
-                            "branch": branch,
-                            "embed_model": embed_model,
-                            "language": language,
-                            "symbol_kind": occ.get("symbol_kind"),
-                            "symbol_name": occ.get("symbol_name"),
-                            "symbol_path": occ.get("symbol_path"),
-                            "heading_h1": occ.get("heading_h1"),
-                            "heading_h2": occ.get("heading_h2"),
-                            "heading_h3": occ.get("heading_h3"),
-                            "token_count": occ_token_counts.get(
-                                (occ["start_line"], occ["end_line"]), 0
-                            ),
-                            "created_at": datetime.datetime.now(datetime.timezone.utc),
-                        }
-                    )
+                        continue  # unchanged hash, skip vector storage
+                    payload.append({
+                        'id': row_id,
+                        'vector': vec,
+                        'repo': repo_name,
+                        'path': filepath,
+                        'start_line': occ['start_line'],
+                        'end_line': occ['end_line'],
+                        'text_hash': h,
+                        'commit': commit_sha,
+                        'branch': branch,
+                        'embed_model': embed_model,
+                        'language': language,
+                        'symbol_kind': occ.get('symbol_kind'),
+                        'symbol_name': occ.get('symbol_name'),
+                        'symbol_path': occ.get('symbol_path'),
+                        'heading_h1': occ.get('heading_h1'),
+                        'heading_h2': occ.get('heading_h2'),
+                        'heading_h3': occ.get('heading_h3'),
+                        'token_count': occ_token_counts.get((occ['start_line'], occ['end_line']), 0),
+                        'created_at': datetime.datetime.now(datetime.timezone.utc),
+                    })
 
-                    # Prepare chunk for FTS5 indexing (first occurrence only)
-                    if content_id and idx_occ == 0:
-                        chunk_text = None
-                        for chunk in chunks:
-                            if chunk.text_hash == h:
-                                chunk_text = chunk.text
-                                break
-
-                        if chunk_text:
-                            fts_chunks.append(
-                                {
-                                    "content_id": content_id,
-                                    "repo": repo_name,
-                                    "path": filepath,
-                                    "content": chunk_text,
-                                    "symbol_name": occ.get("symbol_name"),
-                                    "symbol_path": occ.get("symbol_path"),
-                                }
-                            )
+            logger.info(f"[DEBUG] File {filepath}: prepared {len(payload)} LanceDB vectors and {len(fts_chunks)} FTS5 chunks")
 
             if payload:
                 _lance_store.upsert_chunks(repo_name, payload, model=embed_model)
@@ -806,12 +810,11 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             # Index chunks in FTS5 for BM25 search
             if fts_chunks:
                 _sql_store.bulk_index_chunks_for_fts(fts_chunks)
+                logger.info(f"[DEBUG] File {filepath}: indexed {len(fts_chunks)} chunks in FTS5")
 
             # Prune any stale vectors for this file/model
             if desired_row_ids:
-                _lance_store.prune_file_rows(
-                    repo_name, filepath, model=embed_model, keep_ids=desired_row_ids
-                )
+                _lance_store.prune_file_rows(repo_name, filepath, model=embed_model, keep_ids=desired_row_ids)
             else:
                 _lance_store.prune_file_rows(repo_name, filepath, model=embed_model)
 
@@ -828,19 +831,19 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                     path=filepath,
                     mtime_ns=snapshot["mtime_ns"],
                     size_bytes=snapshot["size_bytes"],
-                    content_hash=snapshot["content_hash"],
+                    content_hash=snapshot["content_hash"]
                 )
 
             # Automatically mark pending changes for this file as processed
             # This file has been successfully indexed, so any pending changes
             # that triggered the indexing are now resolved
-            _sql_store.mark_changes_for_file_processed(
-                repo_id=repo_id, file_path=filepath
-            )
+            _sql_store.mark_changes_for_file_processed(repo_id=repo_id, file_path=filepath)
 
             # Update task with current indexed/skipped counts
             await task_queue.update_task(
-                task_id, indexed=chunks_indexed, skipped=chunks_skipped
+                task_id,
+                indexed=chunks_indexed,
+                skipped=chunks_skipped
             )
 
         # Update session
@@ -850,7 +853,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             chunks_indexed=chunks_indexed,
             chunks_skipped=chunks_skipped,
             vectors_written=chunks_indexed,
-            chunks_pruned=0,
+            chunks_pruned=0
         )
         _sql_store.set_session_status(session_id, "succeeded")
 
@@ -868,11 +871,9 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                 stat = file_path.stat()
                 current_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
 
-                if (
-                    stat.st_mtime_ns != initial_snapshot["mtime_ns"]
-                    or stat.st_size != initial_snapshot["size_bytes"]
-                    or current_hash != initial_snapshot["content_hash"]
-                ):
+                if (stat.st_mtime_ns != initial_snapshot["mtime_ns"] or
+                    stat.st_size != initial_snapshot["size_bytes"] or
+                    current_hash != initial_snapshot["content_hash"]):
                     changed_files.append((filepath, "modified"))
             except Exception:
                 # Error reading file, skip validation
@@ -883,7 +884,9 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             for filepath, change_type in changed_files:
                 try:
                     _sql_store.record_pending_change(
-                        repo_id=repo_id, file_path=filepath, change_type=change_type
+                        repo_id=repo_id,
+                        file_path=filepath,
+                        change_type=change_type
                     )
                 except Exception:
                     pass  # Continue even if recording fails
@@ -902,21 +905,22 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                 "skipped": chunks_skipped,
                 "files_processed": len(valid_files),
                 "mid_index_changes": len(changed_files),
-                "message": result_message,
-            },
+                "message": result_message
+            }
         )
 
     except Exception as e:
         import traceback
-
         error_msg = f"{str(e)}\n{traceback.format_exc()}"
-        await task_queue.update_task(task_id, status=TaskStatus.FAILED, error=error_msg)
+        await task_queue.update_task(
+            task_id,
+            status=TaskStatus.FAILED,
+            error=error_msg
+        )
 
 
 @app.post("/v1/index")
-async def index_files(
-    request: IndexRequest, background_tasks: BackgroundTasks
-) -> IndexResponse:
+async def index_files(request: IndexRequest, background_tasks: BackgroundTasks) -> IndexResponse:
     """Queue files for indexing and return immediately with task ID.
 
     This endpoint creates an indexing task and processes it in the background.
@@ -928,23 +932,19 @@ async def index_files(
     # Validate repo exists
     repo = _sql_store.get_repo_by_name(request.repo)
     if not repo:
-        raise HTTPException(
-            status_code=404, detail=f"Repository '{request.repo}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Repository '{request.repo}' not found")
 
     # Create task
     task_queue = get_task_queue()
     task = task_queue.create_task(request.repo, request.files)
 
     # Queue background processing
-    background_tasks.add_task(
-        _process_index_task, task.task_id, request.repo, request.files
-    )
+    background_tasks.add_task(_process_index_task, task.task_id, request.repo, request.files)
 
     return IndexResponse(
         task_id=task.task_id,
         status="queued",
-        message=f"Queued {len(request.files)} files for indexing",
+        message=f"Queued {len(request.files)} files for indexing"
     )
 
 
@@ -966,7 +966,7 @@ async def get_index_status(task_id: str) -> IndexStatusResponse:
         skipped=task.skipped,  # Use real-time task field instead of result
         current_file=task.current_file,  # Current file being processed
         error=task.error,
-        result=task.result,
+        result=task.result
     )
 
 
@@ -995,65 +995,55 @@ async def list_index_tasks(repo: str | None = None) -> dict:
 @app.get("/v1/repos/{repo_name}/stats")
 async def get_repo_stats(repo_name: str) -> RepoStatsResponse:
     """Get repository statistics for cost estimation and UI display.
-
+    
     Returns file count, chunk count, token count, and last index timestamp.
     Used by the frontend to calculate reindex costs and show current status.
     """
     if _sql_store is None:
         raise HTTPException(status_code=503, detail="SQL store not initialized")
-
+    
     # Get repo
     repo = _sql_store.get_repo_by_name(repo_name)
     if not repo:
-        raise HTTPException(
-            status_code=404, detail=f"Repository '{repo_name}' not found"
-        )
-
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
+    
     repo_id = int(repo["id"])
     repo_path = repo["root_path"]
     embed_model = repo.get("default_embed_model", "large")
-
+    
     try:
         from contextlib import closing
-
+        
         with _sql_store._connect() as conn, closing(conn.cursor()) as cur:
             # Count files
             cur.execute("SELECT COUNT(*) FROM files WHERE repo_id = ?", (repo_id,))
             files_count = cur.fetchone()[0]
-
+            
             # Count chunks
-            cur.execute(
-                "SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,)
-            )
+            cur.execute("SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,))
             chunks_count = cur.fetchone()[0]
-
+            
             # Sum token counts (from LanceDB metadata or estimate)
             total_tokens = chunks_count * ESTIMATED_TOKENS_PER_CHUNK
-
+            
             # Get last successful session timestamp
-            cur.execute(
-                """
+            cur.execute("""
                 SELECT MAX(created_at)
                 FROM sessions
                 WHERE repo_id = ? AND status = 'succeeded'
-            """,
-                (repo_id,),
-            )
+            """, (repo_id,))
             last_indexed_row = cur.fetchone()
             last_indexed = last_indexed_row[0] if last_indexed_row[0] else None
-
+            
             # Check if reindex is needed (simple heuristic: no successful sessions)
-            cur.execute(
-                """
+            cur.execute("""
                 SELECT COUNT(*)
                 FROM sessions
                 WHERE repo_id = ? AND status = 'succeeded'
-            """,
-                (repo_id,),
-            )
+            """, (repo_id,))
             successful_sessions = cur.fetchone()[0]
             needs_reindex = successful_sessions == 0
-
+            
         return RepoStatsResponse(
             name=repo_name,
             path=repo_path,
@@ -1062,126 +1052,110 @@ async def get_repo_stats(repo_name: str) -> RepoStatsResponse:
             total_tokens=total_tokens,
             embed_model=embed_model,
             last_indexed=last_indexed,
-            needs_reindex=needs_reindex,
+            needs_reindex=needs_reindex
         )
 
     except Exception as e:
         import logging
-
         logging.error(f"Failed to get stats for repo {repo_name}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get repo stats: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get repo stats: {str(e)}")
 
 
 @app.post("/v1/repos/{repo_name}/reindex")
 async def reindex_repo(
-    repo_name: str, request: ReindexRequest, background_tasks: BackgroundTasks
+    repo_name: str,
+    request: ReindexRequest,
+    background_tasks: BackgroundTasks
 ) -> IndexResponse:
     """Trigger a full or incremental reindex of the repository.
-
+    
     Full reindex clears existing index and reprocesses all files.
     Incremental reindex only processes changed files.
-
+    
     Requires confirmation for full reindex due to cost implications.
     """
     if _sql_store is None or _lance_store is None:
         raise HTTPException(status_code=503, detail="Stores not initialized")
-
+    
     # Pipeline is only required for full reindex with clear_existing
     if request.mode == "full" and request.clear_existing and _pipeline is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Pipeline not initialized (required for index clearing)",
-        )
-
+        raise HTTPException(status_code=503, detail="Pipeline not initialized (required for index clearing)")
+    
     # Get repo
     repo = _sql_store.get_repo_by_name(repo_name)
     if not repo:
-        raise HTTPException(
-            status_code=404, detail=f"Repository '{repo_name}' not found"
-        )
-
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
+    
     # Validate mode
     if request.mode not in ["full", "incremental"]:
-        raise HTTPException(
-            status_code=400, detail="Mode must be 'full' or 'incremental'"
-        )
-
+        raise HTTPException(status_code=400, detail="Mode must be 'full' or 'incremental'")
+    
     # Require confirmation for full reindex
     if request.mode == "full" and not request.confirmed:
         raise HTTPException(
             status_code=400,
-            detail="Full reindex requires confirmation due to cost implications",
+            detail="Full reindex requires confirmation due to cost implications"
         )
-
+    
     try:
         # For full reindex, use pipeline's full_reindex flag
         if request.mode == "full":
             # Queue full reindex task
-            import logging
             from pathlib import Path
-
+            import logging
+            
             logger = logging.getLogger(__name__)
             repo_id = int(repo["id"])
             root = Path(repo["root_path"])
-
+            
             # Get all tracked files
             from ..ingest._helpers import get_all_tracked_files
-
             all_files = get_all_tracked_files(root)
-
-            logger.info(
-                f"[Full Reindex] Found {len(all_files)} tracked files for {repo_name}"
-            )
+            
+            logger.info(f"[Full Reindex] Found {len(all_files)} tracked files for {repo_name}")
             logger.info(f"[Full Reindex] Root path: {root}")
             if all_files:
                 logger.info(f"[Full Reindex] First 5 files: {all_files[:5]}")
             else:
-                logger.warning(
-                    f"[Full Reindex] NO TRACKED FILES FOUND for {repo_name} at {root}"
-                )
-
+                logger.warning(f"[Full Reindex] NO TRACKED FILES FOUND for {repo_name} at {root}")
+            
             # Create task
             task_queue = get_task_queue()
             task = task_queue.create_task(repo_name, all_files)
-            logger.info(
-                f"[Full Reindex] Created task {task.task_id} with {len(all_files)} files"
-            )
-
+            logger.info(f"[Full Reindex] Created task {task.task_id} with {len(all_files)} files")
+            
             # If clear_existing is requested, trigger index drop
             if request.clear_existing:
                 # This will be handled by the background task
                 pass
-
+            
             # Queue background processing with full_reindex flag
             background_tasks.add_task(
                 _process_full_reindex_task,
                 task.task_id,
                 repo_name,
                 all_files,
-                clear_existing=request.clear_existing,
+                clear_existing=request.clear_existing
             )
-
+            
             return IndexResponse(
                 task_id=task.task_id,
                 status="queued",
-                message=f"Full reindex queued: {len(all_files)} files to process",
+                message=f"Full reindex queued: {len(all_files)} files to process"
             )
         else:
             # Incremental mode: use existing git-diff-based indexing
             # Get changed files since last commit
-            import subprocess
-            from pathlib import Path
-
             from ..ingest._helpers import git_changed_files_modified_added
-
+            from pathlib import Path
+            import subprocess
+            
             repo_id = int(repo["id"])
             root = Path(repo["root_path"])
-
+            
             # Get last successful commit
             last_success = _sql_store.get_last_successful_commit(repo_id)
-
+            
             if last_success:
                 # Get current commit
                 try:
@@ -1189,46 +1163,39 @@ async def reindex_repo(
                     commit_sha = git_repo.get_current_commit()
 
                     # Get changed files
-                    changed_files = git_changed_files_modified_added(
-                        root, last_success, commit_sha
-                    )
+                    changed_files = git_changed_files_modified_added(root, last_success, commit_sha)
                 except Exception:
                     # Fallback: queue all tracked files
                     from ..ingest._helpers import get_all_tracked_files
-
                     changed_files = get_all_tracked_files(root)
             else:
                 # No previous index: process all files
                 from ..ingest._helpers import get_all_tracked_files
-
                 changed_files = get_all_tracked_files(root)
-
+            
             if not changed_files:
                 raise HTTPException(
-                    status_code=400, detail="No files to index (all files up to date)"
+                    status_code=400,
+                    detail="No files to index (all files up to date)"
                 )
-
+            
             # Create task
             task_queue = get_task_queue()
             task = task_queue.create_task(repo_name, changed_files)
-
+            
             # Queue background processing
-            background_tasks.add_task(
-                _process_index_task, task.task_id, repo_name, changed_files
-            )
-
+            background_tasks.add_task(_process_index_task, task.task_id, repo_name, changed_files)
+            
             return IndexResponse(
                 task_id=task.task_id,
                 status="queued",
-                message=f"Incremental index queued: {len(changed_files)} files to process",
+                message=f"Incremental index queued: {len(changed_files)} files to process"
             )
-
+            
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to trigger reindex: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to trigger reindex: {str(e)}")
 
 
 @app.delete("/v1/repos/{repo_name}/index")
@@ -1240,7 +1207,8 @@ async def clear_repo_index(repo_name: str, confirmed: bool = False) -> dict:
     """
     if not confirmed:
         raise HTTPException(
-            status_code=400, detail="Index clearing requires confirmation parameter"
+            status_code=400,
+            detail="Index clearing requires confirmation parameter"
         )
 
     if _sql_store is None or _lance_store is None or _pipeline is None:
@@ -1249,9 +1217,7 @@ async def clear_repo_index(repo_name: str, confirmed: bool = False) -> dict:
     # Get repo
     repo = _sql_store.get_repo_by_name(repo_name)
     if not repo:
-        raise HTTPException(
-            status_code=404, detail=f"Repository '{repo_name}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
 
     repo_id = int(repo["id"])
 
@@ -1261,7 +1227,7 @@ async def clear_repo_index(repo_name: str, confirmed: bool = False) -> dict:
 
         return {
             "success": True,
-            "message": f"Index cleared for repository '{repo_name}'",
+            "message": f"Index cleared for repository '{repo_name}'"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to clear index: {str(e)}")
@@ -1285,9 +1251,7 @@ async def record_pending_changes(repo_name: str, request: PendingChangeRequest) 
     # Get repo
     repo = _sql_store.get_repo_by_name(repo_name)
     if not repo:
-        raise HTTPException(
-            status_code=404, detail=f"Repository '{repo_name}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
 
     repo_id = int(repo["id"])
 
@@ -1298,18 +1262,16 @@ async def record_pending_changes(repo_name: str, request: PendingChangeRequest) 
                 repo_id=repo_id,
                 file_path=change.file_path,
                 change_type=change.change_type,
-                old_path=change.old_path,
+                old_path=change.old_path
             )
             change_ids.append(change_id)
 
         return {
             "change_ids": change_ids,
-            "message": f"Recorded {len(change_ids)} pending changes for '{repo_name}'",
+            "message": f"Recorded {len(change_ids)} pending changes for '{repo_name}'"
         }
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to record changes: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to record changes: {str(e)}")
 
 
 @app.get("/v1/repos/{repo_name}/pending-changes")
@@ -1325,24 +1287,23 @@ async def get_pending_changes(repo_name: str, limit: int = 1000) -> dict:
     # Get repo
     repo = _sql_store.get_repo_by_name(repo_name)
     if not repo:
-        raise HTTPException(
-            status_code=404, detail=f"Repository '{repo_name}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
 
     repo_id = int(repo["id"])
 
     try:
         changes = _sql_store.get_pending_changes(repo_id=repo_id, limit=limit)
-
+        
         # Add processed field to each change for compatibility
         for change in changes:
             change["processed"] = False
 
-        return {"changes": changes, "total": len(changes)}
+        return {
+            "changes": changes,
+            "total": len(changes)
+        }
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get pending changes: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get pending changes: {str(e)}")
 
 
 @app.post("/v1/repos/{repo_name}/changes/mark-processed")
@@ -1357,21 +1318,17 @@ async def mark_changes_processed(repo_name: str, request: MarkProcessedRequest) 
     # Get repo
     repo = _sql_store.get_repo_by_name(repo_name)
     if not repo:
-        raise HTTPException(
-            status_code=404, detail=f"Repository '{repo_name}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
 
     try:
         processed = _sql_store.mark_changes_processed(request.change_ids)
 
         return {
             "processed_count": processed,
-            "message": f"Marked {processed} changes as processed",
+            "message": f"Marked {processed} changes as processed"
         }
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to mark changes as processed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to mark changes as processed: {str(e)}")
 
 
 @app.get("/v1/repos/{repo_name}/drift")
@@ -1387,9 +1344,7 @@ async def detect_drift(repo_name: str) -> DriftDetectionResponse:
     # Get repo
     repo = _sql_store.get_repo_by_name(repo_name)
     if not repo:
-        raise HTTPException(
-            status_code=404, detail=f"Repository '{repo_name}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
 
     repo_id = int(repo["id"])
 
@@ -1397,61 +1352,62 @@ async def detect_drift(repo_name: str) -> DriftDetectionResponse:
         drift_events = _sql_store.detect_drift(repo_id)
 
         return DriftDetectionResponse(
-            drift_events=drift_events, total=len(drift_events)
+            drift_events=drift_events,
+            total=len(drift_events)
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to detect drift: {str(e)}")
 
 
 async def _process_full_reindex_task(
-    task_id: str, repo_name: str, files: list[str], clear_existing: bool = False
+    task_id: str,
+    repo_name: str,
+    files: list[str],
+    clear_existing: bool = False
 ) -> None:
     """Background task for full reindex with optional index clearing."""
     import logging
-
+    
     logger = logging.getLogger(__name__)
     task_queue = get_task_queue()
-
+    
     try:
         # Update task to processing
         await task_queue.update_task(task_id, status=TaskStatus.PROCESSING)
-
-        logger.info(
-            f"[Full Reindex Task] Starting for {repo_name} with {len(files)} files (clear_existing={clear_existing})"
-        )
-
+        
+        logger.info(f"[Full Reindex Task] Starting for {repo_name} with {len(files)} files (clear_existing={clear_existing})")
+        
         # Stores are validated in the endpoint handler before queuing the task
         # If clear_existing is True, we need pipeline (also validated in handler)
         if clear_existing:
             if _sql_store is None or _pipeline is None:
                 raise Exception("Stores not initialized for index clearing")
-
+            
             # Get repo
             repo = _sql_store.get_repo_by_name(repo_name)
             if not repo:
                 raise Exception(f"Repository '{repo_name}' not found")
-
+            
             repo_id = int(repo["id"])
-
-            logger.info(
-                f"[Full Reindex Task] Clearing existing index for {repo_name} (repo_id={repo_id})"
-            )
+            
+            logger.info(f"[Full Reindex Task] Clearing existing index for {repo_name} (repo_id={repo_id})")
             # Clear existing index
             _pipeline._drop_repo_index(repo_id, repo_name)
             logger.info(f"[Full Reindex Task] Index cleared successfully")
-
-        logger.info(
-            f"[Full Reindex Task] About to process {len(files)} files for {repo_name}"
-        )
+        
+        logger.info(f"[Full Reindex Task] About to process {len(files)} files for {repo_name}")
         # Now process all files using standard indexing
         await _process_index_task(task_id, repo_name, files)
         logger.info(f"[Full Reindex Task] Completed processing")
-
+        
     except Exception as e:
         import traceback
-
         error_msg = f"{str(e)}\n{traceback.format_exc()}"
-        await task_queue.update_task(task_id, status=TaskStatus.FAILED, error=error_msg)
+        await task_queue.update_task(
+            task_id,
+            status=TaskStatus.FAILED,
+            error=error_msg
+        )
 
 
 def main() -> None:

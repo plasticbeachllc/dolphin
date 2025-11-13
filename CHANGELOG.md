@@ -304,6 +304,26 @@ This is the first major release of pb-dolphin, marking a significant milestone i
 - Typer - Beautiful CLI framework
 - pytest - Testing framework
 
+**Frontend (TypeScript/JavaScript):**
+
+- VSCode Extension API - Editor integration
+- Bun - Fast JavaScript runtime for Agent Core
+- Anthropic SDK - Claude API client
+- SvelteKit - Full-stack web framework
+- Svelte 5 - Reactive UI components
+- Tailwind CSS - Utility-first styling
+- shadcn/ui - Accessible component library
+- Zod - Runtime type validation
+- MCP SDK - Model Context Protocol implementation
+
+**Development & Tooling:**
+
+- uv - Fast Python package installer and resolver
+- Justfile - Task automation (build, test, lint)
+- Git - Version control and diff-based indexing
+- Prettier - Code formatting
+- ESLint - JavaScript/TypeScript linting
+
 ### Migration Notes
 
 This is a major version release. If upgrading from 0.1.x:

@@ -5,10 +5,7 @@ export class KBStatusBar {
   private item: vscode.StatusBarItem;
 
   constructor() {
-    this.item = vscode.window.createStatusBarItem(
-      vscode.StatusBarAlignment.Right,
-      100
-    );
+    this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     this.item.command = "dolphin.kb.showStatus";
     this.setReady(0);
     this.item.show();
@@ -35,17 +32,13 @@ export class KBStatusBar {
   setOffline() {
     this.item.text = "$(error) KB Offline";
     this.item.tooltip = "Click to restart Knowledge Base";
-    this.item.backgroundColor = new vscode.ThemeColor(
-      "statusBarItem.errorBackground"
-    );
+    this.item.backgroundColor = new vscode.ThemeColor("statusBarItem.errorBackground");
   }
 
   setDegraded() {
     this.item.text = "$(warning) KB Degraded";
     this.item.tooltip = "Some indexing errors occurred";
-    this.item.backgroundColor = new vscode.ThemeColor(
-      "statusBarItem.warningBackground"
-    );
+    this.item.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
   }
 
   dispose() {

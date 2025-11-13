@@ -35,9 +35,7 @@ export class AutoSyncManager {
       return;
     }
 
-    this.outputChannel.appendLine(
-      `[AutoSync] Starting in '${this.config.mode}' mode`
-    );
+    this.outputChannel.appendLine(`[AutoSync] Starting in '${this.config.mode}' mode`);
 
     // Track user activity for idle detection
     this.startActivityTracking();
@@ -78,9 +76,7 @@ export class AutoSyncManager {
         return;
       }
 
-      this.outputChannel.appendLine(
-        `[AutoSync] Found ${changes.length} pending changes`
-      );
+      this.outputChannel.appendLine(`[AutoSync] Found ${changes.length} pending changes`);
 
       // Handle based on mode
       switch (this.config.mode) {
@@ -95,9 +91,7 @@ export class AutoSyncManager {
           break;
       }
     } catch (error: any) {
-      this.outputChannel.appendLine(
-        `[AutoSync] Error during sync: ${error.message}`
-      );
+      this.outputChannel.appendLine(`[AutoSync] Error during sync: ${error.message}`);
     } finally {
       this.isProcessing = false;
     }
@@ -121,14 +115,10 @@ export class AutoSyncManager {
     const idleTime = Date.now() - this.lastActivityTime;
 
     if (idleTime >= this.config.idleTimeMs) {
-      this.outputChannel.appendLine(
-        `[AutoSync] User idle for ${idleTime}ms, syncing...`
-      );
+      this.outputChannel.appendLine(`[AutoSync] User idle for ${idleTime}ms, syncing...`);
       await this.processPendingChanges(changes);
     } else {
-      this.outputChannel.appendLine(
-        `[AutoSync] User active (idle: ${idleTime}ms), deferring sync`
-      );
+      this.outputChannel.appendLine(`[AutoSync] User active (idle: ${idleTime}ms), deferring sync`);
     }
   }
 
@@ -141,9 +131,7 @@ export class AutoSyncManager {
     // Batch changes
     const batches = this.batchChanges(changes, this.config.maxBatchSize);
 
-    this.outputChannel.appendLine(
-      `[AutoSync] Processing ${batches.length} batch(es)`
-    );
+    this.outputChannel.appendLine(`[AutoSync] Processing ${batches.length} batch(es)`);
 
     for (const batch of batches) {
       try {
@@ -159,18 +147,13 @@ export class AutoSyncManager {
           `[AutoSync] Queued batch of ${batch.length} files for indexing`
         );
       } catch (error: any) {
-        this.outputChannel.appendLine(
-          `[AutoSync] Error queuing batch: ${error.message}`
-        );
+        this.outputChannel.appendLine(`[AutoSync] Error queuing batch: ${error.message}`);
         // Continue with next batch even if one fails
       }
     }
   }
 
-  private batchChanges(
-    changes: PendingChange[],
-    maxBatchSize: number
-  ): PendingChange[][] {
+  private batchChanges(changes: PendingChange[], maxBatchSize: number): PendingChange[][] {
     const batches: PendingChange[][] = [];
     for (let i = 0; i < changes.length; i += maxBatchSize) {
       batches.push(changes.slice(i, i + maxBatchSize));
@@ -179,21 +162,18 @@ export class AutoSyncManager {
   }
 
   private async getPendingChanges(): Promise<PendingChange[]> {
-    const response = await fetch(
-      `${this.apiBaseUrl}/v1/repos/${this.repoName}/pending-changes`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    const response = await fetch(`${this.apiBaseUrl}/v1/repos/${this.repoName}/pending-changes`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to get pending changes: ${response.statusText}`);
     }
 
-    const data = await response.json() as { changes?: PendingChange[]; total?: number };
+    const data = (await response.json()) as { changes?: PendingChange[]; total?: number };
     return data.changes || [];
   }
 

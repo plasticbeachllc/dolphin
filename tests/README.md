@@ -15,6 +15,7 @@ pip install -e '.[test]'
 ```
 
 **Required test dependencies:**
+
 - `pytest` - Test framework
 - `pytest-cov` - Coverage reporting
 - `pytest-asyncio` - Async test support
@@ -108,6 +109,7 @@ Fast, isolated tests that test individual functions, classes, or modules without
 - **MCP tests**: Test MCP endpoint functionality
 
 **Characteristics:**
+
 - Fast execution (< 1s per test typically)
 - No external services required
 - Mock/stub external dependencies
@@ -123,6 +125,7 @@ Tests that verify multiple components work together correctly, may use test fixt
 - **KB load/search tests**: Test knowledge base operations
 
 **Characteristics:**
+
 - Moderate execution time
 - May use temporary databases/files
 - Test component interactions
@@ -175,6 +178,7 @@ def test_search_workflow():
 ## Test Fixtures
 
 Common test fixtures are located in:
+
 - `tests/conftest.py` - Global pytest fixtures
 - `tests/fixtures/` - Test data and sample files
 - `tests/utils/` - Test helper functions
@@ -182,6 +186,7 @@ Common test fixtures are located in:
 ## Coverage Reports
 
 After running tests with coverage enabled, reports are generated in:
+
 - `tests/reports/htmlcov/` - HTML coverage report (open `index.html`)
 - `tests/reports/coverage.xml` - XML coverage report (for CI/CD)
 - `tests/reports/junit/` - JUnit XML test results (for CI/CD)
@@ -204,26 +209,31 @@ The test suite is designed to work with CI/CD pipelines:
 ## Troubleshooting
 
 ### Tests are slow
+
 - Use `--parallel` to run tests in parallel
 - Use `--unit` to run only fast unit tests
 - Use `--no-coverage` to skip coverage collection
 
 ### Import errors
+
 - Ensure you're running from the project root
 - Ensure virtual environment is activated
 - Run `pip install -e .` to install package in development mode
 
 ### Fixture not found
+
 - Check that `conftest.py` files are present in test directories
 - Ensure fixture names match between definition and usage
 
 ## MCP Tests
 
 MCP (Model Context Protocol) related tests are split across:
+
 - **Python API**: `tests/unit/test_mcp_endpoints.py` - Tests all MCP endpoints
 - **TypeScript Bridge**: `mcp-bridge/src/tests/` - Tests MCP bridge implementation
 
 Run MCP Python tests:
+
 ```bash
 python tests/run_tests.py tests/unit/test_mcp_endpoints.py
 ```
@@ -231,6 +241,7 @@ python tests/run_tests.py tests/unit/test_mcp_endpoints.py
 ## Contributing
 
 When adding new tests:
+
 1. Choose the appropriate test type (unit/integration/e2e)
 2. Follow the naming conventions
 3. Add docstrings to test functions
@@ -241,5 +252,6 @@ When adding new tests:
 ## Questions?
 
 For issues or questions about testing, please refer to:
+
 - Pytest documentation: https://docs.pytest.org/
 - Project issues: https://github.com/your-org/dolphin/issues

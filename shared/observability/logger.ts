@@ -3,13 +3,13 @@
  * Provides consistent logging across all Dolphin services.
  */
 
-import { trace, context, SpanContext } from '@opentelemetry/api';
+import { trace, context, SpanContext } from "@opentelemetry/api";
 
 export enum LogLevel {
-  DEBUG = 'DEBUG',
-  INFO = 'INFO',
-  WARN = 'WARN',
-  ERROR = 'ERROR',
+  DEBUG = "DEBUG",
+  INFO = "INFO",
+  WARN = "WARN",
+  ERROR = "ERROR",
 }
 
 /**
@@ -70,22 +70,22 @@ export class Logger {
       // Check for circular references by attempting JSON stringify
       JSON.stringify(meta);
     } catch (e) {
-      return { error: 'Failed to sanitize metadata - circular reference detected' };
+      return { error: "Failed to sanitize metadata - circular reference detected" };
     }
 
     const sanitized = { ...meta };
 
     // Remove potential API keys
     for (const key in sanitized) {
-      if (typeof sanitized[key] === 'string') {
+      if (typeof sanitized[key] === "string") {
         // Redact API keys (sk-*, api-*, etc.)
-        sanitized[key] = sanitized[key].replace(/sk-[a-zA-Z0-9]{32,}/g, 'sk-***');
-        sanitized[key] = sanitized[key].replace(/api-[a-zA-Z0-9]{32,}/g, 'api-***');
+        sanitized[key] = sanitized[key].replace(/sk-[a-zA-Z0-9]{32,}/g, "sk-***");
+        sanitized[key] = sanitized[key].replace(/api-[a-zA-Z0-9]{32,}/g, "api-***");
 
         // Redact file paths (remove username)
-        sanitized[key] = sanitized[key].replace(/\/Users\/[^\/]+/g, '/Users/***');
-        sanitized[key] = sanitized[key].replace(/\/home\/[^\/]+/g, '/home/***');
-        sanitized[key] = sanitized[key].replace(/C:\\Users\\[^\\]+/g, 'C:\\Users\\***');
+        sanitized[key] = sanitized[key].replace(/\/Users\/[^\/]+/g, "/Users/***");
+        sanitized[key] = sanitized[key].replace(/\/home\/[^\/]+/g, "/home/***");
+        sanitized[key] = sanitized[key].replace(/C:\\Users\\[^\\]+/g, "C:\\Users\\***");
       }
     }
 

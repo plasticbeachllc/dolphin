@@ -8,6 +8,8 @@ from typing import Optional
 
 from fastapi import HTTPException
 
+from kb.security import PathValidator, PathValidationError
+
 
 def validate_path_within_repo(file_path: Path, repo_root: Path) -> Path:
     """Validate that file_path is within repo_root, return resolved path.
@@ -23,22 +25,20 @@ def validate_path_within_repo(file_path: Path, repo_root: Path) -> Path:
         HTTPException: If path is outside repository or invalid
     """
     try:
-        resolved_path = file_path.resolve()
-        resolved_root = repo_root.resolve()
-
-        # Use is_relative_to() to prevent false positives from string prefix matching
-        # e.g., /data/repoA2/secret.txt would incorrectly pass a startswith check
-        # for repo root /data/repoA, but is_relative_to() correctly rejects it
-        if not resolved_path.is_relative_to(resolved_root):
-            raise HTTPException(
-                status_code=403, detail=f"Path outside repository: {file_path}"
-            )
-
+        # Use PathValidator for secure path validation
+        validator = PathValidator(base_dir=repo_root)
+        resolved_path = validator.validate(file_path)
         return resolved_path
+    except PathValidationError as e:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Path validation failed: {e.reason} - {file_path}"
+        )
     except Exception as e:
-        if isinstance(e, HTTPException):
-            raise
-        raise HTTPException(status_code=400, detail=f"Invalid file path: {file_path}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file path: {file_path}"
+        )
 
 
 class GitRepository:

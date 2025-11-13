@@ -21,6 +21,13 @@ let logger: Logger;
 let autoSyncManager: AutoSyncManager | null = null;
 let driftDetector: DriftDetector | null = null;
 
+/**
+ * Get the active agent bridge instance (for testing)
+ */
+export function getAgentBridge(): AgentBridge | null {
+  return agentBridge;
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   // Create output channel for logging (shared by extension and agent bridge)
   outputChannel = vscode.window.createOutputChannel("Dolphin");
@@ -35,16 +42,14 @@ export async function activate(context: vscode.ExtensionContext) {
     logger.info("Initializing AgentBridge...");
     agentBridge = new AgentBridge(outputChannel);
 
-    const agentCorePath = context.asAbsolutePath(
-      path.join("..", "agent-core", "src", "main.ts")
-    );
+    const agentCorePath = context.asAbsolutePath(path.join("..", "agent-core", "src", "main.ts"));
     const extensionPath = context.extensionPath;
 
     logger.debug(`Agent Core path: ${agentCorePath}`);
     logger.debug(`Extension path: ${extensionPath}`);
 
     // Retrieve API key from SecretStorage
-    const apiKey = await context.secrets.get('dolphin.apiKey');
+    const apiKey = await context.secrets.get("dolphin.apiKey");
     if (apiKey) {
       logger.info("API key found in SecretStorage");
     } else {
@@ -61,11 +66,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     // Set context for keybindings
-    await vscode.commands.executeCommand(
-      "setContext",
-      "dolphin.agentReady",
-      true
-    );
+    await vscode.commands.executeCommand("setContext", "dolphin.agentReady", true);
 
     // Initialize KB status bar
     statusBar = new KBStatusBar();
@@ -134,11 +135,21 @@ export async function activate(context: vscode.ExtensionContext) {
 
       // Initialize Auto-Sync Manager (Phase 4)
       const autoSyncConfig = {
-        enabled: vscode.workspace.getConfiguration("dolphin.kb.autoSync").get<boolean>("enabled", true),
-        mode: vscode.workspace.getConfiguration("dolphin.kb.autoSync").get<"off" | "manual" | "smart" | "aggressive">("mode", "smart"),
-        idleTimeMs: vscode.workspace.getConfiguration("dolphin.kb.autoSync").get<number>("idleTimeMs", 30000),
-        maxBatchSize: vscode.workspace.getConfiguration("dolphin.kb.autoSync").get<number>("maxBatchSize", 100),
-        checkIntervalMs: vscode.workspace.getConfiguration("dolphin.kb.autoSync").get<number>("checkIntervalMs", 30000),
+        enabled: vscode.workspace
+          .getConfiguration("dolphin.kb.autoSync")
+          .get<boolean>("enabled", true),
+        mode: vscode.workspace
+          .getConfiguration("dolphin.kb.autoSync")
+          .get<"off" | "manual" | "smart" | "aggressive">("mode", "smart"),
+        idleTimeMs: vscode.workspace
+          .getConfiguration("dolphin.kb.autoSync")
+          .get<number>("idleTimeMs", 30000),
+        maxBatchSize: vscode.workspace
+          .getConfiguration("dolphin.kb.autoSync")
+          .get<number>("maxBatchSize", 100),
+        checkIntervalMs: vscode.workspace
+          .getConfiguration("dolphin.kb.autoSync")
+          .get<number>("checkIntervalMs", 30000),
       };
 
       autoSyncManager = new AutoSyncManager(
@@ -175,20 +186,20 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
       vscode.window.registerWebviewViewProvider("dolphin.chatView", viewProvider, {
         webviewOptions: {
-          retainContextWhenHidden: true
-        }
+          retainContextWhenHidden: true,
+        },
       })
     );
     logger.info("Webview provider registered successfully");
 
     // Register commands
     logger.info("Registering commands...");
-    
+
     // Command: dolphin.focusInput - Focus the chat input in the webview
     context.subscriptions.push(
-      vscode.commands.registerCommand('dolphin.focusInput', async () => {
+      vscode.commands.registerCommand("dolphin.focusInput", async () => {
         outputChannel.appendLine("[Dolphin] Executing dolphin.focusInput");
-        await vscode.commands.executeCommand('dolphin.chatView.focus');
+        await vscode.commands.executeCommand("dolphin.chatView.focus");
         if (viewProvider) {
           viewProvider.focusInput();
         }
@@ -197,7 +208,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Command: dolphin.newConversation - Start a new conversation
     context.subscriptions.push(
-      vscode.commands.registerCommand('dolphin.newConversation', async () => {
+      vscode.commands.registerCommand("dolphin.newConversation", async () => {
         outputChannel.appendLine("[Dolphin] Executing dolphin.newConversation");
         if (agentBridge) {
           await agentBridge.clearConversation();
@@ -211,17 +222,17 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Command: dolphin.setApiKey - Set the Anthropic API key
     context.subscriptions.push(
-      vscode.commands.registerCommand('dolphin.setApiKey', async () => {
+      vscode.commands.registerCommand("dolphin.setApiKey", async () => {
         outputChannel.appendLine("[Dolphin] Executing dolphin.setApiKey");
         const apiKey = await vscode.window.showInputBox({
           prompt: "Enter your Anthropic API Key",
           password: true,
           placeHolder: "sk-ant-...",
-          ignoreFocusOut: true
+          ignoreFocusOut: true,
         });
 
         if (apiKey) {
-          await context.secrets.store('dolphin.apiKey', apiKey);
+          await context.secrets.store("dolphin.apiKey", apiKey);
           vscode.window.showInformationMessage("API key stored securely");
           outputChannel.appendLine("[Dolphin] API key stored in SecretStorage");
         }
@@ -230,16 +241,18 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Command: dolphin.test - Test command for development/debugging
     context.subscriptions.push(
-      vscode.commands.registerCommand('dolphin.test', async () => {
+      vscode.commands.registerCommand("dolphin.test", async () => {
         outputChannel.appendLine("[Dolphin] Executing dolphin.test");
         const info = {
           agentBridgeActive: !!agentBridge,
-          commands: await vscode.commands.getCommands(true).then(cmds => 
-            cmds.filter(c => c.startsWith('dolphin.'))
-          )
+          commands: await vscode.commands
+            .getCommands(true)
+            .then((cmds) => cmds.filter((c) => c.startsWith("dolphin."))),
         };
         outputChannel.appendLine(`[Dolphin] Test info: ${JSON.stringify(info, null, 2)}`);
-        vscode.window.showInformationMessage(`Dolphin test: ${info.commands.length} commands registered`);
+        vscode.window.showInformationMessage(
+          `Dolphin test: ${info.commands.length} commands registered`
+        );
       })
     );
 
@@ -265,9 +278,43 @@ export async function activate(context: vscode.ExtensionContext) {
       }),
 
       vscode.commands.registerCommand("dolphin.kb.restart", async () => {
-        vscode.window.showInformationMessage(
-          "KB restart not yet implemented. Please restart VSCode to restart KB."
-        );
+        if (!agentBridge) {
+          vscode.window.showErrorMessage("Agent not initialized");
+          return;
+        }
+
+        try {
+          outputChannel.appendLine("[KB Restart] Shutting down agent and KB...");
+
+          // Shutdown existing agent (this also shuts down KB)
+          agentBridge.shutdown();
+
+          // Wait a moment for cleanup
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+          // Restart agent (which will restart KB)
+          outputChannel.appendLine("[KB Restart] Restarting agent and KB...");
+          agentBridge = new AgentBridge(outputChannel);
+
+          const agentCorePath = context.asAbsolutePath(
+            path.join("..", "agent-core", "src", "main.ts")
+          );
+          const extensionPath = context.extensionPath;
+          const apiKey = await context.secrets.get("dolphin.apiKey");
+
+          await agentBridge.start(agentCorePath, extensionPath, apiKey);
+
+          // Update view provider with new bridge
+          if (viewProvider) {
+            (viewProvider as any).agentBridge = agentBridge;
+          }
+
+          outputChannel.appendLine("[KB Restart] Agent and KB restarted successfully");
+          vscode.window.showInformationMessage("KB restarted successfully");
+        } catch (error: any) {
+          outputChannel.appendLine(`[KB Restart] Failed: ${error.message}`);
+          vscode.window.showErrorMessage(`Failed to restart KB: ${error.message}`);
+        }
       })
     );
 
@@ -285,7 +332,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const language = editor.document.languageId;
 
         // Open the chat view first
-        await vscode.commands.executeCommand('dolphin.chatView.focus');
+        await vscode.commands.executeCommand("dolphin.chatView.focus");
 
         // Prefill the input with context
         if (viewProvider) {
@@ -306,7 +353,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const language = editor.document.languageId;
 
         // Open the chat view first
-        await vscode.commands.executeCommand('dolphin.chatView.focus');
+        await vscode.commands.executeCommand("dolphin.chatView.focus");
 
         // Prefill the input with refactoring request
         if (viewProvider) {
@@ -320,7 +367,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const filePath = vscode.workspace.asRelativePath(uri);
 
         // Open the chat view first
-        await vscode.commands.executeCommand('dolphin.chatView.focus');
+        await vscode.commands.executeCommand("dolphin.chatView.focus");
 
         // Prefill the input with file context
         if (viewProvider) {
@@ -334,7 +381,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const folderPath = vscode.workspace.asRelativePath(uri);
 
         // Open the chat view first
-        await vscode.commands.executeCommand('dolphin.chatView.focus');
+        await vscode.commands.executeCommand("dolphin.chatView.focus");
 
         // Prefill the input with folder context
         if (viewProvider) {
@@ -347,40 +394,52 @@ export async function activate(context: vscode.ExtensionContext) {
     // Register code action commands
     context.subscriptions.push(
       // Explain code
-      vscode.commands.registerCommand("dolphin.explainCode", async (selection: string, fileName: string, language: string) => {
-        await vscode.commands.executeCommand('dolphin.chatView.focus');
-        if (viewProvider) {
-          const prompt = `Can you explain this code from ${fileName}?\n\n\`\`\`${language}\n${selection}\n\`\`\``;
-          viewProvider.prefillInput(prompt);
+      vscode.commands.registerCommand(
+        "dolphin.explainCode",
+        async (selection: string, fileName: string, language: string) => {
+          await vscode.commands.executeCommand("dolphin.chatView.focus");
+          if (viewProvider) {
+            const prompt = `Can you explain this code from ${fileName}?\n\n\`\`\`${language}\n${selection}\n\`\`\``;
+            viewProvider.prefillInput(prompt);
+          }
         }
-      }),
+      ),
 
       // Refactor code
-      vscode.commands.registerCommand("dolphin.refactorCode", async (selection: string, fileName: string, language: string) => {
-        await vscode.commands.executeCommand('dolphin.chatView.focus');
-        if (viewProvider) {
-          const prompt = `Please refactor this code from ${fileName}:\n\n\`\`\`${language}\n${selection}\n\`\`\``;
-          viewProvider.prefillInput(prompt);
+      vscode.commands.registerCommand(
+        "dolphin.refactorCode",
+        async (selection: string, fileName: string, language: string) => {
+          await vscode.commands.executeCommand("dolphin.chatView.focus");
+          if (viewProvider) {
+            const prompt = `Please refactor this code from ${fileName}:\n\n\`\`\`${language}\n${selection}\n\`\`\``;
+            viewProvider.prefillInput(prompt);
+          }
         }
-      }),
+      ),
 
       // Add tests
-      vscode.commands.registerCommand("dolphin.addTests", async (selection: string, fileName: string, language: string) => {
-        await vscode.commands.executeCommand('dolphin.chatView.focus');
-        if (viewProvider) {
-          const prompt = `Please write tests for this code from ${fileName}:\n\n\`\`\`${language}\n${selection}\n\`\`\``;
-          viewProvider.prefillInput(prompt);
+      vscode.commands.registerCommand(
+        "dolphin.addTests",
+        async (selection: string, fileName: string, language: string) => {
+          await vscode.commands.executeCommand("dolphin.chatView.focus");
+          if (viewProvider) {
+            const prompt = `Please write tests for this code from ${fileName}:\n\n\`\`\`${language}\n${selection}\n\`\`\``;
+            viewProvider.prefillInput(prompt);
+          }
         }
-      }),
+      ),
 
       // Document code
-      vscode.commands.registerCommand("dolphin.documentCode", async (selection: string, fileName: string, language: string) => {
-        await vscode.commands.executeCommand('dolphin.chatView.focus');
-        if (viewProvider) {
-          const prompt = `Please add documentation to this code from ${fileName}:\n\n\`\`\`${language}\n${selection}\n\`\`\``;
-          viewProvider.prefillInput(prompt);
+      vscode.commands.registerCommand(
+        "dolphin.documentCode",
+        async (selection: string, fileName: string, language: string) => {
+          await vscode.commands.executeCommand("dolphin.chatView.focus");
+          if (viewProvider) {
+            const prompt = `Please add documentation to this code from ${fileName}:\n\n\`\`\`${language}\n${selection}\n\`\`\``;
+            viewProvider.prefillInput(prompt);
+          }
         }
-      }),
+      ),
 
       // Apply diff
       vscode.commands.registerCommand("dolphin.applyDiff", async (diff: DiffChange) => {
@@ -390,7 +449,9 @@ export async function activate(context: vscode.ExtensionContext) {
           if (success) {
             outputChannel.appendLine(`[Dolphin] Successfully applied diff to ${diff.filePath}`);
           } else {
-            outputChannel.appendLine(`[Dolphin] User cancelled or failed to apply diff to ${diff.filePath}`);
+            outputChannel.appendLine(
+              `[Dolphin] User cancelled or failed to apply diff to ${diff.filePath}`
+            );
           }
         } catch (error: any) {
           outputChannel.appendLine(`[Dolphin] Error applying diff: ${error.message}`);
@@ -402,16 +463,12 @@ export async function activate(context: vscode.ExtensionContext) {
     // Register CodeActionProvider for all languages
     const codeActionProvider = new DolphinCodeActionProvider(viewProvider);
     context.subscriptions.push(
-      vscode.languages.registerCodeActionsProvider(
-        { scheme: 'file' },
-        codeActionProvider,
-        {
-          providedCodeActionKinds: [
-            vscode.CodeActionKind.QuickFix,
-            vscode.CodeActionKind.RefactorRewrite
-          ]
-        }
-      )
+      vscode.languages.registerCodeActionsProvider({ scheme: "file" }, codeActionProvider, {
+        providedCodeActionKinds: [
+          vscode.CodeActionKind.QuickFix,
+          vscode.CodeActionKind.RefactorRewrite,
+        ],
+      })
     );
 
     outputChannel.appendLine("[Dolphin] Commands registered successfully");
@@ -517,26 +574,27 @@ async function recoverFromCrash(context: vscode.ExtensionContext): Promise<void>
     const apiBaseUrl = "http://127.0.0.1:7777";
 
     // Check for pending changes that accumulated during offline period
-    const response = await fetch(
-      `${apiBaseUrl}/v1/repos/${repoName}/pending-changes?limit=10`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    const response = await fetch(`${apiBaseUrl}/v1/repos/${repoName}/pending-changes?limit=10`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
 
     if (!response.ok) {
-      outputChannel.appendLine("[CrashRecovery] Failed to check for pending changes (KB may not be running)");
+      outputChannel.appendLine(
+        "[CrashRecovery] Failed to check for pending changes (KB may not be running)"
+      );
       return;
     }
 
-    const data = await response.json() as { total?: number; changes?: any[] };
+    const data = (await response.json()) as { total?: number; changes?: any[] };
     const pendingCount = data.total || 0;
 
     if (pendingCount > 0) {
-      outputChannel.appendLine(`[CrashRecovery] Found ${pendingCount} pending changes from previous session`);
+      outputChannel.appendLine(
+        `[CrashRecovery] Found ${pendingCount} pending changes from previous session`
+      );
 
       const choice = await vscode.window.showInformationMessage(
         `Found ${pendingCount} file change(s) from previous session. Sync now?`,
@@ -545,7 +603,9 @@ async function recoverFromCrash(context: vscode.ExtensionContext): Promise<void>
       );
 
       if (choice === "Sync") {
-        outputChannel.appendLine("[CrashRecovery] User requested sync - will be handled by auto-sync manager");
+        outputChannel.appendLine(
+          "[CrashRecovery] User requested sync - will be handled by auto-sync manager"
+        );
       }
     } else {
       outputChannel.appendLine("[CrashRecovery] No pending changes found");

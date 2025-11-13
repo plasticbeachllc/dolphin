@@ -55,9 +55,7 @@ export class DriftDetector {
         return;
       }
 
-      this.outputChannel.appendLine(
-        `[DriftDetector] Found ${driftEvents.length} drifted files`
-      );
+      this.outputChannel.appendLine(`[DriftDetector] Found ${driftEvents.length} drifted files`);
 
       // Record drifted files as pending changes
       await this.recordDriftedFiles(driftEvents);
@@ -72,21 +70,18 @@ export class DriftDetector {
   }
 
   private async fetchDriftEvents(): Promise<DriftEvent[]> {
-    const response = await fetch(
-      `${this.apiBaseUrl}/v1/repos/${this.repoName}/drift`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    const response = await fetch(`${this.apiBaseUrl}/v1/repos/${this.repoName}/drift`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to fetch drift events: ${response.statusText}`);
     }
 
-    const data = await response.json() as { drift_events?: DriftEvent[] };
+    const data = (await response.json()) as { drift_events?: DriftEvent[] };
     return data.drift_events || [];
   }
 
@@ -97,23 +92,18 @@ export class DriftDetector {
       change_type: event.drift_type,
     }));
 
-    const response = await fetch(
-      `${this.apiBaseUrl}/v1/repos/${this.repoName}/changes`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          changes,
-        }),
-      }
-    );
+    const response = await fetch(`${this.apiBaseUrl}/v1/repos/${this.repoName}/changes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        changes,
+      }),
+    });
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to record drifted files: ${response.statusText}`
-      );
+      throw new Error(`Failed to record drifted files: ${response.statusText}`);
     }
 
     this.outputChannel.appendLine(
@@ -122,12 +112,8 @@ export class DriftDetector {
   }
 
   private async notifyUser(driftEvents: DriftEvent[]): Promise<void> {
-    const modifiedCount = driftEvents.filter(
-      (e) => e.drift_type === "modified"
-    ).length;
-    const deletedCount = driftEvents.filter(
-      (e) => e.drift_type === "deleted"
-    ).length;
+    const modifiedCount = driftEvents.filter((e) => e.drift_type === "modified").length;
+    const deletedCount = driftEvents.filter((e) => e.drift_type === "deleted").length;
 
     let message = `Detected ${driftEvents.length} file change(s) while VSCode was closed`;
     if (modifiedCount > 0) {
@@ -138,11 +124,7 @@ export class DriftDetector {
     }
     message += ")";
 
-    const choice = await vscode.window.showInformationMessage(
-      message,
-      "Sync Now",
-      "Later"
-    );
+    const choice = await vscode.window.showInformationMessage(message, "Sync Now", "Later");
 
     if (choice === "Sync Now") {
       // Trigger auto-sync (if available) or manual reindex
