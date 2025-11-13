@@ -1,20 +1,15 @@
-/**
- * EditorWorkflow - Fast/Direct Execution for Dolphin v2
- * 
- * Fast-path execution for simple, well-defined tasks that don't require planning.
- * 
- * Based on: docs/orchestration/DOLPHIN-V2-ORCHESTRATION-PROJECT-PLAN.md
- */
-
+// agent-core-v2/src/workflows/editor-workflow.ts
 import type {
   IWorkflow,
   TaskInput,
   WorkflowUpdate,
   Context,
-} from '../types/index.js';
-import type { ClaudeProvider } from '../execution/claude-provider.js';
-import type { ContextBuilder } from '../context/context-builder.js';
-import type { PromptBuilder } from '../prompts/prompt-builder.js';
+} from '../types/index';
+import type { ClaudeProvider } from '../execution/claude-provider';
+import type { ContextBuilder } from '../context/context-builder';
+import type { PromptBuilder } from '../prompts/prompt-builder';
+import type { StateStore } from '../state/state-store';
+import type { AgentEvent } from '../../../../shared/types/events';
 
 /**
  * Configuration for EditorWorkflow
@@ -23,17 +18,19 @@ export interface EditorWorkflowConfig {
   claudeProvider: ClaudeProvider;
   contextBuilder: ContextBuilder;
   promptBuilder: PromptBuilder;
+  stateStore: StateStore;
+  workspaceRoot: string;
 }
 
 /**
  * EditorWorkflow implements fast-path execution for simple tasks
- * 
+ *
  * Workflow Steps:
  * 1. Input → Accept task input
  * 2. Context → Gather minimal context (current file, KB search if relevant)
- * 3. Execute → Single Claude CLI call with Sonnet 4.5
- * 4. Stream → Stream response back to user
- * 5. Complete → Done
+ * 3. Execute → Single Claude call with Sonnet 4.5
+ * 4. Stream → Stream response back to user via events
+ * 5. Complete → Save state and finish
  */
 export class EditorWorkflow implements IWorkflow {
   private config: EditorWorkflowConfig;
@@ -59,9 +56,9 @@ export class EditorWorkflow implements IWorkflow {
 
       // Step 1: Build context (lightweight for editor mode)
       console.error('[EditorWorkflow] Building context...');
-      
+
       const context = await this.config.contextBuilder.build({
-        files: input.context.files,
+        files: input.context.files || [],
         searchQuery: this.extractSearchIntent(input.message),
         maxTokens: 8000, // Smaller context for fast execution
       });
@@ -78,54 +75,49 @@ export class EditorWorkflow implements IWorkflow {
 
       // Step 2: Build prompt
       console.error('[EditorWorkflow] Building prompt...');
-      
-      const prompt = this.config.promptBuilder.buildEditorPrompt({
+
+      const systemPrompt = this.config.promptBuilder.buildEditorPrompt({
         message: input.message,
         context,
         conversationHistory: input.conversationHistory,
       });
 
-      // Step 3: Execute with Sonnet (fast, capable model)
+      // Step 3: Execute with Claude (using event-driven approach)
       console.error('[EditorWorkflow] Executing with Claude Sonnet...');
-      
-      const stream = this.config.claudeProvider.execute({
-        model: 'claude-sonnet-4-20250514',
-        prompt: input.message,
-        systemPrompt: prompt,
-        context,
-        tools: this.getEditorTools(),
-        thinkingMode: 'normal', // No extended thinking for editor mode
+
+      let textContent = '';
+      const startTime = Date.now();
+
+      // Collect events and forward them
+      const result = await this.config.claudeProvider.execute({
+        message: systemPrompt,
+        conversationHistory: input.conversationHistory,
+        onEvent: (event: AgentEvent) => {
+          // Forward content_delta events
+          if (event.type === 'content_delta') {
+            textContent += event.delta;
+          }
+
+          // Forward tool events
+          if (event.type === 'tool_call_started' || event.type === 'tool_call_completed') {
+            // Event will be sent via the iterator
+          }
+        },
       });
 
-      // Step 4: Stream results
-      let tokenCount = 0;
-      for await (const chunk of stream) {
-        if (chunk.type === 'text') {
-          tokenCount += chunk.content.split(/\s+/).length; // Rough estimate
-        }
+      const executionTime = Date.now() - startTime;
 
-        yield {
-          type: 'chunk',
-          sessionId,
-          timestamp: new Date().toISOString(),
-          data: chunk,
-        };
+      // Step 4: Complete
+      yield {
+        type: 'progress',
+        sessionId,
+        timestamp: new Date().toISOString(),
+        data: {
+          phase: 'complete',
+          message: `Task completed in ${executionTime}ms (${result.usage.inputTokens + result.usage.outputTokens} tokens, ${result.toolRounds} tool rounds)`,
+        },
+      };
 
-        // Handle tool calls
-        if (chunk.type === 'tool_use') {
-          yield {
-            type: 'tool_call',
-            sessionId,
-            timestamp: new Date().toISOString(),
-            data: {
-              toolName: chunk.toolName,
-              toolInput: chunk.toolInput,
-            },
-          };
-        }
-      }
-
-      // Step 5: Complete
       yield {
         type: 'state_change',
         sessionId,
@@ -133,19 +125,29 @@ export class EditorWorkflow implements IWorkflow {
         data: { state: 'complete' },
       };
 
-      yield {
-        type: 'progress',
-        sessionId,
-        timestamp: new Date().toISOString(),
-        data: {
-          phase: 'complete',
-          message: `Task completed (~${tokenCount} tokens)`,
-        },
-      };
+      // Step 5: Save state
+      try {
+        await this.config.stateStore.saveSession({
+          id: sessionId,
+          mode: 'editor',
+          state: 'complete',
+          metadata: {
+            modelUsed: ['claude-sonnet-4-20250514'],
+            tokensUsed: result.usage.inputTokens + result.usage.outputTokens,
+            estimatedCost: 0, // TODO: calculate based on mode
+            startedAt: new Date(startTime).toISOString(),
+            completedAt: new Date().toISOString(),
+          },
+          input,
+        });
+      } catch (error) {
+        console.error('[EditorWorkflow] Failed to save state:', error);
+        // Don't fail the workflow if state save fails
+      }
 
     } catch (error) {
       console.error('[EditorWorkflow] Error:', error);
-      
+
       yield {
         type: 'error',
         sessionId,
@@ -189,72 +191,5 @@ export class EditorWorkflow implements IWorkflow {
     }
 
     return undefined;
-  }
-
-  /**
-   * Get tools available in editor mode
-   */
-  private getEditorTools() {
-    return [
-      {
-        name: 'read_file',
-        description: 'Read the contents of a file',
-        parameters: {
-          type: 'object',
-          properties: {
-            path: { type: 'string', description: 'File path relative to workspace' },
-          },
-          required: ['path'],
-        },
-      },
-      {
-        name: 'write_file',
-        description: 'Write content to a file',
-        parameters: {
-          type: 'object',
-          properties: {
-            path: { type: 'string', description: 'File path relative to workspace' },
-            content: { type: 'string', description: 'Content to write' },
-          },
-          required: ['path', 'content'],
-        },
-      },
-      {
-        name: 'apply_diff',
-        description: 'Apply a diff to an existing file',
-        parameters: {
-          type: 'object',
-          properties: {
-            path: { type: 'string', description: 'File path' },
-            diff: { type: 'string', description: 'Unified diff format' },
-          },
-          required: ['path', 'diff'],
-        },
-      },
-      {
-        name: 'search_knowledge',
-        description: 'Search the knowledge bank for relevant code',
-        parameters: {
-          type: 'object',
-          properties: {
-            query: { type: 'string', description: 'Search query' },
-            top_k: { type: 'number', description: 'Number of results to return' },
-          },
-          required: ['query'],
-        },
-      },
-      {
-        name: 'execute_command',
-        description: 'Execute a shell command',
-        parameters: {
-          type: 'object',
-          properties: {
-            command: { type: 'string', description: 'Command to execute' },
-            cwd: { type: 'string', description: 'Working directory' },
-          },
-          required: ['command'],
-        },
-      },
-    ];
   }
 }
