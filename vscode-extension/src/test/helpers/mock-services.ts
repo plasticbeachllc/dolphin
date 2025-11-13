@@ -7,6 +7,10 @@ import { AddressInfo } from 'net';
 export class MockKBServer {
   private server: http.Server | null = null;
   public port = 0;
+  private mockSearchResults: any[] | null = null;
+  private mockMetadata: any | null = null;
+  private isHealthy: boolean = true;
+  private requestHistory: any[] = [];
 
   /**
    * Start the mock server
@@ -43,6 +47,44 @@ export class MockKBServer {
   }
 
   /**
+   * Set custom search results
+   */
+  setSearchResults(results: any[]): void {
+    this.mockSearchResults = results;
+  }
+
+  /**
+   * Set custom metadata
+   */
+  setMetadata(metadata: any): void {
+    this.mockMetadata = metadata;
+  }
+
+  /**
+   * Set health status
+   */
+  setHealthy(healthy: boolean): void {
+    this.isHealthy = healthy;
+  }
+
+  /**
+   * Get request history
+   */
+  getRequestHistory(): any[] {
+    return [...this.requestHistory];
+  }
+
+  /**
+   * Reset mock state
+   */
+  reset(): void {
+    this.mockSearchResults = null;
+    this.mockMetadata = null;
+    this.isHealthy = true;
+    this.requestHistory = [];
+  }
+
+  /**
    * Handle HTTP requests
    */
   private handleRequest(
@@ -50,6 +92,13 @@ export class MockKBServer {
     res: http.ServerResponse
   ): void {
     const url = req.url || '';
+
+    // Log request
+    this.requestHistory.push({
+      method: req.method,
+      url,
+      timestamp: Date.now(),
+    });
 
     // CORS headers for testing
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -64,8 +113,13 @@ export class MockKBServer {
 
     // Health check
     if (url === '/health' || url === '/') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', mock: true }));
+      if (this.isHealthy) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok', mock: true }));
+      } else {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'error', mock: true }));
+      }
       return;
     }
 
@@ -116,6 +170,18 @@ export class MockKBServer {
    * Generate mock search response
    */
   private generateMockSearchResponse(request: any): any {
+    // Use custom results if set
+    if (this.mockSearchResults !== null) {
+      return {
+        hits: this.mockSearchResults,
+        total: this.mockSearchResults.length,
+        cursor: null,
+        complete: true,
+        warnings: [],
+      };
+    }
+
+    // Default mock response
     return {
       hits: [
         {
@@ -148,6 +214,12 @@ export class MockKBServer {
    * Generate mock metadata
    */
   private generateMockMetadata(): any {
+    // Use custom metadata if set
+    if (this.mockMetadata !== null) {
+      return this.mockMetadata;
+    }
+
+    // Default mock metadata
     return {
       repos: [
         {
@@ -182,53 +254,147 @@ export class MockKBServer {
 }
 
 /**
- * Create a mock agent bridge for testing
+ * Enhanced MockAgentBridge with full feature support.
  */
 export class MockAgentBridge {
-  private handlers: Map<string, (data: any) => void> = new Map();
+  private messageHandlers: Map<string, Function> = new Map();
+  private eventHandlers: Map<string, Function[]> = new Map();
+  private messageHistory: any[] = [];
+  private responseQueue: string[] = [];
+  private toolCallQueue: any[] = [];
+  private shouldError: Error | null = null;
 
   /**
-   * Simulate sending a message
+   * Send a message (simulates user sending message to agent).
    */
-  async sendMessage(content: string): Promise<void> {
-    // Simulate async processing
-    await new Promise((resolve) => setTimeout(resolve, 100));
+  async sendMessage(message: string): Promise<void> {
+    this.messageHistory.push({ type: 'user_message', content: message, timestamp: Date.now() });
 
-    // Emit mock events
-    this.emitEvent({
-      type: 'content_delta',
-      delta: `Mock response to: ${content}`,
-    });
+    // Simulate processing delay
+    await new Promise(resolve => setTimeout(resolve, 50));
 
-    this.emitEvent({
-      type: 'task_completed',
-      success: true,
-    });
+    if (this.shouldError) {
+      this.emit('error', this.shouldError);
+      throw this.shouldError;
+    }
+
+    // Emit tool calls if configured
+    for (const toolCall of this.toolCallQueue) {
+      this.emit('tool_call_started', toolCall);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      this.emit('tool_call_completed', { ...toolCall, result: 'mock result' });
+    }
+
+    // Emit response
+    const response = this.responseQueue.shift() || 'Mock agent response';
+    this.emit('message_chunk', { content: response });
+    this.emit('content_delta', { delta: response }); // Legacy compatibility
+    this.messageHistory.push({ type: 'assistant_message', content: response, timestamp: Date.now() });
+
+    await new Promise(resolve => setTimeout(resolve, 20));
+    this.emit('task_completed', { success: true, message: response });
   }
 
   /**
-   * Register event handler
+   * Register event listener.
+   */
+  on(event: string, handler: Function): void {
+    if (!this.eventHandlers.has(event)) {
+      this.eventHandlers.set(event, []);
+    }
+    this.eventHandlers.get(event)!.push(handler);
+  }
+
+  /**
+   * Register event handler (alternative syntax for compatibility)
    */
   onEvent(handler: (event: any) => void): { dispose: () => void } {
     const id = Math.random().toString(36);
-    this.handlers.set(id, handler);
+    this.messageHandlers.set(id, handler);
 
     return {
-      dispose: () => this.handlers.delete(id),
+      dispose: () => this.messageHandlers.delete(id),
     };
   }
 
   /**
-   * Emit an event to all handlers
+   * Emit event to listeners.
    */
-  private emitEvent(event: any): void {
-    this.handlers.forEach((handler) => handler(event));
+  private emit(event: string, data: any): void {
+    // Emit to specific event handlers
+    const handlers = this.eventHandlers.get(event) || [];
+    for (const handler of handlers) {
+      handler(data);
+    }
+
+    // Also emit to onEvent handlers
+    const eventData = { type: event, ...data };
+    this.messageHandlers.forEach((handler) => handler(eventData));
+  }
+
+  /**
+   * Get message history.
+   */
+  getMessageHistory(): any[] {
+    return [...this.messageHistory];
+  }
+
+  /**
+   * Get event history.
+   */
+  getEventHistory(): any[] {
+    return [...this.messageHistory];
+  }
+
+  /**
+   * Set next response.
+   */
+  setResponse(response: string): void {
+    this.responseQueue.push(response);
+  }
+
+  /**
+   * Set tool calls to emit.
+   */
+  setToolCalls(toolCalls: any[]): void {
+    this.toolCallQueue = toolCalls;
+  }
+
+  /**
+   * Set error to throw.
+   */
+  setError(error: Error): void {
+    this.shouldError = error;
+  }
+
+  /**
+   * Reset all state.
+   */
+  reset(): void {
+    this.messageHistory = [];
+    this.responseQueue = [];
+    this.toolCallQueue = [];
+    this.shouldError = null;
+    this.eventHandlers.clear();
+  }
+
+  /**
+   * Get KB status (mock).
+   */
+  async getKBStatus(): Promise<any> {
+    return {
+      running: true,
+      port: 7778,
+      totalChunks: 1000,
+      repositories: ['test-repo'],
+    };
   }
 
   /**
    * Shutdown
    */
   shutdown(): void {
-    this.handlers.clear();
+    this.reset();
+    this.messageHandlers.clear();
   }
 }
