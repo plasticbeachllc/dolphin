@@ -31,7 +31,11 @@ class ChunkDeduplicator:
         On failure to query the store, returns an empty set (conservative).
         """
         try:
-            return self.store.get_existing_content_hashes_for_file(repo_id, file_id, embed_model)
+            existing = self.store.get_existing_content_hashes_for_file(repo_id, file_id, embed_model)
+            _log.info(f"[DEBUG DEDUP] repo_id={repo_id}, file_id={file_id}, model={embed_model}: found {len(existing)} existing hashes")
+            if existing and _log.isEnabledFor(logging.DEBUG):
+                _log.debug(f"  First 3 hashes: {list(existing)[:3]}")
+            return existing
         except Exception as e:
             _log.warning(
                 "Failed to fetch existing hashes for repo_id=%s file_id=%s model=%s; treating all as changed: %s",

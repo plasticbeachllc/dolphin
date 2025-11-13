@@ -12,7 +12,13 @@ def mock_providers():
     """Provides mock stores and providers for the search backend."""
     embedding_provider = MagicMock(spec=["embed_texts"])
     lance_store = MagicMock(spec=["query", "upsert_chunks"])
-    sql_store = MagicMock(spec=["bm25_search", "get_chunk_contents", "get_chunk_by_id", "index_chunk_for_fts"])
+    sql_store = MagicMock(spec=[
+        "bm25_search",
+        "get_chunk_contents",
+        "get_chunk_by_id",
+        "get_chunk_by_content_identity",
+        "index_chunk_for_fts",
+    ])
     return embedding_provider, lance_store, sql_store
 
 @pytest.fixture
@@ -46,7 +52,7 @@ class TestKnowledgeSearchBackend:
     def test_search_with_score_cutoff(self, basic_backend):
         """Test that the score_cutoff is applied after RRF fusion."""
         embedding_provider, lance_store, sql_store = basic_backend.embedding_provider, basic_backend.lance_store, basic_backend.sql_store
-        
+
         embedding_provider.embed_texts.return_value = [[0.1] * 1536]
         # Vector search result will rank at position 1, giving RRF score ~0.016
         lance_store.query.return_value = [{"id": "chunk1", "_distance": 0.1, "repo": "repo", "path": "test.py"}]
@@ -63,9 +69,47 @@ class TestKnowledgeSearchBackend:
         # Test high cutoff that filters out results
         request_high_cutoff = SearchRequest(query="test", score_cutoff=0.5)
         results_high = basic_backend.search(request_high_cutoff)
-        
+
         # RRF scores (~0.016) should be below 0.5 cutoff, so no results
         assert len(results_high) == 0
+
+    def test_hydrate_bm25_results_with_deterministic_ids(self, basic_backend):
+        embedding_provider, lance_store, sql_store = (
+            basic_backend.embedding_provider,
+            basic_backend.lance_store,
+            basic_backend.sql_store,
+        )
+
+        deterministic_id = "1:2:abcdef"
+        sql_store.get_chunk_by_content_identity.return_value = {
+            "chunk_id": "uuid-123",
+            "text_hash": "abcdef",
+            "embed_model": "small",
+            "path": "repo/file.py",
+            "language": "python",
+            "start_line": 10,
+            "end_line": 20,
+            "symbol_name": "func",
+            "symbol_path": "module.func",
+        }
+        sql_store.get_chunk_by_id.return_value = None
+
+        hydrated = basic_backend._hydrate_bm25_results(
+            [
+                {
+                    "chunk_id": deterministic_id,
+                    "repo": "repo",
+                    "path": "repo/file.py",
+                    "score": 5.0,
+                }
+            ],
+            sql_store,
+        )
+
+        sql_store.get_chunk_by_content_identity.assert_called_once_with(1, 2, "abcdef")
+        sql_store.get_chunk_by_id.assert_not_called()
+        assert hydrated[0]["start_line"] == 10
+        assert hydrated[0]["chunk_id"] == deterministic_id
 
 @pytest.fixture
 def real_backend(tmp_path: Path):
@@ -130,7 +174,11 @@ class TestSearchBackendIntegration:
         chunks_to_upsert = [{"id": chunk_id, "vector": [0.1] * 1536, "repo": "test-repo", "path": "test.py"}]
         real_backend.lance_store.upsert_chunks("test-repo", chunks_to_upsert, model="small")
         real_backend.sql_store.index_chunk_for_fts(
-            content_id=chunk_id, repo="test-repo", path="test.py", content=test_content
+            content_id=chunk_id,
+            repo="test-repo",
+            path="test.py",
+            content=test_content,
+            text_hash=text_hash,
         )
         
         # Verify FTS indexing worked

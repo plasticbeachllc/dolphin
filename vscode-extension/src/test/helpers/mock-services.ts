@@ -22,6 +22,10 @@ export class MockKBServer {
   private chunkData: MockChunkResponse | null = null;
   private server: http.Server | null = null;
   public port = 0;
+  private mockSearchResults: any[] | null = null;
+  private mockMetadata: any | null = null;
+  private isHealthy: boolean = true;
+  private requestHistory: any[] = [];
 
   /**
    * Start the mock server
@@ -121,6 +125,13 @@ export class MockKBServer {
     res: http.ServerResponse
   ): void {
     const url = req.url || '';
+
+    // Log request
+    this.requestHistory.push({
+      method: req.method,
+      url,
+      timestamp: Date.now(),
+    });
 
     // CORS headers for testing
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -271,7 +282,7 @@ export class MockKBServer {
 }
 
 /**
- * Create a mock agent bridge for testing
+ * Enhanced MockAgentBridge with full feature support.
  */
 export class MockAgentBridge {
   private handlers: Map<string, (data: AgentEvent) => void> = new Map();
@@ -280,7 +291,7 @@ export class MockAgentBridge {
   private errorMessage: string = 'Mock error';
 
   /**
-   * Simulate sending a message
+   * Send a message (simulates user sending message to agent).
    */
   async sendMessage(content: string): Promise<void> {
     this.messageHistory.push(content);
@@ -296,27 +307,50 @@ export class MockAgentBridge {
     // Simulate async processing
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    // Emit mock events
-    this.emitEvent({
-      type: 'content_delta',
-      delta: `Mock response to: ${content}`,
-    });
+    // Simulate processing delay
+    await new Promise(resolve => setTimeout(resolve, 50));
 
-    this.emitEvent({
-      type: 'task_completed',
-      success: true,
-    });
+    if (this.shouldError) {
+      this.emit('error', this.shouldError);
+      throw this.shouldError;
+    }
+
+    // Emit tool calls if configured
+    for (const toolCall of this.toolCallQueue) {
+      this.emit('tool_call_started', toolCall);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      this.emit('tool_call_completed', { ...toolCall, result: 'mock result' });
+    }
+
+    // Emit response
+    const response = this.responseQueue.shift() || 'Mock agent response';
+    this.emit('message_chunk', { content: response });
+    this.emit('content_delta', { delta: response }); // Legacy compatibility
+    this.messageHistory.push({ type: 'assistant_message', content: response, timestamp: Date.now() });
+
+    await new Promise(resolve => setTimeout(resolve, 20));
+    this.emit('task_completed', { success: true, message: response });
   }
 
   /**
-   * Register event handler
+   * Register event listener.
+   */
+  on(event: string, handler: Function): void {
+    if (!this.eventHandlers.has(event)) {
+      this.eventHandlers.set(event, []);
+    }
+    this.eventHandlers.get(event)!.push(handler);
+  }
+
+  /**
+   * Register event handler (alternative syntax for compatibility)
    */
   onEvent(handler: (event: AgentEvent) => void): EventHandlerDisposable {
     const id = Math.random().toString(36);
-    this.handlers.set(id, handler);
+    this.messageHandlers.set(id, handler);
 
     return {
-      dispose: () => this.handlers.delete(id),
+      dispose: () => this.messageHandlers.delete(id),
     };
   }
 

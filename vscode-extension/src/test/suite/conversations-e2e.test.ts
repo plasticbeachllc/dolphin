@@ -10,8 +10,8 @@ import { waitForExtensionActivation, sleep } from '../helpers/test-utils';
  */
 describe('Conversations E2E Tests', () => {
   before(async function () {
-    this.timeout(8000);
-    await waitForExtensionActivation();
+    this.timeout(70000); // Extended timeout for agent-core startup
+    await waitForExtensionActivation(60000, true); // Wait for agent to be ready
     await sleep(1000);
   });
 

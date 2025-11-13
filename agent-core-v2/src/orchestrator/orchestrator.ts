@@ -265,6 +265,7 @@ export class Orchestrator implements IOrchestrator {
     switch (session.state) {
       case 'researching':
         return 'research';
+      case 'clarifying':
       case 'planning':
       case 'awaiting_approval':
       case 'plan_revision':
@@ -363,6 +364,11 @@ export class Orchestrator implements IOrchestrator {
       session.workflowIterator = iterator;
 
       for await (const update of iterator) {
+        // Stop processing if session was cancelled
+        if (session.state === 'cancelled') {
+          break;
+        }
+
         // Handle state changes
         if (update.type === 'state_change') {
           this.transitionState(session, update.data.state);
@@ -371,12 +377,19 @@ export class Orchestrator implements IOrchestrator {
         // Handle plan updates
         if (update.type === 'progress' && update.data.phase === 'planning' && update.data.plan) {
           session.plan = update.data.plan;
-          await this.config.stateStore.savePlan(session.id, session.plan);
+          const contentPath = await this.config.stateStore.savePlan(session.id, session.plan);
+          // Update in-memory session with contentPath so subsequent saves preserve it
+          session.plan.contentPath = contentPath;
         }
 
         // Handle research updates
         if (update.type === 'progress' && update.data.phase === 'research' && update.data.result) {
           session.research = update.data.result;
+        }
+
+        // Handle clarification updates
+        if (update.type === 'progress' && update.data.phase === 'clarification' && update.data.result) {
+          session.clarification = update.data.result;
         }
 
         // Emit update to subscribers

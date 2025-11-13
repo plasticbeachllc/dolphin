@@ -38,7 +38,8 @@ export function getDolphinExtension(): vscode.Extension<any> | undefined {
  * Wait for extension to be activated
  */
 export async function waitForExtensionActivation(
-  timeout = 10000
+  timeout = 10000,
+  waitForAgent = false
 ): Promise<vscode.Extension<any>> {
   const extension = getDolphinExtension();
 
@@ -51,6 +52,14 @@ export async function waitForExtensionActivation(
   }
 
   await waitFor(() => extension.isActive, timeout);
+
+  // Optionally wait for agent bridge to be ready (for E2E tests that need it)
+  if (waitForAgent) {
+    const agentBridge = getAgentBridge();
+    if (agentBridge) {
+      await agentBridge.waitForReady(timeout);
+    }
+  }
 
   return extension;
 }
