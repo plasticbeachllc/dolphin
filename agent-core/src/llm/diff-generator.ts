@@ -2,6 +2,7 @@
 import * as Diff from 'diff';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { PathValidator } from '../../../shared/security/path-validator';
 import type { FileDiff, DiffHunk } from '../../../shared/types/events';
 
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB
@@ -299,7 +300,10 @@ export async function generateFileWriteDiff(
   try {
     const filePath = toolInput.path;
     const newContent = toolInput.content;
-    const fullPath = path.resolve(workspaceRoot, filePath);
+
+    // Validate path to prevent directory traversal attacks
+    const validator = new PathValidator({ baseDir: workspaceRoot });
+    const fullPath = validator.validate(filePath);
 
     // Check if this was a new file creation
     if (toolResult.created_new) {
@@ -311,7 +315,9 @@ export async function generateFileWriteDiff(
 
     if (toolResult.backup_path) {
       try {
-        oldContent = await fs.readFile(toolResult.backup_path, 'utf-8');
+        // Validate backup path as well
+        const validatedBackupPath = validator.validate(toolResult.backup_path);
+        oldContent = await fs.readFile(validatedBackupPath, 'utf-8');
       } catch (error) {
         console.warn(`Failed to read backup file ${toolResult.backup_path}:`, error);
       }

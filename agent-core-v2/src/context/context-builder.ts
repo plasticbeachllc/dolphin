@@ -1,13 +1,14 @@
 /**
  * ContextBuilder - KB Integration for Dolphin v2
- * 
+ *
  * Assembles relevant context from multiple sources, with Knowledge Bank as primary source.
- * 
+ *
  * Based on: docs/orchestration/DOLPHIN-V2-ORCHESTRATION-PROJECT-PLAN.md
  */
 
 import { readFile } from 'fs/promises';
 import { join } from 'path';
+import { PathValidator } from '../../../shared/security/path-validator';
 import type {
   Context,
   ContextBuildParams,
@@ -132,10 +133,12 @@ export class ContextBuilder {
    */
   private async loadFiles(filePaths: string[]): Promise<FileContent[]> {
     const files: FileContent[] = [];
+    const validator = new PathValidator({ baseDir: this.workspaceRoot });
 
     for (const path of filePaths) {
       try {
-        const fullPath = join(this.workspaceRoot, path);
+        // Validate path to prevent directory traversal attacks
+        const fullPath = validator.validate(path);
         const content = await readFile(fullPath, 'utf-8');
         const language = this.detectLanguage(path);
         const tokens = this.estimateFileTokens(content);

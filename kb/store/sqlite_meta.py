@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy import event
 from sqlmodel import SQLModel, create_engine
+from kb.security import PathValidator
 class SQLiteMetadataStore:
     """SQLite-backed metadata store using SQLModel for schema materialization."""
 
@@ -1176,9 +1177,11 @@ class SQLiteMetadataStore:
                     chunk_id, file_path, repo_root, start_line, end_line = row
                     if not all([file_path, repo_root, start_line, end_line]):
                         continue
-                    
+
                     try:
-                        full_path = Path(repo_root) / file_path
+                        # Validate path to prevent directory traversal attacks
+                        validator = PathValidator(base_dir=repo_root)
+                        full_path = validator.validate(file_path)
                         if full_path.exists():
                             lines = full_path.read_text(encoding='utf-8', errors='ignore').splitlines()
                             # Extract lines (1-indexed to 0-indexed)

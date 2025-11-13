@@ -1,8 +1,8 @@
 /**
  * StateStore - TOML Persistence Layer for Dolphin v2
- * 
+ *
  * Persists conversation state, plans, and workflow history in human-readable TOML format.
- * 
+ *
  * Based on: docs/orchestration/DOLPHIN-V2-ORCHESTRATION-PROJECT-PLAN.md
  */
 
@@ -10,6 +10,7 @@ import * as TOML from '@iarna/toml';
 import { readFile, writeFile, mkdir, readdir, unlink, stat } from 'fs/promises';
 import { join, dirname } from 'path';
 import { existsSync } from 'fs';
+import { PathValidator } from '../../../shared/security/path-validator';
 import type {
   TaskSession,
   Plan,
@@ -95,15 +96,37 @@ export class StateStore {
   private sessionsDir: string;
   private plansDir: string;
   private conversationsDir: string;
+  private sessionsValidator: PathValidator | null = null;
+  private plansValidator: PathValidator | null = null;
 
   constructor(config: StateStoreConfig = {}) {
     this.storagePath = config.storagePath || '.dolphin';
     this.sessionsDir = join(this.storagePath, 'sessions');
     this.plansDir = join(this.storagePath, 'plans');
     this.conversationsDir = join(this.storagePath, 'conversations');
-    
-    // Ensure directories exist
+
+    // Ensure directories exist first, then initialize validators
     this.ensureDirectories();
+  }
+
+  /**
+   * Get or initialize sessions path validator (lazy initialization)
+   */
+  private getSessionsValidator(): PathValidator {
+    if (!this.sessionsValidator) {
+      this.sessionsValidator = new PathValidator({ baseDir: this.sessionsDir });
+    }
+    return this.sessionsValidator;
+  }
+
+  /**
+   * Get or initialize plans path validator (lazy initialization)
+   */
+  private getPlansValidator(): PathValidator {
+    if (!this.plansValidator) {
+      this.plansValidator = new PathValidator({ baseDir: this.plansDir });
+    }
+    return this.plansValidator;
   }
 
   /**
@@ -129,10 +152,12 @@ export class StateStore {
    */
   async saveSession(session: TaskSession): Promise<void> {
     await this.ensureDirectories();
-    
-    const sessionPath = join(this.sessionsDir, `${session.id}.toml`);
+
+    // Validate path to prevent directory traversal attacks
+    const validator = this.getSessionsValidator();
+    const sessionPath = validator.validate(`${session.id}.toml`);
     const toml = this.serializeSession(session);
-    
+
     await writeFile(sessionPath, toml, 'utf-8');
   }
 
@@ -140,8 +165,10 @@ export class StateStore {
    * Load a session from disk
    */
   async loadSession(sessionId: string): Promise<TaskSession | null> {
-    const sessionPath = join(this.sessionsDir, `${sessionId}.toml`);
-    
+    // Validate path to prevent directory traversal attacks
+    const validator = this.getSessionsValidator();
+    const sessionPath = validator.validate(`${sessionId}.toml`);
+
     if (!existsSync(sessionPath)) {
       return null;
     }
@@ -160,11 +187,12 @@ export class StateStore {
    */
   async savePlan(sessionId: string, plan: Plan): Promise<void> {
     await this.ensureDirectories();
-    
-    // Save plan content as markdown
-    const planPath = join(this.plansDir, `plan_${sessionId}_v${plan.version}.md`);
+
+    // Validate path to prevent directory traversal attacks
+    const validator = this.getPlansValidator();
+    const planPath = validator.validate(`plan_${sessionId}_v${plan.version}.md`);
     await writeFile(planPath, plan.content, 'utf-8');
-    
+
     // Update session with plan metadata
     const session = await this.loadSession(sessionId);
     if (session) {
