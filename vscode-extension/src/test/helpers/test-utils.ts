@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as http from 'http';
+import { HttpTestResponse } from './mock-types';
 
 /**
  * Wait for a condition to be true with timeout
@@ -119,4 +121,190 @@ export function captureOutputChannel(name: string): {
     getContent: () => content.join('\n'),
     dispose: () => {},
   };
+}
+
+/**
+ * Make an HTTP GET request with timeout handling
+ * @param url The URL to fetch
+ * @param timeout Timeout in milliseconds (default: 2000ms)
+ * @returns Promise resolving to the response with status and parsed JSON data
+ */
+export async function makeHttpGetRequest<T = any>(
+  url: string,
+  timeout: number = 2000
+): Promise<HttpTestResponse<T>> {
+  return new Promise((resolve, reject) => {
+    const req = http.get(url, (res) => {
+      let data = '';
+
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+
+      res.on('end', () => {
+        try {
+          const parsedData = data ? JSON.parse(data) : null;
+          resolve({
+            status: res.statusCode || 0,
+            data: parsedData,
+            headers: res.headers as Record<string, string>,
+          });
+        } catch (err) {
+          reject(
+            new Error(`Failed to parse JSON response: ${err instanceof Error ? err.message : String(err)}`)
+          );
+        }
+      });
+    });
+
+    // Set timeout
+    req.setTimeout(timeout);
+
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error(`Request timed out after ${timeout}ms`));
+    });
+
+    req.on('error', (err) => {
+      reject(err);
+    });
+  });
+}
+
+/**
+ * Make an HTTP POST request with timeout handling
+ * @param options HTTP request options (hostname, port, path, headers)
+ * @param postData The data to send in the request body
+ * @param timeout Timeout in milliseconds (default: 2000ms)
+ * @returns Promise resolving to the response with status and parsed JSON data
+ */
+export async function makeHttpPostRequest<T = any>(
+  options: http.RequestOptions,
+  postData: string,
+  timeout: number = 2000
+): Promise<HttpTestResponse<T>> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        ...options,
+        method: 'POST',
+      },
+      (res) => {
+        let data = '';
+
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+
+        res.on('end', () => {
+          try {
+            const parsedData = data ? JSON.parse(data) : null;
+            resolve({
+              status: res.statusCode || 0,
+              data: parsedData,
+              headers: res.headers as Record<string, string>,
+            });
+          } catch (err) {
+            reject(
+              new Error(`Failed to parse JSON response: ${err instanceof Error ? err.message : String(err)}`)
+            );
+          }
+        });
+      }
+    );
+
+    // Set timeout
+    req.setTimeout(timeout);
+
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error(`Request timed out after ${timeout}ms`));
+    });
+
+    req.on('error', (err) => {
+      reject(err);
+    });
+
+    if (postData) {
+      req.write(postData);
+    }
+    req.end();
+  });
+}
+
+/**
+ * Make a generic HTTP request with full control and timeout handling
+ * @param options HTTP request options
+ * @param postData Optional data to send (for POST/PUT requests)
+ * @param timeout Timeout in milliseconds (default: 2000ms)
+ * @returns Promise resolving to the response with status and parsed JSON data
+ */
+export async function makeHttpRequest<T = any>(
+  options: http.RequestOptions,
+  postData?: string,
+  timeout: number = 2000
+): Promise<HttpTestResponse<T>> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(options, (res) => {
+      let data = '';
+
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+
+      res.on('end', () => {
+        try {
+          const parsedData = data ? JSON.parse(data) : null;
+          resolve({
+            status: res.statusCode || 0,
+            data: parsedData,
+            headers: res.headers as Record<string, string>,
+          });
+        } catch (err) {
+          reject(
+            new Error(`Failed to parse JSON response: ${err instanceof Error ? err.message : String(err)}`)
+          );
+        }
+      });
+    });
+
+    // Set timeout
+    req.setTimeout(timeout);
+
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error(`Request timed out after ${timeout}ms`));
+    });
+
+    req.on('error', (err) => {
+      reject(err);
+    });
+
+    if (postData) {
+      req.write(postData);
+    }
+    req.end();
+  });
+}
+
+/**
+ * Assert that a command executes successfully within a timeout
+ * @param commandId The VS Code command ID to execute
+ * @param args Optional arguments to pass to the command
+ * @param timeout Timeout in milliseconds (default: 2000ms)
+ */
+export async function assertCommandExecutes(
+  commandId: string,
+  args?: any[],
+  timeout: number = 2000
+): Promise<any> {
+  return Promise.race([
+    vscode.commands.executeCommand(commandId, ...(args || [])),
+    new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`Command ${commandId} timed out after ${timeout}ms`)),
+        timeout
+      )
+    ),
+  ]);
 }
