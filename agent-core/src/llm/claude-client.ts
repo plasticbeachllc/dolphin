@@ -55,7 +55,7 @@ export class ClaudeClient {
     // Initialize API client if API key provided or in environment
     if (config.apiKey || process.env.ANTHROPIC_API_KEY) {
       this.apiClient = new Anthropic({
-        apiKey: config.apiKey || process.env.ANTHROPIC_API_KEY
+        apiKey: config.apiKey || process.env.ANTHROPIC_API_KEY,
       });
     }
   }
@@ -107,9 +107,7 @@ export class ClaudeClient {
       return "api_key";
     }
 
-    throw new Error(
-      "No authentication configured. Install Claude CLI or set ANTHROPIC_API_KEY."
-    );
+    throw new Error("No authentication configured. Install Claude CLI or set ANTHROPIC_API_KEY.");
   }
 
   /**
@@ -128,11 +126,9 @@ export class ClaudeClient {
   /**
    * Complete using Claude CLI
    */
-  private async completeCLI(
-    request: CompletionRequest
-  ): Promise<CompletionResult> {
+  private async completeCLI(request: CompletionRequest): Promise<CompletionResult> {
     // Convert messages to Anthropic format
-    const anthropicMessages: Anthropic.Messages.MessageParam[] = request.messages.map(m => ({
+    const anthropicMessages: Anthropic.Messages.MessageParam[] = request.messages.map((m) => ({
       role: m.role,
       content: m.content,
     }));
@@ -162,9 +158,7 @@ export class ClaudeClient {
   /**
    * Complete using Anthropic API
    */
-  private async completeAPI(
-    request: CompletionRequest
-  ): Promise<CompletionResult> {
+  private async completeAPI(request: CompletionRequest): Promise<CompletionResult> {
     if (!this.apiClient) {
       throw new Error("API client not initialized");
     }
@@ -236,7 +230,6 @@ export class ClaudeClient {
     }
   }
 
-
   /**
    * Get current auth status (doesn't throw errors)
    */
@@ -248,13 +241,9 @@ export class ClaudeClient {
     willUseSubscription: boolean;
   }> {
     const cliInstalled = await this.cliDetector.isInstalled();
-    const cliAuthenticated = cliInstalled
-      ? await this.cliDetector.isAuthenticated()
-      : false;
+    const cliAuthenticated = cliInstalled ? await this.cliDetector.isAuthenticated() : false;
     const apiKeySet = !!(this.config.apiKey || process.env.ANTHROPIC_API_KEY);
-    const willUseAPIKey = cliInstalled
-      ? await this.cliDetector.willUseAPIKey()
-      : false;
+    const willUseAPIKey = cliInstalled ? await this.cliDetector.willUseAPIKey() : false;
 
     // Try to detect auth mode, but don't throw if none available
     let mode: AuthMode = "auto";

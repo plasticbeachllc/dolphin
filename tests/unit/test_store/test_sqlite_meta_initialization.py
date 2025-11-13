@@ -361,6 +361,7 @@ class TestPhase1Integration:
             content_id="test1",
             repo="test-repo",
             path="test.py",
+            text_hash="hash_test1",
             content="test content",
             symbol_name="test",
             symbol_path="test",

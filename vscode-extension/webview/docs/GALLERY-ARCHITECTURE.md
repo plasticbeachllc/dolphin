@@ -17,12 +17,14 @@ Gallery routes live in `src/routes/gallery/` and include:
 ## Development vs Production
 
 ### Development (SvelteKit)
+
 - Uses file-based routing via `src/routes/`
 - Full gallery accessible at `http://localhost:5173/gallery`
 - Hot module replacement for rapid iteration
 - Navigation via `AppNavigation.svelte` and SvelteKit routing
 
 ### Production (Standalone Svelte)
+
 - Uses `src/main.ts` → `src/App.svelte`
 - Manual view routing via `currentView` state variable
 - ConversationsGallery is **included** in production bundle (imported in App.svelte line 10)
@@ -31,42 +33,47 @@ Gallery routes live in `src/routes/gallery/` and include:
 ## Module Resolution
 
 All shared types use the `@shared` alias defined in:
+
 - `vite.config.webview.ts` (line 46): `'@shared': path.resolve(__dirname, '../../shared')`
 - `svelte.config.js` (line 26): `'@shared': '../../shared'`
 
 ### Import Pattern
+
 ```typescript
 // ✅ Correct - uses alias
-import type { AgentEvent } from '@shared/types/events';
+import type { AgentEvent } from "@shared/types/events";
 
 // ❌ Incorrect - relative path
-import type { AgentEvent } from '../../../../../shared/types/events';
+import type { AgentEvent } from "../../../../../shared/types/events";
 ```
 
 ## Gallery Component Status
 
-| Component | Dev | Prod | Notes |
-|-----------|-----|------|-------|
-| `/gallery` (main) | ✅ | ❌ | SvelteKit route only |
-| `/gallery/conversations` | ✅ | ✅ | Imported in App.svelte |
-| `AnimationGallery.svelte` | ✅ | ❌ | Dev showcase only |
-| `LoadingStates.svelte` | ✅ | ❌ | Dev showcase only |
-| `AnimationLibrary.svelte` | ✅ | ✅ | Reusable animation components |
+| Component                 | Dev | Prod | Notes                         |
+| ------------------------- | --- | ---- | ----------------------------- |
+| `/gallery` (main)         | ✅  | ❌   | SvelteKit route only          |
+| `/gallery/conversations`  | ✅  | ✅   | Imported in App.svelte        |
+| `AnimationGallery.svelte` | ✅  | ❌   | Dev showcase only             |
+| `LoadingStates.svelte`    | ✅  | ❌   | Dev showcase only             |
+| `AnimationLibrary.svelte` | ✅  | ✅   | Reusable animation components |
 
 ## Animation System
 
 The animation system consists of:
 
 ### 1. Design Documentation
+
 - `docs/DesignTokens.md` - OKLCH color system, spacing, typography
 - `docs/InteractionPatterns.md` - UX patterns, accessibility guidelines
 
 ### 2. Reusable Components (`AnimationLibrary.svelte`)
+
 - Custom actions: `StreamingText`, `ProgressiveReveal`, `CounterAnimation`
 - Snippets: `ThinkingDots`, `ShimmerLoader`, `SlideInCard`, etc.
 - Used throughout production app
 
 ### 3. Gallery Showcases (dev-only)
+
 - `AnimationGallery.svelte` - Visual showcase with reset buttons
 - `LoadingStates.svelte` - Loading pattern examples
 - Main gallery route at `/gallery` with tabs

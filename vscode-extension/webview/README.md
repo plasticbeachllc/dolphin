@@ -91,6 +91,7 @@ bun run preview
 ### Main Pages
 
 **Chat Page** (`/`)
+
 - Message history with user/assistant/system messages
 - Real-time streaming responses
 - Tool call visualization
@@ -98,11 +99,13 @@ bun run preview
 - Markdown rendering with code highlighting
 
 **Settings Page** (`/settings`)
+
 - Authentication status display
 - Refresh auth status
 - Configuration options
 
 **Gallery Page** (`/gallery`)
+
 - Developer tool for testing UI components
 - Preview all component states
 - Useful for UI development and testing
@@ -110,22 +113,26 @@ bun run preview
 ### Key Components
 
 **ChatMessage.svelte**
+
 - Displays individual messages
 - Supports user, assistant, and system roles
 - Markdown rendering
 - Syntax highlighting for code blocks
 
 **ChatInput.svelte**
+
 - Multi-line text input
 - Submit on Enter (Shift+Enter for new line)
 - Auto-focus and keyboard shortcuts
 
 **ToolCallCard.svelte**
+
 - Visualizes tool executions (e.g., KB searches)
 - Shows running, success, and error states
 - Displays tool results
 
 **AuthStatus.svelte**
+
 - Real-time authentication status display
 - Color-coded badges (CLI/API/none)
 - Contextual help text
@@ -137,15 +144,15 @@ The webview communicates with the VSCode extension via the `vscode` API:
 
 ```typescript
 // Extension → Webview
-window.addEventListener('message', (event) => {
+window.addEventListener("message", (event) => {
   const message = event.data;
   // Handle messages from extension
 });
 
 // Webview → Extension
 vscode.postMessage({
-  type: 'sendMessage',
-  payload: { content: 'Hello!' }
+  type: "sendMessage",
+  payload: { content: "Hello!" },
 });
 ```
 
@@ -225,16 +232,16 @@ Uses `@sveltejs/adapter-static` for static site generation:
 
 ```javascript
 // svelte.config.js
-import adapter from '@sveltejs/adapter-static';
+import adapter from "@sveltejs/adapter-static";
 
 export default {
   kit: {
     adapter: adapter({
-      pages: 'build',
-      assets: 'build',
-      fallback: undefined
-    })
-  }
+      pages: "build",
+      assets: "build",
+      fallback: undefined,
+    }),
+  },
 };
 ```
 

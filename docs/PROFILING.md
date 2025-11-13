@@ -169,6 +169,7 @@ open http://localhost:3001
 ```
 
 **Output includes:**
+
 - Real-time progress bar showing files indexed
 - Actual file count (not estimated)
 - Indexing throughput and timing
@@ -189,6 +190,7 @@ Results saved to: `profiling_results/indexing/`
 ```
 
 **Output includes:**
+
 - Progress bar for indexing phase
 - Progress bar for search queries
 - Per-query latency measurements

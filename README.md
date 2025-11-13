@@ -3,9 +3,9 @@
 [![PyPi Version](https://img.shields.io/pypi/v/pb-dolphin.svg)](https://pypi.org/project/pb-dolphin/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**⚠️ EXPERIMENTAL - This is a developmental library under active development. APIs and interfaces are unstable and subject to change without notice.**
+A semantic code search and knowledge management system for AI interface. This package includes an indexing program (Python), an MCP server (TypeScript/Bun), an Agent controller for LLM inference (TypeScript/Bun), and a VSCode extension (NodeJs/Svelte).
 
-A semantic code search and knowledge management system for AI interface. This package includes an indexing program managed by the user and an HTTP retrieval server. The companion MCP server is available at `bunx dolphin-mcp`.
+The packaged MCP server is also available at `bunx dolphin-mcp`.
 
 ## Quick Start
 
@@ -30,7 +30,6 @@ uv pip install "pb-dolphin[reranking]"
 ```
 
 **Trade-off**: Better relevance but 2-3x slower searches. See [Advanced Features](#advanced-features) for configuration.
-
 
 ### Basic Usage
 
@@ -87,17 +86,15 @@ dolphin serve
 
 - **Language-Aware Chunking** - Code parsing for Python, TypeScript, JavaScript, Markdown
 - **Semantic Search**
-  * OpenAI embeddings with LanceDB vector storage
-  * Hybrid approximate nn vector + BM25 keyword search with RRF scoring
-  * Re-ranking with cross-encoder
-  * MMR relevancy enhancement
+  - OpenAI embeddings with LanceDB vector storage
+  - Hybrid approximate nn vector + BM25 keyword search with RRF scoring
+  - Re-ranking with cross-encoder
+  - MMR relevancy enhancement
 - **Interfaces**
-  * `dolphin` CLI app
-  * FastAPI server with search, retrieval, and metadata endpoints
-  * MCP server implementation available at `bunx dolphin-mcp`
+  - `dolphin` CLI app
+  - FastAPI server with search, retrieval, and metadata endpoints
+  - MCP server implementation available at `bunx dolphin-mcp`
 - **Configuration** - Per-repo chunking and ignore configuration
-
-
 
 ## Configuration
 
@@ -123,7 +120,7 @@ top_k = 8
 score_cutoff = 0.0
 ```
 
-To generate a repo-specific config, use `dolphin init --repo` at the repository root. 
+To generate a repo-specific config, use `dolphin init --repo` at the repository root.
 
 ### Environment Variables
 
@@ -198,6 +195,7 @@ cd ../..
 The extension supports two authentication modes:
 
 **Option A: Claude CLI (No API Costs)**
+
 ```bash
 npm install -g @anthropic-ai/claude-code
 claude
@@ -205,6 +203,7 @@ claude
 ```
 
 **Option B: API Key**
+
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
@@ -236,6 +235,7 @@ curl -X POST http://127.0.0.1:7777/search \
 Cross-encoder reranking improves search result relevance by re-scoring each result pairwise against the query using an ML model, leading to 20-30% improvements in search result ranking quality ([Nogueira & Cho, 2019](https://arxiv.org/abs/1901.04085)).
 
 **Performance Impact:**
+
 - ⚠️ **2-3x slower searches** - cross-encoder is compute-intensive
 - ⚠️ **~2GB install size** - requires torch and sentence-transformers
 
@@ -278,6 +278,7 @@ uv run dolphin serve
 - ⚠️ Developmental stage
 
 **Upcoming**:
+
 - Performance optimization
 - Production hardening
 - Evaluation framework
@@ -321,20 +322,24 @@ dolphin kb index <repo-name> --full --force
 ### Common Issues
 
 **API not responding:**
+
 - Start the server: `dolphin serve`
 - Check port conflicts: `lsof -i :7777`
 
 **No search results:**
+
 - Verify repositories are indexed: `dolphin kb status`
 - Try with lower score cutoff in search parameters
 - Re-index: `dolphin kb index <repo-name> --full --force`
 
 **MCP not connecting:**
+
 - Verify API server is running: `curl http://127.0.0.1:7777/health`
 - Check MCP bridge logs: `tail -f mcp-bridge/logs/mcp.log`
 - Verify Bun is installed: `bun --version`
 
 **High embedding costs:**
+
 - Use `small` embedding model (1536d instead of 3072d)
 - Check session costs: `dolphin kb status <repo-name>`
 - Use stub provider for testing (no OpenAI calls)

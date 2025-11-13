@@ -1,7 +1,12 @@
 // vscode-extension/src/agent/bridge.ts
 import { ChildProcess, spawn } from "child_process";
 import * as vscode from "vscode";
-import type { AgentEvent, ExtensionRequest, ConversationListItem, LoadConversationResult } from "../types/events";
+import type {
+  AgentEvent,
+  ExtensionRequest,
+  ConversationListItem,
+  LoadConversationResult,
+} from "../types/events";
 import {
   StreamMessageReader,
   StreamMessageWriter,
@@ -38,7 +43,10 @@ export class AgentBridge {
   private messageId = 0;
   private eventEmitter = new vscode.EventEmitter<AgentEvent>();
   private outputChannel: vscode.OutputChannel;
-  private pendingRequests: Map<number, { resolve: (value: any) => void; reject: (error: any) => void; timeout?: NodeJS.Timeout }> = new Map();
+  private pendingRequests: Map<
+    number,
+    { resolve: (value: any) => void; reject: (error: any) => void; timeout?: NodeJS.Timeout }
+  > = new Map();
   private connection: MessageConnection | null = null;
   private restartAttempts = 0;
   private maxRestartAttempts = 3;
@@ -62,12 +70,8 @@ export class AgentBridge {
     }
 
     this.outputChannel.appendLine(`[AgentBridge] Using Bun at: ${bunPath}`);
-    this.outputChannel.appendLine(
-      `[AgentBridge] Agent Core path: ${agentCorePath}`
-    );
-    this.outputChannel.appendLine(
-      `[AgentBridge] Extension path: ${extensionPath}`
-    );
+    this.outputChannel.appendLine(`[AgentBridge] Agent Core path: ${agentCorePath}`);
+    this.outputChannel.appendLine(`[AgentBridge] Extension path: ${extensionPath}`);
 
     // Spawn Agent Core with workspace root and extension path
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
@@ -93,7 +97,9 @@ export class AgentBridge {
       // Set up notification handler for agent events
       this.connection.onNotification("notify", (params: AgentEvent) => {
         const requestId = (params as any).requestId || "unknown";
-        this.outputChannel.appendLine(`[AgentBridge] Event: ${params.type} (requestId: ${requestId})`);
+        this.outputChannel.appendLine(
+          `[AgentBridge] Event: ${params.type} (requestId: ${requestId})`
+        );
         this.eventEmitter.fire(params);
       });
 
@@ -121,9 +127,7 @@ export class AgentBridge {
 
     // Handle errors with auto-recovery
     this.process.on("error", (error) => {
-      this.outputChannel.appendLine(
-        `[AgentBridge] Process error: ${error.message}`
-      );
+      this.outputChannel.appendLine(`[AgentBridge] Process error: ${error.message}`);
       if (!this.isShuttingDown) {
         this.handleCrash(agentCorePath, extensionPath, apiKey);
       }
@@ -131,9 +135,7 @@ export class AgentBridge {
 
     // Handle exit with auto-recovery
     this.process.on("exit", (code, signal) => {
-      this.outputChannel.appendLine(
-        `[AgentBridge] Process exited: code=${code}, signal=${signal}`
-      );
+      this.outputChannel.appendLine(`[AgentBridge] Process exited: code=${code}, signal=${signal}`);
 
       // Clean up connection
       if (this.connection) {
@@ -156,21 +158,25 @@ export class AgentBridge {
     });
 
     // Don't wait for ready - let agent start in background
-    this.outputChannel.appendLine(
-      "[AgentBridge] Agent Core spawned, starting in background..."
-    );
+    this.outputChannel.appendLine("[AgentBridge] Agent Core spawned, starting in background...");
 
     // Start listening for ready signal (non-blocking)
-    this.waitForReady().then(() => {
-      this.outputChannel.appendLine("[AgentBridge] Agent Core ready!");
-      // Reset restart attempts on successful start
-      this.restartAttempts = 0;
-    }).catch((error) => {
-      this.outputChannel.appendLine(`[AgentBridge] Agent startup error: ${error.message}`);
-    });
+    this.waitForReady()
+      .then(() => {
+        this.outputChannel.appendLine("[AgentBridge] Agent Core ready!");
+        // Reset restart attempts on successful start
+        this.restartAttempts = 0;
+      })
+      .catch((error) => {
+        this.outputChannel.appendLine(`[AgentBridge] Agent startup error: ${error.message}`);
+      });
   }
 
-  private async handleCrash(agentCorePath: string, extensionPath: string, apiKey?: string): Promise<void> {
+  private async handleCrash(
+    agentCorePath: string,
+    extensionPath: string,
+    apiKey?: string
+  ): Promise<void> {
     if (this.restartAttempts >= this.maxRestartAttempts) {
       this.outputChannel.appendLine(
         `[AgentBridge] Maximum restart attempts (${this.maxRestartAttempts}) reached. Not restarting.`
@@ -217,16 +223,13 @@ export class AgentBridge {
     } catch {
       // Try common locations
       const fs = require("fs");
-      const locations = process.platform === "win32"
-        ? [
-            `${process.env.LOCALAPPDATA}\\bun\\bin\\bun.exe`,
-            `${process.env.USERPROFILE}\\.bun\\bin\\bun.exe`,
-          ]
-        : [
-            "/usr/local/bin/bun",
-            "/opt/homebrew/bin/bun",
-            `${process.env.HOME}/.bun/bin/bun`,
-          ];
+      const locations =
+        process.platform === "win32"
+          ? [
+              `${process.env.LOCALAPPDATA}\\bun\\bin\\bun.exe`,
+              `${process.env.USERPROFILE}\\.bun\\bin\\bun.exe`,
+            ]
+          : ["/usr/local/bin/bun", "/opt/homebrew/bin/bun", `${process.env.HOME}/.bun/bin/bun`];
 
       for (const loc of locations) {
         try {
@@ -294,11 +297,12 @@ export class AgentBridge {
     this.connection.sendNotification(method, params);
   }
 
-  async sendMessage(content: string): Promise<void> {
+  async sendMessage(content: string, mode?: "code" | "architect"): Promise<void> {
     const request: ExtensionRequest = {
       type: "send_message",
       messageId: `msg-${this.messageId}`,
       content,
+      mode,
     };
 
     await this.sendNotification("send_message", request);
@@ -335,10 +339,13 @@ export class AgentBridge {
     await this.sendRequest("rename_conversation", { conversationId, newTitle }, 3000);
   }
 
-  private async waitForReady(timeout = 60000): Promise<void> {
+  /**
+   * Wait for agent to be ready (public helper for tests and consumers)
+   */
+  public async waitForReady(timeout = 60000): Promise<void> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        reject(new Error("Agent Core did not become ready within 45s"));
+        reject(new Error("Agent Core did not become ready within 60s"));
       }, timeout);
 
       const disposable = this.onEvent((event) => {
@@ -353,7 +360,7 @@ export class AgentBridge {
 
   shutdown(): void {
     this.isShuttingDown = true;
-    
+
     // Try to log shutdown, but don't fail if channel is disposed
     try {
       this.outputChannel.appendLine("[AgentBridge] Shutting down...");

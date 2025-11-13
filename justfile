@@ -167,7 +167,6 @@ test-unit-all:
 	@echo ""
 	@just test-unit-python
 	@just test-unit-agent-core
-	@just test-unit-agent-core-v2
 	@just test-unit-extension
 	@just test-unit-webview
 	@echo ""
@@ -184,12 +183,6 @@ test-unit-agent-core:
 	@echo "🤖 Testing Agent Core unit tests..."
 	@cd agent-core && bun test tests/conversation-store.test.ts tests/plan-store.test.ts tests/storage.test.ts tests/toml-writer.test.ts tests/llm/diff-generator.test.ts tests/llm/claude-tool-executor-diff.test.ts tests/llm/claude-cli-detector.test.ts tests/planner/basic-planner.test.ts --bail || (echo "   ❌ Agent Core unit tests failed"; exit 1)
 	@echo "   ✅ Agent Core unit tests passed"
-
-# Run Agent Core V2 unit tests
-test-unit-agent-core-v2:
-	@echo "🤖 Testing Agent Core V2 unit tests..."
-	@cd agent-core-v2 && bun test tests/unit/ --bail || (echo "   ❌ Agent Core V2 unit tests failed"; exit 1)
-	@echo "   ✅ Agent Core V2 unit tests passed"
 
 # Run VSCode Extension unit tests
 test-unit-extension:
@@ -213,7 +206,6 @@ test-integration-all:
 	@echo ""
 	@just test-integration-python
 	@just test-integration-agent-core
-	@just test-integration-agent-core-v2
 	@just test-integration-extension
 	@just test-integration-mcp-bridge
 	@echo ""
@@ -230,12 +222,6 @@ test-integration-agent-core:
 	@echo "🤖 Testing Agent Core integration tests..."
 	@cd agent-core && bun test tests/llm/claude-client.test.ts tests/mcp-client.integration.test.ts tests/kb/manager.test.ts tests/main.test.ts --bail || (echo "   ❌ Agent Core integration tests failed"; exit 1)
 	@echo "   ✅ Agent Core integration tests passed"
-
-# Run Agent Core V2 integration tests
-test-integration-agent-core-v2:
-	@echo "🤖 Testing Agent Core V2 integration tests..."
-	@cd agent-core-v2 && bun test tests/integration/claude-auth.test.ts tests/integration/kb-integration.test.ts --bail || (echo "   ❌ Agent Core V2 integration tests failed"; exit 1)
-	@echo "   ✅ Agent Core V2 integration tests passed"
 
 # Run VSCode Extension integration tests
 test-integration-extension:
@@ -258,7 +244,7 @@ test-e2e-all:
 	@echo "🚀 Running all end-to-end tests..."
 	@echo ""
 	@just test-e2e-extension-full
-	@just test-e2e-agent-core-v2
+	@just test-e2e-agent-core
 	@echo ""
 	@echo "✅ All end-to-end tests passed!"
 
@@ -269,9 +255,9 @@ test-e2e-extension-full:
 	@echo "   ✅ Extension E2E tests passed"
 
 # Run Agent Core V2 e2e tests
-test-e2e-agent-core-v2:
+test-e2e-agent-core:
 	@echo "🤖 Testing Agent Core V2 E2E tests..."
-	@cd agent-core-v2 && bun test tests/integration/orchestrator-e2e.test.ts tests/integration/editor-workflow.test.ts --bail || (echo "   ❌ Agent Core V2 E2E tests failed"; exit 1)
+	@cd agent-core && bun test tests/integration/orchestrator-e2e.test.ts tests/integration/editor-workflow.test.ts --bail || (echo "   ❌ Agent Core V2 E2E tests failed"; exit 1)
 	@echo "   ✅ Agent Core V2 E2E tests passed"
 
 # ==============================================================================
@@ -326,11 +312,6 @@ test-e2e-python:
 	@uv run pytest tests/ -q --tb=short || (echo "   ❌ Python backend tests failed"; exit 1)
 	@echo "   ✅ Python backend tests passed"
 
-# Test Agent Core (TypeScript) - ALL Agent Core tests
-test-e2e-agent-core:
-	@echo "🤖 Testing Agent Core (all tests)..."
-	@cd agent-core && bun test --bail || (echo "   ❌ Agent core tests failed"; exit 1)
-	@echo "   ✅ Agent core tests passed"
 
 # Test Agent Core excluding flaky integration tests
 test-e2e-agent-core-unit:

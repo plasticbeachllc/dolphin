@@ -38,7 +38,7 @@ export {
   type SecurityConfig,
   type MessageHandler,
   RPCErrorCode,
-} from './transport';
+} from "./transport";
 
 export {
   SerializerFactory,
@@ -48,4 +48,4 @@ export {
   type ISerializer,
   type SerializationFormat,
   type SerializationMetrics,
-} from './serialization';
+} from "./serialization";

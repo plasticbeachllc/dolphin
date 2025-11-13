@@ -13,16 +13,18 @@
   
   let confirmDialogOpen = $state(false);
   let statsError = $state<string | null>(null);
-  
+  let isRepoRegistered = $state(true);
+  let isRegistering = $state(false);
+
   // Load KB stats on mount
   onMount(async () => {
     await loadStats();
   });
-  
+
   async function loadStats() {
     try {
       statsError = null;
-      
+
       // Get repo name from store - don't proceed if not set
       const repoName = $kbStore.repoName;
       if (!repoName) {
@@ -30,9 +32,12 @@
         kbActions.setStatus('offline');
         return;
       }
-      
+
       const stats = await kbApi.getRepoStats(repoName);
-      
+
+      // Repository is registered
+      isRepoRegistered = true;
+
       kbActions.initialize(repoName, {
         filesCount: stats.files_count,
         chunksCount: stats.chunks_count,
@@ -40,7 +45,7 @@
         embedModel: stats.embed_model,
         lastUpdated: stats.last_indexed ? new Date(stats.last_indexed).toLocaleString() : 'Never'
       });
-      
+
       // Set status based on stats
       if (stats.needs_reindex) {
         kbActions.markStale();
@@ -51,8 +56,53 @@
       }
     } catch (error) {
       console.error('[KBManagementPanel] Failed to load stats:', error);
-      statsError = error instanceof Error ? error.message : 'Failed to load KB stats';
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load KB stats';
+
+      // Check if this is a "not found" error (repository not registered)
+      if (errorMessage.includes('not found') || errorMessage.includes('Not Found')) {
+        isRepoRegistered = false;
+        statsError = 'Repository not registered in Knowledge Base';
+      } else {
+        statsError = errorMessage;
+      }
       kbActions.setStatus('offline');
+    }
+  }
+
+  async function handleRegisterRepo() {
+    try {
+      isRegistering = true;
+      statsError = null;
+
+      const repoName = $kbStore.repoName;
+      if (!repoName) {
+        statsError = 'No repository configured. Please open a workspace folder.';
+        return;
+      }
+
+      // Get workspace path from window (VSCode provides this)
+      const workspacePath = (window as any).workspacePath || `/workspace/${repoName}`;
+
+      console.log('[KBManagementPanel] Registering repository:', repoName, 'at', workspacePath);
+
+      await kbApi.registerRepo({
+        name: repoName,
+        path: workspacePath,
+        default_embed_model: 'large'
+      });
+
+      isRepoRegistered = true;
+
+      // Reload stats after registration
+      await loadStats();
+
+      // Auto-trigger initial indexing after registration
+      await handleIncrementalSync();
+    } catch (error) {
+      console.error('[KBManagementPanel] Failed to register repository:', error);
+      statsError = error instanceof Error ? error.message : 'Failed to register repository';
+    } finally {
+      isRegistering = false;
     }
   }
   
@@ -213,52 +263,75 @@
           </div>
         </div>
       {/if}
-      
-      <!-- Status Badge -->
-      <KBStatusBadge status={$kbStore.status} />
-      
-      <!-- Stats Grid -->
-      <KBStatsGrid
-        filesCount={$kbStore.stats.filesCount}
-        chunksCount={$kbStore.stats.chunksCount}
-        lastUpdated={$kbStore.stats.lastUpdated || 'Never'}
-        embedModel={$kbStore.stats.embedModel}
-      />
-      
-      <!-- Action Buttons -->
-      <div class="flex flex-col gap-2">
-        <!-- Quick Sync (Incremental) -->
-        <Button 
-          variant="default" 
-          class="w-full"
-          onclick={handleIncrementalSync}
-          disabled={$isIndexing}
-        >
-          <RefreshCw class="mr-2 h-4 w-4" />
-          Sync Changes
-        </Button>
-        
-        <!-- Full Reindex (with warning) -->
-        <Button 
-          variant="outline" 
-          class="w-full"
-          onclick={handleRebuildIndex}
-          disabled={$isIndexing}
-        >
-          <Database class="mr-2 h-4 w-4" />
-          Rebuild Index...
-        </Button>
-        
-        <!-- View Status -->
-        <Button 
-          variant="ghost" 
-          class="w-full"
-          onclick={handleViewStatus}
-        >
-          <Info class="mr-2 h-4 w-4" />
-          View Details
-        </Button>
+
+      {#if !isRepoRegistered}
+        <!-- Repository Not Registered UI -->
+        <div class="space-y-4">
+          <div class="text-center py-6">
+            <Database class="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
+            <h3 class="text-lg font-semibold mb-2">Repository Not Registered</h3>
+            <p class="text-sm text-muted-foreground mb-4">
+              This workspace needs to be registered in the Knowledge Base before it can be indexed.
+            </p>
+            <Button
+              variant="default"
+              class="w-full"
+              onclick={handleRegisterRepo}
+              disabled={isRegistering}
+            >
+              <Database class="mr-2 h-4 w-4" />
+              {isRegistering ? 'Registering...' : 'Register Repository'}
+            </Button>
+          </div>
         </div>
+      {:else}
+        <!-- Registered Repository UI -->
+        <!-- Status Badge -->
+        <KBStatusBadge status={$kbStore.status} />
+
+        <!-- Stats Grid -->
+        <KBStatsGrid
+          filesCount={$kbStore.stats.filesCount}
+          chunksCount={$kbStore.stats.chunksCount}
+          lastUpdated={$kbStore.stats.lastUpdated || 'Never'}
+          embedModel={$kbStore.stats.embedModel}
+        />
+
+        <!-- Action Buttons -->
+        <div class="flex flex-col gap-2">
+          <!-- Quick Sync (Incremental) -->
+          <Button
+            variant="default"
+            class="w-full"
+            onclick={handleIncrementalSync}
+            disabled={$isIndexing}
+          >
+            <RefreshCw class="mr-2 h-4 w-4" />
+            Sync Changes
+          </Button>
+
+          <!-- Full Reindex (with warning) -->
+          <Button
+            variant="outline"
+            class="w-full"
+            onclick={handleRebuildIndex}
+            disabled={$isIndexing}
+          >
+            <Database class="mr-2 h-4 w-4" />
+            Rebuild Index...
+          </Button>
+
+          <!-- View Status -->
+          <Button
+            variant="ghost"
+            class="w-full"
+            onclick={handleViewStatus}
+          >
+            <Info class="mr-2 h-4 w-4" />
+            View Details
+          </Button>
+        </div>
+      {/if}
       </div>
     {/if}
   </Card.Content>

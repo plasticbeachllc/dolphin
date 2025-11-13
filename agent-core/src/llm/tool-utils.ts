@@ -43,25 +43,23 @@ export interface ToolResult {
  * Map MCP tools to Anthropic format (just property rename)
  */
 export function mapMCPToAnthropic(mcpTools: MCPTool[]): AnthropicTool[] {
-  return mcpTools.map(tool => ({
+  return mcpTools.map((tool) => ({
     name: tool.name,
     description: tool.description,
-    input_schema: tool.inputSchema
+    input_schema: tool.inputSchema,
   }));
 }
 
 /**
  * Extract tool_use blocks from Claude response content
  */
-export function extractToolCalls(
-  content: Anthropic.ContentBlock[]
-): ToolCall[] {
+export function extractToolCalls(content: Anthropic.ContentBlock[]): ToolCall[] {
   return content
     .filter((block): block is Anthropic.ToolUseBlock => block.type === "tool_use")
-    .map(block => ({
+    .map((block) => ({
       id: block.id,
       name: block.name,
-      input: block.input as Record<string, any>
+      input: block.input as Record<string, any>,
     }));
 }
 
@@ -91,7 +89,7 @@ export function createToolResult(
   const result: ToolResult = {
     type: "tool_result",
     tool_use_id: toolUseId,
-    content: formattedContent
+    content: formattedContent,
   };
 
   if (isError) {
@@ -104,16 +102,10 @@ export function createToolResult(
 /**
  * Create error tool result
  */
-export function createErrorResult(
-  toolUseId: string,
-  error: Error
-): ToolResult {
-  const errorMessage = `Error executing tool: ${error.message}` +
+export function createErrorResult(toolUseId: string, error: Error): ToolResult {
+  const errorMessage =
+    `Error executing tool: ${error.message}` +
     (error.stack ? `\n\nStack trace:\n${error.stack}` : "");
 
-  return createToolResult(
-    toolUseId,
-    { content: errorMessage },
-    true
-  );
+  return createToolResult(toolUseId, { content: errorMessage }, true);
 }
