@@ -13,6 +13,7 @@ Key security features:
 
 import os
 import re
+import unicodedata
 from pathlib import Path
 from typing import List, Optional
 from urllib.parse import unquote
@@ -90,12 +91,41 @@ class PathValidator:
         """
         input_str = str(input_path)
 
-        # Decode URL-encoded paths to prevent bypass attempts
-        try:
-            decoded_path = unquote(input_str)
-        except Exception:
-            # If decode fails, use original (might be already decoded)
-            decoded_path = input_str
+        # Reject UNC paths (Windows network paths)
+        if input_str.startswith("\\\\") or input_str.startswith("//"):
+            raise PathValidationError(
+                f"{self.error_prefix}: UNC paths not allowed",
+                input_str,
+                "unc_path",
+            )
+
+        # Normalize backslashes to forward slashes
+        normalized = input_str.replace("\\", "/")
+
+        # Unicode normalization to prevent homoglyph attacks
+        normalized = unicodedata.normalize("NFKC", normalized)
+
+        # Check for suspicious Unicode characters that might be used in attacks
+        # Unicode dot leader (U+2024), for example, should not be in file paths
+        suspicious_chars = ["\u2024", "\u2025", "\u2026"]  # Various dot characters
+        for char in suspicious_chars:
+            if char in normalized:
+                raise PathValidationError(
+                    f"{self.error_prefix}: suspicious Unicode character in path",
+                    input_str,
+                    "suspicious_unicode",
+                )
+
+        # Decode URL-encoded paths multiple times to prevent double encoding bypass
+        decoded_path = normalized
+        for _ in range(3):  # Decode up to 3 times to catch double/triple encoding
+            try:
+                prev = decoded_path
+                decoded_path = unquote(decoded_path)
+                if decoded_path == prev:
+                    break  # No more decoding needed
+            except Exception:
+                break
 
         # Reject paths with null bytes (directory traversal technique)
         if "\0" in decoded_path:
