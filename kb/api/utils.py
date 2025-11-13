@@ -31,14 +31,10 @@ def validate_path_within_repo(file_path: Path, repo_root: Path) -> Path:
         return resolved_path
     except PathValidationError as e:
         raise HTTPException(
-            status_code=403,
-            detail=f"Path validation failed: {e.reason} - {file_path}"
+            status_code=403, detail=f"Path validation failed: {e.reason} - {file_path}"
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file path: {file_path}"
-        )
+        raise HTTPException(status_code=400, detail=f"Invalid file path: {file_path}")
 
 
 class GitRepository:

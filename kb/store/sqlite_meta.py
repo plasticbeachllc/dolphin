@@ -34,6 +34,8 @@ def generate_fts_content_id(repo_id: int, file_id: int, text_hash: str) -> str:
 
 
 logger = logging.getLogger(__name__)
+
+
 class SQLiteMetadataStore:
     """SQLite-backed metadata store using SQLModel for schema materialization."""
 
@@ -55,12 +57,14 @@ class SQLiteMetadataStore:
         # Create SQLAlchemy engine for SQLModel and enforce foreign_keys pragma on connect.
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         engine = create_engine(f"sqlite:///{self.db_path}")
+
         @event.listens_for(engine, "connect")
         def _set_sqlite_pragma(dbapi_connection, connection_record):  # type: ignore[no-redef]
             try:
                 dbapi_connection.execute("PRAGMA foreign_keys=ON")
             except Exception:
                 pass
+
         return engine
 
     def initialize(self) -> None:
@@ -70,7 +74,7 @@ class SQLiteMetadataStore:
         if self._initialized:
             logger.info("[SQLiteMeta] Already initialized, skipping")
             return
-        
+
         # Use lock to prevent concurrent initialization
         with self._init_lock:
             # Double-check pattern: another thread might have initialized while we were waiting
@@ -91,7 +95,7 @@ class SQLiteMetadataStore:
                 logger.info("[SQLiteMeta] Creating SQLModel tables...")
                 SQLModel.metadata.create_all(engine)
                 logger.info("[SQLiteMeta] SQLModel tables created")
-                
+
                 # Validate foreign key support and constraints
                 with self._connect() as conn, closing(conn.cursor()) as cur:
                     # Enable and verify foreign key constraints
@@ -99,8 +103,10 @@ class SQLiteMetadataStore:
                     cur.execute("PRAGMA foreign_key_check")
                     foreign_key_errors = cur.fetchall()
                     if foreign_key_errors:
-                        raise RuntimeError(f"Foreign key constraint violations: {foreign_key_errors}")
-                    
+                        raise RuntimeError(
+                            f"Foreign key constraint violations: {foreign_key_errors}"
+                        )
+
                     # Enhanced table validation with schema verification
                     expected_tables = {
                         "repos": "Repository metadata",
@@ -113,18 +119,25 @@ class SQLiteMetadataStore:
                         "node_aliases": "Code graph aliases",
                         "cross_repo_references": "Cross-repo references",
                         "pending_changes": "File sync pending changes",
-                        "file_snapshots": "File sync snapshots"
+                        "file_snapshots": "File sync snapshots",
                     }
-                    
+
                     for table, description in expected_tables.items():
-                        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
+                        cur.execute(
+                            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                            (table,),
+                        )
                         if cur.fetchone() is None:
-                            raise RuntimeError(f"Database initialization failed: '{table}' table missing ({description}).")
-                        
+                            raise RuntimeError(
+                                f"Database initialization failed: '{table}' table missing ({description})."
+                            )
+
                         # Validate table schema
                         self._validate_table_schema(cur, table)
 
-                    logger.info("[SQLiteMeta] Table validation complete, creating FTS5 tables...")
+                    logger.info(
+                        "[SQLiteMeta] Table validation complete, creating FTS5 tables..."
+                    )
 
                     # Robust FTS5 creation with version checking
                     self._create_fts5_table_safe(cur)
@@ -143,24 +156,31 @@ class SQLiteMetadataStore:
                 # Mark as successfully initialized
                 self._initialized = True
                 logger.info("[SQLiteMeta] ✅ Initialization complete")
-                
+
             finally:
                 self._initializing = False
-    
+
     def _validate_table_schema(self, cur, table_name: str) -> None:
         """Validate table schema integrity."""
         # Get table schema
         cur.execute(f"PRAGMA table_info({table_name})")
         columns = cur.fetchall()
-        
+
         if not columns:
             raise RuntimeError(f"Table {table_name} exists but has no columns")
-        
+
         # Validate expected columns based on table type
         if table_name == "repos":
             required_cols = {"id", "name", "root_path", "default_embed_model"}
         elif table_name == "sessions":
-            required_cols = {"id", "repo_id", "commit_sha", "branch", "embed_model", "status"}
+            required_cols = {
+                "id",
+                "repo_id",
+                "commit_sha",
+                "branch",
+                "embed_model",
+                "status",
+            }
         elif table_name == "files":
             required_cols = {"id", "repo_id", "path", "ext", "language", "is_binary"}
         elif table_name == "chunk_content":
@@ -169,12 +189,14 @@ class SQLiteMetadataStore:
             required_cols = {"id", "content_id", "start_line", "end_line"}
         else:
             return  # Skip validation for unknown tables
-        
+
         actual_cols = {col[1] for col in columns}  # col[1] is column name
         missing_cols = required_cols - actual_cols
         if missing_cols:
-            raise RuntimeError(f"Table {table_name} missing required columns: {missing_cols}")
-    
+            raise RuntimeError(
+                f"Table {table_name} missing required columns: {missing_cols}"
+            )
+
     def _create_fts5_table_safe(self, cur) -> None:
         """Safely create FTS5 table with version and feature detection."""
         import sqlite3
@@ -189,7 +211,9 @@ class SQLiteMetadataStore:
         # Check if FTS5 is available and handle schema migration
         try:
             # Check if table already exists
-            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
+            cur.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
+            )
             table_exists = cur.fetchone()
             logger.info(f"[FTS5 Migration] Table exists: {bool(table_exists)}")
 
@@ -199,14 +223,20 @@ class SQLiteMetadataStore:
                 logger.info("[FTS5 Migration] Testing for text_hash column...")
                 try:
                     cur.execute("SELECT text_hash FROM chunks_fts LIMIT 0")
-                    logger.info("[FTS5 Migration] text_hash column exists - schema is up to date")
+                    logger.info(
+                        "[FTS5 Migration] text_hash column exists - schema is up to date"
+                    )
                     return  # Already has correct schema
                 except sqlite3.OperationalError as e:
                     logger.info(f"[FTS5 Migration] SELECT text_hash failed: {e}")
                     error_msg = str(e).lower()
-                    if "text_hash" in error_msg and ("no column" in error_msg or "no such column" in error_msg):
+                    if "text_hash" in error_msg and (
+                        "no column" in error_msg or "no such column" in error_msg
+                    ):
                         # Old schema - drop and recreate
-                        logger.warning("[FTS5 Migration] 🔄 Migrating FTS5 table to new schema (adding text_hash column)...")
+                        logger.warning(
+                            "[FTS5 Migration] 🔄 Migrating FTS5 table to new schema (adding text_hash column)..."
+                        )
                         cur.execute("DROP TABLE chunks_fts")
                         logger.info("[FTS5 Migration] Dropped old chunks_fts table")
                         # Fall through to creation below
@@ -216,7 +246,7 @@ class SQLiteMetadataStore:
             # Test FTS5 support
             cur.execute("CREATE VIRTUAL TABLE IF NOT EXISTS _fts5_test USING fts5(x)")
             cur.execute("DROP TABLE _fts5_test")
-            
+
         except sqlite3.OperationalError as e:
             if "fts5" in str(e).lower():
                 raise RuntimeError(
@@ -225,11 +255,12 @@ class SQLiteMetadataStore:
                 )
             else:
                 raise RuntimeError(f"FTS5 test failed: {e}")
-        
+
         # Create FTS5 table with proper schema
         logger.info("[FTS5 Migration] Creating chunks_fts table with new schema...")
         try:
-            cur.execute("""
+            cur.execute(
+                """
                 CREATE VIRTUAL TABLE chunks_fts USING fts5(
                     content_id UNINDEXED,
                     repo UNINDEXED,
@@ -240,23 +271,27 @@ class SQLiteMetadataStore:
                     symbol_path,
                     tokenize='porter unicode61'
                 )
-            """)
+            """
+            )
             logger.info("[FTS5 Migration] ✅ chunks_fts table created successfully")
         except sqlite3.OperationalError as e:
             logger.error(f"[FTS5 Migration] ❌ Failed to create FTS5 table: {e}")
             raise RuntimeError(f"Failed to create FTS5 table: {e}")
-    
+
     def _create_code_graph_fts5_safe(self, cur) -> None:
         """Safely create FTS5 table for code graph symbol search."""
         import sqlite3
-        
+
         try:
-            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='code_nodes_fts'")
+            cur.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='code_nodes_fts'"
+            )
             if cur.fetchone():
                 return  # Already exists
-            
+
             # Create FTS5 table for code node symbol search
-            cur.execute("""
+            cur.execute(
+                """
                 CREATE VIRTUAL TABLE code_nodes_fts USING fts5(
                     node_id UNINDEXED,
                     qualified_name,
@@ -265,11 +300,12 @@ class SQLiteMetadataStore:
                     docstring,
                     tokenize='porter unicode61'
                 )
-            """)
+            """
+            )
         except sqlite3.OperationalError as e:
             # FTS5 support already checked, so this is a different error
             raise RuntimeError(f"Failed to create code_nodes_fts table: {e}")
-    
+
     def _validate_database_integrity(self) -> None:
         """Perform comprehensive database integrity validation."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
@@ -277,32 +313,46 @@ class SQLiteMetadataStore:
             cur.execute("PRAGMA integrity_check")
             integrity_result = cur.fetchone()
             if integrity_result and integrity_result[0] != "ok":
-                raise RuntimeError(f"Database integrity check failed: {integrity_result[0]}")
-            
+                raise RuntimeError(
+                    f"Database integrity check failed: {integrity_result[0]}"
+                )
+
             # Check for orphaned records
             orphaned_checks = [
-                ("chunk_locations without content", """
+                (
+                    "chunk_locations without content",
+                    """
                     SELECT COUNT(*) FROM chunk_locations cl
                     LEFT JOIN chunk_content cc ON cl.content_id = cc.id
                     WHERE cc.id IS NULL
-                """),
-                ("chunk_content without files", """
+                """,
+                ),
+                (
+                    "chunk_content without files",
+                    """
                     SELECT COUNT(*) FROM chunk_content cc
                     LEFT JOIN files f ON cc.file_id = f.id
                     WHERE f.id IS NULL
-                """),
-                ("files without repos", """
+                """,
+                ),
+                (
+                    "files without repos",
+                    """
                     SELECT COUNT(*) FROM files f
                     LEFT JOIN repos r ON f.repo_id = r.id
                     WHERE r.id IS NULL
-                """),
-                ("sessions without repos", """
+                """,
+                ),
+                (
+                    "sessions without repos",
+                    """
                     SELECT COUNT(*) FROM sessions s
                     LEFT JOIN repos r ON s.repo_id = r.id
                     WHERE r.id IS NULL
-                """)
+                """,
+                ),
             ]
-            
+
             for check_name, sql in orphaned_checks:
                 cur.execute(sql)
                 count = cur.fetchone()[0]
@@ -310,14 +360,16 @@ class SQLiteMetadataStore:
                     # Log warning but don't fail initialization for existing databases
                     print(f"Warning: Found {count} orphaned records in {check_name}")
 
-    def record_repo(self, name: str, path: Path | str, *, default_embed_model: str = "small") -> None:
+    def record_repo(
+        self, name: str, path: Path | str, *, default_embed_model: str = "small"
+    ) -> None:
         """Insert or update a repo registration.
 
         Uses raw sqlite3 for simplicity; models are already materialized.
-        
+
         Note: Resolves the path to handle macOS symlinks (/var -> /private/var)
         to ensure path validation consistency across the system.
-        
+
         Args:
             name: Repository name
             path: Repository root path (Path object or string)
@@ -327,7 +379,7 @@ class SQLiteMetadataStore:
         # This ensures consistency with PathValidator which also resolves paths
         path_obj = Path(path) if isinstance(path, str) else path
         resolved_path = path_obj.resolve()
-        
+
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 """
@@ -342,15 +394,18 @@ class SQLiteMetadataStore:
             )
             conn.commit()
 
-    def register_repo(self, name: str, path: str | Path, *, default_embed_model: str = "small") -> None:
+    def register_repo(
+        self, name: str, path: str | Path, *, default_embed_model: str = "small"
+    ) -> None:
         """Alias for record_repo for backward compatibility.
-        
+
         Args:
             name: Repository name
             path: Repository root path (str or Path)
             default_embed_model: Default embedding model to use
         """
         from pathlib import Path as PathType
+
         path_obj = PathType(path) if isinstance(path, str) else path
         self.record_repo(name, path_obj, default_embed_model=default_embed_model)
 
@@ -390,7 +445,11 @@ class SQLiteMetadataStore:
         counts: dict[str, int] = {"repos": 0, "files": 0, "chunks": 0}
         try:
             with self._connect() as conn, closing(conn.cursor()) as cur:
-                for key, table in ("repos", "repos"), ("files", "files"), ("chunks", "chunk_content"):
+                for key, table in (
+                    ("repos", "repos"),
+                    ("files", "files"),
+                    ("chunks", "chunk_content"),
+                ):
                     cur.execute(f"SELECT COUNT(1) FROM {table}")
                     (value,) = cur.fetchone() or (0,)
                     counts[key] = int(value)
@@ -401,16 +460,18 @@ class SQLiteMetadataStore:
 
     def list_all_repos(self) -> list[dict[str, Any]]:
         """List all registered repositories with their metadata.
-        
+
         Returns:
             List of repo dicts with id, name, root_path, default_embed_model
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT id, name, root_path, default_embed_model, created_at, updated_at
                 FROM repos
                 ORDER BY name
-            """)
+            """
+            )
             rows = cur.fetchall() or []
             return [
                 {
@@ -440,7 +501,9 @@ class SQLiteMetadataStore:
                 "default_embed_model": str(row[2]),
             }
 
-    def begin_session(self, repo_id: int, commit_sha: str, branch: str, embed_model: str) -> int:
+    def begin_session(
+        self, repo_id: int, commit_sha: str, branch: str, embed_model: str
+    ) -> int:
         """Create a new ingestion session and return its id."""
         from datetime import datetime, timezone
 
@@ -460,7 +523,9 @@ class SQLiteMetadataStore:
             conn.commit()
             return int(cur.lastrowid)
 
-    def set_session_status(self, session_id: int, status: str, notes: str | None = None) -> None:
+    def set_session_status(
+        self, session_id: int, status: str, notes: str | None = None
+    ) -> None:
         """Update a session status; set ended_at when terminal."""
         terminal = {"succeeded", "failed", "aborted"}
         with self._connect() as conn, closing(conn.cursor()) as cur:
@@ -518,7 +583,7 @@ class SQLiteMetadataStore:
 
     def get_last_successful_commit(self, repo_id: int) -> str | None:
         """Get the commit SHA of the last successful session for a repo.
-        
+
         Returns None if no successful sessions exist.
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
@@ -528,27 +593,27 @@ class SQLiteMetadataStore:
                 WHERE repo_id = ? AND status = 'succeeded' 
                 ORDER BY id DESC LIMIT 1
                 """,
-                (int(repo_id),)
+                (int(repo_id),),
             )
             row = cur.fetchone()
             return str(row[0]) if row else None
 
     def get_file_id(self, repo_id: int, path: str) -> int | None:
         """Get the file_id for a given repo_id and path.
-        
+
         Returns None if the file doesn't exist in the catalog.
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 "SELECT id FROM files WHERE repo_id = ? AND path = ?",
-                (int(repo_id), path)
+                (int(repo_id), path),
             )
             row = cur.fetchone()
             return int(row[0]) if row else None
 
     def get_file_by_path(self, repo_id: int, path: str) -> dict[str, Any] | None:
         """Get file metadata by repo_id and path.
-        
+
         Returns file record dict or None if not found.
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
@@ -556,7 +621,7 @@ class SQLiteMetadataStore:
                 """SELECT id, repo_id, path, ext, language, is_binary,
                           size_bytes, latest_commit_sha, created_at, updated_at
                    FROM files WHERE repo_id = ? AND path = ?""",
-                (int(repo_id), path)
+                (int(repo_id), path),
             )
             row = cur.fetchone()
             if not row:
@@ -571,7 +636,7 @@ class SQLiteMetadataStore:
                 "size_bytes": row[6],
                 "latest_commit_sha": row[7],
                 "created_at": row[8],
-                "updated_at": row[9]
+                "updated_at": row[9],
             }
 
     def upsert_file(
@@ -634,7 +699,9 @@ class SQLiteMetadataStore:
     # Chunk content and location APIs
     # =====================
 
-    def get_existing_content_hashes_for_file(self, repo_id: int, file_id: int, embed_model: str) -> set[str]:
+    def get_existing_content_hashes_for_file(
+        self, repo_id: int, file_id: int, embed_model: str
+    ) -> set[str]:
         """Return the set of distinct text_hash values for a file and model."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
@@ -648,7 +715,9 @@ class SQLiteMetadataStore:
             rows = cur.fetchall() or []
             return {str(r[0]) for r in rows}
 
-    def get_existing_content_map_for_file(self, repo_id: int, file_id: int, embed_model: str) -> dict[str, str]:
+    def get_existing_content_map_for_file(
+        self, repo_id: int, file_id: int, embed_model: str
+    ) -> dict[str, str]:
         """Return mapping text_hash -> content_id for a file and model."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
@@ -662,7 +731,15 @@ class SQLiteMetadataStore:
             rows = cur.fetchall() or []
             return {str(r[0]): str(r[1]) for r in rows}
 
-    def upsert_chunk_content_row(self, repo_id: int, file_id: int, text_hash: str, embed_model: str, *, content_id: str | None = None) -> str:
+    def upsert_chunk_content_row(
+        self,
+        repo_id: int,
+        file_id: int,
+        text_hash: str,
+        embed_model: str,
+        *,
+        content_id: str | None = None,
+    ) -> str:
         """Insert or update a chunk_content row and return its id atomically.
 
         Uses SQLite's RETURNING clause to fetch the id in a single statement.
@@ -693,7 +770,9 @@ class SQLiteMetadataStore:
                 conn.rollback()
                 raise
 
-    def get_existing_locations_for_content_ids(self, content_ids: list[str]) -> dict[str, list[dict[str, object]]]:
+    def get_existing_locations_for_content_ids(
+        self, content_ids: list[str]
+    ) -> dict[str, list[dict[str, object]]]:
         """Return existing locations for a set of content_ids.
 
         Returns dict: content_id -> list of {start_line, end_line, symbol_kind, symbol_name, symbol_path}
@@ -725,7 +804,9 @@ class SQLiteMetadataStore:
             )
         return out
 
-    def sync_locations_for_content_row(self, content_id: str, desired_locations: list[dict[str, object]]) -> dict[str, int]:
+    def sync_locations_for_content_row(
+        self, content_id: str, desired_locations: list[dict[str, object]]
+    ) -> dict[str, int]:
         """Reconcile locations for a single content_id to match desired.
 
         desired_locations: list of dicts with keys: start_line, end_line, symbol_kind, symbol_name, symbol_path
@@ -791,7 +872,14 @@ class SQLiteMetadataStore:
                             SET symbol_kind = ?, symbol_name = ?, symbol_path = ?, last_seen_at = datetime('now')
                             WHERE content_id = ? AND start_line = ? AND end_line = ?
                             """,
-                            (new[0], new[1], new[2], content_id, int(pos[0]), int(pos[1])),
+                            (
+                                new[0],
+                                new[1],
+                                new[2],
+                                content_id,
+                                int(pos[0]),
+                                int(pos[1]),
+                            ),
                         )
                         updated += 1
                     else:
@@ -831,10 +919,15 @@ class SQLiteMetadataStore:
                 cur.execute("SELECT path FROM files WHERE id = ?", (int(file_id),))
                 file_row = cur.fetchone()
                 file_path = str(file_row[0]) if file_row else None
-                
+
                 if current_hashes:
                     placeholders = ",".join(["?"] * len(current_hashes))
-                    params = (int(repo_id), int(file_id), embed_model, *list(current_hashes))
+                    params = (
+                        int(repo_id),
+                        int(file_id),
+                        embed_model,
+                        *list(current_hashes),
+                    )
                     cur.execute(
                         f"""
                         SELECT id FROM chunk_content
@@ -893,7 +986,9 @@ class SQLiteMetadataStore:
         - new_hashes: set of hashes not yet present for this file+model
         - existing_map: dict mapping existing hash -> content_id
         """
-        existing_map = self.get_existing_content_map_for_file(repo_id, file_id, embed_model)
+        existing_map = self.get_existing_content_map_for_file(
+            repo_id, file_id, embed_model
+        )
         new_hashes = set(desired_hashes) - set(existing_map.keys())
         return new_hashes, existing_map
 
@@ -950,7 +1045,9 @@ class SQLiteMetadataStore:
         """
         desired_hashes = set(desired.keys())
         # Ensure content rows for all desired hashes
-        mapping = self.ensure_content_rows_for_file(repo_id, file_id, embed_model, list(desired_hashes))
+        mapping = self.ensure_content_rows_for_file(
+            repo_id, file_id, embed_model, list(desired_hashes)
+        )
 
         # Sync locations for each content
         inserted = updated = deleted = 0
@@ -965,7 +1062,9 @@ class SQLiteMetadataStore:
             deleted += stats.get("deleted", 0)
 
         # Prune invalidated content for this file
-        pruned = self.prune_invalidated_content_for_file(repo_id, file_id, embed_model, desired_hashes)
+        pruned = self.prune_invalidated_content_for_file(
+            repo_id, file_id, embed_model, desired_hashes
+        )
 
         return {
             "content_upserted": len(desired_hashes),
@@ -977,38 +1076,36 @@ class SQLiteMetadataStore:
 
     def get_all_files_for_repo(self, repo_id: int) -> list[dict[str, object]]:
         """Get all files for a repository.
-        
+
         Returns list of dicts with keys: id, path
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 "SELECT id, path FROM files WHERE repo_id = ? ORDER BY path",
-                (int(repo_id),)
+                (int(repo_id),),
             )
             rows = cur.fetchall() or []
-            return [
-                {"id": int(r[0]), "path": str(r[1])}
-                for r in rows
-            ]
+            return [{"id": int(r[0]), "path": str(r[1])} for r in rows]
 
-    def get_chunks_for_file(self, repo_id: int, path: str) -> list[dict[str, object]] | None:
+    def get_chunks_for_file(
+        self, repo_id: int, path: str
+    ) -> list[dict[str, object]] | None:
         """Get all chunks (content rows) for a file by repo_id and path.
-        
+
         Args:
             repo_id: Repository ID
             path: File path relative to repo root
-            
+
         Returns list of dicts or None if no chunks found.
         """
         # First get the file_id
         file_id = self.get_file_id(repo_id, path)
         if file_id is None:
             return None
-            
+
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
-                "SELECT id FROM chunk_content WHERE file_id = ?",
-                (int(file_id),)
+                "SELECT id FROM chunk_content WHERE file_id = ?", (int(file_id),)
             )
             rows = cur.fetchall() or []
             return [{"id": str(r[0])} for r in rows]
@@ -1022,16 +1119,16 @@ class SQLiteMetadataStore:
         top_k: int = 20,
     ) -> list[dict[str, Any]]:
         """Execute BM25 full-text search on indexed chunks.
-        
+
         Args:
             query: Search query (plain text, not SQL)
             repo: Optional repository filter
             path_prefix: Optional path prefix filters
             top_k: Number of results to return
-        
+
         Returns:
             List of results with BM25 scores
-        
+
         FTS5 Query Syntax:
             - Simple: "authentication login"
             - Phrase: '"user controller"'
@@ -1041,22 +1138,22 @@ class SQLiteMetadataStore:
         # Input validation
         if not query or not query.strip():
             return []
-        
+
         # Basic FTS5 safety: escape potentially dangerous characters
         # FTS5 uses MATCH syntax, so we need to be careful about quotes and operators
-        if any(char in query for char in [';', '\\', '\x00']):
+        if any(char in query for char in [";", "\\", "\x00"]):
             return []
-        
+
         try:
             with self._connect() as conn, closing(conn.cursor()) as cur:
                 # Build FTS5 query with filters
                 conditions = ["chunks_fts MATCH ?"]
                 params = [query]
-                
+
                 if repo:
                     conditions.append("repo = ?")
                     params.append(repo)
-                
+
                 if path_prefix:
                     # Add path prefix filters
                     path_conditions = []
@@ -1064,16 +1161,16 @@ class SQLiteMetadataStore:
                         path_conditions.append("path LIKE ?")
                         params.append(f"{prefix}%")
                     conditions.append(f"({' OR '.join(path_conditions)})")
-                
+
                 where_clause = " AND ".join(conditions)
-                
+
                 # FTS5 BM25 scoring:
                 # - bm25(chunks_fts): Overall BM25 score (lower is better!)
                 # - rank: Pre-computed relevance rank (also lower is better!)
                 #
                 # Note: FTS5 returns negative BM25 scores, where more negative = more relevant
                 # We negate to get positive scores for easier interpretation
-                
+
                 sql = f"""
                     SELECT
                         content_id,
@@ -1087,21 +1184,23 @@ class SQLiteMetadataStore:
                     LIMIT ?
                 """
                 params.append(top_k)
-                
+
                 cur.execute(sql, tuple(params))
                 rows = cur.fetchall() or []
-                
+
                 # Convert to list of dicts
                 results = []
                 for row in rows:
-                    results.append({
-                        "chunk_id": str(row[0]),
-                        "repo": str(row[1]),
-                        "path": str(row[2]),
-                        "score": float(row[3]),  # Positive BM25 score
-                        "rank": int(row[4]),
-                    })
-                
+                    results.append(
+                        {
+                            "chunk_id": str(row[0]),
+                            "repo": str(row[1]),
+                            "path": str(row[2]),
+                            "score": float(row[3]),  # Positive BM25 score
+                            "rank": int(row[4]),
+                        }
+                    )
+
                 return results
         except sqlite3.Error:
             # Return empty results on any FTS5 error
@@ -1131,11 +1230,14 @@ class SQLiteMetadataStore:
 
         with self._connect() as conn, closing(conn.cursor()) as cur:
             # Upsert: replace if exists, insert if new
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT OR REPLACE INTO chunks_fts
                 (content_id, repo, path, text_hash, content, symbol_name, symbol_path)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (content_id, repo, path, text_hash, content, symbol_name, symbol_path))
+            """,
+                (content_id, repo, path, text_hash, content, symbol_name, symbol_path),
+            )
             conn.commit()
 
     def bulk_index_chunks_for_fts(
@@ -1158,14 +1260,20 @@ class SQLiteMetadataStore:
             # Runtime schema migration check - ensure FTS5 table has text_hash column
             # This catches cases where initialize() was already called before the migration was added
             import sqlite3
+
             try:
                 cur.execute("SELECT text_hash FROM chunks_fts LIMIT 0")
             except sqlite3.OperationalError as e:
                 error_msg = str(e).lower()
-                if "text_hash" in error_msg and ("no column" in error_msg or "no such column" in error_msg):
-                    logger.warning(f"[FTS5 Migration] Runtime check: text_hash column missing ({e}), migrating now...")
+                if "text_hash" in error_msg and (
+                    "no column" in error_msg or "no such column" in error_msg
+                ):
+                    logger.warning(
+                        f"[FTS5 Migration] Runtime check: text_hash column missing ({e}), migrating now..."
+                    )
                     cur.execute("DROP TABLE IF EXISTS chunks_fts")
-                    cur.execute("""
+                    cur.execute(
+                        """
                         CREATE VIRTUAL TABLE chunks_fts USING fts5(
                             content_id UNINDEXED,
                             repo UNINDEXED,
@@ -1176,22 +1284,33 @@ class SQLiteMetadataStore:
                             symbol_path,
                             tokenize='porter unicode61'
                         )
-                    """)
+                    """
+                    )
                     conn.commit()
                     logger.info("[FTS5 Migration] Runtime migration complete")
                 else:
                     raise
 
             # Proceed with bulk insert
-            cur.executemany("""
+            cur.executemany(
+                """
                 INSERT OR REPLACE INTO chunks_fts
                 (content_id, repo, path, text_hash, content, symbol_name, symbol_path)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, [
-                (c["content_id"], c["repo"], c["path"], c["text_hash"],
-                 c["content"], c.get("symbol_name"), c.get("symbol_path"))
-                for c in chunks
-            ])
+            """,
+                [
+                    (
+                        c["content_id"],
+                        c["repo"],
+                        c["path"],
+                        c["text_hash"],
+                        c["content"],
+                        c.get("symbol_name"),
+                        c.get("symbol_path"),
+                    )
+                    for c in chunks
+                ],
+            )
             conn.commit()
             return len(chunks)
 
@@ -1218,7 +1337,8 @@ class SQLiteMetadataStore:
             Dict with chunk metadata or None if not found
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT
                     cc.id,
                     cc.text_hash,
@@ -1236,12 +1356,14 @@ class SQLiteMetadataStore:
                 JOIN files f ON cc.file_id = f.id
                 LEFT JOIN chunk_locations cl ON cc.id = cl.content_id
                 WHERE cc.id = ?
-            """, (chunk_id,))
-            
+            """,
+                (chunk_id,),
+            )
+
             row = cur.fetchone()
             if not row:
                 return None
-            
+
             return {
                 "chunk_id": str(row[0]),
                 "text_hash": str(row[1]),
@@ -1325,8 +1447,12 @@ class SQLiteMetadataStore:
             if location:
                 metadata.update(
                     {
-                        "start_line": int(location[0]) if location[0] is not None else None,
-                        "end_line": int(location[1]) if location[1] is not None else None,
+                        "start_line": (
+                            int(location[0]) if location[0] is not None else None
+                        ),
+                        "end_line": (
+                            int(location[1]) if location[1] is not None else None
+                        ),
                         "symbol_kind": location[2],
                         "symbol_name": location[3],
                         "symbol_path": location[4],
@@ -1368,7 +1494,7 @@ class SQLiteMetadataStore:
             # If all chunks found in FTS, return immediately
             if len(result) == len(chunk_ids):
                 return result
-            
+
             # For chunks not in FTS, try to get content from files
             missing_ids = [cid for cid in chunk_ids if cid not in result]
             if missing_ids:
@@ -1384,9 +1510,10 @@ class SQLiteMetadataStore:
                 """
                 cur.execute(fallback_query, missing_ids)
                 fallback_rows = cur.fetchall()
-                
+
                 # Read content from files (best effort)
                 from pathlib import Path
+
                 for row in fallback_rows:
                     chunk_id, file_path, repo_root, start_line, end_line = row
                     if not all([file_path, repo_root, start_line, end_line]):
@@ -1397,16 +1524,17 @@ class SQLiteMetadataStore:
                         validator = PathValidator(base_dir=repo_root)
                         full_path = validator.validate(file_path)
                         if full_path.exists():
-                            lines = full_path.read_text(encoding='utf-8', errors='ignore').splitlines()
+                            lines = full_path.read_text(
+                                encoding="utf-8", errors="ignore"
+                            ).splitlines()
                             # Extract lines (1-indexed to 0-indexed)
-                            chunk_lines = lines[start_line-1:end_line]
-                            result[str(chunk_id)] = '\n'.join(chunk_lines)
+                            chunk_lines = lines[start_line - 1 : end_line]
+                            result[str(chunk_id)] = "\n".join(chunk_lines)
                     except Exception:
                         # If we can't read the file, skip this chunk
                         pass
-            
-            return result
 
+            return result
 
     # =====================
     # Enhanced Repository Removal (Phase 2)
@@ -1415,21 +1543,27 @@ class SQLiteMetadataStore:
     def get_active_sessions(self, repo_id: int) -> list:
         """Get all active (non-terminal) sessions for a repository."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT id, status, created_at FROM sessions 
                 WHERE repo_id = ? AND status NOT IN ('succeeded', 'failed', 'aborted')
                 ORDER BY created_at DESC
-            """, (repo_id,))
+            """,
+                (repo_id,),
+            )
             return cur.fetchall()
 
     def terminate_active_sessions(self, repo_id: int) -> int:
         """Terminate all active sessions for a repository."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 UPDATE sessions 
                 SET status = 'aborted', ended_at = datetime('now')
                 WHERE repo_id = ? AND status NOT IN ('succeeded', 'failed', 'aborted')
-            """, (repo_id,))
+            """,
+                (repo_id,),
+            )
             terminated = cur.rowcount
             conn.commit()
             return terminated
@@ -1437,73 +1571,86 @@ class SQLiteMetadataStore:
     def _get_repo_data_counts(self, cur, repo_id: int, repo_name: str) -> dict:
         """Collect counts of all data that will be deleted for validation."""
         counts = {}
-        
+
         # Count files
         cur.execute("SELECT COUNT(*) FROM files WHERE repo_id = ?", (repo_id,))
         counts["files"] = cur.fetchone()[0]
-        
+
         # Count chunk content
         cur.execute("SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,))
         counts["chunk_content"] = cur.fetchone()[0]
-        
+
         # Count chunk locations
-        cur.execute("""
+        cur.execute(
+            """
             SELECT COUNT(*) FROM chunk_locations 
             WHERE content_id IN (SELECT id FROM chunk_content WHERE repo_id = ?)
-        """, (repo_id,))
+        """,
+            (repo_id,),
+        )
         counts["chunk_locations"] = cur.fetchone()[0]
-        
+
         # Count FTS entries
         cur.execute("SELECT COUNT(*) FROM chunks_fts WHERE repo = ?", (repo_name,))
         counts["fts_entries"] = cur.fetchone()[0]
-        
+
         # Count sessions
         cur.execute("SELECT COUNT(*) FROM sessions WHERE repo_id = ?", (repo_id,))
         counts["sessions"] = cur.fetchone()[0]
-        
+
         return counts
 
-    def _cleanup_fts_entries_comprehensive(self, cur, repo_id: int, repo_name: str) -> dict:
+    def _cleanup_fts_entries_comprehensive(
+        self, cur, repo_id: int, repo_name: str
+    ) -> dict:
         """Comprehensive FTS5 cleanup with multiple strategies."""
         stats = {"by_content_id": 0, "by_repo_name": 0, "orphaned": 0, "errors": []}
-        
+
         try:
             # Strategy 1: Delete by content_id (most precise)
-            cur.execute("""
+            cur.execute(
+                """
                 DELETE FROM chunks_fts 
                 WHERE content_id IN (
                     SELECT cc.id FROM chunk_content cc 
                     WHERE cc.repo_id = ?
                 )
-            """, (repo_id,))
+            """,
+                (repo_id,),
+            )
             stats["by_content_id"] = cur.rowcount
-            
+
             # Strategy 2: Delete by repo name (fallback)
             cur.execute("DELETE FROM chunks_fts WHERE repo = ?", (repo_name,))
             stats["by_repo_name"] = cur.rowcount
-            
+
             # Strategy 3: Delete orphaned entries (validation)
-            cur.execute("""
+            cur.execute(
+                """
                 DELETE FROM chunks_fts 
                 WHERE content_id NOT IN (
                     SELECT id FROM chunk_content
                 )
-            """)
+            """
+            )
             stats["orphaned"] = cur.rowcount
-            
+
         except Exception as e:
             stats["errors"].append(str(e))
-            
+
         return stats
 
     def _delete_chunk_locations_by_repo(self, cur, repo_id: int) -> int:
         """Delete all chunk locations for a repository."""
-        cur.execute("""
+        cur.execute(
+            """
             DELETE FROM chunk_locations
             WHERE content_id IN (
                 SELECT id FROM chunk_content WHERE repo_id = ?
             )
-        """, (repo_id,))
+        """,
+            (repo_id,),
+        )
         return cur.rowcount
 
     def _delete_chunk_content_by_repo(self, cur, repo_id: int) -> int:
@@ -1535,7 +1682,7 @@ class SQLiteMetadataStore:
 
     def rm_repo_enhanced(self, name: str, force: bool = False) -> dict:
         """Enhanced repository removal with comprehensive cleanup validation.
-        
+
         This implements Phase 2 Fix 2.1 from the remediation plan:
         - Checks for active sessions before deletion
         - Deletes in proper foreign key order
@@ -1545,9 +1692,9 @@ class SQLiteMetadataStore:
         repo = self.get_repo_by_name(name)
         if not repo:
             raise ValueError(f"Repository '{name}' not found")
-        
+
         repo_id = int(repo["id"])
-        
+
         # Check for active sessions first
         active_sessions = self.get_active_sessions(repo_id)
         if active_sessions and not force:
@@ -1555,173 +1702,179 @@ class SQLiteMetadataStore:
                 f"Cannot remove repository '{name}': {len(active_sessions)} active indexing sessions found. "
                 "Use --force to override."
             )
-        
+
         # Pre-cleanup validation and data collection
         with self._connect() as conn:
             cur = conn.cursor()
-            
+
             # Collect all data that will be deleted for validation
             pre_cleanup_counts = self._get_repo_data_counts(cur, repo_id, name)
-            
+
             # Delete in proper foreign key order with validation
             try:
                 # 1. FTS5 entries (clean by content_id first, then by repo name)
-                fts_cleanup_stats = self._cleanup_fts_entries_comprehensive(cur, repo_id, name)
-                
+                fts_cleanup_stats = self._cleanup_fts_entries_comprehensive(
+                    cur, repo_id, name
+                )
+
                 # 2. Chunk locations (foreign key to chunk_content)
                 locations_deleted = self._delete_chunk_locations_by_repo(cur, repo_id)
-                
+
                 # 3. Chunk content (foreign key to files)
                 content_deleted = self._delete_chunk_content_by_repo(cur, repo_id)
-                
+
                 # 4. Files (foreign key to repos)
                 files_deleted = self._delete_files_by_repo(cur, repo_id)
-                
-                # 5. Sessions (foreign key to repos)  
+
+                # 5. Sessions (foreign key to repos)
                 sessions_deleted = self._delete_sessions_by_repo(cur, repo_id)
-                
+
                 # 6. Repository registration
                 repo_deleted = self._delete_repo_registration(cur, repo_id)
-                
+
                 # Validate cleanup was comprehensive
                 post_cleanup_counts = self._get_repo_data_counts(cur, repo_id, name)
-                cleanup_success = self._validate_cleanup_success(pre_cleanup_counts, post_cleanup_counts)
-                
+                cleanup_success = self._validate_cleanup_success(
+                    pre_cleanup_counts, post_cleanup_counts
+                )
+
                 if not cleanup_success and not force:
-                    raise RuntimeError(f"Cleanup validation failed: {post_cleanup_counts}")
-                
+                    raise RuntimeError(
+                        f"Cleanup validation failed: {post_cleanup_counts}"
+                    )
+
                 conn.commit()
-                
+
             except Exception as e:
                 conn.rollback()
                 raise RuntimeError(f"Repository removal failed: {e}")
-        
+
         # Return detailed stats
         return {
             "repository": name,
             "cleanup_stats": {
                 "fts5_entries": fts_cleanup_stats,
                 "locations_deleted": locations_deleted,
-                "content_deleted": content_deleted, 
+                "content_deleted": content_deleted,
                 "files_deleted": files_deleted,
                 "sessions_deleted": sessions_deleted,
-                "repo_deleted": repo_deleted
+                "repo_deleted": repo_deleted,
             },
             "pre_cleanup_counts": pre_cleanup_counts,
             "post_cleanup_counts": post_cleanup_counts,
-            "success": True
+            "success": True,
         }
 
     def _cleanup_lancedb_comprehensive(self, lancedb_store, name: str) -> dict:
         """Comprehensive LanceDB cleanup with validation.
-        
+
         Args:
             lancedb_store: LanceDBStore instance
             name: Repository name
-            
+
         Returns:
             Statistics about cleanup: {small_deleted, large_deleted, errors}
         """
         stats = {"small_deleted": 0, "large_deleted": 0, "errors": []}
-        
+
         for model in ["small", "large"]:
             try:
                 # Count vectors before deletion
                 pre_count = lancedb_store.count_repo_vectors(name, model=model)
-                
+
                 # Delete vectors
                 lancedb_store.delete_repo(name, model=model)
-                
+
                 # Count vectors after deletion
                 post_count = lancedb_store.count_repo_vectors(name, model=model)
-                
+
                 # Verify deletion was successful
                 if post_count > 0:
                     stats["errors"].append(
                         f"{model} model: {post_count} vectors remain after deletion"
                     )
-                
+
                 stats[f"{model}_deleted"] = pre_count - post_count
-                
+
             except Exception as e:
                 stats["errors"].append(f"{model} model cleanup failed: {e}")
-        
+
         return stats
 
-    def rm_repo_with_lancedb(self, lancedb_store, name: str, force: bool = False) -> dict:
+    def rm_repo_with_lancedb(
+        self, lancedb_store, name: str, force: bool = False
+    ) -> dict:
         """Enhanced repository removal with LanceDB cleanup validation.
-        
+
         This implements Phase 2 Fix 2.1 from the remediation plan:
         - Checks for active sessions before deletion
         - Deletes in proper foreign key order
         - Validates SQLite cleanup was comprehensive
         - Validates LanceDB cleanup was comprehensive
         - Provides detailed statistics
-        
+
         Args:
             lancedb_store: LanceDBStore instance
             name: Repository name
             force: Skip active session check if True
-            
+
         Returns:
             Dict with cleanup statistics and success status
         """
         # First perform SQLite cleanup
         sqlite_result = self.rm_repo_enhanced(name, force=force)
-        
+
         # Then cleanup LanceDB with validation
         lancedb_stats = self._cleanup_lancedb_comprehensive(lancedb_store, name)
-        
+
         # Add LanceDB stats to result
         sqlite_result["cleanup_stats"]["lancedb_vectors"] = lancedb_stats
-        
+
         # Check if there were any LanceDB errors
         if lancedb_stats["errors"]:
             sqlite_result["lancedb_warnings"] = lancedb_stats["errors"]
             if not force:
                 sqlite_result["success"] = False
-        
+
         return sqlite_result
 
     def _check_lancedb_consistency(self, lancedb_store, repo_name: str) -> dict:
         """Check consistency between metadata and LanceDB vector stores.
-        
+
         Args:
             lancedb_store: LanceDBStore instance
             repo_name: Repository name
-            
+
         Returns:
             Consistency report with statistics and issues
         """
-        stats = {
-            "consistent": True,
-            "issues": [],
-            "vector_counts": {}
-        }
-        
+        stats = {"consistent": True, "issues": [], "vector_counts": {}}
+
         try:
             # Count vectors in both models
             for model in ["small", "large"]:
                 count = lancedb_store.count_repo_vectors(repo_name, model=model)
                 stats["vector_counts"][model] = count
-            
+
             # Could add more checks here, e.g., comparing metadata chunk counts
             # with vector counts
-            
+
         except Exception as e:
             stats["consistent"] = False
             stats["issues"].append(f"LanceDB consistency check failed: {e}")
-        
+
         return stats
 
-    def validate_repo_consistency(self, lancedb_store, repo_id: int, repo_name: str) -> dict:
+    def validate_repo_consistency(
+        self, lancedb_store, repo_id: int, repo_name: str
+    ) -> dict:
         """Comprehensive consistency validation between metadata and vector stores.
-        
+
         Args:
             lancedb_store: LanceDBStore instance
             repo_id: Repository ID
             repo_name: Repository name
-            
+
         Returns:
             Comprehensive consistency report
         """
@@ -1730,67 +1883,88 @@ class SQLiteMetadataStore:
             "repo_name": repo_name,
             "valid": True,
             "issues": [],
-            "statistics": {}
+            "statistics": {},
         }
-        
+
         with self._connect() as conn, closing(conn.cursor()) as cur:
             # Get metadata statistics
             cur.execute("SELECT COUNT(*) FROM files WHERE repo_id = ?", (repo_id,))
             metadata_files = cur.fetchone()[0]
-            
-            cur.execute("SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,))
+
+            cur.execute(
+                "SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,)
+            )
             metadata_chunks = cur.fetchone()[0]
-            
-            cur.execute("SELECT COUNT(*) FROM chunk_locations WHERE content_id IN (SELECT id FROM chunk_content WHERE repo_id = ?)", (repo_id,))
+
+            cur.execute(
+                "SELECT COUNT(*) FROM chunk_locations WHERE content_id IN (SELECT id FROM chunk_content WHERE repo_id = ?)",
+                (repo_id,),
+            )
             metadata_locations = cur.fetchone()[0]
-            
+
             # Check for orphaned chunk_locations
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT COUNT(*) FROM chunk_locations cl
                 LEFT JOIN chunk_content cc ON cl.content_id = cc.id
                 WHERE cc.id IS NULL
-            """)
+            """
+            )
             orphaned_locations = cur.fetchone()[0]
-            
+
             if orphaned_locations > 0:
                 consistency_report["valid"] = False
-                consistency_report["issues"].append(f"Found {orphaned_locations} orphaned chunk locations")
-            
+                consistency_report["issues"].append(
+                    f"Found {orphaned_locations} orphaned chunk locations"
+                )
+
             # Check for orphaned FTS entries
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT COUNT(*) FROM chunks_fts
                 WHERE content_id NOT IN (SELECT id FROM chunk_content)
-            """)
+            """
+            )
             orphaned_fts = cur.fetchone()[0]
-            
+
             if orphaned_fts > 0:
                 consistency_report["valid"] = False
-                consistency_report["issues"].append(f"Found {orphaned_fts} orphaned FTS entries")
-            
+                consistency_report["issues"].append(
+                    f"Found {orphaned_fts} orphaned FTS entries"
+                )
+
             # Check for chunk_content without files
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT COUNT(*) FROM chunk_content cc
                 LEFT JOIN files f ON cc.file_id = f.id
                 WHERE f.id IS NULL
-            """)
+            """
+            )
             orphaned_content = cur.fetchone()[0]
-            
+
             if orphaned_content > 0:
                 consistency_report["valid"] = False
-                consistency_report["issues"].append(f"Found {orphaned_content} chunk_content rows without files")
-            
+                consistency_report["issues"].append(
+                    f"Found {orphaned_content} chunk_content rows without files"
+                )
+
             # Check for files without repos
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT COUNT(*) FROM files f
                 LEFT JOIN repos r ON f.repo_id = r.id
                 WHERE r.id IS NULL
-            """)
+            """
+            )
             orphaned_files = cur.fetchone()[0]
-            
+
             if orphaned_files > 0:
                 consistency_report["valid"] = False
-                consistency_report["issues"].append(f"Found {orphaned_files} files without repos")
-            
+                consistency_report["issues"].append(
+                    f"Found {orphaned_files} files without repos"
+                )
+
             consistency_report["statistics"] = {
                 "metadata_files": metadata_files,
                 "metadata_chunks": metadata_chunks,
@@ -1798,26 +1972,26 @@ class SQLiteMetadataStore:
                 "orphaned_locations": orphaned_locations,
                 "orphaned_fts": orphaned_fts,
                 "orphaned_content": orphaned_content,
-                "orphaned_files": orphaned_files
+                "orphaned_files": orphaned_files,
             }
-        
+
         # Check LanceDB consistency
         lancedb_stats = self._check_lancedb_consistency(lancedb_store, repo_name)
         consistency_report["lancedb"] = lancedb_stats
-        
+
         if not lancedb_stats["consistent"]:
             consistency_report["valid"] = False
             consistency_report["issues"].extend(lancedb_stats["issues"])
-        
+
         return consistency_report
 
     def repair_repository_consistency(self, repo_id: int, repo_name: str) -> dict:
         """Attempt to repair consistency issues in a repository.
-        
+
         Args:
             repo_id: Repository ID
             repo_name: Repository name
-            
+
         Returns:
             Repair report with actions taken and results
         """
@@ -1826,101 +2000,120 @@ class SQLiteMetadataStore:
             "repo_name": repo_name,
             "repairs_performed": [],
             "success": True,
-            "errors": []
+            "errors": [],
         }
-        
+
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
                 # Repair orphaned chunk_locations
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT COUNT(*) FROM chunk_locations cl
                     LEFT JOIN chunk_content cc ON cl.content_id = cc.id
                     WHERE cc.id IS NULL
-                """)
+                """
+                )
                 orphaned_count = cur.fetchone()[0]
-                
+
                 if orphaned_count > 0:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         DELETE FROM chunk_locations
                         WHERE id IN (
                             SELECT cl.id FROM chunk_locations cl
                             LEFT JOIN chunk_content cc ON cl.content_id = cc.id
                             WHERE cc.id IS NULL
                         )
-                    """)
+                    """
+                    )
                     repair_report["repairs_performed"].append(
                         f"Deleted {cur.rowcount} orphaned chunk locations"
                     )
-                
+
                 # Repair orphaned FTS entries
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT COUNT(*) FROM chunks_fts
                     WHERE content_id NOT IN (SELECT id FROM chunk_content)
-                """)
+                """
+                )
                 orphaned_fts_count = cur.fetchone()[0]
-                
+
                 if orphaned_fts_count > 0:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         DELETE FROM chunks_fts
                         WHERE content_id NOT IN (SELECT id FROM chunk_content)
-                    """)
+                    """
+                    )
                     repair_report["repairs_performed"].append(
                         f"Deleted {cur.rowcount} orphaned FTS entries"
                     )
-                
+
                 # Repair orphaned chunk_content (without files)
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT COUNT(*) FROM chunk_content cc
                     LEFT JOIN files f ON cc.file_id = f.id
                     WHERE f.id IS NULL
-                """)
+                """
+                )
                 orphaned_content_count = cur.fetchone()[0]
-                
+
                 if orphaned_content_count > 0:
                     # First delete FTS entries for this content
-                    cur.execute("""
+                    cur.execute(
+                        """
                         DELETE FROM chunks_fts
                         WHERE content_id IN (
                             SELECT cc.id FROM chunk_content cc
                             LEFT JOIN files f ON cc.file_id = f.id
                             WHERE f.id IS NULL
                         )
-                    """)
-                    
+                    """
+                    )
+
                     # Then delete locations
-                    cur.execute("""
+                    cur.execute(
+                        """
                         DELETE FROM chunk_locations
                         WHERE content_id IN (
                             SELECT cc.id FROM chunk_content cc
                             LEFT JOIN files f ON cc.file_id = f.id
                             WHERE f.id IS NULL
                         )
-                    """)
-                    
+                    """
+                    )
+
                     # Finally delete content
-                    cur.execute("""
+                    cur.execute(
+                        """
                         DELETE FROM chunk_content
                         WHERE id IN (
                             SELECT cc.id FROM chunk_content cc
                             LEFT JOIN files f ON cc.file_id = f.id
                             WHERE f.id IS NULL
                         )
-                    """)
+                    """
+                    )
                     repair_report["repairs_performed"].append(
                         f"Deleted {cur.rowcount} orphaned chunk_content rows"
                     )
-                
+
                 # Repair orphaned files (without repos)
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT COUNT(*) FROM files f
                     LEFT JOIN repos r ON f.repo_id = r.id
                     WHERE r.id IS NULL
-                """)
+                """
+                )
                 orphaned_files_count = cur.fetchone()[0]
-                
+
                 if orphaned_files_count > 0:
                     # Cascade delete: FTS -> locations -> content -> files
-                    cur.execute("""
+                    cur.execute(
+                        """
                         DELETE FROM chunks_fts
                         WHERE content_id IN (
                             SELECT cc.id FROM chunk_content cc
@@ -1930,9 +2123,11 @@ class SQLiteMetadataStore:
                                 WHERE r.id IS NULL
                             )
                         )
-                    """)
-                    
-                    cur.execute("""
+                    """
+                    )
+
+                    cur.execute(
+                        """
                         DELETE FROM chunk_locations
                         WHERE content_id IN (
                             SELECT cc.id FROM chunk_content cc
@@ -1942,36 +2137,41 @@ class SQLiteMetadataStore:
                                 WHERE r.id IS NULL
                             )
                         )
-                    """)
-                    
-                    cur.execute("""
+                    """
+                    )
+
+                    cur.execute(
+                        """
                         DELETE FROM chunk_content
                         WHERE file_id IN (
                             SELECT f.id FROM files f
                             LEFT JOIN repos r ON f.repo_id = r.id
                             WHERE r.id IS NULL
                         )
-                    """)
-                    
-                    cur.execute("""
+                    """
+                    )
+
+                    cur.execute(
+                        """
                         DELETE FROM files
                         WHERE id IN (
                             SELECT f.id FROM files f
                             LEFT JOIN repos r ON f.repo_id = r.id
                             WHERE r.id IS NULL
                         )
-                    """)
+                    """
+                    )
                     repair_report["repairs_performed"].append(
                         f"Deleted {cur.rowcount} orphaned files"
                     )
-                
+
                 conn.commit()
-                
+
             except Exception as e:
                 conn.rollback()
                 repair_report["success"] = False
                 repair_report["errors"].append(f"Repair failed: {e}")
-        
+
         return repair_report
 
     # =====================
@@ -1983,42 +2183,49 @@ class SQLiteMetadataStore:
         repo_id: int,
         file_path: str,
         change_type: str,
-        old_path: str | None = None
+        old_path: str | None = None,
     ) -> int:
         """Record a file change in the pending queue."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO pending_changes
                 (repo_id, file_path, change_type, old_path, detected_at, processed)
                 VALUES (?, ?, ?, ?, datetime('now'), 0)
-            """, (repo_id, file_path, change_type, old_path))
+            """,
+                (repo_id, file_path, change_type, old_path),
+            )
             change_id = cur.lastrowid
             conn.commit()
             return change_id
 
     def get_pending_changes(
-        self,
-        repo_id: int | None = None,
-        limit: int = 1000
+        self, repo_id: int | None = None, limit: int = 1000
     ) -> list[dict]:
         """Get unprocessed pending changes."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
             if repo_id:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT id, repo_id, file_path, change_type, old_path, detected_at
                     FROM pending_changes
                     WHERE repo_id = ? AND processed = 0
                     ORDER BY detected_at ASC
                     LIMIT ?
-                """, (repo_id, limit))
+                """,
+                    (repo_id, limit),
+                )
             else:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT id, repo_id, file_path, change_type, old_path, detected_at
                     FROM pending_changes
                     WHERE processed = 0
                     ORDER BY detected_at ASC
                     LIMIT ?
-                """, (limit,))
+                """,
+                    (limit,),
+                )
 
             rows = cur.fetchall()
             return [
@@ -2028,7 +2235,7 @@ class SQLiteMetadataStore:
                     "file_path": row[2],
                     "change_type": row[3],
                     "old_path": row[4],
-                    "detected_at": row[5]
+                    "detected_at": row[5],
                 }
                 for row in rows
             ]
@@ -2040,11 +2247,14 @@ class SQLiteMetadataStore:
 
         placeholders = ",".join(["?"] * len(change_ids))
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute(f"""
+            cur.execute(
+                f"""
                 UPDATE pending_changes
                 SET processed = 1, processed_at = datetime('now')
                 WHERE id IN ({placeholders})
-            """, tuple(change_ids))
+            """,
+                tuple(change_ids),
+            )
             updated = cur.rowcount
             conn.commit()
             return updated
@@ -2062,13 +2272,16 @@ class SQLiteMetadataStore:
             Number of changes marked as processed
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 UPDATE pending_changes
                 SET processed = 1, processed_at = datetime('now')
                 WHERE repo_id = ?
                 AND file_path = ?
                 AND processed = 0
-            """, (repo_id, file_path))
+            """,
+                (repo_id, file_path),
+            )
             updated = cur.rowcount
             conn.commit()
             return updated
@@ -2076,11 +2289,14 @@ class SQLiteMetadataStore:
     def cleanup_old_changes(self, days: int = 7) -> int:
         """Delete processed changes older than specified days."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 DELETE FROM pending_changes
                 WHERE processed = 1
                 AND processed_at < datetime('now', ?)
-            """, (f"-{days} days",))
+            """,
+                (f"-{days} days",),
+            )
             deleted = cur.rowcount
             conn.commit()
             return deleted
@@ -2092,11 +2308,12 @@ class SQLiteMetadataStore:
         path: str,
         mtime_ns: int,
         size_bytes: int,
-        content_hash: str
+        content_hash: str,
     ) -> None:
         """Record file state after successful indexing."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO file_snapshots
                 (file_id, repo_id, path, mtime_ns, size_bytes, content_hash, last_indexed_at)
                 VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
@@ -2105,17 +2322,22 @@ class SQLiteMetadataStore:
                     size_bytes = excluded.size_bytes,
                     content_hash = excluded.content_hash,
                     last_indexed_at = excluded.last_indexed_at
-            """, (file_id, repo_id, path, mtime_ns, size_bytes, content_hash))
+            """,
+                (file_id, repo_id, path, mtime_ns, size_bytes, content_hash),
+            )
             conn.commit()
 
     def get_file_snapshot(self, file_id: int) -> dict | None:
         """Get snapshot for a file."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT file_id, path, mtime_ns, size_bytes, content_hash, last_indexed_at
                 FROM file_snapshots
                 WHERE file_id = ?
-            """, (file_id,))
+            """,
+                (file_id,),
+            )
             row = cur.fetchone()
             if not row:
                 return None
@@ -2125,7 +2347,7 @@ class SQLiteMetadataStore:
                 "mtime_ns": row[2],
                 "size_bytes": row[3],
                 "content_hash": row[4],
-                "last_indexed_at": row[5]
+                "last_indexed_at": row[5],
             }
 
     def detect_drift(self, repo_id: int) -> list[dict]:
@@ -2146,32 +2368,31 @@ class SQLiteMetadataStore:
         drift_events = []
 
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT fs.file_id, fs.path, fs.mtime_ns, fs.size_bytes, fs.content_hash
                 FROM file_snapshots fs
                 WHERE fs.repo_id = ?
-            """, (repo_id,))
+            """,
+                (repo_id,),
+            )
 
             for row in cur.fetchall():
                 file_id, path, snapshot_mtime, snapshot_size, snapshot_hash = row
                 file_path = root / path
 
                 if not file_path.exists():
-                    drift_events.append({
-                        "file_id": file_id,
-                        "path": path,
-                        "drift_type": "deleted"
-                    })
+                    drift_events.append(
+                        {"file_id": file_id, "path": path, "drift_type": "deleted"}
+                    )
                     continue
 
                 stat = file_path.stat()
                 if stat.st_mtime_ns != snapshot_mtime or stat.st_size != snapshot_size:
                     current_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
                     if current_hash != snapshot_hash:
-                        drift_events.append({
-                            "file_id": file_id,
-                            "path": path,
-                            "drift_type": "modified"
-                        })
+                        drift_events.append(
+                            {"file_id": file_id, "path": path, "drift_type": "modified"}
+                        )
 
         return drift_events

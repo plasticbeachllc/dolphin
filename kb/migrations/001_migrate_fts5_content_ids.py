@@ -40,9 +40,7 @@ def generate_fts_content_id(repo_id: int, file_id: int, text_hash: str) -> str:
 
 
 def get_repo_and_file_ids(
-    conn: sqlite3.Connection,
-    repo_name: str,
-    file_path: str
+    conn: sqlite3.Connection, repo_name: str, file_path: str
 ) -> Tuple[int | None, int | None]:
     """Get repo_id and file_id from names/paths.
 
@@ -65,8 +63,7 @@ def get_repo_and_file_ids(
 
     # Get file_id
     cursor.execute(
-        "SELECT id FROM files WHERE repo_id = ? AND path = ?",
-        (repo_id, file_path)
+        "SELECT id FROM files WHERE repo_id = ? AND path = ?", (repo_id, file_path)
     )
     file_row = cursor.fetchone()
     if not file_row:
@@ -103,14 +100,18 @@ def migrate_fts5_content_ids(db_path: Path) -> Dict[str, int]:
             "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
         )
         if not cursor.fetchone():
-            logger.info("[FTS5 Migration 001] No chunks_fts table found, skipping migration")
+            logger.info(
+                "[FTS5 Migration 001] No chunks_fts table found, skipping migration"
+            )
             return stats
 
         # Read all existing FTS5 entries
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT content_id, repo, path, text_hash, content, symbol_name, symbol_path
             FROM chunks_fts
-        """)
+        """
+        )
         old_entries = cursor.fetchall()
         stats["entries_read"] = len(old_entries)
 
@@ -118,7 +119,9 @@ def migrate_fts5_content_ids(db_path: Path) -> Dict[str, int]:
             logger.info("[FTS5 Migration 001] No entries to migrate")
             return stats
 
-        logger.info(f"[FTS5 Migration 001] Read {stats['entries_read']} entries from chunks_fts")
+        logger.info(
+            f"[FTS5 Migration 001] Read {stats['entries_read']} entries from chunks_fts"
+        )
 
         # Step 2: Transform entries to new format
         new_entries: Dict[str, Dict] = {}  # Use dict to deduplicate by new content_id
@@ -172,7 +175,8 @@ def migrate_fts5_content_ids(db_path: Path) -> Dict[str, int]:
         cursor.execute("DROP TABLE chunks_fts")
 
         logger.info("[FTS5 Migration 001] Creating new chunks_fts table...")
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE VIRTUAL TABLE chunks_fts USING fts5(
                 content_id UNINDEXED,
                 repo UNINDEXED,
@@ -183,23 +187,27 @@ def migrate_fts5_content_ids(db_path: Path) -> Dict[str, int]:
                 symbol_path,
                 tokenize='porter unicode61'
             )
-        """)
+        """
+        )
 
         # Step 4: Insert entries with new content_ids
         logger.info("[FTS5 Migration 001] Inserting entries with new content IDs...")
         for entry in new_entries.values():
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO chunks_fts (content_id, repo, path, text_hash, content, symbol_name, symbol_path)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                entry["content_id"],
-                entry["repo"],
-                entry["path"],
-                entry["text_hash"],
-                entry["content"],
-                entry["symbol_name"],
-                entry["symbol_path"],
-            ))
+            """,
+                (
+                    entry["content_id"],
+                    entry["repo"],
+                    entry["path"],
+                    entry["text_hash"],
+                    entry["content"],
+                    entry["symbol_name"],
+                    entry["symbol_path"],
+                ),
+            )
             stats["entries_migrated"] += 1
 
         conn.commit()
@@ -259,10 +267,7 @@ if __name__ == "__main__":
     """Run migration standalone for testing."""
     import sys
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="[%(levelname)s] %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
     if len(sys.argv) < 2:
         print("Usage: python 001_migrate_fts5_content_ids.py <db_path>")

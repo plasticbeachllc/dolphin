@@ -135,7 +135,9 @@ class ParallelHybridSearch:
                 )
             )
         else:
-            self.vector_search_fn: Optional[Callable[[Any, Any], Any]] = vector_search_fn
+            self.vector_search_fn: Optional[Callable[[Any, Any], Any]] = (
+                vector_search_fn
+            )
 
         if bm25_search_fn is None and bm25_store is not None:
             self.bm25_search_fn = lambda query, top_k, **kwargs: bm25_store.search(
@@ -221,8 +223,12 @@ class ParallelHybridSearch:
 
         # Merge results using reciprocal rank fusion
         # Handle potential exceptions by converting to empty list
-        vec_list: List[SearchResult] = vector_results if not isinstance(vector_results, BaseException) else []
-        bm25_list: List[SearchResult] = bm25_results if not isinstance(bm25_results, BaseException) else []
+        vec_list: List[SearchResult] = (
+            vector_results if not isinstance(vector_results, BaseException) else []
+        )
+        bm25_list: List[SearchResult] = (
+            bm25_results if not isinstance(bm25_results, BaseException) else []
+        )
         merged = self._merge_results(
             vec_list,
             bm25_list,
@@ -253,7 +259,11 @@ class ParallelHybridSearch:
         loop = asyncio.get_event_loop()
         results = await loop.run_in_executor(
             None,
-            lambda: self.vector_search_fn(query_embedding, top_k, **kwargs) if self.vector_search_fn else [],
+            lambda: (
+                self.vector_search_fn(query_embedding, top_k, **kwargs)
+                if self.vector_search_fn
+                else []
+            ),
         )
 
         return [

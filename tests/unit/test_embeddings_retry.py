@@ -4,7 +4,11 @@ import time
 import types
 import pytest
 
-from kb.embeddings.provider import EmbeddingProvider, embed_texts_with_retry, set_default_provider
+from kb.embeddings.provider import (
+    EmbeddingProvider,
+    embed_texts_with_retry,
+    set_default_provider,
+)
 from kb.ingest.error_logging import with_retry
 
 

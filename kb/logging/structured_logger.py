@@ -18,6 +18,7 @@ from enum import IntEnum
 
 try:
     from opentelemetry import trace, context
+
     OTEL_AVAILABLE = True
 except ImportError:
     OTEL_AVAILABLE = False
@@ -46,11 +47,14 @@ class StructuredLogger:
     """
 
     # PII patterns to redact
-    _API_KEY_PATTERN = re.compile(r'\b(sk|api|key|token|secret|password|bearer)[-_][a-zA-Z0-9]{20,}\b', re.IGNORECASE)
-    _ANTHROPIC_KEY_PATTERN = re.compile(r'sk-ant-[a-zA-Z0-9-]{95,}')
-    _OPENAI_KEY_PATTERN = re.compile(r'sk-[a-zA-Z0-9]{48,}')
-    _FILE_PATH_PATTERN = re.compile(r'/(Users|home|root)/[^/\s]+')
-    _WINDOWS_PATH_PATTERN = re.compile(r'C:\\Users\\[^\\]+')
+    _API_KEY_PATTERN = re.compile(
+        r"\b(sk|api|key|token|secret|password|bearer)[-_][a-zA-Z0-9]{20,}\b",
+        re.IGNORECASE,
+    )
+    _ANTHROPIC_KEY_PATTERN = re.compile(r"sk-ant-[a-zA-Z0-9-]{95,}")
+    _OPENAI_KEY_PATTERN = re.compile(r"sk-[a-zA-Z0-9]{48,}")
+    _FILE_PATH_PATTERN = re.compile(r"/(Users|home|root)/[^/\s]+")
+    _WINDOWS_PATH_PATTERN = re.compile(r"C:\\Users\\[^\\]+")
 
     def __init__(self, name: str, default_context: Optional[Dict[str, Any]] = None):
         """Initialize structured logger.
@@ -65,7 +69,7 @@ class StructuredLogger:
         # Configure JSON formatter if not already configured
         if not self.logger.handlers:
             handler = logging.StreamHandler()
-            handler.setFormatter(logging.Formatter('%(message)s'))  # Raw JSON output
+            handler.setFormatter(logging.Formatter("%(message)s"))  # Raw JSON output
             self.logger.addHandler(handler)
             self.logger.setLevel(logging.INFO)
 
@@ -84,8 +88,8 @@ class StructuredLogger:
                 span_context = span.get_span_context()
                 if span_context.is_valid:
                     return {
-                        "trace_id": format(span_context.trace_id, '032x'),
-                        "span_id": format(span_context.span_id, '016x'),
+                        "trace_id": format(span_context.trace_id, "032x"),
+                        "span_id": format(span_context.span_id, "016x"),
                     }
         except Exception:
             # Silently fail if trace extraction fails
@@ -110,14 +114,14 @@ class StructuredLogger:
         """
         if isinstance(value, str):
             # Apply specific patterns FIRST to preserve key prefixes, then generic pattern
-            value = self._ANTHROPIC_KEY_PATTERN.sub('sk-ant-***', value)
-            value = self._OPENAI_KEY_PATTERN.sub('sk-***', value)
+            value = self._ANTHROPIC_KEY_PATTERN.sub("sk-ant-***", value)
+            value = self._OPENAI_KEY_PATTERN.sub("sk-***", value)
             # Apply generic pattern last (won't re-match already sanitized keys)
-            value = self._API_KEY_PATTERN.sub(r'\1-***', value)
+            value = self._API_KEY_PATTERN.sub(r"\1-***", value)
 
             # Redact file paths (remove username)
-            value = self._FILE_PATH_PATTERN.sub(r'/\1/***', value)
-            value = self._WINDOWS_PATH_PATTERN.sub(r'C:\\Users\\***', value)
+            value = self._FILE_PATH_PATTERN.sub(r"/\1/***", value)
+            value = self._WINDOWS_PATH_PATTERN.sub(r"C:\\Users\\***", value)
 
             return value
         elif isinstance(value, dict):
@@ -143,7 +147,9 @@ class StructuredLogger:
         try:
             json.dumps(data)
         except (TypeError, ValueError):
-            return {"error": "Failed to sanitize metadata - circular reference or non-serializable object"}
+            return {
+                "error": "Failed to sanitize metadata - circular reference or non-serializable object"
+            }
 
         sanitized = {}
         for key, value in data.items():
@@ -151,10 +157,17 @@ class StructuredLogger:
             sanitized_value = self._sanitize_value(value)
 
             # Then check if key name itself is sensitive
-            if key.lower() in ('password', 'passwd', 'secret', 'authorization',
-                              'apikey', 'access_token', 'auth_token'):
+            if key.lower() in (
+                "password",
+                "passwd",
+                "secret",
+                "authorization",
+                "apikey",
+                "access_token",
+                "auth_token",
+            ):
                 # These keys should be completely redacted
-                sanitized[key] = '***'
+                sanitized[key] = "***"
             else:
                 # For other keys (including api_key, token), use the sanitized value
                 # which may have already been pattern-matched

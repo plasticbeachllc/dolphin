@@ -107,7 +107,10 @@ class TestRetrievalConstants:
     def test_timeout_hierarchy(self):
         """Test that search timeout is longer than embedding timeout."""
         # Search timeout should be longer since it includes embeddings + search
-        assert RETRIEVAL_PARAMS.SEARCH_TIMEOUT_SECONDS > RETRIEVAL_PARAMS.EMBEDDING_TIMEOUT_SECONDS
+        assert (
+            RETRIEVAL_PARAMS.SEARCH_TIMEOUT_SECONDS
+            > RETRIEVAL_PARAMS.EMBEDDING_TIMEOUT_SECONDS
+        )
 
     def test_create_new_instance(self):
         """Test creating a new RetrievalConstants instance with custom values."""

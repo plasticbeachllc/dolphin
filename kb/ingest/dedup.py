@@ -25,14 +25,20 @@ class ChunkDeduplicator:
     def __init__(self, store: SQLiteMetadataStore):
         self.store = store
 
-    def get_existing_hashes_set(self, repo_id: int, file_id: int, embed_model: str) -> Set[str]:
+    def get_existing_hashes_set(
+        self, repo_id: int, file_id: int, embed_model: str
+    ) -> Set[str]:
         """Return the set of existing text hashes for a file+model.
 
         On failure to query the store, returns an empty set (conservative).
         """
         try:
-            existing = self.store.get_existing_content_hashes_for_file(repo_id, file_id, embed_model)
-            _log.info(f"[DEBUG DEDUP] repo_id={repo_id}, file_id={file_id}, model={embed_model}: found {len(existing)} existing hashes")
+            existing = self.store.get_existing_content_hashes_for_file(
+                repo_id, file_id, embed_model
+            )
+            _log.info(
+                f"[DEBUG DEDUP] repo_id={repo_id}, file_id={file_id}, model={embed_model}: found {len(existing)} existing hashes"
+            )
             if existing and _log.isEnabledFor(logging.DEBUG):
                 _log.debug(f"  First 3 hashes: {list(existing)[:3]}")
             return existing
@@ -65,7 +71,12 @@ class ChunkDeduplicator:
                 try:
                     ch.text_hash = hash_text(ch.text)
                 except Exception as e:
-                    _log.warning("Failed to compute hash for chunk %s-%s: %s", ch.start_line, ch.end_line, e)
+                    _log.warning(
+                        "Failed to compute hash for chunk %s-%s: %s",
+                        ch.start_line,
+                        ch.end_line,
+                        e,
+                    )
                     changed.append(ch)
                     continue
 

@@ -156,7 +156,11 @@ class TypeScriptCallGraphExtractor:
     ) -> GraphNode:
         """Extract class definition node."""
         name_node = node.child_by_field_name("name")
-        class_name = name_node.text.decode("utf8") if (name_node and name_node.text) else "Unknown"
+        class_name = (
+            name_node.text.decode("utf8")
+            if (name_node and name_node.text)
+            else "Unknown"
+        )
 
         # Extract docstring/comment
         docstring = self._extract_comment(node)
@@ -195,14 +199,22 @@ class TypeScriptCallGraphExtractor:
     ) -> GraphNode:
         """Extract function declaration node."""
         name_node = node.child_by_field_name("name")
-        func_name = name_node.text.decode("utf8") if (name_node and name_node.text) else "Unknown"
+        func_name = (
+            name_node.text.decode("utf8")
+            if (name_node and name_node.text)
+            else "Unknown"
+        )
 
         # Build qualified name
         qualified_name = f"{file_path.replace('/', '.').replace('.ts', '').replace('.tsx', '')}.{func_name}"
 
         # Extract parameters for signature
         params_node = node.child_by_field_name("parameters")
-        params_text = params_node.text.decode("utf8") if (params_node and params_node.text) else "()"
+        params_text = (
+            params_node.text.decode("utf8")
+            if (params_node and params_node.text)
+            else "()"
+        )
 
         # Check if async
         is_async = self._is_async(node)
@@ -244,7 +256,11 @@ class TypeScriptCallGraphExtractor:
     ) -> GraphNode:
         """Extract method definition node."""
         name_node = node.child_by_field_name("name")
-        method_name = name_node.text.decode("utf8") if (name_node and name_node.text) else "Unknown"
+        method_name = (
+            name_node.text.decode("utf8")
+            if (name_node and name_node.text)
+            else "Unknown"
+        )
 
         # Build qualified name
         if parent_class:
@@ -254,7 +270,11 @@ class TypeScriptCallGraphExtractor:
 
         # Extract parameters for signature
         params_node = node.child_by_field_name("parameters")
-        params_text = params_node.text.decode("utf8") if (params_node and params_node.text) else "()"
+        params_text = (
+            params_node.text.decode("utf8")
+            if (params_node and params_node.text)
+            else "()"
+        )
 
         # Check if async
         is_async = self._is_async(node)
@@ -312,7 +332,11 @@ class TypeScriptCallGraphExtractor:
 
         # Extract parameters
         params_node = arrow_func_node.child_by_field_name("parameters")
-        params_text = params_node.text.decode("utf8") if (params_node and params_node.text) else "()"
+        params_text = (
+            params_node.text.decode("utf8")
+            if (params_node and params_node.text)
+            else "()"
+        )
 
         # Check if async
         is_async = self._is_async(arrow_func_node)
@@ -355,7 +379,11 @@ class TypeScriptCallGraphExtractor:
     ) -> GraphNode:
         """Extract interface declaration node (TypeScript)."""
         name_node = node.child_by_field_name("name")
-        interface_name = name_node.text.decode("utf8") if (name_node and name_node.text) else "Unknown"
+        interface_name = (
+            name_node.text.decode("utf8")
+            if (name_node and name_node.text)
+            else "Unknown"
+        )
 
         # Build qualified name
         qualified_name = f"{file_path.replace('/', '.').replace('.ts', '').replace('.tsx', '')}.{interface_name}"
@@ -398,7 +426,9 @@ class TypeScriptCallGraphExtractor:
                         visit(child)
                     return
 
-                class_name = name_node.text.decode("utf8") if name_node.text else "Unknown"
+                class_name = (
+                    name_node.text.decode("utf8") if name_node.text else "Unknown"
+                )
                 class_node = next(
                     (
                         n
@@ -424,7 +454,11 @@ class TypeScriptCallGraphExtractor:
                                         "type_identifier",
                                         "identifier",
                                     ):
-                                        interface_name = impl_child.text.decode("utf8") if impl_child.text else "Unknown"
+                                        interface_name = (
+                                            impl_child.text.decode("utf8")
+                                            if impl_child.text
+                                            else "Unknown"
+                                        )
                                         # Find the interface node
                                         interface_node = next(
                                             (
@@ -457,7 +491,11 @@ class TypeScriptCallGraphExtractor:
                                         "identifier",
                                         "member_expression",
                                     ):
-                                        base_class_name = ext_child.text.decode("utf8") if ext_child.text else "Unknown"
+                                        base_class_name = (
+                                            ext_child.text.decode("utf8")
+                                            if ext_child.text
+                                            else "Unknown"
+                                        )
                                         # Find the base class node
                                         base_node = next(
                                             (
@@ -501,7 +539,9 @@ class TypeScriptCallGraphExtractor:
         def_map: Dict[Tuple[int, int], GraphNode] = {
             (node.start_line or 0, node.end_line or 0): node
             for node in definitions
-            if node.node_type in (NodeType.FUNCTION, NodeType.METHOD) and node.start_line is not None and node.end_line is not None
+            if node.node_type in (NodeType.FUNCTION, NodeType.METHOD)
+            and node.start_line is not None
+            and node.end_line is not None
         }
 
         def visit(node: Node):
@@ -562,7 +602,11 @@ class TypeScriptCallGraphExtractor:
         elif node.type == "member_expression":
             # For method calls like obj.method()
             prop_node = node.child_by_field_name("property")
-            return prop_node.text.decode("utf8") if (prop_node and prop_node.text) else "Unknown"
+            return (
+                prop_node.text.decode("utf8")
+                if (prop_node and prop_node.text)
+                else "Unknown"
+            )
         return "Unknown"
 
     def _resolve_callee(

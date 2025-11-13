@@ -22,7 +22,7 @@ class TestStructuredLogger:
         # Capture output
         log_output = StringIO()
         handler = logging.StreamHandler(log_output)
-        handler.setFormatter(logging.Formatter('%(message)s'))
+        handler.setFormatter(logging.Formatter("%(message)s"))
 
         # Clear any existing handlers and add our test handler
         logger.logger.handlers.clear()
@@ -37,7 +37,7 @@ class TestStructuredLogger:
     def _get_log_entry(self, logger):
         """Get the last log entry as a dict."""
         output = logger._test_output.getvalue()
-        lines = output.strip().split('\n')
+        lines = output.strip().split("\n")
         if lines and lines[-1]:
             return json.loads(lines[-1])
         return None
@@ -114,12 +114,14 @@ class TestStructuredLogger:
 
     def test_default_context(self):
         """Test logger with default context."""
-        logger = StructuredLogger("test.context", {"service": "test-service", "version": "1.0"})
+        logger = StructuredLogger(
+            "test.context", {"service": "test-service", "version": "1.0"}
+        )
 
         # Capture output
         log_output = StringIO()
         handler = logging.StreamHandler(log_output)
-        handler.setFormatter(logging.Formatter('%(message)s'))
+        handler.setFormatter(logging.Formatter("%(message)s"))
         logger.logger.handlers.clear()
         logger.logger.addHandler(handler)
         logger.logger.setLevel(logging.DEBUG)
@@ -139,7 +141,7 @@ class TestStructuredLogger:
         # Capture child output
         log_output = StringIO()
         handler = logging.StreamHandler(log_output)
-        handler.setFormatter(logging.Formatter('%(message)s'))
+        handler.setFormatter(logging.Formatter("%(message)s"))
         child.logger.handlers.clear()
         child.logger.addHandler(handler)
         child.logger.setLevel(logging.DEBUG)
@@ -160,7 +162,7 @@ class TestStructuredLogger:
         # Capture output
         log_output = StringIO()
         handler = logging.StreamHandler(log_output)
-        handler.setFormatter(logging.Formatter('%(message)s'))
+        handler.setFormatter(logging.Formatter("%(message)s"))
         parent.logger.handlers.clear()
         parent.logger.addHandler(handler)
         parent.logger.setLevel(logging.DEBUG)
@@ -219,20 +221,19 @@ class TestStructuredLogger:
 
         # Should be parseable as ISO format
         from datetime import datetime
+
         ts = datetime.fromisoformat(entry["timestamp"].rstrip("Z"))
         assert ts is not None
 
     def test_context_with_nested_dict(self, logger):
         """Test logging with nested context dict."""
-        logger.info("Test", {
-            "user": {
-                "id": 123,
-                "name": "Test User"
+        logger.info(
+            "Test",
+            {
+                "user": {"id": 123, "name": "Test User"},
+                "metadata": {"tags": ["tag1", "tag2"]},
             },
-            "metadata": {
-                "tags": ["tag1", "tag2"]
-            }
-        })
+        )
 
         entry = self._get_log_entry(logger)
         assert entry["context"]["user"]["id"] == 123
@@ -257,8 +258,8 @@ class TestStructuredLogger:
 
     # OpenTelemetry integration tests
 
-    @patch('kb.logging.structured_logger.OTEL_AVAILABLE', True)
-    @patch('kb.logging.structured_logger.trace')
+    @patch("kb.logging.structured_logger.OTEL_AVAILABLE", True)
+    @patch("kb.logging.structured_logger.trace")
     def test_otel_trace_context_extraction(self, mock_trace, logger):
         """Test OpenTelemetry trace context extraction."""
         # Mock span with valid context
@@ -277,10 +278,10 @@ class TestStructuredLogger:
         assert "trace_id" in entry
         assert "span_id" in entry
         assert len(entry["trace_id"]) == 32  # 128-bit trace ID as hex
-        assert len(entry["span_id"]) == 16   # 64-bit span ID as hex
+        assert len(entry["span_id"]) == 16  # 64-bit span ID as hex
 
-    @patch('kb.logging.structured_logger.OTEL_AVAILABLE', True)
-    @patch('kb.logging.structured_logger.trace')
+    @patch("kb.logging.structured_logger.OTEL_AVAILABLE", True)
+    @patch("kb.logging.structured_logger.trace")
     def test_otel_no_active_span(self, mock_trace, logger):
         """Test logging when no active span exists."""
         mock_trace.get_current_span.return_value = None
@@ -334,12 +335,15 @@ class TestStructuredLogger:
 
     def test_pii_sanitization_sensitive_keys(self, logger):
         """Test that sensitive keys are completely redacted."""
-        logger.info("Test", {
-            "password": "super_secret",
-            "api_key": "sk-" + "a" * 48,
-            "token": "token_abc123xyz456789012345",
-            "secret": "confidential"
-        })
+        logger.info(
+            "Test",
+            {
+                "password": "super_secret",
+                "api_key": "sk-" + "a" * 48,
+                "token": "token_abc123xyz456789012345",
+                "secret": "confidential",
+            },
+        )
 
         entry = self._get_log_entry(logger)
         assert entry["context"]["password"] == "***"
@@ -349,16 +353,22 @@ class TestStructuredLogger:
 
     def test_pii_sanitization_nested_values(self, logger):
         """Test PII sanitization in nested structures."""
-        logger.info("Test", {
-            "user": {
-                "name": "John",
-                "api_key": "sk-" + "a" * 48,
-                "home": "/Users/john/workspace"
+        logger.info(
+            "Test",
+            {
+                "user": {
+                    "name": "John",
+                    "api_key": "sk-" + "a" * 48,
+                    "home": "/Users/john/workspace",
+                },
+                "config": {
+                    "tokens": [
+                        "token_abc123xyz456789012345",
+                        "another_token_xyz789012345678",
+                    ]
+                },
             },
-            "config": {
-                "tokens": ["token_abc123xyz456789012345", "another_token_xyz789012345678"]
-            }
-        })
+        )
 
         entry = self._get_log_entry(logger)
         assert entry["context"]["user"]["name"] == "John"
@@ -381,6 +391,7 @@ class TestStructuredLogger:
 
     def test_non_serializable_object(self, logger):
         """Test handling of non-serializable objects."""
+
         class CustomObject:
             pass
 
@@ -393,8 +404,10 @@ class TestStructuredLogger:
 
     def test_full_feature_integration(self, logger):
         """Test all features working together."""
-        with patch('kb.logging.structured_logger.OTEL_AVAILABLE', True), \
-             patch('kb.logging.structured_logger.trace') as mock_trace:
+        with (
+            patch("kb.logging.structured_logger.OTEL_AVAILABLE", True),
+            patch("kb.logging.structured_logger.trace") as mock_trace,
+        ):
 
             # Setup OpenTelemetry mock
             mock_span = Mock()
@@ -410,11 +423,15 @@ class TestStructuredLogger:
             try:
                 raise ValueError("Test error")
             except ValueError as e:
-                logger.error("Error with PII", {
-                    "api_key": "sk-" + "a" * 48,
-                    "path": "/Users/john/file.txt",
-                    "data": {"nested": "value"}
-                }, error=e)
+                logger.error(
+                    "Error with PII",
+                    {
+                        "api_key": "sk-" + "a" * 48,
+                        "path": "/Users/john/file.txt",
+                        "data": {"nested": "value"},
+                    },
+                    error=e,
+                )
 
             entry = self._get_log_entry(logger)
 

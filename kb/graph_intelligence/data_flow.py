@@ -122,7 +122,9 @@ class DataFlowAnalyzer:
         def_map: Dict[Tuple[int, int], GraphNode] = {
             (node.start_line or 0, node.end_line or 0): node
             for node in definitions
-            if node.node_type in (NodeType.FUNCTION, NodeType.METHOD) and node.start_line is not None and node.end_line is not None
+            if node.node_type in (NodeType.FUNCTION, NodeType.METHOD)
+            and node.start_line is not None
+            and node.end_line is not None
         }
 
         # Walk the tree to find assignments and identifiers
@@ -195,7 +197,9 @@ class DataFlowAnalyzer:
         def_map: Dict[Tuple[int, int], GraphNode] = {
             (node.start_line or 0, node.end_line or 0): node
             for node in definitions
-            if node.node_type in (NodeType.FUNCTION, NodeType.METHOD) and node.start_line is not None and node.end_line is not None
+            if node.node_type in (NodeType.FUNCTION, NodeType.METHOD)
+            and node.start_line is not None
+            and node.end_line is not None
         }
 
         # Walk the tree to find declarations and identifiers

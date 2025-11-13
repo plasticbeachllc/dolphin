@@ -155,8 +155,8 @@ def _extract_with_intelligence(
 
 def store_graph_data(
     graph_store: GraphStore,
-    nodes: list[GraphNode],
-    edges: list[GraphEdge],
+    nodes: list[ChunkerGraphNode],
+    edges: list[ChunkerGraphEdge],
     *,
     repo_id: int,
     file_id: int,

@@ -83,15 +83,21 @@ class TestSnapshotTracking:
             time.sleep(1)
 
         # Check if task completed successfully
-        assert task_completed, f"Task did not complete within timeout. Final status: {final_status}"
-        assert final_status == "completed", f"Task failed with status: {final_status}, error: {status_data.get('error')}"
+        assert (
+            task_completed
+        ), f"Task did not complete within timeout. Final status: {final_status}"
+        assert (
+            final_status == "completed"
+        ), f"Task failed with status: {final_status}, error: {status_data.get('error')}"
 
         # Add small delay to ensure database commits are visible
         time.sleep(0.5)
 
         # Verify snapshot was created
         file_record = sql_store.get_file_by_path(repo["id"], "sample.py")
-        assert file_record is not None, f"File record not found after successful indexing. Task status: {status_data}"
+        assert (
+            file_record is not None
+        ), f"File record not found after successful indexing. Task status: {status_data}"
 
         snapshot = sql_store.get_file_snapshot(file_record["id"])
         assert snapshot is not None
