@@ -1,8 +1,9 @@
-"""Tests for structured logger."""
+"""Tests for structured logger with OpenTelemetry and PII sanitization."""
 
 import json
 import logging
 from io import StringIO
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -253,3 +254,174 @@ class TestStructuredLogger:
         assert entry is not None
         assert entry["message"] == "Test without context"
         assert isinstance(entry["context"], dict)
+
+    # OpenTelemetry integration tests
+
+    @patch('kb.logging.structured_logger.OTEL_AVAILABLE', True)
+    @patch('kb.logging.structured_logger.trace')
+    def test_otel_trace_context_extraction(self, mock_trace, logger):
+        """Test OpenTelemetry trace context extraction."""
+        # Mock span with valid context
+        mock_span = Mock()
+        mock_span.is_recording.return_value = True
+        mock_span_context = Mock()
+        mock_span_context.is_valid = True
+        mock_span_context.trace_id = 123456789012345678901234567890123456
+        mock_span_context.span_id = 1234567890123456
+        mock_span.get_span_context.return_value = mock_span_context
+        mock_trace.get_current_span.return_value = mock_span
+
+        logger.info("Test with trace")
+
+        entry = self._get_log_entry(logger)
+        assert "trace_id" in entry
+        assert "span_id" in entry
+        assert len(entry["trace_id"]) == 32  # 128-bit trace ID as hex
+        assert len(entry["span_id"]) == 16   # 64-bit span ID as hex
+
+    @patch('kb.logging.structured_logger.OTEL_AVAILABLE', True)
+    @patch('kb.logging.structured_logger.trace')
+    def test_otel_no_active_span(self, mock_trace, logger):
+        """Test logging when no active span exists."""
+        mock_trace.get_current_span.return_value = None
+
+        logger.info("Test without span")
+
+        entry = self._get_log_entry(logger)
+        assert "trace_id" not in entry
+        assert "span_id" not in entry
+
+    # PII sanitization tests
+
+    def test_pii_sanitization_anthropic_key(self, logger):
+        """Test Anthropic API key sanitization."""
+        logger.info("Test", {"api_key": "sk-ant-api03-" + "a" * 95})
+
+        entry = self._get_log_entry(logger)
+        assert "sk-ant-***" in entry["context"]["api_key"]
+        assert "sk-ant-api03" not in entry["context"]["api_key"]
+
+    def test_pii_sanitization_openai_key(self, logger):
+        """Test OpenAI API key sanitization."""
+        logger.info("Test", {"key": "sk-" + "a" * 48})
+
+        entry = self._get_log_entry(logger)
+        assert entry["context"]["key"] == "sk-***"
+
+    def test_pii_sanitization_generic_token(self, logger):
+        """Test generic token sanitization."""
+        logger.info("Test", {"auth": "Bearer token_abc123xyz456789012345"})
+
+        entry = self._get_log_entry(logger)
+        assert "token_abc123xyz456789012345" not in entry["context"]["auth"]
+        assert "token-***" in entry["context"]["auth"]
+
+    def test_pii_sanitization_file_paths_unix(self, logger):
+        """Test Unix file path sanitization."""
+        logger.info("Test", {"path": "/Users/john/documents/secret.txt"})
+
+        entry = self._get_log_entry(logger)
+        assert "/Users/***" in entry["context"]["path"]
+        assert "john" not in entry["context"]["path"]
+
+    def test_pii_sanitization_file_paths_windows(self, logger):
+        """Test Windows file path sanitization."""
+        logger.info("Test", {"path": r"C:\Users\jane\documents\file.txt"})
+
+        entry = self._get_log_entry(logger)
+        assert r"C:\Users\***" in entry["context"]["path"]
+        assert "jane" not in entry["context"]["path"]
+
+    def test_pii_sanitization_sensitive_keys(self, logger):
+        """Test that sensitive keys are completely redacted."""
+        logger.info("Test", {
+            "password": "super_secret",
+            "api_key": "sk-" + "a" * 48,
+            "token": "token_abc123xyz456789012345",
+            "secret": "confidential"
+        })
+
+        entry = self._get_log_entry(logger)
+        assert entry["context"]["password"] == "***"
+        assert entry["context"]["api_key"] == "sk-***"  # Pattern-based sanitization
+        assert "token-***" in entry["context"]["token"]  # Pattern-based sanitization
+        assert entry["context"]["secret"] == "***"  # Key-based redaction
+
+    def test_pii_sanitization_nested_values(self, logger):
+        """Test PII sanitization in nested structures."""
+        logger.info("Test", {
+            "user": {
+                "name": "John",
+                "api_key": "sk-" + "a" * 48,
+                "home": "/Users/john/workspace"
+            },
+            "config": {
+                "tokens": ["token_abc123xyz456789012345", "another_token_xyz789012345678"]
+            }
+        })
+
+        entry = self._get_log_entry(logger)
+        assert entry["context"]["user"]["name"] == "John"
+        assert entry["context"]["user"]["api_key"] == "sk-***"
+        assert "/Users/***" in entry["context"]["user"]["home"]
+        assert "token-***" in entry["context"]["config"]["tokens"][0]
+
+    # Circular reference detection tests
+
+    def test_circular_reference_detection(self, logger):
+        """Test that circular references are detected and handled."""
+        circular = {"key": "value"}
+        circular["self"] = circular
+
+        logger.info("Test", circular)
+
+        entry = self._get_log_entry(logger)
+        assert "error" in entry["context"]
+        assert "circular reference" in entry["context"]["error"].lower()
+
+    def test_non_serializable_object(self, logger):
+        """Test handling of non-serializable objects."""
+        class CustomObject:
+            pass
+
+        logger.info("Test", {"obj": CustomObject()})
+
+        entry = self._get_log_entry(logger)
+        assert "error" in entry["context"]
+
+    # Integration test
+
+    def test_full_feature_integration(self, logger):
+        """Test all features working together."""
+        with patch('kb.logging.structured_logger.OTEL_AVAILABLE', True), \
+             patch('kb.logging.structured_logger.trace') as mock_trace:
+
+            # Setup OpenTelemetry mock
+            mock_span = Mock()
+            mock_span.is_recording.return_value = True
+            mock_span_context = Mock()
+            mock_span_context.is_valid = True
+            mock_span_context.trace_id = 123456789012345678901234567890123456
+            mock_span_context.span_id = 1234567890123456
+            mock_span.get_span_context.return_value = mock_span_context
+            mock_trace.get_current_span.return_value = mock_span
+
+            # Log with PII
+            try:
+                raise ValueError("Test error")
+            except ValueError as e:
+                logger.error("Error with PII", {
+                    "api_key": "sk-" + "a" * 48,
+                    "path": "/Users/john/file.txt",
+                    "data": {"nested": "value"}
+                }, error=e)
+
+            entry = self._get_log_entry(logger)
+
+            # Check all features
+            assert "trace_id" in entry  # OpenTelemetry
+            assert "span_id" in entry
+            assert entry["context"]["api_key"] == "sk-***"  # PII sanitization
+            assert "/Users/***" in entry["context"]["path"]
+            assert entry["error"]["type"] == "ValueError"  # Error tracking
+            assert entry["context"]["data"]["nested"] == "value"  # Nested context
