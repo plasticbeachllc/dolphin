@@ -5,8 +5,14 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from kb.api.app import (SearchRequest, app, reset_search_backend, reset_stores,
-                        set_search_backend, set_stores)
+from kb.api.app import (
+    SearchRequest,
+    app,
+    reset_search_backend,
+    reset_stores,
+    set_search_backend,
+    set_stores,
+)
 
 
 class MockSearchBackend:

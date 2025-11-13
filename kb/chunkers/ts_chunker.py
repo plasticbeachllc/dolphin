@@ -546,8 +546,8 @@ def extract_graph_data(
     Returns:
         Tuple of (nodes, edges) for graph database insertion
     """
-    nodes = []
-    edges = []
+    nodes: list[GraphNode] = []
+    edges: list[GraphEdge] = []
 
     lang_key = lang.lower()
     if lang_key not in SUPPORTED_LANGUAGES:
@@ -655,7 +655,7 @@ def _extract_ts_edges(root, source: str, edges: List[GraphEdge]):
             func_name = node_text(name_node) if name_node else None
 
             if current_context:
-                qualified = (
+                qualified: Optional[str] = (
                     f"{current_context}.{func_name}" if func_name else current_context
                 )
             else:
@@ -731,7 +731,7 @@ def _extract_ts_edges(root, source: str, edges: List[GraphEdge]):
         # Interface extends
         if ntype == "interface_declaration":
             name_node = node.child_by_field_name("name")
-            interface_name = node_text(name_node) if name_node else None
+            interface_name: Optional[str] = node_text(name_node) if name_node else None
 
             # Check for extends clause
             for child in node.children:

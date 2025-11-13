@@ -15,7 +15,7 @@ from typing import Any, Mapping
 try:
     import tomllib  # Python 3.11+
 except ImportError:
-    import tomli as tomllib  # type: ignore[import-not-found]
+    import tomli as tomllib  # type: ignore[import-not-found,no-redef]
 
 __all__ = ["RepoChunkingConfig", "load_repo_chunking_config"]
 

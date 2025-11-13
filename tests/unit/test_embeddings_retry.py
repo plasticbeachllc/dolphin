@@ -5,8 +5,11 @@ import types
 
 import pytest
 
-from kb.embeddings.provider import (EmbeddingProvider, _default_provider,
-                                    embed_texts_with_retry)
+from kb.embeddings.provider import (
+    EmbeddingProvider,
+    _default_provider,
+    embed_texts_with_retry,
+)
 from kb.ingest.error_logging import with_retry
 
 

@@ -2,9 +2,12 @@
 
 import pytest
 
-from kb.retrieval.rankers import (create_fusion_function,
-                                  maximal_marginal_relevance,
-                                  reciprocal_rank_fusion, weighted_fusion)
+from kb.retrieval.rankers import (
+    create_fusion_function,
+    maximal_marginal_relevance,
+    reciprocal_rank_fusion,
+    weighted_fusion,
+)
 
 
 class TestReciprocalRankFusion:

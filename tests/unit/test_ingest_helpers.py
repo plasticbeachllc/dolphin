@@ -6,10 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from kb.ingest._helpers import (build_desired_map, get_all_tracked_files,
-                                git_changed_files_deleted,
-                                git_changed_files_modified_added,
-                                representative_text_for_hash)
+from kb.ingest._helpers import (
+    build_desired_map,
+    get_all_tracked_files,
+    git_changed_files_deleted,
+    git_changed_files_modified_added,
+    representative_text_for_hash,
+)
 
 
 # Simple test chunk class

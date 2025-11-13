@@ -5,9 +5,13 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from kb.embeddings.provider import (EmbeddingProvider, OpenAIEmbeddingProvider,
-                                    create_provider, embed_texts,
-                                    set_default_provider)
+from kb.embeddings.provider import (
+    EmbeddingProvider,
+    OpenAIEmbeddingProvider,
+    create_provider,
+    embed_texts,
+    set_default_provider,
+)
 
 
 class TestEmbeddingProvider:

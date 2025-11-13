@@ -201,9 +201,13 @@ class TypeGraphExtractor:
 
         for child in bases_node.children:
             if child.type == "identifier":
-                base_classes.append(child.text.decode("utf8"))
+                text = child.text
+                if text:
+                    base_classes.append(text.decode("utf8"))
             elif child.type == "attribute":
                 # Handle qualified names like module.ClassName
-                base_classes.append(child.text.decode("utf8"))
+                text = child.text
+                if text:
+                    base_classes.append(text.decode("utf8"))
 
         return base_classes

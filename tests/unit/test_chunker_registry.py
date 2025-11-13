@@ -4,8 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from kb.chunkers import (Chunk, RepoChunkingConfig, chunk_file,
-                         detect_language_from_extension, get_chunker)
+from kb.chunkers import (
+    Chunk,
+    RepoChunkingConfig,
+    chunk_file,
+    detect_language_from_extension,
+    get_chunker,
+)
 
 
 class TestLanguageDetection:

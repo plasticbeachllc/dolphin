@@ -11,9 +11,12 @@ Tiktoken is required for all tests (enforced by setup_tiktoken fixture).
 
 import pytest
 
-from kb.chunkers.token_utils import (count_tokens, get_tokenizer,
-                                     window_text_by_tokens,
-                                     window_token_ranges)
+from kb.chunkers.token_utils import (
+    count_tokens,
+    get_tokenizer,
+    window_text_by_tokens,
+    window_token_ranges,
+)
 
 
 class TestRealTiktokenBehavior:

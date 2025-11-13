@@ -4,8 +4,10 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
-from kb.retrieval.graph_context import (GraphContextEnricher,
-                                        format_graph_context_for_llm)
+from kb.retrieval.graph_context import (
+    GraphContextEnricher,
+    format_graph_context_for_llm,
+)
 
 
 class TestGraphContextEnricher:

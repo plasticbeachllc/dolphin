@@ -4,8 +4,7 @@ import textwrap
 
 import pytest
 
-from kb.chunkers.token_utils import (count_tokens, get_tokenizer,
-                                     window_text_by_tokens)
+from kb.chunkers.token_utils import count_tokens, get_tokenizer, window_text_by_tokens
 
 
 class TestTokenUtilities:

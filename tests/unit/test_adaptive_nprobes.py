@@ -5,10 +5,14 @@ import time
 import pytest
 
 from kb.retrieval.ann_tuning import ANNParams
-from kb.search.adaptive_nprobes import (AdaptiveNProbes, AdaptiveState,
-                                        GlobalAdaptiveNProbes, SearchMetrics,
-                                        get_adaptive_params,
-                                        record_search_performance)
+from kb.search.adaptive_nprobes import (
+    AdaptiveNProbes,
+    AdaptiveState,
+    GlobalAdaptiveNProbes,
+    SearchMetrics,
+    get_adaptive_params,
+    record_search_performance,
+)
 
 
 class TestSearchMetrics:

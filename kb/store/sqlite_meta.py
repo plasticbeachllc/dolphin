@@ -428,7 +428,8 @@ class SQLiteMetadataStore:
                 (repo_id, commit_sha, branch, embed_model),
             )
             conn.commit()
-            return int(cur.lastrowid)
+            lastrowid = cur.lastrowid
+            return int(lastrowid) if lastrowid is not None else 0
 
     def set_session_status(
         self, session_id: int, status: str, notes: str | None = None
@@ -578,7 +579,8 @@ class SQLiteMetadataStore:
                     size_bytes,
                 ),
             )
-            file_id = int(cur.lastrowid)
+            lastrowid = cur.lastrowid
+            file_id = int(lastrowid) if lastrowid is not None else 0
             if file_id == 0:
                 cur.execute(
                     "SELECT id FROM files WHERE repo_id = ? AND path = ?",
@@ -739,7 +741,11 @@ class SQLiteMetadataStore:
 
                 desired_map: dict[tuple[int, int], tuple[Any, Any, Any]] = {}
                 for d in desired_locations:
-                    desired_map[(int(d["start_line"]), int(d["end_line"]))] = (
+                    start = d["start_line"]
+                    end = d["end_line"]
+                    if not isinstance(start, int) or not isinstance(end, int):
+                        continue
+                    desired_map[(int(start), int(end))] = (
                         d.get("symbol_kind"),
                         d.get("symbol_name"),
                         d.get("symbol_path"),
@@ -1090,9 +1096,10 @@ class SQLiteMetadataStore:
                     ORDER BY rank
                     LIMIT ?
                 """
-                params.append(top_k)
+                params_list: list[str | int] = list(params)
+                params_list.append(top_k)
 
-                cur.execute(sql, tuple(params))
+                cur.execute(sql, tuple(params_list))
                 rows = cur.fetchall() or []
 
                 # Convert to list of dicts
@@ -1337,29 +1344,34 @@ class SQLiteMetadataStore:
 
         # Count files
         cur.execute("SELECT COUNT(*) FROM files WHERE repo_id = ?", (repo_id,))
-        counts["files"] = cur.fetchone()[0]
+        row = cur.fetchone()
+        counts["files"] = int(row[0]) if row else 0
 
         # Count chunk content
         cur.execute("SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,))
-        counts["chunk_content"] = cur.fetchone()[0]
+        row = cur.fetchone()
+        counts["chunk_content"] = int(row[0]) if row else 0
 
         # Count chunk locations
         cur.execute(
             """
-            SELECT COUNT(*) FROM chunk_locations 
+            SELECT COUNT(*) FROM chunk_locations
             WHERE content_id IN (SELECT id FROM chunk_content WHERE repo_id = ?)
         """,
             (repo_id,),
         )
-        counts["chunk_locations"] = cur.fetchone()[0]
+        row = cur.fetchone()
+        counts["chunk_locations"] = int(row[0]) if row else 0
 
         # Count FTS entries
         cur.execute("SELECT COUNT(*) FROM chunks_fts WHERE repo = ?", (repo_name,))
-        counts["fts_entries"] = cur.fetchone()[0]
+        row = cur.fetchone()
+        counts["fts_entries"] = int(row[0]) if row else 0
 
         # Count sessions
         cur.execute("SELECT COUNT(*) FROM sessions WHERE repo_id = ?", (repo_id,))
-        counts["sessions"] = cur.fetchone()[0]
+        row = cur.fetchone()
+        counts["sessions"] = int(row[0]) if row else 0
 
         return counts
 
@@ -1652,18 +1664,21 @@ class SQLiteMetadataStore:
         with self._connect() as conn, closing(conn.cursor()) as cur:
             # Get metadata statistics
             cur.execute("SELECT COUNT(*) FROM files WHERE repo_id = ?", (repo_id,))
-            metadata_files = cur.fetchone()[0]
+            row = cur.fetchone()
+            metadata_files = int(row[0]) if row else 0
 
             cur.execute(
                 "SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,)
             )
-            metadata_chunks = cur.fetchone()[0]
+            row = cur.fetchone()
+            metadata_chunks = int(row[0]) if row else 0
 
             cur.execute(
                 "SELECT COUNT(*) FROM chunk_locations WHERE content_id IN (SELECT id FROM chunk_content WHERE repo_id = ?)",
                 (repo_id,),
             )
-            metadata_locations = cur.fetchone()[0]
+            row = cur.fetchone()
+            metadata_locations = int(row[0]) if row else 0
 
             # Check for orphaned chunk_locations
             cur.execute(
@@ -1673,7 +1688,8 @@ class SQLiteMetadataStore:
                 WHERE cc.id IS NULL
             """
             )
-            orphaned_locations = cur.fetchone()[0]
+            row = cur.fetchone()
+            orphaned_locations = int(row[0]) if row else 0
 
             if orphaned_locations > 0:
                 consistency_report["valid"] = False
@@ -1688,7 +1704,8 @@ class SQLiteMetadataStore:
                 WHERE content_id NOT IN (SELECT id FROM chunk_content)
             """
             )
-            orphaned_fts = cur.fetchone()[0]
+            row = cur.fetchone()
+            orphaned_fts = int(row[0]) if row else 0
 
             if orphaned_fts > 0:
                 consistency_report["valid"] = False
@@ -1704,7 +1721,8 @@ class SQLiteMetadataStore:
                 WHERE f.id IS NULL
             """
             )
-            orphaned_content = cur.fetchone()[0]
+            row = cur.fetchone()
+            orphaned_content = int(row[0]) if row else 0
 
             if orphaned_content > 0:
                 consistency_report["valid"] = False
@@ -1720,7 +1738,8 @@ class SQLiteMetadataStore:
                 WHERE r.id IS NULL
             """
             )
-            orphaned_files = cur.fetchone()[0]
+            row = cur.fetchone()
+            orphaned_files = int(row[0]) if row else 0
 
             if orphaned_files > 0:
                 consistency_report["valid"] = False
@@ -1776,7 +1795,8 @@ class SQLiteMetadataStore:
                     WHERE cc.id IS NULL
                 """
                 )
-                orphaned_count = cur.fetchone()[0]
+                row = cur.fetchone()
+                orphaned_count = int(row[0]) if row else 0
 
                 if orphaned_count > 0:
                     cur.execute(
@@ -1800,7 +1820,8 @@ class SQLiteMetadataStore:
                     WHERE content_id NOT IN (SELECT id FROM chunk_content)
                 """
                 )
-                orphaned_fts_count = cur.fetchone()[0]
+                row = cur.fetchone()
+                orphaned_fts_count = int(row[0]) if row else 0
 
                 if orphaned_fts_count > 0:
                     cur.execute(
@@ -1821,7 +1842,8 @@ class SQLiteMetadataStore:
                     WHERE f.id IS NULL
                 """
                 )
-                orphaned_content_count = cur.fetchone()[0]
+                row = cur.fetchone()
+                orphaned_content_count = int(row[0]) if row else 0
 
                 if orphaned_content_count > 0:
                     # First delete FTS entries for this content
@@ -1871,7 +1893,8 @@ class SQLiteMetadataStore:
                     WHERE r.id IS NULL
                 """
                 )
-                orphaned_files_count = cur.fetchone()[0]
+                row = cur.fetchone()
+                orphaned_files_count = int(row[0]) if row else 0
 
                 if orphaned_files_count > 0:
                     # Cascade delete: FTS -> locations -> content -> files
@@ -1958,9 +1981,9 @@ class SQLiteMetadataStore:
             """,
                 (repo_id, file_path, change_type, old_path),
             )
-            change_id = cur.lastrowid
+            lastrowid = cur.lastrowid
             conn.commit()
-            return change_id
+            return int(lastrowid) if lastrowid is not None else 0
 
     def get_pending_changes(
         self, repo_id: int | None = None, limit: int = 1000

@@ -323,7 +323,7 @@ def extract_graph_data(
         Tuple of (nodes, edges) for graph database insertion
     """
     nodes = []
-    edges = []
+    edges: list[GraphEdge] = []
 
     # Create node for the component itself
     nodes.append(

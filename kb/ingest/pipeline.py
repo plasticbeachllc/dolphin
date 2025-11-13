@@ -9,22 +9,27 @@ from typing import Any, Dict, List
 from pathspec import PathSpec
 
 from ..chunkers.registry import chunk_file as chunk_file_with_config
-from ..chunkers.registry import (detect_language_from_extension,
-                                 get_chunker_for_file)
+from ..chunkers.registry import detect_language_from_extension, get_chunker_for_file
 from ..config import KBConfig
 from ..embeddings.provider import embed_texts_with_retry
 from ..graph_intelligence.graph_manager import GraphManager
 from ..hashing import hash_text
 from ..ignores import build_ignore_set, load_repo_ignores
-from ..ingest._helpers import (build_desired_map, get_all_tracked_files,
-                               git_changed_files_deleted,
-                               git_changed_files_modified_added,
-                               representative_text_for_hash)
+from ..ingest._helpers import (
+    build_desired_map,
+    get_all_tracked_files,
+    git_changed_files_deleted,
+    git_changed_files_modified_added,
+    representative_text_for_hash,
+)
 from ..ingest.dedup import ChunkDeduplicator
 from ..ingest.error_logging import ErrorLogger
-from ..ingest.graph_helpers import (cleanup_graph_for_file,
-                                    cleanup_graph_for_repo,
-                                    extract_graph_from_file, store_graph_data)
+from ..ingest.graph_helpers import (
+    cleanup_graph_for_file,
+    cleanup_graph_for_repo,
+    extract_graph_from_file,
+    store_graph_data,
+)
 from ..ingest.scanner import FileCandidate, scan_repo
 from ..store import LanceDBStore, SQLiteMetadataStore
 from ..store.graph_store import GraphStore

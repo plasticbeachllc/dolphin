@@ -313,7 +313,7 @@ def create_cache(
 
     if redis_url and enabled:
         try:
-            import redis
+            import redis  # type: ignore[import-not-found]
 
             redis_client = redis.from_url(redis_url)
             # Test connection

@@ -94,6 +94,8 @@ check-python:
 	@echo "   ✅ black formatting passed"
 	@uv run mypy kb/ || (echo "   ❌ mypy type checking failed"; exit 1)
 	@echo "   ✅ mypy type checking passed"
+	@uv run pylint kb/ || (echo "   ❌ pylint linting failed"; exit 1)
+	@echo "   ✅ pylint linting passed"
 
 # Check TypeScript code quality
 check-typescript:

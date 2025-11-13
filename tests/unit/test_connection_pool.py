@@ -7,9 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from kb.store.connection_pool import (SQLiteConnectionPool,
-                                      close_connection_pool,
-                                      get_connection_pool)
+from kb.store.connection_pool import (
+    SQLiteConnectionPool,
+    close_connection_pool,
+    get_connection_pool,
+)
 
 
 class TestSQLiteConnectionPool:

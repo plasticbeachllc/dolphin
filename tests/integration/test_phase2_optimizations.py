@@ -13,12 +13,10 @@ import pytest
 
 from kb.cache.ast_cache import ASTCache
 from kb.chunkers.types import Chunk
-from kb.embeddings.adaptive_batching import (AdaptiveBatcher,
-                                             create_adaptive_batches)
+from kb.embeddings.adaptive_batching import AdaptiveBatcher, create_adaptive_batches
 from kb.hashing import hash_text
 from kb.ingest.incremental import IncrementalIndexer, compute_chunk_diff
-from kb.ingest.parallel_parser import (ParallelChunkCache, ParseJob,
-                                       parse_files_parallel)
+from kb.ingest.parallel_parser import ParallelChunkCache, ParseJob, parse_files_parallel
 from kb.ingest.parallel_scanner import scan_repo_parallel
 
 

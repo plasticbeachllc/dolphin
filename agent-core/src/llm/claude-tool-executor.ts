@@ -139,14 +139,14 @@ export class ClaudeToolExecutor {
       // Accumulate usage
       totalUsage.inputTokens += response.usage.input_tokens;
       totalUsage.outputTokens += response.usage.output_tokens;
-      if (response.usage.cache_read_input_tokens) {
-        totalUsage.cacheReadTokens += response.usage.cache_read_input_tokens;
+      if ((response.usage as any).cache_read_input_tokens) {
+        totalUsage.cacheReadTokens += (response.usage as any).cache_read_input_tokens;
       }
-      if (response.usage.cache_creation_input_tokens) {
-        totalUsage.cacheWriteTokens += response.usage.cache_creation_input_tokens;
+      if ((response.usage as any).cache_creation_input_tokens) {
+        totalUsage.cacheWriteTokens += (response.usage as any).cache_creation_input_tokens;
       }
 
-      stopReason = response.stop_reason;
+      stopReason = response.stop_reason || undefined;
 
       // Extract tool calls from response
       const toolCalls = extractToolCalls(response.content);
@@ -177,7 +177,7 @@ export class ClaudeToolExecutor {
       // Add tool results as user message
       messages.push({
         role: "user",
-        content: toolResults,
+        content: toolResults as any,
       });
 
       toolRound++;
@@ -409,11 +409,11 @@ export class ClaudeToolExecutor {
         usage.input_tokens += message.usage.input_tokens;
         usage.output_tokens += message.usage.output_tokens;
         usage.cache_read_input_tokens +=
-          message.usage.cache_read_input_tokens || 0;
+          (message.usage as any).cache_read_input_tokens || 0;
         usage.cache_creation_input_tokens +=
-          message.usage.cache_creation_input_tokens || 0;
+          (message.usage as any).cache_creation_input_tokens || 0;
 
-        stopReason = message.stop_reason;
+        stopReason = message.stop_reason || undefined;
       }
     }
 

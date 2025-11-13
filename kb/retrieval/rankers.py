@@ -211,7 +211,7 @@ def maximal_marginal_relevance(
     if not candidates:
         return []
 
-    selected = []
+    selected: list[dict[str, Any]] = []
     candidates = list(candidates)
 
     def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:

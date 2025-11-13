@@ -14,11 +14,11 @@ import * as fs from "fs";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { randomBytes } from "crypto";
-import type { Message } from "./llm/claude-tool-executor";
+import type { Message as LLMMessage } from "./llm/claude-tool-executor";
 
 const execAsync = promisify(exec);
 
-interface Message {
+interface IPCMessage {
   jsonrpc: "2.0";
   id?: number;
   method?: string;
@@ -45,7 +45,7 @@ class AgentCore {
   private claudeClient: ClaudeClient;
   private toolExecutor: ClaudeToolExecutor;
   private planner: BasicPlanner;
-  private conversationHistory: Message[] = [];
+  private conversationHistory: LLMMessage[] = [];
   private workspaceRoot: string;
   private extensionPath?: string;
   private repoName: string | null = null;
@@ -178,7 +178,7 @@ class AgentCore {
 
       // Restore conversation history
       this.conversationHistory = conversation.messages.map((msg) => ({
-        role: msg.role,
+        role: msg.role as "user" | "assistant",
         content: msg.content,
       }));
 
@@ -299,16 +299,18 @@ class AgentCore {
       this.indexQueue.on("progress", (count: number) => {
         console.error(`[Agent Core] Indexed ${count} files`);
         this.sendEvent({
-          type: "kb_progress",
-          data: { indexed: count },
+          type: "tool_call_progress" as const,
+          toolId: "kb-indexing",
+          chunk: `Indexed ${count} files`,
         });
       });
 
       this.indexQueue.on("complete", () => {
         console.error("[Agent Core] Index queue complete");
         this.sendEvent({
-          type: "kb_complete",
-          data: {},
+          type: "tool_call_completed" as const,
+          toolId: "kb-indexing",
+          result: { success: true },
         });
       });
 

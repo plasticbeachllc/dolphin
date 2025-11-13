@@ -13,6 +13,7 @@ from typing import Optional
 import typer
 
 from kb.api.server import app_with_lifespan
+
 # Import kb CLI functions for top-level commands
 # Import subcommand apps
 from kb.ingest.cli import add_repo as kb_add_repo
@@ -236,7 +237,7 @@ def _search_remote(
     show_content: bool,
 ) -> None:
     """Search using remote API server."""
-    import requests
+    import requests  # type: ignore[import-untyped]
 
     from kb.config import load_config
 

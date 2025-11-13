@@ -2,8 +2,7 @@
 
 import pytest
 
-from kb.graph_intelligence.extractors.python_call_graph import \
-    PythonCallGraphExtractor
+from kb.graph_intelligence.extractors.python_call_graph import PythonCallGraphExtractor
 from kb.graph_intelligence.models import EdgeType, NodeType
 
 

@@ -300,8 +300,8 @@ def extract_graph_data(source: str) -> Tuple[List[GraphNode], List[GraphEdge]]:
     Returns:
         Tuple of (nodes, edges) for graph database insertion
     """
-    nodes = []
-    edges = []
+    nodes: list[GraphNode] = []
+    edges: list[GraphEdge] = []
 
     try:
         source_bytes = source.encode("utf-8")
@@ -384,7 +384,7 @@ def _extract_edges(root, source: str, edges: List[GraphEdge]):
                     f"{current_context}.{func_name}" if func_name else current_context
                 )
             else:
-                qualified = func_name
+                qualified: Optional[str] = func_name
 
             # Extract decorators
             for child in node.children:
@@ -429,7 +429,7 @@ def _extract_edges(root, source: str, edges: List[GraphEdge]):
         if ntype == "import_from_statement":
             # from X import Y, Z
             module_node = node.child_by_field_name("module_name")
-            module_name = node_text(module_node) if module_node else None
+            module_name: Optional[str] = node_text(module_node) if module_node else None
 
             # Extract imported names
             for child in node.children:

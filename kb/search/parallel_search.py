@@ -108,7 +108,7 @@ class ParallelHybridSearch:
 
     def __init__(
         self,
-        vector_search_fn: Callable = None,
+        vector_search_fn: Optional[Callable] = None,
         bm25_search_fn: Optional[Callable] = None,
         enable_parallel: bool = True,
         vector_store: Any = None,
@@ -135,14 +135,14 @@ class ParallelHybridSearch:
                 )
             )
         else:
-            self.vector_search_fn = vector_search_fn
+            self.vector_search_fn: Optional[Callable[[Any, Any], Any]] = vector_search_fn
 
         if bm25_search_fn is None and bm25_store is not None:
             self.bm25_search_fn = lambda query, top_k, **kwargs: bm25_store.search(
                 query, top_k, **kwargs
             )
         else:
-            self.bm25_search_fn = bm25_search_fn
+            self.bm25_search_fn: Optional[Callable[[Any, Any], Any]] = bm25_search_fn
 
         self.enable_parallel = enable_parallel
         self.vector_store = vector_store
@@ -182,7 +182,7 @@ class ParallelHybridSearch:
                 else:
                     query_embedding = self.embedding_provider.embed_query(query)
 
-        if not self.enable_parallel or not self.bm25_search_fn:
+        if not self.enable_parallel or self.bm25_search_fn is None:
             # Fall back to sequential
             return await self._search_sequential(
                 query, query_embedding, top_k, **kwargs
@@ -220,9 +220,12 @@ class ParallelHybridSearch:
             )
 
         # Merge results using reciprocal rank fusion
+        # Handle potential exceptions by converting to empty list
+        vec_list: List[SearchResult] = vector_results if not isinstance(vector_results, BaseException) else []
+        bm25_list: List[SearchResult] = bm25_results if not isinstance(bm25_results, BaseException) else []
         merged = self._merge_results(
-            vector_results,
-            bm25_results,
+            vec_list,
+            bm25_list,
             top_k=top_k,
         )
 
@@ -245,10 +248,12 @@ class ParallelHybridSearch:
             List of SearchResult objects
         """
         # Run in thread pool to avoid blocking
+        if self.vector_search_fn is None:
+            return []
         loop = asyncio.get_event_loop()
         results = await loop.run_in_executor(
             None,
-            lambda: self.vector_search_fn(query_embedding, top_k, **kwargs),
+            lambda: self.vector_search_fn(query_embedding, top_k, **kwargs) if self.vector_search_fn else [],
         )
 
         return [
@@ -282,7 +287,7 @@ class ParallelHybridSearch:
         Returns:
             List of SearchResult objects
         """
-        if not self.bm25_search_fn:
+        if self.bm25_search_fn is None:
             return []
 
         # Run in thread pool
@@ -340,7 +345,7 @@ class ParallelHybridSearch:
 
         # BM25 search
         bm25_results = []
-        if self.bm25_search_fn:
+        if self.bm25_search_fn is not None:
             bm25_results = await self._bm25_search_async(query, top_k, **kwargs)
 
         # Merge

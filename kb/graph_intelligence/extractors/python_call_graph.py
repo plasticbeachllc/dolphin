@@ -116,7 +116,7 @@ class PythonCallGraphExtractor:
     ) -> GraphNode:
         """Extract class definition node."""
         name_node = node.child_by_field_name("name")
-        class_name = name_node.text.decode("utf8") if name_node else "Unknown"
+        class_name = name_node.text.decode("utf8") if (name_node and name_node.text) else "Unknown"
 
         # Extract docstring
         docstring = self._extract_docstring(node)
@@ -158,7 +158,7 @@ class PythonCallGraphExtractor:
     ) -> GraphNode:
         """Extract function/method definition node."""
         name_node = node.child_by_field_name("name")
-        func_name = name_node.text.decode("utf8") if name_node else "Unknown"
+        func_name = name_node.text.decode("utf8") if (name_node and name_node.text) else "Unknown"
 
         # Determine node type
         if parent_class:
@@ -180,7 +180,7 @@ class PythonCallGraphExtractor:
                 is_async = True
                 break
 
-        signature = f"{'async ' if is_async else ''}def {func_name}{params_node.text.decode('utf8') if params_node else '()'}"
+        signature = f"{'async ' if is_async else ''}def {func_name}{params_node.text.decode('utf8') if (params_node and params_node.text) else '()'}"
 
         # Extract docstring
         docstring = self._extract_docstring(node)
@@ -215,9 +215,9 @@ class PythonCallGraphExtractor:
 
         # Create a map of function nodes by their line ranges
         def_map: Dict[Tuple[int, int], GraphNode] = {
-            (node.start_line, node.end_line): node
+            (node.start_line or 0, node.end_line or 0): node
             for node in definitions
-            if node.node_type in (NodeType.FUNCTION, NodeType.METHOD)
+            if node.node_type in (NodeType.FUNCTION, NodeType.METHOD) and node.start_line is not None and node.end_line is not None
         }
 
         def visit(node: Node):
@@ -274,11 +274,11 @@ class PythonCallGraphExtractor:
     def _extract_call_target(self, node: Node) -> str:
         """Extract the name of the called function/method."""
         if node.type == "identifier":
-            return node.text.decode("utf8")
+            return node.text.decode("utf8") if node.text else "Unknown"
         elif node.type == "attribute":
             # For method calls like obj.method()
             attr_node = node.child_by_field_name("attribute")
-            return attr_node.text.decode("utf8") if attr_node else "Unknown"
+            return attr_node.text.decode("utf8") if (attr_node and attr_node.text) else "Unknown"
         return "Unknown"
 
     def _resolve_callee(

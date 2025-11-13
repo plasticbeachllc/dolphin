@@ -116,13 +116,13 @@ class DataFlowAnalyzer:
         self, tree_root: Node, definitions: List[GraphNode]
     ) -> List[VariableReference]:
         """Find all variable references in Python code."""
-        refs = []
+        refs: list[VariableReference] = []
 
         # Create a map of function nodes by line range
         def_map: Dict[Tuple[int, int], GraphNode] = {
-            (node.start_line, node.end_line): node
+            (node.start_line or 0, node.end_line or 0): node
             for node in definitions
-            if node.node_type in (NodeType.FUNCTION, NodeType.METHOD)
+            if node.node_type in (NodeType.FUNCTION, NodeType.METHOD) and node.start_line is not None and node.end_line is not None
         }
 
         # Walk the tree to find assignments and identifiers
@@ -141,7 +141,10 @@ class DataFlowAnalyzer:
         if node.type == "assignment":
             left = node.child_by_field_name("left")
             if left and left.type == "identifier":
-                var_name = left.text.decode("utf8")
+                text = left.text
+                if not text:
+                    return
+                var_name = text.decode("utf8")
                 containing_func = self._find_containing_func(node, def_map)
                 refs.append(
                     VariableReference(
@@ -154,7 +157,10 @@ class DataFlowAnalyzer:
 
         # Check for identifiers (variable uses)
         elif node.type == "identifier":
-            var_name = node.text.decode("utf8")
+            text = node.text
+            if not text:
+                return
+            var_name = text.decode("utf8")
             containing_func = self._find_containing_func(node, def_map)
 
             # Check if this is a mutation (left side of assignment)
@@ -183,13 +189,13 @@ class DataFlowAnalyzer:
         self, tree_root: Node, definitions: List[GraphNode]
     ) -> List[VariableReference]:
         """Find all variable references in TypeScript code."""
-        refs = []
+        refs: list[VariableReference] = []
 
         # Create a map of function nodes by line range
         def_map: Dict[Tuple[int, int], GraphNode] = {
-            (node.start_line, node.end_line): node
+            (node.start_line or 0, node.end_line or 0): node
             for node in definitions
-            if node.node_type in (NodeType.FUNCTION, NodeType.METHOD)
+            if node.node_type in (NodeType.FUNCTION, NodeType.METHOD) and node.start_line is not None and node.end_line is not None
         }
 
         # Walk the tree to find declarations and identifiers
@@ -208,7 +214,10 @@ class DataFlowAnalyzer:
         if node.type == "variable_declarator":
             name_node = node.child_by_field_name("name")
             if name_node and name_node.type == "identifier":
-                var_name = name_node.text.decode("utf8")
+                text = name_node.text
+                if not text:
+                    return
+                var_name = text.decode("utf8")
                 containing_func = self._find_containing_func(node, def_map)
                 refs.append(
                     VariableReference(
@@ -221,7 +230,10 @@ class DataFlowAnalyzer:
 
         # Check for identifiers (variable uses)
         elif node.type == "identifier":
-            var_name = node.text.decode("utf8")
+            text = node.text
+            if not text:
+                return
+            var_name = text.decode("utf8")
             containing_func = self._find_containing_func(node, def_map)
 
             # Check if this is an assignment

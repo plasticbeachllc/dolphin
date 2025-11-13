@@ -12,7 +12,13 @@
  * 4. Performance monitoring via metrics
  */
 
-import msgpack from 'msgpack5';
+// msgpack5 is optional - only required if using msgpack serialization
+let msgpack: any;
+try {
+  msgpack = require('msgpack5');
+} catch {
+  // msgpack not installed - only JSON will be available
+}
 
 /**
  * Serialization format
@@ -97,8 +103,15 @@ export class JSONSerializer implements ISerializer {
  */
 export class MessagePackSerializer implements ISerializer {
   readonly format: SerializationFormat = 'msgpack';
-  private codec = msgpack();
+  private codec: any;
   private lastMetrics: SerializationMetrics | null = null;
+
+  constructor() {
+    if (!msgpack) {
+      throw new Error('msgpack5 is not installed. Install it to use msgpack serialization.');
+    }
+    this.codec = msgpack();
+  }
 
   serialize(data: any): Buffer {
     const startTime = performance.now();

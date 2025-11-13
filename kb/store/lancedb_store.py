@@ -16,7 +16,7 @@ class LanceDBStore:
         # In-memory URIs like "memory://name" should remain as strings
         if isinstance(root, str) and root.startswith("memory://"):
             # Keep memory:// URIs as strings for LanceDB
-            self.root = root
+            self.root: Union[str, Path] = root
         else:
             # Convert file paths to Path objects
             self.root = Path(root) if isinstance(root, str) else root
@@ -35,13 +35,13 @@ class LanceDBStore:
             return self._db
 
         # Create new connection and cache it
-        import lancedb
+        import lancedb  # type: ignore[import-untyped]
 
         db_uri = self.root if isinstance(self.root, str) else self.root.as_posix()
         self._db = lancedb.connect(db_uri)
         return self._db
 
-    def _get_schema_for_model(self, model: str) -> "pa.Schema":
+    def _get_schema_for_model(self, model: str) -> Any:
         """Get PyArrow schema for the given model.
 
         Args:
@@ -50,7 +50,7 @@ class LanceDBStore:
         Returns:
             PyArrow schema for the model's table
         """
-        import pyarrow as pa
+        import pyarrow as pa  # type: ignore[import-untyped]
 
         model_to_dim = {"small": 1536, "large": 3072}
 
@@ -361,7 +361,7 @@ class LanceDBStore:
         model: str = "small",
         repo: str | None = None,
         top_k: int = 8,
-        ann_params: "ANNParams | None" = None,
+        ann_params: Any | None = None,
     ) -> list[dict[str, Any]]:
         """Execute KNN search against the vector store with configurable ANN parameters.
 

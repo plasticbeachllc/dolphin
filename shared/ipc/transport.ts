@@ -14,9 +14,37 @@ import {
   StreamMessageWriter,
   type MessageReader,
   type MessageWriter,
-  type Message as VSCodeMessage,
 } from 'vscode-jsonrpc/node';
 import { type ISerializer, SerializerFactory, type SerializationFormat } from './serialization';
+
+/**
+ * JSON-RPC 2.0 Message types
+ */
+export interface JSONRPCRequest {
+  jsonrpc: '2.0';
+  id: string | number;
+  method: string;
+  params?: any;
+}
+
+export interface JSONRPCNotification {
+  jsonrpc: '2.0';
+  method: string;
+  params?: any;
+}
+
+export interface JSONRPCResponse {
+  jsonrpc: '2.0';
+  id: string | number;
+  result?: any;
+  error?: {
+    code: number;
+    message: string;
+    data?: any;
+  };
+}
+
+export type JSONRPCMessage = JSONRPCRequest | JSONRPCNotification | JSONRPCResponse;
 
 /**
  * Security configuration
@@ -49,8 +77,9 @@ export interface TransportConfig {
 
 /**
  * Message handler type
+ * Handlers can return a value which will be sent as the JSON-RPC response
  */
-export type MessageHandler = (message: any) => void | Promise<void>;
+export type MessageHandler = (message: any) => any | Promise<any>;
 
 /**
  * Enhanced IPC transport using vscode-jsonrpc
@@ -120,7 +149,7 @@ export class IPCTransport {
 
     const id = this.generateId();
 
-    const message: VSCodeMessage = {
+    const message: JSONRPCRequest = {
       jsonrpc: '2.0',
       id,
       method,
@@ -156,7 +185,7 @@ export class IPCTransport {
    * Send a notification (no response expected)
    */
   async notify(method: string, params: any): Promise<void> {
-    const message: VSCodeMessage = {
+    const message: JSONRPCNotification = {
       jsonrpc: '2.0',
       method,
       params,
@@ -169,7 +198,7 @@ export class IPCTransport {
    * Send a response to a request
    */
   async respond(id: string | number, result: any): Promise<void> {
-    const message: VSCodeMessage = {
+    const message: JSONRPCResponse = {
       jsonrpc: '2.0',
       id,
       result,
@@ -187,7 +216,7 @@ export class IPCTransport {
     message: string,
     data?: any
   ): Promise<void> {
-    const response: VSCodeMessage = {
+    const response: JSONRPCResponse = {
       jsonrpc: '2.0',
       id,
       error: {
@@ -203,7 +232,7 @@ export class IPCTransport {
   /**
    * Send a message (internal)
    */
-  private async sendMessage(message: VSCodeMessage): Promise<void> {
+  private async sendMessage(message: JSONRPCMessage): Promise<void> {
     // Security check: estimate message size using actual byte length
     const serializedMessage = JSON.stringify(message);
     const estimatedSize = Buffer.byteLength(serializedMessage, 'utf-8');
@@ -219,7 +248,7 @@ export class IPCTransport {
   /**
    * Handle incoming message
    */
-  private async handleMessage(message: VSCodeMessage): Promise<void> {
+  private async handleMessage(message: JSONRPCMessage): Promise<void> {
     try {
       // Validate message structure
       if (!message || typeof message !== 'object') {
@@ -228,51 +257,53 @@ export class IPCTransport {
       }
 
       // Handle response to our request
-      if (message.id !== undefined && (message.result !== undefined || message.error !== undefined)) {
-        const pending = this.pendingRequests.get(message.id);
+      if ('id' in message && ('result' in message || 'error' in message)) {
+        const response = message as JSONRPCResponse;
+        const pending = this.pendingRequests.get(response.id);
         if (pending) {
           clearTimeout(pending.timeout);
-          this.pendingRequests.delete(message.id);
+          this.pendingRequests.delete(response.id);
 
-          if (message.error) {
-            const errorMessage = message.error.message || 'Unknown error';
+          if (response.error) {
+            const errorMessage = response.error.message || 'Unknown error';
             const error = new Error(errorMessage);
             // Attach error code and data for better debugging
-            (error as any).code = message.error.code;
-            (error as any).data = message.error.data;
+            (error as any).code = response.error.code;
+            (error as any).data = response.error.data;
             pending.reject(error);
           } else {
-            pending.resolve(message.result);
+            pending.resolve(response.result);
           }
         } else {
           // Response for unknown request ID - log but don't crash
-          console.warn('[IPCTransport] Received response for unknown request ID:', message.id);
+          console.warn('[IPCTransport] Received response for unknown request ID:', response.id);
         }
         return;
       }
 
       // Handle request
-      if (message.method && message.id !== undefined) {
-        const handler = this.messageHandlers.get(message.method);
+      if ('method' in message && 'id' in message) {
+        const request = message as JSONRPCRequest;
+        const handler = this.messageHandlers.get(request.method);
 
         if (!handler) {
           await this.respondError(
-            message.id,
+            request.id,
             -32601,
-            `Method not found: ${message.method}`
+            `Method not found: ${request.method}`
           );
           return;
         }
 
         try {
-          const result = await handler(message.params);
-          await this.respond(message.id, result);
+          const result = await handler(request.params);
+          await this.respond(request.id, result);
         } catch (error) {
           // Catch all errors from handlers and send proper error response
           const errorMessage = error instanceof Error ? error.message : 'Internal error';
           const errorData = error instanceof Error ? { stack: error.stack } : error;
           await this.respondError(
-            message.id,
+            request.id,
             -32603,
             errorMessage,
             errorData
@@ -282,14 +313,15 @@ export class IPCTransport {
       }
 
       // Handle notification
-      if (message.method) {
-        const handler = this.messageHandlers.get(message.method);
+      if ('method' in message) {
+        const notification = message as JSONRPCNotification;
+        const handler = this.messageHandlers.get(notification.method);
         if (handler) {
           // Notifications don't send responses, but we should catch errors
           try {
-            await handler(message.params);
+            await handler(notification.params);
           } catch (error) {
-            console.error(`[IPCTransport] Error in notification handler '${message.method}':`, error);
+            console.error(`[IPCTransport] Error in notification handler '${notification.method}':`, error);
           }
         } else if (this.defaultHandler) {
           try {

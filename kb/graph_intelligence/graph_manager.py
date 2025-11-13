@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 from typing import Optional
 
-import networkx as nx
+import networkx as nx  # type: ignore[import-untyped]
 from sqlmodel import Session, select
 
 from kb.store.sql_models import CodeEdge, CodeNode, GraphMetrics

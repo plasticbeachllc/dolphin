@@ -5,8 +5,11 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from kb.search.parallel_search import (ParallelHybridSearch, SearchResult,
-                                       reciprocal_rank_fusion)
+from kb.search.parallel_search import (
+    ParallelHybridSearch,
+    SearchResult,
+    reciprocal_rank_fusion,
+)
 
 
 class TestReciprocalRankFusion:

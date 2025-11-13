@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from kb.ignores import (DEFAULT_IGNORE_PATTERNS, build_ignore_set,
-                        load_repo_ignores)
+from kb.ignores import DEFAULT_IGNORE_PATTERNS, build_ignore_set, load_repo_ignores
 
 
 class TestDefaultIgnorePatterns:

@@ -6,9 +6,12 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from kb.chunkers.graph_types import GraphEdge, GraphNode
-from kb.ingest.graph_helpers import (cleanup_graph_for_file,
-                                     cleanup_graph_for_repo,
-                                     extract_graph_from_file, store_graph_data)
+from kb.ingest.graph_helpers import (
+    cleanup_graph_for_file,
+    cleanup_graph_for_repo,
+    extract_graph_from_file,
+    store_graph_data,
+)
 
 
 class TestExtractGraphFromFile:

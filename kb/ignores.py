@@ -7,7 +7,7 @@ from typing import Iterable
 try:
     import tomllib  # Python 3.11+
 except ImportError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore[import-not-found]
+    import tomli as tomllib  # type: ignore[import-not-found,no-redef]
 
 _log = logging.getLogger(__name__)
 

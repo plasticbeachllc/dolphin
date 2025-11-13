@@ -189,7 +189,7 @@ export class ClaudeClient {
         input_tokens: response.usage.input_tokens,
         output_tokens: response.usage.output_tokens,
       },
-      stop_reason: response.stop_reason,
+      stop_reason: response.stop_reason || undefined,
     };
   }
 

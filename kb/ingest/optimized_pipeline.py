@@ -25,6 +25,7 @@ from ..store import LanceDBStore, SQLiteMetadataStore
 from ..store.graph_store import GraphStore
 from .incremental import IncrementalIndexer, compute_chunk_diff
 from .parallel_parser import ParseJob, get_chunk_cache, parse_files_parallel
+
 # Import Phase 2 optimizations
 from .parallel_scanner import scan_repo_parallel
 

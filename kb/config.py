@@ -8,7 +8,7 @@ from typing import Any, Mapping, Optional
 try:
     import tomllib
 except ImportError:
-    import tomli as tomllib
+    import tomli as tomllib  # type: ignore[import-not-found,no-redef]
 
 from .ignores import DEFAULT_IGNORE_PATTERNS
 
@@ -238,7 +238,9 @@ class KBConfig:
 
         # Handle storage settings
         if storage_data and storage_data.get("store_root"):
-            config_kwargs["store_root"] = _to_path(storage_data.get("store_root"))
+            store_root_value = storage_data.get("store_root")
+            if store_root_value is not None:
+                config_kwargs["store_root"] = _to_path(store_root_value)
 
         # Handle server settings
         if server_data and server_data.get("endpoint"):
@@ -269,7 +271,9 @@ class KBConfig:
                 data.get("per_session_spend_cap_usd"), float
             )
         if data.get("ignore"):
-            config_kwargs["ignore"] = data.get("ignore")
+            ignore_value = data.get("ignore")
+            if isinstance(ignore_value, list):
+                config_kwargs["ignore"] = ignore_value
         if data.get("exceptions") or data.get("ignore_exceptions"):
             config_kwargs["ignore_exceptions"] = data.get(
                 "exceptions", data.get("ignore_exceptions", [])
@@ -301,7 +305,9 @@ class KBConfig:
                 data.get("cache_enabled"), bool
             )
         if "redis_url" in data:
-            config_kwargs["redis_url"] = data.get("redis_url")
+            redis_url_value = data.get("redis_url")
+            if redis_url_value is not None:
+                config_kwargs["redis_url"] = redis_url_value
 
         return cls(**config_kwargs)
 

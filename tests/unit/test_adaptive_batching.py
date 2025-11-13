@@ -2,8 +2,11 @@
 
 import pytest
 
-from kb.embeddings.adaptive_batching import (AdaptiveBatcher, BatchMetrics,
-                                             create_adaptive_batches)
+from kb.embeddings.adaptive_batching import (
+    AdaptiveBatcher,
+    BatchMetrics,
+    create_adaptive_batches,
+)
 
 
 class TestAdaptiveBatcher:

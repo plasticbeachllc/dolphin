@@ -2,8 +2,9 @@
 
 import pytest
 
-from kb.graph_intelligence.extractors.typescript_call_graph import \
-    TypeScriptCallGraphExtractor
+from kb.graph_intelligence.extractors.typescript_call_graph import (
+    TypeScriptCallGraphExtractor,
+)
 from kb.graph_intelligence.models import EdgeType, NodeType
 
 

@@ -4,11 +4,14 @@ from unittest.mock import Mock
 
 import pytest
 
-from kb.search.vector_prefilter import (FilterCriteria, VectorPreFilter,
-                                        combine_filters,
-                                        create_language_filter,
-                                        create_repo_filter,
-                                        create_symbol_filter)
+from kb.search.vector_prefilter import (
+    FilterCriteria,
+    VectorPreFilter,
+    combine_filters,
+    create_language_filter,
+    create_repo_filter,
+    create_symbol_filter,
+)
 
 
 class TestFilterCriteria:

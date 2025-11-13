@@ -20,8 +20,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from kb.api.app import (app, reset_pipeline, reset_stores, set_pipeline,
-                        set_stores)
+from kb.api.app import app, reset_pipeline, reset_stores, set_pipeline, set_stores
 from kb.pipeline import KBPipeline
 from kb.store.lancedb_vector import LanceDBVectorStore
 from kb.store.sqlite_meta import SQLiteMetadataStore

@@ -12,8 +12,7 @@ from ..embeddings.provider import EmbeddingProvider, create_provider
 from ..retrieval.ann_tuning import ANNParams
 from ..retrieval.cross_encoder_rerank import CrossEncoderReranker
 from ..retrieval.graph_context import GraphContextEnricher
-from ..retrieval.rankers import (maximal_marginal_relevance,
-                                 reciprocal_rank_fusion)
+from ..retrieval.rankers import maximal_marginal_relevance, reciprocal_rank_fusion
 from ..retrieval.types import Document
 from ..store.graph_store import GraphStore
 from ..store.lancedb_store import LanceDBStore

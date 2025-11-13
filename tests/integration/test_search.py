@@ -206,8 +206,11 @@ class TestSearchIntegration:
         mock_embedding_service: MockEmbeddingService,
     ):
         """Test search backend configuration and lifecycle."""
-        from kb.api.app import (get_search_backend, reset_search_backend,
-                                set_search_backend)
+        from kb.api.app import (
+            get_search_backend,
+            reset_search_backend,
+            set_search_backend,
+        )
 
         # Get default backend
         default_backend = get_search_backend()

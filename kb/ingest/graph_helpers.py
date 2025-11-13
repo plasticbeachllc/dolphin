@@ -97,8 +97,10 @@ def _extract_with_intelligence(
     Returns:
         Tuple of (nodes, edges) in chunker format
     """
-    from kb.graph_intelligence.extractors import (PythonCallGraphExtractor,
-                                                  TypeScriptCallGraphExtractor)
+    from kb.graph_intelligence.extractors import (
+        PythonCallGraphExtractor,
+        TypeScriptCallGraphExtractor,
+    )
 
     # Use appropriate extractor
     if language == "python":

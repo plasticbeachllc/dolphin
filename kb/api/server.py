@@ -13,8 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ..config import KBConfig, load_config
-from .app import (app, reset_search_backend, set_pipeline, set_search_backend,
-                  set_stores)
+from .app import app, reset_search_backend, set_pipeline, set_search_backend, set_stores
 from .middleware.metrics import metrics_endpoint, prometheus_middleware
 from .search_backend import create_search_backend
 

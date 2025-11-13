@@ -8,8 +8,15 @@ from typing import Callable
 
 from fastapi import Request, Response
 from fastapi.responses import Response as FastAPIResponse
-from prometheus_client import (CONTENT_TYPE_LATEST, REGISTRY, Counter, Gauge,
-                               Histogram, Info, generate_latest)
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    REGISTRY,
+    Counter,
+    Gauge,
+    Histogram,
+    Info,
+    generate_latest,
+)
 
 # ============================================================================
 # Metrics Definitions

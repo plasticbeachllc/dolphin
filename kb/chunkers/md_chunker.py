@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import Iterable, Iterator, List, Optional, Sequence, Tuple
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 

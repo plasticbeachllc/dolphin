@@ -11,8 +11,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from kb.api.app import (app, reset_pipeline, reset_stores, set_pipeline,
-                        set_stores)
+from kb.api.app import app, reset_pipeline, reset_stores, set_pipeline, set_stores
 from kb.api.task_queue import TaskStatus, get_task_queue
 from kb.pipeline import KBPipeline
 from kb.store.lancedb_vector import LanceDBVectorStore

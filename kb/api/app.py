@@ -629,8 +629,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
         from ..chunkers.repo_config import load_repo_chunking_config
         from ..embeddings.provider import embed_texts_with_retry
         from ..hashing import hash_text
-        from ..ingest._helpers import (build_desired_map,
-                                       representative_text_for_hash)
+        from ..ingest._helpers import build_desired_map, representative_text_for_hash
         from ..ingest.dedup import ChunkDeduplicator
 
         # Get commit info for provenance

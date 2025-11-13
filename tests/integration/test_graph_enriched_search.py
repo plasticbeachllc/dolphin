@@ -9,8 +9,10 @@ import pytest
 from kb.api.app import SearchRequest
 from kb.api.search_backend import KnowledgeSearchBackend, create_search_backend
 from kb.ingest.pipeline import IngestionPipeline
-from kb.retrieval.graph_context import (GraphContextEnricher,
-                                        format_graph_context_for_llm)
+from kb.retrieval.graph_context import (
+    GraphContextEnricher,
+    format_graph_context_for_llm,
+)
 from kb.store.graph_store import GraphStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
@@ -75,8 +77,7 @@ def indexed_repo(sample_python_file: Path, tmp_path: Path):
     # Process the file to extract graph data
     file_path = sample_python_file / "calculator.py"
     from kb.chunkers.repo_config import RepoChunkingConfig
-    from kb.ingest.graph_helpers import (extract_graph_from_file,
-                                         store_graph_data)
+    from kb.ingest.graph_helpers import extract_graph_from_file, store_graph_data
 
     file_info_id = sql_store.upsert_file(
         repo_id=repo_info["id"],
