@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 import math
+import uuid
 from pathlib import Path
 from typing import Optional, Sequence, List, Dict, Any
+import time
 
 from ..config import KBConfig
 from ..embeddings.provider import EmbeddingProvider, create_provider, set_default_provider
@@ -17,11 +19,8 @@ from ..retrieval.types import Document
 from ..retrieval.ann_tuning import ANNParams
 from ..retrieval.graph_context import GraphContextEnricher
 from .app import SearchRequest
-
-# Constants
-CANDIDATE_MULTIPLIER = 4
-CONFIG_FILE_SCORE_PENALTY = 0.5
-BM25_SCORE_NORMALIZATION_FACTOR = 10
+from ..logging.structured_logger import StructuredLogger
+from ..constants.retrieval_config import RETRIEVAL_PARAMS
 
 class KnowledgeSearchBackend:
     def __init__(
@@ -44,7 +43,10 @@ class KnowledgeSearchBackend:
         self.config = config
         self.graph_store = graph_store
         self._request_ann_config = None  # Per-request ANN configuration overrides
-        
+
+        # Initialize structured logger
+        self.logger = StructuredLogger("kb.api.search_backend", {"component": "KnowledgeSearchBackend"})
+
         # Initialize graph enricher if graph store is available
         self.graph_enricher = None
         if self.graph_store:
@@ -56,15 +58,26 @@ class KnowledgeSearchBackend:
             )
 
     def search(self, request: SearchRequest) -> Sequence[dict[str, object]]:
-        import logging
-        logger = logging.getLogger(__name__)
+        # Generate correlation ID for this search request
+        correlation_id = f"search_{uuid.uuid4().hex[:8]}"
+        start_time = time.time()
 
-        # Log incoming search request
-        logger.info(f"[SEARCH] Query: {request.query[:100]}")
-        logger.info(f"[SEARCH] Repos filter: {request.repos}")
-        logger.info(f"[SEARCH] Path prefix: {request.path_prefix}")
-        logger.info(f"[SEARCH] Top-K: {request.top_k}, Score cutoff: {request.score_cutoff}")
-        logger.info(f"[SEARCH] Embed model: {request.embed_model}")
+        # Create child logger with request-specific context
+        request_logger = self.logger.create_child({
+            "correlation_id": correlation_id,
+            "method": "search"
+        })
+
+        # Log incoming search request at DEBUG level (not INFO)
+        request_logger.debug("Search request received", {
+            "query_length": len(request.query),
+            "query_preview": request.query[:100],
+            "repos": request.repos,
+            "path_prefix": request.path_prefix,
+            "top_k": request.top_k,
+            "score_cutoff": request.score_cutoff,
+            "embed_model": request.embed_model,
+        })
 
         # Check cache first if available
         if self.cache:
@@ -78,11 +91,14 @@ class KnowledgeSearchBackend:
             }
             cached_results = self.cache.get_results(request.query, **cache_params)
             if cached_results is not None:
-                logger.info(f"[SEARCH] Returning {len(cached_results)} results from cache")
+                request_logger.info("Search completed (cache hit)", {
+                    "results_count": len(cached_results),
+                    "cache_hit": True,
+                })
                 return cached_results
 
         query_embedding = self.embedding_provider.embed_texts(request.embed_model, [request.query])[0]
-        num_candidates = request.top_k * CANDIDATE_MULTIPLIER  # Fetch more candidates for reranking
+        num_candidates = request.top_k * RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER  # Fetch more candidates for reranking
 
         # Get ANN parameters from config or use defaults
         ann_params = self._get_ann_params(request)
@@ -97,55 +113,77 @@ class KnowledgeSearchBackend:
                 ann_params=ann_params
             )
             vector_formatted = self._format_vector_results(vector_results)
-            logger.info(f"[SEARCH] Vector search returned {len(vector_formatted)} results")
+            request_logger.debug("Vector search completed", {
+                "results_count": len(vector_formatted)
+            })
         except Exception as e:
             # Log error but continue with empty vector results
-            logger.warning(f"[SEARCH] Vector search failed: {e}", exc_info=True)
+            request_logger.warning("Vector search failed", error=e)
 
         # BM25 search with error handling
         bm25_hydrated = []
         if self.hybrid_search_enabled and hasattr(self.sql_store, 'bm25_search'):
             try:
                 repo_filter = request.repos[0] if request.repos else None
-                logger.info(f"[SEARCH] BM25 search with repo={repo_filter}, path_prefix={request.path_prefix}")
+                request_logger.debug("BM25 search started", {
+                    "repo": repo_filter,
+                    "path_prefix": request.path_prefix,
+                })
                 bm25_results = self.sql_store.bm25_search(
                     request.query,
                     repo=repo_filter,
                     path_prefix=request.path_prefix,
                     top_k=num_candidates
                 )
-                logger.info(f"[SEARCH] BM25 raw results: {len(bm25_results)}")
-                if bm25_results:
-                    logger.info(f"[SEARCH] BM25 sample result: chunk_id={bm25_results[0].get('chunk_id')}, repo={bm25_results[0].get('repo')}, score={bm25_results[0].get('score')}")
+                request_logger.debug("BM25 search completed", {
+                    "raw_results_count": len(bm25_results),
+                    "sample_chunk_id": bm25_results[0].get('chunk_id') if bm25_results else None,
+                    "sample_score": bm25_results[0].get('score') if bm25_results else None,
+                })
                 bm25_hydrated = self._hydrate_bm25_results(bm25_results, self.sql_store)
-                logger.info(f"[SEARCH] BM25 after hydration: {len(bm25_hydrated)} results")
+                request_logger.debug("BM25 results hydrated", {
+                    "hydrated_count": len(bm25_hydrated)
+                })
             except Exception as e:
                 # Log error but continue with empty BM25 results
-                logger.warning(f"[SEARCH] BM25 search failed: {e}", exc_info=True)
+                request_logger.warning("BM25 search failed", error=e)
 
         # Apply request filters to both vector and BM25 results
         vector_filtered = self._apply_request_filters(vector_formatted, request)
         bm25_filtered = self._apply_request_filters(bm25_hydrated, request)
 
-        logger.info(f"[SEARCH] After filtering - Vector: {len(vector_filtered)}, BM25: {len(bm25_filtered)}")
+        request_logger.debug("Applied request filters", {
+            "vector_filtered_count": len(vector_filtered),
+            "bm25_filtered_count": len(bm25_filtered)
+        })
 
         # Apply file type scoring adjustments to deprioritize config files
         vector_filtered = self._apply_file_type_scoring(vector_filtered)
         bm25_filtered = self._apply_file_type_scoring(bm25_filtered)
 
-        logger.info(f"[SEARCH] After file type scoring - Vector: {len(vector_filtered)}, BM25: {len(bm25_filtered)}")
+        request_logger.debug("Applied file type scoring", {
+            "vector_count": len(vector_filtered),
+            "bm25_count": len(bm25_filtered)
+        })
 
         hits = reciprocal_rank_fusion([vector_filtered, bm25_filtered])
 
-        logger.info(f"[SEARCH] After RRF: {len(hits)} results")
-        
+        request_logger.debug("Reciprocal rank fusion completed", {
+            "hits_count": len(hits)
+        })
+
         # Convert rrf_score to score for all hits
         for hit in hits:
             hit['score'] = hit.pop('rrf_score', 0.0)
-        
-        # Log first 3 hits
-        for i, hit in enumerate(hits[:3]):
-            logger.info(f"[SEARCH] Hit {i+1}: chunk_id={hit.get('chunk_id')}, score={hit.get('score', 0.0)}")
+
+        # Log top 3 hits at DEBUG level
+        if hits:
+            request_logger.debug("Top hits", {
+                "top_hits": [{
+                    "chunk_id": hit.get('chunk_id'),
+                    "score": hit.get('score', 0.0)
+                } for hit in hits[:3]]
+            })
         
         # UNCOMMENTED AND CORRECTED RERANKING LOGIC
         if self.reranker and hits:
@@ -161,10 +199,10 @@ class KnowledgeSearchBackend:
         # Use request overrides when provided, otherwise fall back to global config.
         try:
             cfg_mmr_enabled = bool(self.config and getattr(self.config.retrieval, "mmr_enabled", False))
-            cfg_mmr_lambda = (self.config.retrieval.mmr_lambda if self.config else 0.7)
+            cfg_mmr_lambda = (self.config.retrieval.mmr_lambda if self.config else RETRIEVAL_PARAMS.MMR_LAMBDA_DEFAULT)
         except Exception:
             cfg_mmr_enabled = False
-            cfg_mmr_lambda = 0.7
+            cfg_mmr_lambda = RETRIEVAL_PARAMS.MMR_LAMBDA_DEFAULT
 
         mmr_enabled = request.mmr_enabled if request.mmr_enabled is not None else cfg_mmr_enabled
         mmr_lambda = request.mmr_lambda if request.mmr_lambda is not None else cfg_mmr_lambda
@@ -195,19 +233,25 @@ class KnowledgeSearchBackend:
                             pass
             except Exception as e:
                 # Fall back gracefully if MMR fails for any reason
-                import logging
-                logging.warning(f"MMR diversification failed: {e}", exc_info=True)
+                request_logger.warning("MMR diversification failed", error=e)
 
-        logger.info(f"[SEARCH] Before score cutoff: {len(hits)} hits")
-        logger.info(f"[SEARCH] Score cutoff threshold: {request.score_cutoff}")
+        request_logger.debug("Applying score cutoff", {
+            "before_cutoff_count": len(hits),
+            "score_cutoff": request.score_cutoff,
+        })
 
         final_results = [h for h in hits if h.get("score", 0.0) >= (request.score_cutoff or 0.0)][:request.top_k]
 
-        logger.info(f"[SEARCH] After score cutoff and top-k limit: {len(final_results)} results")
         if not final_results:
-            logger.warning(f"[SEARCH] ❌ NO RESULTS after score cutoff! Check if cutoff {request.score_cutoff} is too high")
+            request_logger.warning("No results after score cutoff", {
+                "cutoff_threshold": request.score_cutoff,
+                "hits_before_cutoff": len(hits),
+            })
         else:
-            logger.info(f"[SEARCH] First result score: {final_results[0].get('score')}")
+            request_logger.debug("Results after score cutoff", {
+                "results_count": len(final_results),
+                "first_result_score": final_results[0].get('score'),
+            })
 
         # Hydrate content for all final results
         if final_results:
@@ -230,14 +274,13 @@ class KnowledgeSearchBackend:
                             result['file_path'] = result['path']
                 except Exception as e:
                     # Log error but don't fail the search
-                    import logging
-                    logging.warning(f"Failed to hydrate content for results: {e}", exc_info=True)
+                    request_logger.warning("Failed to hydrate content for results", error=e)
             else:
                 # Ensure all results have file_path even if no hydration needed
                 for result in final_results:
                     if 'path' in result and 'file_path' not in result:
                         result['file_path'] = result['path']
-        
+
         # Enrich with graph context if requested and available
         include_graph = getattr(request, 'include_graph_context', False)
         if include_graph and self.graph_enricher:
@@ -250,22 +293,32 @@ class KnowledgeSearchBackend:
                 )
             except Exception as e:
                 # Log error but don't fail the search
-                import logging
-                logging.warning(f"Graph enrichment failed: {e}")
-        
+                request_logger.warning("Graph enrichment failed", error=e)
+
         # Cache results if cache is available
         if self.cache:
             self.cache.set_results(request.query, list(final_results), **cache_params)
-            
+
+        # Log search completion with summary at INFO level
+        duration_ms = (time.time() - start_time) * 1000
+        request_logger.info("Search completed", {
+            "results_count": len(final_results),
+            "cache_hit": False,
+            "duration_ms": round(duration_ms, 2),
+        })
+
         return final_results
 
     def _format_vector_results(self, vector_results: list[dict]) -> list[dict[str, object]]:
-        import logging
         formatted = []
         for r in vector_results:
             distance = r.get('_distance', 1.0)
             score = 1 / (1 + distance)
-            logging.debug(f"Vector result: id={r.get('id')}, _distance={distance}, score={score}")
+            self.logger.debug("Formatted vector result", {
+                "id": r.get('id'),
+                "distance": distance,
+                "score": score,
+            })
             formatted.append({**r, 'chunk_id': r.get('id'), 'score': score})
         return formatted
     
@@ -360,7 +413,7 @@ class KnowledgeSearchBackend:
             )
             
             if is_config:
-                result = {**result, 'score': score * CONFIG_FILE_SCORE_PENALTY}
+                result = {**result, 'score': score * RETRIEVAL_PARAMS.CONFIG_FILE_SCORE_PENALTY}
             
             adjusted.append(result)
         
@@ -397,7 +450,7 @@ class KnowledgeSearchBackend:
             # Normalize BM25 score to [0, 1] range for fusion
             # BM25 scores are unbounded, use sigmoid normalization
             bm25_score = result["score"]
-            normalized_score = 1 / (1 + math.exp(-bm25_score / BM25_SCORE_NORMALIZATION_FACTOR))
+            normalized_score = 1 / (1 + math.exp(-bm25_score / RETRIEVAL_PARAMS.BM25_SCORE_NORMALIZATION_FACTOR))
 
             # Create result dict with available data
             hydrated_result = {
@@ -483,8 +536,10 @@ class KnowledgeSearchBackend:
                         
             except (ValueError, IndexError) as e:
                 # Skip malformed row IDs
-                import logging
-                logging.warning(f"Failed to parse row_id {row_id}: {e}")
+                self.logger.warning("Failed to parse row_id", {
+                    "row_id": row_id,
+                    "error": str(e)
+                })
                 continue
                 
         return row_id_to_content_id
@@ -805,10 +860,9 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     graph_store = None
     try:
         graph_store = GraphStore(config.resolved_store_root() / "metadata.db")
-    except Exception:
-        # Graph store is optional
-        import logging
-        logging.debug("Graph store not available")
+    except Exception as e:
+        # Graph store is optional - no logging needed for expected absence
+        pass
     
     # Create and return the search backend
     return KnowledgeSearchBackend(

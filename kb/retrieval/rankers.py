@@ -14,42 +14,48 @@ from __future__ import annotations
 from typing import Sequence, Any, Callable, Optional
 import math
 
+from ..constants.retrieval_config import RETRIEVAL_PARAMS
+
 
 def reciprocal_rank_fusion(
     result_lists: Sequence[Sequence[dict[str, Any]]],
-    k: int = 60,
+    k: int | None = None,
     id_field: str = "chunk_id",
     score_field: str = "score",
 ) -> list[dict[str, Any]]:
     """Combine multiple ranked lists using Reciprocal Rank Fusion (RRF).
-    
+
     RRF combines ranked lists without requiring score normalization:
     RRF_score(d) = Σᵣ 1 / (k + rank_r(d))
-    
+
     Where:
     - d: document
     - r: ranking (e.g., vector search, BM25)
     - rank_r(d): position of document d in ranking r (1-indexed)
-    - k: constant to prevent high scores for top-ranked items (default: 60)
-    
+    - k: constant to prevent high scores for top-ranked items
+
     Args:
         result_lists: List of result lists to combine
-        k: RRF constant (higher = more conservative, default: 60)
+        k: RRF constant (higher = more conservative). If None, uses RETRIEVAL_PARAMS.RRF_K
         id_field: Field name containing unique document identifier
         score_field: Field name containing original scores
-    
+
     Returns:
         Combined results sorted by RRF score (descending)
-    
+
     Example:
         vector_results = [{"chunk_id": "A", "score": 0.9}, {"chunk_id": "B", "score": 0.8}]
         bm25_results = [{"chunk_id": "B", "score": 0.95}, {"chunk_id": "A", "score": 0.75}]
-        
+
         fused = reciprocal_rank_fusion([vector_results, bm25_results])
         # Result: [{"chunk_id": "B", "rrf_score": 0.0325}, {"chunk_id": "A", "rrf_score": 0.0323}]
     """
     if not result_lists:
         return []
+
+    # Use configured RRF_K if not explicitly provided
+    if k is None:
+        k = RETRIEVAL_PARAMS.RRF_K
     
     # Collect all unique documents across all rankings
     all_documents = {}
