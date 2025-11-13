@@ -31,18 +31,14 @@ def validate_path_within_repo(file_path: Path, repo_root: Path) -> Path:
         # for repo root /data/repoA, but is_relative_to() correctly rejects it
         if not resolved_path.is_relative_to(resolved_root):
             raise HTTPException(
-                status_code=403,
-                detail=f"Path outside repository: {file_path}"
+                status_code=403, detail=f"Path outside repository: {file_path}"
             )
 
         return resolved_path
     except Exception as e:
         if isinstance(e, HTTPException):
             raise
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file path: {file_path}"
-        )
+        raise HTTPException(status_code=400, detail=f"Invalid file path: {file_path}")
 
 
 class GitRepository:
@@ -70,8 +66,7 @@ class GitRepository:
         """
         try:
             result = subprocess.check_output(
-                ["git", "-C", str(self.root), *args],
-                stderr=subprocess.STDOUT
+                ["git", "-C", str(self.root), *args], stderr=subprocess.STDOUT
             )
             return result.decode("utf-8").strip()
         except subprocess.CalledProcessError as e:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 # Track initialized loggers to avoid duplicate handlers across instances
 _initialized_loggers: Dict[str, bool] = {}
@@ -30,7 +30,9 @@ class ErrorLogger:
         # Generate log filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         session_suffix = f"_session_{session_id}" if session_id else ""
-        self.log_file = self.log_dir / f"indexing_errors_{timestamp}{session_suffix}.log"
+        self.log_file = (
+            self.log_dir / f"indexing_errors_{timestamp}{session_suffix}.log"
+        )
 
         # Lazy logger/file creation
         self._logger_name = f"pb_kb_ingest_{self.session_id or 'unknown'}"
@@ -51,7 +53,7 @@ class ErrorLogger:
             file_handler = logging.FileHandler(self.log_file)
             file_handler.setLevel(logging.ERROR)
             file_formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
             )
             file_handler.setFormatter(file_formatter)
             logger.addHandler(file_handler)
@@ -59,7 +61,7 @@ class ErrorLogger:
             # Console handler (for critical errors only)
             console_handler = logging.StreamHandler()
             console_handler.setLevel(logging.CRITICAL)
-            console_formatter = logging.Formatter('%(levelname)s: %(message)s')
+            console_formatter = logging.Formatter("%(levelname)s: %(message)s")
             console_handler.setFormatter(console_formatter)
             logger.addHandler(console_handler)
 
@@ -111,7 +113,10 @@ class ErrorLogger:
 
 # Convenience function for quick error logging without full setup
 
-def log_error_to_file(repo_root: Path, message: str, session_id: Optional[str] = None) -> None:
+
+def log_error_to_file(
+    repo_root: Path, message: str, session_id: Optional[str] = None
+) -> None:
     """Quick convenience function to log an error without full ErrorLogger setup.
 
     Args:
@@ -124,6 +129,7 @@ def log_error_to_file(repo_root: Path, message: str, session_id: Optional[str] =
 
 
 # Retry decorator for network operations
+
 
 def with_retry(max_attempts: int = 3, delays: tuple[float, ...] = (1.0, 2.0, 4.0)):
     """Decorator for retrying network operations with exponential backoff.
@@ -157,5 +163,7 @@ def with_retry(max_attempts: int = 3, delays: tuple[float, ...] = (1.0, 2.0, 4.0
                         raise last_exception
             # This should never be reached, but just in case
             raise last_exception
+
         return wrapper
+
     return decorator

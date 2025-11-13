@@ -1,7 +1,9 @@
 """Unit tests for Python symbol-level chunking."""
 
-import pytest
 from pathlib import Path
+
+import pytest
+
 from kb.chunkers.py_chunker import chunk_source
 from kb.hashing import canonicalize_text
 
@@ -21,7 +23,7 @@ class MyClass:
         print('hello')
 """
         chunks = chunk_source(src, model="small")
-        
+
         # Assert basic chunk structure
         assert isinstance(chunks, list)
         for c in chunks:
@@ -46,9 +48,9 @@ class MyClass:
         # Create many repeated lines to exceed token target
         long_body = "\n".join(["print('line')" for _ in range(2000)])
         src = f"def big():\n{long_body}\n"
-        
+
         chunks = chunk_source(src, model="small", token_target=400)
-        
+
         # Assert basic chunk structure
         assert isinstance(chunks, list)
         for c in chunks:
@@ -58,7 +60,7 @@ class MyClass:
             assert hasattr(c, "token_count")
             assert c.start_line >= 1
             assert c.end_line >= c.start_line
-        
+
         # There should be at least one chunk and likely multiple
         assert len(chunks) >= 1
 
@@ -82,22 +84,22 @@ class Calculator:
         return x * y
 """
         chunks = chunk_source(src, model="small")
-        
+
         # Look for chunks with symbol metadata
         symbol_chunks = [c for c in chunks if c.symbol_kind]
-        
+
         if symbol_chunks:  # If Tree-sitter is available
             # Should have class and method symbols
             class_chunks = [c for c in symbol_chunks if c.symbol_kind == "class"]
             method_chunks = [c for c in symbol_chunks if c.symbol_kind == "method"]
-            
+
             assert len(class_chunks) >= 1
             assert len(method_chunks) >= 2
-            
+
             # Check symbol names
             class_names = [c.symbol_name for c in class_chunks]
             method_names = [c.symbol_name for c in method_chunks]
-            
+
             assert "Calculator" in class_names
             assert "add" in method_names
             assert "multiply" in method_names
@@ -116,17 +118,21 @@ def function():
     return "inside function"
 """
         chunks = chunk_source(src, model="small")
-        
+
         # Should have chunks for module-level code and function
         assert len(chunks) >= 1
-        
+
         # Module-level chunks should have appropriate metadata
         for chunk in chunks:
             if chunk.symbol_kind == "function":
                 assert chunk.symbol_name == "function"
             elif chunk.symbol_kind is None:
                 # Module-level code chunk
-                assert "import os" in chunk.text or "CONSTANT = 42" in chunk.text or "Module level code" in chunk.text
+                assert (
+                    "import os" in chunk.text
+                    or "CONSTANT = 42" in chunk.text
+                    or "Module level code" in chunk.text
+                )
 
     def test_python_nested_classes_and_functions(self):
         """Test chunking of nested classes and functions."""
@@ -142,11 +148,11 @@ def outer_function():
     return inner_function()
 """
         chunks = chunk_source(src, model="small")
-        
+
         if any(c.symbol_kind for c in chunks):  # If Tree-sitter is available
             # Should detect nested structure
             symbol_paths = [c.symbol_path for c in chunks if c.symbol_path]
-            
+
             # Look for nested symbols in symbol paths
             nested_symbols = [path for path in symbol_paths if "inner" in path.lower()]
             assert len(nested_symbols) >= 1
@@ -162,7 +168,7 @@ def broken_function(
 """
         # Should not raise an exception
         chunks = chunk_source(malformed_src, model="small")
-        
+
         # Should still return chunks (may fall back to token windowing)
         assert isinstance(chunks, list)
         assert len(chunks) >= 1
@@ -176,7 +182,7 @@ def calculate(x, y):
     return result
 """
         chunks = chunk_source(src, model="small")
-        
+
         for chunk in chunks:
             # Token count should be positive
             assert chunk.token_count > 0
@@ -192,10 +198,10 @@ class OuterClass:
             return "nested"
 """
         chunks = chunk_source(src, model="small")
-        
+
         if any(c.symbol_kind for c in chunks):  # If Tree-sitter is available
             method_chunks = [c for c in chunks if c.symbol_kind == "method"]
-            
+
             if method_chunks:
                 method_chunk = method_chunks[0]
                 # Symbol path should reflect the hierarchy

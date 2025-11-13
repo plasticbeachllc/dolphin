@@ -1,8 +1,10 @@
 """Basic smoke tests for CLI functionality."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 from typer.testing import CliRunner
+
 from kb.ingest.cli import app
 
 runner = CliRunner()
@@ -33,7 +35,9 @@ class TestCLIBasics:
         """Test that index --help works."""
         result = runner.invoke(app, ["index", "--help"])
         assert result.exit_code == 0
-        assert "indexing" in result.stdout.lower() or "pipeline" in result.stdout.lower()
+        assert (
+            "indexing" in result.stdout.lower() or "pipeline" in result.stdout.lower()
+        )
 
     def test_status_help_works(self):
         """Test that status --help works."""
@@ -62,7 +66,10 @@ class TestCLIBasics:
         # Second run should not fail
         result2 = runner.invoke(app, ["init", "--config-path", str(config_path)])
         assert result2.exit_code == 0
-        assert "already exists" in result2.stdout.lower() or "verified" in result2.stdout.lower()
+        assert (
+            "already exists" in result2.stdout.lower()
+            or "verified" in result2.stdout.lower()
+        )
 
     def test_add_repo_requires_arguments(self):
         """Test that add-repo requires name and path arguments."""
@@ -78,7 +85,10 @@ class TestCLIBasics:
         result = runner.invoke(app, ["add-repo", "test-repo", str(nonexistent)])
 
         assert result.exit_code != 0
-        assert "does not exist" in result.stdout.lower() or "not a directory" in result.stdout.lower()
+        assert (
+            "does not exist" in result.stdout.lower()
+            or "not a directory" in result.stdout.lower()
+        )
 
     def test_index_requires_repo_name(self):
         """Test that index requires a repository name."""

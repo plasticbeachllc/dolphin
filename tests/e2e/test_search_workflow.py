@@ -11,9 +11,9 @@ def _create_backend(setup: dict) -> KnowledgeSearchBackend:
     """Create a KnowledgeSearchBackend instance using stub embeddings."""
     return KnowledgeSearchBackend(
         embedding_provider=EmbeddingProvider(),
-        lance_store=setup['lancedb_store'],
-        sql_store=setup['metadata_store'],
-        config=setup['config'],
+        lance_store=setup["lancedb_store"],
+        sql_store=setup["metadata_store"],
+        config=setup["config"],
     )
 
 
@@ -41,13 +41,13 @@ class TestSearchWorkflow:
     def test_search_after_indexing(self, e2e_kb_setup):
         """Test search workflow: index → search → verify results."""
         setup = e2e_kb_setup
-        pipeline = setup['pipeline']
-        lancedb_store = setup['lancedb_store']
-        repo_name = setup['repo_name']
+        pipeline = setup["pipeline"]
+        lancedb_store = setup["lancedb_store"]
+        repo_name = setup["repo_name"]
 
         # Step 1: Index repository
         result = pipeline.index(repo_name, dry_run=False, force=True)
-        assert result['chunks_indexed'] > 0
+        assert result["chunks_indexed"] > 0
 
         # Step 2: Create search backend
         backend = _create_backend(setup)
@@ -58,7 +58,7 @@ class TestSearchWorkflow:
             "authenticate user",
             top_k=5,
             repo_name=repo_name,
-            embed_model=setup['config'].default_embed_model,
+            embed_model=setup["config"].default_embed_model,
         )
 
         # Step 4: Verify results
@@ -66,18 +66,18 @@ class TestSearchWorkflow:
 
         # Step 5: Verify result structure
         top_result = search_results[0]
-        assert 'chunk_id' in top_result
-        assert 'content' in top_result
-        assert 'file_path' in top_result
-        assert 'score' in top_result
-        assert top_result['score'] > 0.0
+        assert "chunk_id" in top_result
+        assert "content" in top_result
+        assert "file_path" in top_result
+        assert "score" in top_result
+        assert top_result["score"] > 0.0
 
     def test_search_relevance_ranking(self, e2e_kb_setup):
         """Test that search results are ranked by relevance."""
         setup = e2e_kb_setup
-        pipeline = setup['pipeline']
-        lancedb_store = setup['lancedb_store']
-        repo_name = setup['repo_name']
+        pipeline = setup["pipeline"]
+        lancedb_store = setup["lancedb_store"]
+        repo_name = setup["repo_name"]
 
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
@@ -89,21 +89,21 @@ class TestSearchWorkflow:
             "password hashing security",
             top_k=10,
             repo_name=repo_name,
-            embed_model=setup['config'].default_embed_model,
+            embed_model=setup["config"].default_embed_model,
         )
 
         # Verify ranking
         if len(results) > 1:
-            scores = [r['score'] for r in results]
+            scores = [r["score"] for r in results]
             # Scores should be in descending order
             assert scores == sorted(scores, reverse=True)
 
     def test_search_with_different_queries(self, e2e_kb_setup):
         """Test search with various query types."""
         setup = e2e_kb_setup
-        pipeline = setup['pipeline']
-        lancedb_store = setup['lancedb_store']
-        repo_name = setup['repo_name']
+        pipeline = setup["pipeline"]
+        lancedb_store = setup["lancedb_store"]
+        repo_name = setup["repo_name"]
 
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
@@ -124,19 +124,19 @@ class TestSearchWorkflow:
                 query,
                 top_k=5,
                 repo_name=repo_name,
-                embed_model=setup['config'].default_embed_model,
+                embed_model=setup["config"].default_embed_model,
             )
             assert isinstance(results, list)
             # Some queries might not return results, but should not error
             if len(results) > 0:
-                assert 'content' in results[0]
+                assert "content" in results[0]
 
     def test_search_filters_by_top_k(self, e2e_kb_setup):
         """Test that top_k limits number of results."""
         setup = e2e_kb_setup
-        pipeline = setup['pipeline']
-        lancedb_store = setup['lancedb_store']
-        repo_name = setup['repo_name']
+        pipeline = setup["pipeline"]
+        lancedb_store = setup["lancedb_store"]
+        repo_name = setup["repo_name"]
 
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
@@ -149,14 +149,14 @@ class TestSearchWorkflow:
             "authentication",
             top_k=5,
             repo_name=repo_name,
-            embed_model=setup['config'].default_embed_model,
+            embed_model=setup["config"].default_embed_model,
         )
         results_10 = _run_search(
             backend,
             "authentication",
             top_k=10,
             repo_name=repo_name,
-            embed_model=setup['config'].default_embed_model,
+            embed_model=setup["config"].default_embed_model,
         )
 
         assert len(results_5) <= 5
@@ -165,9 +165,9 @@ class TestSearchWorkflow:
     def test_search_empty_query(self, e2e_kb_setup):
         """Test handling of empty query."""
         setup = e2e_kb_setup
-        pipeline = setup['pipeline']
-        lancedb_store = setup['lancedb_store']
-        repo_name = setup['repo_name']
+        pipeline = setup["pipeline"]
+        lancedb_store = setup["lancedb_store"]
+        repo_name = setup["repo_name"]
 
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
@@ -181,7 +181,7 @@ class TestSearchWorkflow:
                 "",
                 top_k=5,
                 repo_name=repo_name,
-                embed_model=setup['config'].default_embed_model,
+                embed_model=setup["config"].default_embed_model,
             )
             # Should return empty or handle gracefully
             assert isinstance(results, list)
@@ -193,9 +193,9 @@ class TestSearchWorkflow:
     def test_search_no_results(self, e2e_kb_setup):
         """Test search when no results match."""
         setup = e2e_kb_setup
-        pipeline = setup['pipeline']
-        lancedb_store = setup['lancedb_store']
-        repo_name = setup['repo_name']
+        pipeline = setup["pipeline"]
+        lancedb_store = setup["lancedb_store"]
+        repo_name = setup["repo_name"]
 
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
@@ -208,7 +208,7 @@ class TestSearchWorkflow:
             "zxcvbnmasdfghjklqwertyuiop",
             top_k=5,
             repo_name=repo_name,
-            embed_model=setup['config'].default_embed_model,
+            embed_model=setup["config"].default_embed_model,
         )
 
         # Should return empty list, not error
@@ -221,9 +221,9 @@ class TestSearchQuality:
     def test_search_finds_exact_match(self, e2e_kb_setup):
         """Test that exact matches are ranked highly."""
         setup = e2e_kb_setup
-        pipeline = setup['pipeline']
-        lancedb_store = setup['lancedb_store']
-        repo_name = setup['repo_name']
+        pipeline = setup["pipeline"]
+        lancedb_store = setup["lancedb_store"]
+        repo_name = setup["repo_name"]
 
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
@@ -236,7 +236,7 @@ class TestSearchQuality:
             "authenticate_user",
             top_k=10,
             repo_name=repo_name,
-            embed_model=setup['config'].default_embed_model,
+            embed_model=setup["config"].default_embed_model,
         )
 
         # Should find results containing this function
@@ -244,15 +244,17 @@ class TestSearchQuality:
 
         # Top result should mention authentication
         top_result = results[0]
-        assert 'authenticat' in top_result['content'].lower() or \
-               'user' in top_result['content'].lower()
+        assert (
+            "authenticat" in top_result["content"].lower()
+            or "user" in top_result["content"].lower()
+        )
 
     def test_search_semantic_similarity(self, e2e_kb_setup):
         """Test semantic search finds conceptually similar content."""
         setup = e2e_kb_setup
-        pipeline = setup['pipeline']
-        lancedb_store = setup['lancedb_store']
-        repo_name = setup['repo_name']
+        pipeline = setup["pipeline"]
+        lancedb_store = setup["lancedb_store"]
+        repo_name = setup["repo_name"]
 
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
@@ -265,23 +267,30 @@ class TestSearchQuality:
             "verifying user credentials",
             top_k=5,
             repo_name=repo_name,
-            embed_model=setup['config'].default_embed_model,
+            embed_model=setup["config"].default_embed_model,
         )
 
         # Should find authentication-related content
         if len(results) > 0:
-            content_lower = ' '.join([r['content'].lower() for r in results])
+            content_lower = " ".join([r["content"].lower() for r in results])
             # Should find related concepts
-            assert any(keyword in content_lower for keyword in [
-                'authenticat', 'user', 'password', 'credential', 'valid'
-            ])
+            assert any(
+                keyword in content_lower
+                for keyword in [
+                    "authenticat",
+                    "user",
+                    "password",
+                    "credential",
+                    "valid",
+                ]
+            )
 
     def test_search_code_vs_docs(self, e2e_kb_setup):
         """Test search differentiates code and documentation."""
         setup = e2e_kb_setup
-        pipeline = setup['pipeline']
-        lancedb_store = setup['lancedb_store']
-        repo_name = setup['repo_name']
+        pipeline = setup["pipeline"]
+        lancedb_store = setup["lancedb_store"]
+        repo_name = setup["repo_name"]
 
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
@@ -294,7 +303,7 @@ class TestSearchQuality:
             "features authentication project",
             top_k=10,
             repo_name=repo_name,
-            embed_model=setup['config'].default_embed_model,
+            embed_model=setup["config"].default_embed_model,
         )
 
         # Should find both code and docs
@@ -303,8 +312,12 @@ class TestSearchQuality:
         # Check file types in results
         file_types = set()
         for result in results:
-            if 'file_path' in result:
-                ext = result['file_path'].split('.')[-1] if '.' in result['file_path'] else ''
+            if "file_path" in result:
+                ext = (
+                    result["file_path"].split(".")[-1]
+                    if "." in result["file_path"]
+                    else ""
+                )
                 file_types.add(ext)
 
         # Should have found various file types
@@ -319,9 +332,9 @@ class TestSearchPerformance:
         import time
 
         setup = e2e_kb_setup
-        pipeline = setup['pipeline']
-        lancedb_store = setup['lancedb_store']
-        repo_name = setup['repo_name']
+        pipeline = setup["pipeline"]
+        lancedb_store = setup["lancedb_store"]
+        repo_name = setup["repo_name"]
 
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
@@ -335,7 +348,7 @@ class TestSearchPerformance:
             "authentication",
             top_k=10,
             repo_name=repo_name,
-            embed_model=setup['config'].default_embed_model,
+            embed_model=setup["config"].default_embed_model,
         )
         elapsed_time = time.time() - start_time
 
@@ -346,9 +359,9 @@ class TestSearchPerformance:
     def test_multiple_searches_consistent(self, e2e_kb_setup):
         """Test that multiple searches are consistent."""
         setup = e2e_kb_setup
-        pipeline = setup['pipeline']
-        lancedb_store = setup['lancedb_store']
-        repo_name = setup['repo_name']
+        pipeline = setup["pipeline"]
+        lancedb_store = setup["lancedb_store"]
+        repo_name = setup["repo_name"]
 
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
@@ -362,14 +375,14 @@ class TestSearchPerformance:
             query,
             top_k=5,
             repo_name=repo_name,
-            embed_model=setup['config'].default_embed_model,
+            embed_model=setup["config"].default_embed_model,
         )
         results2 = _run_search(
             backend,
             query,
             top_k=5,
             repo_name=repo_name,
-            embed_model=setup['config'].default_embed_model,
+            embed_model=setup["config"].default_embed_model,
         )
 
         # Results should be consistent
@@ -377,7 +390,7 @@ class TestSearchPerformance:
 
         if len(results1) > 0:
             # Top results should be the same
-            assert results1[0]['chunk_id'] == results2[0]['chunk_id']
+            assert results1[0]["chunk_id"] == results2[0]["chunk_id"]
 
 
 class TestSearchFiltering:
@@ -387,9 +400,9 @@ class TestSearchFiltering:
     def test_search_filter_by_file_type(self, e2e_kb_setup):
         """Test filtering search results by file type."""
         setup = e2e_kb_setup
-        pipeline = setup['pipeline']
-        lancedb_store = setup['lancedb_store']
-        repo_name = setup['repo_name']
+        pipeline = setup["pipeline"]
+        lancedb_store = setup["lancedb_store"]
+        repo_name = setup["repo_name"]
 
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)
@@ -400,9 +413,9 @@ class TestSearchFiltering:
     def test_search_filter_by_path(self, e2e_kb_setup):
         """Test filtering search results by file path."""
         setup = e2e_kb_setup
-        pipeline = setup['pipeline']
-        lancedb_store = setup['lancedb_store']
-        repo_name = setup['repo_name']
+        pipeline = setup["pipeline"]
+        lancedb_store = setup["lancedb_store"]
+        repo_name = setup["repo_name"]
 
         # Index
         pipeline.index(repo_name, dry_run=False, force=True)

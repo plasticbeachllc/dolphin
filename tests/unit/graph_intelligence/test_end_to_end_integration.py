@@ -4,20 +4,22 @@ Tests the full integration flow without requiring real tiktoken/embeddings.
 Uses mocked components for embedding while testing real graph intelligence.
 """
 
-import pytest
-import tempfile
 import shutil
-from pathlib import Path
-from datetime import datetime
-from sqlmodel import create_engine, Session, select
 import subprocess
-from unittest.mock import Mock, MagicMock, patch
+import tempfile
+from datetime import datetime
+from pathlib import Path
+from unittest.mock import MagicMock, Mock, patch
 
-from kb.store.sql_models import CodeNode, CodeEdge, GraphMetrics, GraphCacheState, Repo, File
-from kb.store.graph_store import GraphStore
-from kb.store.sqlite_meta import SQLiteMetadataStore
+import pytest
+from sqlmodel import Session, create_engine, select
+
 from kb.graph_intelligence.graph_manager import GraphManager
 from kb.ingest.graph_helpers import extract_graph_from_file, store_graph_data
+from kb.store.graph_store import GraphStore
+from kb.store.sql_models import (CodeEdge, CodeNode, File, GraphCacheState,
+                                 GraphMetrics, Repo)
+from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
 @pytest.fixture
@@ -51,7 +53,8 @@ def temp_git_repo():
 
     # Create Python files
     main_py = repo_path / "main.py"
-    main_py.write_text("""
+    main_py.write_text(
+        """
 def main():
     result = process()
     display(result)
@@ -67,7 +70,8 @@ def transform(data):
 
 def display(result):
     print(result)
-""")
+"""
+    )
 
     # Commit
     subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
@@ -259,7 +263,9 @@ class TestEndToEndIntegration:
             # Verify metrics count matches node count
             assert len(db_metrics) == stats["nodes_created"]
 
-    def test_cache_invalidation_on_git_changes(self, graph_store_with_data, temp_git_repo):
+    def test_cache_invalidation_on_git_changes(
+        self, graph_store_with_data, temp_git_repo
+    ):
         """Test cache invalidation when git commit changes."""
         graph_store, repo_id, initial_commit, stats = graph_store_with_data
 
@@ -280,7 +286,9 @@ class TestEndToEndIntegration:
         # Make a git change
         new_file = temp_git_repo / "utils.py"
         new_file.write_text("def helper():\n    return 42\n")
-        subprocess.run(["git", "add", "."], cwd=temp_git_repo, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "add", "."], cwd=temp_git_repo, check=True, capture_output=True
+        )
         subprocess.run(
             ["git", "commit", "-m", "Add utils"],
             cwd=temp_git_repo,
@@ -498,7 +506,8 @@ class TestEdgeCases:
         """Test extraction from non-Python files."""
         # Create TypeScript file
         ts_file = temp_git_repo / "app.ts"
-        ts_file.write_text("""
+        ts_file.write_text(
+            """
 function hello() {
     console.log("Hello");
 }
@@ -506,7 +515,8 @@ function hello() {
 function world() {
     hello();
 }
-""")
+"""
+        )
 
         # Extract graph
         text = ts_file.read_text()
@@ -522,11 +532,13 @@ function world() {
         """Test handling of malformed code."""
         # Create file with syntax errors
         bad_py = temp_git_repo / "bad.py"
-        bad_py.write_text("""
+        bad_py.write_text(
+            """
 def broken(
     missing_paren:
     pass
-""")
+"""
+        )
 
         # Extract should handle gracefully
         text = bad_py.read_text()

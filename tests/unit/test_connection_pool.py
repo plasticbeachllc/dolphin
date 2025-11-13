@@ -1,15 +1,15 @@
 """Unit tests for SQLite connection pool."""
 
-import pytest
 import tempfile
 import threading
 import time
 from pathlib import Path
-from kb.store.connection_pool import (
-    SQLiteConnectionPool,
-    get_connection_pool,
-    close_connection_pool,
-)
+
+import pytest
+
+from kb.store.connection_pool import (SQLiteConnectionPool,
+                                      close_connection_pool,
+                                      get_connection_pool)
 
 
 class TestSQLiteConnectionPool:
@@ -40,8 +40,8 @@ class TestSQLiteConnectionPool:
         assert pool.pool_size == 5
         assert pool.max_overflow == 3
         stats = pool.stats()
-        assert stats['pool_size'] == 5
-        assert stats['created_connections'] >= 5
+        assert stats["pool_size"] == 5
+        assert stats["created_connections"] >= 5
 
         pool.close_all()
 
@@ -98,8 +98,8 @@ class TestSQLiteConnectionPool:
         stats = pool.stats()
 
         # Should have high reuse rate
-        assert stats['reused_connections'] >= 8
-        assert stats['reuse_rate'] > 80.0
+        assert stats["reused_connections"] >= 8
+        assert stats["reuse_rate"] > 80.0
 
         pool.close_all()
 
@@ -120,7 +120,7 @@ class TestSQLiteConnectionPool:
         assert conn3 is not None
 
         stats = pool.stats()
-        assert stats['current_overflow'] >= 1
+        assert stats["current_overflow"] >= 1
 
         # Release all
         pool.release(conn1)
@@ -129,7 +129,7 @@ class TestSQLiteConnectionPool:
 
         # Overflow should be back to 0
         stats = pool.stats()
-        assert stats['current_overflow'] == 0
+        assert stats["current_overflow"] == 0
 
         pool.close_all()
 
@@ -249,11 +249,11 @@ class TestSQLiteConnectionPool:
 
         stats = pool.stats()
 
-        assert stats['pool_size'] == 2
-        assert stats['created_connections'] >= 2
-        assert stats['reused_connections'] >= 3
-        assert stats['available_connections'] >= 0
-        assert 'reuse_rate' in stats
+        assert stats["pool_size"] == 2
+        assert stats["created_connections"] >= 2
+        assert stats["reused_connections"] >= 3
+        assert stats["available_connections"] >= 0
+        assert "reuse_rate" in stats
 
         pool.close_all()
 
@@ -269,7 +269,7 @@ class TestSQLiteConnectionPool:
         pool.close_all()
 
         stats = pool.stats()
-        assert stats['available_connections'] == 0
+        assert stats["available_connections"] == 0
 
 
 class TestGlobalPoolHelpers:

@@ -8,18 +8,19 @@ Tests the full end-to-end flow:
 5. Cache invalidation scenarios
 """
 
-import pytest
-import tempfile
 import shutil
-from pathlib import Path
-from sqlmodel import create_engine, Session
 import subprocess
+import tempfile
+from pathlib import Path
+
+import pytest
+from sqlmodel import Session, create_engine
 
 from kb.config import KBConfig
+from kb.graph_intelligence.graph_manager import GraphManager
+from kb.ingest.pipeline import IngestionPipeline
 from kb.store import LanceDBStore, SQLiteMetadataStore
 from kb.store.graph_store import GraphStore
-from kb.ingest.pipeline import IngestionPipeline
-from kb.graph_intelligence.graph_manager import GraphManager
 
 
 @pytest.fixture
@@ -46,7 +47,8 @@ def temp_repo():
 
     # Create Python files with functions and calls
     main_py = repo_path / "main.py"
-    main_py.write_text("""
+    main_py.write_text(
+        """
 def main():
     '''Main entry point.'''
     result = process_data()
@@ -72,10 +74,12 @@ def display_result(result):
 
 if __name__ == "__main__":
     main()
-""")
+"""
+    )
 
     utils_py = repo_path / "utils.py"
-    utils_py.write_text("""
+    utils_py.write_text(
+        """
 class DataProcessor:
     '''Utility class for data processing.'''
 
@@ -96,7 +100,8 @@ class DataProcessor:
     def _transform(self, data):
         '''Transform data.'''
         return [x ** 2 for x in data]
-""")
+"""
+    )
 
     # Commit files
     subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
@@ -161,9 +166,9 @@ class TestEndToEndFlow:
 
         # Verify specific nodes exist
         with Session(pipeline.graph_store.db) as session:
-            from kb.store.sql_models import CodeNode
-
             from sqlmodel import select
+
+            from kb.store.sql_models import CodeNode
 
             nodes = session.exec(select(CodeNode)).all()
             node_names = {node.name for node in nodes}
@@ -200,11 +205,11 @@ class TestEndToEndFlow:
         # process_data() calls load_data(), transform()
         edges = list(graph.edges())
         assert len(edges) > 0
-        
+
         # Test that invalidating cache works
         graph_manager.invalidate_cache()
         assert graph_manager._graph is None
-        
+
         # Re-accessing rebuilds
         graph2 = graph_manager.get_graph()
         assert graph2 is not None
@@ -226,8 +231,9 @@ class TestEndToEndFlow:
 
         # Verify metrics are stored in database
         with Session(pipeline.graph_store.db) as session:
-            from kb.store.sql_models import GraphMetrics
             from sqlmodel import select
+
+            from kb.store.sql_models import GraphMetrics
 
             metrics = session.exec(select(GraphMetrics)).all()
             assert len(metrics) > 0
@@ -253,13 +259,18 @@ class TestEndToEndFlow:
 
         # Make a change and commit
         new_file = temp_repo / "new_module.py"
-        new_file.write_text("""
+        new_file.write_text(
+            """
 def new_function():
     '''A new function.'''
     return 42
-""")
+"""
+        )
         subprocess.run(
-            ["git", "add", "new_module.py"], cwd=temp_repo, check=True, capture_output=True
+            ["git", "add", "new_module.py"],
+            cwd=temp_repo,
+            check=True,
+            capture_output=True,
         )
         subprocess.run(
             ["git", "commit", "-m", "Add new function"],
@@ -307,7 +318,8 @@ def new_function():
 
         # Add a new file with function calls
         new_file = temp_repo / "service.py"
-        new_file.write_text("""
+        new_file.write_text(
+            """
 def service_function():
     '''Service function that calls helpers.'''
     helper_a()
@@ -320,7 +332,8 @@ def helper_a():
 def helper_b():
     '''Helper B.'''
     pass
-""")
+"""
+        )
         subprocess.run(
             ["git", "add", "service.py"], cwd=temp_repo, check=True, capture_output=True
         )
@@ -339,7 +352,7 @@ def helper_b():
 
         # Force graph rebuild to update cache with new commit
         graph_manager.get_graph(force_rebuild=True)
-        
+
         # Get new cache state
         new_cache = graph_manager.validator._get_cache_state()
 
@@ -374,7 +387,9 @@ class TestEdgeCases:
         # Create initial commit
         readme = empty_repo / "README.md"
         readme.write_text("# Empty Repo")
-        subprocess.run(["git", "add", "."], cwd=empty_repo, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "add", "."], cwd=empty_repo, check=True, capture_output=True
+        )
         subprocess.run(
             ["git", "commit", "-m", "Initial"],
             cwd=empty_repo,
@@ -484,16 +499,16 @@ class TestPerformance:
         # Both cached accesses should be fast (< 20ms to account for test overhead)
         assert first_access_time < 0.02
         assert second_access_time < 0.02
-        
+
         # Test invalidation and rebuild
         graph_manager.invalidate_cache()
         start = time.time()
         graph3 = graph_manager.get_graph()
         rebuild_time = time.time() - start
-        
+
         # Rebuild might be slower but still reasonable for small graph
         assert rebuild_time < 0.5  # 500ms should be plenty for a small graph
-        
+
         # After rebuild, cache should work again
         start = time.time()
         graph4 = graph_manager.get_graph()

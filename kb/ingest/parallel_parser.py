@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import multiprocessing as mp
 from dataclasses import dataclass
-from pathlib import Path
-from typing import List, Dict, Any
 from functools import partial
+from pathlib import Path
+from typing import Any, Dict, List
 
 from ..chunkers.registry import get_chunker_for_file
 from ..chunkers.types import Chunk
@@ -19,6 +19,7 @@ from ..chunkers.types import Chunk
 @dataclass
 class ParseJob:
     """A parsing job for a single file."""
+
     file_path: Path
     content: str
     language: str
@@ -30,6 +31,7 @@ class ParseJob:
 @dataclass
 class ParseResult:
     """Result of parsing a file."""
+
     file_path: Path
     chunks: List[Chunk]
     success: bool
@@ -101,6 +103,7 @@ def parse_files_parallel(
     except Exception as e:
         # Fall back to sequential processing on error
         import logging
+
         logging.warning(f"Parallel parsing failed: {e}. Falling back to sequential.")
         return [_parse_file_worker(job) for job in jobs]
 
@@ -119,6 +122,7 @@ class ParallelChunkCache:
             max_size: Maximum number of files to cache (default: 1000)
         """
         from functools import lru_cache
+
         self.max_size = max_size
         self._cache: Dict[tuple[str, str], List[Chunk]] = {}
         self._access_order: List[tuple[str, str]] = []

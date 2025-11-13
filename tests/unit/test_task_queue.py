@@ -1,9 +1,11 @@
 """Unit tests for TaskQueue functionality."""
 
-import pytest
 import asyncio
-from datetime import datetime, timedelta, UTC
-from kb.api.task_queue import TaskQueue, TaskStatus, IndexTask
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
+from kb.api.task_queue import IndexTask, TaskQueue, TaskStatus
 
 
 class TestTaskQueueCreation:
@@ -161,9 +163,7 @@ class TestTaskQueueUpdate:
         task = queue.create_task(repo="test-repo", files=["file.py"])
 
         await queue.update_task(
-            task.task_id,
-            status=TaskStatus.FAILED,
-            error="Test error message"
+            task.task_id, status=TaskStatus.FAILED, error="Test error message"
         )
 
         updated = queue.get_task(task.task_id)
@@ -205,7 +205,7 @@ class TestTaskQueueUpdate:
             task.task_id,
             status=TaskStatus.COMPLETED,
             progress=2,
-            result={"indexed": 2, "skipped": 0}
+            result={"indexed": 2, "skipped": 0},
         )
 
         updated = queue.get_task(task.task_id)
@@ -273,7 +273,9 @@ class TestTaskQueueCleanup:
 
         # Create a failed task
         task = queue.create_task(repo="test-repo", files=["file.py"])
-        await queue.update_task(task.task_id, status=TaskStatus.FAILED, error="Test error")
+        await queue.update_task(
+            task.task_id, status=TaskStatus.FAILED, error="Test error"
+        )
 
         # Manually set completed_at to 2 hours ago
         task.completed_at = datetime.now(UTC) - timedelta(hours=2)
@@ -390,7 +392,7 @@ class TestTaskQueueConcurrency:
         # Update both tasks concurrently
         await asyncio.gather(
             queue.update_task(task1.task_id, status=TaskStatus.PROCESSING),
-            queue.update_task(task2.task_id, status=TaskStatus.PROCESSING)
+            queue.update_task(task2.task_id, status=TaskStatus.PROCESSING),
         )
 
         assert queue.get_task(task1.task_id).status == TaskStatus.PROCESSING
@@ -407,7 +409,7 @@ class TestTaskQueueConcurrency:
         await asyncio.gather(
             queue.update_task(task.task_id, progress=1),
             queue.update_task(task.task_id, progress=2),
-            queue.update_task(task.task_id, progress=3)
+            queue.update_task(task.task_id, progress=3),
         )
 
         # Final progress should be one of the values (3 is most likely)

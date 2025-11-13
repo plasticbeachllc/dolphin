@@ -1,11 +1,13 @@
+import tempfile
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
-from pathlib import Path
-import tempfile
 
-from kb.api.app import app, set_search_backend, reset_search_backend
+from kb.api.app import app, reset_search_backend, set_search_backend
 from kb.api.search_backend import create_search_backend
+
 
 @pytest.fixture
 def client_with_backend():
@@ -16,6 +18,7 @@ def client_with_backend():
         set_search_backend(backend)
         yield TestClient(app)
         reset_search_backend()
+
 
 class TestSearchAPI:
     def test_health_endpoint(self, client_with_backend):

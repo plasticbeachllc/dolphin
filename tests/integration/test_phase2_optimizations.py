@@ -4,19 +4,22 @@ Tests parallel scanning, parallel parsing, incremental embedding,
 adaptive batching, and AST caching.
 """
 
-import pytest
 import tempfile
 import time
 from pathlib import Path
 from typing import List
 
-from kb.ingest.parallel_scanner import scan_repo_parallel
-from kb.ingest.parallel_parser import ParseJob, parse_files_parallel, ParallelChunkCache
-from kb.ingest.incremental import compute_chunk_diff, IncrementalIndexer
-from kb.embeddings.adaptive_batching import AdaptiveBatcher, create_adaptive_batches
+import pytest
+
 from kb.cache.ast_cache import ASTCache
 from kb.chunkers.types import Chunk
+from kb.embeddings.adaptive_batching import (AdaptiveBatcher,
+                                             create_adaptive_batches)
 from kb.hashing import hash_text
+from kb.ingest.incremental import IncrementalIndexer, compute_chunk_diff
+from kb.ingest.parallel_parser import (ParallelChunkCache, ParseJob,
+                                       parse_files_parallel)
+from kb.ingest.parallel_scanner import scan_repo_parallel
 
 
 class TestParallelScanning:
@@ -25,22 +28,34 @@ class TestParallelScanning:
     def test_parallel_scanning_small_repo(self, tmp_path):
         """Test parallel scanning on a small repository."""
         import subprocess
-        
+
         # Create test repo
         repo_dir = tmp_path / "test_repo"
         repo_dir.mkdir()
-        
+
         # Initialize git repository
         subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"],
+            cwd=repo_dir,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test User"],
+            cwd=repo_dir,
+            check=True,
+            capture_output=True,
+        )
 
         # Create test files
         for i in range(10):
             (repo_dir / f"file_{i}.py").write_text(f"# File {i}\nprint('hello')")
-        
+
         # Add files to git
-        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "add", "."], cwd=repo_dir, check=True, capture_output=True
+        )
 
         # Scan with parallel scanner
         candidates = scan_repo_parallel(repo_dir, [])
@@ -51,23 +66,36 @@ class TestParallelScanning:
     def test_parallel_vs_sequential_performance(self, tmp_path):
         """Compare parallel vs sequential scanning performance."""
         import subprocess
+
         from kb.ingest.scanner import scan_repo
 
         # Create larger test repo
         repo_dir = tmp_path / "test_repo"
         repo_dir.mkdir()
-        
+
         # Initialize git repository
         subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"],
+            cwd=repo_dir,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test User"],
+            cwd=repo_dir,
+            check=True,
+            capture_output=True,
+        )
 
         # Create 100 test files
         for i in range(100):
             (repo_dir / f"file_{i}.py").write_text(f"# File {i}\n" + "x = 1\n" * 100)
-        
+
         # Add files to git
-        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "add", "."], cwd=repo_dir, check=True, capture_output=True
+        )
 
         # Sequential scan
         start = time.time()
@@ -164,11 +192,11 @@ class TestIncrementalEmbedding:
 
         diff = compute_chunk_diff(new_chunks, existing_hashes, "test_repo", "test.py")
 
-        assert diff.stats['total_new'] == 3
-        assert diff.stats['to_embed'] == 1  # Only chunk3
-        assert diff.stats['unchanged'] == 2
-        assert diff.stats['deleted'] == 0
-        assert diff.stats['reuse_pct'] == 66  # 2/3
+        assert diff.stats["total_new"] == 3
+        assert diff.stats["to_embed"] == 1  # Only chunk3
+        assert diff.stats["unchanged"] == 2
+        assert diff.stats["deleted"] == 0
+        assert diff.stats["reuse_pct"] == 66  # 2/3
 
     def test_incremental_skip_unchanged(self):
         """Test that unchanged chunks are skipped."""
@@ -182,7 +210,7 @@ class TestIncrementalEmbedding:
 
         # Should skip all chunks
         assert len(diff.new_chunks) == 0
-        assert diff.stats['reuse_pct'] == 100
+        assert diff.stats["reuse_pct"] == 100
 
 
 class TestAdaptiveBatching:
@@ -325,26 +353,36 @@ class TestPhase2Integration:
     def test_full_optimized_pipeline(self, tmp_path):
         """Test full optimized pipeline with all Phase 2 features."""
         import subprocess
-        
+
         # Create test repository
         repo_dir = tmp_path / "test_repo"
         repo_dir.mkdir()
-        
+
         # Initialize git repository
         subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"],
+            cwd=repo_dir,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test User"],
+            cwd=repo_dir,
+            check=True,
+            capture_output=True,
+        )
 
         # Create test files
         for i in range(20):
             (repo_dir / f"module_{i}.py").write_text(
-                f"# Module {i}\n"
-                f"def function_{i}():\n"
-                f"    return {i}\n"
+                f"# Module {i}\n" f"def function_{i}():\n" f"    return {i}\n"
             )
-        
+
         # Add files to git
-        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "add", "."], cwd=repo_dir, check=True, capture_output=True
+        )
 
         # Test 1: Parallel scanning
         candidates = scan_repo_parallel(repo_dir, [], num_workers=4)
@@ -353,17 +391,19 @@ class TestPhase2Integration:
         # Test 2: Parallel parsing
         parse_jobs = []
         for candidate in candidates[:10]:  # Test subset
-            with open(candidate.abs_path, 'r') as f:
+            with open(candidate.abs_path, "r") as f:
                 content = f.read()
 
-            parse_jobs.append(ParseJob(
-                file_path=candidate.abs_path,
-                content=content,
-                language=candidate.language,
-                model="small",
-                token_target=400,
-                overlap_pct=0.1,
-            ))
+            parse_jobs.append(
+                ParseJob(
+                    file_path=candidate.abs_path,
+                    content=content,
+                    language=candidate.language,
+                    model="small",
+                    token_target=400,
+                    overlap_pct=0.1,
+                )
+            )
 
         results = parse_files_parallel(parse_jobs, num_workers=4)
         assert all(r.success for r in results)
@@ -372,14 +412,16 @@ class TestPhase2Integration:
         ast_cache = ASTCache(max_size=100)
         for result in results:
             if result.success:
-                with open(result.file_path, 'r') as f:
+                with open(result.file_path, "r") as f:
                     content = f.read()
                 content_hash = hash_text(content)
-                ast_cache.put(str(result.file_path), content_hash, result.chunks, "python")
+                ast_cache.put(
+                    str(result.file_path), content_hash, result.chunks, "python"
+                )
 
         # Verify cache works
         first_result = results[0]
-        with open(first_result.file_path, 'r') as f:
+        with open(first_result.file_path, "r") as f:
             content = f.read()
         content_hash = hash_text(content)
         cached = ast_cache.get(str(first_result.file_path), content_hash)

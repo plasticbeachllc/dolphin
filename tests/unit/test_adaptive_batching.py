@@ -1,11 +1,9 @@
 """Unit tests for adaptive batching."""
 
 import pytest
-from kb.embeddings.adaptive_batching import (
-    AdaptiveBatcher,
-    create_adaptive_batches,
-    BatchMetrics,
-)
+
+from kb.embeddings.adaptive_batching import (AdaptiveBatcher, BatchMetrics,
+                                             create_adaptive_batches)
 
 
 class TestAdaptiveBatcher:
@@ -105,15 +103,15 @@ class TestAdaptiveBatcher:
 
         # Before batching
         stats = batcher.get_stats()
-        assert stats['batches_processed'] == 0
+        assert stats["batches_processed"] == 0
 
         # After batching
         batches = list(batcher.create_batches(texts))
         stats = batcher.get_stats()
 
-        assert stats['batches_processed'] > 0
-        assert stats['avg_batch_size'] > 0
-        assert stats['avg_tokens_per_batch'] > 0
+        assert stats["batches_processed"] > 0
+        assert stats["avg_batch_size"] > 0
+        assert stats["avg_tokens_per_batch"] > 0
 
     def test_record_batch_time(self):
         """Test recording batch processing time."""
@@ -128,7 +126,7 @@ class TestAdaptiveBatcher:
 
         stats = batcher.get_stats()
         # Should have processing time recorded
-        assert 'avg_processing_time' in stats
+        assert "avg_processing_time" in stats
 
 
 class TestCreateAdaptiveBatches:

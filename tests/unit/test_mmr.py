@@ -33,7 +33,7 @@ class TestMaximalMarginalRelevance:
             {"chunk_id": "c", "score": 0.85, "query_vector": query_vector},
         ]
         reranked = maximal_marginal_relevance(query_vector, results)
-        
+
         # Should return all results
         assert len(reranked) == 3
         # Each should have MMR scores
@@ -47,10 +47,10 @@ class TestMaximalMarginalRelevance:
             {"chunk_id": "b", "score": 0.90, "query_vector": query_vector},
             {"chunk_id": "c", "score": 0.85, "query_vector": query_vector},
         ]
-        
+
         # High lambda (0.9) should prioritize relevance
         reranked = maximal_marginal_relevance(query_vector, results, lambda_param=0.9)
-        
+
         # Should return all results with MMR scores
         assert len(reranked) == 3
         # First result should be one of the high-scoring ones
@@ -65,10 +65,10 @@ class TestMaximalMarginalRelevance:
             {"chunk_id": "c", "score": 0.90, "query_vector": query_vector},
             {"chunk_id": "d", "score": 0.85, "query_vector": query_vector},
         ]
-        
+
         # Low lambda (0.3) should favor diversity
         reranked = maximal_marginal_relevance(query_vector, results, lambda_param=0.3)
-        
+
         # Should return all results
         assert len(reranked) == 4
         # MMR scores should reflect diversity optimization
@@ -81,13 +81,11 @@ class TestMaximalMarginalRelevance:
             {"id": "a", "score": 0.9, "query_vector": query_vector},
             {"id": "b", "score": 0.8, "query_vector": query_vector},
         ]
-        
+
         reranked = maximal_marginal_relevance(
-            query_vector, results,
-            lambda_param=0.7,
-            id_field="id"
+            query_vector, results, lambda_param=0.7, id_field="id"
         )
-        
+
         assert len(reranked) == 2
         assert all("mmr_score" in r for r in reranked)
 
@@ -95,7 +93,7 @@ class TestMaximalMarginalRelevance:
         """Test that invalid lambda parameters are handled gracefully."""
         query_vector = [0.1, 0.2, 0.3]
         results = [{"chunk_id": "a", "score": 0.9, "query_vector": query_vector}]
-        
+
         # Should handle invalid lambda gracefully (clip to valid range)
         # The function should not crash but should handle edge cases
         reranked = maximal_marginal_relevance(query_vector, results, lambda_param=-0.1)
@@ -109,9 +107,9 @@ class TestMaximalMarginalRelevance:
             {"chunk_id": "b", "score": 0.8, "query_vector": query_vector},
             {"score": 0.7, "query_vector": query_vector},  # No chunk_id
         ]
-        
+
         reranked = maximal_marginal_relevance(query_vector, results)
-        
+
         # Should handle missing IDs gracefully
         assert len(reranked) >= 0
 
@@ -122,9 +120,9 @@ class TestMaximalMarginalRelevance:
             {"chunk_id": "a", "score": 0.95, "query_vector": query_vector},
             {"chunk_id": "b", "score": 0.90, "query_vector": query_vector},
         ]
-        
+
         reranked = maximal_marginal_relevance(query_vector, results, lambda_param=0.7)
-        
+
         # Each result should have both original score and MMR score
         assert len(reranked) == 2
         for result in reranked:
@@ -142,12 +140,12 @@ class TestMaximalMarginalRelevance:
                 "repo": "api-server",
                 "language": "python",
                 "content": "def login(): pass",
-                "query_vector": query_vector
+                "query_vector": query_vector,
             }
         ]
-        
+
         reranked = maximal_marginal_relevance(query_vector, original_results)
-        
+
         assert len(reranked) == 1
         # All original fields should be preserved
         for key, value in original_results[0].items():
@@ -162,28 +160,36 @@ class TestMaximalMarginalRelevance:
         results = [
             {"chunk_id": "a", "score": 0.95, "query_vector": query_vector},
             {"chunk_id": "b", "score": 0.94, "query_vector": query_vector},
-            {"chunk_id": "c", "score": 0.90, "query_vector": [-0.1, -0.2, -0.3]},  # Different vector
+            {
+                "chunk_id": "c",
+                "score": 0.90,
+                "query_vector": [-0.1, -0.2, -0.3],
+            },  # Different vector
             {"chunk_id": "d", "score": 0.80, "query_vector": query_vector},
         ]
-        
+
         # High lambda (relevance-focused)
-        relevance_focused = maximal_marginal_relevance(query_vector, results, lambda_param=0.9)
-        
+        relevance_focused = maximal_marginal_relevance(
+            query_vector, results, lambda_param=0.9
+        )
+
         # Low lambda (diversity-focused)
-        diversity_focused = maximal_marginal_relevance(query_vector, results, lambda_param=0.3)
-        
+        diversity_focused = maximal_marginal_relevance(
+            query_vector, results, lambda_param=0.3
+        )
+
         # Both should preserve all results but potentially reorder
         assert len(relevance_focused) == 4
         assert len(diversity_focused) == 4
-        
+
         # Check that results are reordered differently
         relevance_order = [r["chunk_id"] for r in relevance_focused]
         diversity_order = [r["chunk_id"] for r in diversity_focused]
-        
+
         # The ordering might be the same, but MMR scores should differ
         relevance_scores = [r["mmr_score"] for r in relevance_focused]
         diversity_scores = [r["mmr_score"] for r in diversity_focused]
-        
+
         assert relevance_scores != diversity_scores
 
     def test_realistic_code_search_scenario(self):
@@ -196,7 +202,7 @@ class TestMaximalMarginalRelevance:
                 "content": "def login(username, password): return authenticate(username, password)",
                 "path": "src/auth/login.py",
                 "symbol_name": "login",
-                "query_vector": query_vector
+                "query_vector": query_vector,
             },
             {
                 "chunk_id": "login_2",
@@ -204,7 +210,7 @@ class TestMaximalMarginalRelevance:
                 "content": "async def login_async(user: User) -> AuthResult: return await auth.login(user)",
                 "path": "src/auth/async_login.py",
                 "symbol_name": "login_async",
-                "query_vector": query_vector
+                "query_vector": query_vector,
             },
             {
                 "chunk_id": "logout",
@@ -212,7 +218,7 @@ class TestMaximalMarginalRelevance:
                 "content": "def logout(session_id): clear_session(session_id)",
                 "path": "src/auth/session.py",
                 "symbol_name": "logout",
-                "query_vector": query_vector
+                "query_vector": query_vector,
             },
             {
                 "chunk_id": "database",
@@ -220,24 +226,24 @@ class TestMaximalMarginalRelevance:
                 "content": "SELECT * FROM users WHERE id = ?",
                 "path": "src/db/queries.sql",
                 "symbol_name": None,
-                "query_vector": [-0.1, -0.2, -0.3]  # Different semantic space
-            }
+                "query_vector": [-0.1, -0.2, -0.3],  # Different semantic space
+            },
         ]
-        
+
         reranked = maximal_marginal_relevance(query_vector, results, lambda_param=0.7)
-        
+
         # Should return all results
         assert len(reranked) == 4
-        
+
         # All should have MMR scores
         assert all("mmr_score" in r for r in reranked)
-        
+
         # Login-related results (similar) and database query (different) should be included
         chunk_ids = [r["chunk_id"] for r in reranked]
         assert "login_1" in chunk_ids
         assert "login_2" in chunk_ids
         assert "database" in chunk_ids
-        
+
         # First result should be highly relevant
         assert reranked[0]["score"] >= 0.85
 
@@ -249,10 +255,10 @@ class TestMaximalMarginalRelevance:
             {"chunk_id": "b", "score": 0.89, "query_vector": query_vector},
             {"chunk_id": "c", "score": 0.88, "query_vector": query_vector},
         ]
-        
+
         # With high similarity, lambda determines which gets selected first
         reranked = maximal_marginal_relevance(query_vector, results, lambda_param=0.8)
-        
+
         assert len(reranked) == 3
         # All should still be returned, MMR handles similarity internally
         assert all(r["chunk_id"] in ["a", "b", "c"] for r in reranked)

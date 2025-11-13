@@ -1,7 +1,10 @@
 """Unit tests for query caching functionality."""
-import pytest
+
 import time
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from kb.cache import QueryCache, create_cache
 
 
@@ -32,10 +35,10 @@ class TestQueryCache:
         cache = QueryCache(enabled=True)
         cache.set_embedding("query", "small", [0.1, 0.2])
         cache.set_embedding("query", "large", [0.5, 0.6])
-        
+
         small_cached = cache.get_embedding("query", "small")
         large_cached = cache.get_embedding("query", "large")
-        
+
         assert small_cached == [0.1, 0.2]
         assert large_cached == [0.5, 0.6]
         assert small_cached != large_cached
@@ -64,13 +67,13 @@ class TestQueryCache:
         cache = QueryCache(enabled=True)
         results1 = [{"chunk_id": "1"}]
         results2 = [{"chunk_id": "2"}]
-        
+
         cache.set_results("query", results1, repo="repo1", top_k=5)
         cache.set_results("query", results2, repo="repo2", top_k=5)
-        
+
         cached1 = cache.get_results("query", repo="repo1", top_k=5)
         cached2 = cache.get_results("query", repo="repo2", top_k=5)
-        
+
         assert cached1 == results1
         assert cached2 == results2
 
@@ -108,12 +111,12 @@ class TestCacheStatistics:
     def test_stats_tracking(self):
         """Verify stats are tracked accurately."""
         cache = QueryCache()
-        
+
         # Generate hits and misses
         cache.set_embedding("q1", "small", [0.1])
         cache.get_embedding("q1", "small")  # hit
         cache.get_embedding("q2", "small")  # miss
-        
+
         stats = cache.get_stats()
         assert stats["embedding_hits"] == 1
         assert stats["embedding_misses"] == 1
@@ -124,14 +127,14 @@ class TestCacheStatistics:
         cache = QueryCache()
         cache.set_embedding("q", "small", [0.1])
         cache.get_embedding("q", "small")
-        
+
         cache.stats = {
             "embedding_hits": 0,
             "embedding_misses": 0,
             "result_hits": 0,
-            "result_misses": 0
+            "result_misses": 0,
         }
-        
+
         stats = cache.get_stats()
         assert stats["total_requests"] == 0
         assert stats["embedding_hit_rate"] == 0.0
@@ -139,14 +142,14 @@ class TestCacheStatistics:
     def test_hit_rate_calculation(self):
         """Verify hit rate is calculated correctly."""
         cache = QueryCache()
-        
+
         # Set up 3 hits, 1 miss
         cache.set_embedding("q1", "small", [0.1])
         cache.get_embedding("q1", "small")  # hit
         cache.get_embedding("q1", "small")  # hit
         cache.get_embedding("q1", "small")  # hit
         cache.get_embedding("q2", "small")  # miss
-        
+
         stats = cache.get_stats()
         assert stats["embedding_hit_rate"] == 0.75
 
@@ -159,9 +162,9 @@ class TestCacheInvalidation:
         cache = QueryCache()
         cache.set_results("q1", [{"id": "1"}], repo="repo1")
         cache.set_results("q2", [{"id": "2"}], repo="repo2")
-        
+
         cache.invalidate_repo("repo1")
-        
+
         # In-memory cache invalidation is conservative
         # Just verify it doesn't crash
         assert True
@@ -171,9 +174,9 @@ class TestCacheInvalidation:
         cache = QueryCache()
         cache.set_embedding("q", "small", [0.1])
         cache.set_results("q", [{"id": "1"}])
-        
+
         cache.clear()
-        
+
         assert cache.get_embedding("q", "small") is None
         assert cache.get_results("q") is None
 
@@ -184,21 +187,21 @@ class TestCacheEnableDisable:
     def test_cache_disabled(self):
         """Verify caching can be disabled."""
         cache = QueryCache(enabled=False)
-        
+
         cache.set_embedding("q", "small", [0.1])
         cached = cache.get_embedding("q", "small")
-        
+
         assert cached is None
 
     def test_toggle_enabled(self):
         """Verify cache can be toggled at runtime."""
         cache = QueryCache(enabled=True)
         cache.set_embedding("q", "small", [0.1])
-        
+
         # Disable cache
         cache.enabled = False
         assert cache.get_embedding("q", "small") is None
-        
+
         # Re-enable cache
         cache.enabled = True
         assert cache.get_embedding("q", "small") == [0.1]
@@ -207,7 +210,7 @@ class TestCacheEnableDisable:
         """Verify disabled cache doesn't track stats."""
         cache = QueryCache(enabled=False)
         cache.get_embedding("q", "small")
-        
+
         stats = cache.get_stats()
         # Stats should still be at 0 since cache is disabled
         assert stats["embedding_hits"] == 0
@@ -220,10 +223,10 @@ class TestErrorHandling:
     def test_cache_read_error_handling(self):
         """Verify cache gracefully handles read errors."""
         cache = QueryCache()
-        
+
         # Simulate corrupted cache data
         cache._memory_cache["embed:small:abc"] = ("invalid", 0)
-        
+
         # Should return None, not crash
         result = cache.get_embedding("query", "small")
         # Since the key doesn't match the hash, it will return None (miss)
@@ -233,9 +236,9 @@ class TestErrorHandling:
         """Verify cache gracefully handles write errors."""
         mock_redis = MagicMock()
         mock_redis.setex.side_effect = Exception("Redis unavailable")
-        
+
         cache = QueryCache(redis_client=mock_redis)
-        
+
         # Should not crash
         cache.set_embedding("q", "small", [0.1])
         # Verify it logged a warning but didn't crash
@@ -258,11 +261,7 @@ class TestCreateCache:
 
     def test_create_with_custom_ttl(self):
         """Create cache with custom TTL values."""
-        cache = create_cache(
-            embedding_ttl=7200,
-            result_ttl=1800,
-            enabled=True
-        )
+        cache = create_cache(embedding_ttl=7200, result_ttl=1800, enabled=True)
         assert cache.embedding_ttl == 7200
         assert cache.result_ttl == 1800
 
@@ -271,15 +270,16 @@ class TestCreateCache:
         # Mock redis at import time
         mock_client = MagicMock()
         mock_client.ping.return_value = True
-        
-        with patch('builtins.__import__') as mock_import:
+
+        with patch("builtins.__import__") as mock_import:
+
             def import_side_effect(name, *args, **kwargs):
-                if name == 'redis':
+                if name == "redis":
                     mock_redis = MagicMock()
                     mock_redis.from_url.return_value = mock_client
                     return mock_redis
                 return __import__(name, *args, **kwargs)
-            
+
             mock_import.side_effect = import_side_effect
             cache = create_cache(redis_url="redis://localhost:6379/0")
             assert cache.redis is not None
@@ -288,14 +288,15 @@ class TestCreateCache:
     def test_create_with_redis_failure(self):
         """Create cache with failed Redis connection (fallback to in-memory)."""
         # Mock redis import that raises on connection
-        with patch('builtins.__import__') as mock_import:
+        with patch("builtins.__import__") as mock_import:
+
             def import_side_effect(name, *args, **kwargs):
-                if name == 'redis':
+                if name == "redis":
                     mock_redis = MagicMock()
                     mock_redis.from_url.side_effect = Exception("Connection failed")
                     return mock_redis
                 return __import__(name, *args, **kwargs)
-            
+
             mock_import.side_effect = import_side_effect
             cache = create_cache(redis_url="redis://localhost:6379/0")
             # Should fall back to in-memory
@@ -308,10 +309,11 @@ class TestCacheIntegration:
 
     def test_search_backend_with_cache(self):
         """Test search backend uses cache."""
+        import tempfile
+        from pathlib import Path
+
         from kb.api.search_backend import create_search_backend
         from kb.config import KBConfig
-        from pathlib import Path
-        import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config = KBConfig(store_root=Path(tmpdir), cache_enabled=True)
@@ -319,7 +321,7 @@ class TestCacheIntegration:
                 store_root=config.resolved_store_root(),
                 embedding_provider_type=config.embedding_provider,
                 cache_enabled=config.cache_enabled,
-                redis_url=config.redis_url
+                redis_url=config.redis_url,
             )
             assert backend.cache is not None
             assert backend.cache.enabled is True
@@ -327,24 +329,24 @@ class TestCacheIntegration:
     def test_cache_lifecycle(self):
         """Test complete cache lifecycle."""
         cache = QueryCache(enabled=True)
-        
+
         # 1. Cache miss
         assert cache.get_embedding("query", "small") is None
-        
+
         # 2. Set embedding
         embedding = [0.1, 0.2, 0.3]
         cache.set_embedding("query", "small", embedding)
-        
+
         # 3. Cache hit
         cached = cache.get_embedding("query", "small")
         assert cached == embedding
-        
+
         # 4. Clear cache
         cache.clear()
-        
+
         # 5. Cache miss again
         assert cache.get_embedding("query", "small") is None
-        
+
         # 6. Verify stats
         stats = cache.get_stats()
         assert stats["embedding_hits"] == 1

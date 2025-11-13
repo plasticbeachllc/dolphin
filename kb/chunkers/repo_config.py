@@ -42,16 +42,16 @@ DEFAULT_PER_LANGUAGE = {
     "rust": 400,
     "markdown": 256,
     "text": 256,
-    "json": 400,      # Increased from 128 to reduce config file chunk count
-    "toml": 512,      # Increased from 128 to reduce config file chunk count
-    "yaml": 400,      # Increased from 128 to reduce config file chunk count
+    "json": 400,  # Increased from 128 to reduce config file chunk count
+    "toml": 512,  # Increased from 128 to reduce config file chunk count
+    "yaml": 400,  # Increased from 128 to reduce config file chunk count
 }
 
 
 @dataclass
 class RepoChunkingConfig:
     """Configuration for chunking files in a specific repository.
-    
+
     Attributes:
         repo_path: Absolute path to the repository root
         default_window_size: Default token window size for all files
@@ -60,31 +60,33 @@ class RepoChunkingConfig:
         tokenizer_encoding: Tokenizer encoding name (e.g., "cl100k_base")
         overlap_pct: Percentage of overlap between consecutive chunks (0.0-1.0)
     """
-    
+
     repo_path: Path
     default_window_size: int = DEFAULT_WINDOW_SIZE
-    per_language: dict[str, int] = field(default_factory=lambda: DEFAULT_PER_LANGUAGE.copy())
+    per_language: dict[str, int] = field(
+        default_factory=lambda: DEFAULT_PER_LANGUAGE.copy()
+    )
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
     tokenizer_encoding: str = DEFAULT_TOKENIZER_ENCODING
     overlap_pct: float = DEFAULT_OVERLAP_PCT
-    
+
     def get_window_size_for_language(self, language: str) -> int:
         """Get the configured window size for a specific language.
-        
+
         Args:
             language: Language identifier (e.g., "python", "typescript")
-            
+
         Returns:
             Token window size for the language, or default if not configured
         """
         return self.per_language.get(language, self.default_window_size)
-    
+
     def get_overlap_tokens(self, window_size: int | None = None) -> int:
         """Calculate the overlap token count for a given window size.
-        
+
         Args:
             window_size: Window size in tokens (uses default if None)
-            
+
         Returns:
             Number of tokens for overlap between consecutive chunks
         """
@@ -94,21 +96,21 @@ class RepoChunkingConfig:
 
 def load_repo_chunking_config(repo_path: Path) -> RepoChunkingConfig:
     """Load chunking configuration from a repository's .dolphin/chunking_config.toml file.
-    
+
     If the configuration file doesn't exist, returns a config with sensible defaults.
-    
+
     Args:
         repo_path: Path to the repository root
-        
+
     Returns:
         RepoChunkingConfig instance with loaded or default configuration
-        
+
     Raises:
         ValueError: If the TOML file is malformed or contains invalid values
     """
     repo_path = Path(repo_path).expanduser().resolve()
     config_file = repo_path / ".dolphin" / "chunking_config.toml"
-    
+
     # If config file doesn't exist, return defaults
     if not config_file.exists():
         _log.debug(
@@ -124,21 +126,21 @@ def load_repo_chunking_config(repo_path: Path) -> RepoChunkingConfig:
             tokenizer_encoding=DEFAULT_TOKENIZER_ENCODING,
             overlap_pct=DEFAULT_OVERLAP_PCT,
         )
-    
+
     # Load and parse TOML configuration
     try:
         with config_file.open("rb") as f:
             data = tomllib.load(f)
     except Exception as e:
         raise ValueError(f"Failed to parse TOML config at {config_file}: {e}") from e
-    
+
     # Extract configuration values with validation
     default_window = data.get("default_window_size", DEFAULT_WINDOW_SIZE)
     if not isinstance(default_window, int) or default_window <= 0:
         raise ValueError(
             f"default_window_size must be a positive integer, got: {default_window}"
         )
-    
+
     # Per-language overrides
     per_language = DEFAULT_PER_LANGUAGE.copy()
     if "per_language" in data:
@@ -152,19 +154,19 @@ def load_repo_chunking_config(repo_path: Path) -> RepoChunkingConfig:
                 )
                 continue
             per_language[str(lang)] = size
-    
+
     # Embedding configuration
     embeddings_section = data.get("embeddings", {})
     embedding_model = embeddings_section.get("model", DEFAULT_EMBEDDING_MODEL)
     if not isinstance(embedding_model, str):
         embedding_model = DEFAULT_EMBEDDING_MODEL
-    
+
     # Tokenizer configuration
     tokenizer_section = data.get("tokenizer", {})
     tokenizer_encoding = tokenizer_section.get("encoding", DEFAULT_TOKENIZER_ENCODING)
     if not isinstance(tokenizer_encoding, str):
         tokenizer_encoding = DEFAULT_TOKENIZER_ENCODING
-    
+
     # Overlap percentage (optional, not in TOML spec but useful)
     overlap_pct = data.get("overlap_pct", DEFAULT_OVERLAP_PCT)
     if not isinstance(overlap_pct, (int, float)) or not (0.0 <= overlap_pct <= 1.0):
@@ -172,14 +174,14 @@ def load_repo_chunking_config(repo_path: Path) -> RepoChunkingConfig:
             "Invalid overlap_pct %s, using default %f", overlap_pct, DEFAULT_OVERLAP_PCT
         )
         overlap_pct = DEFAULT_OVERLAP_PCT
-    
+
     _log.info(
         "Loaded chunking config from %s (default_window_size=%d, model=%s)",
         config_file,
         default_window,
         embedding_model,
     )
-    
+
     return RepoChunkingConfig(
         repo_path=repo_path,
         default_window_size=default_window,

@@ -6,7 +6,8 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any
 
-from kb.chunkers.graph_types import GraphNode as ChunkerGraphNode, GraphEdge as ChunkerGraphEdge
+from kb.chunkers.graph_types import GraphEdge as ChunkerGraphEdge
+from kb.chunkers.graph_types import GraphNode as ChunkerGraphNode
 from kb.chunkers.types import Chunk
 from kb.store.graph_store import GraphStore
 
@@ -34,17 +35,25 @@ def extract_graph_from_file(
     lang_key = language.lower() if language else ""
 
     # Try to use enhanced graph intelligence extractors for Python and TypeScript
-    if lang_key in ("python", "typescript", "typescriptreact", "javascript", "javascriptreact"):
+    if lang_key in (
+        "python",
+        "typescript",
+        "typescriptreact",
+        "javascript",
+        "javascriptreact",
+    ):
         try:
             return _extract_with_intelligence(file_path, lang_key, text)
         except Exception as e:
-            print(f"  Warning: Enhanced graph extraction failed for {file_path}, falling back to basic: {e}")
+            print(
+                f"  Warning: Enhanced graph extraction failed for {file_path}, falling back to basic: {e}"
+            )
 
     # Fall back to basic chunker extraction
     import kb.chunkers.py_chunker as py_chunker
-    import kb.chunkers.ts_chunker as ts_chunker
     import kb.chunkers.sql_chunker as sql_chunker
     import kb.chunkers.svelte_chunker as svelte_chunker
+    import kb.chunkers.ts_chunker as ts_chunker
 
     # Map languages to chunker modules that support graph extraction
     chunker_map = {
@@ -59,7 +68,7 @@ def extract_graph_from_file(
 
     chunker_module = chunker_map.get(lang_key)
 
-    if not chunker_module or not hasattr(chunker_module, 'extract_graph_data'):
+    if not chunker_module or not hasattr(chunker_module, "extract_graph_data"):
         # Language doesn't support graph extraction
         return [], []
 
@@ -88,7 +97,8 @@ def _extract_with_intelligence(
     Returns:
         Tuple of (nodes, edges) in chunker format
     """
-    from kb.graph_intelligence.extractors import PythonCallGraphExtractor, TypeScriptCallGraphExtractor
+    from kb.graph_intelligence.extractors import (PythonCallGraphExtractor,
+                                                  TypeScriptCallGraphExtractor)
 
     # Use appropriate extractor
     if language == "python":
@@ -111,13 +121,15 @@ def _extract_with_intelligence(
     # Convert to chunker format
     chunker_nodes = []
     for node in nodes:
-        chunker_nodes.append(ChunkerGraphNode(
-            node_type=node.node_type.value,
-            name=node.name,
-            qualified_name=node.qualified_name or node.name,
-            start_line=node.start_line or 0,
-            end_line=node.end_line or 0,
-        ))
+        chunker_nodes.append(
+            ChunkerGraphNode(
+                node_type=node.node_type.value,
+                name=node.name,
+                qualified_name=node.qualified_name or node.name,
+                start_line=node.start_line or 0,
+                end_line=node.end_line or 0,
+            )
+        )
 
     chunker_edges = []
     for edge in edges:
@@ -126,12 +138,15 @@ def _extract_with_intelligence(
         target_node = next((n for n in nodes if n.id == edge.target_id), None)
 
         if source_node and target_node:
-            chunker_edges.append(ChunkerGraphEdge(
-                source_name=source_node.qualified_name or source_node.name,
-                target_name=target_node.qualified_name or target_node.name,
-                edge_type=edge.edge_type.value,
-                line_number=edge.attributes.get("call_line") or edge.attributes.get("import_line"),
-            ))
+            chunker_edges.append(
+                ChunkerGraphEdge(
+                    source_name=source_node.qualified_name or source_node.name,
+                    target_name=target_node.qualified_name or target_node.name,
+                    edge_type=edge.edge_type.value,
+                    line_number=edge.attributes.get("call_line")
+                    or edge.attributes.get("import_line"),
+                )
+            )
 
     return chunker_nodes, chunker_edges
 
@@ -148,7 +163,7 @@ def store_graph_data(
     branch: str,
 ) -> dict[str, int]:
     """Store extracted graph nodes and edges.
-    
+
     Args:
         graph_store: Graph store instance
         nodes: List of extracted nodes
@@ -158,7 +173,7 @@ def store_graph_data(
         language: Programming language
         commit_sha: Git commit SHA
         branch: Git branch name
-        
+
     Returns:
         Statistics dict with counts of nodes and edges created
     """
@@ -166,7 +181,7 @@ def store_graph_data(
     node_ids_map: dict[str, str] = {}  # qualified_name -> node_id
     nodes_created = 0
     edges_created = 0
-    
+
     # Store nodes
     for node in nodes:
         try:
@@ -186,14 +201,14 @@ def store_graph_data(
             nodes_created += 1
         except Exception as e:
             print(f"  Warning: Failed to store node {node.qualified_name}: {e}")
-    
+
     # Store edges
     for edge in edges:
         try:
             # Resolve source and target node IDs
             source_id = node_ids_map.get(edge.source_name)
             target_id = node_ids_map.get(edge.target_name)
-            
+
             # Skip edge if we couldn't resolve both endpoints
             # (This can happen for external references or incomplete extraction)
             if not source_id:
@@ -203,7 +218,7 @@ def store_graph_data(
                 )
                 if source_node:
                     source_id = source_node["id"]
-            
+
             if not target_id:
                 # Try to find existing node
                 target_node = graph_store.find_node_by_qualified_name(
@@ -211,7 +226,7 @@ def store_graph_data(
                 )
                 if target_node:
                     target_id = target_node["id"]
-            
+
             if source_id and target_id:
                 graph_store.upsert_edge(
                     source_node_id=source_id,
@@ -223,8 +238,10 @@ def store_graph_data(
                 )
                 edges_created += 1
         except Exception as e:
-            print(f"  Warning: Failed to store edge {edge.source_name} -> {edge.target_name}: {e}")
-    
+            print(
+                f"  Warning: Failed to store edge {edge.source_name} -> {edge.target_name}: {e}"
+            )
+
     return {
         "nodes_created": nodes_created,
         "edges_created": edges_created,
@@ -273,11 +290,11 @@ def cleanup_graph_for_file(graph_store: GraphStore, file_id: int) -> tuple[int, 
 
 def cleanup_graph_for_repo(graph_store: GraphStore, repo_id: int) -> int:
     """Clean up all graph data for a repository.
-    
+
     Args:
         graph_store: Graph store instance
         repo_id: Repository ID
-        
+
     Returns:
         Number of nodes deleted (edges cascade automatically)
     """

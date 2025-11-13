@@ -1,22 +1,20 @@
 # from __future__ import annotations
-from pathlib import Path
 import os
+from pathlib import Path
 from typing import cast
 
 import typer
+from pathspec import PathSpec
 
 from ..config import DEFAULT_CONFIG_PATH, KBConfig, load_config
-from ..store import LanceDBStore, SQLiteMetadataStore
-from .pipeline import IngestionPipeline
 from ..embeddings.provider import create_provider, set_default_provider
 from ..ignores import build_ignore_set, load_repo_ignores
-from pathspec import PathSpec
+from ..store import LanceDBStore, SQLiteMetadataStore
+from .pipeline import IngestionPipeline
 
 app = typer.Typer(help="Unified knowledge store ingestion CLI.")
 
-_CONFIG_TEMPLATE_PATH = (
-    Path(__file__).resolve().parent.parent / "config_template.toml"
-)
+_CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "config_template.toml"
 
 
 def _read_config_template() -> str:
@@ -47,7 +45,9 @@ def _build_pipeline(config: KBConfig) -> IngestionPipeline:
 
 
 @app.command()
-def init(config_path: Path | None = typer.Option(None, help="Optional config path.")) -> None:
+def init(
+    config_path: Path | None = typer.Option(None, help="Optional config path.")
+) -> None:
     """Initialize the knowledge store (config + SQLite + LanceDB collections).
 
     Idempotent: safe to run multiple times.
@@ -76,7 +76,9 @@ def init(config_path: Path | None = typer.Option(None, help="Optional config pat
     typer.echo(f"LanceDB root initialized at {lancedb.root}")
 
     if created:
-        typer.echo("Initialization complete. You can now run 'kb add-repo' and 'kb index'.")
+        typer.echo(
+            "Initialization complete. You can now run 'kb add-repo' and 'kb index'."
+        )
     else:
         typer.echo("Initialization verified. Nothing else to do.")
 
@@ -86,7 +88,9 @@ def add_repo(
     name: str = typer.Argument(..., help="Logical name for the repository."),
     path: Path = typer.Argument(..., help="Absolute path to the repository root."),
     default_embed_model: str = typer.Option(
-        "large", "--default-embed-model", help="Default embedding model for the Repo (small|large)."
+        "large",
+        "--default-embed-model",
+        help="Default embedding model for the Repo (small|large).",
     ),
 ) -> None:
     """Register or update a repository in the metadata store."""
@@ -114,8 +118,12 @@ def add_repo(
 def index(
     name: str = typer.Argument(..., help="Name of the repository to index."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Run without persisting."),
-    force: bool = typer.Option(False, "--force", help="Bypass clean working tree check."),
-    full: bool = typer.Option(False, "--full", help="Process all files instead of incremental diff."),
+    force: bool = typer.Option(
+        False, "--force", help="Bypass clean working tree check."
+    ),
+    full: bool = typer.Option(
+        False, "--full", help="Process all files instead of incremental diff."
+    ),
 ) -> None:
     """Run the full indexing pipeline for the specified repository.
 
@@ -132,7 +140,7 @@ def index(
     if not repo_record:
         typer.echo(
             "Error: Repository not registered. Register once with: uv run dolphin add-repo <name> <abs/repo/path>",
-            err=True
+            err=True,
         )
         raise typer.Exit(code=2)
 
@@ -156,14 +164,14 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
     metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
     # Ensure DB and schema exist before summarizing.
     metadata.initialize()
-    
+
     # Get aggregate counts
     summary = metadata.summarize()
     typer.echo(f"\n📊 Knowledge Store Summary:")
     typer.echo(f"  Total repositories: {summary['repos']}")
     typer.echo(f"  Total files: {summary['files']}")
     typer.echo(f"  Total chunks: {summary['chunks']}")
-    
+
     # List all registered repositories
     repos = metadata.list_all_repos()
     if repos:
@@ -175,38 +183,40 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
             typer.echo(f"    Created: {repo['created_at']}")
     else:
         typer.echo(f"\n  No repositories registered.")
-    
+
     typer.echo()
 
 
 @app.command("prune-ignored")
 def prune_ignored(
     name: str = typer.Argument(..., help="Repository name to clean up."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be removed without persisting."),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would be removed without persisting."
+    ),
 ) -> None:
     """Remove chunks for files that match the ignore patterns.
-    
+
     Use this after updating ignore patterns to clean up previously-indexed
     files that should no longer be included.
     """
     config = load_config()
     repo = config.resolved_store_root()
-    
+
     metadata = SQLiteMetadataStore(repo / "metadata.db")
     metadata.initialize()
-    
+
     lancedb = LanceDBStore(repo / "lancedb")
     lancedb.initialize_collections()
-    
+
     # Resolve repo and get its root path
     repo_record = metadata.get_repo_by_name(name)
     if not repo_record:
         typer.echo(f"Error: Repository '{name}' not registered.")
         raise typer.Exit(code=1)
-    
+
     repo_id = int(repo_record["id"])
     repo_root = Path(str(repo_record["root_path"]))
-    
+
     # Build ignore spec
     extra_security = {
         "**/id_rsa",
@@ -221,7 +231,10 @@ def prune_ignored(
     ignore_patterns = build_ignore_set(config.ignore, config.ignore_exceptions)
     repo_level_patterns, repo_level_exceptions = load_repo_ignores(repo_root)
     if dry_run:
-        typer.echo(f"Debug: repo_level ignores loaded: {len(repo_level_patterns)} patterns", err=True)
+        typer.echo(
+            f"Debug: repo_level ignores loaded: {len(repo_level_patterns)} patterns",
+            err=True,
+        )
         # Check if bun.lock patterns are in repo_level
         bun_in_repo = [p for p in repo_level_patterns if "bun" in p.lower()]
         if bun_in_repo:
@@ -234,13 +247,13 @@ def prune_ignored(
     if repo_level_exceptions:
         ignore_patterns = build_ignore_set(ignore_patterns, repo_level_exceptions)
     ignore_patterns.update(extra_security)
-    
+
     # Manually add bun.lock patterns to test
     ignore_patterns.add("bun.lock")
     ignore_patterns.add("**/bun.lock")
-    
+
     ignore_spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
-    
+
     # Debug: show which patterns we're using
     if dry_run:
         typer.echo(f"Debug: Using {len(ignore_patterns)} ignore patterns", err=True)
@@ -251,13 +264,13 @@ def prune_ignored(
             typer.echo(f"Debug: NO bun patterns found!", err=True)
     # Get all files for this repo
     files = metadata.get_all_files_for_repo(repo_id)
-    
+
     total_chunks_pruned = 0
     pruned_files = []
     for file_record in files:
         file_path = cast(str, file_record["path"])
         file_id = cast(int, file_record["id"])
-        
+
         # Check if file matches ignore patterns
         matches = ignore_spec.match_file(file_path)
         if dry_run and "bun.lock" in file_path:
@@ -275,7 +288,7 @@ def prune_ignored(
                     )
                     total_chunks_pruned += pruned_count
                     lancedb.prune_file_rows(name, file_path, model=embed_model)
-                
+
                 # Also delete any orphaned FTS5 entries for this file
                 with metadata._connect() as conn:
                     cur = conn.cursor()
@@ -285,7 +298,7 @@ def prune_ignored(
                 # In dry-run, just count what would be pruned
                 file_chunks = metadata.get_chunks_for_file(file_id)
                 total_chunks_pruned += len(file_chunks) if file_chunks else 0
-    
+
     if dry_run:
         typer.echo(f"[DRY RUN] Would prune:")
         typer.echo(f"  Files: {len(pruned_files)}")
@@ -303,17 +316,19 @@ def prune_ignored(
 @app.command("rm-repo")
 def rm_repo(
     name: str = typer.Argument(..., help="Repository name to remove."),
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation and active session checks."),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Skip confirmation and active session checks."
+    ),
 ) -> None:
     """Remove a repository and all its data from the knowledge store.
-    
+
     This will delete:
     - Repository registration
     - All indexed files metadata
     - All chunk content and locations
     - All vectors (embeddings)
     - All indexing sessions
-    
+
     Enhanced with Phase 2 Fix 2.1:
     - Validates active sessions before deletion
     - Deletes in proper foreign key order
@@ -323,26 +338,28 @@ def rm_repo(
     config = load_config()
     metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
     metadata.initialize()
-    
+
     lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
-    
+
     # Get repo info
     repo = metadata.get_repo_by_name(name)
     if not repo:
         typer.echo(f"Error: Repository '{name}' not found.", err=True)
         raise typer.Exit(code=1)
-    
+
     repo_id = int(repo["id"])
     repo_path = repo["root_path"]
-    
+
     # Check for active sessions
     active_sessions = metadata.get_active_sessions(repo_id)
     if active_sessions and not force:
         typer.echo(f"Error: Cannot remove repository '{name}':", err=True)
-        typer.echo(f"  Found {len(active_sessions)} active indexing session(s).", err=True)
+        typer.echo(
+            f"  Found {len(active_sessions)} active indexing session(s).", err=True
+        )
         typer.echo(f"  Use --force to override and abort active sessions.", err=True)
         raise typer.Exit(code=1)
-    
+
     # Confirm deletion unless --force
     if not force:
         typer.echo(f"This will remove repository '{name}' and all its data:")
@@ -353,12 +370,12 @@ def rm_repo(
         if not confirm:
             typer.echo("Aborted.")
             raise typer.Exit(code=0)
-    
+
     # Use enhanced removal with comprehensive cleanup validation
     typer.echo(f"Removing repository '{name}' with comprehensive cleanup validation...")
     try:
         result = metadata.rm_repo_with_lancedb(lancedb, name, force=force)
-        
+
         # Display cleanup statistics
         stats = result["cleanup_stats"]
         typer.echo(f"\n✓ Repository '{name}' removed successfully.")
@@ -367,36 +384,39 @@ def rm_repo(
         typer.echo(f"  Chunk content deleted: {stats['content_deleted']}")
         typer.echo(f"  Chunk locations deleted: {stats['locations_deleted']}")
         typer.echo(f"  Sessions deleted: {stats['sessions_deleted']}")
-        
+
         # FTS5 cleanup details
-        fts_stats = stats['fts5_entries']
+        fts_stats = stats["fts5_entries"]
         typer.echo(f"\n  FTS5 Cleanup:")
         typer.echo(f"    By content_id: {fts_stats['by_content_id']}")
         typer.echo(f"    By repo name: {fts_stats['by_repo_name']}")
         typer.echo(f"    Orphaned entries: {fts_stats['orphaned']}")
-        
+
         # LanceDB cleanup details
-        lance_stats = stats['lancedb_vectors']
+        lance_stats = stats["lancedb_vectors"]
         typer.echo(f"\n  LanceDB Cleanup:")
         typer.echo(f"    Small model vectors: {lance_stats['small_deleted']}")
         typer.echo(f"    Large model vectors: {lance_stats['large_deleted']}")
-        
+
         # Show warnings if any
         if "lancedb_warnings" in result:
             typer.echo(f"\n⚠️  Warnings:")
             for warning in result["lancedb_warnings"]:
                 typer.echo(f"    {warning}", err=True)
-        
+
     except Exception as e:
         typer.echo(f"Error: Repository removal failed: {e}", err=True)
         raise typer.Exit(code=1)
+
 
 @app.command("reset-repo")
 def reset_repo(
     name: str = typer.Argument(..., help="Repository name to reset."),
     path: Path = typer.Argument(..., help="Absolute path to the repository root."),
     default_embed_model: str = typer.Option(
-        "large", "--default-embed-model", help="Default embedding model for the Repo (small|large)."
+        "large",
+        "--default-embed-model",
+        help="Default embedding model for the Repo (small|large).",
     ),
 ) -> None:
     """Wipe all stores for the repo and re-register it in one step.
@@ -406,7 +426,7 @@ def reset_repo(
       - Delete all metadata rows (files, chunk_content, chunk_locations, sessions, FTS)
       - Delete the repo row
       - Re-register the repo with the provided path and embed model
-      
+
     Enhanced with Phase 2 Fix 2.1:
       - Uses comprehensive cleanup validation
       - Validates deletion was successful
@@ -433,23 +453,29 @@ def reset_repo(
     repo = metadata.get_repo_by_name(name)
     if repo:
         typer.echo(f"Removing all data for '{name}' using enhanced cleanup...")
-        
+
         try:
             # Use enhanced removal with force=True (skip confirmation, abort active sessions)
             result = metadata.rm_repo_with_lancedb(lancedb, name, force=True)
-            
+
             # Display brief cleanup summary
             stats = result["cleanup_stats"]
-            typer.echo(f"✓ Removed: {stats['files_deleted']} files, "
-                      f"{stats['content_deleted']} chunks, "
-                      f"{stats['lancedb_vectors']['small_deleted'] + stats['lancedb_vectors']['large_deleted']} vectors")
-            
+            typer.echo(
+                f"✓ Removed: {stats['files_deleted']} files, "
+                f"{stats['content_deleted']} chunks, "
+                f"{stats['lancedb_vectors']['small_deleted'] + stats['lancedb_vectors']['large_deleted']} vectors"
+            )
+
             # Show warnings if any
             if "lancedb_warnings" in result and result["lancedb_warnings"]:
-                typer.echo(f"⚠️  Cleanup warnings: {len(result['lancedb_warnings'])}", err=True)
-                
+                typer.echo(
+                    f"⚠️  Cleanup warnings: {len(result['lancedb_warnings'])}", err=True
+                )
+
         except Exception as e:
-            typer.echo(f"Warning: Enhanced cleanup failed, continuing anyway: {e}", err=True)
+            typer.echo(
+                f"Warning: Enhanced cleanup failed, continuing anyway: {e}", err=True
+            )
 
     # Re-register repo
     metadata.record_repo(name=name, path=repo_path, default_embed_model=model)
@@ -505,25 +531,35 @@ def list_files(
 @app.command()
 def search(
     query: str = typer.Argument(..., help="Search query."),
-    repos: list[str] | None = typer.Option(None, "--repo", "-r", help="Repository name(s) to search."),
-    path_prefix: list[str] | None = typer.Option(None, "--path", "-p", help="Filter by path prefix."),
+    repos: list[str] | None = typer.Option(
+        None, "--repo", "-r", help="Repository name(s) to search."
+    ),
+    path_prefix: list[str] | None = typer.Option(
+        None, "--path", "-p", help="Filter by path prefix."
+    ),
     top_k: int = typer.Option(8, "--top-k", "-k", help="Number of results to return."),
-    score_cutoff: float = typer.Option(0.0, "--score-cutoff", "-s", help="Minimum similarity score."),
-    embed_model: str = typer.Option("large", "--embed-model", "-m", help="Embedding model to use (small|large)."),
-    show_content: bool = typer.Option(False, "--show-content", "-c", help="Display code snippets."),
+    score_cutoff: float = typer.Option(
+        0.0, "--score-cutoff", "-s", help="Minimum similarity score."
+    ),
+    embed_model: str = typer.Option(
+        "large", "--embed-model", "-m", help="Embedding model to use (small|large)."
+    ),
+    show_content: bool = typer.Option(
+        False, "--show-content", "-c", help="Display code snippets."
+    ),
 ) -> None:
     """Search indexed code semantically (local backend).
-    
+
     Examples:
         dolphin kb search "authentication logic" --repo myapp
         dolphin kb search "database migration" --path src/db --top-k 5
         dolphin kb search "error handling" --show-content
     """
-    from ..api.search_backend import create_search_backend
     from ..api.app import SearchRequest
-    
+    from ..api.search_backend import create_search_backend
+
     config = load_config()
-    
+
     try:
         # Create search backend
         backend = create_search_backend(
@@ -531,7 +567,7 @@ def search(
             embedding_provider_type=config.embedding_provider,
             hybrid_search_enabled=True,
         )
-        
+
         # Create search request
         request = SearchRequest(
             query=query,
@@ -541,58 +577,63 @@ def search(
             score_cutoff=score_cutoff,
             embed_model=embed_model,
         )
-        
+
         # Execute search
         hits = list(backend.search(request))
-        
+
         # Display results
         if not hits:
             typer.echo("No results found.")
             return
-        
+
         typer.echo(f"\n🔍 Found {len(hits)} result(s):\n")
-        
+
         for i, hit in enumerate(hits, 1):
             score = hit.get("score", 0.0)
             repo = hit.get("repo", "unknown")
             path = hit.get("path", "unknown")
             start_line = hit.get("start_line", 0)
             end_line = hit.get("end_line", 0)
-            
+
             # Header
-            typer.secho(f"\n{i}. {repo}/{path}:{start_line}-{end_line}", fg="cyan", bold=True)
+            typer.secho(
+                f"\n{i}. {repo}/{path}:{start_line}-{end_line}", fg="cyan", bold=True
+            )
             typer.echo(f"   Score: {score:.3f}")
-            
+
             # Symbol info
             symbol_name = hit.get("symbol_name")
             symbol_kind = hit.get("symbol_kind")
             if symbol_name and symbol_kind:
                 typer.secho(f"   {symbol_kind}: {symbol_name}", fg="green")
-            
+
             # Show content if requested
             if show_content:
                 chunk_id = hit.get("chunk_id")
                 content = hit.get("content")
-                
+
                 # Normalize types
                 if not isinstance(content, str):
                     content = ""
-                
+
                 # Fetch content if not present and we have a string chunk_id
                 if not content and isinstance(chunk_id, str):
                     content_map = backend.sql_store.get_chunk_contents([chunk_id])
                     content = content_map.get(chunk_id, "") or ""
-                
+
                 if content:
                     typer.echo("\n   " + "─" * 70)
                     for line in content.splitlines()[:10]:  # Show first 10 lines
                         typer.echo(f"   {line}")
                     if len(content.splitlines()) > 10:
-                        typer.secho(f"   ... ({len(content.splitlines()) - 10} more lines)", fg="yellow")
+                        typer.secho(
+                            f"   ... ({len(content.splitlines()) - 10} more lines)",
+                            fg="yellow",
+                        )
                     typer.echo("   " + "─" * 70)
-        
+
         typer.echo()
-        
+
     except Exception as e:
         typer.echo(f"Error: Search failed: {e}", err=True)
         raise typer.Exit(1)
@@ -603,7 +644,7 @@ def validate_repo(
     name: str = typer.Argument(..., help="Repository name to validate."),
 ) -> None:
     """Validate repository consistency across metadata and vector stores.
-    
+
     This checks for:
     - Orphaned chunk locations without content
     - Orphaned FTS entries without content
@@ -614,22 +655,22 @@ def validate_repo(
     config = load_config()
     metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
     metadata.initialize()
-    
+
     lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
-    
+
     # Get repo info
     repo = metadata.get_repo_by_name(name)
     if not repo:
         typer.echo(f"Error: Repository '{name}' not found.", err=True)
         raise typer.Exit(code=1)
-    
+
     repo_id = int(repo["id"])
-    
+
     # Run validation
     typer.echo(f"Validating repository '{name}'...")
     try:
         report = metadata.validate_repo_consistency(lancedb, repo_id, name)
-        
+
         # Display results
         if report["valid"]:
             typer.echo(f"\n✓ Repository '{name}' is consistent.")
@@ -637,7 +678,7 @@ def validate_repo(
             typer.echo(f"\n⚠️  Repository '{name}' has consistency issues:", err=True)
             for issue in report["issues"]:
                 typer.echo(f"  - {issue}", err=True)
-        
+
         # Display statistics
         stats = report["statistics"]
         typer.echo(f"\nStatistics:")
@@ -648,17 +689,17 @@ def validate_repo(
         typer.echo(f"  Orphaned FTS entries: {stats['orphaned_fts']}")
         typer.echo(f"  Orphaned content: {stats['orphaned_content']}")
         typer.echo(f"  Orphaned files: {stats['orphaned_files']}")
-        
+
         # LanceDB stats
         lancedb_stats = report["lancedb"]
         typer.echo(f"\nLanceDB Vectors:")
         for model, count in lancedb_stats["vector_counts"].items():
             typer.echo(f"  {model}: {count}")
-        
+
         if not report["valid"]:
             typer.echo(f"\nTip: Run 'kb repair-repo {name}' to fix these issues.")
             raise typer.Exit(code=1)
-            
+
     except Exception as e:
         typer.echo(f"Error: Validation failed: {e}", err=True)
         raise typer.Exit(code=1)
@@ -667,10 +708,12 @@ def validate_repo(
 @app.command("repair-repo")
 def repair_repo(
     name: str = typer.Argument(..., help="Repository name to repair."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be repaired without making changes."),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would be repaired without making changes."
+    ),
 ) -> None:
     """Repair consistency issues in a repository.
-    
+
     This will:
     - Remove orphaned chunk locations
     - Remove orphaned FTS entries
@@ -680,45 +723,45 @@ def repair_repo(
     config = load_config()
     metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
     metadata.initialize()
-    
+
     lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
-    
+
     # Get repo info
     repo = metadata.get_repo_by_name(name)
     if not repo:
         typer.echo(f"Error: Repository '{name}' not found.", err=True)
         raise typer.Exit(code=1)
-    
+
     repo_id = int(repo["id"])
-    
+
     if dry_run:
         # Run validation to show what would be repaired
         typer.echo(f"[DRY RUN] Checking what would be repaired for '{name}'...")
         report = metadata.validate_repo_consistency(lancedb, repo_id, name)
-        
+
         if report["valid"]:
             typer.echo(f"\n✓ No repairs needed for '{name}'.")
             return
-        
+
         typer.echo(f"\n[DRY RUN] Would repair the following issues:")
         for issue in report["issues"]:
             typer.echo(f"  - {issue}")
-        
+
         stats = report["statistics"]
         total_repairs = (
-            stats["orphaned_locations"] +
-            stats["orphaned_fts"] +
-            stats["orphaned_content"] +
-            stats["orphaned_files"]
+            stats["orphaned_locations"]
+            + stats["orphaned_fts"]
+            + stats["orphaned_content"]
+            + stats["orphaned_files"]
         )
         typer.echo(f"\nTotal items that would be repaired: {total_repairs}")
         return
-    
+
     # Perform repair
     typer.echo(f"Repairing repository '{name}'...")
     try:
         repair_report = metadata.repair_repository_consistency(repo_id, name)
-        
+
         if repair_report["success"]:
             if repair_report["repairs_performed"]:
                 typer.echo(f"\n✓ Repository '{name}' repaired successfully.")
@@ -732,7 +775,7 @@ def repair_repo(
             for error in repair_report["errors"]:
                 typer.echo(f"  - {error}", err=True)
             raise typer.Exit(code=1)
-            
+
     except Exception as e:
         typer.echo(f"Error: Repair failed: {e}", err=True)
         raise typer.Exit(code=1)
@@ -744,12 +787,12 @@ def list_repos() -> None:
     config = load_config()
     metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
     metadata.initialize()
-    
+
     repos = metadata.list_all_repos()
     if not repos:
         typer.echo("No repositories registered.")
         return
-    
+
     typer.echo(f"\n📚 Registered Repositories ({len(repos)}):\n")
     for repo in repos:
         typer.echo(f"  • {repo['name']}")
@@ -761,31 +804,33 @@ def list_repos() -> None:
 
 @app.command("reset-all")
 def reset_all(
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt."),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Skip confirmation prompt."
+    ),
 ) -> None:
     """Reset the entire knowledge store (delete everything).
-    
+
     WARNING: This will:
     - Remove ALL repositories
     - Delete ALL metadata (files, chunks, locations, sessions, FTS)
     - Delete ALL vectors from LanceDB
     - Preserve configuration
-    
+
     This is a nuclear option for complete cleanup.
     """
     config = load_config()
     metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
     metadata.initialize()
-    
+
     lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
-    
+
     # Get all repos for cleanup
     repos = metadata.list_all_repos()
-    
+
     if not repos:
         typer.echo("No repositories to clean up.")
         return
-    
+
     # Show what will be deleted
     summary = metadata.summarize()
     typer.echo(f"\n⚠️  WARNING: This will delete EVERYTHING:")
@@ -795,15 +840,17 @@ def reset_all(
     typer.echo(f"\nRepositories to be removed:")
     for repo in repos:
         typer.echo(f"  - {repo['name']} ({repo['root_path']})")
-    
+
     # Confirm unless --force
     if not force:
         typer.echo()
-        confirm = typer.confirm("Are you absolutely sure you want to delete everything?")
+        confirm = typer.confirm(
+            "Are you absolutely sure you want to delete everything?"
+        )
         if not confirm:
             typer.echo("Aborted.")
             raise typer.Exit(code=0)
-    
+
     # Remove all repos using enhanced cleanup
     typer.echo(f"\n🧹 Removing all repositories with comprehensive cleanup...")
     total_stats = {
@@ -813,35 +860,35 @@ def reset_all(
         "locations_deleted": 0,
         "sessions_deleted": 0,
         "vectors_deleted": 0,
-        "errors": []
+        "errors": [],
     }
-    
+
     for repo in repos:
         try:
-            result = metadata.rm_repo_with_lancedb(lancedb, repo['name'], force=True)
+            result = metadata.rm_repo_with_lancedb(lancedb, repo["name"], force=True)
             stats = result["cleanup_stats"]
-            
+
             total_stats["repos_removed"] += 1
             total_stats["files_deleted"] += stats["files_deleted"]
             total_stats["content_deleted"] += stats["content_deleted"]
             total_stats["locations_deleted"] += stats["locations_deleted"]
             total_stats["sessions_deleted"] += stats["sessions_deleted"]
             total_stats["vectors_deleted"] += (
-                stats["lancedb_vectors"]["small_deleted"] +
-                stats["lancedb_vectors"]["large_deleted"]
+                stats["lancedb_vectors"]["small_deleted"]
+                + stats["lancedb_vectors"]["large_deleted"]
             )
-            
+
             typer.echo(f"  ✓ Removed {repo['name']}")
-            
+
             # Capture any warnings
             if "lancedb_warnings" in result:
                 total_stats["errors"].extend(result["lancedb_warnings"])
-                
+
         except Exception as e:
             error_msg = f"Failed to remove {repo['name']}: {e}"
             total_stats["errors"].append(error_msg)
             typer.echo(f"  ✗ {error_msg}", err=True)
-    
+
     # Display final summary
     typer.echo(f"\n✅ Reset complete!")
     typer.echo(f"\nCleanup Statistics:")
@@ -851,12 +898,12 @@ def reset_all(
     typer.echo(f"  Locations deleted: {total_stats['locations_deleted']}")
     typer.echo(f"  Sessions deleted: {total_stats['sessions_deleted']}")
     typer.echo(f"  Vectors deleted: {total_stats['vectors_deleted']}")
-    
+
     if total_stats["errors"]:
         typer.echo(f"\n⚠️  Warnings ({len(total_stats['errors'])}):")
         for error in total_stats["errors"]:
             typer.echo(f"  - {error}", err=True)
-    
+
     typer.echo(f"\nConfiguration preserved at: {config.resolved_store_root()}")
     typer.echo(f"You can now run 'dolphin kb add-repo' to register new repositories.")
 

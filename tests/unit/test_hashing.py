@@ -1,6 +1,7 @@
 """Unit tests for text hashing and canonicalization."""
 
 import pytest
+
 from kb.hashing import canonicalize_text, hash_text, verify_hash
 
 

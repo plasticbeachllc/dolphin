@@ -5,13 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Sequence
 
-from kb.api.app import (
-    SearchRequest,
-    reset_search_backend,
-    set_search_backend,
-)
+from kb.api.app import SearchRequest, reset_search_backend, set_search_backend
 from kb.hashing import hash_text
-
 
 FIXTURE_REPO_ROOT = Path(__file__).resolve().parent / "fixtures" / "kb_sample_repo"
 

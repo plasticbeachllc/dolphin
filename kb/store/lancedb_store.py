@@ -20,7 +20,7 @@ class LanceDBStore:
         else:
             # Convert file paths to Path objects
             self.root = Path(root) if isinstance(root, str) else root
-        
+
         # Cache for database connection to avoid connection isolation issues
         self._db = None
 
@@ -29,41 +29,39 @@ class LanceDBStore:
         # Only create directory for file-based storage, not memory://
         if isinstance(self.root, Path):
             self.root.mkdir(parents=True, exist_ok=True)
-        
+
         # Return cached connection if available
         if self._db is not None:
             return self._db
-        
+
         # Create new connection and cache it
         import lancedb
+
         db_uri = self.root if isinstance(self.root, str) else self.root.as_posix()
         self._db = lancedb.connect(db_uri)
         return self._db
 
     def _get_schema_for_model(self, model: str) -> "pa.Schema":
         """Get PyArrow schema for the given model.
-        
+
         Args:
             model: Embedding model ('small' or 'large')
-            
+
         Returns:
             PyArrow schema for the model's table
         """
         import pyarrow as pa
-        
-        model_to_dim = {
-            'small': 1536,
-            'large': 3072
-        }
-        
+
+        model_to_dim = {"small": 1536, "large": 3072}
+
         if model not in model_to_dim:
             raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
-        
+
         dim = model_to_dim[model]
-        
+
         # Use fixed-size list for LanceDB vector search to work properly
         vector_field = pa.field("vector", pa.list_(pa.float32(), dim))
-        
+
         fields = [
             pa.field("id", pa.string()),
             vector_field,
@@ -114,6 +112,7 @@ class LanceDBStore:
             # Create a dummy row with null/zero values that we'll delete immediately
             try:
                 import datetime
+
                 # Create a single dummy row with the schema
                 dummy_row = {
                     "id": "__init_placeholder__",
@@ -150,48 +149,42 @@ class LanceDBStore:
 
     def upsert_chunks(self, repo: str, chunks: Iterable[Any], *, model: str) -> None:
         """Persist chunk data using delete-then-append strategy.
-        
+
         Args:
             repo: Repository name
             chunks: Iterable of chunk dictionaries with LanceDB schema
             model: Embedding model name ('small' or 'large')
         """
         # Map model to table name and expected dimension
-        model_to_table = {
-            'small': 'chunks_small',
-            'large': 'chunks_large'
-        }
-        model_to_dim = {
-            'small': 1536,
-            'large': 3072
-        }
-        
+        model_to_table = {"small": "chunks_small", "large": "chunks_large"}
+        model_to_dim = {"small": 1536, "large": 3072}
+
         if model not in model_to_table:
             raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
-        
+
         table_name = model_to_table[model]
         expected_dim = model_to_dim[model]
-        
+
         # Use cached connection
         db = self.connect()
-        
+
         # Convert chunks to list for processing
         chunks_list = list(chunks)
         if not chunks_list:
             return  # Nothing to do
-        
+
         # Validate vector dimensions
         for chunk in chunks_list:
-            vector = chunk.get('vector', [])
+            vector = chunk.get("vector", [])
             if len(vector) != expected_dim:
                 raise ValueError(
                     f"Vector dimension mismatch for model '{model}': "
                     f"expected {expected_dim}, got {len(vector)}"
                 )
-        
+
         # Extract IDs for deletion
-        ids_to_delete = [chunk['id'] for chunk in chunks_list if 'id' in chunk]
-        
+        ids_to_delete = [chunk["id"] for chunk in chunks_list if "id" in chunk]
+
         # Delete existing rows with these IDs
         if ids_to_delete:
             try:
@@ -203,14 +196,14 @@ class LanceDBStore:
             except Exception as e:
                 # If table doesn't exist or delete fails, we'll append anyway
                 print(f"Warning: Failed to delete existing rows: {e}")
-        
+
         # Append new rows
         # Convert data to PyArrow table with explicit schema to avoid casting issues
         import pyarrow as pa
-        
+
         # Get the schema for the target table
         schema = self._get_schema_for_model(model)
-        
+
         # Convert chunks to PyArrow table with explicit schema
         try:
             # Normalize None values and create PyArrow table
@@ -221,13 +214,13 @@ class LanceDBStore:
                     # Handle None values properly - PyArrow needs them as None, not as missing keys
                     normalized[key] = value
                 normalized_chunks.append(normalized)
-            
+
             pa_table = pa.Table.from_pylist(normalized_chunks, schema=schema)
         except Exception as schema_error:
             raise RuntimeError(
                 f"Failed to convert chunks to PyArrow table with schema: {schema_error}"
             ) from schema_error
-        
+
         try:
             table = db.open_table(table_name)
             # Table exists - check if it has the problematic schema from initialize_collections
@@ -236,15 +229,15 @@ class LanceDBStore:
                 if count == 0:
                     # Empty table from initialization - drop and recreate with real data
                     db.drop_table(table_name)
-                    db.create_table(table_name, data=pa_table, mode='create')
+                    db.create_table(table_name, data=pa_table, mode="create")
                 else:
                     # Has data - try to append
-                    table.add(pa_table, mode='append')
+                    table.add(pa_table, mode="append")
             except Exception as append_error:
                 # If append fails, try to drop and recreate
                 try:
                     db.drop_table(table_name)
-                    db.create_table(table_name, data=pa_table, mode='create')
+                    db.create_table(table_name, data=pa_table, mode="create")
                 except Exception:
                     raise append_error
         except Exception as e:
@@ -253,7 +246,7 @@ class LanceDBStore:
             try:
                 # Create table directly from data instead of using initialize_collections
                 # This ensures schema matches exactly
-                db.create_table(table_name, data=pa_table, mode='create')
+                db.create_table(table_name, data=pa_table, mode="create")
             except Exception as retry_error:
                 # If still failing, raise a more descriptive error
                 raise RuntimeError(
@@ -269,10 +262,7 @@ class LanceDBStore:
         keep_ids: set[str] | None = None,
     ) -> None:
         """Remove vectors for a given repo/path, optionally preserving specific row IDs."""
-        model_to_table = {
-            'small': 'chunks_small',
-            'large': 'chunks_large'
-        }
+        model_to_table = {"small": "chunks_small", "large": "chunks_large"}
 
         if model not in model_to_table:
             raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
@@ -289,7 +279,9 @@ class LanceDBStore:
         path_expr = repr(path)
         if keep_ids:
             id_list = ", ".join(repr(_id) for _id in sorted(keep_ids))
-            filter_expr = f"repo = {repo_expr} AND path = {path_expr} AND id NOT IN ({id_list})"
+            filter_expr = (
+                f"repo = {repo_expr} AND path = {path_expr} AND id NOT IN ({id_list})"
+            )
         else:
             filter_expr = f"repo = {repo_expr} AND path = {path_expr}"
 
@@ -301,15 +293,12 @@ class LanceDBStore:
 
     def delete_repo(self, repo: str, *, model: str) -> None:
         """Delete all vectors for a given repository.
-        
+
         Args:
             repo: Repository name
             model: Embedding model ('small' or 'large')
         """
-        model_to_table = {
-            'small': 'chunks_small',
-            'large': 'chunks_large'
-        }
+        model_to_table = {"small": "chunks_small", "large": "chunks_large"}
 
         if model not in model_to_table:
             raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
@@ -333,18 +322,15 @@ class LanceDBStore:
 
     def count_repo_vectors(self, repo: str, *, model: str) -> int:
         """Count the number of vectors for a repository.
-        
+
         Args:
             repo: Repository name
             model: Embedding model ('small' or 'large')
-            
+
         Returns:
             Number of vectors found for the repository
         """
-        model_to_table = {
-            'small': 'chunks_small',
-            'large': 'chunks_large'
-        }
+        model_to_table = {"small": "chunks_small", "large": "chunks_large"}
 
         if model not in model_to_table:
             raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
@@ -390,20 +376,14 @@ class LanceDBStore:
             List of matching chunks with metadata, sorted by similarity (closest first)
         """
         from kb.retrieval.ann_tuning import ANNParams
-        
+
         # Use default params if not provided
         if ann_params is None:
             ann_params = ANNParams()  # Default configuration
 
         # Map model to table name and expected dimension
-        model_to_table = {
-            'small': 'chunks_small',
-            'large': 'chunks_large'
-        }
-        model_to_dim = {
-            'small': 1536,
-            'large': 3072
-        }
+        model_to_table = {"small": "chunks_small", "large": "chunks_large"}
+        model_to_dim = {"small": 1536, "large": 3072}
 
         if model not in model_to_table:
             raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
@@ -428,22 +408,24 @@ class LanceDBStore:
             return []
 
         # Build search query with ANN parameters - explicitly specify vector column name
-        search_query = table.search(list(query_vector), vector_column_name="vector").limit(top_k)
-        
+        search_query = table.search(
+            list(query_vector), vector_column_name="vector"
+        ).limit(top_k)
+
         # Apply ANN parameters to LanceDB query
         # LanceDB API: https://lancedb.github.io/lancedb/search/
         lance_params = ann_params.to_lancedb_params()
-        
+
         # Apply metric if supported
-        if hasattr(search_query, 'metric'):
+        if hasattr(search_query, "metric"):
             search_query = search_query.metric(lance_params["metric"])
-        
+
         # Apply nprobes if using index
-        if lance_params["use_index"] and hasattr(search_query, 'nprobes'):
+        if lance_params["use_index"] and hasattr(search_query, "nprobes"):
             search_query = search_query.nprobes(lance_params["nprobes"])
-        
+
         # Apply refine_factor if using index
-        if lance_params["use_index"] and hasattr(search_query, 'refine_factor'):
+        if lance_params["use_index"] and hasattr(search_query, "refine_factor"):
             search_query = search_query.refine_factor(lance_params["refine_factor"])
 
         # Add repository filter if specified
@@ -458,7 +440,9 @@ class LanceDBStore:
             # Handle empty table or other search errors
             return []
 
-    def get_chunk_by_id(self, chunk_id: str, model: str = "small") -> dict[str, Any] | None:
+    def get_chunk_by_id(
+        self, chunk_id: str, model: str = "small"
+    ) -> dict[str, Any] | None:
         """Retrieve a chunk by its ID from the vector store.
 
         Args:
@@ -469,10 +453,7 @@ class LanceDBStore:
             Chunk dictionary if found, None otherwise
         """
         # Map model to table name
-        model_to_table = {
-            'small': 'chunks_small',
-            'large': 'chunks_large'
-        }
+        model_to_table = {"small": "chunks_small", "large": "chunks_large"}
 
         if model not in model_to_table:
             raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")

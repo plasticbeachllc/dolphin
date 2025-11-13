@@ -1,9 +1,11 @@
 """Unit tests for AST cache."""
 
-import pytest
-from pathlib import Path
 import tempfile
-from kb.cache.ast_cache import ASTCache, get_ast_cache, clear_ast_cache
+from pathlib import Path
+
+import pytest
+
+from kb.cache.ast_cache import ASTCache, clear_ast_cache, get_ast_cache
 from kb.chunkers.types import Chunk
 
 
@@ -94,7 +96,7 @@ class TestASTCache:
         cache.put("file4.py", "hash4", chunks4, "python")
 
         assert cache.get("file1.py", "hash1") == chunks1  # Still present
-        assert cache.get("file2.py", "hash2") is None     # Evicted
+        assert cache.get("file2.py", "hash2") is None  # Evicted
         assert cache.get("file3.py", "hash3") == chunks3
         assert cache.get("file4.py", "hash4") == chunks4
 
@@ -127,12 +129,12 @@ class TestASTCache:
 
         stats = cache.stats()
 
-        assert stats['size'] == 1
-        assert stats['max_size'] == 10
-        assert stats['hits'] == 1
-        assert stats['misses'] == 1
-        assert stats['hit_rate'] == 50.0
-        assert stats['total_requests'] == 2
+        assert stats["size"] == 1
+        assert stats["max_size"] == 10
+        assert stats["hits"] == 1
+        assert stats["misses"] == 1
+        assert stats["hit_rate"] == 50.0
+        assert stats["total_requests"] == 2
 
     def test_clear(self):
         """Test cache clear."""

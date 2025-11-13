@@ -1,11 +1,13 @@
 """Unit tests for repository scanning and file enumeration."""
 
-import pytest
 import subprocess
 import tempfile
 from pathlib import Path
-from kb.ingest.scanner import ScannerError, scan_repo
+
+import pytest
+
 from kb.ignores import build_ignore_set
+from kb.ingest.scanner import ScannerError, scan_repo
 from tests.conftest import init_test_git_repo
 
 
@@ -17,11 +19,11 @@ class TestScannerBasic:
         repo_path = temp_dir / "repo1"
         repo_path.mkdir()
         init_test_git_repo(repo_path)
-        
+
         # Create test files
         (repo_path / "src" / "app.py").parent.mkdir(parents=True, exist_ok=True)
         (repo_path / "src" / "app.py").write_text("print('hello')\n")
-        
+
         (repo_path / "src" / "app.ts").write_text("export const x = 1;\n")
         (repo_path / "docs" / "readme.md").parent.mkdir(parents=True, exist_ok=True)
         (repo_path / "docs" / "readme.md").write_text("# Title\ntext\n")
@@ -29,10 +31,25 @@ class TestScannerBasic:
         (repo_path / ".env").write_text("SECRET=1\n")  # Should be excluded
         (repo_path / "bin" / "image.bin").parent.mkdir(parents=True, exist_ok=True)
         (repo_path / "bin" / "image.bin").write_bytes(b"\x00\x01\x02\x03")  # Binary
-        
+
         # Add and commit files
-        subprocess.run(["git", "-C", str(repo_path), "add", "src/app.py", "src/app.ts", "docs/readme.md", "README", ".env"], check=True)
-        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "init"], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_path),
+                "add",
+                "src/app.py",
+                "src/app.ts",
+                "docs/readme.md",
+                "README",
+                ".env",
+            ],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "init"], check=True
+        )
 
         ignores = build_ignore_set({".env"})
         results = scan_repo(repo_path, ignores)
@@ -57,20 +74,24 @@ class TestScannerBasic:
         repo_path = temp_dir / "repo2"
         repo_path.mkdir()
         init_test_git_repo(repo_path)
-        
+
         # Create .gitignore
         (repo_path / ".gitignore").write_text("node_modules\ndist\n")
-        
+
         # Create files
         (repo_path / "src" / "ok.py").parent.mkdir(parents=True, exist_ok=True)
         (repo_path / "src" / "ok.py").write_text("pass\n")
-        
-        (repo_path / "node_modules" / "pkg" / "a.js").parent.mkdir(parents=True, exist_ok=True)
+
+        (repo_path / "node_modules" / "pkg" / "a.js").parent.mkdir(
+            parents=True, exist_ok=True
+        )
         (repo_path / "node_modules" / "pkg" / "a.js").write_text("console.log(1)\n")
 
         # Add and commit only the tracked file
         subprocess.run(["git", "-C", str(repo_path), "add", "src/ok.py"], check=True)
-        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "add ok"], check=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "add ok"], check=True
+        )
 
         ignores = build_ignore_set()
         results = scan_repo(repo_path, ignores)
@@ -93,19 +114,33 @@ class TestScannerBasic:
         # Add file to submodule and commit
         (sub_root / "sub.txt").write_text("hi\n")
         subprocess.run(["git", "-C", str(sub_root), "add", "sub.txt"], check=True)
-        subprocess.run(["git", "-C", str(sub_root), "commit", "-m", "sub init"], check=True)
+        subprocess.run(
+            ["git", "-C", str(sub_root), "commit", "-m", "sub init"], check=True
+        )
 
         # Add submodule to super repo
-        subprocess.run([
-            "git", "-C", str(super_root), "-c", "protocol.file.allow=always", 
-            "submodule", "add", str(sub_root), "vendor/sub"
-        ], check=True)
-        subprocess.run(["git", "-C", str(super_root), "commit", "-m", "add submodule"], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(super_root),
+                "-c",
+                "protocol.file.allow=always",
+                "submodule",
+                "add",
+                str(sub_root),
+                "vendor/sub",
+            ],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(super_root), "commit", "-m", "add submodule"], check=True
+        )
 
         ignores = build_ignore_set()
         results = scan_repo(super_root, ignores)
         rels = {c.rel_path for c in results}
-        
+
         # Verify no files from submodule are included
         assert not any(p.startswith("vendor/sub/") for p in rels)
 
@@ -113,10 +148,10 @@ class TestScannerBasic:
         """Test error handling for non-git repositories."""
         repo_path = temp_dir / "nogit"
         repo_path.mkdir()
-        
+
         with pytest.raises(ScannerError) as exc_info:
             scan_repo(repo_path, build_ignore_set())
-        
+
         assert "Not a git repository" in str(exc_info.value)
 
 
@@ -140,24 +175,30 @@ class TestIgnorePatterns:
         repo_path = temp_dir / "repo"
         repo_path.mkdir()
         init_test_git_repo(repo_path)
-        
+
         # Create files that should be ignored
-        (repo_path / "node_modules" / "package" / "index.js").parent.mkdir(parents=True, exist_ok=True)
-        (repo_path / "node_modules" / "package" / "index.js").write_text("console.log('ignored')\n")
-        
+        (repo_path / "node_modules" / "package" / "index.js").parent.mkdir(
+            parents=True, exist_ok=True
+        )
+        (repo_path / "node_modules" / "package" / "index.js").write_text(
+            "console.log('ignored')\n"
+        )
+
         (repo_path / "dist" / "bundle.js").parent.mkdir(parents=True, exist_ok=True)
         (repo_path / "dist" / "bundle.js").write_text("// bundled\n")
-        
+
         (repo_path / ".env").write_text("SECRET=value\n")
-        
+
         # Add and commit
         subprocess.run(["git", "-C", str(repo_path), "add", "-A"], check=True)
-        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "add files"], check=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "add files"], check=True
+        )
 
         ignores = build_ignore_set()
         results = scan_repo(repo_path, ignores)
         rels = {c.rel_path for c in results}
-        
+
         # Verify ignored files are not included
         assert "node_modules/package/index.js" not in rels
         assert "dist/bundle.js" not in rels

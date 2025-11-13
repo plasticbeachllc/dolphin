@@ -1,11 +1,11 @@
 """Unit tests for graph context enrichment."""
 
+from unittest.mock import MagicMock, Mock
+
 import pytest
-from unittest.mock import Mock, MagicMock
-from kb.retrieval.graph_context import (
-    GraphContextEnricher,
-    format_graph_context_for_llm
-)
+
+from kb.retrieval.graph_context import (GraphContextEnricher,
+                                        format_graph_context_for_llm)
 
 
 class TestGraphContextEnricher:
@@ -19,7 +19,7 @@ class TestGraphContextEnricher:
             self.mock_graph_store,
             self.mock_sql_store,
             max_related_nodes=10,
-            max_edges_per_node=5
+            max_edges_per_node=5,
         )
 
     def test_initialization(self):
@@ -35,7 +35,7 @@ class TestGraphContextEnricher:
             self.mock_graph_store,
             self.mock_sql_store,
             max_related_nodes=20,
-            max_edges_per_node=10
+            max_edges_per_node=10,
         )
 
         assert enricher.max_related_nodes == 20
@@ -53,7 +53,7 @@ class TestGraphContextEnricher:
                 "start_line": 1,
                 "end_line": 10,
                 "content": "def test(): pass",
-                "score": 0.9
+                "score": 0.9,
             }
         ]
 
@@ -67,7 +67,10 @@ class TestGraphContextEnricher:
     def test_enrich_adds_graph_context(self):
         """Test that graph context is added when available."""
         # Setup: Mock the entire chain
-        self.mock_sql_store.get_repo_by_name.return_value = {"id": 1, "name": "test-repo"}
+        self.mock_sql_store.get_repo_by_name.return_value = {
+            "id": 1,
+            "name": "test-repo",
+        }
         self.mock_sql_store.get_file_id.return_value = 100
 
         # Mock overlapping nodes
@@ -79,7 +82,7 @@ class TestGraphContextEnricher:
                 "qualified_name": "module.test_func",
                 "signature": "def test_func()",
                 "start_line": 1,
-                "end_line": 10
+                "end_line": 10,
             }
         ]
 
@@ -94,7 +97,7 @@ class TestGraphContextEnricher:
                 "start_line": 1,
                 "end_line": 10,
                 "content": "def test_func(): pass",
-                "score": 0.9
+                "score": 0.9,
             }
         ]
 
@@ -115,7 +118,7 @@ class TestGraphContextEnricher:
             self.mock_graph_store,
             self.mock_sql_store,
             max_related_nodes=2,
-            max_edges_per_node=5
+            max_edges_per_node=5,
         )
 
         # Setup
@@ -131,7 +134,7 @@ class TestGraphContextEnricher:
                 "qualified_name": f"module.func{i}",
                 "signature": f"def func{i}()",
                 "start_line": i * 10,
-                "end_line": i * 10 + 9
+                "end_line": i * 10 + 9,
             }
             for i in range(5)
         ]
@@ -145,7 +148,7 @@ class TestGraphContextEnricher:
                 "path": "test.py",
                 "start_line": 1,
                 "end_line": 50,
-                "score": 0.9
+                "score": 0.9,
             }
         ]
 
@@ -169,7 +172,7 @@ class TestGraphContextEnricher:
                 "qualified_name": "module.func1",
                 "signature": "def func1()",
                 "start_line": 1,
-                "end_line": 5  # Does NOT overlap with 10-20
+                "end_line": 5,  # Does NOT overlap with 10-20
             },
             {
                 "id": "node-2",
@@ -178,8 +181,8 @@ class TestGraphContextEnricher:
                 "qualified_name": "module.func2",
                 "signature": "def func2()",
                 "start_line": 15,
-                "end_line": 25  # OVERLAPS with 10-20
-            }
+                "end_line": 25,  # OVERLAPS with 10-20
+            },
         ]
 
         self.mock_graph_store.get_outgoing_edges.return_value = []
@@ -191,7 +194,7 @@ class TestGraphContextEnricher:
                 "path": "test.py",
                 "start_line": 10,
                 "end_line": 20,
-                "score": 0.9
+                "score": 0.9,
             }
         ]
 
@@ -208,7 +211,7 @@ class TestGraphContextEnricher:
             {"repo": "test-repo", "path": "test.py"},  # Missing line numbers
             {"repo": "test-repo", "start_line": 1, "end_line": 10},  # Missing path
             {"path": "test.py", "start_line": 1, "end_line": 10},  # Missing repo
-            {}  # Missing everything
+            {},  # Missing everything
         ]
 
         enriched = self.enricher.enrich_search_results(results)
@@ -229,17 +232,13 @@ class TestGraphContextEnricher:
                 "qualified_name": "module.caller",
                 "signature": "def caller()",
                 "start_line": 1,
-                "end_line": 10
+                "end_line": 10,
             }
         ]
 
         # Mock outgoing call edge
         self.mock_graph_store.get_outgoing_edges.return_value = [
-            {
-                "edge_type": "calls",
-                "target_node_id": "node-2",
-                "line_number": 5
-            }
+            {"edge_type": "calls", "target_node_id": "node-2", "line_number": 5}
         ]
 
         # Mock target node
@@ -248,7 +247,7 @@ class TestGraphContextEnricher:
             "node_type": "function",
             "name": "callee",
             "qualified_name": "module.callee",
-            "signature": "def callee()"
+            "signature": "def callee()",
         }
 
         self.mock_graph_store.get_incoming_edges.return_value = []
@@ -259,7 +258,7 @@ class TestGraphContextEnricher:
                 "path": "test.py",
                 "start_line": 1,
                 "end_line": 10,
-                "score": 0.9
+                "score": 0.9,
             }
         ]
 
@@ -288,7 +287,7 @@ class TestGraphContextEnricher:
                 "qualified_name": "module.callee",
                 "signature": "def callee()",
                 "start_line": 1,
-                "end_line": 10
+                "end_line": 10,
             }
         ]
 
@@ -296,11 +295,7 @@ class TestGraphContextEnricher:
 
         # Mock incoming call edge
         self.mock_graph_store.get_incoming_edges.return_value = [
-            {
-                "edge_type": "calls",
-                "source_node_id": "node-2",
-                "line_number": 5
-            }
+            {"edge_type": "calls", "source_node_id": "node-2", "line_number": 5}
         ]
 
         # Mock source node
@@ -309,7 +304,7 @@ class TestGraphContextEnricher:
             "node_type": "function",
             "name": "caller",
             "qualified_name": "module.caller",
-            "signature": "def caller()"
+            "signature": "def caller()",
         }
 
         results = [
@@ -318,7 +313,7 @@ class TestGraphContextEnricher:
                 "path": "test.py",
                 "start_line": 1,
                 "end_line": 10,
-                "score": 0.9
+                "score": 0.9,
             }
         ]
 
@@ -328,7 +323,8 @@ class TestGraphContextEnricher:
 
         # Find incoming call relationships
         incoming_calls = [
-            r for r in context["relationships"]
+            r
+            for r in context["relationships"]
             if r["type"] == "calls" and r["direction"] == "incoming"
         ]
         assert len(incoming_calls) >= 1
@@ -347,22 +343,14 @@ class TestGraphContextEnricher:
                 "qualified_name": "module.func",
                 "signature": "def func()",
                 "start_line": 1,
-                "end_line": 10
+                "end_line": 10,
             }
         ]
 
         # Mock different edge types
         self.mock_graph_store.get_outgoing_edges.return_value = [
-            {
-                "edge_type": "calls",
-                "target_node_id": "node-2",
-                "line_number": 5
-            },
-            {
-                "edge_type": "imports",
-                "target_node_id": "node-3",
-                "line_number": 1
-            }
+            {"edge_type": "calls", "target_node_id": "node-2", "line_number": 5},
+            {"edge_type": "imports", "target_node_id": "node-3", "line_number": 1},
         ]
 
         self.mock_graph_store.get_incoming_edges.return_value = []
@@ -374,7 +362,7 @@ class TestGraphContextEnricher:
                 "node_type": "function",
                 "name": f"target_{node_id}",
                 "qualified_name": f"module.target_{node_id}",
-                "signature": "def target()"
+                "signature": "def target()",
             }
 
         self.mock_graph_store.get_node_by_id.side_effect = mock_get_node
@@ -385,15 +373,13 @@ class TestGraphContextEnricher:
                 "path": "test.py",
                 "start_line": 1,
                 "end_line": 10,
-                "score": 0.9
+                "score": 0.9,
             }
         ]
 
         # Test with callsites disabled
         enriched = self.enricher.enrich_search_results(
-            results,
-            include_callsites=False,
-            include_dependencies=True
+            results, include_callsites=False, include_dependencies=True
         )
 
         context = enriched[0]["graph_context"]
@@ -402,9 +388,7 @@ class TestGraphContextEnricher:
 
         # Test with dependencies disabled
         enriched = self.enricher.enrich_search_results(
-            results,
-            include_callsites=True,
-            include_dependencies=False
+            results, include_callsites=True, include_dependencies=False
         )
 
         context = enriched[0]["graph_context"]
@@ -414,7 +398,7 @@ class TestGraphContextEnricher:
 
     def test_enrich_handles_graph_store_errors(self):
         """Test that graph store errors don't crash enrichment."""
-        self.mock_sql_store.get_repo_by_name.side_effect = Exception('DB error')
+        self.mock_sql_store.get_repo_by_name.side_effect = Exception("DB error")
 
         results = [
             {
@@ -422,7 +406,7 @@ class TestGraphContextEnricher:
                 "path": "test.py",
                 "start_line": 1,
                 "end_line": 10,
-                "score": 0.9
+                "score": 0.9,
             }
         ]
 
@@ -445,7 +429,7 @@ class TestGraphContextEnricher:
                 "qualified_name": "module.func1",
                 "signature": "def func1()",
                 "start_line": 1,
-                "end_line": 10
+                "end_line": 10,
             },
             {
                 "id": "node-2",
@@ -454,17 +438,13 @@ class TestGraphContextEnricher:
                 "qualified_name": "module.func2",
                 "signature": "def func2()",
                 "start_line": 11,
-                "end_line": 20
-            }
+                "end_line": 20,
+            },
         ]
 
         # Both nodes call the same target
         self.mock_graph_store.get_outgoing_edges.return_value = [
-            {
-                "edge_type": "calls",
-                "target_node_id": "target",
-                "line_number": 5
-            }
+            {"edge_type": "calls", "target_node_id": "target", "line_number": 5}
         ]
 
         self.mock_graph_store.get_incoming_edges.return_value = []
@@ -474,7 +454,7 @@ class TestGraphContextEnricher:
             "node_type": "function",
             "name": "target_func",
             "qualified_name": "module.target_func",
-            "signature": "def target_func()"
+            "signature": "def target_func()",
         }
 
         results = [
@@ -483,7 +463,7 @@ class TestGraphContextEnricher:
                 "path": "test.py",
                 "start_line": 1,
                 "end_line": 20,
-                "score": 0.9
+                "score": 0.9,
             }
         ]
 
@@ -528,10 +508,10 @@ class TestGraphContextEnricher:
                     "qualified_name": "module.func1",
                     "signature": "def func1()",
                     "start_line": 1,
-                    "end_line": 10
+                    "end_line": 10,
                 }
             ],
-            []  # Second result has no nodes
+            [],  # Second result has no nodes
         ]
 
         self.mock_graph_store.get_outgoing_edges.return_value = []
@@ -543,15 +523,15 @@ class TestGraphContextEnricher:
                 "path": "file1.py",
                 "start_line": 1,
                 "end_line": 10,
-                "score": 0.9
+                "score": 0.9,
             },
             {
                 "repo": "test-repo",
                 "path": "file2.py",
                 "start_line": 1,
                 "end_line": 10,
-                "score": 0.8
-            }
+                "score": 0.8,
+            },
         ]
 
         enriched = self.enricher.enrich_search_results(results)
@@ -581,10 +561,10 @@ class TestFormatGraphContextForLLM:
                     "name": "test_func",
                     "qualified_name": "module.test_func",
                     "signature": "def test_func(x: int) -> str",
-                    "line_range": [10, 20]
+                    "line_range": [10, 20],
                 }
             ],
-            "relationships": []
+            "relationships": [],
         }
 
         result = format_graph_context_for_llm(context)
@@ -605,7 +585,7 @@ class TestFormatGraphContextForLLM:
                     "name": "caller",
                     "qualified_name": "module.caller",
                     "signature": "def caller()",
-                    "line_range": [1, 10]
+                    "line_range": [1, 10],
                 }
             ],
             "relationships": [
@@ -616,11 +596,11 @@ class TestFormatGraphContextForLLM:
                         "name": "callee",
                         "qualified_name": "module.callee",
                         "node_type": "function",
-                        "signature": "def callee()"
+                        "signature": "def callee()",
                     },
-                    "line_number": 5
+                    "line_number": 5,
                 }
-            ]
+            ],
         }
 
         result = format_graph_context_for_llm(context)
@@ -638,7 +618,7 @@ class TestFormatGraphContextForLLM:
                     "name": "callee",
                     "qualified_name": "module.callee",
                     "signature": "def callee()",
-                    "line_range": [1, 10]
+                    "line_range": [1, 10],
                 }
             ],
             "relationships": [
@@ -649,11 +629,11 @@ class TestFormatGraphContextForLLM:
                         "name": "caller",
                         "qualified_name": "module.caller",
                         "node_type": "function",
-                        "signature": "def caller()"
+                        "signature": "def caller()",
                     },
-                    "line_number": 5
+                    "line_number": 5,
                 }
-            ]
+            ],
         }
 
         result = format_graph_context_for_llm(context)
@@ -671,7 +651,7 @@ class TestFormatGraphContextForLLM:
                     "name": "ChildClass",
                     "qualified_name": "module.ChildClass",
                     "signature": "class ChildClass",
-                    "line_range": [10, 50]
+                    "line_range": [10, 50],
                 }
             ],
             "relationships": [
@@ -682,11 +662,11 @@ class TestFormatGraphContextForLLM:
                         "name": "BaseClass",
                         "qualified_name": "module.BaseClass",
                         "node_type": "class",
-                        "signature": "class BaseClass"
+                        "signature": "class BaseClass",
                     },
-                    "line_number": 10
+                    "line_number": 10,
                 }
-            ]
+            ],
         }
 
         result = format_graph_context_for_llm(context)
@@ -703,7 +683,7 @@ class TestFormatGraphContextForLLM:
                     "name": "ConcreteClass",
                     "qualified_name": "module.ConcreteClass",
                     "signature": "class ConcreteClass",
-                    "line_range": [10, 50]
+                    "line_range": [10, 50],
                 }
             ],
             "relationships": [
@@ -714,9 +694,9 @@ class TestFormatGraphContextForLLM:
                         "name": "IInterface",
                         "qualified_name": "module.IInterface",
                         "node_type": "interface",
-                        "signature": "interface IInterface"
+                        "signature": "interface IInterface",
                     },
-                    "line_number": 10
+                    "line_number": 10,
                 },
                 {
                     "type": "implements",
@@ -725,11 +705,11 @@ class TestFormatGraphContextForLLM:
                         "name": "AnotherImpl",
                         "qualified_name": "module.AnotherImpl",
                         "node_type": "class",
-                        "signature": "class AnotherImpl"
+                        "signature": "class AnotherImpl",
                     },
-                    "line_number": 50
-                }
-            ]
+                    "line_number": 50,
+                },
+            ],
         }
 
         result = format_graph_context_for_llm(context)
@@ -747,7 +727,7 @@ class TestFormatGraphContextForLLM:
                     "name": "main",
                     "qualified_name": "main",
                     "signature": "",
-                    "line_range": [1, 100]
+                    "line_range": [1, 100],
                 }
             ],
             "relationships": [
@@ -758,11 +738,11 @@ class TestFormatGraphContextForLLM:
                         "name": "utils",
                         "qualified_name": "utils",
                         "node_type": "module",
-                        "signature": ""
+                        "signature": "",
                     },
-                    "line_number": 1
+                    "line_number": 1,
                 }
-            ]
+            ],
         }
 
         result = format_graph_context_for_llm(context)
@@ -780,7 +760,7 @@ class TestFormatGraphContextForLLM:
                     "name": "func",
                     "qualified_name": "module.func",
                     "signature": "def func()",
-                    "line_range": [1, 100]
+                    "line_range": [1, 100],
                 }
             ],
             "relationships": [
@@ -791,12 +771,12 @@ class TestFormatGraphContextForLLM:
                         "name": f"target{i}",
                         "qualified_name": f"module.target{i}",
                         "node_type": "function",
-                        "signature": f"def target{i}()"
+                        "signature": f"def target{i}()",
                     },
-                    "line_number": i
+                    "line_number": i,
                 }
                 for i in range(10)
-            ]
+            ],
         }
 
         result = format_graph_context_for_llm(context)
@@ -813,10 +793,10 @@ class TestFormatGraphContextForLLM:
                     "name": "test_func",
                     "qualified_name": "module.test_func",
                     "signature": None,  # Missing signature
-                    "line_range": [10, 20]
+                    "line_range": [10, 20],
                 }
             ],
-            "relationships": []
+            "relationships": [],
         }
 
         result = format_graph_context_for_llm(context)
@@ -834,7 +814,7 @@ class TestFormatGraphContextForLLM:
                     "name": "caller",
                     "qualified_name": "module.caller",
                     "signature": "def caller()",
-                    "line_range": [1, 10]
+                    "line_range": [1, 10],
                 }
             ],
             "relationships": [
@@ -845,11 +825,11 @@ class TestFormatGraphContextForLLM:
                         "name": "callee",
                         "qualified_name": "module.callee",
                         "node_type": "function",
-                        "signature": "def callee()"
-                    }
+                        "signature": "def callee()",
+                    },
                     # No line_number field
                 }
-            ]
+            ],
         }
 
         result = format_graph_context_for_llm(context)

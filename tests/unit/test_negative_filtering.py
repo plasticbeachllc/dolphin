@@ -1,6 +1,7 @@
 """Tests for negative filtering functionality in search backend."""
 
 import pytest
+
 from kb.api.app import SearchRequest
 from kb.api.search_backend import KnowledgeSearchBackend
 
@@ -13,24 +14,24 @@ class TestNegativeFiltering:
         # Mock results with various paths
         results = [
             {"chunk_id": "1", "repo": "test", "path": "src/main.py", "score": 0.9},
-            {"chunk_id": "2", "repo": "test", "path": "tests/test_main.py", "score": 0.8},
+            {
+                "chunk_id": "2",
+                "repo": "test",
+                "path": "tests/test_main.py",
+                "score": 0.8,
+            },
             {"chunk_id": "3", "repo": "test", "path": "src/utils.py", "score": 0.7},
             {"chunk_id": "4", "repo": "test", "path": "docs/guide.md", "score": 0.6},
         ]
-        
-        request = SearchRequest(
-            query="test",
-            exclude_paths=["tests/"]
-        )
-        
+
+        request = SearchRequest(query="test", exclude_paths=["tests/"])
+
         backend = KnowledgeSearchBackend(
-            embedding_provider=None,
-            lance_store=None,
-            sql_store=None
+            embedding_provider=None, lance_store=None, sql_store=None
         )
-        
+
         filtered = backend._apply_request_filters(results, request)
-        
+
         # Should exclude tests/ directory
         assert len(filtered) == 3
         assert all(not r["path"].startswith("tests/") for r in filtered)
@@ -42,25 +43,32 @@ class TestNegativeFiltering:
         """Test excluding multiple path prefixes."""
         results = [
             {"chunk_id": "1", "repo": "test", "path": "src/main.py", "score": 0.9},
-            {"chunk_id": "2", "repo": "test", "path": "tests/test_main.py", "score": 0.8},
-            {"chunk_id": "3", "repo": "test", "path": "node_modules/lib.js", "score": 0.7},
+            {
+                "chunk_id": "2",
+                "repo": "test",
+                "path": "tests/test_main.py",
+                "score": 0.8,
+            },
+            {
+                "chunk_id": "3",
+                "repo": "test",
+                "path": "node_modules/lib.js",
+                "score": 0.7,
+            },
             {"chunk_id": "4", "repo": "test", "path": "dist/bundle.js", "score": 0.6},
             {"chunk_id": "5", "repo": "test", "path": "src/utils.py", "score": 0.5},
         ]
-        
+
         request = SearchRequest(
-            query="test",
-            exclude_paths=["tests/", "node_modules/", "dist/"]
+            query="test", exclude_paths=["tests/", "node_modules/", "dist/"]
         )
-        
+
         backend = KnowledgeSearchBackend(
-            embedding_provider=None,
-            lance_store=None,
-            sql_store=None
+            embedding_provider=None, lance_store=None, sql_store=None
         )
-        
+
         filtered = backend._apply_request_filters(results, request)
-        
+
         # Should only include src/ files
         assert len(filtered) == 2
         assert all(r["path"].startswith("src/") for r in filtered)
@@ -70,24 +78,26 @@ class TestNegativeFiltering:
         results = [
             {"chunk_id": "1", "repo": "test", "path": "src/main.py", "score": 0.9},
             {"chunk_id": "2", "repo": "test", "path": "src/test_main.py", "score": 0.8},
-            {"chunk_id": "3", "repo": "test", "path": "tests/test_utils.py", "score": 0.7},
+            {
+                "chunk_id": "3",
+                "repo": "test",
+                "path": "tests/test_utils.py",
+                "score": 0.7,
+            },
             {"chunk_id": "4", "repo": "test", "path": "src/utils.py", "score": 0.6},
             {"chunk_id": "5", "repo": "test", "path": "config.json", "score": 0.5},
         ]
-        
+
         request = SearchRequest(
-            query="test",
-            exclude_patterns=["**/test_*.py", "*.json"]
+            query="test", exclude_patterns=["**/test_*.py", "*.json"]
         )
-        
+
         backend = KnowledgeSearchBackend(
-            embedding_provider=None,
-            lance_store=None,
-            sql_store=None
+            embedding_provider=None, lance_store=None, sql_store=None
         )
-        
+
         filtered = backend._apply_request_filters(results, request)
-        
+
         # Should exclude test files and config files
         assert len(filtered) == 2
         assert any(r["path"] == "src/main.py" for r in filtered)
@@ -102,49 +112,57 @@ class TestNegativeFiltering:
             {"chunk_id": "4", "repo": "test", "path": "package.json", "score": 0.6},
             {"chunk_id": "5", "repo": "test", "path": "src/utils.ts", "score": 0.5},
         ]
-        
+
         request = SearchRequest(
-            query="test",
-            exclude_patterns=["*.spec.ts", "*.toml", "*.json"]
+            query="test", exclude_patterns=["*.spec.ts", "*.toml", "*.json"]
         )
-        
+
         backend = KnowledgeSearchBackend(
-            embedding_provider=None,
-            lance_store=None,
-            sql_store=None
+            embedding_provider=None, lance_store=None, sql_store=None
         )
-        
+
         filtered = backend._apply_request_filters(results, request)
-        
+
         # Should only include production TypeScript files
         assert len(filtered) == 2
-        assert all(r["path"].endswith(".ts") and not r["path"].endswith(".spec.ts") for r in filtered)
+        assert all(
+            r["path"].endswith(".ts") and not r["path"].endswith(".spec.ts")
+            for r in filtered
+        )
 
     def test_exclude_paths_and_patterns_combined(self):
         """Test using both exclude_paths and exclude_patterns together."""
         results = [
             {"chunk_id": "1", "repo": "test", "path": "src/main.py", "score": 0.9},
             {"chunk_id": "2", "repo": "test", "path": "src/test_main.py", "score": 0.8},
-            {"chunk_id": "3", "repo": "test", "path": "tests/test_utils.py", "score": 0.7},
-            {"chunk_id": "4", "repo": "test", "path": "node_modules/lib.js", "score": 0.6},
+            {
+                "chunk_id": "3",
+                "repo": "test",
+                "path": "tests/test_utils.py",
+                "score": 0.7,
+            },
+            {
+                "chunk_id": "4",
+                "repo": "test",
+                "path": "node_modules/lib.js",
+                "score": 0.6,
+            },
             {"chunk_id": "5", "repo": "test", "path": "src/config.json", "score": 0.5},
             {"chunk_id": "6", "repo": "test", "path": "src/utils.py", "score": 0.4},
         ]
-        
+
         request = SearchRequest(
             query="test",
             exclude_paths=["tests/", "node_modules/"],
-            exclude_patterns=["test_*.py", "*.json"]
+            exclude_patterns=["test_*.py", "*.json"],
         )
-        
+
         backend = KnowledgeSearchBackend(
-            embedding_provider=None,
-            lance_store=None,
-            sql_store=None
+            embedding_provider=None, lance_store=None, sql_store=None
         )
-        
+
         filtered = backend._apply_request_filters(results, request)
-        
+
         # Should exclude tests/, node_modules/, test_*.py, and *.json
         assert len(filtered) == 2
         assert any(r["path"] == "src/main.py" for r in filtered)
@@ -156,24 +174,27 @@ class TestNegativeFiltering:
             {"chunk_id": "1", "repo": "test", "path": "src/main.py", "score": 0.9},
             {"chunk_id": "2", "repo": "test", "path": "src/test_main.py", "score": 0.8},
             {"chunk_id": "3", "repo": "test", "path": "src/config.json", "score": 0.7},
-            {"chunk_id": "4", "repo": "test", "path": "tests/test_utils.py", "score": 0.6},
+            {
+                "chunk_id": "4",
+                "repo": "test",
+                "path": "tests/test_utils.py",
+                "score": 0.6,
+            },
             {"chunk_id": "5", "repo": "test", "path": "docs/guide.md", "score": 0.5},
         ]
-        
+
         request = SearchRequest(
             query="test",
             path_prefix=["src/"],  # Only include src/
-            exclude_patterns=["test_*.py", "*.json"]  # But exclude tests and configs
+            exclude_patterns=["test_*.py", "*.json"],  # But exclude tests and configs
         )
-        
+
         backend = KnowledgeSearchBackend(
-            embedding_provider=None,
-            lance_store=None,
-            sql_store=None
+            embedding_provider=None, lance_store=None, sql_store=None
         )
-        
+
         filtered = backend._apply_request_filters(results, request)
-        
+
         # Should only include src/main.py
         assert len(filtered) == 1
         assert filtered[0]["path"] == "src/main.py"
@@ -185,20 +206,15 @@ class TestNegativeFiltering:
             {"chunk_id": "2", "repo": "test", "path": "/tests/test.py", "score": 0.8},
             {"chunk_id": "3", "repo": "test", "path": "src/utils.py", "score": 0.7},
         ]
-        
-        request = SearchRequest(
-            query="test",
-            exclude_paths=["tests/"]
-        )
-        
+
+        request = SearchRequest(query="test", exclude_paths=["tests/"])
+
         backend = KnowledgeSearchBackend(
-            embedding_provider=None,
-            lance_store=None,
-            sql_store=None
+            embedding_provider=None, lance_store=None, sql_store=None
         )
-        
+
         filtered = backend._apply_request_filters(results, request)
-        
+
         # Should properly normalize and exclude /tests/test.py
         assert len(filtered) == 2
         assert not any("test.py" in r["path"] for r in filtered)
@@ -209,21 +225,15 @@ class TestNegativeFiltering:
             {"chunk_id": "1", "repo": "test", "path": "src/main.py", "score": 0.9},
             {"chunk_id": "2", "repo": "test", "path": "tests/test.py", "score": 0.8},
         ]
-        
-        request = SearchRequest(
-            query="test",
-            exclude_paths=[],
-            exclude_patterns=[]
-        )
-        
+
+        request = SearchRequest(query="test", exclude_paths=[], exclude_patterns=[])
+
         backend = KnowledgeSearchBackend(
-            embedding_provider=None,
-            lance_store=None,
-            sql_store=None
+            embedding_provider=None, lance_store=None, sql_store=None
         )
-        
+
         filtered = backend._apply_request_filters(results, request)
-        
+
         # Should return all results
         assert len(filtered) == 2
 
@@ -233,19 +243,17 @@ class TestNegativeFiltering:
             {"chunk_id": "1", "repo": "test", "path": "src/main.py", "score": 0.9},
             {"chunk_id": "2", "repo": "test", "path": "tests/test.py", "score": 0.8},
         ]
-        
+
         request = SearchRequest(
             query="test"
             # exclude_paths and exclude_patterns not specified
         )
-        
+
         backend = KnowledgeSearchBackend(
-            embedding_provider=None,
-            lance_store=None,
-            sql_store=None
+            embedding_provider=None, lance_store=None, sql_store=None
         )
-        
+
         filtered = backend._apply_request_filters(results, request)
-        
+
         # Should return all results
         assert len(filtered) == 2

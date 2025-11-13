@@ -75,6 +75,54 @@ show-mcp-bridge:
 	lsof -i :7777
 
 # ==============================================================================
+# Code Quality & Linting
+# ==============================================================================
+
+# Run all linting and type checking
+check:
+	@echo "🔍 Running code quality checks..."
+	@echo ""
+	@just check-python
+	@just check-typescript
+	@echo ""
+	@echo "✅ All checks passed!"
+
+# Check Python code quality
+check-python:
+	@echo "🐍 Checking Python code quality..."
+	@uv run black --check kb/ tests/ || (echo "   ❌ black formatting failed"; exit 1)
+	@echo "   ✅ black formatting passed"
+	@uv run mypy kb/ || (echo "   ❌ mypy type checking failed"; exit 1)
+	@echo "   ✅ mypy type checking passed"
+
+# Check TypeScript code quality
+check-typescript:
+	@echo "📘 Checking TypeScript code quality..."
+	@cd mcp-bridge && bun x eslint . || (echo "   ❌ MCP bridge linting failed"; exit 1)
+	@echo "   ✅ MCP bridge linting passed"
+	@cd mcp-bridge && bun x tsc --noEmit || (echo "   ❌ MCP bridge type checking failed"; exit 1)
+	@echo "   ✅ MCP bridge type checking passed"
+	@cd agent-core && bun x tsc --noEmit || (echo "   ❌ Agent core type checking failed"; exit 1)
+	@echo "   ✅ Agent core type checking passed"
+
+# Auto-fix Python formatting issues
+fix-python:
+	@echo "🔧 Auto-fixing Python code..."
+	@uv run black kb/ tests/
+	@uv run isort kb/ tests/
+	@echo "✅ Python code formatted"
+
+# Auto-fix TypeScript linting issues
+fix-typescript:
+	@echo "🔧 Auto-fixing TypeScript code..."
+	@cd mcp-bridge && bun x eslint . --fix
+	@echo "✅ TypeScript code fixed"
+
+# Auto-fix all code quality issues
+fix: fix-python fix-typescript
+	@echo "✅ All code formatting fixed"
+
+# ==============================================================================
 # Testing
 # ==============================================================================
 

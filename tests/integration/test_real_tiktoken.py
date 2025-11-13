@@ -10,12 +10,10 @@ Tiktoken is required for all tests (enforced by setup_tiktoken fixture).
 """
 
 import pytest
-from kb.chunkers.token_utils import (
-    count_tokens,
-    window_text_by_tokens,
-    window_token_ranges,
-    get_tokenizer,
-)
+
+from kb.chunkers.token_utils import (count_tokens, get_tokenizer,
+                                     window_text_by_tokens,
+                                     window_token_ranges)
 
 
 class TestRealTiktokenBehavior:
@@ -31,8 +29,14 @@ class TestRealTiktokenBehavior:
             # (text, expected_token_count_with_cl100k_base)
             ("hello world", 2),  # "hello" + " world"
             ("The quick brown fox", 4),  # "The" + " quick" + " brown" + " fox"
-            ("print('hello')", 4),  # "print" + "(" + "'hello'" + ")" (tiktoken optimizes some tokens)
-            ("def example():\n    pass", 5),  # "def" + " example" + "()" + "\n    " + "pass"
+            (
+                "print('hello')",
+                4,
+            ),  # "print" + "(" + "'hello'" + ")" (tiktoken optimizes some tokens)
+            (
+                "def example():\n    pass",
+                5,
+            ),  # "def" + " example" + "()" + "\n    " + "pass"
         ]
 
         for text, expected_count in test_cases:
@@ -48,7 +52,6 @@ class TestRealTiktokenBehavior:
     def test_window_text_boundaries_real_tiktoken(self):
         """Verify text windowing produces correct boundaries with real tiktoken."""
         text = "The quick brown fox jumps over the lazy dog"
-
 
         # With real tiktoken and target=5, overlap=2
         windows = window_text_by_tokens(text, model="small", target=5, overlap=2)
@@ -83,7 +86,6 @@ def example_function():
     return True
 """
 
-
         # Get chunks twice
         chunks1 = window_text_by_tokens(text, target=20, overlap=5)
         chunks2 = window_text_by_tokens(text, target=20, overlap=5)
@@ -104,15 +106,13 @@ def example_function():
             "Symbols: @#$%^&*()",
         ]
 
-
         tokenizer = get_tokenizer("small")
 
         for text in test_texts:
             tokens = tokenizer.encode(text)
             decoded = tokenizer.decode(tokens)
             assert decoded == text, (
-                f"Encode/decode roundtrip failed for: {text!r}\n"
-                f"Got: {decoded!r}"
+                f"Encode/decode roundtrip failed for: {text!r}\n" f"Got: {decoded!r}"
             )
 
 

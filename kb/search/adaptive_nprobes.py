@@ -6,12 +6,12 @@ search performance, dynamically balancing speed and quality.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional, Dict, Any, List
-from collections import deque
-import time
 import logging
 import math
+import time
+from collections import deque
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 from kb.retrieval.ann_tuning import ANNParams
 
@@ -198,8 +198,7 @@ class AdaptiveNProbes:
             self._ema_latency = latency_ms
         else:
             self._ema_latency = (
-                self._ema_alpha * latency_ms +
-                (1 - self._ema_alpha) * self._ema_latency
+                self._ema_alpha * latency_ms + (1 - self._ema_alpha) * self._ema_latency
             )
 
         # Consider adjustment
@@ -232,8 +231,7 @@ class AdaptiveNProbes:
             # Latency too high - decrease nprobes
             adjustment_factor = 0.8  # Reduce by 20%
             new_nprobes = max(
-                self.min_nprobes,
-                int(self.current_nprobes * adjustment_factor)
+                self.min_nprobes, int(self.current_nprobes * adjustment_factor)
             )
 
             # Also reduce refine factor if needed
@@ -246,8 +244,7 @@ class AdaptiveNProbes:
             # Latency too low - can increase nprobes for better quality
             adjustment_factor = 1.2  # Increase by 20%
             new_nprobes = min(
-                self.max_nprobes,
-                int(self.current_nprobes * adjustment_factor)
+                self.max_nprobes, int(self.current_nprobes * adjustment_factor)
             )
 
             # Also increase refine factor if appropriate
@@ -299,16 +296,16 @@ class AdaptiveNProbes:
         """
         if not self._history:
             return {
-                'total_queries': 0,
-                'current_nprobes': self.current_nprobes,
-                'current_refine_factor': self.current_refine_factor,
-                'target_latency_ms': self.target_latency_ms,
-                'avg_latency_ms': 0.0,
-                'min_latency_ms': 0.0,
-                'max_latency_ms': 0.0,
-                'p50_latency_ms': 0.0,
-                'p95_latency_ms': 0.0,
-                'adjustment_count': 0,
+                "total_queries": 0,
+                "current_nprobes": self.current_nprobes,
+                "current_refine_factor": self.current_refine_factor,
+                "target_latency_ms": self.target_latency_ms,
+                "avg_latency_ms": 0.0,
+                "min_latency_ms": 0.0,
+                "max_latency_ms": 0.0,
+                "p50_latency_ms": 0.0,
+                "p95_latency_ms": 0.0,
+                "adjustment_count": 0,
             }
 
         # Extract latencies
@@ -319,17 +316,17 @@ class AdaptiveNProbes:
         p95_idx = int(len(latencies) * 0.95)
 
         return {
-            'total_queries': len(self._history),
-            'current_nprobes': self.current_nprobes,
-            'current_refine_factor': self.current_refine_factor,
-            'target_latency_ms': self.target_latency_ms,
-            'avg_latency_ms': sum(latencies) / len(latencies),
-            'min_latency_ms': min(latencies),
-            'max_latency_ms': max(latencies),
-            'p50_latency_ms': latencies[p50_idx],
-            'p95_latency_ms': latencies[p95_idx],
-            'adjustment_count': self._adjustment_count,
-            'ema_latency_ms': self._ema_latency or 0.0,
+            "total_queries": len(self._history),
+            "current_nprobes": self.current_nprobes,
+            "current_refine_factor": self.current_refine_factor,
+            "target_latency_ms": self.target_latency_ms,
+            "avg_latency_ms": sum(latencies) / len(latencies),
+            "min_latency_ms": min(latencies),
+            "max_latency_ms": max(latencies),
+            "p50_latency_ms": latencies[p50_idx],
+            "p95_latency_ms": latencies[p95_idx],
+            "adjustment_count": self._adjustment_count,
+            "ema_latency_ms": self._ema_latency or 0.0,
         }
 
     def reset(self) -> None:
@@ -377,7 +374,7 @@ class AdaptiveNProbes:
 
         # Clamp to valid range, but ensure distinct values for different recall levels
         clamped = max(self.min_nprobes, min(optimal, self.max_nprobes))
-        
+
         # If clamped at min, use recall-based offset to distinguish
         if clamped == self.min_nprobes and optimal < self.min_nprobes:
             if target_recall >= 0.98:
@@ -386,7 +383,7 @@ class AdaptiveNProbes:
                 return self.min_nprobes + 1
             elif target_recall >= 0.90:
                 return self.min_nprobes
-        
+
         return clamped
 
 
@@ -409,9 +406,7 @@ class GlobalAdaptiveNProbes:
             Global AdaptiveNProbes instance
         """
         if cls._instance is None:
-            cls._instance = AdaptiveNProbes(
-                target_latency_ms=target_latency_ms
-            )
+            cls._instance = AdaptiveNProbes(target_latency_ms=target_latency_ms)
         return cls._instance
 
     @classmethod

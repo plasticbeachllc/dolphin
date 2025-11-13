@@ -1,7 +1,9 @@
 """Unit tests for language classification."""
 
-import pytest
 from pathlib import Path
+
+import pytest
+
 from kb.ingest.lang import classify_language
 
 
@@ -97,7 +99,10 @@ class TestClassifyLanguage:
     def test_path_with_directories(self):
         """Test that directory paths don't affect classification."""
         assert classify_language(Path("/path/to/file.py")) == (".py", "python")
-        assert classify_language(Path("./src/components/App.tsx")) == (".tsx", "typescriptreact")
+        assert classify_language(Path("./src/components/App.tsx")) == (
+            ".tsx",
+            "typescriptreact",
+        )
         assert classify_language(Path("../utils/helper.js")) == (".js", "javascript")
 
     def test_multiple_dots_in_filename(self):
@@ -128,7 +133,7 @@ class TestClassifyLanguage:
             ("app.ts", "typescript"),
             ("component.tsx", "typescriptreact"),
             ("module.mts", "typescript"),
-            ("config.cts", "typescript")
+            ("config.cts", "typescript"),
         ]
         for filename, expected_lang in ts_files:
             ext, lang = classify_language(Path(filename))
@@ -140,7 +145,7 @@ class TestClassifyLanguage:
             ("app.js", "javascript"),
             ("component.jsx", "javascriptreact"),
             ("common.cjs", "javascript"),
-            ("module.mjs", "javascript")
+            ("module.mjs", "javascript"),
         ]
         for filename, expected_lang in js_files:
             ext, lang = classify_language(Path(filename))
@@ -172,7 +177,7 @@ class TestClassifyLanguage:
             "README": "text",
             "LICENSE": "text",
             "Makefile": "text",
-            "Dockerfile": "text"
+            "Dockerfile": "text",
         }
         for filename, expected_lang in special_files.items():
             ext, lang = classify_language(Path(filename))

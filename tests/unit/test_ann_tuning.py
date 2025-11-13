@@ -1,6 +1,7 @@
 """Unit tests for ANN parameter tuning module."""
 
 import pytest
+
 from kb.retrieval.ann_tuning import ANNParams
 
 
@@ -19,7 +20,7 @@ class TestANNParamsValidation:
         """Test nprobes validation."""
         with pytest.raises(ValueError, match="nprobes must be >= 1"):
             ANNParams(nprobes=0)
-        
+
         with pytest.raises(ValueError, match="nprobes must be >= 1"):
             ANNParams(nprobes=-1)
 
@@ -27,18 +28,13 @@ class TestANNParamsValidation:
         """Test refine_factor validation."""
         with pytest.raises(ValueError, match="refine_factor must be >= 1"):
             ANNParams(refine_factor=0)
-        
+
         with pytest.raises(ValueError, match="refine_factor must be >= 1"):
             ANNParams(refine_factor=-1)
 
     def test_valid_custom_params(self):
         """Test custom parameters are accepted."""
-        params = ANNParams(
-            metric="L2",
-            nprobes=15,
-            refine_factor=5,
-            use_index=False
-        )
+        params = ANNParams(metric="L2", nprobes=15, refine_factor=5, use_index=False)
         assert params.metric == "L2"
         assert params.nprobes == 15
         assert params.refine_factor == 5
@@ -55,7 +51,7 @@ class TestANNParamsPresets:
         assert params.nprobes == 10
         assert params.refine_factor == 5
         assert params.use_index is True
-        
+
         # Should be faster than default
         speedup = params.estimated_speedup()
         assert speedup >= 2.0, f"Expected speedup >= 2.0x, got {speedup:.2f}x"
@@ -67,7 +63,7 @@ class TestANNParamsPresets:
         assert params.nprobes == 30
         assert params.refine_factor == 20
         assert params.use_index is True
-        
+
         # Should be slower than default
         speedup = params.estimated_speedup()
         assert speedup < 1.0, f"Expected speedup < 1.0x, got {speedup:.2f}x"
@@ -87,31 +83,21 @@ class TestANNParamsAdaptive:
     def test_identifier_query_high_precision(self):
         """Test identifier query needs high precision."""
         params = ANNParams.adaptive(
-            query_type="identifier",
-            top_k=5,
-            dataset_size=100000
+            query_type="identifier", top_k=5, dataset_size=100000
         )
         assert params.nprobes >= 20, "Identifier queries need high precision"
         assert params.refine_factor >= 15, "Identifier queries need refinement"
 
     def test_concept_query_small_topk(self):
         """Test concept query with small top_k can afford accuracy."""
-        params = ANNParams.adaptive(
-            query_type="concept",
-            top_k=5,
-            dataset_size=100000
-        )
+        params = ANNParams.adaptive(query_type="concept", top_k=5, dataset_size=100000)
         # Small top_k allows balanced parameters
         assert 10 <= params.nprobes <= 50
         assert params.refine_factor >= 5
 
     def test_concept_query_large_topk(self):
         """Test concept query with large top_k prioritizes speed."""
-        params = ANNParams.adaptive(
-            query_type="concept",
-            top_k=20,
-            dataset_size=100000
-        )
+        params = ANNParams.adaptive(query_type="concept", top_k=20, dataset_size=100000)
         # Large top_k prioritizes speed
         assert params.nprobes <= 20
         assert params.refine_factor <= 10
@@ -120,18 +106,14 @@ class TestANNParamsAdaptive:
         """Test adaptive parameters scale with dataset size."""
         # Small dataset
         params_small = ANNParams.adaptive(
-            query_type="concept",
-            top_k=10,
-            dataset_size=10000
+            query_type="concept", top_k=10, dataset_size=10000
         )
-        
+
         # Large dataset
         params_large = ANNParams.adaptive(
-            query_type="concept",
-            top_k=10,
-            dataset_size=1000000
+            query_type="concept", top_k=10, dataset_size=1000000
         )
-        
+
         # Larger datasets should use more nprobes (more clusters)
         assert params_large.nprobes >= params_small.nprobes
 
@@ -144,26 +126,21 @@ class TestANNParamsUtilities:
         # Baseline (default)
         baseline = ANNParams(nprobes=20, refine_factor=10)
         assert baseline.estimated_speedup() == pytest.approx(1.0, rel=0.01)
-        
+
         # Faster config
         fast = ANNParams(nprobes=10, refine_factor=5)
         assert fast.estimated_speedup() >= 2.0
-        
+
         # Slower config
         slow = ANNParams(nprobes=40, refine_factor=20)
         assert slow.estimated_speedup() < 1.0
 
     def test_to_lancedb_params(self):
         """Test conversion to LanceDB parameters."""
-        params = ANNParams(
-            metric="cosine",
-            nprobes=15,
-            refine_factor=8,
-            use_index=True
-        )
-        
+        params = ANNParams(metric="cosine", nprobes=15, refine_factor=8, use_index=True)
+
         lance_params = params.to_lancedb_params()
-        
+
         assert lance_params["metric"] == "cosine"
         assert lance_params["nprobes"] == 15
         assert lance_params["refine_factor"] == 8

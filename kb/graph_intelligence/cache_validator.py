@@ -1,12 +1,13 @@
 """Cache validation for NetworkX graph management."""
 
+import logging
 import subprocess
 from datetime import datetime, timedelta
-from typing import Optional
-import logging
 from pathlib import Path
+from typing import Optional
 
 from sqlmodel import Session, select
+
 from kb.store.sql_models import GraphCacheState, Repo
 
 logger = logging.getLogger(__name__)
@@ -16,11 +17,7 @@ class GraphCacheValidator:
     """Validates whether cached NetworkX graph is still current."""
 
     def __init__(
-        self,
-        db,
-        repo_id: int,
-        edge_change_threshold: int = 5,
-        ttl_minutes: int = 10
+        self, db, repo_id: int, edge_change_threshold: int = 5, ttl_minutes: int = 10
     ):
         """Initialize cache validator.
 
@@ -152,7 +149,7 @@ class GraphCacheValidator:
         commit_sha: str,
         node_count: int,
         edge_count: int,
-        reset_changes: bool = True
+        reset_changes: bool = True,
     ):
         """Update cache state after rebuild.
 

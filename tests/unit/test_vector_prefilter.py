@@ -1,15 +1,14 @@
 """Unit tests for vector search pre-filtering."""
 
-import pytest
 from unittest.mock import Mock
-from kb.search.vector_prefilter import (
-    VectorPreFilter,
-    FilterCriteria,
-    create_repo_filter,
-    create_language_filter,
-    create_symbol_filter,
-    combine_filters,
-)
+
+import pytest
+
+from kb.search.vector_prefilter import (FilterCriteria, VectorPreFilter,
+                                        combine_filters,
+                                        create_language_filter,
+                                        create_repo_filter,
+                                        create_symbol_filter)
 
 
 class TestFilterCriteria:
@@ -161,7 +160,7 @@ class TestVectorPreFilter:
 
         # Cache should have entry
         stats = prefilter.get_stats()
-        assert stats['cache_size'] > 0
+        assert stats["cache_size"] > 0
 
     def test_apply_prefilter(self):
         """Test applying pre-filter to search query."""
@@ -237,9 +236,9 @@ class TestVectorPreFilter:
 
         stats = prefilter.get_stats()
 
-        assert stats['total_filters_applied'] == 2
-        assert stats['avg_reduction_pct'] > 0
-        assert 'cache_size' in stats
+        assert stats["total_filters_applied"] == 2
+        assert stats["avg_reduction_pct"] > 0
+        assert "cache_size" in stats
 
     def test_clear_cache(self):
         """Test cache clearing."""
@@ -250,13 +249,13 @@ class TestVectorPreFilter:
         prefilter.build_filter_expression(criteria)
 
         stats = prefilter.get_stats()
-        assert stats['cache_size'] > 0
+        assert stats["cache_size"] > 0
 
         # Clear cache
         prefilter.clear_cache()
 
         stats = prefilter.get_stats()
-        assert stats['cache_size'] == 0
+        assert stats["cache_size"] == 0
 
     def test_cache_key_generation(self):
         """Test cache key generation."""

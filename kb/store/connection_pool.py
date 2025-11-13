@@ -6,13 +6,13 @@ connection overhead and improve concurrent access performance.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import threading
-from typing import Optional, Any, Callable
-from contextlib import contextmanager
-from queue import Queue, Empty, Full
-import logging
 import time
+from contextlib import contextmanager
+from queue import Empty, Full, Queue
+from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -215,14 +215,14 @@ class SQLiteConnectionPool:
             Dictionary with pool stats
         """
         return {
-            'pool_size': self.pool_size,
-            'max_overflow': self.max_overflow,
-            'current_overflow': self._overflow_count,
-            'available_connections': self._pool.qsize(),
-            'created_connections': self._created_connections,
-            'reused_connections': self._reused_connections,
-            'overflow_connections': self._overflow_connections,
-            'reuse_rate': (
+            "pool_size": self.pool_size,
+            "max_overflow": self.max_overflow,
+            "current_overflow": self._overflow_count,
+            "available_connections": self._pool.qsize(),
+            "created_connections": self._created_connections,
+            "reused_connections": self._reused_connections,
+            "overflow_connections": self._overflow_connections,
+            "reuse_rate": (
                 self._reused_connections / max(1, self._created_connections) * 100
             ),
         }

@@ -7,10 +7,10 @@ before the expensive KNN search operation.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, List, Optional, Dict, Set
-import time
 import logging
+import time
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
@@ -150,9 +150,9 @@ class VectorPreFilter:
         if criteria.exclude_paths:
             for exclude_path in criteria.exclude_paths:
                 # Always use LIKE for path matching (more flexible)
-                if '*' in exclude_path or '?' in exclude_path:
+                if "*" in exclude_path or "?" in exclude_path:
                     # Convert glob to SQL LIKE pattern
-                    like_pattern = exclude_path.replace('*', '%').replace('?', '_')
+                    like_pattern = exclude_path.replace("*", "%").replace("?", "_")
                     conditions.append(f"path NOT LIKE '{like_pattern}'")
                 else:
                     # Use LIKE with % for prefix matching
@@ -163,7 +163,7 @@ class VectorPreFilter:
             pattern_conditions = []
             for pattern in criteria.file_patterns:
                 # Convert glob to SQL LIKE pattern
-                like_pattern = pattern.replace('*', '%').replace('?', '_')
+                like_pattern = pattern.replace("*", "%").replace("?", "_")
                 pattern_conditions.append(f"path LIKE '{like_pattern}'")
 
             # OR together all patterns
@@ -343,9 +343,13 @@ class VectorPreFilter:
             Dictionary with statistics
         """
         return {
-            'total_filters_applied': self._total_filters,
-            'avg_reduction_pct': self._total_reduction_pct / self._total_filters if self._total_filters > 0 else 0.0,
-            'cache_size': len(self._filter_cache),
+            "total_filters_applied": self._total_filters,
+            "avg_reduction_pct": (
+                self._total_reduction_pct / self._total_filters
+                if self._total_filters > 0
+                else 0.0
+            ),
+            "cache_size": len(self._filter_cache),
         }
 
     def clear_cache(self) -> None:

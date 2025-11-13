@@ -3,9 +3,8 @@ from __future__ import annotations
 import uuid
 from typing import Optional
 
-from sqlalchemy import UniqueConstraint, Index, ForeignKey, Column, String
+from sqlalchemy import Column, ForeignKey, Index, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
-
 
 # =====================
 # Core Metadata Tables
@@ -41,7 +40,9 @@ class Session(SQLModel, table=True):
     chunks_indexed: int = Field(default=0)
     vectors_written: int = Field(default=0)
     chunks_skipped: int = Field(default=0)
-    chunks_pruned: int = Field(default=0)  # Added for Phase 6: tracks chunks removed from deleted files
+    chunks_pruned: int = Field(
+        default=0
+    )  # Added for Phase 6: tracks chunks removed from deleted files
 
     # Notes and lifecycle
     notes: Optional[str] = Field(default=None)
@@ -131,9 +132,16 @@ class ChunkLocation(SQLModel, table=True):
 
 class CodeNode(SQLModel, table=True):
     """Represents a code entity in the code graph (function, class, table, component, etc.)."""
+
     __tablename__ = "code_nodes"
     __table_args__ = (
-        UniqueConstraint("repo_id", "file_id", "qualified_name", "start_line", name="uq_code_node_identity"),
+        UniqueConstraint(
+            "repo_id",
+            "file_id",
+            "qualified_name",
+            "start_line",
+            name="uq_code_node_identity",
+        ),
         Index("ix_code_nodes_qualified_name", "qualified_name"),
         Index("ix_code_nodes_name", "name"),
         Index("ix_code_nodes_type", "node_type"),
@@ -160,9 +168,13 @@ class CodeNode(SQLModel, table=True):
     language: str  # 'python', 'typescript', 'sql', 'svelte'
 
     # Optional metadata (language-specific)
-    signature: Optional[str] = Field(default=None)  # Function signature or type definition
+    signature: Optional[str] = Field(
+        default=None
+    )  # Function signature or type definition
     docstring: Optional[str] = Field(default=None)  # Documentation/comments
-    visibility: Optional[str] = Field(default=None)  # 'public', 'private', 'protected', 'exported'
+    visibility: Optional[str] = Field(
+        default=None
+    )  # 'public', 'private', 'protected', 'exported'
     is_async: bool = Field(default=False)
     is_generator: bool = Field(default=False)
 
@@ -175,32 +187,63 @@ class CodeNode(SQLModel, table=True):
 
 class CodeEdge(SQLModel, table=True):
     """Represents a relationship between code entities in the code graph."""
+
     __tablename__ = "code_edges"
     __table_args__ = (
-        UniqueConstraint("source_node_id", "target_node_id", "edge_type", "line_number", name="uq_code_edge_identity"),
+        UniqueConstraint(
+            "source_node_id",
+            "target_node_id",
+            "edge_type",
+            "line_number",
+            name="uq_code_edge_identity",
+        ),
         Index("ix_code_edges_source", "source_node_id", "edge_type"),
         Index("ix_code_edges_target", "target_node_id", "edge_type"),
         Index("ix_code_edges_type", "edge_type"),
         Index("ix_code_edges_bidirectional", "source_node_id", "target_node_id"),
-        Index("ix_code_edges_source_type_target", "source_node_id", "edge_type", "target_node_id"),
-        Index("ix_code_edges_target_type_source", "target_node_id", "edge_type", "source_node_id"),
+        Index(
+            "ix_code_edges_source_type_target",
+            "source_node_id",
+            "edge_type",
+            "target_node_id",
+        ),
+        Index(
+            "ix_code_edges_target_type_source",
+            "target_node_id",
+            "edge_type",
+            "source_node_id",
+        ),
     )
 
     # Identity
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)  # UUID
 
     # Relationship - with CASCADE DELETE for automatic cleanup
-    source_node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False))
-    target_node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False))
-    edge_type: str  # 'calls', 'imports', 'inherits', 'implements', 'depends_on_table', etc.
+    source_node_id: str = Field(
+        sa_column=Column(
+            String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False
+        )
+    )
+    target_node_id: str = Field(
+        sa_column=Column(
+            String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False
+        )
+    )
+    edge_type: (
+        str  # 'calls', 'imports', 'inherits', 'implements', 'depends_on_table', etc.
+    )
     repo_id: int = Field(foreign_key="repos.id")  # Repository reference for filtering
 
     # Context
-    line_number: Optional[int] = Field(default=None)  # Where this relationship occurs in source
+    line_number: Optional[int] = Field(
+        default=None
+    )  # Where this relationship occurs in source
     is_direct: bool = Field(default=True)  # Direct vs. transitive relationship
 
     # Optional metadata
-    relationship_metadata: Optional[str] = Field(default=None)  # JSON for language-specific details
+    relationship_metadata: Optional[str] = Field(
+        default=None
+    )  # JSON for language-specific details
 
     # Lifecycle
     commit_sha: str
@@ -210,9 +253,12 @@ class CodeEdge(SQLModel, table=True):
 
 class NodeAlias(SQLModel, table=True):
     """Tracks multiple names for the same entity (imports, renames, etc.)."""
+
     __tablename__ = "node_aliases"
     __table_args__ = (
-        UniqueConstraint("node_id", "file_id", "alias_qualified_name", name="uq_node_alias_identity"),
+        UniqueConstraint(
+            "node_id", "file_id", "alias_qualified_name", name="uq_node_alias_identity"
+        ),
         Index("ix_node_aliases_name", "alias_name"),
         Index("ix_node_aliases_qualified", "alias_qualified_name"),
         Index("ix_node_aliases_node", "node_id"),
@@ -222,7 +268,11 @@ class NodeAlias(SQLModel, table=True):
     id: str = Field(primary_key=True)  # UUID
 
     # References - CASCADE DELETE to remove aliases when node is deleted
-    node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False))
+    node_id: str = Field(
+        sa_column=Column(
+            String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False
+        )
+    )
     file_id: int = Field(foreign_key="files.id")
 
     # Alias information
@@ -233,6 +283,7 @@ class NodeAlias(SQLModel, table=True):
 
 class CrossRepoReference(SQLModel, table=True):
     """Tracks relationships across repository boundaries (external dependencies)."""
+
     __tablename__ = "cross_repo_references"
     __table_args__ = (
         Index("ix_cross_repo_source", "source_node_id"),
@@ -243,7 +294,11 @@ class CrossRepoReference(SQLModel, table=True):
     id: str = Field(primary_key=True)  # UUID
 
     # Source (current repo) - CASCADE DELETE to remove references when source node is deleted
-    source_node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False))
+    source_node_id: str = Field(
+        sa_column=Column(
+            String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False
+        )
+    )
     source_repo_id: int = Field(foreign_key="repos.id")
 
     # Target (external reference)
@@ -268,6 +323,7 @@ class CrossRepoReference(SQLModel, table=True):
 
 class PendingChange(SQLModel, table=True):
     """Tracks file changes detected by file watcher for crash-proof synchronization."""
+
     __tablename__ = "pending_changes"
     __table_args__ = (
         Index("idx_pending_changes_repo", "repo_id"),
@@ -287,6 +343,7 @@ class PendingChange(SQLModel, table=True):
 
 class FileSnapshot(SQLModel, table=True):
     """Tracks file state at index time for drift detection and consistency validation."""
+
     __tablename__ = "file_snapshots"
     __table_args__ = (
         UniqueConstraint("repo_id", "path", name="uq_file_snapshot_repo_path"),
@@ -309,13 +366,21 @@ class FileSnapshot(SQLModel, table=True):
 
 class GraphMetrics(SQLModel, table=True):
     """Computed metrics for graph nodes (PageRank, centrality, etc.)."""
+
     __tablename__ = "graph_metrics"
     __table_args__ = (
         Index("ix_graph_metrics_pagerank", "pagerank"),
         Index("ix_graph_metrics_community", "community_id"),
     )
 
-    node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), primary_key=True, nullable=False))
+    node_id: str = Field(
+        sa_column=Column(
+            String,
+            ForeignKey("code_nodes.id", ondelete="CASCADE"),
+            primary_key=True,
+            nullable=False,
+        )
+    )
     pagerank: Optional[float] = Field(default=None)
     betweenness_centrality: Optional[float] = Field(default=None)
     in_degree: int = Field(default=0)
@@ -327,10 +392,9 @@ class GraphMetrics(SQLModel, table=True):
 
 class GraphSnapshot(SQLModel, table=True):
     """Snapshots of the code graph for time-travel analysis."""
+
     __tablename__ = "graph_snapshots"
-    __table_args__ = (
-        Index("ix_graph_snapshots_repo_commit", "repo_id", "commit_sha"),
-    )
+    __table_args__ = (Index("ix_graph_snapshots_repo_commit", "repo_id", "commit_sha"),)
 
     id: Optional[int] = Field(default=None, primary_key=True)
     repo_id: int = Field(foreign_key="repos.id")
@@ -345,6 +409,7 @@ class GraphSnapshot(SQLModel, table=True):
 
 class GraphCacheState(SQLModel, table=True):
     """Tracks cache state for NetworkX graph rebuilds."""
+
     __tablename__ = "graph_cache_state"
 
     repo_id: int = Field(primary_key=True, foreign_key="repos.id")

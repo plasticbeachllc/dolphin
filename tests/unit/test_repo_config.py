@@ -50,7 +50,9 @@ def test_missing_config_uses_defaults():
         default_config = load_repo_chunking_config(tmp_path)
 
         assert default_config.repo_path == tmp_path.resolve()
-        assert default_config.default_window_size == 350, "Expected default window size 350"
+        assert (
+            default_config.default_window_size == 350
+        ), "Expected default window size 350"
         assert default_config.embedding_model == "text-embedding-3-small"
 
 
@@ -62,7 +64,8 @@ def test_custom_config_file():
         config_dir.mkdir()
 
         config_file = config_dir / "chunking_config.toml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 default_window_size = 512
 
 [per_language]
@@ -74,7 +77,8 @@ model = "text-embedding-3-large"
 
 [tokenizer]
 encoding = "cl100k_base"
-""")
+"""
+        )
 
         custom_config = load_repo_chunking_config(tmp_path)
         assert custom_config.default_window_size == 512

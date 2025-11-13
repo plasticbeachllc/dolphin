@@ -1,8 +1,10 @@
 """Tests for TypeScript call graph extraction."""
 
 import pytest
-from kb.graph_intelligence.extractors.typescript_call_graph import TypeScriptCallGraphExtractor
-from kb.graph_intelligence.models import NodeType, EdgeType
+
+from kb.graph_intelligence.extractors.typescript_call_graph import \
+    TypeScriptCallGraphExtractor
+from kb.graph_intelligence.models import EdgeType, NodeType
 
 
 @pytest.fixture
@@ -13,13 +15,14 @@ def extractor():
 
 def test_extract_simple_function(extractor):
     """Test extraction of simple function declaration."""
-    code = '''
+    code = """
 function hello() {
     console.log("Hello");
 }
-'''
-    nodes, edges = extractor.extract("test.ts", code, repo_id=1, file_id=1,
-                                     commit_sha="abc123", branch="main")
+"""
+    nodes, edges = extractor.extract(
+        "test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
+    )
 
     assert len(nodes) == 1
     assert nodes[0].name == "hello"
@@ -29,13 +32,14 @@ function hello() {
 
 def test_extract_arrow_function(extractor):
     """Test extraction of arrow function."""
-    code = '''
+    code = """
 const greet = (name: string) => {
     console.log(`Hello, ${name}`);
 };
-'''
-    nodes, edges = extractor.extract("test.ts", code, repo_id=1, file_id=1,
-                                     commit_sha="abc123", branch="main")
+"""
+    nodes, edges = extractor.extract(
+        "test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
+    )
 
     assert len(nodes) == 1
     assert nodes[0].name == "greet"
@@ -45,7 +49,7 @@ const greet = (name: string) => {
 
 def test_extract_class_and_methods(extractor):
     """Test extraction of class with methods."""
-    code = '''
+    code = """
 class Calculator {
     add(a: number, b: number): number {
         return a + b;
@@ -55,9 +59,10 @@ class Calculator {
         return this.add(a, 0) * b;
     }
 }
-'''
-    nodes, edges = extractor.extract("test.ts", code, repo_id=1, file_id=1,
-                                     commit_sha="abc123", branch="main")
+"""
+    nodes, edges = extractor.extract(
+        "test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
+    )
 
     # Should have: Calculator class, add method, multiply method
     assert len(nodes) == 3
@@ -72,7 +77,7 @@ class Calculator {
 
 def test_async_function_detection(extractor):
     """Test detection of async functions."""
-    code = '''
+    code = """
 async function fetchData() {
     await someApiCall();
 }
@@ -80,9 +85,10 @@ async function fetchData() {
 async function someApiCall() {
     return Promise.resolve();
 }
-'''
-    nodes, edges = extractor.extract("test.ts", code, repo_id=1, file_id=1,
-                                     commit_sha="abc123", branch="main")
+"""
+    nodes, edges = extractor.extract(
+        "test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
+    )
 
     assert len(nodes) == 2
     fetch_node = next(n for n in nodes if n.name == "fetchData")
@@ -91,7 +97,7 @@ async function someApiCall() {
 
 def test_function_call(extractor):
     """Test extraction of function call edge."""
-    code = '''
+    code = """
 function caller() {
     callee();
 }
@@ -99,9 +105,10 @@ function caller() {
 function callee() {
     // do nothing
 }
-'''
-    nodes, edges = extractor.extract("test.ts", code, repo_id=1, file_id=1,
-                                     commit_sha="abc123", branch="main")
+"""
+    nodes, edges = extractor.extract(
+        "test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
+    )
 
     assert len(nodes) == 2
     assert len(edges) == 1
@@ -110,7 +117,7 @@ function callee() {
 
 def test_qualified_names(extractor):
     """Test that qualified names are generated correctly."""
-    code = '''
+    code = """
 class Outer {
     method() {
         // do nothing
@@ -120,9 +127,15 @@ class Outer {
 function standalone() {
     // do nothing
 }
-'''
-    nodes, edges = extractor.extract("path/to/module.ts", code, repo_id=1, file_id=1,
-                                     commit_sha="abc123", branch="main")
+"""
+    nodes, edges = extractor.extract(
+        "path/to/module.ts",
+        code,
+        repo_id=1,
+        file_id=1,
+        commit_sha="abc123",
+        branch="main",
+    )
 
     class_node = next(n for n in nodes if n.node_type == NodeType.CLASS)
     assert class_node.qualified_name == "path.to.module.Outer"
@@ -137,8 +150,9 @@ function standalone() {
 def test_empty_file(extractor):
     """Test extraction from empty file."""
     code = ""
-    nodes, edges = extractor.extract("test.ts", code, repo_id=1, file_id=1,
-                                     commit_sha="abc123", branch="main")
+    nodes, edges = extractor.extract(
+        "test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
+    )
 
     assert len(nodes) == 0
     assert len(edges) == 0
@@ -146,13 +160,14 @@ def test_empty_file(extractor):
 
 def test_async_arrow_function(extractor):
     """Test async arrow function."""
-    code = '''
+    code = """
 const fetchUser = async (id: string) => {
     return await api.getUser(id);
 };
-'''
-    nodes, edges = extractor.extract("test.ts", code, repo_id=1, file_id=1,
-                                     commit_sha="abc123", branch="main")
+"""
+    nodes, edges = extractor.extract(
+        "test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
+    )
 
     assert len(nodes) == 1
     assert nodes[0].name == "fetchUser"

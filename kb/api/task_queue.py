@@ -1,12 +1,13 @@
 """Task queue for async KB indexing operations."""
+
 from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime, UTC
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Dict, List, Optional
-from dataclasses import dataclass, field
 
 
 class TaskStatus(str, Enum):
@@ -19,6 +20,7 @@ class TaskStatus(str, Enum):
 @dataclass
 class IndexTask:
     """Represents a single indexing task."""
+
     task_id: str
     repo: str
     files: List[str]
@@ -45,10 +47,7 @@ class TaskQueue:
     def create_task(self, repo: str, files: List[str]) -> IndexTask:
         """Create a new indexing task."""
         task = IndexTask(
-            task_id=str(uuid.uuid4()),
-            repo=repo,
-            files=files,
-            total=len(files)
+            task_id=str(uuid.uuid4()), repo=repo, files=files, total=len(files)
         )
         self.tasks[task.task_id] = task
         return task
@@ -62,7 +61,7 @@ class TaskQueue:
         skipped: Optional[int] = None,
         current_file: Optional[str] = None,
         error: Optional[str] = None,
-        result: Optional[Dict] = None
+        result: Optional[Dict] = None,
     ):
         """Update task status and progress."""
         async with self._lock:

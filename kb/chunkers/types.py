@@ -11,7 +11,7 @@ __all__ = ["Chunk", "ChunkList"]
 @dataclass(slots=True)
 class Chunk:
     """A chunk of text with provenance and metadata.
-    
+
     Attributes:
         text: The chunk text (canonicalized for embedding)
         start_line: 1-based inclusive starting line number
@@ -25,7 +25,7 @@ class Chunk:
         h2: Optional H2 heading (Markdown only)
         h3: Optional H3 heading (Markdown only)
     """
-    
+
     text: str
     start_line: int
     end_line: int
