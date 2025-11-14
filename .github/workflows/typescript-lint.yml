@@ -32,8 +32,13 @@ jobs:
           git config user.name "pb-typescript-linter[bot]"
           git config user.email "pb-typescript-linter[bot]@users.noreply.github.com"
 
-      - name: Push changes
+      - name: Commit and push changes
         run: |
           git add .
-          git commit -m "TypeScript linting bot makes changes" || echo "No changes to commit"
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "TypeScript linting bot makes changes"
+          git pull --rebase origin ${{ github.event.pull_request.head.ref }} || true
           git push origin ${{ github.event.pull_request.head.ref }}
