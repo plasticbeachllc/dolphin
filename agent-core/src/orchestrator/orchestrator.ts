@@ -24,7 +24,11 @@ import type {
  */
 export interface OrchestratorConfig {
   workspaceRoot: string;
-  stateStore: any; // Will be properly typed when StateStore is implemented
+  stateStore: {
+    saveSession: (session: TaskSession) => Promise<void>;
+    loadSession: (sessionId: string) => Promise<TaskSession | null>;
+    savePlan: (sessionId: string, plan: unknown) => Promise<string>;
+  };
   editorWorkflow: IWorkflow;
   architectWorkflow: IWorkflow;
 }
@@ -313,7 +317,7 @@ export class Orchestrator implements IOrchestrator {
       if (resolveNext) {
         const resolver = resolveNext;
         resolveNext = null;
-        resolver({ value: undefined as any, done: true });
+        resolver({ value: undefined as unknown as WorkflowUpdate, done: true });
       }
     };
 

@@ -458,7 +458,17 @@ export class ArchitectWorkflow implements IWorkflow {
     }
 
     // Parse plan from markdown with robust TOML extraction
-    let parsedPlan: any;
+    let parsedPlan: Partial<{
+      files_to_modify?: string[];
+      filesToModify?: string[];
+      files_to_create?: string[];
+      filesToCreate?: string[];
+      steps?: Array<{ id: number; description: string; files: string[] } | string>;
+      complexity?: "low" | "medium" | "high";
+      estimated_tokens?: number;
+      estimatedTokens?: number;
+      overview?: string;
+    }>;
     let _parseSource = "toml";
 
     try {
@@ -488,7 +498,9 @@ export class ArchitectWorkflow implements IWorkflow {
       content: planContent,
       filesToModify: parsedPlan.files_to_modify || parsedPlan.filesToModify || [],
       filesToCreate: parsedPlan.files_to_create || parsedPlan.filesToCreate || [],
-      steps: (parsedPlan.steps || []).map((s: any) => (typeof s === "string" ? s : s.description)),
+      steps: (parsedPlan.steps || []).map((s) =>
+        typeof s === "string" ? s : s.description
+      ),
       complexity: parsedPlan.complexity || "medium",
       estimatedTokens:
         parsedPlan.estimated_tokens ||

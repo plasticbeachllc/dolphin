@@ -136,11 +136,15 @@ export class ClaudeToolExecutor {
       // Accumulate usage
       totalUsage.inputTokens += response.usage.input_tokens;
       totalUsage.outputTokens += response.usage.output_tokens;
-      if ((response.usage as any).cache_read_input_tokens) {
-        totalUsage.cacheReadTokens += (response.usage as any).cache_read_input_tokens;
+      const extendedUsage = response.usage as Anthropic.Messages.Message["usage"] & {
+        cache_read_input_tokens?: number;
+        cache_creation_input_tokens?: number;
+      };
+      if (extendedUsage.cache_read_input_tokens) {
+        totalUsage.cacheReadTokens += extendedUsage.cache_read_input_tokens;
       }
-      if ((response.usage as any).cache_creation_input_tokens) {
-        totalUsage.cacheWriteTokens += (response.usage as any).cache_creation_input_tokens;
+      if (extendedUsage.cache_creation_input_tokens) {
+        totalUsage.cacheWriteTokens += extendedUsage.cache_creation_input_tokens;
       }
 
       stopReason = response.stop_reason || undefined;
@@ -174,7 +178,7 @@ export class ClaudeToolExecutor {
       // Add tool results as user message
       messages.push({
         role: "user",
-        content: toolResults as any,
+        content: toolResults as Anthropic.ContentBlock[],
       });
 
       toolRound++;
@@ -207,7 +211,7 @@ export class ClaudeToolExecutor {
 
     if (authStatus.mode === "api_key") {
       // Use Anthropic SDK directly for API mode
-      const apiClient = (this.config.claudeClient as any).apiClient;
+      const apiClient = this.config.claudeClient.apiClient;
       if (!apiClient) {
         throw new Error("API client not initialized");
       }
@@ -241,7 +245,13 @@ export class ClaudeToolExecutor {
     // Accumulators
     const fullContent: Anthropic.ContentBlock[] = [];
     let currentTextBlock = "";
-    let currentToolUse: any = null;
+    let currentToolUse: {
+      type: "tool_use";
+      id: string;
+      name: string;
+      inputJson: string;
+      input?: Record<string, unknown>;
+    } | null = null;
 
     // Process stream events
     for await (const event of stream) {
@@ -344,10 +354,13 @@ export class ClaudeToolExecutor {
       .join("\n\n")}`;
 
     // Convert our message format to Anthropic format
-    const anthropicMessages = messages.map((m) => ({
-      role: m.role,
-      content: typeof m.content === "string" ? m.content : m.content,
-    })) as any[];
+    const anthropicMessages = messages.map(
+      (m) =>
+        ({
+          role: m.role,
+          content: typeof m.content === "string" ? m.content : m.content,
+        }) as Anthropic.Messages.MessageParam
+    );
 
     // Accumulators for parsing CLI output
     const fullContent: Anthropic.ContentBlock[] = [];
@@ -505,22 +518,23 @@ export class ClaudeToolExecutor {
 
           // Convert to Anthropic format
           return createToolResult(toolCall.id, mcpResult, false);
-        } catch (error: any) {
+        } catch (error: unknown) {
           const executionTime = Date.now() - startTime;
+          const errorMessage = error instanceof Error ? error.message : String(error);
 
-          console.error(`[ToolExecutor] Tool ${toolCall.name} failed:`, error.message);
+          console.error(`[ToolExecutor] Tool ${toolCall.name} failed:`, errorMessage);
 
           // Emit error event
           this.config.onEvent({
             type: "tool_call_completed",
             toolId: toolCall.id,
             result: null,
-            error: error.message,
+            error: errorMessage,
             executionTime,
           });
 
           // Return error result
-          return createErrorResult(toolCall.id, error);
+          return createErrorResult(toolCall.id, error instanceof Error ? error : new Error(String(error)));
         }
       })
     );
@@ -534,8 +548,8 @@ export class ClaudeToolExecutor {
    * Claude sometimes serializes arrays/objects as JSON strings, e.g.:
    *   { "paths": "[\"file.ts\"]" }  -> { "paths": ["file.ts"] }
    */
-  private preprocessToolInput(input: Record<string, any>): Record<string, any> {
-    const processed: Record<string, any> = {};
+  private preprocessToolInput(input: Record<string, unknown>): Record<string, unknown> {
+    const processed: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(input)) {
       if (typeof value === "string" && (value.startsWith("[") || value.startsWith("{"))) {

@@ -5,9 +5,13 @@ interface MCPMessage {
   jsonrpc: "2.0";
   id?: number;
   method?: string;
-  params?: any;
-  result?: any;
-  error?: any;
+  params?: unknown;
+  result?: unknown;
+  error?: {
+    code: number;
+    message: string;
+    data?: unknown;
+  };
 }
 
 export class MCPClient {
@@ -16,8 +20,8 @@ export class MCPClient {
   private pendingRequests = new Map<
     number,
     {
-      resolve: (result: any) => void;
-      reject: (error: any) => void;
+      resolve: (result: unknown) => void;
+      reject: (error: Error) => void;
       timeout: NodeJS.Timeout;
     }
   >();
@@ -104,7 +108,7 @@ export class MCPClient {
     }
   }
 
-  async callTool(toolName: string, args: any, timeout = 20000): Promise<any> {
+  async callTool(toolName: string, args: unknown, timeout = 20000): Promise<unknown> {
     if (!this.process || this.process.exitCode !== null) {
       throw new Error("MCP Bridge not running");
     }
@@ -139,7 +143,7 @@ export class MCPClient {
     });
   }
 
-  async listTools(): Promise<any[]> {
+  async listTools(): Promise<{ name: string; description: string; inputSchema: unknown }[]> {
     const id = ++this.messageId;
 
     const message: MCPMessage = {

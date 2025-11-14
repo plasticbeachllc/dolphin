@@ -129,8 +129,9 @@ export class ConversationStore {
 
       console.error(`[ConversationStore] Returning ${result.length} conversations`);
       return result;
-    } catch (error: any) {
-      console.error(`[ConversationStore] Error listing conversations: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[ConversationStore] Error listing conversations: ${message}`);
       return [];
     }
   }

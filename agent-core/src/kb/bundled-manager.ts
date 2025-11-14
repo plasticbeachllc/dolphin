@@ -27,8 +27,9 @@ export class BundledKBManager {
     if (process.platform !== "win32") {
       try {
         fs.chmodSync(this.uvBinary, 0o755);
-      } catch (error: any) {
-        console.error(`[Bundled KB] Warning: Could not chmod uv binary: ${error.message}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[Bundled KB] Warning: Could not chmod uv binary: ${message}`);
       }
     }
 

@@ -176,8 +176,8 @@ export class ClaudeClient {
 
     return {
       content: response.content
-        .filter((c) => c.type === "text")
-        .map((c) => (c as any).text)
+        .filter((c): c is Anthropic.TextBlock => c.type === "text")
+        .map((c) => c.text)
         .join(""),
       usage: {
         input_tokens: response.usage.input_tokens,

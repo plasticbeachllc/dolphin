@@ -324,8 +324,8 @@ export async function generateFileDiff(
  * @returns FileDiff object or null if diff generation fails
  */
 export async function generateFileWriteDiff(
-  toolInput: any,
-  toolResult: any,
+  toolInput: { path: string; content: string },
+  toolResult: { created_new?: boolean; backup_path?: string },
   workspaceRoot: string
 ): Promise<FileDiff | null> {
   try {

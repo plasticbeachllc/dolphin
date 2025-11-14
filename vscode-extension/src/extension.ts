@@ -59,9 +59,13 @@ export async function activate(context: vscode.ExtensionContext) {
     try {
       await agentBridge.start(agentCorePath, extensionPath, apiKey);
       logger.info("AgentBridge started successfully");
-    } catch (startError: any) {
-      logger.error(`AgentBridge.start() failed: ${startError.message}`);
-      logger.debug(`Stack: ${startError.stack}`);
+    } catch (startError: unknown) {
+      const message = startError instanceof Error ? startError.message : String(startError);
+      const stack = startError instanceof Error ? startError.stack : undefined;
+      logger.error(`AgentBridge.start() failed: ${message}`);
+      if (stack) {
+        logger.debug(`Stack: ${stack}`);
+      }
       throw startError;
     }
 
@@ -93,8 +97,9 @@ export async function activate(context: vscode.ExtensionContext) {
         // Add API integration for file sync (Phase 2)
         config.apiBaseUrl = "http://127.0.0.1:7777";
         config.repoName = path.basename(workspaceFolder.uri.fsPath);
-      } catch (error: any) {
-        logger.warn(`Failed to load watcher config, using defaults: ${error.message}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(`Failed to load watcher config, using defaults: ${message}`);
         // Fallback to safe defaults if config system isn't ready (e.g., in tests)
         config = {
           debounceMs: 2000,
@@ -121,8 +126,9 @@ export async function activate(context: vscode.ExtensionContext) {
         try {
           await queueFilesForIndexing(files, 5);
           outputChannel.appendLine(`[Extension] Queued ${files.length} files for indexing`);
-        } catch (error: any) {
-          outputChannel.appendLine(`[Extension] Failed to queue files: ${error.message}`);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          outputChannel.appendLine(`[Extension] Failed to queue files: ${message}`);
         }
       });
 
@@ -272,8 +278,9 @@ export async function activate(context: vscode.ExtensionContext) {
               `Queue Depth: ${status.queueDepth}\n` +
               `Indexing: ${status.isIndexing ? "Yes" : "No"}`
           );
-        } catch (error: any) {
-          vscode.window.showErrorMessage(`Failed to get KB status: ${error.message}`);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          vscode.window.showErrorMessage(`Failed to get KB status: ${message}`);
         }
       }),
 
@@ -306,14 +313,16 @@ export async function activate(context: vscode.ExtensionContext) {
 
           // Update view provider with new bridge
           if (viewProvider) {
-            (viewProvider as any).agentBridge = agentBridge;
+            // Create new view provider with updated bridge
+            viewProvider = new DolphinViewProvider(context.extensionUri, outputChannel, agentBridge);
           }
 
           outputChannel.appendLine("[KB Restart] Agent and KB restarted successfully");
           vscode.window.showInformationMessage("KB restarted successfully");
-        } catch (error: any) {
-          outputChannel.appendLine(`[KB Restart] Failed: ${error.message}`);
-          vscode.window.showErrorMessage(`Failed to restart KB: ${error.message}`);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          outputChannel.appendLine(`[KB Restart] Failed: ${message}`);
+          vscode.window.showErrorMessage(`Failed to restart KB: ${message}`);
         }
       })
     );
@@ -453,9 +462,10 @@ export async function activate(context: vscode.ExtensionContext) {
               `[Dolphin] User cancelled or failed to apply diff to ${diff.filePath}`
             );
           }
-        } catch (error: any) {
-          outputChannel.appendLine(`[Dolphin] Error applying diff: ${error.message}`);
-          vscode.window.showErrorMessage(`Failed to apply diff: ${error.message}`);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          outputChannel.appendLine(`[Dolphin] Error applying diff: ${message}`);
+          vscode.window.showErrorMessage(`Failed to apply diff: ${message}`);
         }
       })
     );
@@ -486,10 +496,14 @@ export async function activate(context: vscode.ExtensionContext) {
       getAutoSyncManager: () => autoSyncManager,
       getDriftDetector: () => driftDetector,
     };
-  } catch (error: any) {
-    const errorMsg = `Dolphin activation failed: ${error.message}`;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : undefined;
+    const errorMsg = `Dolphin activation failed: ${message}`;
     logger.error(errorMsg);
-    logger.debug(`Stack: ${error.stack}`);
+    if (stack) {
+      logger.debug(`Stack: ${stack}`);
+    }
     vscode.window.showErrorMessage(errorMsg);
     throw error;
   }
@@ -511,8 +525,9 @@ async function queueFilesForIndexing(files: string[], priority = 5): Promise<voi
   };
 
   // Write to agent bridge stdin
-  const bridge = agentBridge as any;
-  if (bridge.process && bridge.process.stdin) {
+  // Access private process via type assertion (internal bridge communication)
+  const bridge = agentBridge as unknown as { process?: { stdin?: { write: (data: string) => void } } };
+  if (bridge.process?.stdin) {
     bridge.process.stdin.write(JSON.stringify(message) + "\n");
   } else {
     throw new Error("Agent bridge process not available");
@@ -520,7 +535,7 @@ async function queueFilesForIndexing(files: string[], priority = 5): Promise<voi
 }
 
 // Helper function to get KB status via agent bridge
-async function getKBStatus(): Promise<any> {
+async function getKBStatus(): Promise<Record<string, unknown>> {
   if (!agentBridge) {
     throw new Error("Agent bridge not initialized");
   }
@@ -534,7 +549,11 @@ async function getKBStatus(): Promise<any> {
   };
 
   return new Promise((resolve, reject) => {
-    const bridge = agentBridge as any;
+    // Access private process and pendingRequests via type assertion
+    const bridge = agentBridge as unknown as {
+      process?: { stdin?: { write: (data: string) => void } };
+      pendingRequests?: Map<number, { resolve: (value: unknown) => void; reject: (error: unknown) => void }>;
+    };
 
     // Set up response handler
     const timeout = setTimeout(() => {
@@ -542,18 +561,21 @@ async function getKBStatus(): Promise<any> {
     }, 5000);
 
     // Create temporary listener for response
-    const _handleResponse = (event: any) => {
-      if (event.type === "kb_status_response") {
+    const _handleResponse = (event: unknown) => {
+      const evt = event as Record<string, unknown>;
+      if (evt.type === "kb_status_response") {
         clearTimeout(timeout);
-        resolve(event.data);
+        resolve(evt.data as Record<string, unknown>);
       }
     };
 
     // Try to use agent bridge's pending requests if available
     if (bridge.pendingRequests) {
       bridge.pendingRequests.set(id, {
-        resolve,
-        reject: (error: any) => {
+        resolve: (value: unknown) => {
+          resolve(value as Record<string, unknown>);
+        },
+        reject: (error: unknown) => {
           clearTimeout(timeout);
           reject(error);
         },
@@ -561,7 +583,7 @@ async function getKBStatus(): Promise<any> {
     }
 
     // Send request
-    if (bridge.process && bridge.process.stdin) {
+    if (bridge.process?.stdin) {
       bridge.process.stdin.write(JSON.stringify(message) + "\n");
     } else {
       clearTimeout(timeout);
@@ -598,7 +620,7 @@ async function recoverFromCrash(_context: vscode.ExtensionContext): Promise<void
       return;
     }
 
-    const data = (await response.json()) as { total?: number; changes?: any[] };
+    const data = (await response.json()) as { total?: number; changes?: unknown[] };
     const pendingCount = data.total || 0;
 
     if (pendingCount > 0) {
@@ -620,8 +642,9 @@ async function recoverFromCrash(_context: vscode.ExtensionContext): Promise<void
     } else {
       outputChannel.appendLine("[CrashRecovery] No pending changes found");
     }
-  } catch (error: any) {
-    outputChannel.appendLine(`[CrashRecovery] Error during crash recovery: ${error.message}`);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    outputChannel.appendLine(`[CrashRecovery] Error during crash recovery: ${message}`);
   }
 }
 

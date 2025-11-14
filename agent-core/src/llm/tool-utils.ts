@@ -11,7 +11,7 @@ export interface MCPTool {
   description: string;
   inputSchema: {
     type: "object";
-    properties: Record<string, any>;
+    properties: Record<string, unknown>;
     required?: string[];
   };
 }
@@ -21,7 +21,7 @@ export interface AnthropicTool {
   description: string;
   input_schema: {
     type: "object";
-    properties: Record<string, any>;
+    properties: Record<string, unknown>;
     required?: string[];
   };
 }
@@ -29,13 +29,13 @@ export interface AnthropicTool {
 export interface ToolCall {
   id: string;
   name: string;
-  input: Record<string, any>;
+  input: Record<string, unknown>;
 }
 
 export interface ToolResult {
   type: "tool_result";
   tool_use_id: string;
-  content: string | Array<{ type: string; [key: string]: any }>;
+  content: string | Array<{ type: string; [key: string]: unknown }>;
   is_error?: boolean;
 }
 
@@ -59,7 +59,7 @@ export function extractToolCalls(content: Anthropic.ContentBlock[]): ToolCall[] 
     .map((block) => ({
       id: block.id,
       name: block.name,
-      input: block.input as Record<string, any>,
+      input: block.input as Record<string, unknown>,
     }));
 }
 
@@ -68,18 +68,30 @@ export function extractToolCalls(content: Anthropic.ContentBlock[]): ToolCall[] 
  */
 export function createToolResult(
   toolUseId: string,
-  mcpResult: any,
+  mcpResult: unknown,
   isError: boolean = false
 ): ToolResult {
   let formattedContent: string;
 
   // MCP results have format: { content: [{ type: "text", text: "..." }], ... }
-  if (mcpResult?.content && Array.isArray(mcpResult.content)) {
+  if (
+    mcpResult &&
+    typeof mcpResult === "object" &&
+    "content" in mcpResult &&
+    Array.isArray(mcpResult.content)
+  ) {
     formattedContent = mcpResult.content
-      .filter((block: any) => block.type === "text")
-      .map((block: any) => block.text)
+      .filter((block: unknown): block is { type: string; text: string } =>
+        typeof block === "object" && block !== null && "type" in block && block.type === "text"
+      )
+      .map((block) => block.text)
       .join("\n\n");
-  } else if (typeof mcpResult?.content === "string") {
+  } else if (
+    mcpResult &&
+    typeof mcpResult === "object" &&
+    "content" in mcpResult &&
+    typeof mcpResult.content === "string"
+  ) {
     formattedContent = mcpResult.content;
   } else {
     // Fallback to JSON

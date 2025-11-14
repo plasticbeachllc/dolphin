@@ -170,8 +170,9 @@ export class KBManager {
       fs.writeFileSync(this.lockFile, process.pid.toString());
       console.error(`[KB Manager] Lock acquired with PID ${process.pid}`);
       return true;
-    } catch (error: any) {
-      console.error(`[KB Manager] Failed to acquire lock: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[KB Manager] Failed to acquire lock: ${message}`);
       return false;
     }
   }
@@ -189,8 +190,9 @@ export class KBManager {
             console.error(`[KB Manager] Lock released`);
           }
         }
-      } catch (error: any) {
-        console.error(`[KB Manager] Failed to release lock: ${error.message}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[KB Manager] Failed to release lock: ${message}`);
       }
       this.weOwnKB = false;
     }
