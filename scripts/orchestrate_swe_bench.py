@@ -270,7 +270,7 @@ class SWEBenchOrchestrator:
             result = subprocess.run(["du", "-sm", str(path)], capture_output=True, text=True, timeout=30)
             if result.returncode == 0:
                 return float(result.stdout.split()[0])
-        except:
+        except Exception:
             pass
         return 0.0
 

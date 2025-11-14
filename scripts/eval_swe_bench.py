@@ -352,7 +352,8 @@ def main():
             repo_recall = statistics.mean(metrics["recall"])
             repo_mrr = statistics.mean(metrics["mrr"])
             print(
-                f"  {repo:40} P@{args.top_k}: {repo_precision:.3f}, R@{args.top_k}: {repo_recall:.3f}, MRR: {repo_mrr:.3f}"
+                f"  {repo:40} P@{args.top_k}: {repo_precision:.3f}, "
+                f"R@{args.top_k}: {repo_recall:.3f}, MRR: {repo_mrr:.3f}"
             )
 
     # Save results

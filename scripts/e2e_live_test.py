@@ -400,15 +400,17 @@ def _run_reranking_test(store_root: Path) -> bool:
     env["DOLPHIN_STORE_ROOT"] = str(store_root)
 
     # Check if reranking dependencies are available
-    try:
-        import sentence_transformers
-        import torch
+    import importlib.util
 
-        log_step("  ✓ Reranking dependencies found (torch + sentence-transformers)")
-    except ImportError:
+    has_torch = importlib.util.find_spec("torch") is not None
+    has_sentence_transformers = importlib.util.find_spec("sentence_transformers") is not None
+
+    if not (has_torch and has_sentence_transformers):
         log_warning("  Reranking dependencies not installed - skipping (optional)")
         log_step("    To enable: uv pip install torch sentence-transformers")
         return True  # Not a failure - it's optional
+
+    log_step("  ✓ Reranking dependencies found (torch + sentence-transformers)")
 
     # Dependencies are available, test reranking
     log_step("  Enabling reranking in config...")

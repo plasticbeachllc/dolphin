@@ -88,7 +88,8 @@ try:
                 print(f"Generated {len(chunks)} chunks:")
                 for i, chunk in enumerate(chunks[:5], 1):  # Show first 5
                     print(
-                        f"  {i}. {chunk.symbol_kind} (lines {chunk.start_line}-{chunk.end_line}, {chunk.token_count} tokens)"
+                        f"  {i}. {chunk.symbol_kind} "
+                        f"(lines {chunk.start_line}-{chunk.end_line}, {chunk.token_count} tokens)"
                     )
 
                 if len(chunks) > 5:
