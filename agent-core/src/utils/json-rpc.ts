@@ -237,7 +237,7 @@ export class JSONRPCServer {
 
     // Set up input stream
     input.on("data", (chunk: Buffer) => {
-      this.parser.processChunk(chunk);
+      void this.parser.processChunk(chunk);
     });
   }
 

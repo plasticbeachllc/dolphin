@@ -134,7 +134,7 @@ class GraphContextEnricher:
                 int(node["start_line"]) if node.get("start_line") is not None else 0,
                 int(node["end_line"]) if node.get("end_line") is not None else 0,
                 start_line_int,
-                end_line_int
+                end_line_int,
             )
         ]
 

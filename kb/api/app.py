@@ -5,7 +5,7 @@ from collections.abc import Awaitable, Iterable, Sequence
 from inspect import isawaitable
 from pathlib import Path
 from time import perf_counter
-from typing import Protocol
+from typing import Protocol, cast
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,7 +24,6 @@ app = FastAPI(title="Unified Knowledge Store", version="0.1.0")
 # Add CORS middleware to allow requests from VSCode webviews
 # Note: CORSMiddleware is a class, not a factory function, but FastAPI's add_middleware
 # accepts both. We need to help the type checker by explicitly typing this.
-from typing import cast
 app.add_middleware(
     cast(type, CORSMiddleware),  # type: ignore[arg-type]
     allow_origins=["*"],  # Allow all origins (webview origins are dynamic)

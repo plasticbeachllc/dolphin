@@ -208,7 +208,7 @@ export class ClaudeClient {
       throw new Error("API client not initialized");
     }
 
-    const stream = await this.apiClient.messages.stream({
+    const stream = this.apiClient.messages.stream({
       model: this.config.model,
       max_tokens: request.maxTokens || this.config.maxTokens,
       temperature: request.temperature || this.config.temperature || 1.0,

@@ -218,7 +218,7 @@ class AgentCoreV2 {
 
         try {
           const message: Message = JSON.parse(messageBody);
-          this.handleMessage(message);
+          void this.handleMessage(message);
         } catch (error) {
           console.error("[Agent Core V2] Failed to parse message:", error);
         }
@@ -269,7 +269,7 @@ class AgentCoreV2 {
         });
 
         // Stream updates to extension in background
-        (async () => {
+        void (async () => {
           try {
             for await (const update of this.orchestrator.subscribeToUpdates(session.id)) {
               this.sendEvent({

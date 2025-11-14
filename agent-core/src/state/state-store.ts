@@ -226,7 +226,7 @@ export class StateStore {
     this.conversationsDir = join(this.storagePath, "conversations");
 
     // Ensure directories exist first, then initialize validators
-    this.ensureDirectories();
+    void this.ensureDirectories();
   }
 
   /**
