@@ -11,7 +11,11 @@ import {
   makeHttpPostRequest,
 } from "../../../helpers/test-utils";
 import { MockKBServer } from "../../../helpers/mock-services";
-import { MockHealthResponse, MockSearchResponse, MockSearchRequest } from "../../../helpers/mock-types";
+import {
+  MockHealthResponse,
+  MockSearchResponse,
+  MockSearchRequest,
+} from "../../../helpers/mock-types";
 
 describe("Integration Tests", () => {
   let mockServer: MockKBServer;
@@ -121,8 +125,14 @@ describe("Integration Tests", () => {
       const http = require("http");
       await new Promise((resolve) => {
         http.get(`http://localhost:${mockServer.port}/health`, (res: unknown) => {
-          (res as { on: (event: string, callback: (data: unknown) => void) => void }).on("data", () => {});
-          (res as { on: (event: string, callback: (data: unknown) => void) => void }).on("end", resolve);
+          (res as { on: (event: string, callback: (data: unknown) => void) => void }).on(
+            "data",
+            () => {}
+          );
+          (res as { on: (event: string, callback: (data: unknown) => void) => void }).on(
+            "end",
+            resolve
+          );
         });
       });
 

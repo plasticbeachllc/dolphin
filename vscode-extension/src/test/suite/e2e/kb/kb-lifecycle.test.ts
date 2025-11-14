@@ -15,7 +15,11 @@ import {
 import { activateExtension, assertCommandExists } from "../../../helpers/shared-fixtures";
 import { TEST_COMMANDS } from "../../../helpers/test-constants";
 import * as http from "http";
-import { MockHealthResponse, MockSearchResponse, MockMetadataResponse } from "../../../helpers/mock-types";
+import {
+  MockHealthResponse,
+  MockSearchResponse,
+  MockMetadataResponse,
+} from "../../../helpers/mock-types";
 
 describe("KB Lifecycle Management", function () {
   this.timeout(10000);
@@ -182,22 +186,20 @@ describe("KB Lifecycle Management", function () {
         },
       });
 
-      const response = await new Promise<{ status: number | undefined; data: MockMetadataResponse }>(
-        (resolve, _reject) => {
-          http.get(
-            `http://localhost:${kbServer.port}/metadata/test`,
-            (res: http.IncomingMessage) => {
-              let data = "";
-              res.on("data", (chunk: Buffer) => {
-                data += chunk;
-              });
-              res.on("end", () => {
-                resolve({ status: res.statusCode, data: JSON.parse(data) });
-              });
-            }
-          );
-        }
-      );
+      const response = await new Promise<{
+        status: number | undefined;
+        data: MockMetadataResponse;
+      }>((resolve, _reject) => {
+        http.get(`http://localhost:${kbServer.port}/metadata/test`, (res: http.IncomingMessage) => {
+          let data = "";
+          res.on("data", (chunk: Buffer) => {
+            data += chunk;
+          });
+          res.on("end", () => {
+            resolve({ status: res.statusCode, data: JSON.parse(data) });
+          });
+        });
+      });
 
       assert.strictEqual(response.status, 200, "Metadata should return 200");
       assert.ok(response.data.repos, "Should have repos");
@@ -229,11 +231,15 @@ describe("KB Lifecycle Management", function () {
 
       const history = kbServer.getRequestHistory();
       assert.ok(
-        history.every((r: { timestamp: number; method: string | undefined; url: string }) => r.timestamp),
+        history.every(
+          (r: { timestamp: number; method: string | undefined; url: string }) => r.timestamp
+        ),
         "Each request should have timestamp"
       );
       assert.ok(
-        history.every((r: { timestamp: number; method: string | undefined; url: string }) => r.method),
+        history.every(
+          (r: { timestamp: number; method: string | undefined; url: string }) => r.method
+        ),
         "Each request should have method"
       );
       assert.ok(

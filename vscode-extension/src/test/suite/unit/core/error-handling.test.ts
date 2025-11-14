@@ -5,7 +5,11 @@ import {
   makeHttpPostRequest,
   assertCommandExecutes,
 } from "../../../helpers/test-utils";
-import { MockHealthResponse, MockSearchRequest, MockSearchResponse } from "../../../helpers/mock-types";
+import {
+  MockHealthResponse,
+  MockSearchRequest,
+  MockSearchResponse,
+} from "../../../helpers/mock-types";
 
 /**
  * Negative test cases for error handling scenarios
