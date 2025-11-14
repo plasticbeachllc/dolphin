@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.2.0] - 2025-11-12
+## [0.2.0] - Under Development
 
 This is the first major release of pb-dolphin, marking a significant milestone in semantic code search and knowledge management. Version 1.0.0 represents a complete, production-ready Python backend with comprehensive testing and performance optimization.
 
