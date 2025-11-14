@@ -20,6 +20,10 @@ This is the first major release of pb-dolphin, marking a significant milestone i
 
 #### 📚 Enhanced Knowledge Base Core
 
+- **Missing Core Dependencies**
+  - Added `networkx>=3.0` for graph intelligence features
+  - Added `scipy>=1.11.0` for PageRank computation in network analysis
+
 - **Advanced Language-Aware Chunking**
   - **Python** (`py_chunker.py`): Tree-sitter AST parsing for classes, functions, methods, docstrings
   - **TypeScript/JavaScript** (`ts_chunker.py`): Exports, functions, classes, interfaces, type definitions
@@ -232,6 +236,15 @@ This is the first major release of pb-dolphin, marking a significant milestone i
 
 ### Fixed
 
+- **Code Quality Issues**
+  - Fixed `_coerce_optional` method calls missing `cls.` prefix in `kb/config.py:266, 270`
+  - Fixed incorrect type hints in `kb/ingest/graph_helpers.py` (GraphNode and GraphEdge imports)
+  - Fixed incorrect variable name in error logging in `kb/api/app.py:382` (file_path → path)
+  - Fixed incorrect method call signature in `kb/ingest/cli.py:286` for `get_chunks_for_file()`
+
+- **Test Infrastructure**
+  - Removed problematic manual test script that was interfering with pytest collection
+
 - **Configuration Template Issues**
   - Fixed `[embedding]` section name (was incorrectly `[embeddings]`)
   - Added missing `default_embed_model` field
@@ -284,33 +297,24 @@ This is the first major release of pb-dolphin, marking a significant milestone i
 - pathspec - `.gitignore` pattern matching
 - Typer - Beautiful CLI framework
 - pytest - Testing framework
-
-**Frontend (TypeScript/JavaScript):**
-
-- VSCode Extension API - Editor integration
-- Bun - Fast JavaScript runtime for Agent Core
-- Anthropic SDK - Claude API client
-- SvelteKit - Full-stack web framework
-- Svelte 5 - Reactive UI components
-- Tailwind CSS - Utility-first styling
-- shadcn/ui - Accessible component library
-- Zod - Runtime type validation
-- MCP SDK - Model Context Protocol implementation
+- networkx - Graph algorithms and analysis
+- scipy - Scientific computing (PageRank calculations)
 
 **Development & Tooling:**
 
 - uv - Fast Python package installer and resolver
 - Justfile - Task automation (build, test, lint)
 - Git - Version control and diff-based indexing
-- Prettier - Code formatting
-- ESLint - JavaScript/TypeScript linting
+- black - Code formatting
+- mypy - Static type checking
+- pylint - Code linting
 
 ### Migration Notes
 
 This is a major version release. If upgrading from 0.1.x:
 
 1. **Configuration**: Review and update your `.dolphin/config.toml` files. Some field names have changed and new options are available.
-2. **Dependencies**: If you were using reranking features, reinstall with `pip install pb-dolphin[reranking]`.
+2. **Dependencies**: The package now includes `networkx` and `scipy` as core dependencies. If you were using reranking features, reinstall with `pip install pb-dolphin[reranking]`.
 3. **API**: REST API endpoints are backward compatible, but new parameters are available for hybrid search and MMR.
 4. **Database**: Existing SQLite and LanceDB indices are compatible. Consider rebuilding for optimal performance with new features.
 
@@ -320,10 +324,13 @@ This is a major version release. If upgrading from 0.1.x:
 
 ### Fixed
 
-- **MMR Relevance Selection**
-  - Configured to work properly
+- **MMR Relevance Selection** - Configured to work properly
 
----
+### Changed
+
+- **MCP Bridge Version** bumped to 0.1.2
+  - REST client now reads `KB_REST_BASE_URL` dynamically during runtime
+  - Maintains backward compatibility with production configurations
 
 ## [0.1.12] - 2025-11-04
 
@@ -363,15 +370,11 @@ This is a major version release. If upgrading from 0.1.x:
   - Active session validation prevents mid-operation deletions
   - All cleanup operations validated for completeness
 
----
-
 ## [0.1.11] - 2025-11-03
 
 ### Fixed
 
 - **Documentation Issues**
-
----
 
 ## [0.1.10] - 2025-11-03
 
@@ -391,8 +394,6 @@ This is a major version release. If upgrading from 0.1.x:
 - **Install Process**
   - Remediated install-blocking issues
 
----
-
 ## [0.1.9] - 2025-11-02
 
 ### Added
@@ -404,7 +405,7 @@ This is a major version release. If upgrading from 0.1.x:
   - Chunk retrieval endpoint
   - File slice retrieval endpoint
 - **Comprehensive Testing Infrastructure**
-  - 191+ passing Python tests (unit + integration)
+  - 360+ passing tests (unit + integration)
   - Mock tiktoken for fast unit tests
   - Real tiktoken validation for integration tests
   - Coverage reporting and CI/CD ready
@@ -448,8 +449,6 @@ This is a major version release. If upgrading from 0.1.x:
 - Semantic search latency reduced by ~40% with adaptive ANN tuning
 - Hybrid search improves precision by ~40% on code identifiers
 - Optional reranking improves MRR by 20-30%
-
----
 
 ## [0.1.8] - 2025-11-01
 

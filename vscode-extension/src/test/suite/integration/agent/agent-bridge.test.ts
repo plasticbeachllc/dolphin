@@ -146,10 +146,7 @@ describe("AgentBridge Unit Tests", () => {
         assert.fail("Should have thrown timeout error");
       } catch (error: unknown) {
         const err = error as Error;
-        assert.ok(
-          err.message.includes("timeout"),
-          "Should be a timeout error"
-        );
+        assert.ok(err.message.includes("timeout"), "Should be a timeout error");
       }
     });
 
@@ -225,11 +222,9 @@ describe("AgentBridge Unit Tests", () => {
       };
 
       // Call handleCrash
-      await (bridge.handleCrash as (agentPath: string, extPath: string, error: unknown) => Promise<void>)(
-        "/fake/path",
-        "/fake/ext",
-        undefined
-      );
+      await (
+        bridge.handleCrash as (agentPath: string, extPath: string, error: unknown) => Promise<void>
+      )("/fake/path", "/fake/ext", undefined);
 
       assert.strictEqual(restartCalled, false, "Should not restart when shutting down");
     });
@@ -259,20 +254,14 @@ describe("AgentBridge Unit Tests", () => {
       (agentBridge as unknown as TestRecord).isShuttingDown = false;
 
       // First crash - should restart after 1s
-      await (bridge.handleCrash as (agentPath: string, extPath: string, error: unknown) => Promise<void>)(
-        "/fake/path",
-        "/fake/ext",
-        undefined
-      );
+      await (
+        bridge.handleCrash as (agentPath: string, extPath: string, error: unknown) => Promise<void>
+      )("/fake/path", "/fake/ext", undefined);
 
       // Wait for first restart
       await new Promise((resolve) => setTimeout(resolve, 1100));
       assert.strictEqual(startCallCount, 1, "Should call start once after first crash");
-      assert.strictEqual(
-        bridge.restartAttempts as number,
-        1,
-        "Should increment restart attempts"
-      );
+      assert.strictEqual(bridge.restartAttempts as number, 1, "Should increment restart attempts");
 
       // Clean up
       if (originalShowWarning !== undefined) {
@@ -300,11 +289,9 @@ describe("AgentBridge Unit Tests", () => {
         return Promise.resolve("Cancel");
       };
 
-      await (bridge.handleCrash as (agentPath: string, extPath: string, error: unknown) => Promise<void>)(
-        "/fake/path",
-        "/fake/ext",
-        undefined
-      );
+      await (
+        bridge.handleCrash as (agentPath: string, extPath: string, error: unknown) => Promise<void>
+      )("/fake/path", "/fake/ext", undefined);
 
       // Wait a tick for the promise to resolve
       await new Promise((resolve) => setImmediate(resolve));
@@ -410,7 +397,12 @@ describe("AgentBridge Unit Tests", () => {
       // Set up connection and pending requests
       (agentBridge as unknown as TestRecord).connection = mockConnection;
       let bridgeA = agentBridge as unknown as TestRecord;
-      (bridgeA.pendingRequests as Map<number, { resolve: () => void; reject: () => void; timeout: NodeJS.Timeout }>).set(1, {
+      (
+        bridgeA.pendingRequests as Map<
+          number,
+          { resolve: () => void; reject: () => void; timeout: NodeJS.Timeout }
+        >
+      ).set(1, {
         resolve: () => {},
         reject: () => {},
         timeout: setTimeout(() => {}, 1000),
@@ -444,7 +436,12 @@ describe("AgentBridge Unit Tests", () => {
 
       (agentBridge as unknown as TestRecord).connection = mockConnection;
       const bridgeB = agentBridge as unknown as TestRecord;
-      (bridgeB.pendingRequests as Map<number, { resolve: () => void; reject: (error: Error) => void; timeout: NodeJS.Timeout }>).set(1, {
+      (
+        bridgeB.pendingRequests as Map<
+          number,
+          { resolve: () => void; reject: (error: Error) => void; timeout: NodeJS.Timeout }
+        >
+      ).set(1, {
         resolve: () => {},
         reject: (error: Error) => {
           rejectionError = error;
@@ -486,7 +483,12 @@ describe("AgentBridge Unit Tests", () => {
       const mockConnection: Partial<MockConnection> = { dispose: () => {} };
       (agentBridge as unknown as TestRecord).connection = mockConnection;
       const bridgeC = agentBridge as unknown as TestRecord;
-      (bridgeC.pendingRequests as Map<number, { resolve: () => void; reject: () => void; timeout: NodeJS.Timeout }>).set(1, {
+      (
+        bridgeC.pendingRequests as Map<
+          number,
+          { resolve: () => void; reject: () => void; timeout: NodeJS.Timeout }
+        >
+      ).set(1, {
         resolve: () => {},
         reject: () => {},
         timeout: mockTimer,
@@ -521,7 +523,13 @@ describe("AgentBridge Unit Tests", () => {
       const startTime = Date.now();
       try {
         const bridgeD = agentBridge as unknown as TestRecord;
-        await (bridgeD.sendRequest as (method: string, params: Record<string, unknown>, timeout: number) => Promise<unknown>)("test_method", {}, 1000);
+        await (
+          bridgeD.sendRequest as (
+            method: string,
+            params: Record<string, unknown>,
+            timeout: number
+          ) => Promise<unknown>
+        )("test_method", {}, 1000);
         assert.fail("Should have timed out");
       } catch (error: unknown) {
         const elapsed = Date.now() - startTime;
@@ -543,7 +551,13 @@ describe("AgentBridge Unit Tests", () => {
       bridgeE.connection = mockConnection;
 
       try {
-        await (bridgeE.sendRequest as (method: string, params: Record<string, unknown>, timeout: number) => Promise<unknown>)("test_method", {}, 500);
+        await (
+          bridgeE.sendRequest as (
+            method: string,
+            params: Record<string, unknown>,
+            timeout: number
+          ) => Promise<unknown>
+        )("test_method", {}, 500);
       } catch (error) {
         // Expected timeout
       }
