@@ -98,9 +98,9 @@ class TestSearchWorkflow:
             # Note: With stub embeddings (zero vectors), scores may not be strictly descending
             # due to floating-point precision and tie-breaking. Just verify they're reasonable.
             # In production with real embeddings, scores would be properly ordered.
-            assert all(
-                isinstance(s, (int, float)) for s in scores
-            ), "All scores should be numeric"
+            assert all(isinstance(s, (int, float)) for s in scores), (
+                "All scores should be numeric"
+            )
             assert all(s >= 0 for s in scores), "All scores should be non-negative"
 
     def test_search_with_different_queries(self, e2e_kb_setup):

@@ -267,9 +267,9 @@ class TestGraphExtraction:
             print(
                 f"DEBUG: All TS nodes: {[(n['name'], n['node_type']) for n in ts_nodes]}"
             )
-        assert (
-            user_interface is not None
-        ), f"User interface not found in nodes: {[(n['name'], n['node_type']) for n in ts_nodes]}"
+        assert user_interface is not None, (
+            f"User interface not found in nodes: {[(n['name'], n['node_type']) for n in ts_nodes]}"
+        )
         assert user_interface["node_type"] == "interface"
 
         user_service = next((n for n in ts_nodes if n["name"] == "UserService"), None)
@@ -345,12 +345,12 @@ class TestGraphExtraction:
         final_edge_count = graph_store.get_edge_count()
 
         # Should have fewer nodes and edges after deletion
-        assert (
-            final_node_count < initial_node_count
-        ), "Graph nodes should be pruned when files are deleted"
-        assert (
-            final_edge_count < initial_edge_count
-        ), "Graph edges should be pruned when files are deleted"
+        assert final_node_count < initial_node_count, (
+            "Graph nodes should be pruned when files are deleted"
+        )
+        assert final_edge_count < initial_edge_count, (
+            "Graph edges should be pruned when files are deleted"
+        )
 
         # Verify no nodes remain for deleted file
         py_file_id = metadata.get_file_id(repo_id, "example.py")

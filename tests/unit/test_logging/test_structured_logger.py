@@ -408,7 +408,6 @@ class TestStructuredLogger:
             patch("kb.logging.structured_logger.OTEL_AVAILABLE", True),
             patch("kb.logging.structured_logger.trace") as mock_trace,
         ):
-
             # Setup OpenTelemetry mock
             mock_span = Mock()
             mock_span.is_recording.return_value = True

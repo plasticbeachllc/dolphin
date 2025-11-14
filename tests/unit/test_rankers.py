@@ -264,9 +264,9 @@ class TestMaximalMarginalRelevance:
         diversity_scores = [r["mmr_score"] for r in result_diversity]
 
         # Should have different score distributions
-        assert (
-            relevance_scores != diversity_scores
-        ), "Different lambda values should produce different MMR scores"
+        assert relevance_scores != diversity_scores, (
+            "Different lambda values should produce different MMR scores"
+        )
 
     def test_top_k_limit(self):
         """Test top_k parameter limits results."""

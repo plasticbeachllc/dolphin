@@ -195,7 +195,7 @@ class TestANNParamsRecall:
 
             # Speed params should maintain >90% recall
             assert recall >= 0.90, (
-                f"Speed params recall too low: {recall:.2%} " f"(expected >= 90%)"
+                f"Speed params recall too low: {recall:.2%} (expected >= 90%)"
             )
 
     def test_accuracy_params_maximize_recall(self, lance_store):
@@ -224,7 +224,7 @@ class TestANNParamsRecall:
 
             # Accuracy params should achieve >95% recall
             assert recall >= 0.95, (
-                f"Accuracy params recall too low: {recall:.2%} " f"(expected >= 95%)"
+                f"Accuracy params recall too low: {recall:.2%} (expected >= 95%)"
             )
 
 

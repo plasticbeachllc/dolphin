@@ -374,7 +374,7 @@ class TestPhase2Integration:
         # Create test files
         for i in range(20):
             (repo_dir / f"module_{i}.py").write_text(
-                f"# Module {i}\n" f"def function_{i}():\n" f"    return {i}\n"
+                f"# Module {i}\ndef function_{i}():\n    return {i}\n"
             )
 
         # Add files to git

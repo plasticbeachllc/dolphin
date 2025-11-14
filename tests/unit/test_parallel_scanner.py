@@ -118,9 +118,7 @@ class TestScanRepoParallel:
             mock_list.return_value = [f"file{i}.py" for i in range(250)]
 
             with patch("multiprocessing.Pool") as mock_pool:
-                mock_pool.return_value.__enter__.return_value.imap_unordered.return_value = (
-                    []
-                )
+                mock_pool.return_value.__enter__.return_value.imap_unordered.return_value = []
 
                 scan_repo_parallel(tmp_path, [], num_workers=4)
 

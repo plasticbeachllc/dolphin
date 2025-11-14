@@ -115,7 +115,7 @@ def example_function():
             tokens = tokenizer.encode(text)
             decoded = tokenizer.decode(tokens)
             assert decoded == text, (
-                f"Encode/decode roundtrip failed for: {text!r}\n" f"Got: {decoded!r}"
+                f"Encode/decode roundtrip failed for: {text!r}\nGot: {decoded!r}"
             )
 
 

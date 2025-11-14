@@ -261,7 +261,6 @@ class TestErrorHandling:
                 return_value=[{"id": "vec1", "_distance": 0.5}],
             ),
         ):
-
             results = hybrid_backend.search(request)
             # Should still return the vector result
             assert len(results) == 1
@@ -289,7 +288,6 @@ class TestErrorHandling:
                 hybrid_backend, "_hydrate_bm25_results", return_value=mock_bm25_results
             ),
         ):
-
             results = hybrid_backend.search(request)
             # Should return BM25 results
             assert len(results) >= 1
@@ -310,7 +308,6 @@ class TestErrorHandling:
                 side_effect=Exception("FTS Error"),
             ),
         ):
-
             results = hybrid_backend.search(request)
             # Should return empty list, not crash
             assert isinstance(results, list)
@@ -341,7 +338,6 @@ class TestSearchRequestHandling:
                 ),
                 patch.object(hybrid_backend.sql_store, "bm25_search", return_value=[]),
             ):
-
                 results = hybrid_backend.search(request)
 
             assert isinstance(results, list)
@@ -363,7 +359,6 @@ class TestSearchRequestHandling:
                 ),
                 patch.object(hybrid_backend.sql_store, "bm25_search", return_value=[]),
             ):
-
                 results = hybrid_backend.search(request)
 
             assert isinstance(results, list)
@@ -398,7 +393,6 @@ class TestPerformanceCharacteristics:
                 hybrid_backend, "_hydrate_bm25_results", return_value=mock_bm25_results
             ),
         ):
-
             results = hybrid_backend.search(request)
 
         # Results should be fused from both sources

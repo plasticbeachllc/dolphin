@@ -201,9 +201,9 @@ def goodbye():
 
         # Verify completion
         assert final_status is not None, "Indexing did not complete within 30 seconds"
-        assert (
-            final_status["status"] == "completed"
-        ), f"Indexing failed: {final_status.get('error')}"
+        assert final_status["status"] == "completed", (
+            f"Indexing failed: {final_status.get('error')}"
+        )
         assert final_status["total"] == 1
 
         # Verify chunks were created

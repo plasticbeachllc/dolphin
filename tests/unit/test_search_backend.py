@@ -245,6 +245,6 @@ class TestSearchBackendIntegration:
         assert len(results) >= 1, f"Expected at least 1 result, got {len(results)}"
         assert "score" in results[0], f"Result missing 'score' field: {results[0]}"
         # Expect the production-format chunk ID
-        assert (
-            results[0]["chunk_id"] == chunk_id
-        ), f"Expected chunk_id {chunk_id}, got {results[0]['chunk_id']}"
+        assert results[0]["chunk_id"] == chunk_id, (
+            f"Expected chunk_id {chunk_id}, got {results[0]['chunk_id']}"
+        )

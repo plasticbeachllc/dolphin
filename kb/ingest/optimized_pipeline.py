@@ -327,9 +327,9 @@ class OptimizedIngestionPipeline:
             speedup=speedup,
         )
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Indexing Complete")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"Total files: {stats.total_files}")
         print(f"Files processed: {stats.files_processed}")
         print(f"Files skipped: {stats.files_skipped}")
@@ -338,6 +338,6 @@ class OptimizedIngestionPipeline:
         print(f"Total time: {stats.total_time:.1f}s")
         print(f"Throughput: {stats.throughput:.0f} files/min")
         print(f"Speedup vs baseline: {stats.speedup}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         return stats

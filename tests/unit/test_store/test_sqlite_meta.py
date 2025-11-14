@@ -305,8 +305,7 @@ class TestSQLiteMetadataStore:
 
         # Test sync_file_state with multiple content entries
         desired = {
-            "a"
-            * 64: [
+            "a" * 64: [
                 {
                     "start_line": 1,
                     "end_line": 5,
@@ -315,8 +314,7 @@ class TestSQLiteMetadataStore:
                     "symbol_path": "WidgetRenamed",
                 }
             ],
-            "c"
-            * 64: [
+            "c" * 64: [
                 {
                     "start_line": 30,
                     "end_line": 40,

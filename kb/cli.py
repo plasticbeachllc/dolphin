@@ -54,7 +54,9 @@ app = typer.Typer(
 
 @app.callback(invoke_without_command=True)
 def dolphin_callback(
-    version: bool = typer.Option(False, "--version", "-v", help="Show version and exit")
+    version: bool = typer.Option(
+        False, "--version", "-v", help="Show version and exit"
+    ),
 ):
     version_callback(version)
 

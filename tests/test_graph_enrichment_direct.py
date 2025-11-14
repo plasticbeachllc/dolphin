@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Test graph enrichment directly without MCP layer."""
+
 import sys
 from pathlib import Path
 

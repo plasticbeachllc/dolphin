@@ -183,9 +183,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 or "incorrect" in error_msg.lower()
             ):
                 raise RuntimeError(
-                    f"\n{'='*70}\n"
+                    f"\n{'=' * 70}\n"
                     f"OPENAI API KEY VALIDATION FAILED\n"
-                    f"{'='*70}\n"
+                    f"{'=' * 70}\n"
                     f"The OpenAI API key is invalid or has expired.\n\n"
                     f"To fix this:\n"
                     f"  1. Get a valid API key from: https://platform.openai.com/account/api-keys\n"
@@ -193,7 +193,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                     f'     export OPENAI_API_KEY="sk-your-actual-key-here"\n'
                     f"  3. Or add to your shell profile (~/.zshrc or ~/.bashrc)\n\n"
                     f"Original error: {error_msg}\n"
-                    f"{'='*70}\n"
+                    f"{'=' * 70}\n"
                 )
             # For other errors, raise the original exception
             raise
@@ -406,8 +406,7 @@ def create_provider(provider_type: str = "stub", **kwargs) -> EmbeddingProvider:
         return OpenAIEmbeddingProvider(**kwargs)
     else:
         raise ValueError(
-            f"Unsupported provider type: {provider_type}. "
-            "Must be 'stub' or 'openai'."
+            f"Unsupported provider type: {provider_type}. Must be 'stub' or 'openai'."
         )
 
 

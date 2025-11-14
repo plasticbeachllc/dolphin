@@ -83,21 +83,21 @@ class TestSnapshotTracking:
             time.sleep(1)
 
         # Check if task completed successfully
-        assert (
-            task_completed
-        ), f"Task did not complete within timeout. Final status: {final_status}"
-        assert (
-            final_status == "completed"
-        ), f"Task failed with status: {final_status}, error: {status_data.get('error')}"
+        assert task_completed, (
+            f"Task did not complete within timeout. Final status: {final_status}"
+        )
+        assert final_status == "completed", (
+            f"Task failed with status: {final_status}, error: {status_data.get('error')}"
+        )
 
         # Add small delay to ensure database commits are visible
         time.sleep(0.5)
 
         # Verify snapshot was created
         file_record = sql_store.get_file_by_path(repo["id"], "sample.py")
-        assert (
-            file_record is not None
-        ), f"File record not found after successful indexing. Task status: {status_data}"
+        assert file_record is not None, (
+            f"File record not found after successful indexing. Task status: {status_data}"
+        )
 
         snapshot = sql_store.get_file_snapshot(file_record["id"])
         assert snapshot is not None
@@ -618,9 +618,9 @@ class TestAutomaticChangeProcessing:
 
         # 4. Verify change was AUTOMATICALLY marked as processed (no manual API call!)
         pending_after = client.get("/v1/repos/test-repo/pending-changes")
-        assert (
-            len(pending_after.json()["changes"]) == 0
-        ), "Python should have automatically marked the change as processed during indexing"
+        assert len(pending_after.json()["changes"]) == 0, (
+            "Python should have automatically marked the change as processed during indexing"
+        )
 
         # 5. Verify by checking directly in database
         processed_changes = sql_store.get_pending_changes(repo_id=repo["id"], limit=100)
@@ -770,9 +770,9 @@ class TestPendingChangesWorkflow:
         # 4. Verify Python automatically marked changes as processed
         # (No manual mark-processed call needed!)
         final_pending = client.get("/v1/repos/test-repo/pending-changes")
-        assert (
-            len(final_pending.json()["changes"]) == 0
-        ), "Python should automatically mark changes as processed after successful indexing"
+        assert len(final_pending.json()["changes"]) == 0, (
+            "Python should automatically mark changes as processed after successful indexing"
+        )
 
         # 6. Verify snapshots were created
         repo = sql_store.get_repo_by_name("test-repo")

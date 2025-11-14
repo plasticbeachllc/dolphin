@@ -50,9 +50,9 @@ def test_missing_config_uses_defaults():
         default_config = load_repo_chunking_config(tmp_path)
 
         assert default_config.repo_path == tmp_path.resolve()
-        assert (
-            default_config.default_window_size == 350
-        ), "Expected default window size 350"
+        assert default_config.default_window_size == 350, (
+            "Expected default window size 350"
+        )
         assert default_config.embedding_model == "text-embedding-3-small"
 
 

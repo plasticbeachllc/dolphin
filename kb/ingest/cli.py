@@ -46,7 +46,7 @@ def _build_pipeline(config: KBConfig) -> IngestionPipeline:
 
 @app.command()
 def init(
-    config_path: Path | None = typer.Option(None, help="Optional config path.")
+    config_path: Path | None = typer.Option(None, help="Optional config path."),
 ) -> None:
     """Initialize the knowledge store (config + SQLite + LanceDB collections).
 

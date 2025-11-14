@@ -587,7 +587,7 @@ def broken(
             for i in range(100):
                 edge = CodeEdge(
                     source_node_id=f"node_{i}",
-                    target_node_id=f"node_{i+1}",
+                    target_node_id=f"node_{i + 1}",
                     edge_type="calls",
                     repo_id=repo_id,
                     commit_sha="test_commit",

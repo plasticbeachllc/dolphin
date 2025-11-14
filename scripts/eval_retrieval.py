@@ -431,10 +431,10 @@ def main():
     print("SUMMARY")
     print("=" * 80)
     print(f"\nTotal scenarios: {len(scenarios)}")
-    print(f"Passed: {passed} ({passed/len(scenarios)*100:.1f}%)")
-    print(f"Failed: {failed} ({failed/len(scenarios)*100:.1f}%)")
+    print(f"Passed: {passed} ({passed / len(scenarios) * 100:.1f}%)")
+    print(f"Failed: {failed} ({failed / len(scenarios) * 100:.1f}%)")
     if errors:
-        print(f"Errors: {errors} ({errors/len(scenarios)*100:.1f}%)")
+        print(f"Errors: {errors} ({errors / len(scenarios) * 100:.1f}%)")
 
     print("\nOverall metrics:")
     for metric, value in overall_summary.items():
