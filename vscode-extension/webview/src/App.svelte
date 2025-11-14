@@ -3,6 +3,7 @@
   import { fade } from 'svelte/transition';
   import { MessageList, ChatInput, ChatHeader, ModeSelector, ArchitectModeBanner } from '$lib/components/chat';
   import AppNavigation from '$lib/components/navigation/AppNavigation.svelte';
+  import WelcomeCard from '$lib/components/WelcomeCard.svelte';
   import { sendMessage, onMessage, abortGeneration, saveState, getState } from '$lib/api/vscode';
   import type { AgentEvent } from '@shared/types/events';
   import SettingsPage from './routes/settings/+page.svelte';
@@ -79,6 +80,10 @@
   
   // Workspace status - conversations require a workspace
   let hasWorkspace = $state(false);
+  
+  // Dolphin config initialization status
+  let configExists = $state(true); // Assume exists until we check
+  let checkingConfig = $state(true);
 
   // EP-11: Architect mode selection
   let selectedMode = $state<'code' | 'architect'>('code');
@@ -103,6 +108,9 @@
     // Don't restore state - users should load conversations from gallery
     console.log('[App] Starting with blank slate - no auto-restore');
     hasRestoredState = true;
+    
+    // Check if config exists
+    checkConfigExists();
 
     // Start tracking startup time
     startupTimer = window.setInterval(() => {
@@ -287,6 +295,22 @@
             console.log('[App] Workspace status unchanged, ignoring event');
           }
           break;
+        
+        case 'dolphin_config_status':
+          // Response from config existence check
+          console.log('[App] Config status received:', event);
+          configExists = (event as any).exists ?? true;
+          checkingConfig = false;
+          break;
+        
+        case 'dolphin_init_response':
+          // Response from initialization
+          console.log('[App] Init response received:', event);
+          if (!(event as any).error) {
+            // Success - config now exists
+            configExists = true;
+          }
+          break;
       }
     });
     
@@ -335,6 +359,11 @@
       timestamp: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
     }];
   }
+  
+  function checkConfigExists() {
+    const vscode = window.acquireVsCodeApi();
+    vscode.postMessage({ type: 'check_dolphin_config' });
+  }
 </script>
 
 <div class="app-container">
@@ -373,9 +402,13 @@
       {/if}
 
       {#if showLogo && messages.length === 0 && agentReady}
-        <div class="logo-container" transition:fade={{ duration: 600 }}>
-          <div class="dolphin-logo">🐬</div>
-        </div>
+        {#if !configExists && !checkingConfig}
+          <WelcomeCard />
+        {:else}
+          <div class="logo-container" transition:fade={{ duration: 600 }}>
+            <div class="dolphin-logo">🐬</div>
+          </div>
+        {/if}
       {/if}
 
       <div class="messages-container">

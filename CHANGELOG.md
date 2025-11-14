@@ -14,15 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0] - Under Development
 
-This is the first major release of pb-dolphin, marking a significant milestone in semantic code search and knowledge management. Version 1.0.0 represents a complete, production-ready Python backend with comprehensive testing and performance optimization.
+Version 0.2.0 represents a complete Python backend.
 
 ### Added
 
 #### 📚 Enhanced Knowledge Base Core
-
-- **Missing Core Dependencies**
-  - Added `networkx>=3.0` for graph intelligence features
-  - Added `scipy>=1.11.0` for PageRank computation in network analysis
 
 - **Advanced Language-Aware Chunking**
   - **Python** (`py_chunker.py`): Tree-sitter AST parsing for classes, functions, methods, docstrings
@@ -47,7 +43,7 @@ This is the first major release of pb-dolphin, marking a significant milestone i
     - Device selection (CPU/CUDA)
     - Trade-off: 2-3x slower, ~2GB additional install size
 
-- **Advanced Result Ranking**
+- **Result Ranking**
   - **Maximal Marginal Relevance (MMR)**: Balances relevance and diversity
     - Prevents redundant/similar results
     - Configurable lambda parameter (default: 0.7)
@@ -69,14 +65,13 @@ This is the first major release of pb-dolphin, marking a significant milestone i
 - **Multi-Backend Storage**
   - **SQLite**: Metadata, provenance, graph, FTS5 full-text search
   - **LanceDB**: Vector embeddings with ANN search
-  - **File System**: Repository files and snapshots
   - Content deduplication via SHA256 hashing
   - Separate LanceDB collections per embedding model
   - Foreign key constraints for referential integrity
 
 #### ⚡ Parallelized Knowledge Base
 
-- **High-Performance Batch Processing**
+- **Batch Processing**
   - Configurable batch size for embedding API calls (default: 100)
   - Parallel embedding requests with concurrency control
   - Rate limit handling with exponential backoff retry logic
@@ -84,8 +79,8 @@ This is the first major release of pb-dolphin, marking a significant milestone i
 
 - **Concurrent Search Capabilities**
   - 8 parallel search queries supported (for LLM multi-tool calls)
-  - ~300ms p50 search latency (60% faster than target)
-  - ~800ms p95 search latency (60% faster than target)
+  - ~300ms p50 search latency for medium-sized repos (~500K chunks)
+  - ~800ms p95 search latency ""
   - 10-20 sustained queries per second for single-user workloads
 
 - **Adaptive ANN (Approximate Nearest Neighbor) Tuning**
@@ -314,15 +309,6 @@ This is the first major release of pb-dolphin, marking a significant milestone i
 - mypy - Static type checking
 - pylint - Code linting
 
-### Migration Notes
-
-This is a major version release. If upgrading from 0.1.x:
-
-1. **Configuration**: Review and update your `.dolphin/config.toml` files. Some field names have changed and new options are available.
-2. **Dependencies**: The package now includes `networkx` and `scipy` as core dependencies. If you were using reranking features, reinstall with `pip install pb-dolphin[reranking]`.
-3. **API**: REST API endpoints are backward compatible, but new parameters are available for hybrid search and MMR.
-4. **Database**: Existing SQLite and LanceDB indices are compatible. Consider rebuilding for optimal performance with new features.
-
 ---
 
 ## [0.1.13] - 2025-11-08
@@ -417,7 +403,7 @@ This is a major version release. If upgrading from 0.1.x:
 - **Advanced Retrieval Features**
   - Hybrid search (BM25 + Vector) for 40% better precision on identifiers
   - Adaptive ANN parameter tuning for 40% faster searches
-  - Optional cross-encoder reranking (install with `pip install pb-dolphin[reranking]`)
+  - Optional cross-encoder reranking
   - Maximal Marginal Relevance (MMR) for result diversity
 - **Unified CLI** with `dolphin` command
   - Wraps all functionality (init, add-repo, index, search, serve)
@@ -426,11 +412,8 @@ This is a major version release. If upgrading from 0.1.x:
 
 ### Changed
 
-- **BREAKING**: Dependency structure optimized
-  - Core install now ~200MB (previously ~2GB)
-  - Heavy ML dependencies moved to optional extras
-  - Install reranking with `pip install pb-dolphin[reranking]`
-  - Install orchestrator with `pip install pb-dolphin[orchestrator]`
+- **Dependencies**
+  - ML dependencies moved to optional extras
 - **Config system improvements**
   - Fixed config template field names to match parser
   - Removed non-functional config sections
@@ -443,7 +426,7 @@ This is a major version release. If upgrading from 0.1.x:
 
 ### Fixed
 
-- Config template `[embedding]` section name (was incorrectly `[embeddings]`)
+- Config template `[embedding]` section name
 - Missing `default_embed_model` field in config template
 - Missing `per_session_spend_cap_usd` field at top level
 - TOML syntax error in config template (null values)

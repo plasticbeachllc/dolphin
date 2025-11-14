@@ -576,6 +576,64 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           }
           break;
 
+        case "check_dolphin_config":
+          this.outputChannel.appendLine(`[DolphinViewProvider] Checking Dolphin config existence`);
+          try {
+            const configPath = path.join(require("os").homedir(), ".dolphin", "config.toml");
+            const exists = fs.existsSync(configPath);
+            this.outputChannel.appendLine(`[DolphinViewProvider] Config exists: ${exists} at ${configPath}`);
+            webviewView.webview.postMessage({
+              type: "dolphin_config_status",
+              exists,
+              path: configPath,
+            });
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.outputChannel.appendLine(`[DolphinViewProvider] Error checking config: ${errorMessage}`);
+            webviewView.webview.postMessage({
+              type: "dolphin_config_status",
+              exists: true, // Assume exists on error to avoid false positives
+              error: errorMessage,
+            });
+          }
+          break;
+
+        case "dolphin_init":
+          this.outputChannel.appendLine(`[DolphinViewProvider] Initializing Dolphin config`);
+          try {
+            // Run dolphin init command
+            const { exec } = require("child_process");
+            const util = require("util");
+            const execPromise = util.promisify(exec);
+            
+            // Use 'uv run dolphin init' as per AGENTS.md
+            const { stdout, stderr } = await execPromise("uv run dolphin init");
+            
+            this.outputChannel.appendLine(`[DolphinViewProvider] Init stdout: ${stdout}`);
+            if (stderr) {
+              this.outputChannel.appendLine(`[DolphinViewProvider] Init stderr: ${stderr}`);
+            }
+            
+            // Verify config was created
+            const configPath = path.join(require("os").homedir(), ".dolphin", "config.toml");
+            const exists = fs.existsSync(configPath);
+            
+            webviewView.webview.postMessage({
+              type: "dolphin_init_response",
+              success: exists,
+              path: configPath,
+            });
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.outputChannel.appendLine(`[DolphinViewProvider] Error initializing: ${errorMessage}`);
+            webviewView.webview.postMessage({
+              type: "dolphin_init_response",
+              success: false,
+              error: errorMessage || "Failed to initialize Dolphin settings",
+            });
+          }
+          break;
+
         default:
           this.outputChannel.appendLine(
             `[DolphinViewProvider] Unknown message type: ${message.type}`
