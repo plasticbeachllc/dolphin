@@ -49,15 +49,15 @@ export class AuthManager {
     try {
       const raw = readFileSync(this.settingsPath, "utf-8");
       if (!raw.trim()) {
-        return true;
+        // Empty file means no token
+        return false;
       }
 
       const data = JSON.parse(raw) as { token?: string } | undefined;
       return !!data?.token;
     } catch {
-      // Treat unreadable files as an existing OAuth login – aligns with tests
-      // that expect corrupted files to still indicate subscription auth.
-      return true;
+      // Corrupted or unreadable files indicate a problem, not valid auth
+      return false;
     }
   }
 
