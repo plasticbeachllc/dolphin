@@ -6,13 +6,12 @@ connection overhead and improve concurrent access performance.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import threading
-from typing import Optional, Any, Callable
 from contextlib import contextmanager
-from queue import Queue, Empty, Full
-import logging
-import time
+from queue import Empty, Full, Queue
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -165,10 +164,7 @@ class SQLiteConnectionPool:
                     self._overflow_connections += 1
                     conn = self._create_connection()
                     self._created_connections += 1
-                    logger.info(
-                        f"Created overflow connection "
-                        f"({self._overflow_count}/{self.max_overflow})"
-                    )
+                    logger.info(f"Created overflow connection ({self._overflow_count}/{self.max_overflow})")
                     return conn
                 else:
                     raise TimeoutError(
@@ -215,16 +211,14 @@ class SQLiteConnectionPool:
             Dictionary with pool stats
         """
         return {
-            'pool_size': self.pool_size,
-            'max_overflow': self.max_overflow,
-            'current_overflow': self._overflow_count,
-            'available_connections': self._pool.qsize(),
-            'created_connections': self._created_connections,
-            'reused_connections': self._reused_connections,
-            'overflow_connections': self._overflow_connections,
-            'reuse_rate': (
-                self._reused_connections / max(1, self._created_connections) * 100
-            ),
+            "pool_size": self.pool_size,
+            "max_overflow": self.max_overflow,
+            "current_overflow": self._overflow_count,
+            "available_connections": self._pool.qsize(),
+            "created_connections": self._created_connections,
+            "reused_connections": self._reused_connections,
+            "overflow_connections": self._overflow_connections,
+            "reuse_rate": (self._reused_connections / max(1, self._created_connections) * 100),
         }
 
     def __del__(self):
@@ -233,7 +227,7 @@ class SQLiteConnectionPool:
 
 
 # Global pool instance
-_connection_pool: Optional[SQLiteConnectionPool] = None
+_connection_pool: SQLiteConnectionPool | None = None
 
 
 def get_connection_pool(

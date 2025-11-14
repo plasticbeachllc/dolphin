@@ -1,13 +1,13 @@
 """Pytest configuration and shared fixtures for KB pipeline tests."""
 
-import pytest
 import tempfile
-import shutil
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from tests.kb_utils import InMemoryKBBackend, FIXTURE_REPO_ROOT
+import pytest
+
+from tests.kb_utils import FIXTURE_REPO_ROOT, InMemoryKBBackend
 
 
 @pytest.fixture(scope="session")
@@ -41,10 +41,11 @@ def in_memory_backend(sample_repo_path: Path) -> InMemoryKBBackend:
 @pytest.fixture
 def mock_embedding_service():
     """Mock embedding service for predictable tests."""
+
     class MockEmbeddingService:
         def __init__(self, embedding_size: int = 1536):
             self.embedding_size = embedding_size
-            
+
         def get_embeddings(self, texts: list[str]) -> list[list[float]]:
             """Return deterministic embeddings for testing."""
             embeddings = []
@@ -53,7 +54,7 @@ def mock_embedding_service():
                 embedding = [float((hash(text) + j) % 100) / 100.0 for j in range(self.embedding_size)]
                 embeddings.append(embedding)
             return embeddings
-            
+
     return MockEmbeddingService()
 
 
@@ -66,7 +67,10 @@ def init_test_git_repo(repo_path: Path) -> None:
     import subprocess
 
     subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(repo_path), "config", "user.email", "test@example.com"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo_path), "config", "user.email", "test@example.com"],
+        check=True,
+    )
     subprocess.run(["git", "-C", str(repo_path), "config", "user.name", "Test User"], check=True)
     # Disable GPG signing for this repo only (not globally)
     subprocess.run(["git", "-C", str(repo_path), "config", "commit.gpgsign", "false"], check=True)
@@ -104,7 +108,7 @@ class MockTiktokenEncoding:
             if i + chunk_size > len(text):
                 chunk_size = len(text) - i
 
-            chunk = text[i:i+chunk_size]
+            chunk = text[i : i + chunk_size]
 
             # Create or retrieve token ID for this chunk
             token_id = hash(chunk) % 1000000  # Use hash for deterministic IDs
@@ -123,8 +127,8 @@ class MockTiktokenEncoding:
                 result.append(self._token_map[token_id])
             else:
                 # Fallback for unknown tokens - shouldn't happen in practice
-                result.append('???')
-        return ''.join(result)
+                result.append("???")
+        return "".join(result)
 
 
 def validate_tiktoken_cache() -> tuple[bool, str]:
@@ -193,19 +197,22 @@ def ensure_tiktoken_available(force_refresh: bool = False) -> bool:
 
     # Check for force refresh environment variable
     if not force_refresh:
-        force_refresh = os.getenv("TIKTOKEN_FORCE_REFRESH", "").lower() in ("1", "true", "yes")
+        force_refresh = os.getenv("TIKTOKEN_FORCE_REFRESH", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
 
     if force_refresh:
         # Clear cache to force re-download
         import shutil
+
         cache_dir = os.path.expanduser("~/.cache/tiktoken")
         if os.path.exists(cache_dir):
             print(f"Force refresh: Clearing tiktoken cache at {cache_dir}")
             shutil.rmtree(cache_dir)
 
     try:
-        import tiktoken
-
         # Try to load and validate encoding
         is_valid, error_msg = validate_tiktoken_cache()
 
@@ -238,10 +245,7 @@ def setup_tiktoken(request):
     Integration tests require real tiktoken (production validation).
     """
     # Check if any integration tests are being run
-    has_integration_tests = any(
-        "tests/integration" in str(item.fspath)
-        for item in request.session.items
-    )
+    has_integration_tests = any("tests/integration" in str(item.fspath) for item in request.session.items)
 
     if not has_integration_tests:
         # Only unit tests - mock tiktoken is fine
@@ -259,6 +263,7 @@ def setup_tiktoken(request):
 
     try:
         import tiktoken
+
         print("Downloading cl100k_base encoding...", end=" ", flush=True)
         tiktoken.get_encoding("cl100k_base")
         print("✓ Downloaded!")
@@ -267,7 +272,7 @@ def setup_tiktoken(request):
         print("Validating downloaded data...", end=" ", flush=True)
         is_valid, error_msg = validate_tiktoken_cache()
         if not is_valid:
-            print(f"✗ Validation failed!")
+            print("✗ Validation failed!")
             print(f"Error: {error_msg}")
             raise RuntimeError(f"Downloaded tiktoken data is invalid: {error_msg}")
 
@@ -342,17 +347,16 @@ def mock_tiktoken():
     def mock_get_encoding(encoding_name: str):
         return mock_encoding
 
-    with patch('tiktoken.get_encoding', side_effect=mock_get_encoding):
+    with patch("tiktoken.get_encoding", side_effect=mock_get_encoding):
         yield mock_encoding
 
 
 def pytest_configure(config):
     """Configure pytest with custom markers."""
+    config.addinivalue_line("markers", "unit: mark test as a unit test (uses mock tiktoken)")
     config.addinivalue_line(
-        "markers", "unit: mark test as a unit test (uses mock tiktoken)"
-    )
-    config.addinivalue_line(
-        "markers", "integration: mark test as an integration test (uses real dependencies)"
+        "markers",
+        "integration: mark test as an integration test (uses real dependencies)",
     )
 
 
@@ -364,10 +368,10 @@ def cleanup_test_repos():
     1. Clean starting state (cleans up repos from interrupted previous runs)
     2. Clean ending state (cleans up repos created during this test run)
     """
+
     def _cleanup():
         """Perform the actual cleanup of test repositories."""
         try:
-            from pathlib import Path
             from kb.config import CONFIG_ROOT
             from kb.store.sqlite_meta import SQLiteMetadataStore
 
@@ -378,18 +382,29 @@ def cleanup_test_repos():
                 store.initialize()
 
                 # Get all repos
-                with store._get_connection() as conn:
+                with store._get_connection() as conn:  # type: ignore[attr-defined]
                     cursor = conn.execute("SELECT id, name FROM repos")
                     repos = cursor.fetchall()
 
                     # Delete test repositories (those with test-related names)
-                    test_repo_patterns = ["test", "test_repo", "test-repo", "repo-1", "repo-2", "my-repo", "integration-test"]
+                    test_repo_patterns = [
+                        "test",
+                        "test_repo",
+                        "test-repo",
+                        "repo-1",
+                        "repo-2",
+                        "my-repo",
+                        "integration-test",
+                    ]
                     for repo_id, repo_name in repos:
                         if any(pattern in repo_name.lower() for pattern in test_repo_patterns):
                             # Delete all data associated with this test repo
                             conn.execute("DELETE FROM chunks WHERE repo_id = ?", (repo_id,))
                             conn.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
-                            conn.execute("DELETE FROM scan_sessions WHERE repo_id = ?", (repo_id,))
+                            conn.execute(
+                                "DELETE FROM scan_sessions WHERE repo_id = ?",
+                                (repo_id,),
+                            )
                             conn.execute("DELETE FROM repos WHERE id = ?", (repo_id,))
 
                     conn.commit()
@@ -428,11 +443,12 @@ def pytest_collection_modifyitems(config, items):
 # KB Auto-Sync Specific Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def mock_kb_stores(temp_db_path):
     """Mock KB stores (SQLite + LanceDB) for testing."""
+
     from kb.store.sqlite_meta import SQLiteMetadataStore
-    from unittest.mock import MagicMock
 
     # Create real SQLite store for metadata
     sql_store = SQLiteMetadataStore(temp_db_path)
@@ -460,11 +476,7 @@ def registered_test_repo(mock_kb_stores, temp_dir):
     workspace_path.mkdir()
 
     # Register repo
-    sql_store.record_repo(
-        name="test-repo",
-        path=workspace_path,
-        default_embed_model="large"
-    )
+    sql_store.record_repo(name="test-repo", path=workspace_path, default_embed_model="large")
 
     # Get repo info
     repo = sql_store.get_repo_by_name("test-repo")
@@ -473,7 +485,7 @@ def registered_test_repo(mock_kb_stores, temp_dir):
         "repo_id": repo["id"],
         "name": "test-repo",  # name not returned by get_repo_by_name
         "path": str(workspace_path),
-        "workspace": workspace_path
+        "workspace": workspace_path,
     }
 
     # Cleanup handled by fixtures
@@ -483,7 +495,8 @@ def registered_test_repo(mock_kb_stores, temp_dir):
 def kb_api_client(mock_kb_stores):
     """FastAPI TestClient with mocked stores."""
     from fastapi.testclient import TestClient
-    from kb.api.app import app, set_stores, reset_stores
+
+    from kb.api.app import app, reset_stores, set_stores
 
     sql_store, lance_store = mock_kb_stores
     set_stores(sql_store, lance_store)
@@ -497,7 +510,7 @@ def kb_api_client(mock_kb_stores):
 @pytest.fixture
 def mock_pipeline():
     """Mock KB pipeline for testing indexing without real embedding calls."""
-    from unittest.mock import MagicMock, AsyncMock
+    from unittest.mock import AsyncMock
 
     pipeline = MagicMock()
 
@@ -506,7 +519,7 @@ def mock_pipeline():
         return {
             "indexed": len(file_paths) if file_paths else 0,
             "skipped": 0,
-            "errors": []
+            "errors": [],
         }
 
     pipeline.process_repo = AsyncMock(side_effect=mock_process_repo)
@@ -530,6 +543,7 @@ def task_queue_instance():
 # E2E Live Test Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def store_root(temp_dir: Path) -> Path:
     """Temporary store root for E2E live tests."""
@@ -542,28 +556,35 @@ def store_root(temp_dir: Path) -> Path:
 def repo_path(temp_dir: Path) -> Path:
     """Create a test repository for E2E live tests."""
     import subprocess
-    
+
     repo_dir = temp_dir / "test_repo"
     repo_dir.mkdir()
-    
+
     # Create simple Python file
-    (repo_dir / "main.py").write_text("""
+    (repo_dir / "main.py").write_text(
+        """
 def calculate_sum(numbers):
     return sum(numbers)
 
 class Calculator:
     def add(self, a, b):
         return a + b
-""")
-    
+"""
+    )
+
     # Initialize git repo
     subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)
     subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True)
     subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=repo_dir, check=True)
     subprocess.run(["git", "add", "."], cwd=repo_dir, check=True)
-    subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_dir, check=True, capture_output=True)
-    
+    subprocess.run(
+        ["git", "commit", "-m", "Initial commit"],
+        cwd=repo_dir,
+        check=True,
+        capture_output=True,
+    )
+
     return repo_dir
 
 
@@ -571,7 +592,8 @@ class Calculator:
 def port() -> int:
     """Find a free port for testing."""
     import socket
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('', 0))
+        s.bind(("", 0))
         s.listen(1)
         return s.getsockname()[1]

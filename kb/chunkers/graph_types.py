@@ -14,7 +14,7 @@ __all__ = ["GraphNode", "GraphEdge"]
 
 class GraphNode(NamedTuple):
     """A node in the code graph representing a code entity.
-    
+
     Attributes:
         node_type: Type of entity (class, function, method, table, component, etc.)
         name: Simple name of the entity
@@ -22,6 +22,7 @@ class GraphNode(NamedTuple):
         start_line: Starting line number (1-based)
         end_line: Ending line number (1-based)
     """
+
     node_type: str
     name: str
     qualified_name: str
@@ -31,13 +32,14 @@ class GraphNode(NamedTuple):
 
 class GraphEdge(NamedTuple):
     """An edge in the code graph representing a relationship between entities.
-    
+
     Attributes:
         source_name: Name of the source entity
         target_name: Name of the target entity
         edge_type: Type of relationship (calls, imports, references_table, depends_on, etc.)
         line_number: Line number where the relationship occurs (1-based)
     """
+
     source_name: str
     target_name: str
     edge_type: str

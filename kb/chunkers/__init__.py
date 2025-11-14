@@ -1,11 +1,7 @@
 from __future__ import annotations
 
+from .registry import chunk_file, detect_language_from_extension, get_chunker
 from .repo_config import RepoChunkingConfig, load_repo_chunking_config
-from .registry import (
-    chunk_file,
-    detect_language_from_extension,
-    get_chunker,
-)
 from .types import Chunk, ChunkList
 
 __all__ = [

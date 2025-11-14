@@ -12,7 +12,7 @@ const execCommand = (
     const args = command.split(" ");
     const cmd = args[0];
     const cmdArgs = args.slice(1);
-    
+
     const proc = spawn(cmd, cmdArgs, {
       shell: false,
       timeout: timeoutMs,
@@ -28,18 +28,18 @@ const execCommand = (
       reject(new Error(`Command timed out after ${timeoutMs}ms`));
     }, timeoutMs);
 
-    proc.stdout?.on("data", (data) => {
+    proc.stdout?.on("data", (data: Buffer) => {
       stdout += data.toString();
     });
 
-    proc.stderr?.on("data", (data) => {
+    proc.stderr?.on("data", (data: Buffer) => {
       stderr += data.toString();
     });
 
     proc.on("close", (code) => {
       clearTimeout(timeout);
       if (timedOut) return;
-      
+
       if (code !== 0) {
         reject(new Error(`Command failed with code ${code}`));
       } else {
@@ -147,24 +147,22 @@ export class ClaudeCLIDetector {
 
     // Warning: User has subscription but will use API due to env var
     if (cliAuthenticated && willUseAPIKey) {
-      warnings.push(
-        "ANTHROPIC_API_KEY is set. CLI will use API billing instead of subscription."
-      );
+      warnings.push("ANTHROPIC_API_KEY is set. CLI will use API billing instead of subscription.");
       warnings.push("To use subscription: unset ANTHROPIC_API_KEY");
     }
 
     // Warning: CLI not installed
     if (!cliInstalled) {
       warnings.push("Claude Code CLI not installed. Using API mode only.");
-      warnings.push(
-        "Install with: npm install -g @anthropic-ai/claude-code"
-      );
+      warnings.push("Install with: npm install -g @anthropic-ai/claude-code");
     }
 
     // Warning: CLI installed but not authenticated
     if (cliInstalled && !cliAuthenticated && !apiKeySet) {
       warnings.push("Claude CLI not authenticated and no API key set.");
-      warnings.push('Authenticate with: claude (then select "1. Claude account with subscription")');
+      warnings.push(
+        'Authenticate with: claude (then select "1. Claude account with subscription")'
+      );
     }
 
     return {

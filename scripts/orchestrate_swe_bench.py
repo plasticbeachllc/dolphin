@@ -27,13 +27,7 @@ from kb.store.sqlite_meta import SQLiteMetadataStore
 class SWEBenchOrchestrator:
     """Orchestrates SWE-Bench Lite evaluation workflow."""
 
-    def __init__(
-        self,
-        repos_dir: Path,
-        index_dir: Path,
-        config_path: Path,
-        state_file: Path
-    ):
+    def __init__(self, repos_dir: Path, index_dir: Path, config_path: Path, state_file: Path):
         self.repos_dir = repos_dir
         self.index_dir = index_dir
         self.config_path = config_path
@@ -55,12 +49,13 @@ class SWEBenchOrchestrator:
             "repos_cloned": {},
             "repos_indexed": {},
             "commits_indexed": {},
-            "last_updated": None
+            "last_updated": None,
         }
 
     def _save_state(self):
         """Save orchestration state."""
         import time
+
         self.state["last_updated"] = time.strftime("%Y-%m-%d %H:%M:%S")
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
         with open(self.state_file, "w") as f:
@@ -79,15 +74,10 @@ class SWEBenchOrchestrator:
         try:
             # Clone with depth 1 to save space, then fetch full history
             result = subprocess.run(
-                [
-                    "git",
-                    "clone",
-                    f"https://github.com/{repo_name}.git",
-                    str(repo_path)
-                ],
+                ["git", "clone", f"https://github.com/{repo_name}.git", str(repo_path)],
                 capture_output=True,
                 text=True,
-                timeout=600  # 10 min timeout
+                timeout=600,  # 10 min timeout
             )
 
             if result.returncode != 0:
@@ -117,7 +107,7 @@ class SWEBenchOrchestrator:
                 ["git", "fetch", "origin", commit_sha],
                 cwd=repo_path,
                 capture_output=True,
-                timeout=300
+                timeout=300,
             )
 
             # Checkout
@@ -126,7 +116,7 @@ class SWEBenchOrchestrator:
                 cwd=repo_path,
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=60,
             )
 
             if result.returncode != 0:
@@ -224,9 +214,9 @@ class SWEBenchOrchestrator:
 
     def setup_all_repos(self):
         """Clone and index all configured repos."""
-        print("="*80)
+        print("=" * 80)
         print("SWE-BENCH LITE REPO SETUP")
-        print("="*80)
+        print("=" * 80)
 
         repos = self.config["repos"]
         total = len(repos)
@@ -239,29 +229,26 @@ class SWEBenchOrchestrator:
 
             # Clone
             if not self.clone_repo(repo_name):
-                print(f"  ⚠️  Skipping index due to clone failure")
+                print("  ⚠️  Skipping index due to clone failure")
                 continue
 
             # Index with configured model
             embed_model = repo_config["embed_model"]
             if not self.index_repo(repo_name, embed_model):
-                print(f"  ⚠️  Index failed, continuing anyway")
+                print("  ⚠️  Index failed, continuing anyway")
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("SETUP COMPLETE")
-        print("="*80)
+        print("=" * 80)
         self._print_status()
 
     def _print_status(self):
         """Print current setup status."""
         repos = self.config["repos"]
-        cloned_count = sum(
-            1 for repo in repos
-            if repo in self.state["repos_cloned"]
-        )
+        cloned_count = sum(1 for repo in repos if repo in self.state["repos_cloned"])
         indexed_count = len(self.state["repos_indexed"])
 
-        print(f"\nStatus:")
+        print("\nStatus:")
         print(f"  Repos cloned: {cloned_count}/{len(repos)}")
         print(f"  Repos indexed: {indexed_count} (small + large model)")
 
@@ -269,7 +256,7 @@ class SWEBenchOrchestrator:
         repos_dir_size = self._get_dir_size(self.repos_dir)
         index_dir_size = self._get_dir_size(self.index_dir)
 
-        print(f"\nStorage:")
+        print("\nStorage:")
         print(f"  Source code: {repos_dir_size / 1024:.1f} GB")
         print(f"  Indices: {index_dir_size / 1024:.1f} GB")
         print(f"  Total: {(repos_dir_size + index_dir_size) / 1024:.1f} GB")
@@ -280,23 +267,18 @@ class SWEBenchOrchestrator:
             return 0.0
 
         try:
-            result = subprocess.run(
-                ["du", "-sm", str(path)],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
+            result = subprocess.run(["du", "-sm", str(path)], capture_output=True, text=True, timeout=30)
             if result.returncode == 0:
                 return float(result.stdout.split()[0])
-        except:
+        except Exception:
             pass
         return 0.0
 
     def list_status(self):
         """List current status of all repos."""
-        print("="*80)
+        print("=" * 80)
         print("SWE-BENCH REPOS STATUS")
-        print("="*80)
+        print("=" * 80)
 
         repos = self.config["repos"]
         for repo_name, repo_config in repos.items():
@@ -318,14 +300,14 @@ class SWEBenchOrchestrator:
             print(f"  Model: {repo_config['embed_model']}")
             print(f"  Status: {status}")
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         self._print_status()
 
     def cleanup_registered_repos(self):
         """Clean up all registered SWE-Bench repositories from the database."""
-        print("="*80)
+        print("=" * 80)
         print("CLEANING UP SWE-BENCH REPOS")
-        print("="*80)
+        print("=" * 80)
 
         db_path = CONFIG_ROOT / "metadata.db"
 
@@ -346,7 +328,7 @@ class SWEBenchOrchestrator:
                 repos_to_cleanup.add(repo_name)
 
             # Also check database for any repos matching our cloned repos
-            with store._get_connection() as conn:
+            with store._get_connection() as conn:  # type: ignore[attr-defined]
                 cursor = conn.execute("SELECT id, name FROM repos")
                 db_repos = cursor.fetchall()
 
@@ -386,44 +368,43 @@ class SWEBenchOrchestrator:
             self._save_state()
             print("State file cleared")
 
-            print("\n" + "="*80)
+            print("\n" + "=" * 80)
             print("CLEANUP COMPLETE")
-            print("="*80)
+            print("=" * 80)
 
         except Exception as e:
             print(f"Error during cleanup: {e}", file=sys.stderr)
             import traceback
+
             traceback.print_exc()
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Orchestrate SWE-Bench Lite evaluation setup"
-    )
+    parser = argparse.ArgumentParser(description="Orchestrate SWE-Bench Lite evaluation setup")
 
     parser.add_argument(
         "--repos-dir",
         type=Path,
         default=Path("test-repos/swe-bench"),
-        help="Directory for cloned repos"
+        help="Directory for cloned repos",
     )
     parser.add_argument(
         "--index-dir",
         type=Path,
         default=Path.home() / ".dolphin" / "knowledge_store",
-        help="Directory for vector indices"
+        help="Directory for vector indices",
     )
     parser.add_argument(
         "--config",
         type=Path,
         default=Path("test-data/swe_bench_repos.json"),
-        help="Repo configuration file"
+        help="Repo configuration file",
     )
     parser.add_argument(
         "--state-file",
         type=Path,
         default=Path("test-data/swe_bench_state.json"),
-        help="State tracking file"
+        help="State tracking file",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
@@ -444,12 +425,7 @@ def main():
     # Index command
     index_parser = subparsers.add_parser("index", help="Index specific repo")
     index_parser.add_argument("repo", help="Repo name")
-    index_parser.add_argument(
-        "--model",
-        choices=["small", "large"],
-        default="small",
-        help="Embedding model"
-    )
+    index_parser.add_argument("--model", choices=["small", "large"], default="small", help="Embedding model")
 
     args = parser.parse_args()
 
@@ -462,7 +438,7 @@ def main():
         repos_dir=args.repos_dir,
         index_dir=args.index_dir,
         config_path=args.config,
-        state_file=args.state_file
+        state_file=args.state_file,
     )
 
     # Execute command

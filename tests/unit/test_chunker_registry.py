@@ -1,14 +1,8 @@
 """Unit tests for chunker registry and routing system."""
 
-import pytest
 from pathlib import Path
-from kb.chunkers import (
-    Chunk,
-    RepoChunkingConfig,
-    chunk_file,
-    detect_language_from_extension,
-    get_chunker,
-)
+
+from kb.chunkers import Chunk, RepoChunkingConfig, chunk_file, detect_language_from_extension, get_chunker
 
 
 class TestLanguageDetection:
@@ -125,7 +119,7 @@ class TestChunkFileInterface:
             embedding_model="text-embedding-3-small",
             overlap_pct=0.10,
         )
-        
+
         source = """
 def add(a, b):
     '''Add two numbers.'''
@@ -142,7 +136,7 @@ class Calculator:
             text=source,
             repo_config=mock_config,
         )
-        
+
         assert len(chunks) > 0
         for chunk in chunks:
             assert isinstance(chunk, Chunk)
@@ -162,7 +156,7 @@ class Calculator:
             embedding_model="text-embedding-3-small",
             overlap_pct=0.10,
         )
-        
+
         markdown = """
 # Main Heading
 
@@ -183,7 +177,7 @@ Content for section 2.
             text=markdown,
             repo_config=mock_config,
         )
-        
+
         assert len(chunks) > 0
         has_h1 = any(c.h1 == "Main Heading" for c in chunks)
         has_h2 = any(c.h2 in ["Section 1", "Section 2"] for c in chunks)
@@ -198,7 +192,7 @@ Content for section 2.
             embedding_model="text-embedding-3-small",
             overlap_pct=0.10,
         )
-        
+
         source = """
 class MyClass:
     def method(self):
@@ -211,7 +205,7 @@ class MyClass:
             text=source,
             repo_config=mock_config,
         )
-        
+
         method_chunks = [c for c in chunks if c.symbol_kind == "method"]
         if method_chunks:
             method_chunk = method_chunks[0]
@@ -234,7 +228,7 @@ def calculate(x, y):
 class DataProcessor:
     def __init__(self):
         self.data = []
-    
+
     def process(self, item):
         self.data.append(item)
 """
@@ -243,15 +237,15 @@ class DataProcessor:
             default_window_size=400,
             per_language={"python": 512},
         )
-        
+
         # Detect language
         language = detect_language_from_extension(file_path)
         assert language == "python"
-        
+
         # Get chunker
         chunker = get_chunker(language)
         assert chunker is not None
-        
+
         # Chunk file
         chunks = chunk_file(
             abs_path=file_path,
@@ -260,7 +254,7 @@ class DataProcessor:
             text=source,
             repo_config=config,
         )
-        
+
         # Verify output
         assert len(chunks) >= 2
         assert all(isinstance(c, Chunk) for c in chunks)
@@ -275,7 +269,7 @@ class DataProcessor:
             default_window_size=400,
             per_language={"python": 512},
         )
-        
+
         # Test with invalid language
         chunks = chunk_file(
             abs_path=Path("/mock/repo/src/file.unknown"),
@@ -284,7 +278,7 @@ class DataProcessor:
             text="Some content",
             repo_config=config,
         )
-        
+
         # Should still return chunks using fallback chunker
         assert len(chunks) > 0
         assert all(isinstance(c, Chunk) for c in chunks)
@@ -298,7 +292,7 @@ class DataProcessor:
             embedding_model="text-embedding-3-large",
             overlap_pct=0.15,
         )
-        
+
         source = "print('hello world')\n"
         chunks = chunk_file(
             abs_path=Path("/mock/repo/test.py"),
@@ -307,7 +301,7 @@ class DataProcessor:
             text=source,
             repo_config=config,
         )
-        
+
         # Should use the custom Python window size from config
         assert len(chunks) == 1  # Small file, should be one chunk
         # Token count should reflect the custom configuration

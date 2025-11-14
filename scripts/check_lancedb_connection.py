@@ -8,25 +8,25 @@ from pathlib import Path
 
 def check_lancedb_connection():
     """Check LanceDB connection and data."""
-    
+
     print("🔍 LanceDB Connection Diagnosis")
     print("=" * 40)
-    
-    store_root = Path.home() / '.dolphin' / 'knowledge_store'
+
+    store_root = Path.home() / ".dolphin" / "knowledge_store"
     lancedb_dir = store_root / "lancedb"
-    
+
     print(f"Store root: {store_root}")
     print(f"LanceDB dir: {lancedb_dir}")
-    
+
     # Check what directories exist
     if lancedb_dir.exists():
-        print(f"\n📁 LanceDB directory contents:")
+        print("\n📁 LanceDB directory contents:")
         for item in lancedb_dir.iterdir():
             if item.is_dir():
                 print(f"  📁 {item.name}/")
                 # Check if this is a table directory
                 table_dir = item
-                if table_dir.name.endswith('.lance'):
+                if table_dir.name.endswith(".lance"):
                     # Count actual vector files
                     data_dir = table_dir / "data"
                     if data_dir.exists():
@@ -39,95 +39,97 @@ def check_lancedb_connection():
     else:
         print("❌ LanceDB directory doesn't exist")
         return
-    
+
     # Try to connect and check tables
     try:
         import lancedb
-        print(f"\n🔌 Testing LanceDB connection...")
-        
+
+        print("\n🔌 Testing LanceDB connection...")
+
         # Connect to LanceDB
         db = lancedb.connect(lancedb_dir.as_posix())
         table_names = db.table_names()
-        print(f"✅ Connected successfully")
+        print("✅ Connected successfully")
         print(f"📋 Table names: {table_names}")
-        
+
         # Check each table
         for table_name in table_names:
             try:
                 table = db.open_table(table_name)
                 count = len(table)
                 print(f"  📊 {table_name}: {count} records")
-                
+
                 if count > 0:
-                    sample = table.head(3)
-                    print(f"     Sample record:")
+                    sample = table.head(3)  # type: ignore[attr-defined]
+                    print("     Sample record:")
                     print(f"     {sample}")
-                
+
             except Exception as e:
                 print(f"  ❌ Error reading {table_name}: {e}")
-                
+
     except ImportError:
         print("❌ LanceDB not installed")
     except Exception as e:
         print(f"❌ LanceDB connection error: {e}")
         import traceback
+
         traceback.print_exc()
 
 
 def check_vector_file_structure():
     """Check the actual vector file structure."""
-    
-    print(f"\n🔍 Vector File Structure Analysis")
+
+    print("\n🔍 Vector File Structure Analysis")
     print("=" * 40)
-    
-    store_root = Path.home() / '.dolphin' / 'knowledge_store'
+
+    store_root = Path.home() / ".dolphin" / "knowledge_store"
     lancedb_dir = store_root / "lancedb"
-    
+
     # Check chunks_large.lance specifically
     chunks_large_dir = lancedb_dir / "chunks_large.lance"
     if chunks_large_dir.exists():
-        print(f"✅ chunks_large.lance exists")
-        
+        print("✅ chunks_large.lance exists")
+
         # Check data directory
         data_dir = chunks_large_dir / "data"
         if data_dir.exists():
             vector_files = list(data_dir.glob("*.lance"))
             print(f"📊 {len(vector_files)} vector files in data directory")
-            
+
             if vector_files:
                 # Check file sizes
                 total_size = sum(f.stat().st_size for f in vector_files)
-                print(f"📏 Total size: {total_size:,} bytes ({total_size/1024/1024:.1f} MB)")
-                
+                print(f"📏 Total size: {total_size:,} bytes ({total_size / 1024 / 1024:.1f} MB)")
+
                 # Sample a few files
-                print(f"📄 Sample files:")
+                print("📄 Sample files:")
                 for f in vector_files[:5]:
                     size = f.stat().st_size
                     print(f"  {f.name}: {size:,} bytes")
-                    
+
                 # Check if these are actually LanceDB table files
                 # This would indicate the table structure is different
-                print(f"🔍 File structure suggests LanceDB v2 format")
-                print(f"   This might explain why connection shows empty tables")
+                print("🔍 File structure suggests LanceDB v2 format")
+                print("   This might explain why connection shows empty tables")
         else:
-            print(f"❌ data directory doesn't exist")
+            print("❌ data directory doesn't exist")
     else:
-        print(f"❌ chunks_large.lance doesn't exist")
+        print("❌ chunks_large.lance doesn't exist")
 
 
 def main():
     """Run all diagnostics."""
-    
+
     check_lancedb_connection()
     check_vector_file_structure()
-    
-    print(f"\n💡 Analysis:")
-    print(f"If vector files exist but LanceDB reports empty tables:")
-    print(f"1. Check LanceDB version compatibility")
-    print(f"2. Verify table initialization worked correctly") 
-    print(f"3. Look for path configuration mismatches")
-    print(f"4. Consider that files might be in wrong format/location")
+
+    print("\n💡 Analysis:")
+    print("If vector files exist but LanceDB reports empty tables:")
+    print("1. Check LanceDB version compatibility")
+    print("2. Verify table initialization worked correctly")
+    print("3. Look for path configuration mismatches")
+    print("4. Consider that files might be in wrong format/location")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

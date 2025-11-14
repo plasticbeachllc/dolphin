@@ -3,9 +3,7 @@
 
 def build_widget(name: str, *, mode: str = "balanced") -> str:
     """Create a stable widget description for integration tests."""
-    description = (
-        f"{name} widgets balance clarity and recall for oceanic research notes."
-    )
+    description = f"{name} widgets balance clarity and recall for oceanic research notes."
     return description
 
 
@@ -18,7 +16,5 @@ def detailed_widget_recipe(name: str) -> str:
         "Review the output with the oceanography leads.",
         "Record follow-up questions for the knowledge store backlog.",
     ]
-    prose = (
-        f"Recipe for {name} widget: " + " ".join(steps) + " Maintain alignment always."
-    )
+    prose = f"Recipe for {name} widget: " + " ".join(steps) + " Maintain alignment always."
     return prose

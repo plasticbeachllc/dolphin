@@ -7,11 +7,10 @@ files, resulting in 40%+ parse time reduction on incremental indexing.
 from __future__ import annotations
 
 import pickle
-import hashlib
-from dataclasses import dataclass
-from typing import Dict, Any, List
-from pathlib import Path
 from collections import OrderedDict
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 from ..chunkers.types import Chunk
 
@@ -19,9 +18,10 @@ from ..chunkers.types import Chunk
 @dataclass
 class CachedAST:
     """Cached AST data for a file."""
+
     file_path: str
     content_hash: str
-    chunks: List[Chunk]
+    chunks: list[Chunk]
     language: str
     timestamp: float
 
@@ -62,7 +62,7 @@ class ASTCache:
         self,
         file_path: str,
         content_hash: str,
-    ) -> List[Chunk] | None:
+    ) -> list[Chunk] | None:
         """Get cached chunks for a file.
 
         Args:
@@ -87,7 +87,7 @@ class ASTCache:
         self,
         file_path: str,
         content_hash: str,
-        chunks: List[Chunk],
+        chunks: list[Chunk],
         language: str,
     ) -> None:
         """Store chunks in cache.
@@ -123,10 +123,7 @@ class ASTCache:
         Args:
             file_path: Path to the file
         """
-        keys_to_remove = [
-            key for key in self._cache.keys()
-            if key.startswith(f"{file_path}:")
-        ]
+        keys_to_remove = [key for key in self._cache.keys() if key.startswith(f"{file_path}:")]
         for key in keys_to_remove:
             del self._cache[key]
 
@@ -151,19 +148,19 @@ class ASTCache:
             return 0.0
         return (self._hits / total) * 100
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """Get cache statistics.
 
         Returns:
             Dictionary with cache stats
         """
         return {
-            'size': len(self._cache),
-            'max_size': self.max_size,
-            'hits': self._hits,
-            'misses': self._misses,
-            'hit_rate': self.hit_rate(),
-            'total_requests': self._hits + self._misses,
+            "size": len(self._cache),
+            "max_size": self.max_size,
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": self.hit_rate(),
+            "total_requests": self._hits + self._misses,
         }
 
     def _save_to_disk(self) -> None:
@@ -174,14 +171,19 @@ class ASTCache:
         try:
             self.persist_path.parent.mkdir(parents=True, exist_ok=True)
 
-            with open(self.persist_path, 'wb') as f:
-                pickle.dump({
-                    'cache': dict(self._cache),
-                    'hits': self._hits,
-                    'misses': self._misses,
-                }, f, protocol=pickle.HIGHEST_PROTOCOL)
+            with open(self.persist_path, "wb") as f:
+                pickle.dump(
+                    {
+                        "cache": dict(self._cache),
+                        "hits": self._hits,
+                        "misses": self._misses,
+                    },
+                    f,
+                    protocol=pickle.HIGHEST_PROTOCOL,
+                )
         except Exception as e:
             import logging
+
             logging.warning(f"Failed to save AST cache to disk: {e}")
 
     def _load_from_disk(self) -> None:
@@ -190,12 +192,12 @@ class ASTCache:
             return
 
         try:
-            with open(self.persist_path, 'rb') as f:
+            with open(self.persist_path, "rb") as f:
                 data = pickle.load(f)
 
-            self._cache = OrderedDict(data.get('cache', {}))
-            self._hits = data.get('hits', 0)
-            self._misses = data.get('misses', 0)
+            self._cache = OrderedDict(data.get("cache", {}))
+            self._hits = data.get("hits", 0)
+            self._misses = data.get("misses", 0)
 
             # Enforce max size
             while len(self._cache) > self.max_size:
@@ -203,6 +205,7 @@ class ASTCache:
 
         except Exception as e:
             import logging
+
             logging.warning(f"Failed to load AST cache from disk: {e}")
             self._cache.clear()
 

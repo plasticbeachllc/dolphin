@@ -8,6 +8,8 @@ import { AgentBridge } from "../agent/bridge";
 export class DolphinViewProvider implements vscode.WebviewViewProvider {
   private webviewView?: vscode.WebviewView;
   private workspaceChangeDisposable?: vscode.Disposable;
+  private eventListenerDisposable?: vscode.Disposable;
+  private isDisposed = false;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -16,22 +18,49 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
   ) {
     // Set up event forwarding immediately when AgentBridge is available
     if (this.agentBridge) {
-      this.agentBridge.onEvent((event) => {
+      this.eventListenerDisposable = this.agentBridge.onEvent((event) => {
+        // Check if disposed before processing events
+        if (this.isDisposed) {
+          return;
+        }
+
         // Phase 7: Extract and log correlation ID for event tracking
-        const requestId = (event as any).requestId || 'unknown';
-        this.outputChannel.appendLine(`[DolphinViewProvider] Received event from agent: ${event.type} (requestId: ${requestId})`);
+        const requestId =
+          (event && typeof event === "object" && "requestId" in event
+            ? (event as { requestId?: string }).requestId
+            : undefined) || "unknown";
+        try {
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] Received event from agent: ${event.type} (requestId: ${requestId})`
+          );
+        } catch {
+          // Output channel may be disposed
+          return;
+        }
 
         // Forward to webview if it's available
         if (this.webviewView) {
-          this.outputChannel.appendLine(`[DolphinViewProvider] Forwarding event to webview: ${event.type} (requestId: ${requestId})`);
-          this.webviewView.webview.postMessage(event);
+          try {
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] Forwarding event to webview: ${event.type} (requestId: ${requestId})`
+            );
+            this.webviewView.webview.postMessage(event);
+          } catch {
+            // Webview may be disposed
+          }
         } else {
-          this.outputChannel.appendLine(`[DolphinViewProvider] Webview not ready yet, event will be queued (requestId: ${requestId})`);
+          try {
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] Webview not ready yet, event will be queued (requestId: ${requestId})`
+            );
+          } catch {
+            // Output channel may be disposed
+          }
         }
       });
     }
   }
-  
+
   /**
    * Handle workspace folder changes
    */
@@ -39,22 +68,32 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
     if (this.webviewView) {
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
       const hasWorkspace = !!workspaceFolder;
-      this.outputChannel.appendLine(`[DolphinViewProvider] Workspace changed, hasWorkspace: ${hasWorkspace}`);
-      
-      const capabilities = ['kb_search', 'file_operations', 'planning', 'claude_auth', 'agentic_tools'];
+      this.outputChannel.appendLine(
+        `[DolphinViewProvider] Workspace changed, hasWorkspace: ${hasWorkspace}`
+      );
+
+      const capabilities = [
+        "kb_search",
+        "file_operations",
+        "planning",
+        "claude_auth",
+        "agentic_tools",
+      ];
       if (hasWorkspace) {
-        capabilities.push('conversation_persistence');
+        capabilities.push("conversation_persistence");
       }
-      
-      // Get workspace folder name for KB operations
+
+      // Get workspace folder name and path for KB operations
       const workspaceName = workspaceFolder ? path.basename(workspaceFolder.uri.fsPath) : null;
-      
+      const workspacePath = workspaceFolder ? workspaceFolder.uri.fsPath : null;
+
       // Send updated workspace status to webview
       this.webviewView.webview.postMessage({
-        type: 'workspace_changed',
+        type: "workspace_changed",
         hasWorkspace,
         capabilities,
-        workspaceName
+        workspaceName,
+        workspacePath,
       });
     }
   }
@@ -62,11 +101,26 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
   /**
    * Post a message to the webview
    */
-  public postMessage(message: any): void {
+  public postMessage(message: unknown): void {
+    // Don't post messages if disposed
+    if (this.isDisposed) {
+      return;
+    }
+
     if (this.webviewView) {
-      this.webviewView.webview.postMessage(message);
+      try {
+        this.webviewView.webview.postMessage(message);
+      } catch {
+        // Webview may be disposed
+      }
     } else {
-      this.outputChannel.appendLine(`[DolphinViewProvider] Cannot post message - webview not ready`);
+      try {
+        this.outputChannel.appendLine(
+          `[DolphinViewProvider] Cannot post message - webview not ready`
+        );
+      } catch {
+        // Output channel may be disposed
+      }
     }
   }
 
@@ -74,53 +128,55 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
    * Clear the conversation in the webview
    */
   public clearConversation(): void {
-    this.postMessage({ type: 'clear_conversation' });
+    this.postMessage({ type: "clear_conversation" });
   }
 
   /**
    * Focus the chat input in the webview
    */
   public focusInput(): void {
-    this.postMessage({ type: 'focus_input' });
+    this.postMessage({ type: "focus_input" });
   }
 
   /**
    * Prefill the chat input with text
    */
   public prefillInput(text: string): void {
-    this.postMessage({ type: 'prefill_input', text });
+    this.postMessage({ type: "prefill_input", text });
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     // Store webview reference
     this.webviewView = webviewView;
     this.outputChannel.appendLine("[DolphinViewProvider] resolveWebviewView called!");
-    
+
     // Set up workspace change listener now that webview exists
     this.workspaceChangeDisposable = vscode.workspace.onDidChangeWorkspaceFolders(() => {
       this.handleWorkspaceChange();
     });
-    
+
     try {
       webviewView.webview.options = {
         enableScripts: true,
-        localResourceRoots: [
-          vscode.Uri.joinPath(this.extensionUri, "webview", "build")
-        ]
+        localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, "webview", "build")],
       };
-      
-      this.outputChannel.appendLine("[DolphinViewProvider] Webview options set, generating HTML...");
+
+      this.outputChannel.appendLine(
+        "[DolphinViewProvider] Webview options set, generating HTML..."
+      );
 
       webviewView.webview.html = this.getHtml(webviewView.webview);
-      
+
       this.outputChannel.appendLine("[DolphinViewProvider] HTML set to webview");
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      this.outputChannel.appendLine(`[DolphinViewProvider] FATAL ERROR in resolveWebviewView: ${errorMsg}`);
+      this.outputChannel.appendLine(
+        `[DolphinViewProvider] FATAL ERROR in resolveWebviewView: ${errorMsg}`
+      );
       if (error instanceof Error && error.stack) {
         this.outputChannel.appendLine(`[DolphinViewProvider] Stack: ${error.stack}`);
       }
-      
+
       // Set error HTML
       webviewView.webview.html = `<!DOCTYPE html>
       <html>
@@ -131,123 +187,153 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
         <body>
           <h1>Dolphin Failed to Load</h1>
           <p><strong>Error:</strong> ${errorMsg}</p>
-          <pre>${error instanceof Error && error.stack ? error.stack : 'No stack trace'}</pre>
+          <pre>${error instanceof Error && error.stack ? error.stack : "No stack trace"}</pre>
         </body>
       </html>`;
     }
 
     // Handle messages from webview
     webviewView.webview.onDidReceiveMessage(async (message) => {
-      this.outputChannel.appendLine(`[DolphinViewProvider] Received message from webview: ${JSON.stringify(message)}`);
-      
+      this.outputChannel.appendLine(
+        `[DolphinViewProvider] Received message from webview: ${JSON.stringify(message)}`
+      );
+
       switch (message.type) {
         case "webview_loaded":
           // Webview JavaScript has loaded and is ready to receive messages
-          this.outputChannel.appendLine(`[DolphinViewProvider] ✅ Webview confirmed loaded, sending agent_ready event`);
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] ✅ Webview confirmed loaded, sending agent_ready event`
+          );
           if (this.agentBridge) {
             const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
             const hasWorkspace = !!workspaceFolder;
-            const capabilities = ['kb_search', 'file_operations', 'planning', 'claude_auth', 'agentic_tools'];
+            const capabilities = [
+              "kb_search",
+              "file_operations",
+              "planning",
+              "claude_auth",
+              "agentic_tools",
+            ];
             if (hasWorkspace) {
-              capabilities.push('conversation_persistence');
+              capabilities.push("conversation_persistence");
             }
-            
+
             // Get workspace folder name for KB operations
-            const workspaceName = workspaceFolder ? path.basename(workspaceFolder.uri.fsPath) : null;
-            
+            const workspaceName = workspaceFolder
+              ? path.basename(workspaceFolder.uri.fsPath)
+              : null;
+
             webviewView.webview.postMessage({
-              type: 'agent_ready',
-              version: '0.1.0',
+              type: "agent_ready",
+              version: "0.1.0",
               capabilities,
               hasWorkspace,
-              workspaceName
+              workspaceName,
             });
           }
           break;
-          
+
         case "send_message":
-          this.outputChannel.appendLine(`[DolphinViewProvider] Processing send_message: ${message.content}`);
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] Processing send_message: ${message.content} (mode: ${message.mode || "code"})`
+          );
           if (this.agentBridge) {
-            await this.agentBridge.sendMessage(message.content);
+            await this.agentBridge.sendMessage(message.content, message.mode);
           } else {
-            this.outputChannel.appendLine(`[DolphinViewProvider] WARNING: agentBridge not available`);
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] WARNING: agentBridge not available`
+            );
             // Send mock response for testing
             webviewView.webview.postMessage({
-              type: 'content_delta',
-              delta: '<p>Agent bridge not connected. This is a test response.</p>'
+              type: "content_delta",
+              delta: "<p>Agent bridge not connected. This is a test response.</p>",
             });
             webviewView.webview.postMessage({
-              type: 'task_completed',
-              success: true
+              type: "task_completed",
+              success: true,
             });
           }
           break;
-        
+
         case "abort_generation":
           this.outputChannel.appendLine(`[DolphinViewProvider] Processing abort_generation`);
           if (this.agentBridge) {
             await this.agentBridge.abortGeneration();
           }
           break;
-        
+
         case "get_auth_status":
           this.outputChannel.appendLine(`[DolphinViewProvider] Processing get_auth_status request`);
           if (this.agentBridge) {
             try {
               // Request auth status from agent via JSON-RPC
-              this.outputChannel.appendLine(`[DolphinViewProvider] Requesting auth status from agent`);
-              
+              this.outputChannel.appendLine(
+                `[DolphinViewProvider] Requesting auth status from agent`
+              );
+
               // Use the new getAuthStatus method on AgentBridge
               const status = await this.agentBridge.getAuthStatus();
-              
-              this.outputChannel.appendLine(`[DolphinViewProvider] Received auth status: ${JSON.stringify(status)}`);
-              
+
+              this.outputChannel.appendLine(
+                `[DolphinViewProvider] Received auth status: ${JSON.stringify(status)}`
+              );
+
               // Send status to webview
               webviewView.webview.postMessage({
-                type: 'auth_status',
-                status: status
+                type: "auth_status",
+                status: status,
               });
-            } catch (error: any) {
-              this.outputChannel.appendLine(`[DolphinViewProvider] Error getting auth status: ${error.message}`);
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              this.outputChannel.appendLine(
+                `[DolphinViewProvider] Error getting auth status: ${errorMessage}`
+              );
               // Send error state
               webviewView.webview.postMessage({
-                type: 'auth_status',
+                type: "auth_status",
                 status: {
-                  mode: 'auto',
+                  mode: "auto",
                   cliInstalled: false,
                   cliAuthenticated: false,
                   apiKeySet: false,
-                  willUseSubscription: false
-                }
+                  willUseSubscription: false,
+                },
               });
             }
           } else {
             // Mock auth status when agent not connected
-            this.outputChannel.appendLine(`[DolphinViewProvider] Agent not connected, using mock data`);
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] Agent not connected, using mock data`
+            );
             webviewView.webview.postMessage({
-              type: 'auth_status',
+              type: "auth_status",
               status: {
-                mode: 'auto',
+                mode: "auto",
                 cliInstalled: false,
                 cliAuthenticated: false,
                 apiKeySet: false,
-                willUseSubscription: false
-              }
+                willUseSubscription: false,
+              },
             });
           }
           break;
-        
+
         case "apply_diff":
-          this.outputChannel.appendLine(`[DolphinViewProvider] Processing apply_diff for ${message.diff?.filePath}`);
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] Processing apply_diff for ${message.diff?.filePath}`
+          );
           if (message.diff) {
             try {
-              await vscode.commands.executeCommand('dolphin.applyDiff', message.diff);
-            } catch (error: any) {
-              this.outputChannel.appendLine(`[DolphinViewProvider] Error applying diff: ${error.message}`);
+              await vscode.commands.executeCommand("dolphin.applyDiff", message.diff);
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              this.outputChannel.appendLine(
+                `[DolphinViewProvider] Error applying diff: ${errorMessage}`
+              );
             }
           }
           break;
-        
+
         // Phase 5: Conversation Management
         case "list_conversations":
           this.outputChannel.appendLine(`[DolphinViewProvider] Processing list_conversations`);
@@ -255,162 +341,245 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             try {
               const conversations = await this.agentBridge.listConversations();
               webviewView.webview.postMessage({
-                type: 'conversations_listed',
-                conversations: conversations
+                type: "conversations_listed",
+                conversations: conversations,
               });
-            } catch (error: any) {
-              this.outputChannel.appendLine(`[DolphinViewProvider] Error listing conversations: ${error.message}`);
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              this.outputChannel.appendLine(
+                `[DolphinViewProvider] Error listing conversations: ${errorMessage}`
+              );
               webviewView.webview.postMessage({
-                type: 'error',
-                error: { message: `Failed to list conversations: ${error.message}` }
+                type: "error",
+                error: { message: `Failed to list conversations: ${errorMessage}` },
               });
             }
           }
           break;
 
         case "load_conversation":
-          this.outputChannel.appendLine(`[DolphinViewProvider] Processing load_conversation: ${message.conversationId}`);
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] Processing load_conversation: ${message.conversationId}`
+          );
           if (this.agentBridge) {
             try {
               const result = await this.agentBridge.loadConversation(message.conversationId);
               webviewView.webview.postMessage({
-                type: 'conversation_loaded',
+                type: "conversation_loaded",
                 conversation: result.conversation,
-                branchInfo: result.branchInfo
+                branchInfo: result.branchInfo,
               });
-            } catch (error: any) {
-              this.outputChannel.appendLine(`[DolphinViewProvider] Error loading conversation: ${error.message}`);
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              this.outputChannel.appendLine(
+                `[DolphinViewProvider] Error loading conversation: ${errorMessage}`
+              );
               webviewView.webview.postMessage({
-                type: 'error',
-                error: { message: `Failed to load conversation: ${error.message}` }
+                type: "error",
+                error: { message: `Failed to load conversation: ${errorMessage}` },
               });
             }
           }
           break;
 
         case "delete_conversation":
-          this.outputChannel.appendLine(`[DolphinViewProvider] Processing delete_conversation: ${message.conversationId}`);
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] Processing delete_conversation: ${message.conversationId}`
+          );
           if (this.agentBridge) {
             try {
               await this.agentBridge.deleteConversation(message.conversationId);
               webviewView.webview.postMessage({
-                type: 'conversation_deleted',
-                conversationId: message.conversationId
+                type: "conversation_deleted",
+                conversationId: message.conversationId,
               });
-            } catch (error: any) {
-              this.outputChannel.appendLine(`[DolphinViewProvider] Error deleting conversation: ${error.message}`);
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              this.outputChannel.appendLine(
+                `[DolphinViewProvider] Error deleting conversation: ${errorMessage}`
+              );
               webviewView.webview.postMessage({
-                type: 'error',
-                error: { message: `Failed to delete conversation: ${error.message}` }
+                type: "error",
+                error: { message: `Failed to delete conversation: ${errorMessage}` },
               });
             }
           }
           break;
 
         case "rename_conversation":
-          this.outputChannel.appendLine(`[DolphinViewProvider] Processing rename_conversation: ${message.conversationId} -> ${message.newTitle}`);
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] Processing rename_conversation: ${message.conversationId} -> ${message.newTitle}`
+          );
           if (this.agentBridge) {
             try {
               await this.agentBridge.renameConversation(message.conversationId, message.newTitle);
               webviewView.webview.postMessage({
-                type: 'conversation_renamed',
+                type: "conversation_renamed",
                 conversationId: message.conversationId,
-                newTitle: message.newTitle
+                newTitle: message.newTitle,
               });
-            } catch (error: any) {
-              this.outputChannel.appendLine(`[DolphinViewProvider] Error renaming conversation: ${error.message}`);
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              this.outputChannel.appendLine(
+                `[DolphinViewProvider] Error renaming conversation: ${errorMessage}`
+              );
               webviewView.webview.postMessage({
-                type: 'error',
-                error: { message: `Failed to rename conversation: ${error.message}` }
+                type: "error",
+                error: { message: `Failed to rename conversation: ${errorMessage}` },
               });
             }
           }
           break;
 
         // KB API Operations
-        case "kb_get_stats":
-          this.outputChannel.appendLine(`[DolphinViewProvider] Processing kb_get_stats: ${message.repoName}`);
+        case "kb_register_repo":
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] Processing kb_register_repo: ${message.name} at ${message.path}`
+          );
           try {
-            const data = await this.httpRequest('GET', `/v1/repos/${message.repoName}/stats`);
-            webviewView.webview.postMessage({
-              type: 'kb_get_stats_response',
-              requestId: message.requestId,
-              data
+            const data = await this.httpRequest("POST", "/v1/repos", {
+              name: message.name,
+              path: message.path,
+              default_embed_model: message.default_embed_model || "large",
             });
-          } catch (error: any) {
-            this.outputChannel.appendLine(`[DolphinViewProvider] Error getting KB stats: ${error.message}`);
             webviewView.webview.postMessage({
-              type: 'kb_get_stats_response',
+              type: "kb_register_repo_response",
               requestId: message.requestId,
-              error: error.message || 'Failed to get KB stats'
+              data,
+            });
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] Error registering repo: ${errorMessage}`
+            );
+            webviewView.webview.postMessage({
+              type: "kb_register_repo_response",
+              requestId: message.requestId,
+              error: errorMessage || "Failed to register repository",
+            });
+          }
+          break;
+
+        case "kb_get_stats":
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] Processing kb_get_stats: ${message.repoName}`
+          );
+          try {
+            const data = await this.httpRequest("GET", `/v1/repos/${message.repoName}/stats`);
+            webviewView.webview.postMessage({
+              type: "kb_get_stats_response",
+              requestId: message.requestId,
+              data,
+            });
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] Error getting KB stats: ${errorMessage}`
+            );
+            webviewView.webview.postMessage({
+              type: "kb_get_stats_response",
+              requestId: message.requestId,
+              error: errorMessage || "Failed to get KB stats",
             });
           }
           break;
 
         case "kb_trigger_reindex":
-          this.outputChannel.appendLine(`[DolphinViewProvider] Processing kb_trigger_reindex: ${message.repoName}`);
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] Processing kb_trigger_reindex: ${message.repoName}`
+          );
           try {
-            const data = await this.httpRequest('POST', `/v1/repos/${message.repoName}/reindex`, message.request);
+            const data = await this.httpRequest(
+              "POST",
+              `/v1/repos/${message.repoName}/reindex`,
+              message.request
+            );
             webviewView.webview.postMessage({
-              type: 'kb_trigger_reindex_response',
+              type: "kb_trigger_reindex_response",
               requestId: message.requestId,
-              data
+              data,
             });
-          } catch (error: any) {
-            this.outputChannel.appendLine(`[DolphinViewProvider] Error triggering reindex: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] Error triggering reindex: ${errorMessage}`
+            );
             webviewView.webview.postMessage({
-              type: 'kb_trigger_reindex_response',
+              type: "kb_trigger_reindex_response",
               requestId: message.requestId,
-              error: error.message || 'Failed to trigger reindex'
+              error: errorMessage || "Failed to trigger reindex",
             });
           }
           break;
 
         case "kb_get_status":
-          this.outputChannel.appendLine(`[DolphinViewProvider] Processing kb_get_status: ${message.taskId}`);
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] Processing kb_get_status: ${message.taskId}`
+          );
           try {
-            this.outputChannel.appendLine(`[DolphinViewProvider] Making HTTP request for status: ${message.taskId}`);
-            const data = await this.httpRequest('GET', `/v1/index/status/${message.taskId}`);
-            this.outputChannel.appendLine(`[DolphinViewProvider] Got status data: ${JSON.stringify(data)}`);
-            this.outputChannel.appendLine(`[DolphinViewProvider] Sending kb_get_status_response to webview with requestId: ${message.requestId}`);
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] Making HTTP request for status: ${message.taskId}`
+            );
+            const data = await this.httpRequest("GET", `/v1/index/status/${message.taskId}`);
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] Got status data: ${JSON.stringify(data)}`
+            );
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] Sending kb_get_status_response to webview with requestId: ${message.requestId}`
+            );
             webviewView.webview.postMessage({
-              type: 'kb_get_status_response',
+              type: "kb_get_status_response",
               requestId: message.requestId,
-              data
+              data,
             });
             this.outputChannel.appendLine(`[DolphinViewProvider] Response sent successfully`);
-          } catch (error: any) {
-            this.outputChannel.appendLine(`[DolphinViewProvider] Error getting index status: ${error.message}`);
-            this.outputChannel.appendLine(`[DolphinViewProvider] Sending error response to webview`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] Error getting index status: ${errorMessage}`
+            );
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] Sending error response to webview`
+            );
             webviewView.webview.postMessage({
-              type: 'kb_get_status_response',
+              type: "kb_get_status_response",
               requestId: message.requestId,
-              error: error.message || 'Failed to get index status'
+              error: errorMessage || "Failed to get index status",
             });
           }
           break;
 
         case "kb_clear_index":
-          this.outputChannel.appendLine(`[DolphinViewProvider] Processing kb_clear_index: ${message.repoName}`);
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] Processing kb_clear_index: ${message.repoName}`
+          );
           try {
-            const data = await this.httpRequest('DELETE', `/v1/repos/${message.repoName}/index?confirmed=${message.confirmed}`);
+            const data = await this.httpRequest(
+              "DELETE",
+              `/v1/repos/${message.repoName}/index?confirmed=${message.confirmed}`
+            );
             webviewView.webview.postMessage({
-              type: 'kb_clear_index_response',
+              type: "kb_clear_index_response",
               requestId: message.requestId,
-              data
+              data,
             });
-          } catch (error: any) {
-            this.outputChannel.appendLine(`[DolphinViewProvider] Error clearing index: ${error.message}`);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] Error clearing index: ${errorMessage}`
+            );
             webviewView.webview.postMessage({
-              type: 'kb_clear_index_response',
+              type: "kb_clear_index_response",
               requestId: message.requestId,
-              error: error.message || 'Failed to clear index'
+              error: errorMessage || "Failed to clear index",
             });
           }
           break;
 
         default:
-          this.outputChannel.appendLine(`[DolphinViewProvider] Unknown message type: ${message.type}`);
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] Unknown message type: ${message.type}`
+          );
       }
     });
 
@@ -436,7 +605,9 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
     try {
       // Read the built index.html
       let htmlContent = fs.readFileSync(indexPath, "utf8");
-      this.outputChannel.appendLine(`[DolphinViewProvider] Original HTML length: ${htmlContent.length}`);
+      this.outputChannel.appendLine(
+        `[DolphinViewProvider] Original HTML length: ${htmlContent.length}`
+      );
 
       // Generate a nonce for scripts and styles
       const nonce = this.getNonce();
@@ -456,17 +627,16 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
         }
       );
 
-      this.outputChannel.appendLine(`[DolphinViewProvider] Made ${replacementCount} path replacements`);
+      this.outputChannel.appendLine(
+        `[DolphinViewProvider] Made ${replacementCount} path replacements`
+      );
 
       // Remove crossorigin attribute (not needed for webview URIs)
-      htmlContent = htmlContent.replace(/\s+crossorigin/g, '');
+      htmlContent = htmlContent.replace(/\s+crossorigin/g, "");
       this.outputChannel.appendLine(`[DolphinViewProvider] Removed crossorigin attribute`);
 
       // Add nonce to script tags
-      htmlContent = htmlContent.replace(
-        /<script/g,
-        `<script nonce="${nonce}"`
-      );
+      htmlContent = htmlContent.replace(/<script/g, `<script nonce="${nonce}"`);
 
       // Note: We don't add nonce to style tags because we need 'unsafe-inline' to work for UI libraries
       // If we add nonce to styles, 'unsafe-inline' will be ignored per CSP spec
@@ -480,9 +650,13 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
         `<meta charset="UTF-8" />\n\t${cspTag}`
       );
 
-      this.outputChannel.appendLine(`[DolphinViewProvider] CSP tag added: ${htmlContent.includes('Content-Security-Policy')}`);
+      this.outputChannel.appendLine(
+        `[DolphinViewProvider] CSP tag added: ${htmlContent.includes("Content-Security-Policy")}`
+      );
 
-      this.outputChannel.appendLine(`[DolphinViewProvider] Final HTML length: ${htmlContent.length}`);
+      this.outputChannel.appendLine(
+        `[DolphinViewProvider] Final HTML length: ${htmlContent.length}`
+      );
 
       return htmlContent;
     } catch (error) {
@@ -527,39 +701,48 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           sidebarBackground: getColor("sideBar.background", "#252526"),
           inputBackground: getColor("input.background", "#3c3c3c"),
           buttonBackground: getColor("button.background", "#0e639c"),
-          buttonForeground: getColor("button.foreground", "#ffffff")
-        }
-      }
+          buttonForeground: getColor("button.foreground", "#ffffff"),
+        },
+      },
     });
   }
 
   /**
    * Make HTTP request to KB API with timeout
    */
-  private httpRequest(method: string, path: string, body?: any, timeoutMs: number = 5000): Promise<any> {
+  private httpRequest(
+    method: string,
+    path: string,
+    body?: unknown,
+    timeoutMs: number = 5000
+  ): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const options = {
-        hostname: '127.0.0.1',
+        hostname: "127.0.0.1",
         port: 7777,
         path: path,
         method: method,
         headers: {
-          'Content-Type': 'application/json'
+          "Content-Type": "application/json",
         },
-        timeout: timeoutMs
+        timeout: timeoutMs,
       };
 
-      this.outputChannel.appendLine(`[DolphinViewProvider] httpRequest ${method} ${path} (timeout: ${timeoutMs}ms)`);
+      this.outputChannel.appendLine(
+        `[DolphinViewProvider] httpRequest ${method} ${path} (timeout: ${timeoutMs}ms)`
+      );
 
       const req = http.request(options, (res) => {
-        let data = '';
+        let data = "";
 
-        res.on('data', (chunk) => {
+        res.on("data", (chunk) => {
           data += chunk;
         });
 
-        res.on('end', () => {
-          this.outputChannel.appendLine(`[DolphinViewProvider] httpRequest ${method} ${path} response received (${res.statusCode}): ${data.substring(0, 200)}`);
+        res.on("end", () => {
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] httpRequest ${method} ${path} response received (${res.statusCode}): ${data.substring(0, 200)}`
+          );
           try {
             const parsed = JSON.parse(data);
             if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
@@ -574,14 +757,19 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
         });
       });
 
-      req.on('timeout', () => {
-        this.outputChannel.appendLine(`[DolphinViewProvider] httpRequest ${method} ${path} TIMEOUT after ${timeoutMs}ms`);
+      req.on("timeout", () => {
+        this.outputChannel.appendLine(
+          `[DolphinViewProvider] httpRequest ${method} ${path} TIMEOUT after ${timeoutMs}ms`
+        );
         req.destroy();
         reject(new Error(`Request timeout after ${timeoutMs}ms`));
       });
 
-      req.on('error', (error) => {
-        this.outputChannel.appendLine(`[DolphinViewProvider] httpRequest ${method} ${path} ERROR: ${error.message}`);
+      req.on("error", (error) => {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        this.outputChannel.appendLine(
+          `[DolphinViewProvider] httpRequest ${method} ${path} ERROR: ${errMsg}`
+        );
         reject(error);
       });
 
@@ -597,7 +785,29 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
    * Generate a cryptographically secure nonce for CSP
    */
   private getNonce(): string {
-    const crypto = require('crypto');
-    return crypto.randomBytes(16).toString('base64');
+    const crypto = require("crypto");
+    return crypto.randomBytes(16).toString("base64");
+  }
+
+  /**
+   * Dispose of all resources and cleanup
+   */
+  public dispose(): void {
+    this.isDisposed = true;
+
+    // Dispose event listener first to stop receiving events
+    if (this.eventListenerDisposable) {
+      this.eventListenerDisposable.dispose();
+      this.eventListenerDisposable = undefined;
+    }
+
+    // Dispose workspace change listener
+    if (this.workspaceChangeDisposable) {
+      this.workspaceChangeDisposable.dispose();
+      this.workspaceChangeDisposable = undefined;
+    }
+
+    // Clear webview reference (don't dispose it - VSCode manages webview lifecycle)
+    this.webviewView = undefined;
   }
 }

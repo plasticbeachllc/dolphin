@@ -4,7 +4,10 @@
 
 # user configs
 .continue/
-.claude/
+.claude/*
+# Allow SessionStart hooks for Claude Code on the web
+!.claude/hooks/
+!.claude/settings.json
 
 # private dirs
 docs/private/
@@ -27,8 +30,6 @@ tests/**/coverage.xml
 tests/reports/*
 .coverage
 coverage.xml
-
-profiling_results/
 
 # profiling artifacts
 profiling_results/

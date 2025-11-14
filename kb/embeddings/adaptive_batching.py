@@ -6,9 +6,9 @@ chunk token counts to optimize throughput while respecting API limits.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import List, Iterator
 from collections import deque
+from collections.abc import Iterator
+from dataclasses import dataclass
 
 from ..chunkers.token_utils import count_tokens, get_tokenizer
 
@@ -16,6 +16,7 @@ from ..chunkers.token_utils import count_tokens, get_tokenizer
 @dataclass
 class BatchMetrics:
     """Metrics for a batch of texts."""
+
     batch_size: int
     total_tokens: int
     avg_tokens: float
@@ -56,7 +57,7 @@ class AdaptiveBatcher:
         self._recent_metrics: deque[BatchMetrics] = deque(maxlen=10)
         self._current_batch_size = min_batch_size
 
-    def create_batches(self, texts: List[str]) -> Iterator[List[str]]:
+    def create_batches(self, texts: list[str]) -> Iterator[list[str]]:
         """Create optimally-sized batches from texts.
 
         Args:
@@ -71,14 +72,14 @@ class AdaptiveBatcher:
         i = 0
         while i < len(texts):
             # Determine batch size for this batch
-            batch_size = self._estimate_batch_size(texts[i:min(i + 100, len(texts))])
+            batch_size = self._estimate_batch_size(texts[i : min(i + 100, len(texts))])
             batch_size = max(self.min_batch_size, min(batch_size, self.max_batch_size))
 
             # Don't exceed remaining texts
             batch_size = min(batch_size, len(texts) - i)
 
             # Extract batch
-            batch = texts[i:i + batch_size]
+            batch = texts[i : i + batch_size]
 
             # Calculate metrics
             total_tokens = sum(count_tokens(text, self.tokenizer) for text in batch)
@@ -92,7 +93,7 @@ class AdaptiveBatcher:
             yield batch
             i += batch_size
 
-    def _estimate_batch_size(self, sample_texts: List[str]) -> int:
+    def _estimate_batch_size(self, sample_texts: list[str]) -> int:
         """Estimate optimal batch size based on sample texts.
 
         Args:
@@ -151,10 +152,10 @@ class AdaptiveBatcher:
         """
         if not self._recent_metrics:
             return {
-                'batches_processed': 0,
-                'avg_batch_size': 0,
-                'avg_tokens_per_batch': 0,
-                'avg_processing_time': 0,
+                "batches_processed": 0,
+                "avg_batch_size": 0,
+                "avg_tokens_per_batch": 0,
+                "avg_processing_time": 0,
             }
 
         avg_batch_size = sum(m.batch_size for m in self._recent_metrics) / len(self._recent_metrics)
@@ -164,20 +165,20 @@ class AdaptiveBatcher:
         avg_time = sum(times) / len(times) if times else 0
 
         return {
-            'batches_processed': len(self._recent_metrics),
-            'avg_batch_size': avg_batch_size,
-            'avg_tokens_per_batch': avg_tokens,
-            'avg_processing_time': avg_time,
+            "batches_processed": len(self._recent_metrics),
+            "avg_batch_size": avg_batch_size,
+            "avg_tokens_per_batch": avg_tokens,
+            "avg_processing_time": avg_time,
         }
 
 
 def create_adaptive_batches(
-    texts: List[str],
+    texts: list[str],
     model: str = "small",
     target_tokens: int = 8000,
     min_batch_size: int = 10,
     max_batch_size: int = 500,
-) -> List[List[str]]:
+) -> list[list[str]]:
     """Create adaptively-sized batches from texts (convenience function).
 
     Args:

@@ -1,7 +1,7 @@
 // agent-core/src/llm/claude-tool-executor.ts
 import type Anthropic from "@anthropic-ai/sdk";
 import type { ClaudeClient } from "./claude-client";
-import type { MCPClient } from "../mcp/client";
+import type { MCPClient } from "../mcp/mcp-client";
 import type { AgentEvent } from "../../../shared/types/events";
 import {
   mapMCPToAnthropic,
@@ -57,14 +57,14 @@ export class ClaudeToolExecutor {
   constructor(config: ToolExecutorConfig) {
     this.config = config;
   }
-  
+
   /**
    * Abort current generation
    */
   abort() {
     console.error("[ToolExecutor] Abort requested");
     this.isAborted = true;
-    
+
     if (this.abortController) {
       this.abortController.abort();
       this.abortController = null;
@@ -103,11 +103,8 @@ export class ClaudeToolExecutor {
     // Reset abort state
     this.isAborted = false;
     this.abortController = new AbortController();
-    
-    const messages: Message[] = [
-      ...conversationHistory,
-      { role: "user", content: userMessage },
-    ];
+
+    const messages: Message[] = [...conversationHistory, { role: "user", content: userMessage }];
 
     let toolRound = 0;
     let stopReason: string | undefined;
@@ -124,12 +121,12 @@ export class ClaudeToolExecutor {
         console.error("[ToolExecutor] Generation aborted by user");
         throw new Error("Generation aborted by user");
       }
-      
+
       console.error(`[ToolExecutor] Round ${toolRound + 1}`);
 
       // Call Claude with tools
       const response = await this.callClaudeWithTools(messages);
-      
+
       // Check if aborted during call
       if (this.isAborted) {
         console.error("[ToolExecutor] Generation aborted during API call");
@@ -139,14 +136,18 @@ export class ClaudeToolExecutor {
       // Accumulate usage
       totalUsage.inputTokens += response.usage.input_tokens;
       totalUsage.outputTokens += response.usage.output_tokens;
-      if (response.usage.cache_read_input_tokens) {
-        totalUsage.cacheReadTokens += response.usage.cache_read_input_tokens;
+      const extendedUsage = response.usage as Anthropic.Messages.Message["usage"] & {
+        cache_read_input_tokens?: number;
+        cache_creation_input_tokens?: number;
+      };
+      if (extendedUsage.cache_read_input_tokens) {
+        totalUsage.cacheReadTokens += extendedUsage.cache_read_input_tokens;
       }
-      if (response.usage.cache_creation_input_tokens) {
-        totalUsage.cacheWriteTokens += response.usage.cache_creation_input_tokens;
+      if (extendedUsage.cache_creation_input_tokens) {
+        totalUsage.cacheWriteTokens += extendedUsage.cache_creation_input_tokens;
       }
 
-      stopReason = response.stop_reason;
+      stopReason = response.stop_reason || undefined;
 
       // Extract tool calls from response
       const toolCalls = extractToolCalls(response.content);
@@ -167,7 +168,7 @@ export class ClaudeToolExecutor {
 
       // Execute tools in parallel
       const toolResults = await this.executeToolCalls(toolCalls);
-      
+
       // Check if aborted after tool execution
       if (this.isAborted) {
         console.error("[ToolExecutor] Generation aborted after tool execution");
@@ -177,7 +178,7 @@ export class ClaudeToolExecutor {
       // Add tool results as user message
       messages.push({
         role: "user",
-        content: toolResults,
+        content: toolResults as Anthropic.ContentBlock[],
       });
 
       toolRound++;
@@ -186,7 +187,7 @@ export class ClaudeToolExecutor {
     if (toolRound >= this.config.maxToolRounds) {
       console.warn("[ToolExecutor] WARNING: Max tool rounds reached");
     }
-    
+
     // Clean up abort controller
     this.abortController = null;
 
@@ -202,9 +203,7 @@ export class ClaudeToolExecutor {
    * Call Claude with streaming + tools
    * Supports both API key and CLI subscription modes
    */
-  private async callClaudeWithTools(
-    messages: Message[]
-  ): Promise<Anthropic.Message> {
+  private async callClaudeWithTools(messages: Message[]): Promise<Anthropic.Message> {
     console.error("[ToolExecutor] Calling Claude API...");
 
     // Check auth mode
@@ -212,7 +211,7 @@ export class ClaudeToolExecutor {
 
     if (authStatus.mode === "api_key") {
       // Use Anthropic SDK directly for API mode
-      const apiClient = (this.config.claudeClient as any).apiClient;
+      const apiClient = this.config.claudeClient.apiClient;
       if (!apiClient) {
         throw new Error("API client not initialized");
       }
@@ -246,7 +245,13 @@ export class ClaudeToolExecutor {
     // Accumulators
     const fullContent: Anthropic.ContentBlock[] = [];
     let currentTextBlock = "";
-    let currentToolUse: any = null;
+    let currentToolUse: {
+      type: "tool_use";
+      id: string;
+      name: string;
+      inputJson: string;
+      input?: Record<string, unknown>;
+    } | null = null;
 
     // Process stream events
     for await (const event of stream) {
@@ -295,7 +300,10 @@ export class ClaudeToolExecutor {
           } else if (currentToolUse !== null) {
             // Finalize tool use block
             try {
-              currentToolUse.input = JSON.parse(currentToolUse.inputJson);
+              currentToolUse.input = JSON.parse(currentToolUse.inputJson) as Record<
+                string,
+                unknown
+              >;
             } catch (error) {
               console.error("[ToolExecutor] Failed to parse tool input JSON:", error);
               currentToolUse.input = {};
@@ -336,9 +344,7 @@ export class ClaudeToolExecutor {
    * Call Claude via CLI (subscription mode)
    * The CLI handles tool use internally and returns complete responses
    */
-  private async callClaudeCLI(
-    messages: Message[]
-  ): Promise<Anthropic.Message> {
+  private async callClaudeCLI(messages: Message[]): Promise<Anthropic.Message> {
     // Import CLI process helpers
     const { runClaudeCode } = await import("./claude-cli-process");
 
@@ -351,10 +357,13 @@ export class ClaudeToolExecutor {
       .join("\n\n")}`;
 
     // Convert our message format to Anthropic format
-    const anthropicMessages = messages.map((m) => ({
-      role: m.role,
-      content: typeof m.content === "string" ? m.content : m.content,
-    })) as any[];
+    const anthropicMessages = messages.map(
+      (m) =>
+        ({
+          role: m.role,
+          content: typeof m.content === "string" ? m.content : m.content,
+        }) as Anthropic.Messages.MessageParam
+    );
 
     // Accumulators for parsing CLI output
     const fullContent: Anthropic.ContentBlock[] = [];
@@ -408,12 +417,10 @@ export class ClaudeToolExecutor {
         // Update usage
         usage.input_tokens += message.usage.input_tokens;
         usage.output_tokens += message.usage.output_tokens;
-        usage.cache_read_input_tokens +=
-          message.usage.cache_read_input_tokens || 0;
-        usage.cache_creation_input_tokens +=
-          message.usage.cache_creation_input_tokens || 0;
+        usage.cache_read_input_tokens += message.usage.cache_read_input_tokens || 0;
+        usage.cache_creation_input_tokens += message.usage.cache_creation_input_tokens || 0;
 
-        stopReason = message.stop_reason;
+        stopReason = message.stop_reason || undefined;
       }
     }
 
@@ -432,9 +439,7 @@ export class ClaudeToolExecutor {
   /**
    * Execute multiple tool calls in parallel
    */
-  private async executeToolCalls(
-    toolCalls: ToolCall[]
-  ): Promise<ToolResult[]> {
+  private async executeToolCalls(toolCalls: ToolCall[]): Promise<ToolResult[]> {
     console.error(`[ToolExecutor] Executing ${toolCalls.length} tool(s) in parallel`);
 
     const results = await Promise.all(
@@ -452,31 +457,29 @@ export class ClaudeToolExecutor {
         try {
           // Strip MCP server prefix if present (e.g., "mcp__pb-kb__search_knowledge" -> "search_knowledge")
           const toolName = toolCall.name.replace(/^mcp__[^_]+__/, "");
-          console.error(`[ToolExecutor] Calling MCP tool: ${toolName} (original: ${toolCall.name})`);
+          console.error(
+            `[ToolExecutor] Calling MCP tool: ${toolName} (original: ${toolCall.name})`
+          );
 
           // Preprocess input to handle Claude's JSON string serialization quirk
           const processedInput = this.preprocessToolInput(toolCall.input);
 
           // Call MCP
-          const mcpResult = await this.config.mcpClient.callTool(
-            toolName,
-            processedInput
-          );
+          const mcpResult = await this.config.mcpClient.callTool(toolName, processedInput);
 
           const executionTime = Date.now() - startTime;
 
-          console.error(
-            `[ToolExecutor] Tool ${toolCall.name} completed in ${executionTime}ms`
-          );
+          console.error(`[ToolExecutor] Tool ${toolCall.name} completed in ${executionTime}ms`);
 
           // Generate diff for file editing tools
-          let diff = undefined;
-          if (toolName === 'file_write' && mcpResult && !mcpResult.isError) {
+          let diff: string | undefined = undefined;
+          if (toolName === "file_write" && mcpResult && !mcpResult.isError) {
             try {
               // Parse the result to get file info
-              const resultText = mcpResult.content?.[0]?.text;
+              const content = mcpResult.content as Array<{ text?: string }> | undefined;
+              const resultText = content && content[0] ? content[0].text : undefined;
               if (resultText) {
-                const parsedResult = JSON.parse(resultText);
+                const parsedResult = JSON.parse(resultText) as Record<string, unknown>;
                 const generatedDiff = await generateFileWriteDiff(
                   processedInput,
                   parsedResult,
@@ -486,24 +489,26 @@ export class ClaudeToolExecutor {
                 diff = generatedDiff ?? undefined;
               }
             } catch (error) {
-              console.warn('[ToolExecutor] Failed to generate diff:', error);
+              console.warn("[ToolExecutor] Failed to generate diff:", error);
             }
           }
 
           // Check if MCP returned an error result
           if (mcpResult.isError) {
             // Extract error message from MCP result
-            const errorMessage = mcpResult.content?.[0]?.text || 'Tool execution failed';
-            
+            const content = mcpResult.content as Array<{ text?: string }> | undefined;
+            const errorMessage =
+              (content && content[0] ? content[0].text : undefined) || "Tool execution failed";
+
             // Emit error event
             this.config.onEvent({
               type: "tool_call_completed",
               toolId: toolCall.id,
               result: null,
-              error: errorMessage,
+              error: errorMessage as string,
               executionTime,
             });
-            
+
             // Return error result to Claude
             return createErrorResult(toolCall.id, new Error(errorMessage));
           }
@@ -514,30 +519,31 @@ export class ClaudeToolExecutor {
             toolId: toolCall.id,
             result: mcpResult,
             executionTime,
-            diff,
+            diff: diff as string | undefined,
           });
 
           // Convert to Anthropic format
           return createToolResult(toolCall.id, mcpResult, false);
-        } catch (error: any) {
+        } catch (error: unknown) {
           const executionTime = Date.now() - startTime;
+          const errorMessage = error instanceof Error ? error.message : String(error);
 
-          console.error(
-            `[ToolExecutor] Tool ${toolCall.name} failed:`,
-            error.message
-          );
+          console.error(`[ToolExecutor] Tool ${toolCall.name} failed:`, errorMessage);
 
           // Emit error event
           this.config.onEvent({
             type: "tool_call_completed",
             toolId: toolCall.id,
             result: null,
-            error: error.message,
+            error: errorMessage,
             executionTime,
           });
 
           // Return error result
-          return createErrorResult(toolCall.id, error);
+          return createErrorResult(
+            toolCall.id,
+            error instanceof Error ? error : new Error(String(error))
+          );
         }
       })
     );
@@ -551,11 +557,11 @@ export class ClaudeToolExecutor {
    * Claude sometimes serializes arrays/objects as JSON strings, e.g.:
    *   { "paths": "[\"file.ts\"]" }  -> { "paths": ["file.ts"] }
    */
-  private preprocessToolInput(input: Record<string, any>): Record<string, any> {
-    const processed: Record<string, any> = {};
-    
+  private preprocessToolInput(input: Record<string, unknown>): Record<string, unknown> {
+    const processed: Record<string, unknown> = {};
+
     for (const [key, value] of Object.entries(input)) {
-      if (typeof value === 'string' && (value.startsWith('[') || value.startsWith('{'))) {
+      if (typeof value === "string" && (value.startsWith("[") || value.startsWith("{"))) {
         // Looks like a JSON string, try to parse it
         try {
           processed[key] = JSON.parse(value);
@@ -568,7 +574,7 @@ export class ClaudeToolExecutor {
         processed[key] = value;
       }
     }
-    
+
     return processed;
   }
 

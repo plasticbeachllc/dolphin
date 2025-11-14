@@ -1,14 +1,16 @@
 // agent-core/src/storage/plan-store.ts
 import { Plan, PlanSchema } from "../../../shared/types/state";
 import { TOMLWriter } from "./toml-writer";
-import * as path from "path";
-import * as fs from "fs/promises";
+import { join as pathJoin } from "path";
+import { mkdir, readdir } from "fs/promises";
 
 export class PlanStore {
   private stateDir: string;
+  private workspaceRoot: string;
 
   constructor(workspaceRoot: string) {
-    this.stateDir = path.join(workspaceRoot, ".dolphin", "state", "plans");
+    this.workspaceRoot = workspaceRoot;
+    this.stateDir = pathJoin(workspaceRoot, ".dolphin", "state", "plans");
   }
 
   async savePlan(plan: Plan): Promise<void> {
@@ -18,8 +20,8 @@ export class PlanStore {
     // Update timestamp
     validated.plan.updated_at = new Date().toISOString();
 
-    const filepath = path.join(this.stateDir, `${plan.plan.id}.toml`);
-    const writer = new TOMLWriter<Plan>(filepath);
+    const filepath = pathJoin(this.stateDir, `${plan.plan.id}.toml`);
+    const writer = new TOMLWriter<Plan>(filepath, this.workspaceRoot);
 
     await writer.write(validated);
 
@@ -27,8 +29,8 @@ export class PlanStore {
   }
 
   async loadPlan(planId: string): Promise<Plan | null> {
-    const filepath = path.join(this.stateDir, `${planId}.toml`);
-    const writer = new TOMLWriter<Plan>(filepath);
+    const filepath = pathJoin(this.stateDir, `${planId}.toml`);
+    const writer = new TOMLWriter<Plan>(filepath, this.workspaceRoot);
 
     const data = await writer.read();
     if (!data) {
@@ -41,8 +43,8 @@ export class PlanStore {
 
   async listPlans(): Promise<string[]> {
     try {
-      await fs.mkdir(this.stateDir, { recursive: true });
-      const files = await fs.readdir(this.stateDir);
+      await mkdir(this.stateDir, { recursive: true });
+      const files = await readdir(this.stateDir);
       return files
         .filter((f) => f.endsWith(".toml"))
         .map((f) => f.replace(".toml", ""))
@@ -53,8 +55,8 @@ export class PlanStore {
   }
 
   async deletePlan(planId: string): Promise<void> {
-    const filepath = path.join(this.stateDir, `${planId}.toml`);
-    const writer = new TOMLWriter<Plan>(filepath);
+    const filepath = pathJoin(this.stateDir, `${planId}.toml`);
+    const writer = new TOMLWriter<Plan>(filepath, this.workspaceRoot);
     await writer.delete();
 
     console.error(`[PlanStore] Deleted plan: ${planId}`);

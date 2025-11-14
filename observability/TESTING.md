@@ -7,6 +7,7 @@
 ## What Has Been Validated ✅
 
 ### Static Analysis (Completed)
+
 - ✅ All Python files pass syntax validation
 - ✅ All YAML configs are valid (Docker Compose, Prometheus, Loki, Grafana)
 - ✅ Grafana dashboard JSON is valid
@@ -68,6 +69,7 @@ cd observability
 ```
 
 **Manual verification:**
+
 - Open http://localhost:3000 (Grafana) - Should show login page
 - Open http://localhost:9090 (Prometheus) - Should show Prometheus UI
 - Open http://localhost:16686 (Jaeger) - Should show Jaeger UI
@@ -82,6 +84,7 @@ python -m uvicorn api.server:app_with_lifespan --host 0.0.0.0 --port 8000
 ```
 
 **Expected startup logs:**
+
 ```
 ✅ Search backend ready
 ✅ Ingestion pipeline ready
@@ -89,6 +92,7 @@ INFO:     Application startup complete.
 ```
 
 **If it fails**, check:
+
 - Python dependencies installed?
 - `prometheus_client` import error?
 - `opentelemetry` import error?
@@ -106,6 +110,7 @@ curl http://localhost:8000/metrics
 ```
 
 **If it fails**, check:
+
 - Is middleware registered correctly in `server.py`?
 - Are metrics being created without errors?
 - Check server logs for exceptions
@@ -147,17 +152,21 @@ curl http://localhost:8000/metrics | grep kb_http_requests_total
 Open http://localhost:9090/targets
 
 **Expected:**
+
 - Target `kb-api` shows state: **UP**
 - Last scrape: Recent timestamp
 - Labels: `job="kb-api"`
 
 **If DOWN:**
+
 1. Check Prometheus logs:
+
    ```bash
    docker-compose logs prometheus
    ```
 
 2. Verify KB API is accessible from Prometheus container:
+
    ```bash
    docker exec dolphin-prometheus wget -O- http://host.docker.internal:8000/metrics
    ```
@@ -169,6 +178,7 @@ Open http://localhost:9090/targets
 Open http://localhost:9090/graph
 
 **Test queries:**
+
 ```promql
 # Should return 1 (service is up)
 up{job="kb-api"}
@@ -196,6 +206,7 @@ Open http://localhost:3000
 **Expected:** ✅ "Data source is working"
 
 **If fails:**
+
 - Check Prometheus URL in datasource config
 - Verify Prometheus is accessible from Grafana container
 
@@ -205,12 +216,14 @@ Open http://localhost:3000
 2. Open "Dolphin System Health"
 
 **Expected:**
+
 - All panels load without errors
 - "Request Rate" panel shows data (if requests were made)
 - "Error Rate" shows 0%
 - No "No data" errors
 
 **If "No data":**
+
 - Check time range (top right) - should include recent data
 - Verify queries in panel inspector
 - Check that metrics names match what's exposed by KB API
@@ -230,6 +243,7 @@ Open http://localhost:3000
 Open http://localhost:9090/alerts
 
 **Expected:** Should see all alert rules from `alerts.yml`:
+
 - HighErrorRate
 - HighLatency
 - CostSpike
@@ -329,10 +343,12 @@ ps aux | grep "uvicorn" | awk '{print $6}'
 ### Issue: Prometheus Cannot Scrape KB API
 
 **Symptoms:**
+
 - Prometheus target shows "DOWN"
 - Error: "connection refused" or "no route to host"
 
 **Resolution:**
+
 1. Verify KB API is running: `curl http://localhost:8000/metrics`
 2. Check Docker network: Use `host.docker.internal` instead of `localhost`
 3. For Linux: May need to use host networking mode in docker-compose
@@ -340,10 +356,12 @@ ps aux | grep "uvicorn" | awk '{print $6}'
 ### Issue: Grafana Shows "No Data"
 
 **Symptoms:**
+
 - Dashboard panels show "No Data"
 - Explore shows empty results
 
 **Resolution:**
+
 1. Verify Prometheus datasource test passes
 2. Check time range includes recent data
 3. Verify metrics names in queries match exposed metrics
@@ -352,11 +370,13 @@ ps aux | grep "uvicorn" | awk '{print $6}'
 ### Issue: Python Import Errors
 
 **Symptoms:**
+
 ```
 ModuleNotFoundError: No module named 'prometheus_client'
 ```
 
 **Resolution:**
+
 ```bash
 # Install dependencies
 cd /path/to/dolphin
@@ -370,11 +390,13 @@ pip install prometheus-client opentelemetry-api opentelemetry-sdk \
 ### Issue: TypeScript Compilation Errors
 
 **Symptoms:**
+
 ```
 Cannot find module '@opentelemetry/api'
 ```
 
 **Resolution:**
+
 ```bash
 cd shared
 npm install
@@ -385,11 +407,13 @@ bun install
 ### Issue: Docker Compose Fails to Start
 
 **Symptoms:**
+
 - Service fails to start
 - Port conflicts
 - Volume mount errors
 
 **Resolution:**
+
 1. Check ports are not in use: `lsof -i :3000` (etc.)
 2. Verify Docker has enough resources (4GB RAM minimum)
 3. Check Docker logs: `docker-compose logs <service>`
@@ -397,18 +421,21 @@ bun install
 ## Testing Checklist
 
 ### Pre-Deployment ✅
+
 - [ ] Python syntax validates
 - [ ] YAML configs validate
 - [ ] JSON configs validate
 - [ ] Dependencies documented
 
 ### Deployment ✅
+
 - [ ] Observability stack starts
 - [ ] All services healthy
 - [ ] Web UIs accessible
 - [ ] No error logs
 
 ### KB API Integration ✅
+
 - [ ] API starts with metrics
 - [ ] /metrics endpoint works
 - [ ] /health endpoint works
@@ -416,6 +443,7 @@ bun install
 - [ ] No performance degradation
 
 ### Observability Stack Integration ✅
+
 - [ ] Prometheus scrapes KB API
 - [ ] Metrics visible in Prometheus
 - [ ] Grafana connects to Prometheus
@@ -423,6 +451,7 @@ bun install
 - [ ] Alerts are loaded
 
 ### End-to-End ✅
+
 - [ ] Real requests generate metrics
 - [ ] Metrics visible in Grafana
 - [ ] Alerts can fire
@@ -529,6 +558,7 @@ echo "EP-1 implementation is working correctly."
 ## Support
 
 If you encounter issues during testing:
+
 1. Check logs: `docker-compose logs <service>`
 2. Review this testing guide
 3. See `DEPLOYMENT.md` for troubleshooting

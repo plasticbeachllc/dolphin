@@ -6,21 +6,22 @@ and similarity detection for 70%+ cache hit rates.
 
 from __future__ import annotations
 
-import time
 import hashlib
-from dataclasses import dataclass
-from typing import Dict, Any, List, Optional
-from collections import OrderedDict
 import json
+import time
+from collections import OrderedDict
+from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
 class CachedQuery:
     """Cached query result with metadata."""
+
     query_hash: str
     query_text: str
-    results: List[Dict[str, Any]]
-    params: Dict[str, Any]
+    results: list[dict[str, Any]]
+    params: dict[str, Any]
     timestamp: float
     hits: int = 0
 
@@ -54,14 +55,14 @@ class QueryResultCache:
         self.enable_similarity = enable_similarity
 
         self._cache: OrderedDict[str, CachedQuery] = OrderedDict()
-        self._repo_timestamps: Dict[str, float] = {}
+        self._repo_timestamps: dict[str, float] = {}
 
         # Statistics
         self._hits = 0
         self._misses = 0
         self._invalidations = 0
 
-    def _make_cache_key(self, query: str, params: Dict[str, Any]) -> str:
+    def _make_cache_key(self, query: str, params: dict[str, Any]) -> str:
         """Create cache key from query and parameters.
 
         Args:
@@ -79,8 +80,8 @@ class QueryResultCache:
     def get(
         self,
         query: str,
-        params: Optional[Dict[str, Any]] = None,
-    ) -> Optional[List[Dict[str, Any]]]:
+        params: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]] | None:
         """Get cached results for a query.
 
         Args:
@@ -124,8 +125,8 @@ class QueryResultCache:
     def put(
         self,
         query: str,
-        params: Optional[Dict[str, Any]],
-        results: List[Dict[str, Any]],
+        params: dict[str, Any] | None,
+        results: list[dict[str, Any]],
     ) -> None:
         """Store query results in cache.
 
@@ -156,7 +157,7 @@ class QueryResultCache:
     def _is_invalidated_by_repo_update(
         self,
         cached: CachedQuery,
-        params: Dict[str, Any],
+        params: dict[str, Any],
     ) -> bool:
         """Check if cached result is invalidated by repo update.
 
@@ -169,12 +170,12 @@ class QueryResultCache:
         """
         # Check if any of the queried repos were updated after cache timestamp
         # Support both 'repo' (singular) and 'repos' (plural) params
-        repos = params.get('repos', [])
-        single_repo = params.get('repo')
-        
+        repos = params.get("repos", [])
+        single_repo = params.get("repo")
+
         if single_repo:
             repos = [single_repo]
-        
+
         if not repos:
             return False
 
@@ -202,12 +203,12 @@ class QueryResultCache:
         # Support both 'repo' (singular) and 'repos' (plural) params
         to_remove = []
         for key, cached in self._cache.items():
-            repos = cached.params.get('repos', [])
-            single_repo = cached.params.get('repo')
-            
+            repos = cached.params.get("repos", [])
+            single_repo = cached.params.get("repo")
+
             if single_repo:
                 repos = [single_repo]
-            
+
             if repo_name in repos:
                 to_remove.append(key)
 
@@ -240,7 +241,7 @@ class QueryResultCache:
             return 0.0
         return (self._hits / total) * 100
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """Get cache statistics.
 
         Returns:
@@ -249,14 +250,14 @@ class QueryResultCache:
         total_requests = self._hits + self._misses
 
         return {
-            'size': len(self._cache),
-            'max_size': self.max_size,
-            'hits': self._hits,
-            'misses': self._misses,
-            'invalidations': self._invalidations,
-            'hit_rate': self.hit_rate(),
-            'total_requests': total_requests,
-            'ttl_seconds': self.ttl_seconds,
+            "size": len(self._cache),
+            "max_size": self.max_size,
+            "hits": self._hits,
+            "misses": self._misses,
+            "invalidations": self._invalidations,
+            "hit_rate": self.hit_rate(),
+            "total_requests": total_requests,
+            "ttl_seconds": self.ttl_seconds,
         }
 
     def evict_expired(self) -> int:
@@ -280,7 +281,7 @@ class QueryResultCache:
 
 
 # Global cache instance
-_query_cache: Optional[QueryResultCache] = None
+_query_cache: QueryResultCache | None = None
 
 
 def get_query_cache(

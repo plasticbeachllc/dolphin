@@ -2,7 +2,13 @@
 
 // Extension → Agent Core
 export type ExtensionRequest =
-  | { type: "send_message"; messageId: string; content: string; context?: any }
+  | {
+      type: "send_message";
+      messageId: string;
+      content: string;
+      context?: any;
+      mode?: "code" | "architect";
+    }
   | { type: "abort_generation" }
   | { type: "approve_plan"; planId: string }
   | { type: "reject_plan"; planId: string; feedback?: string }
@@ -18,6 +24,8 @@ export type ExtensionRequest =
 // All events include an optional requestId for correlation/logging
 export type AgentEvent =
   | { type: "agent_ready"; version: string; capabilities: string[]; requestId?: string }
+  | { type: "ready"; data: { version: string; capabilities: string[] } }
+  | { type: "workflow_update"; data: any }
   | { type: "content_delta"; delta: string; requestId?: string }
   | { type: "plan_generated"; plan: Plan; requestId?: string }
   | { type: "plan_step_started"; stepId: string; description: string; requestId?: string }
@@ -52,7 +60,11 @@ export type AgentEvent =
   | { type: "focus_input" }
   | { type: "clear_conversation" }
   | { type: "prefill_input"; text: string }
-  | { type: "conversation_loaded"; conversation: any; branchInfo?: { originalId: string; originalTitle: string } }
+  | {
+      type: "conversation_loaded";
+      conversation: any;
+      branchInfo?: { originalId: string; originalTitle: string };
+    }
   | { type: "conversations_listed"; conversations: ConversationListItem[] }
   | { type: "conversation_deleted"; conversationId: string }
   | { type: "conversation_renamed"; conversationId: string; newTitle: string };

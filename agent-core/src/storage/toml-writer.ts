@@ -1,42 +1,49 @@
 // agent-core/src/storage/toml-writer.ts
-import * as fs from "fs/promises";
-import * as path from "path";
-import * as toml from "@iarna/toml";
+import { mkdir, writeFile, rename, unlink, readFile, access } from "fs/promises";
+import { dirname } from "path";
+import { stringify as tomlStringify, parse as tomlParse } from "@iarna/toml";
 import { randomBytes } from "crypto";
+import { PathValidator } from "../../../shared/security/path-validator";
 
 export class TOMLWriter<T> {
-  constructor(private filepath: string) {}
+  private filepath: string;
+
+  constructor(filepath: string, baseDir: string = process.cwd()) {
+    // Validate filepath to prevent directory traversal attacks
+    const validator = new PathValidator({ baseDir });
+    this.filepath = validator.validate(filepath);
+  }
 
   async write(data: T): Promise<void> {
     // Ensure directory exists
-    const dir = path.dirname(this.filepath);
-    await fs.mkdir(dir, { recursive: true });
+    const dir = dirname(this.filepath);
+    await mkdir(dir, { recursive: true });
 
     // Serialize to TOML
-    const content = toml.stringify(data as any);
+    const content = tomlStringify(data as Record<string, unknown>);
 
     // Create temp file
     const tempFile = `${this.filepath}.tmp-${randomBytes(6).toString("hex")}`;
 
     try {
       // Write to temp
-      await fs.writeFile(tempFile, content, "utf-8");
+      await writeFile(tempFile, content, "utf-8");
 
       // Atomic rename (POSIX)
-      await fs.rename(tempFile, this.filepath);
+      await rename(tempFile, this.filepath);
     } catch (error) {
       // Clean up on failure
-      await fs.unlink(tempFile).catch(() => {});
+      await unlink(tempFile).catch(() => {});
       throw error;
     }
   }
 
   async read(): Promise<T | null> {
     try {
-      const content = await fs.readFile(this.filepath, "utf-8");
-      return toml.parse(content) as T;
-    } catch (error: any) {
-      if (error.code === "ENOENT") {
+      const content = await readFile(this.filepath, "utf-8");
+      return tomlParse(content) as T;
+    } catch (error: unknown) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") {
         return null; // File doesn't exist yet
       }
       throw error; // Re-throw parse errors or other issues
@@ -45,7 +52,7 @@ export class TOMLWriter<T> {
 
   async exists(): Promise<boolean> {
     try {
-      await fs.access(this.filepath);
+      await access(this.filepath);
       return true;
     } catch {
       return false;
@@ -54,9 +61,9 @@ export class TOMLWriter<T> {
 
   async delete(): Promise<void> {
     try {
-      await fs.unlink(this.filepath);
-    } catch (error: any) {
-      if (error.code !== "ENOENT") {
+      await unlink(this.filepath);
+    } catch (error: unknown) {
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
         throw error;
       }
     }

@@ -1,26 +1,34 @@
 {
-    "name": "@dolphin/agent-core",
-    "version": "0.1.0",
-    "type": "module",
-    "main": "src/main.ts",
-    "scripts": {
-        "dev": "bun run src/main.ts",
-        "build": "bun build src/main.ts --outdir dist --target bun",
-        "test": "bun test",
-        "test:watch": "bun test --watch",
-        "test:coverage": "bun test --coverage --coverage-reporter=html --coverage-reporter=lcov",
-        "test:threshold": "bun test --coverage --coverage-threshold=80"
-    },
-    "dependencies": {
-        "@anthropic-ai/sdk": "^0.32.1",
-        "@iarna/toml": "^2.2.5",
-        "diff": "^8.0.2",
-        "uuid": "^11.0.3",
-        "zod": "^3.23.8"
-    },
-    "devDependencies": {
-        "@types/diff": "^7.0.2",
-        "@types/uuid": "^10.0.0",
-        "bun-types": "^1.1.38"
-    }
+  "name": "@dolphin/agent-core",
+  "version": "2.0.0",
+  "type": "module",
+  "main": "src/main.ts",
+  "scripts": {
+    "dev": "bun run src/main.ts",
+    "build": "bun build src/main.ts --outdir dist --target bun",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage --coverage-reporter=html --coverage-reporter=lcov",
+    "test:threshold": "bun test --coverage --coverage-threshold=80",
+    "lint": "bun x eslint ."
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@iarna/toml": "^2.2.5",
+    "diff": "^8.0.2",
+    "marked": "^17.0.0",
+    "toml": "^3.0.0",
+    "uuid": "^11.0.3",
+    "vscode-jsonrpc": "^8.2.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/diff": "^7.0.2",
+    "@types/node": "^22.19.1",
+    "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.17.0",
+    "@typescript-eslint/parser": "^7.17.0",
+    "bun-types": "^1.1.38",
+    "eslint": "^9.8.0"
+  }
 }
