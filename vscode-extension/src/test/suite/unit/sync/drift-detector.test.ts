@@ -1,6 +1,6 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { DriftDetector, DriftEvent } from "../../kb/drift-detector";
+import { DriftDetector, DriftEvent } from "../../../../kb/drift-detector";
 
 describe("DriftDetector Tests", () => {
   let outputChannel: vscode.OutputChannel;

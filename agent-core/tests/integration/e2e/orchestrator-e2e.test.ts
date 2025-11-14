@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach, mock } from "bun:test";
-import { Orchestrator } from "../../src/orchestrator/orchestrator";
-import type { TaskInput, TaskSession, WorkflowUpdate } from "../../src/types/index";
+import { Orchestrator } from "../../../src/orchestrator/orchestrator";
+import type { TaskInput, TaskSession, WorkflowUpdate } from "../../../src/types/index";
 
 describe("Orchestrator End-to-End", () => {
   let orchestrator: Orchestrator;

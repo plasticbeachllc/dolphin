@@ -1,6 +1,6 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { FileWatcher, WatcherConfig, ChangeEvent } from "../../kb/file-watcher";
+import { FileWatcher, WatcherConfig, ChangeEvent } from "../../../../kb/file-watcher";
 
 describe("FileWatcher API Integration Tests", () => {
   let testConfig: WatcherConfig;

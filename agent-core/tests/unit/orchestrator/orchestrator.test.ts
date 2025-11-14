@@ -3,8 +3,8 @@
  */
 
 import { describe, it, expect, beforeEach, mock } from "bun:test";
-import { Orchestrator } from "../../src/orchestrator/orchestrator";
-import type { TaskInput } from "../../src/types/index";
+import { Orchestrator } from "../../../src/orchestrator/orchestrator";
+import type { TaskInput } from "../../../src/types/index";
 
 describe("Orchestrator", () => {
   let orchestrator: Orchestrator;

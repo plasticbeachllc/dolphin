@@ -187,14 +187,26 @@ test-unit-python-domain DOMAIN: setup-python
 # Run Agent Core unit tests
 test-unit-agent-core:
 	@echo "🤖 Testing Agent Core unit tests..."
-	@cd agent-core && bun test tests/conversation-store.test.ts tests/plan-store.test.ts tests/storage.test.ts tests/toml-writer.test.ts tests/llm/diff-generator.test.ts tests/llm/claude-tool-executor-diff.test.ts tests/llm/claude-cli-detector.test.ts tests/planner/basic-planner.test.ts --bail || (echo "   ❌ Agent Core unit tests failed"; exit 1)
+	@cd agent-core && bun test tests/unit/ --bail || (echo "   ❌ Agent Core unit tests failed"; exit 1)
 	@echo "   ✅ Agent Core unit tests passed"
+
+# Run Agent Core unit tests for a specific domain
+test-unit-agent-core-domain DOMAIN:
+	@echo "🤖 Testing Agent Core unit tests for {{DOMAIN}} domain..."
+	@cd agent-core && bun test tests/unit/{{DOMAIN}}/ --bail || (echo "   ❌ {{DOMAIN}} unit tests failed"; exit 1)
+	@echo "   ✅ {{DOMAIN}} unit tests passed"
 
 # Run VSCode Extension unit tests
 test-unit-extension:
 	@echo "📦 Testing VSCode Extension unit tests..."
-	@cd vscode-extension && npm test -- --grep "logger|configuration|diff-handler|code-actions|drift-detector|auto-sync-manager|file-watcher-sync" || (echo "   ❌ Extension unit tests failed"; exit 1)
+	@cd vscode-extension && npm test -- --grep "unit/" || (echo "   ❌ Extension unit tests failed"; exit 1)
 	@echo "   ✅ Extension unit tests passed"
+
+# Run VSCode Extension unit tests for a specific domain
+test-unit-extension-domain DOMAIN:
+	@echo "📦 Testing VSCode Extension unit tests for {{DOMAIN}} domain..."
+	@cd vscode-extension && npm test -- --grep "unit/{{DOMAIN}}/" || (echo "   ❌ {{DOMAIN}} unit tests failed"; exit 1)
+	@echo "   ✅ {{DOMAIN}} unit tests passed"
 
 # Run Webview unit tests
 test-unit-webview:
@@ -232,14 +244,26 @@ test-integration-python-domain DOMAIN: setup-python
 # Run Agent Core integration tests
 test-integration-agent-core:
 	@echo "🤖 Testing Agent Core integration tests..."
-	@cd agent-core && bun test tests/llm/claude-client.test.ts tests/mcp-client.integration.test.ts tests/kb/manager.test.ts tests/main.test.ts --bail || (echo "   ❌ Agent Core integration tests failed"; exit 1)
+	@cd agent-core && bun test tests/integration/ --bail || (echo "   ❌ Agent Core integration tests failed"; exit 1)
 	@echo "   ✅ Agent Core integration tests passed"
+
+# Run Agent Core integration tests for a specific domain
+test-integration-agent-core-domain DOMAIN:
+	@echo "🤖 Testing Agent Core integration tests for {{DOMAIN}} domain..."
+	@cd agent-core && bun test tests/integration/{{DOMAIN}}/ --bail || (echo "   ❌ {{DOMAIN}} integration tests failed"; exit 1)
+	@echo "   ✅ {{DOMAIN}} integration tests passed"
 
 # Run VSCode Extension integration tests
 test-integration-extension:
 	@echo "📦 Testing VSCode Extension integration tests..."
-	@cd vscode-extension && npm test -- --grep "agent-bridge|provider|commands|webview|^extension" || (echo "   ❌ Extension integration tests failed"; exit 1)
+	@cd vscode-extension && npm test -- --grep "integration/" || (echo "   ❌ Extension integration tests failed"; exit 1)
 	@echo "   ✅ Extension integration tests passed"
+
+# Run VSCode Extension integration tests for a specific domain
+test-integration-extension-domain DOMAIN:
+	@echo "📦 Testing VSCode Extension integration tests for {{DOMAIN}} domain..."
+	@cd vscode-extension && npm test -- --grep "integration/{{DOMAIN}}/" || (echo "   ❌ {{DOMAIN}} integration tests failed"; exit 1)
+	@echo "   ✅ {{DOMAIN}} integration tests passed"
 
 # Run MCP Bridge integration tests
 test-integration-mcp-bridge:
@@ -263,14 +287,20 @@ test-e2e-all:
 # Run VSCode Extension full e2e tests
 test-e2e-extension-full:
 	@echo "📦 Testing VSCode Extension E2E tests..."
-	@cd vscode-extension && npm test -- --grep "phase1-integration|phase2-integration|integration\.test|conversations-e2e|kb-lifecycle" || (echo "   ❌ Extension E2E tests failed"; exit 1)
+	@cd vscode-extension && npm test -- --grep "e2e/" || (echo "   ❌ Extension E2E tests failed"; exit 1)
 	@echo "   ✅ Extension E2E tests passed"
 
-# Run Agent Core V2 e2e tests
+# Run VSCode Extension e2e tests for a specific domain
+test-e2e-extension-domain DOMAIN:
+	@echo "📦 Testing VSCode Extension E2E tests for {{DOMAIN}} domain..."
+	@cd vscode-extension && npm test -- --grep "e2e/{{DOMAIN}}/" || (echo "   ❌ {{DOMAIN}} E2E tests failed"; exit 1)
+	@echo "   ✅ {{DOMAIN}} E2E tests passed"
+
+# Run Agent Core e2e tests
 test-e2e-agent-core:
-	@echo "🤖 Testing Agent Core V2 E2E tests..."
-	@cd agent-core && bun test tests/integration/orchestrator-e2e.test.ts tests/integration/editor-workflow.test.ts --bail || (echo "   ❌ Agent Core V2 E2E tests failed"; exit 1)
-	@echo "   ✅ Agent Core V2 E2E tests passed"
+	@echo "🤖 Testing Agent Core E2E tests..."
+	@cd agent-core && bun test tests/integration/e2e/ --bail || (echo "   ❌ Agent Core E2E tests failed"; exit 1)
+	@echo "   ✅ Agent Core E2E tests passed"
 
 # ==============================================================================
 # Legacy E2E Commands (comprehensive test suite - runs EVERYTHING)

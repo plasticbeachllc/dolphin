@@ -7,10 +7,10 @@
  */
 
 import { describe, test, expect, beforeAll } from "bun:test";
-import { ArchitectWorkflow } from "../../src/workflows/architect-workflow";
-import { ContextBuilder } from "../../src/context/context-builder";
-import { PromptBuilder } from "../../src/prompts/prompt-builder";
-import type { TaskInput, WorkflowUpdate, ResearchResult } from "../../src/types/index";
+import { ArchitectWorkflow } from "../../../src/workflows/architect-workflow";
+import { ContextBuilder } from "../../../src/context/context-builder";
+import { PromptBuilder } from "../../../src/prompts/prompt-builder";
+import type { TaskInput, WorkflowUpdate, ResearchResult } from "../../../src/types/index";
 
 // Simple mock Claude provider for integration tests
 class MockClaudeProvider {

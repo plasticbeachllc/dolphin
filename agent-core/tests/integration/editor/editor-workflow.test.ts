@@ -5,10 +5,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { EditorWorkflow } from "../../src/workflows/editor-workflow";
-import { ContextBuilder } from "../../src/context/context-builder";
-import { PromptBuilder } from "../../src/prompts/prompt-builder";
-import type { TaskInput, WorkflowUpdate } from "../../src/types/index";
+import { EditorWorkflow } from "../../../src/workflows/editor-workflow";
+import { ContextBuilder } from "../../../src/context/context-builder";
+import { PromptBuilder } from "../../../src/prompts/prompt-builder";
+import type { TaskInput, WorkflowUpdate } from "../../../src/types/index";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";

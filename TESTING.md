@@ -148,20 +148,97 @@ uv run pytest tests/e2e/workflows/   # All workflow E2E tests
 
 ### TypeScript Agent Core
 
-- **Unit tests:** Individual test files for storage, stores, diff generation, etc.
-- **Integration tests:** Tests for Claude client, MCP client, KB manager
+TypeScript tests in agent-core are now organized by domain within each test category. All test files follow the naming convention `*.test.ts`.
 
-### TypeScript Agent Core V2
+#### Unit Tests (`agent-core/tests/unit/`)
 
-- **Unit tests:** `agent-core-v2/tests/unit/`
-- **Integration tests:** `agent-core-v2/tests/integration/` (excluding E2E)
-- **E2E tests:** `orchestrator-e2e.test.ts`, `editor-workflow.test.ts`
+Fast, isolated tests organized by domain:
+
+- `architect/` - Architect workflow unit tests
+- `orchestrator/` - Orchestrator unit tests
+- `rpc/` - JSON-RPC communication tests
+- `state/` - State store tests
+
+**Run specific domain unit tests:**
+```bash
+just test-unit-agent-core                      # All agent-core unit tests
+just test-unit-agent-core-domain architect     # Architect domain only
+just test-unit-agent-core-domain orchestrator  # Orchestrator domain only
+```
+
+#### Integration Tests (`agent-core/tests/integration/`)
+
+Tests that integrate components within a domain:
+
+- `architect/` - Architect KB integration tests
+- `auth/` - Claude authentication tests
+- `editor/` - Editor workflow integration tests
+- `kb/` - Knowledge base integration tests
+- `e2e/` - Full end-to-end workflow tests
+
+**Run specific domain integration tests:**
+```bash
+just test-integration-agent-core                   # All agent-core integration tests
+just test-integration-agent-core-domain architect  # Architect integration tests
+just test-integration-agent-core-domain kb         # KB integration tests
+```
+
+**Run e2e tests:**
+```bash
+just test-e2e-agent-core   # All agent-core E2E tests
+```
 
 ### VSCode Extension
 
-- **Unit tests:** logger, configuration, diff handler, code actions, drift detector
-- **Integration tests:** agent bridge, provider, commands, webview
-- **E2E tests:** phase1/phase2 integration, conversations E2E, KB lifecycle
+VSCode Extension tests are organized by test type and domain. All test files follow the naming convention `*.test.ts`.
+
+#### Unit Tests (`vscode-extension/src/test/suite/unit/`)
+
+Fast, isolated tests organized by domain:
+
+- `core/` - Logger, configuration, error handling tests
+- `editor/` - Diff handler, code actions tests
+- `sync/` - Auto-sync manager, file watcher, drift detector tests
+- `commands/` - Commands registry tests
+
+**Run specific domain unit tests:**
+```bash
+just test-unit-extension                    # All extension unit tests
+just test-unit-extension-domain core        # Core domain only
+just test-unit-extension-domain editor      # Editor domain only
+just test-unit-extension-domain sync        # Sync domain only
+```
+
+#### Integration Tests (`vscode-extension/src/test/suite/integration/`)
+
+Tests that integrate components within a domain:
+
+- `agent/` - Agent bridge, architect mode integration tests
+- `ui/` - Provider, webview integration tests
+- `commands/` - Commands integration tests
+- `core/` - Extension activation tests
+
+**Run specific domain integration tests:**
+```bash
+just test-integration-extension                    # All extension integration tests
+just test-integration-extension-domain agent       # Agent integration tests
+just test-integration-extension-domain ui          # UI integration tests
+```
+
+#### End-to-End Tests (`vscode-extension/src/test/suite/e2e/`)
+
+Full workflow tests:
+
+- `conversations/` - Conversation lifecycle E2E tests
+- `kb/` - Knowledge base lifecycle tests
+- `workflows/` - Complete integration workflow tests
+
+**Run e2e tests:**
+```bash
+just test-e2e-extension-full                  # All extension E2E tests
+just test-e2e-extension-domain conversations  # Conversations E2E only
+just test-e2e-extension-domain kb             # KB lifecycle E2E only
+```
 
 ### MCP Bridge
 

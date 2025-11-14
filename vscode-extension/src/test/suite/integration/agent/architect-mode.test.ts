@@ -6,7 +6,7 @@
 
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { AgentBridge } from "../../agent/bridge";
+import { AgentBridge } from "../../../../agent/bridge";
 import * as path from "path";
 
 describe("Architect Mode E2E Tests", function () {

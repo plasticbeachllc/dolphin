@@ -1,7 +1,7 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import * as path from "path";
-import { DiffHandler, DiffChange } from "../../editor/diff-handler";
+import { DiffHandler, DiffChange } from "../../../../editor/diff-handler";
 
 describe("DiffHandler Tests", () => {
   let _testWorkspaceUri: vscode.Uri;

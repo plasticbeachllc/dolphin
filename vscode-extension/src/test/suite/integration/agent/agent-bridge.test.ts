@@ -1,6 +1,6 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { AgentBridge } from "../../agent/bridge";
+import { AgentBridge } from "../../../../agent/bridge";
 
 describe("AgentBridge Unit Tests", () => {
   let agentBridge: AgentBridge;

@@ -1,6 +1,6 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { DolphinCodeActionProvider } from "../../editor/code-actions";
+import { DolphinCodeActionProvider } from "../../../../editor/code-actions";
 
 // Helper to resolve code actions from provider result
 async function resolveActions(

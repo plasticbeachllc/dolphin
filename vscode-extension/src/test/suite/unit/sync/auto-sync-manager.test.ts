@@ -1,6 +1,6 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { AutoSyncManager, AutoSyncConfig, PendingChange } from "../../kb/auto-sync-manager";
+import { AutoSyncManager, AutoSyncConfig, PendingChange } from "../../../../kb/auto-sync-manager";
 
 describe("AutoSyncManager Tests", () => {
   let outputChannel: vscode.OutputChannel;

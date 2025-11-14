@@ -6,13 +6,13 @@
  */
 
 import { describe, test, expect, beforeEach, afterAll } from "bun:test";
-import { Orchestrator } from "../../src/orchestrator/orchestrator";
-import { ArchitectWorkflow } from "../../src/workflows/architect-workflow";
-import { EditorWorkflow } from "../../src/workflows/editor-workflow";
-import { StateStore } from "../../src/state/state-store";
-import { ContextBuilder } from "../../src/context/context-builder";
-import { PromptBuilder } from "../../src/prompts/prompt-builder";
-import type { TaskInput, TaskSession } from "../../src/types/index";
+import { Orchestrator } from "../../../src/orchestrator/orchestrator";
+import { ArchitectWorkflow } from "../../../src/workflows/architect-workflow";
+import { EditorWorkflow } from "../../../src/workflows/editor-workflow";
+import { StateStore } from "../../../src/state/state-store";
+import { ContextBuilder } from "../../../src/context/context-builder";
+import { PromptBuilder } from "../../../src/prompts/prompt-builder";
+import type { TaskInput, TaskSession } from "../../../src/types/index";
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";

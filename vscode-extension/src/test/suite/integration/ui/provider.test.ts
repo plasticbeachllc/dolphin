@@ -1,7 +1,7 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { DolphinViewProvider } from "../../views/provider";
-import { AgentBridge } from "../../agent/bridge";
+import { DolphinViewProvider } from "../../../../views/provider";
+import { AgentBridge } from "../../../../agent/bridge";
 
 describe("DolphinViewProvider Unit Tests", () => {
   let provider: DolphinViewProvider;

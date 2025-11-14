@@ -3,11 +3,11 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { StateStore } from "../../src/state/state-store";
+import { StateStore } from "../../../src/state/state-store";
 import { rm, mkdtemp } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import type { TaskSession } from "../../src/types/index";
+import type { TaskSession } from "../../../src/types/index";
 
 describe("StateStore", () => {
   let stateStore: StateStore;

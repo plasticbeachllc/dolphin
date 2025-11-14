@@ -8,8 +8,8 @@ import {
   JSONRPCSerializer,
   JSONRPCServer,
   JSONRPCErrorCode,
-} from "../../src/utils/json-rpc";
-import type { JSONRPCMessage } from "../../src/types/index";
+} from "../../../src/utils/json-rpc";
+import type { JSONRPCMessage } from "../../../src/types/index";
 
 describe("JSONRPCParser", () => {
   let parser: JSONRPCParser;

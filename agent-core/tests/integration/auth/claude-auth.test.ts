@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { ClaudeProvider, AuthManager } from "../../src/execution/claude-provider";
+import { ClaudeProvider, AuthManager } from "../../../src/execution/claude-provider";
 import { existsSync, writeFileSync, mkdirSync, unlinkSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";

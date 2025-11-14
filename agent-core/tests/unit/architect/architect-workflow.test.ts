@@ -3,10 +3,10 @@
  */
 
 import { describe, test, expect, beforeEach } from "bun:test";
-import { ArchitectWorkflow } from "../../src/workflows/architect-workflow";
-import type { ClaudeProvider } from "../../src/execution/claude-provider";
-import type { ContextBuilder } from "../../src/context/context-builder";
-import type { PromptBuilder } from "../../src/prompts/prompt-builder";
+import { ArchitectWorkflow } from "../../../src/workflows/architect-workflow";
+import type { ClaudeProvider } from "../../../src/execution/claude-provider";
+import type { ContextBuilder } from "../../../src/context/context-builder";
+import type { PromptBuilder } from "../../../src/prompts/prompt-builder";
 import type {
   TaskInput,
   WorkflowUpdate,
@@ -15,7 +15,7 @@ import type {
   ResearchResult,
   ClarificationResult,
   Plan,
-} from "../../src/types/index";
+} from "../../../src/types/index";
 
 // Mock implementations
 class MockClaudeProvider {
