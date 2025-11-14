@@ -25,6 +25,8 @@ import type {
 import type { ContextBuilder } from "../context/context-builder.js";
 import type { PromptBuilder } from "../prompts/prompt-builder.js";
 import type { ClaudeProvider } from "../execution/claude-provider.js";
+import type { StateStore } from "../state/state-store.js";
+import type { PlanStore } from "../storage/plan-store.js";
 import { MODELS, CHARS_PER_TOKEN, DEFAULT_MAX_CLARIFICATION_TURNS } from "./constants.js";
 import { parsePlanFromMarkdown, parseLegacyMarkdownPlan } from "./plan-parser.js";
 
@@ -32,6 +34,9 @@ export interface ArchitectWorkflowConfig {
   claudeProvider: ClaudeProvider;
   contextBuilder: ContextBuilder;
   promptBuilder: PromptBuilder;
+  stateStore: StateStore;
+  planStore: PlanStore;
+  workspaceRoot: string;
   maxClarificationTurns?: number;
 }
 
