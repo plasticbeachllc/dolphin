@@ -41,8 +41,8 @@ export async function run(): Promise<void> {
   });
 
   // CRITICAL: Expose Mocha globals before loading test files
-  mocha.suite.emit('pre-require', global, null, mocha);
-  
+  mocha.suite.emit("pre-require", global, null, mocha);
+
   // Verify globals are set
   console.log("Mocha globals set:", {
     describe: typeof (global as any).describe,

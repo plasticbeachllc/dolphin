@@ -353,6 +353,7 @@ Dolphin is a monorepo with independently versioned components. Each component (P
 ### Component Versions
 
 Current versions:
+
 - **Python Package (PyPI)**: [`1.0.0`](pyproject.toml:7) - `pb-dolphin`
 - **VSCode Extension**: [`1.0.0`](vscode-extension/package.json:5) - `dolphin`
 - **MCP Bridge (npm)**: [`0.1.2`](mcp-bridge/package.json:3) - `dolphin-mcp`
@@ -374,6 +375,7 @@ git push origin py-v0.1.14
 ```
 
 This triggers the [`publish-pypi.yml`](.github/workflows/publish-pypi.yml:1) workflow which:
+
 - Builds the package with `uv build`
 - Publishes to PyPI using trusted publishing
 
@@ -391,6 +393,7 @@ git push origin vscode-v0.1.1
 ```
 
 This triggers the [`publish-vscode.yml`](.github/workflows/publish-vscode.yml:1) workflow which:
+
 - Installs dependencies with npm
 - Builds webview with Bun
 - Publishes to VS Code Marketplace
@@ -410,6 +413,7 @@ git push origin mcp-v0.1.3
 ```
 
 This triggers the [`publish-mcp.yml`](.github/workflows/publish-mcp.yml:1) workflow which:
+
 - Installs dependencies with Bun
 - Builds package
 - Publishes to npm registry
@@ -437,6 +441,7 @@ git push origin develop
 #### Releasing Components
 
 **Step 1: Prepare on develop branch**
+
 ```bash
 # On develop branch
 git checkout develop
@@ -453,6 +458,7 @@ git push origin develop
 ```
 
 **Step 2: Merge to master**
+
 ```bash
 # Merge develop to master
 git checkout master
@@ -461,6 +467,7 @@ git push origin master
 ```
 
 **Step 3: Create tags (triggers workflows)**
+
 ```bash
 # IMPORTANT: You must be on master branch when creating tags
 git checkout master
@@ -493,6 +500,7 @@ git push origin --tags  # Triggers workflows
 ```
 
 **Multiple components?** You can create multiple tags and push them all at once:
+
 ```bash
 git tag py-v0.1.14 vscode-v0.1.1 mcp-v0.1.3
 git push origin --tags
@@ -504,12 +512,14 @@ git push origin --tags
 If you need to publish manually without GitHub Actions:
 
 **Python Package:**
+
 ```bash
 uv build
 uv publish
 ```
 
 **VSCode Extension:**
+
 ```bash
 cd vscode-extension
 npm install
@@ -518,6 +528,7 @@ npx vsce publish --pat <your-pat>
 ```
 
 **MCP Bridge:**
+
 ```bash
 cd mcp-bridge
 bun install

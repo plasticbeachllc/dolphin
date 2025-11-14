@@ -1,8 +1,4 @@
-import type {
-  Tool,
-  CallToolResult,
-  TextContent,
-} from "@modelcontextprotocol/sdk/types.js";
+import type { Tool, CallToolResult, TextContent } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { restSearch, type SearchResponse } from "../../rest/client.js";

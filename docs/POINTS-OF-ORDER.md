@@ -127,10 +127,7 @@ export class PathValidator {
     // Check for path traversal
     const relativePath = relative(resolvedBase, resolvedPath);
 
-    if (
-      relativePath.startsWith("..") ||
-      resolve(resolvedBase, relativePath) !== resolvedPath
-    ) {
+    if (relativePath.startsWith("..") || resolve(resolvedBase, relativePath) !== resolvedPath) {
       throw new PathValidationError(
         `Path traversal detected: ${path} escapes base directory ${baseDir}`,
         "PATH_TRAVERSAL",
@@ -140,11 +137,7 @@ export class PathValidator {
 
     // Check if path exists (if required)
     if (mustExist && !existsSync(resolvedPath)) {
-      throw new PathValidationError(
-        `Path does not exist: ${path}`,
-        "PATH_NOT_FOUND",
-        path
-      );
+      throw new PathValidationError(`Path does not exist: ${path}`, "PATH_NOT_FOUND", path);
     }
 
     // Check symlinks
@@ -164,9 +157,7 @@ export class PathValidator {
       const ext = normalizedPath.substring(normalizedPath.lastIndexOf("."));
       if (!options.allowedExtensions.includes(ext)) {
         throw new PathValidationError(
-          `File extension ${ext} not allowed. Allowed: ${options.allowedExtensions.join(
-            ", "
-          )}`,
+          `File extension ${ext} not allowed. Allowed: ${options.allowedExtensions.join(", ")}`,
           "INVALID_EXTENSION",
           path
         );
@@ -194,10 +185,7 @@ export class PathValidator {
    * Validate multiple paths in batch.
    * Returns validated paths or throws on first error.
    */
-  static validateBatch(
-    paths: string[],
-    options: PathValidationOptions
-  ): string[] {
+  static validateBatch(paths: string[], options: PathValidationOptions): string[] {
     return paths.map((p) => this.validate(p, options));
   }
 
@@ -205,10 +193,7 @@ export class PathValidator {
    * Check if a path is safe without throwing.
    * Returns { valid: boolean, error?: string }
    */
-  static check(
-    path: string,
-    options: PathValidationOptions
-  ): { valid: boolean; error?: string } {
+  static check(path: string, options: PathValidationOptions): { valid: boolean; error?: string } {
     try {
       this.validate(path, options);
       return { valid: true };
@@ -230,21 +215,19 @@ describe("PathValidator", () => {
 
   describe("Path Traversal Protection", () => {
     it("should reject .. traversal", () => {
-      expect(() =>
-        PathValidator.validate("../etc/passwd", { baseDir })
-      ).toThrow(PathValidationError);
-    });
-
-    it("should reject absolute paths outside base", () => {
-      expect(() => PathValidator.validate("/etc/passwd", { baseDir })).toThrow(
+      expect(() => PathValidator.validate("../etc/passwd", { baseDir })).toThrow(
         PathValidationError
       );
     });
 
+    it("should reject absolute paths outside base", () => {
+      expect(() => PathValidator.validate("/etc/passwd", { baseDir })).toThrow(PathValidationError);
+    });
+
     it("should reject encoded traversal attempts", () => {
-      expect(() =>
-        PathValidator.validate("%2e%2e/etc/passwd", { baseDir })
-      ).toThrow(PathValidationError);
+      expect(() => PathValidator.validate("%2e%2e/etc/passwd", { baseDir })).toThrow(
+        PathValidationError
+      );
     });
 
     it("should accept valid relative paths", () => {
@@ -259,9 +242,9 @@ describe("PathValidator", () => {
       const symlinkPath = "/tmp/test-symlink";
       fs.symlinkSync("/etc/passwd", symlinkPath);
 
-      expect(() =>
-        PathValidator.validate(symlinkPath, { baseDir, allowSymlinks: false })
-      ).toThrow(PathValidationError);
+      expect(() => PathValidator.validate(symlinkPath, { baseDir, allowSymlinks: false })).toThrow(
+        PathValidationError
+      );
 
       fs.unlinkSync(symlinkPath);
     });
@@ -296,16 +279,7 @@ class AgentCore {
     return PathValidator.validate(path, {
       baseDir: this.workspaceRoot,
       allowSymlinks: false,
-      allowedExtensions: [
-        ".ts",
-        ".js",
-        ".tsx",
-        ".jsx",
-        ".py",
-        ".md",
-        ".json",
-        ".toml",
-      ],
+      allowedExtensions: [".ts", ".js", ".tsx", ".jsx", ".py", ".md", ".json", ".toml"],
       disallowedPatterns: ["**/node_modules/**", "**/.git/**"],
     });
   }
@@ -645,9 +619,7 @@ export interface IWorkflowPhase<TResult extends PhaseResult = PhaseResult> {
    * Execute this phase.
    * Yields progress updates and returns final result.
    */
-  execute(
-    context: PhaseContext
-  ): AsyncGenerator<WorkflowUpdate, TResult, unknown>;
+  execute(context: PhaseContext): AsyncGenerator<WorkflowUpdate, TResult, unknown>;
 
   /**
    * Validate that prerequisites for this phase are met.
@@ -666,11 +638,7 @@ export interface IWorkflowPhase<TResult extends PhaseResult = PhaseResult> {
 **File:** `agent-core-v2/src/workflows/phases/research-phase.ts`
 
 ```typescript
-import type {
-  IWorkflowPhase,
-  PhaseContext,
-  PhaseResult,
-} from "./phase-interface";
+import type { IWorkflowPhase, PhaseContext, PhaseResult } from "./phase-interface";
 import type { ResearchResult, WorkflowUpdate } from "../../types";
 import { MODELS, CHARS_PER_TOKEN } from "../constants";
 
@@ -682,20 +650,15 @@ export class ResearchPhase implements IWorkflowPhase<ResearchResult> {
     return context.input.message.length > 0;
   }
 
-  async estimate(
-    context: PhaseContext
-  ): Promise<{ tokens: number; cost: number }> {
+  async estimate(context: PhaseContext): Promise<{ tokens: number; cost: number }> {
     // Estimate based on average research findings length
     const estimatedTokens = 2000;
     const costPerToken = 0.00001; // Haiku pricing
     return { tokens: estimatedTokens, cost: estimatedTokens * costPerToken };
   }
 
-  async *execute(
-    context: PhaseContext
-  ): AsyncGenerator<WorkflowUpdate, ResearchResult, unknown> {
-    const { sessionId, input, contextBuilder, promptBuilder, claudeProvider } =
-      context;
+  async *execute(context: PhaseContext): AsyncGenerator<WorkflowUpdate, ResearchResult, unknown> {
+    const { sessionId, input, contextBuilder, promptBuilder, claudeProvider } = context;
 
     yield {
       type: "progress",
@@ -793,12 +756,7 @@ Be concise but thorough. Your findings will guide the planning phase.`;
 **File:** `agent-core-v2/src/workflows/architect-workflow.ts` (refactored)
 
 ```typescript
-import type {
-  IWorkflow,
-  TaskInput,
-  WorkflowUpdate,
-  Plan,
-} from "../types/index.js";
+import type { IWorkflow, TaskInput, WorkflowUpdate, Plan } from "../types/index.js";
 import { ResearchPhase } from "./phases/research-phase";
 import { ClarificationPhase } from "./phases/clarification-phase";
 import { PlanningPhase } from "./phases/planning-phase";
@@ -994,12 +952,7 @@ export class Logger {
     this.log(LogLevel.FATAL, message, context, error);
   }
 
-  private static log(
-    level: LogLevel,
-    message: string,
-    context?: LogContext,
-    error?: Error
-  ) {
+  private static log(level: LogLevel, message: string, context?: LogContext, error?: Error) {
     if (level < this.minLevel) return;
 
     const entry: LogEntry = {
@@ -2046,8 +1999,7 @@ export abstract class DolphinError extends Error {
       .join(", ");
 
     const fullMessage =
-      `[${component}] ${message} (${code})` +
-      (contextStr ? `\nContext: ${contextStr}` : "");
+      `[${component}] ${message} (${code})` + (contextStr ? `\nContext: ${contextStr}` : "");
 
     super(fullMessage);
     this.name = this.constructor.name;

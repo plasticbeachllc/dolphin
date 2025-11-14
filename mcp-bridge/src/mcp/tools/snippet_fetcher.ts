@@ -65,7 +65,12 @@ export async function fetchSnippetsInParallel(
   requests: SnippetFetchRequest[],
   options: SnippetFetchOptions = {}
 ): Promise<{ [key: number]: SnippetFetchResult | undefined }> {
-  const { maxConcurrent = 8, requestTimeoutMs = 1500, retryAttempts = 1, signal: _signal } = options;
+  const {
+    maxConcurrent = 8,
+    requestTimeoutMs = 1500,
+    retryAttempts = 1,
+    signal: _signal,
+  } = options;
 
   const startTime = Date.now();
   await logInfo("snippet_fetch", "Starting parallel snippet fetch", {

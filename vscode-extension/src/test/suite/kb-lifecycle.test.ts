@@ -12,10 +12,7 @@ import {
   getMockEnvironment,
   configureMockKB,
 } from "../helpers/mock-manager";
-import {
-  activateExtension,
-  assertCommandExists,
-} from "../helpers/shared-fixtures";
+import { activateExtension, assertCommandExists } from "../helpers/shared-fixtures";
 import { TEST_COMMANDS } from "../helpers/test-constants";
 
 describe("KB Lifecycle Management", function () {
@@ -259,9 +256,17 @@ describe("KB Lifecycle Management", function () {
       const excludePatterns = config.inspect<string[]>("kb.excludePatterns");
       const autoSyncEnabled = config.inspect<boolean>("kb.autoSync.enabled");
 
-      assert.strictEqual(typeof kbDebounce?.defaultValue, "number", `debounceMs should be number, got ${typeof kbDebounce?.defaultValue}`);
+      assert.strictEqual(
+        typeof kbDebounce?.defaultValue,
+        "number",
+        `debounceMs should be number, got ${typeof kbDebounce?.defaultValue}`
+      );
       assert.ok(Array.isArray(excludePatterns?.defaultValue), "excludePatterns should be array");
-      assert.strictEqual(typeof autoSyncEnabled?.defaultValue, "boolean", "autoSync.enabled should be boolean");
+      assert.strictEqual(
+        typeof autoSyncEnabled?.defaultValue,
+        "boolean",
+        "autoSync.enabled should be boolean"
+      );
     });
   });
 

@@ -442,7 +442,7 @@ export class MockAgentBridge {
    */
   setResponse(response: any): void {
     this.mockResponse = response;
-    if (typeof response === 'string') {
+    if (typeof response === "string") {
       this.responseQueue.push(response);
     }
   }

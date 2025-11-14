@@ -28,27 +28,27 @@ For detailed profiling procedures, see [PROFILING.md](PROFILING.md).
 
 ### Search Latency
 
-| Metric | Target | Current (v1.0.0) | Status |
-|--------|--------|------------------|--------|
-| p50 (median) | ≤ 600ms | ~300ms | ✅ 2x better |
-| p95 | ≤ 2s | ~800ms | ✅ 2.5x better |
-| p99 | ≤ 5s | ~2s | ✅ 2.5x better |
+| Metric       | Target  | Current (v1.0.0) | Status         |
+| ------------ | ------- | ---------------- | -------------- |
+| p50 (median) | ≤ 600ms | ~300ms           | ✅ 2x better   |
+| p95          | ≤ 2s    | ~800ms           | ✅ 2.5x better |
+| p99          | ≤ 5s    | ~2s              | ✅ 2.5x better |
 
 ### Throughput
 
-| Metric | Target | Current (v1.0.0) | Status |
-|--------|--------|------------------|--------|
-| Single-user QPS | 10-20 | 10-20 | ✅ |
-| Concurrent queries | 8 parallel | 8 parallel | ✅ |
+| Metric             | Target     | Current (v1.0.0) | Status |
+| ------------------ | ---------- | ---------------- | ------ |
+| Single-user QPS    | 10-20      | 10-20            | ✅     |
+| Concurrent queries | 8 parallel | 8 parallel       | ✅     |
 
 ### Resource Usage
 
-| Metric | Target | Current (v1.0.0) | Status |
-|--------|--------|------------------|--------|
-| Baseline memory | ~200 MB | ~200 MB | ✅ |
-| Under load (8 queries) | ~500 MB | ~500 MB | ✅ |
-| Embedding latency | - | ~150ms avg | ✅ |
-| Vector search latency | - | ~50ms avg | ✅ |
+| Metric                 | Target  | Current (v1.0.0) | Status |
+| ---------------------- | ------- | ---------------- | ------ |
+| Baseline memory        | ~200 MB | ~200 MB          | ✅     |
+| Under load (8 queries) | ~500 MB | ~500 MB          | ✅     |
+| Embedding latency      | -       | ~150ms avg       | ✅     |
+| Vector search latency  | -       | ~50ms avg        | ✅     |
 
 ---
 
@@ -56,11 +56,11 @@ For detailed profiling procedures, see [PROFILING.md](PROFILING.md).
 
 ### Repository Sizes
 
-| Size | Files | Chunks | LanceDB | SQLite | Status |
-|------|-------|--------|---------|--------|--------|
-| Small | ~1K | ~50K | ~100 MB | ~5 MB | ✅ |
-| Medium | ~10K | ~500K | ~1 GB | ~50 MB | ✅ |
-| Large | ~100K | ~5M | ~10 GB | ~500 MB | ✅ |
+| Size   | Files | Chunks | LanceDB | SQLite  | Status |
+| ------ | ----- | ------ | ------- | ------- | ------ |
+| Small  | ~1K   | ~50K   | ~100 MB | ~5 MB   | ✅     |
+| Medium | ~10K  | ~500K  | ~1 GB   | ~50 MB  | ✅     |
+| Large  | ~100K | ~5M    | ~10 GB  | ~500 MB | ✅     |
 
 ### Search Quality Metrics
 
@@ -121,6 +121,7 @@ time uv run dolphin kb index test-large
 ```
 
 **Expected Results**:
+
 - Small: < 5 minutes
 - Medium: 10-30 minutes
 - Large: Varies by size (incremental indexing recommended)
@@ -148,6 +149,7 @@ curl -w "\nTime: %{time_total}s\n" -X POST http://127.0.0.1:7777/search \
 ```
 
 **Expected Results**:
+
 - Cold cache: 300-600ms
 - Warm cache: 50-200ms
 
@@ -164,6 +166,7 @@ wait
 ```
 
 **Expected Results**:
+
 - All queries complete in < 2s
 - No significant latency increase
 
@@ -176,6 +179,7 @@ uv run python scripts/test_hybrid_search_performance.py
 ```
 
 **Metrics tracked**:
+
 - Precision@5
 - Precision@10
 - Mean Reciprocal Rank (MRR)
@@ -188,6 +192,7 @@ uv run python scripts/benchmark_ann.py --repo test-medium --queries 50
 ```
 
 **Expected Results**:
+
 - Speed strategy: Fastest, good precision
 - Accuracy strategy: Slower, best precision
 - Adaptive strategy: Balanced (recommended)
@@ -242,6 +247,7 @@ uv run dolphin kb add-repo my-repo /path --default-embed-model large
 ```
 
 **Trade-offs**:
+
 - Small (1536d): Faster, lower cost, good for most use cases
 - Large (3072d): Better precision, use for critical repos
 
@@ -256,6 +262,7 @@ overlap_tokens = 64     # Balance context and duplication
 ```
 
 **Trade-offs**:
+
 - Smaller chunks (256): Better precision, more API calls, higher cost
 - Larger chunks (512): Better context, fewer chunks, lower cost
 
@@ -285,6 +292,7 @@ uv run dolphin kb index my-repo --full --force
 ### 5. Caching Strategy
 
 Leverage content deduplication:
+
 - SHA256 hashing prevents re-embedding unchanged code
 - Git-aware indexing only processes changed files
 - Reindexing same code is nearly free
@@ -306,6 +314,7 @@ Track key metrics over time:
 ### Alerting Thresholds
 
 Set up alerts for:
+
 - p95 latency > 2s
 - Memory usage > 1GB
 - Indexing failures

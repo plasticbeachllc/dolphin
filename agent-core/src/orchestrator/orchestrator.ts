@@ -494,8 +494,13 @@ export class Orchestrator implements IOrchestrator {
    * Convert internal session to public session
    */
   private toPublicSession(session: InternalSession): TaskSession {
-    const { eventEmitter: _eventEmitter, workflowIterator: _workflowIterator, approvalResolver: _approvalResolver, revisionResolver: _revisionResolver, ...publicSession } =
-      session;
+    const {
+      eventEmitter: _eventEmitter,
+      workflowIterator: _workflowIterator,
+      approvalResolver: _approvalResolver,
+      revisionResolver: _revisionResolver,
+      ...publicSession
+    } = session;
     return publicSession;
   }
 }
