@@ -251,6 +251,11 @@ This is the first major release of pb-dolphin, marking a significant milestone i
   - Added missing `per_session_spend_cap_usd` field at top level
   - Corrected TOML syntax errors for null/default values
 
+- **API Startup Stability**
+  - Guarded module-level Knowledge Base initialization so importing `kb.api.server`
+    no longer raises when a user config hasn't been created yet, which restores
+    the Python unit test suite.
+
 - **Database and Storage**
   - Foreign key validation during repository initialization
   - Proper cascade deletion order in `rm-repo` operations

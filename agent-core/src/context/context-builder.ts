@@ -6,6 +6,7 @@
  * Based on: docs/orchestration/DOLPHIN-V2-ORCHESTRATION-PROJECT-PLAN.md
  */
 
+import { existsSync } from "fs";
 import { readFile } from "fs/promises";
 import { PathValidator } from "../../../shared/security/path-validator";
 import type {
@@ -133,7 +134,24 @@ export class ContextBuilder {
    */
   private async loadFiles(filePaths: string[]): Promise<FileContent[]> {
     const files: FileContent[] = [];
-    const validator = new PathValidator({ baseDir: this.workspaceRoot });
+
+    if (!existsSync(this.workspaceRoot)) {
+      console.warn(
+        `[ContextBuilder] Workspace root '${this.workspaceRoot}' not found. Skipping explicit file loads.`
+      );
+      return files;
+    }
+
+    let validator: PathValidator;
+    try {
+      validator = new PathValidator({ baseDir: this.workspaceRoot });
+    } catch (error) {
+      console.error(
+        `[ContextBuilder] Failed to initialize path validator for '${this.workspaceRoot}':`,
+        error
+      );
+      return files;
+    }
 
     for (const path of filePaths) {
       try {

@@ -356,12 +356,13 @@ describe("Claude Authentication Integration", () => {
 
       delete process.env.ANTHROPIC_API_KEY;
 
-      // Should handle gracefully (existsSync returns true, but file is invalid)
+      // Should handle gracefully - corrupted file means no valid auth
       const status = await authManager.detectAuthStatus();
 
-      // Should treat as authenticated via OAuth since file exists
-      expect(status.authenticated).toBe(true);
-      expect(status.mode).toBe("subscription");
+      // Corrupted file should be treated as NOT authenticated
+      expect(status.authenticated).toBe(false);
+      expect(status.mode).toBe("none");
+      expect(status.error).toBeDefined();
 
       // Cleanup
       try {

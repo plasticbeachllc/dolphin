@@ -110,7 +110,13 @@ def initialize_search_backend() -> None:
 
 # Initialize search backend when module loads (before uvicorn starts)
 print("🚀 Initializing KB server...", file=sys.stderr)
-initialize_search_backend()
+try:
+    initialize_search_backend()
+except FileNotFoundError:
+    print(
+        "⚠️  No KB configuration found at import time. Call initialize_search_backend() after creating a config.",
+        file=sys.stderr,
+    )
 
 # Add Prometheus metrics middleware to the app
 app.middleware("http")(prometheus_middleware)
