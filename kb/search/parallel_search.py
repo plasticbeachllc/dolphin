@@ -281,11 +281,14 @@ class ParallelHybridSearch:
         if self.bm25_search_fn is None:
             return []
 
+        # Store in local variable to help type checker
+        bm25_fn = self.bm25_search_fn
+
         # Run in thread pool
         loop = asyncio.get_event_loop()
         results = await loop.run_in_executor(
             None,
-            lambda: self.bm25_search_fn(query, top_k, **kwargs),
+            lambda: bm25_fn(query, top_k, **kwargs),
         )
 
         return [

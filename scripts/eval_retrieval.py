@@ -313,7 +313,7 @@ def main():
     # Initialize backend
     print(f"\nInitializing knowledge base from: {args.store_path}")
     config = KBConfig()
-    embedding_provider = create_provider(config)
+    embedding_provider = create_provider(config)  # type: ignore[arg-type]
     lance_store = LanceDBStore(root=args.store_path)
     sql_store = SQLiteMetadataStore(args.store_path / "metadata.db")
 

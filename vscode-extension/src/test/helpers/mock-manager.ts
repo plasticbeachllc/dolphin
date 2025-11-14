@@ -5,6 +5,7 @@
 
 import { MockKBServer, MockAgentBridge } from "./mock-services";
 import { MOCK_KB_CONFIG } from "./test-constants";
+import { MockSearchResult, MockMetadataResponse, ToolCall } from "./mock-types";
 
 export interface MockEnvironment {
   kbServer: MockKBServer;
@@ -74,8 +75,8 @@ export function resetMocks(): void {
  * Configure mock KB server responses.
  */
 export function configureMockKB(config: {
-  searchResults?: any[];
-  metadata?: any;
+  searchResults?: MockSearchResult[];
+  metadata?: MockMetadataResponse;
   health?: boolean;
 }): void {
   const env = getMockEnvironment();
@@ -98,7 +99,7 @@ export function configureMockKB(config: {
  */
 export function configureMockAgent(config: {
   response?: string;
-  toolCalls?: any[];
+  toolCalls?: ToolCall[];
   shouldError?: boolean;
   error?: Error;
 }): void {

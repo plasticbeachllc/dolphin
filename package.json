@@ -15,6 +15,7 @@
     "build:webview": "cd vscode-extension/webview && bun run build",
     "build:agent": "cd agent-core && bun run build",
     "build:all": "npm run build:extension && npm run build:webview && npm run build:agent",
+    "lint:all": "cd mcp-bridge && bun run lint && cd ../agent-core && bun run lint && cd ../vscode-extension && bun run lint",
     "test:agent": "cd agent-core && bun test",
     "test:mcp": "cd mcp-bridge && npm run test:clean",
     "test:kb": "cd kb && pytest tests/",
@@ -23,7 +24,6 @@
     "clean": "rm -rf vscode-extension/out vscode-extension/webview/build agent-core/dist",
     "dev:extension": "cd vscode-extension && npm run watch",
     "dev:webview": "cd vscode-extension/webview && bun run dev",
-    "lint:all": "cd mcp-bridge && bun run lint && cd ../agent-core && bun run lint && cd ../vscode-extension && bun run lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,svelte}\""
   },
   "devDependencies": {

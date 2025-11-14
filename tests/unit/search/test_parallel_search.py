@@ -12,7 +12,7 @@ class TestReciprocalRankFusion:
 
     def test_rrf_empty_results(self):
         """Test RRF with empty results."""
-        result = reciprocal_rank_fusion([], [])
+        result = reciprocal_rank_fusion([], [])  # type: ignore[arg-type]
         assert result == []
 
     def test_rrf_single_list(self):

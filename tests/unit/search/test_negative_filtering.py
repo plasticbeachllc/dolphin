@@ -1,7 +1,12 @@
 """Tests for negative filtering functionality in search backend."""
 
+from typing import cast
+
 from kb.api.app import SearchRequest
 from kb.api.search_backend import KnowledgeSearchBackend
+from kb.embeddings.provider import EmbeddingProvider
+from kb.store.lancedb_store import LanceDBStore
+from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
 class TestNegativeFiltering:
@@ -24,13 +29,17 @@ class TestNegativeFiltering:
 
         request = SearchRequest(query="test", exclude_paths=["tests/"])
 
-        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
+        backend = KnowledgeSearchBackend(
+            embedding_provider=cast(EmbeddingProvider, None),
+            lance_store=cast(LanceDBStore, None),
+            sql_store=cast(SQLiteMetadataStore, None),
+        )
 
         filtered = backend._apply_request_filters(results, request)
 
         # Should exclude tests/ directory
         assert len(filtered) == 3
-        assert all(not r["path"].startswith("tests/") for r in filtered)
+        assert all(isinstance(r["path"], str) and not r["path"].startswith("tests/") for r in filtered)
         assert any(r["path"] == "src/main.py" for r in filtered)
         assert any(r["path"] == "src/utils.py" for r in filtered)
         assert any(r["path"] == "docs/guide.md" for r in filtered)
@@ -57,13 +66,17 @@ class TestNegativeFiltering:
 
         request = SearchRequest(query="test", exclude_paths=["tests/", "node_modules/", "dist/"])
 
-        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
+        backend = KnowledgeSearchBackend(
+            embedding_provider=cast(EmbeddingProvider, None),
+            lance_store=cast(LanceDBStore, None),
+            sql_store=cast(SQLiteMetadataStore, None),
+        )
 
         filtered = backend._apply_request_filters(results, request)
 
         # Should only include src/ files
         assert len(filtered) == 2
-        assert all(r["path"].startswith("src/") for r in filtered)
+        assert all(isinstance(r["path"], str) and r["path"].startswith("src/") for r in filtered)
 
     def test_exclude_patterns_glob_matching(self):
         """Test excluding files by glob patterns."""
@@ -82,7 +95,11 @@ class TestNegativeFiltering:
 
         request = SearchRequest(query="test", exclude_patterns=["**/test_*.py", "*.json"])
 
-        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
+        backend = KnowledgeSearchBackend(
+            embedding_provider=cast(EmbeddingProvider, None),
+            lance_store=cast(LanceDBStore, None),
+            sql_store=cast(SQLiteMetadataStore, None),
+        )
 
         filtered = backend._apply_request_filters(results, request)
 
@@ -103,13 +120,20 @@ class TestNegativeFiltering:
 
         request = SearchRequest(query="test", exclude_patterns=["*.spec.ts", "*.toml", "*.json"])
 
-        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
+        backend = KnowledgeSearchBackend(
+            embedding_provider=cast(EmbeddingProvider, None),
+            lance_store=cast(LanceDBStore, None),
+            sql_store=cast(SQLiteMetadataStore, None),
+        )
 
         filtered = backend._apply_request_filters(results, request)
 
         # Should only include production TypeScript files
         assert len(filtered) == 2
-        assert all(r["path"].endswith(".ts") and not r["path"].endswith(".spec.ts") for r in filtered)
+        assert all(
+            isinstance(r["path"], str) and r["path"].endswith(".ts") and not r["path"].endswith(".spec.ts")
+            for r in filtered
+        )
 
     def test_exclude_paths_and_patterns_combined(self):
         """Test using both exclude_paths and exclude_patterns together."""
@@ -138,7 +162,11 @@ class TestNegativeFiltering:
             exclude_patterns=["test_*.py", "*.json"],
         )
 
-        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
+        backend = KnowledgeSearchBackend(
+            embedding_provider=cast(EmbeddingProvider, None),
+            lance_store=cast(LanceDBStore, None),
+            sql_store=cast(SQLiteMetadataStore, None),
+        )
 
         filtered = backend._apply_request_filters(results, request)
 
@@ -168,7 +196,11 @@ class TestNegativeFiltering:
             exclude_patterns=["test_*.py", "*.json"],  # But exclude tests and configs
         )
 
-        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
+        backend = KnowledgeSearchBackend(
+            embedding_provider=cast(EmbeddingProvider, None),
+            lance_store=cast(LanceDBStore, None),
+            sql_store=cast(SQLiteMetadataStore, None),
+        )
 
         filtered = backend._apply_request_filters(results, request)
 
@@ -186,13 +218,17 @@ class TestNegativeFiltering:
 
         request = SearchRequest(query="test", exclude_paths=["tests/"])
 
-        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
+        backend = KnowledgeSearchBackend(
+            embedding_provider=cast(EmbeddingProvider, None),
+            lance_store=cast(LanceDBStore, None),
+            sql_store=cast(SQLiteMetadataStore, None),
+        )
 
         filtered = backend._apply_request_filters(results, request)
 
         # Should properly normalize and exclude /tests/test.py
         assert len(filtered) == 2
-        assert not any("test.py" in r["path"] for r in filtered)
+        assert not any(isinstance(r["path"], str) and "test.py" in r["path"] for r in filtered)
 
     def test_empty_negative_filters(self):
         """Test that empty negative filters don't affect results."""
@@ -203,7 +239,11 @@ class TestNegativeFiltering:
 
         request = SearchRequest(query="test", exclude_paths=[], exclude_patterns=[])
 
-        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
+        backend = KnowledgeSearchBackend(
+            embedding_provider=cast(EmbeddingProvider, None),
+            lance_store=cast(LanceDBStore, None),
+            sql_store=cast(SQLiteMetadataStore, None),
+        )
 
         filtered = backend._apply_request_filters(results, request)
 
@@ -222,7 +262,11 @@ class TestNegativeFiltering:
             # exclude_paths and exclude_patterns not specified
         )
 
-        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
+        backend = KnowledgeSearchBackend(
+            embedding_provider=cast(EmbeddingProvider, None),
+            lance_store=cast(LanceDBStore, None),
+            sql_store=cast(SQLiteMetadataStore, None),
+        )
 
         filtered = backend._apply_request_filters(results, request)
 

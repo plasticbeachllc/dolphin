@@ -98,6 +98,7 @@ def initialized_db(temp_git_repo):
     # Register test repo
     metadata_store.record_repo("test_repo", temp_git_repo)
     repo = metadata_store.get_repo_by_name("test_repo")
+    assert repo is not None
     repo_id = int(repo["id"])
 
     # Add a file
@@ -277,6 +278,7 @@ class TestEndToEndIntegration:
 
         # Get initial cache state
         initial_cache = graph_manager.validator._get_cache_state()
+        assert initial_cache is not None
         assert initial_cache["commit_sha"] == initial_commit
 
         # Make a git change
@@ -309,6 +311,7 @@ class TestEndToEndIntegration:
 
         # Get initial cache state
         initial_cache = graph_manager.validator._get_cache_state()
+        assert initial_cache is not None
         assert initial_cache["edge_changes_since_rebuild"] == 0
 
         # Simulate edge changes
@@ -365,7 +368,7 @@ class TestEndToEndIntegration:
         new_graph = graph_manager.get_graph(force_rebuild=True)
 
         # Rebuild time should be different
-        assert graph_manager._last_rebuild > initial_rebuild_time
+        assert graph_manager._last_rebuild > initial_rebuild_time  # type: ignore[operator]
 
         # Graph should be valid
         assert new_graph.number_of_nodes() == initial_graph.number_of_nodes()

@@ -88,8 +88,8 @@ class HybridSearchValidator:
             vector_precision_scores.append(vector_precision)
 
             # Calculate MRR (Mean Reciprocal Rank)
-            hybrid_mrr = self._calculate_mrr(hybrid_results, ground_truth)
-            vector_mrr = self._calculate_mrr(vector_results, ground_truth)
+            hybrid_mrr = self._calculate_mrr(hybrid_results, ground_truth)  # type: ignore[arg-type]
+            vector_mrr = self._calculate_mrr(vector_results, ground_truth)  # type: ignore[arg-type]
             hybrid_mrr_scores.append(hybrid_mrr)
             vector_mrr_scores.append(vector_mrr)
 
@@ -211,7 +211,7 @@ class HybridSearchValidator:
             targets_met.append("❌ Precision improvement target missed")
             print("❌ Precision improvement target missed (< 20%)")
 
-        validation_results["targets"]["targets_met"] = targets_met
+        validation_results["targets"]["targets_met"] = targets_met  # type: ignore[index]
 
         if all(
             [

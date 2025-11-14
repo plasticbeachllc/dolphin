@@ -143,7 +143,7 @@ class TestANNParamsUtilities:
     def test_to_lancedb_params_all_metrics(self):
         """Test all metric types convert properly."""
         for metric in ["cosine", "L2", "dot"]:
-            params = ANNParams(metric=metric)
+            params = ANNParams(metric=metric)  # type: ignore[arg-type]
             lance_params = params.to_lancedb_params()
             assert lance_params["metric"] == metric
 

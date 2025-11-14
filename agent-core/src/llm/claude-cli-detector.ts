@@ -28,11 +28,11 @@ const execCommand = (
       reject(new Error(`Command timed out after ${timeoutMs}ms`));
     }, timeoutMs);
 
-    proc.stdout?.on("data", (data) => {
+    proc.stdout?.on("data", (data: Buffer) => {
       stdout += data.toString();
     });
 
-    proc.stderr?.on("data", (data) => {
+    proc.stderr?.on("data", (data: Buffer) => {
       stderr += data.toString();
     });
 

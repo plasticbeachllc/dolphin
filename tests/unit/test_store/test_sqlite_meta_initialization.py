@@ -240,6 +240,7 @@ class TestDatabaseIntegrityValidation:
         store.record_repo("test-repo", repo_path)
 
         repo = store.get_repo_by_name("test-repo")
+        assert repo is not None
         repo_id = int(repo["id"])
 
         store.upsert_file(

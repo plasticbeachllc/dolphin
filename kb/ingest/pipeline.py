@@ -61,6 +61,8 @@ class IngestionPipeline:
         Returns:
             GraphManager instance for the repository
         """
+        if self.graph_managers is None:
+            self.graph_managers = {}
         if repo_id not in self.graph_managers:
             # Use the database engine from the graph_store
             db_engine = self.graph_store.db if self.graph_store else None
@@ -500,7 +502,7 @@ class IngestionPipeline:
                 # Extract and store code graph data
                 if self.graph_store and not dry_run:
                     try:
-                        nodes, edges = extract_graph_from_file(file_path, language, text, repo_config)
+                        nodes, edges = extract_graph_from_file(file_path, language, text, repo_config)  # type: ignore[arg-type]
                         if nodes or edges:
                             graph_stats = store_graph_data(
                                 self.graph_store,

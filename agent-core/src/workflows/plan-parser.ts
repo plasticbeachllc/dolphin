@@ -88,7 +88,7 @@ export function parsePlanFromMarkdown(md: string): ParseResult {
   for (const cand of candidates.sort((a, b) => b.score - a.score)) {
     for (const repaired of [cand.src, normalizeToml(cand.src)]) {
       try {
-        const obj = TOML.parse(repaired);
+        const obj = TOML.parse(repaired) as unknown;
         const plan = PlanSchema.parse(obj);
         return { plan, rawToml: repaired, source: cand.where };
       } catch (err) {
@@ -112,9 +112,15 @@ function collectTomlCandidates(md: string): Candidate[] {
   // Pass 1: Explicit TOML fences
   const tokens = marked.lexer(md, { gfm: true });
   for (const token of tokens) {
-    if (token.type === "code") {
-      const lang = (token as any).lang?.toLowerCase() || "";
-      const text = (token as any).text as string;
+    if (
+      token.type === "code" &&
+      "lang" in token &&
+      typeof token.lang === "string" &&
+      "text" in token &&
+      typeof token.text === "string"
+    ) {
+      const lang = token.lang.toLowerCase();
+      const text = token.text;
 
       if (lang === "toml") {
         out.push(scoreCandidate(text, "fenced:toml"));
@@ -124,9 +130,14 @@ function collectTomlCandidates(md: string): Candidate[] {
 
   // Pass 2: Unlabeled code fences that look like TOML
   for (const token of tokens) {
-    if (token.type === "code") {
-      const lang = (token as any).lang?.toLowerCase() || "";
-      const text = (token as any).text as string;
+    if (
+      token.type === "code" &&
+      "lang" in token &&
+      "text" in token &&
+      typeof token.text === "string"
+    ) {
+      const lang = typeof token.lang === "string" ? token.lang.toLowerCase() : "";
+      const text = token.text;
 
       if (!lang && looksLikeToml(text)) {
         out.push(scoreCandidate(text, "fenced:unlabeled"));

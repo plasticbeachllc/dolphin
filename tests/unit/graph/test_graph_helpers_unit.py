@@ -44,7 +44,7 @@ class TestExtractGraphFromFile:
 
     def test_extract_graph_with_none_language(self):
         """Test extraction with None language."""
-        nodes, edges = extract_graph_from_file(Path("/repo/file"), None, "content")
+        nodes, edges = extract_graph_from_file(Path("/repo/file"), None, "content")  # type: ignore[arg-type]
 
         assert nodes == []
         assert edges == []

@@ -24,7 +24,11 @@ import type {
  */
 export interface OrchestratorConfig {
   workspaceRoot: string;
-  stateStore: any; // Will be properly typed when StateStore is implemented
+  stateStore: {
+    saveSession: (session: TaskSession) => Promise<void>;
+    loadSession: (sessionId: string) => Promise<TaskSession | null>;
+    savePlan: (sessionId: string, plan: unknown) => Promise<string>;
+  };
   editorWorkflow: IWorkflow;
   architectWorkflow: IWorkflow;
 }
@@ -313,7 +317,7 @@ export class Orchestrator implements IOrchestrator {
       if (resolveNext) {
         const resolver = resolveNext;
         resolveNext = null;
-        resolver({ value: undefined as any, done: true });
+        resolver({ value: undefined as unknown as WorkflowUpdate, done: true });
       }
     };
 
@@ -373,29 +377,29 @@ export class Orchestrator implements IOrchestrator {
 
         // Handle state changes
         if (update.type === "state_change") {
-          this.transitionState(session, update.data.state);
+          const data = update.data as { state: string };
+          this.transitionState(session, data.state);
         }
 
         // Handle plan updates
-        if (update.type === "progress" && update.data.phase === "planning" && update.data.plan) {
-          session.plan = update.data.plan;
-          const contentPath = await this.config.stateStore.savePlan(session.id, session.plan);
-          // Update in-memory session with contentPath so subsequent saves preserve it
-          session.plan.contentPath = contentPath;
-        }
+        if (update.type === "progress") {
+          const data = update.data as { phase?: string; plan?: unknown; result?: unknown };
+          if (data.phase === "planning" && data.plan) {
+            session.plan = data.plan;
+            const contentPath = await this.config.stateStore.savePlan(session.id, session.plan);
+            // Update in-memory session with contentPath so subsequent saves preserve it
+            session.plan.contentPath = contentPath;
+          }
 
-        // Handle research updates
-        if (update.type === "progress" && update.data.phase === "research" && update.data.result) {
-          session.research = update.data.result;
-        }
+          // Handle research updates
+          if (data.phase === "research" && data.result) {
+            session.research = data.result;
+          }
 
-        // Handle clarification updates
-        if (
-          update.type === "progress" &&
-          update.data.phase === "clarification" &&
-          update.data.result
-        ) {
-          session.clarification = update.data.result;
+          // Handle clarification updates
+          if (data.phase === "clarification" && data.result) {
+            session.clarification = data.result;
+          }
         }
 
         // Emit update to subscribers

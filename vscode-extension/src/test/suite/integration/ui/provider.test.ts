@@ -23,7 +23,9 @@ describe("DolphinViewProvider Unit Tests", () => {
 
     // Then shutdown agent bridge to stop async operations
     if (mockAgentBridge) {
-      const process = (mockAgentBridge as any).process;
+      const process = (mockAgentBridge as unknown as Record<string, unknown>).process as
+        | Record<string, unknown>
+        | undefined;
       if (process && !process.kill) {
         process.kill = () => true;
       }
@@ -57,44 +59,45 @@ describe("DolphinViewProvider Unit Tests", () => {
     });
 
     it("Should send message when webview is ready", () => {
-      let sentMessage: any = null;
+      let sentMessage: unknown = null;
 
       // Mock webview view
       const mockWebviewView = {
         webview: {
-          postMessage: (message: any) => {
+          postMessage: (message: unknown) => {
             sentMessage = message;
             return Promise.resolve(true);
           },
         },
-      } as any;
+      } as unknown as vscode.WebviewView;
 
       // Set the webview view by calling resolveWebviewView
       // We can't call it directly due to missing dependencies, so we'll inject it
-      (provider as any).webviewView = mockWebviewView;
+      (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
       provider.postMessage({ type: "test", data: "test-data" });
 
       assert.ok(sentMessage, "Message should have been sent");
-      assert.strictEqual(sentMessage.type, "test", "Message type should match");
-      assert.strictEqual(sentMessage.data, "test-data", "Message data should match");
+      const messageRecord = sentMessage as Record<string, unknown>;
+      assert.strictEqual(messageRecord.type, "test", "Message type should match");
+      assert.strictEqual(messageRecord.data, "test-data", "Message data should match");
     });
   });
 
   describe("clearConversation", () => {
     it("Should send clear_conversation message to webview", () => {
-      let sentMessage: any = null;
+      let sentMessage: unknown = null;
 
       const mockWebviewView = {
         webview: {
-          postMessage: (message: any) => {
+          postMessage: (message: unknown) => {
             sentMessage = message;
             return Promise.resolve(true);
           },
         },
-      } as any;
+      } as unknown as vscode.WebviewView;
 
-      (provider as any).webviewView = mockWebviewView;
+      (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
       provider.clearConversation();
 
@@ -116,18 +119,18 @@ describe("DolphinViewProvider Unit Tests", () => {
 
   describe("focusInput", () => {
     it("Should send focus_input message to webview", () => {
-      let sentMessage: any = null;
+      let sentMessage: unknown = null;
 
       const mockWebviewView = {
         webview: {
-          postMessage: (message: any) => {
+          postMessage: (message: unknown) => {
             sentMessage = message;
             return Promise.resolve(true);
           },
         },
-      } as any;
+      } as unknown as vscode.WebviewView;
 
-      (provider as any).webviewView = mockWebviewView;
+      (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
       provider.focusInput();
 
@@ -144,18 +147,18 @@ describe("DolphinViewProvider Unit Tests", () => {
 
   describe("prefillInput (Phase 2)", () => {
     it("Should send prefill_input message with text to webview", () => {
-      let sentMessage: any = null;
+      let sentMessage: unknown = null;
 
       const mockWebviewView = {
         webview: {
-          postMessage: (message: any) => {
+          postMessage: (message: unknown) => {
             sentMessage = message;
             return Promise.resolve(true);
           },
         },
-      } as any;
+      } as unknown as vscode.WebviewView;
 
-      (provider as any).webviewView = mockWebviewView;
+      (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
       const testText = "Can you explain this code?";
       provider.prefillInput(testText);
@@ -166,18 +169,18 @@ describe("DolphinViewProvider Unit Tests", () => {
     });
 
     it("Should handle empty string", () => {
-      let sentMessage: any = null;
+      let sentMessage: unknown = null;
 
       const mockWebviewView = {
         webview: {
-          postMessage: (message: any) => {
+          postMessage: (message: unknown) => {
             sentMessage = message;
             return Promise.resolve(true);
           },
         },
-      } as any;
+      } as unknown as vscode.WebviewView;
 
-      (provider as any).webviewView = mockWebviewView;
+      (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
       provider.prefillInput("");
 
@@ -186,18 +189,18 @@ describe("DolphinViewProvider Unit Tests", () => {
     });
 
     it("Should handle multi-line text with code blocks", () => {
-      let sentMessage: any = null;
+      let sentMessage: unknown = null;
 
       const mockWebviewView = {
         webview: {
-          postMessage: (message: any) => {
+          postMessage: (message: unknown) => {
             sentMessage = message;
             return Promise.resolve(true);
           },
         },
-      } as any;
+      } as unknown as vscode.WebviewView;
 
-      (provider as any).webviewView = mockWebviewView;
+      (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
       const multiLineText = "Explain this code:\n\n```typescript\nconst x = 1;\n```";
       provider.prefillInput(multiLineText);
@@ -207,18 +210,18 @@ describe("DolphinViewProvider Unit Tests", () => {
     });
 
     it("Should handle special characters", () => {
-      let sentMessage: any = null;
+      let sentMessage: unknown = null;
 
       const mockWebviewView = {
         webview: {
-          postMessage: (message: any) => {
+          postMessage: (message: unknown) => {
             sentMessage = message;
             return Promise.resolve(true);
           },
         },
-      } as any;
+      } as unknown as vscode.WebviewView;
 
-      (provider as any).webviewView = mockWebviewView;
+      (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
       const specialText = "Text with \"quotes\" and 'apostrophes' and <html> & more";
       provider.prefillInput(specialText);
@@ -236,8 +239,11 @@ describe("DolphinViewProvider Unit Tests", () => {
 
   describe("getNonce", () => {
     it("Should generate unique nonces", () => {
-      const nonce1 = (provider as any).getNonce();
-      const nonce2 = (provider as any).getNonce();
+      type ProviderWithGetNonce = {
+        getNonce: () => string;
+      };
+      const nonce1 = (provider as unknown as ProviderWithGetNonce).getNonce();
+      const nonce2 = (provider as unknown as ProviderWithGetNonce).getNonce();
 
       assert.ok(nonce1, "Nonce 1 should be generated");
       assert.ok(nonce2, "Nonce 2 should be generated");
@@ -245,7 +251,10 @@ describe("DolphinViewProvider Unit Tests", () => {
     });
 
     it("Should generate base64 encoded strings", () => {
-      const nonce = (provider as any).getNonce();
+      type ProviderWithGetNonce = {
+        getNonce: () => string;
+      };
+      const nonce = (provider as unknown as ProviderWithGetNonce).getNonce();
 
       // Base64 regex pattern
       const base64Pattern = /^[A-Za-z0-9+/]+=*$/;
@@ -253,7 +262,10 @@ describe("DolphinViewProvider Unit Tests", () => {
     });
 
     it("Should generate nonces of expected length", () => {
-      const nonce = (provider as any).getNonce();
+      type ProviderWithGetNonce = {
+        getNonce: () => string;
+      };
+      const nonce = (provider as unknown as ProviderWithGetNonce).getNonce();
 
       // 16 bytes -> 24 base64 characters (including padding)
       assert.ok(nonce.length >= 20, "Nonce should be at least 20 characters");
@@ -265,32 +277,38 @@ describe("DolphinViewProvider Unit Tests", () => {
     it("Should include nonce in CSP when generating HTML", () => {
       // This test would require mocking the file system and creating a fake index.html
       // For now, we'll test the nonce generation which is part of CSP
-      const nonce = (provider as any).getNonce();
+      type ProviderWithGetNonce = {
+        getNonce: () => string;
+      };
+      const nonce = (provider as unknown as ProviderWithGetNonce).getNonce();
       assert.ok(nonce, "Nonce should be generated for CSP");
     });
   });
 
   describe("Event Forwarding", () => {
     it("Should forward agent events to webview when ready", (done) => {
-      let forwardedEvent: any = null;
+      let forwardedEvent: unknown = null;
 
       const mockWebviewView = {
         webview: {
-          postMessage: (message: any) => {
+          postMessage: (message: unknown) => {
             forwardedEvent = message;
             return Promise.resolve(true);
           },
         },
-      } as any;
+      } as unknown as vscode.WebviewView;
 
-      (provider as any).webviewView = mockWebviewView;
+      (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
       // The provider sets up event forwarding in the constructor
       // We need to trigger an event from the mock agent bridge
       const mockEvent = { type: "content_delta", delta: "Hello" };
 
       // Access the event emitter from the agent bridge
-      (mockAgentBridge as any).eventEmitter.fire(mockEvent);
+      type AgentBridgeWithEmitter = {
+        eventEmitter: { fire: (event: Record<string, unknown>) => void };
+      };
+      (mockAgentBridge as unknown as AgentBridgeWithEmitter).eventEmitter.fire(mockEvent);
 
       // Give it a moment to process
       setTimeout(() => {
@@ -302,7 +320,7 @@ describe("DolphinViewProvider Unit Tests", () => {
     });
 
     it("Should forward events with requestId for correlation", (done) => {
-      let forwardedEvent: any = null;
+      let forwardedEvent: unknown = null;
       const loggedMessages: string[] = [];
 
       // Capture log messages
@@ -314,14 +332,14 @@ describe("DolphinViewProvider Unit Tests", () => {
 
       const mockWebviewView = {
         webview: {
-          postMessage: (message: any) => {
+          postMessage: (message: unknown) => {
             forwardedEvent = message;
             return Promise.resolve(true);
           },
         },
-      } as any;
+      } as unknown as vscode.WebviewView;
 
-      (provider as any).webviewView = mockWebviewView;
+      (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
       const mockEvent = {
         type: "tool_call_started",
@@ -331,7 +349,10 @@ describe("DolphinViewProvider Unit Tests", () => {
         requestId: "req-1234567890-1",
       };
 
-      (mockAgentBridge as any).eventEmitter.fire(mockEvent);
+      type AgentBridgeWithEmitter = {
+        eventEmitter: { fire: (event: Record<string, unknown>) => void };
+      };
+      (mockAgentBridge as unknown as AgentBridgeWithEmitter).eventEmitter.fire(mockEvent);
 
       setTimeout(() => {
         assert.ok(forwardedEvent, "Event should have been forwarded");
@@ -363,9 +384,9 @@ describe("DolphinViewProvider Unit Tests", () => {
         webview: {
           postMessage: () => Promise.resolve(true),
         },
-      } as any;
+      } as unknown as vscode.WebviewView;
 
-      (provider as any).webviewView = mockWebviewView;
+      (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
       const mockEvent = {
         type: "agent_ready",
@@ -374,7 +395,10 @@ describe("DolphinViewProvider Unit Tests", () => {
         requestId: "req-9999-42",
       };
 
-      (mockAgentBridge as any).eventEmitter.fire(mockEvent);
+      type AgentBridgeWithEmitter = {
+        eventEmitter: { fire: (event: Record<string, unknown>) => void };
+      };
+      (mockAgentBridge as unknown as AgentBridgeWithEmitter).eventEmitter.fire(mockEvent);
 
       setTimeout(() => {
         // Check logs include requestId
@@ -392,7 +416,7 @@ describe("DolphinViewProvider Unit Tests", () => {
     });
 
     it("Should handle events without requestId gracefully", (done) => {
-      let forwardedEvent: any = null;
+      let forwardedEvent: unknown = null;
       const loggedMessages: string[] = [];
 
       const originalAppendLine = outputChannel.appendLine;
@@ -403,14 +427,14 @@ describe("DolphinViewProvider Unit Tests", () => {
 
       const mockWebviewView = {
         webview: {
-          postMessage: (message: any) => {
+          postMessage: (message: unknown) => {
             forwardedEvent = message;
             return Promise.resolve(true);
           },
         },
-      } as any;
+      } as unknown as vscode.WebviewView;
 
-      (provider as any).webviewView = mockWebviewView;
+      (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
       // Event without requestId
       const mockEvent = {
@@ -418,7 +442,10 @@ describe("DolphinViewProvider Unit Tests", () => {
         delta: "test",
       };
 
-      (mockAgentBridge as any).eventEmitter.fire(mockEvent);
+      type AgentBridgeWithEmitter = {
+        eventEmitter: { fire: (event: Record<string, unknown>) => void };
+      };
+      (mockAgentBridge as unknown as AgentBridgeWithEmitter).eventEmitter.fire(mockEvent);
 
       setTimeout(() => {
         assert.ok(forwardedEvent, "Event should still be forwarded");

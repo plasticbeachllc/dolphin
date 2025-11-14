@@ -284,7 +284,7 @@ def prune_ignored(
                     conn.commit()
             else:
                 # In dry-run, just count what would be pruned
-                file_chunks = metadata.get_chunks_for_file(file_id)
+                file_chunks = metadata.get_chunks_for_file(repo_id, file_path)
                 total_chunks_pruned += len(file_chunks) if file_chunks else 0
 
     if dry_run:
@@ -823,7 +823,7 @@ def reset_all(
             result = metadata.rm_repo_with_lancedb(lancedb, repo["name"], force=True)
             stats = result["cleanup_stats"]
 
-            total_stats["repos_removed"] += 1
+            total_stats["repos_removed"] += 1  # type: ignore[operator]
             total_stats["files_deleted"] += stats["files_deleted"]
             total_stats["content_deleted"] += stats["content_deleted"]
             total_stats["locations_deleted"] += stats["locations_deleted"]
@@ -836,11 +836,11 @@ def reset_all(
 
             # Capture any warnings
             if "lancedb_warnings" in result:
-                total_stats["errors"].extend(result["lancedb_warnings"])
+                total_stats["errors"].extend(result["lancedb_warnings"])  # type: ignore[attr-defined]
 
         except Exception as e:
             error_msg = f"Failed to remove {repo['name']}: {e}"
-            total_stats["errors"].append(error_msg)
+            total_stats["errors"].append(error_msg)  # type: ignore[attr-defined]
             typer.echo(f"  ✗ {error_msg}", err=True)
 
     # Display final summary
@@ -854,8 +854,8 @@ def reset_all(
     typer.echo(f"  Vectors deleted: {total_stats['vectors_deleted']}")
 
     if total_stats["errors"]:
-        typer.echo(f"\n⚠️  Warnings ({len(total_stats['errors'])}):")
-        for error in total_stats["errors"]:
+        typer.echo(f"\n⚠️  Warnings ({len(total_stats['errors'])}):")  # type: ignore[arg-type]
+        for error in total_stats["errors"]:  # type: ignore[union-attr]
             typer.echo(f"  - {error}", err=True)
 
     typer.echo(f"\nConfiguration preserved at: {config.resolved_store_root()}")

@@ -176,8 +176,8 @@ export class ClaudeClient {
 
     return {
       content: response.content
-        .filter((c) => c.type === "text")
-        .map((c) => (c as any).text)
+        .filter((c): c is Anthropic.TextBlock => c.type === "text")
+        .map((c) => c.text)
         .join(""),
       usage: {
         input_tokens: response.usage.input_tokens,
@@ -208,7 +208,7 @@ export class ClaudeClient {
       throw new Error("API client not initialized");
     }
 
-    const stream = await this.apiClient.messages.stream({
+    const stream = this.apiClient.messages.stream({
       model: this.config.model,
       max_tokens: request.maxTokens || this.config.maxTokens,
       temperature: request.temperature || this.config.temperature || 1.0,

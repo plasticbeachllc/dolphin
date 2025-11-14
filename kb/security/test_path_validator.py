@@ -93,6 +93,7 @@ class TestPathTraversalAttacks:
         """Should reject simple parent directory traversal."""
         with pytest.raises(PathValidationError) as exc_info:
             validator.validate("../etc/passwd")
+        assert isinstance(exc_info.value, PathValidationError)
         assert exc_info.value.reason == "path_traversal"
 
     def test_reject_multiple_parent_directory_traversal(self, validator):
@@ -156,6 +157,7 @@ class TestNullByteAttacks:
         """Should reject path with null byte."""
         with pytest.raises(PathValidationError) as exc_info:
             validator.validate("file.txt\0.jpg")
+        assert isinstance(exc_info.value, PathValidationError)
         assert exc_info.value.reason == "null_byte"
 
     def test_reject_path_with_null_byte_in_middle(self, validator):
@@ -175,6 +177,7 @@ class TestSymlinkHandling:
 
         with pytest.raises(PathValidationError) as exc_info:
             validator.validate("symlink.txt")
+        assert isinstance(exc_info.value, PathValidationError)
         assert exc_info.value.reason == "symlink"
 
     def test_allow_symlinks_when_enabled(self, test_dir):
@@ -201,6 +204,7 @@ class TestExistenceChecking:
         v = PathValidator(base_dir=test_dir, must_exist=True)
         with pytest.raises(PathValidationError) as exc_info:
             v.validate("nonexistent.txt")
+        assert isinstance(exc_info.value, PathValidationError)
         assert exc_info.value.reason == "not_found"
 
     def test_allow_existing_paths_when_must_exist(self, test_dir):
@@ -227,6 +231,7 @@ class TestExtensionFiltering:
 
         with pytest.raises(PathValidationError) as exc_info:
             v.validate("file.json")
+        assert isinstance(exc_info.value, PathValidationError)
         assert exc_info.value.reason == "invalid_extension"
 
     def test_case_insensitive_for_extensions(self, test_dir):
@@ -252,6 +257,7 @@ class TestPatternFiltering:
 
         with pytest.raises(PathValidationError) as exc_info:
             v.validate(".hidden")
+        assert isinstance(exc_info.value, PathValidationError)
         assert exc_info.value.reason == "disallowed_pattern"
 
         with pytest.raises(PathValidationError):
@@ -292,12 +298,14 @@ class TestErrorDetails:
         """Should include attempted path in error."""
         with pytest.raises(PathValidationError) as exc_info:
             validator.validate("../etc/passwd")
+        assert isinstance(exc_info.value, PathValidationError)
         assert exc_info.value.attempted_path == "../etc/passwd"
 
     def test_include_reason_in_error(self, validator):
         """Should include reason in error."""
         with pytest.raises(PathValidationError) as exc_info:
             validator.validate("../etc/passwd")
+        assert isinstance(exc_info.value, PathValidationError)
         assert exc_info.value.reason == "path_traversal"
 
 

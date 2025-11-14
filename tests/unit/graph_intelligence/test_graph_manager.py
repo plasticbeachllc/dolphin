@@ -29,6 +29,12 @@ class TestLazyLoading:
         # Mock validator to return False (cache invalid)
         with patch.object(manager.validator, "is_cache_valid", return_value=False):
             with patch.object(manager, "_rebuild_graph") as mock_rebuild:
+                # Ensure patched rebuild populates the graph to avoid runtime errors
+                def fake_rebuild():
+                    manager._graph = nx.DiGraph()
+
+                mock_rebuild.side_effect = fake_rebuild
+
                 # First access should trigger rebuild
                 manager.get_graph()
                 assert mock_rebuild.called

@@ -105,8 +105,9 @@ export class AutoSyncManager {
           await this.handleAggressiveMode(changes);
           break;
       }
-    } catch (error: any) {
-      this.log(`[AutoSync] Error during sync: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log(`[AutoSync] Error during sync: ${message}`);
     } finally {
       this.isProcessing = false;
     }
@@ -163,8 +164,9 @@ export class AutoSyncManager {
         await this.triggerIndexing(filePaths);
 
         this.log(`[AutoSync] Queued batch of ${batch.length} files for indexing`);
-      } catch (error: any) {
-        this.log(`[AutoSync] Error queuing batch: ${error.message}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.log(`[AutoSync] Error queuing batch: ${message}`);
         // Continue with next batch even if one fails
       }
     }

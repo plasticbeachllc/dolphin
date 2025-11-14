@@ -1,14 +1,14 @@
 // agent-core/src/kb/kb-manager.ts
-import { spawn, ChildProcess } from "child_process";
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
+import { spawn, type ChildProcess } from "child_process";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "fs";
+import { tmpdir as osTmpdir, platform as osPlatform, arch as osArch } from "os";
+import { join as pathJoin } from "path";
 import { BundledKBManager } from "./bundled-manager";
 
 export class KBManager {
   private process: ChildProcess | null = null;
   private readonly KB_URL = "http://127.0.0.1:7777";
-  private readonly lockFile = path.join(os.tmpdir(), "dolphin-kb.lock");
+  private readonly lockFile = pathJoin(osTmpdir(), "dolphin-kb.lock");
   private weOwnKB = false;
 
   async start(workspaceRoot: string, extensionPath?: string): Promise<void> {
@@ -97,8 +97,8 @@ export class KBManager {
   }
 
   private checkBundledUv(extensionPath: string): boolean {
-    const platform = os.platform();
-    const arch = os.arch();
+    const platform = osPlatform();
+    const arch = osArch();
 
     let uvName: string;
     if (platform === "darwin") {
@@ -111,19 +111,19 @@ export class KBManager {
       return false;
     }
 
-    const uvPath = path.join(extensionPath, "dist", "uv", uvName);
-    return fs.existsSync(uvPath);
+    const uvPath = pathJoin(extensionPath, "dist", "uv", uvName);
+    return existsSync(uvPath);
   }
 
   private checkDevelopmentSetup(workspaceRoot: string): boolean {
     // Check if workspace has pyproject.toml directly
-    if (fs.existsSync(path.join(workspaceRoot, "pyproject.toml"))) {
+    if (existsSync(pathJoin(workspaceRoot, "pyproject.toml"))) {
       return true;
     }
 
     // Check if dolphin subdirectory has pyproject.toml
-    const dolphinPath = path.join(workspaceRoot, "dolphin");
-    if (fs.existsSync(path.join(dolphinPath, "pyproject.toml"))) {
+    const dolphinPath = pathJoin(workspaceRoot, "dolphin");
+    if (existsSync(pathJoin(dolphinPath, "pyproject.toml"))) {
       return true;
     }
 
@@ -132,13 +132,13 @@ export class KBManager {
 
   private findDolphinRoot(workspaceRoot: string): string {
     // Check if workspaceRoot itself has pyproject.toml
-    if (fs.existsSync(path.join(workspaceRoot, "pyproject.toml"))) {
+    if (existsSync(pathJoin(workspaceRoot, "pyproject.toml"))) {
       return workspaceRoot;
     }
 
     // Check if there's a "dolphin" subdirectory with pyproject.toml
-    const dolphinPath = path.join(workspaceRoot, "dolphin");
-    if (fs.existsSync(path.join(dolphinPath, "pyproject.toml"))) {
+    const dolphinPath = pathJoin(workspaceRoot, "dolphin");
+    if (existsSync(pathJoin(dolphinPath, "pyproject.toml"))) {
       return dolphinPath;
     }
 
@@ -150,9 +150,9 @@ export class KBManager {
   private tryAcquireLock(): boolean {
     try {
       // Check if lock file exists
-      if (fs.existsSync(this.lockFile)) {
+      if (existsSync(this.lockFile)) {
         // Read PID from lock file
-        const lockContent = fs.readFileSync(this.lockFile, "utf-8").trim();
+        const lockContent = readFileSync(this.lockFile, "utf-8").trim();
         const pid = parseInt(lockContent, 10);
 
         if (!isNaN(pid) && this.isProcessRunning(pid)) {
@@ -163,15 +163,16 @@ export class KBManager {
 
         // Stale lock file, remove it
         console.error(`[KB Manager] Removing stale lock file (PID ${pid} not running)`);
-        fs.unlinkSync(this.lockFile);
+        unlinkSync(this.lockFile);
       }
 
       // Create lock file with our PID
-      fs.writeFileSync(this.lockFile, process.pid.toString());
+      writeFileSync(this.lockFile, process.pid.toString());
       console.error(`[KB Manager] Lock acquired with PID ${process.pid}`);
       return true;
-    } catch (error: any) {
-      console.error(`[KB Manager] Failed to acquire lock: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[KB Manager] Failed to acquire lock: ${message}`);
       return false;
     }
   }
@@ -179,18 +180,19 @@ export class KBManager {
   private releaseLock(): void {
     if (this.weOwnKB) {
       try {
-        if (fs.existsSync(this.lockFile)) {
+        if (existsSync(this.lockFile)) {
           // Verify we still own the lock before removing
-          const lockContent = fs.readFileSync(this.lockFile, "utf-8").trim();
+          const lockContent = readFileSync(this.lockFile, "utf-8").trim();
           const pid = parseInt(lockContent, 10);
 
           if (pid === process.pid) {
-            fs.unlinkSync(this.lockFile);
+            unlinkSync(this.lockFile);
             console.error(`[KB Manager] Lock released`);
           }
         }
-      } catch (error: any) {
-        console.error(`[KB Manager] Failed to release lock: ${error.message}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[KB Manager] Failed to release lock: ${message}`);
       }
       this.weOwnKB = false;
     }

@@ -226,7 +226,7 @@ export class StateStore {
     this.conversationsDir = join(this.storagePath, "conversations");
 
     // Ensure directories exist first, then initialize validators
-    this.ensureDirectories();
+    void this.ensureDirectories();
   }
 
   /**
@@ -539,7 +539,7 @@ export class StateStore {
       };
     }
 
-    return TOML.stringify(tomlObject as any);
+    return TOML.stringify(tomlObject as TOML.JsonMap);
   }
 
   /**
@@ -605,7 +605,7 @@ export class StateStore {
         model: obj.research.model,
         tokensUsed: obj.research.tokens_used,
         findings: obj.research.findings,
-        kbSearches: obj.research.kb_searches.map((s: any) => ({
+        kbSearches: obj.research.kb_searches.map((s) => ({
           query: s.query,
           resultsCount: s.results_count,
           topResult: s.top_result,
@@ -623,12 +623,12 @@ export class StateStore {
         conversationTurns: obj.clarification.conversation_turns,
         readyForPlanning: obj.clarification.ready_for_planning,
         finalContext: obj.clarification.final_context,
-        questions: obj.clarification.questions.map((q: any) => ({
+        questions: obj.clarification.questions.map((q) => ({
           question: q.question,
           priority: q.priority,
           reason: q.reason,
         })),
-        responses: obj.clarification.responses.map((r: any) => ({
+        responses: obj.clarification.responses.map((r) => ({
           answers: r.answers,
           timestamp: r.timestamp,
         })),
@@ -695,7 +695,7 @@ export class StateStore {
         tokensUsed: obj.execution.tokens_used,
         cost: obj.execution.cost,
         success: true, // Will be determined from steps
-        steps: obj.execution.steps.map((s: any) => ({
+        steps: obj.execution.steps.map((s) => ({
           stepNumber: s.step_number,
           description: s.description,
           status: s.status,

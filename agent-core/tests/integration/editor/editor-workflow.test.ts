@@ -15,8 +15,8 @@ import { join } from "path";
 
 describe("EditorWorkflow Integration", () => {
   let workflow: EditorWorkflow;
-  let mockClaudeProvider: any;
-  let mockStateStore: any;
+  let mockClaudeProvider: unknown;
+  let mockStateStore: unknown;
   let contextBuilder: ContextBuilder;
   let promptBuilder: PromptBuilder;
   let testWorkspace: string;
@@ -37,7 +37,7 @@ describe("EditorWorkflow Integration", () => {
 
     // Mock ClaudeProvider
     mockClaudeProvider = {
-      execute: mock(async (params: any) => {
+      execute: mock(async (params: unknown) => {
         // Call onEvent callback if provided
         if (params.onEvent) {
           params.onEvent({ type: "content_delta", delta: "I will help you with this task." });
@@ -154,7 +154,7 @@ describe("EditorWorkflow Integration", () => {
           };
         }
         return { ok: false };
-      }) as any;
+      }) as unknown;
 
       const input: TaskInput = {
         mode: "editor",
@@ -274,7 +274,7 @@ describe("EditorWorkflow Integration", () => {
           };
         }
         return { ok: false };
-      }) as any;
+      }) as unknown;
 
       const input: TaskInput = {
         mode: "editor",
@@ -326,7 +326,7 @@ describe("EditorWorkflow Integration", () => {
       // Mock KB to fail
       global.fetch = mock(async () => {
         throw new Error("KB unavailable");
-      }) as any;
+      }) as unknown;
 
       const input: TaskInput = {
         mode: "editor",

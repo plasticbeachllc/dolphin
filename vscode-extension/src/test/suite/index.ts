@@ -44,11 +44,12 @@ export async function run(): Promise<void> {
   mocha.suite.emit("pre-require", global, null, mocha);
 
   // Verify globals are set
+  const globalRecord = global as Record<string, unknown>;
   console.log("Mocha globals set:", {
-    describe: typeof (global as any).describe,
-    it: typeof (global as any).it,
-    suite: typeof (global as any).suite,
-    test: typeof (global as any).test,
+    describe: typeof globalRecord.describe,
+    it: typeof globalRecord.it,
+    suite: typeof globalRecord.suite,
+    test: typeof globalRecord.test,
   });
 
   const testsRoot = path.resolve(__dirname, ".");

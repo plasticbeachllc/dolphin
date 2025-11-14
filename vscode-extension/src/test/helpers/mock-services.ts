@@ -10,6 +10,8 @@ import {
   MockKBConfig,
   AgentEvent,
   EventHandlerDisposable,
+  HttpRequestLog,
+  ToolCall,
 } from "./mock-types";
 
 /**
@@ -22,7 +24,7 @@ export class MockKBServer {
   private chunkData: MockChunkResponse | null = null;
   private server: http.Server | null = null;
   public port = 0;
-  private requestHistory: any[] = [];
+  private requestHistory: HttpRequestLog[] = [];
 
   /**
    * Start the mock server
@@ -118,7 +120,7 @@ export class MockKBServer {
   /**
    * Get request history for testing
    */
-  getRequestHistory(): any[] {
+  getRequestHistory(): HttpRequestLog[] {
     return [...this.requestHistory];
   }
 
@@ -286,16 +288,16 @@ export class MockKBServer {
  */
 export class MockAgentBridge {
   private handlers: Map<string, (data: AgentEvent) => void> = new Map();
-  private messageHistory: any[] = [];
+  private messageHistory: string[] = [];
   private shouldThrowError: boolean = false;
   private errorMessage: string = "Mock error";
   private shouldError: Error | null = null;
-  private toolCallQueue: any[] = [];
+  private toolCallQueue: ToolCall[] = [];
   private responseQueue: string[] = [];
   private eventHandlers: Map<string, Function[]> = new Map();
   private messageHandlers: Map<string, (event: AgentEvent) => void> = new Map();
-  public mockResponse: any = null;
-  public mockToolCalls: any[] = [];
+  public mockResponse: string | null = null;
+  public mockToolCalls: ToolCall[] = [];
   public mockError: Error | null = null;
   public mockConnected: boolean = true;
 
@@ -323,15 +325,18 @@ export class MockAgentBridge {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     if (this.shouldError) {
-      this.emitToHandlers("error", this.shouldError);
+      this.emitToHandlers("error", { error: this.shouldError.message });
       throw this.shouldError;
     }
 
     // Emit tool calls if configured
     for (const toolCall of this.toolCallQueue) {
-      this.emitToHandlers("tool_call_started", toolCall);
+      this.emitToHandlers("tool_call_started", toolCall as unknown as Record<string, unknown>);
       await new Promise((resolve) => setTimeout(resolve, 20));
-      this.emitToHandlers("tool_call_completed", { ...toolCall, result: "mock result" });
+      this.emitToHandlers("tool_call_completed", {
+        ...(toolCall as unknown as Record<string, unknown>),
+        result: "mock result",
+      });
     }
 
     // Emit response
@@ -376,14 +381,14 @@ export class MockAgentBridge {
   /**
    * Get message history for test verification
    */
-  getMessageHistory(): any[] {
+  getMessageHistory(): string[] {
     return [...this.messageHistory];
   }
 
   /**
    * Emit to registered event handlers
    */
-  private emitToHandlers(event: string, data: any): void {
+  private emitToHandlers(event: string, data: Record<string, unknown>): void {
     const handlers = this.eventHandlers.get(event);
     if (handlers) {
       handlers.forEach((handler) => handler(data));
@@ -403,7 +408,7 @@ export class MockAgentBridge {
   /**
    * Simulate a tool call event
    */
-  simulateToolCall(toolName: string, toolArgs: any): void {
+  simulateToolCall(toolName: string, toolArgs: Record<string, unknown>): void {
     this.emitEvent({
       type: "tool_call",
       toolName,
@@ -440,7 +445,7 @@ export class MockAgentBridge {
   /**
    * Set mock response for tests
    */
-  setResponse(response: any): void {
+  setResponse(response: string): void {
     this.mockResponse = response;
     if (typeof response === "string") {
       this.responseQueue.push(response);
@@ -450,7 +455,7 @@ export class MockAgentBridge {
   /**
    * Set mock tool calls for tests
    */
-  setToolCalls(toolCalls: any[]): void {
+  setToolCalls(toolCalls: ToolCall[]): void {
     this.mockToolCalls = toolCalls;
     this.toolCallQueue = [...toolCalls];
   }

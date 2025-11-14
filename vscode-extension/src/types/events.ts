@@ -6,7 +6,7 @@ export type ExtensionRequest =
       type: "send_message";
       messageId: string;
       content: string;
-      context?: any;
+      context?: Record<string, unknown>;
       mode?: "code" | "architect";
     }
   | { type: "abort_generation" }
@@ -27,8 +27,14 @@ export type AgentEvent =
   | { type: "content_delta"; delta: string; requestId?: string }
   | { type: "plan_generated"; plan: Plan; requestId?: string }
   | { type: "plan_step_started"; stepId: string; description: string; requestId?: string }
-  | { type: "plan_step_completed"; stepId: string; result: any; requestId?: string }
-  | { type: "tool_call_started"; toolId: string; tool: string; input: any; requestId?: string }
+  | { type: "plan_step_completed"; stepId: string; result: unknown; requestId?: string }
+  | {
+      type: "tool_call_started";
+      toolId: string;
+      tool: string;
+      input: Record<string, unknown>;
+      requestId?: string;
+    }
   | {
       type: "tool_call_progress";
       toolId: string;
@@ -39,8 +45,8 @@ export type AgentEvent =
   | {
       type: "tool_call_completed";
       toolId: string;
-      result: any;
-      error?: any;
+      result: unknown;
+      error?: unknown;
       executionTime?: number;
       diff?: FileDiff;
       requestId?: string;
@@ -53,14 +59,14 @@ export type AgentEvent =
       options: string[];
       requestId?: string;
     }
-  | { type: "task_completed"; success: boolean; result?: any; error?: any }
+  | { type: "task_completed"; success: boolean; result?: unknown; error?: unknown }
   | { type: "error"; error: AgentError }
   | { type: "focus_input" }
   | { type: "clear_conversation" }
   | { type: "prefill_input"; text: string }
   | {
       type: "conversation_loaded";
-      conversation: any;
+      conversation: Record<string, unknown>;
       branchInfo?: { originalId: string; originalTitle: string };
     }
   | { type: "conversations_listed"; conversations: ConversationListItem[] }
@@ -86,8 +92,8 @@ export interface PlanStep {
   status: "pending" | "running" | "completed" | "failed";
   started_at?: string;
   completed_at?: string;
-  input?: Record<string, any>;
-  output?: Record<string, any>;
+  input?: Record<string, unknown>;
+  output?: Record<string, unknown>;
 }
 
 export interface AgentError {
@@ -145,7 +151,7 @@ export interface ConversationMetadata {
 }
 
 export interface LoadConversationResult {
-  conversation: any; // Full Conversation object from state.ts
+  conversation: Record<string, unknown>; // Full Conversation object from state.ts
   branchInfo?: {
     originalId: string;
     originalTitle: string;

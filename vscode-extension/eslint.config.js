@@ -3,13 +3,25 @@ import typescriptParser from "@typescript-eslint/parser";
 
 export default [
   {
-    files: ["**/*.ts", "**/*.tsx"],
+    ignores: [
+      "out/**",
+      "dist/**",
+      "node_modules/**",
+      "webview/**",
+      ".vscode-test/**",
+      "test-workspace/**",
+      ".uv-cache/**",
+      "*.log",
+      "*.txt",
+    ],
+  },
+  {
+    files: ["src/**/*.ts"],
     languageOptions: {
       parser: typescriptParser,
       parserOptions: {
         ecmaVersion: "latest",
         sourceType: "module",
-        project: "./tsconfig.json",
       },
       globals: {
         console: "readonly",
@@ -35,8 +47,5 @@ export default [
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_" },
       ],
     },
-  },
-  {
-    ignores: ["out/**", "dist/**", "node_modules/**", "webview/**"],
   },
 ];

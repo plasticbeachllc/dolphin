@@ -5,9 +5,9 @@ import * as vscode from "vscode";
  * Provides code actions (quick fixes) for Dolphin AI assistance
  */
 export class DolphinCodeActionProvider implements vscode.CodeActionProvider {
-  private viewProvider: any;
+  private viewProvider: unknown;
 
-  constructor(viewProvider: any) {
+  constructor(viewProvider: unknown) {
     this.viewProvider = viewProvider;
   }
 

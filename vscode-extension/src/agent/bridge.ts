@@ -30,7 +30,11 @@ export class AgentBridge {
   private outputChannel: vscode.OutputChannel;
   private pendingRequests: Map<
     number,
-    { resolve: (value: any) => void; reject: (error: any) => void; timeout?: NodeJS.Timeout }
+    {
+      resolve: (value: unknown) => void;
+      reject: (error: unknown) => void;
+      timeout?: NodeJS.Timeout;
+    }
   > = new Map();
   private connection: MessageConnection | null = null;
   private restartAttempts = 0;
@@ -82,7 +86,7 @@ export class AgentBridge {
 
       // Set up notification handler for agent events
       this.connection.onNotification("notify", (params: AgentEvent) => {
-        const requestId = (params as any).requestId || "unknown";
+        const requestId = (params as Record<string, unknown>).requestId || "unknown";
         this.outputChannel.appendLine(
           `[AgentBridge] Event: ${params.type} (requestId: ${requestId})`
         );
@@ -90,8 +94,10 @@ export class AgentBridge {
       });
 
       // Set up error handler
-      this.connection.onError((error: any) => {
-        this.outputChannel.appendLine(`[AgentBridge] Connection error: ${error[0]}`);
+      this.connection.onError((error: unknown) => {
+        const errorMessage =
+          Array.isArray(error) && error.length > 0 ? String(error[0]) : String(error);
+        this.outputChannel.appendLine(`[AgentBridge] Connection error: ${errorMessage}`);
       });
 
       // Set up close handler
@@ -255,7 +261,7 @@ export class AgentBridge {
     return null;
   }
 
-  private async sendRequest(method: string, params?: any, timeout = 20000): Promise<any> {
+  private async sendRequest(method: string, params?: unknown, timeout = 20000): Promise<unknown> {
     if (!this.connection) {
       throw new Error("JSON-RPC connection not established");
     }
@@ -276,7 +282,7 @@ export class AgentBridge {
 
       // Send via connection (vscode-jsonrpc handles backpressure internally)
       this.connection!.sendRequest(method, params)
-        .then((result: any) => {
+        .then((result: unknown) => {
           const pending = this.pendingRequests.get(id);
           if (pending) {
             if (pending.timeout) {
@@ -286,7 +292,7 @@ export class AgentBridge {
             resolve(result);
           }
         })
-        .catch((error: any) => {
+        .catch((error: unknown) => {
           const pending = this.pendingRequests.get(id);
           if (pending) {
             if (pending.timeout) {
@@ -299,7 +305,7 @@ export class AgentBridge {
     });
   }
 
-  private async sendNotification(method: string, params?: any): Promise<void> {
+  private async sendNotification(method: string, params?: unknown): Promise<void> {
     if (!this.connection) {
       throw new Error("JSON-RPC connection not established");
     }
@@ -320,7 +326,7 @@ export class AgentBridge {
     await this.sendNotification("send_message", request);
   }
 
-  async getAuthStatus(): Promise<any> {
+  async getAuthStatus(): Promise<unknown> {
     return this.sendRequest("get_auth_status", undefined, 3000);
   }
 
@@ -335,12 +341,15 @@ export class AgentBridge {
   // Phase 5: Conversation Management Methods
 
   async listConversations(): Promise<ConversationListItem[]> {
-    const result = await this.sendRequest("list_conversations", undefined, 3000);
+    const result = (await this.sendRequest("list_conversations", undefined, 3000)) as {
+      conversations?: ConversationListItem[];
+    };
     return result.conversations || [];
   }
 
   async loadConversation(conversationId: string): Promise<LoadConversationResult> {
-    return await this.sendRequest("load_conversation", { conversationId }, 5000);
+    const result = await this.sendRequest("load_conversation", { conversationId }, 5000);
+    return result as LoadConversationResult;
   }
 
   async deleteConversation(conversationId: string): Promise<void> {

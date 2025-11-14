@@ -1,7 +1,7 @@
 // agent-core/src/llm/diff-generator.ts
-import * as Diff from "diff";
-import * as fs from "fs/promises";
-import * as path from "path";
+import { createPatch } from "diff";
+import { readFile } from "fs/promises";
+import { extname } from "path";
 import { PathValidator } from "../../../shared/security/path-validator";
 import type { FileDiff, DiffHunk } from "../../../shared/types/events";
 
@@ -42,7 +42,7 @@ const BINARY_FILE_EXTENSIONS = new Set([
  * Checks if a file is likely binary based on extension or content
  */
 function isBinaryFile(filePath: string, content?: Buffer): boolean {
-  const ext = path.extname(filePath).toLowerCase();
+  const ext = extname(filePath).toLowerCase();
   if (BINARY_FILE_EXTENSIONS.has(ext)) {
     return true;
   }
@@ -285,7 +285,7 @@ export async function generateFileDiff(
     }
 
     // Generate unified diff using the diff library
-    const patch = Diff.createPatch(filePath, oldContent, newContent, "before", "after");
+    const patch = createPatch(filePath, oldContent, newContent, "before", "after");
 
     // Parse the unified diff
     const hunks = parseUnifiedDiff(patch);
@@ -324,8 +324,8 @@ export async function generateFileDiff(
  * @returns FileDiff object or null if diff generation fails
  */
 export async function generateFileWriteDiff(
-  toolInput: any,
-  toolResult: any,
+  toolInput: { path: string; content: string },
+  toolResult: { created_new?: boolean; backup_path?: string },
   workspaceRoot: string
 ): Promise<FileDiff | null> {
   try {
@@ -348,7 +348,7 @@ export async function generateFileWriteDiff(
       try {
         // Validate backup path as well
         const validatedBackupPath = validator.validate(toolResult.backup_path);
-        oldContent = await fs.readFile(validatedBackupPath, "utf-8");
+        oldContent = await readFile(validatedBackupPath, "utf-8");
       } catch (error) {
         console.warn(`Failed to read backup file ${toolResult.backup_path}:`, error);
       }

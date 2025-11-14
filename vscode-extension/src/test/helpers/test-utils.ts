@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import * as http from "http";
-import { HttpTestResponse } from "./mock-types";
+import { HttpTestResponse, ExtensionExports } from "./mock-types";
 
 /**
  * Wait for a condition to be true with timeout
@@ -30,7 +30,7 @@ export function sleep(ms: number): Promise<void> {
 /**
  * Get the Dolphin extension
  */
-export function getDolphinExtension(): vscode.Extension<any> | undefined {
+export function getDolphinExtension(): vscode.Extension<ExtensionExports> | undefined {
   return vscode.extensions.getExtension("pb.dolphin");
 }
 
@@ -40,7 +40,7 @@ export function getDolphinExtension(): vscode.Extension<any> | undefined {
 export async function waitForExtensionActivation(
   timeout = 10000,
   waitForAgent = false
-): Promise<vscode.Extension<any>> {
+): Promise<vscode.Extension<ExtensionExports>> {
   const extension = getDolphinExtension();
 
   if (!extension) {
@@ -134,7 +134,7 @@ export function captureOutputChannel(name: string): {
  * @param timeout Timeout in milliseconds (default: 2000ms)
  * @returns Promise resolving to the response with status and parsed JSON data
  */
-export async function makeHttpGetRequest<T = any>(
+export async function makeHttpGetRequest<T = unknown>(
   url: string,
   timeout: number = 2000
 ): Promise<HttpTestResponse<T>> {
@@ -185,7 +185,7 @@ export async function makeHttpGetRequest<T = any>(
  * @param timeout Timeout in milliseconds (default: 2000ms)
  * @returns Promise resolving to the response with status and parsed JSON data
  */
-export async function makeHttpPostRequest<T = any>(
+export async function makeHttpPostRequest<T = unknown>(
   options: http.RequestOptions,
   postData: string,
   timeout: number = 2000
@@ -248,7 +248,7 @@ export async function makeHttpPostRequest<T = any>(
  * @param timeout Timeout in milliseconds (default: 2000ms)
  * @returns Promise resolving to the response with status and parsed JSON data
  */
-export async function makeHttpRequest<T = any>(
+export async function makeHttpRequest<T = unknown>(
   options: http.RequestOptions,
   postData?: string,
   timeout: number = 2000
@@ -306,9 +306,9 @@ export async function makeHttpRequest<T = any>(
  */
 export async function assertCommandExecutes(
   commandId: string,
-  args?: any[],
+  args?: unknown[],
   timeout: number = 2000
-): Promise<any> {
+): Promise<unknown> {
   return Promise.race([
     vscode.commands.executeCommand(commandId, ...(args || [])),
     new Promise((_, reject) =>

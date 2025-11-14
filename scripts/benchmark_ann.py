@@ -197,7 +197,7 @@ def main():
         # Combine results
         benchmark_result = {**latency_results, "recall": recall}
 
-        results["benchmarks"][name] = benchmark_result
+        results["benchmarks"][name] = benchmark_result  # type: ignore[index]
 
         # Print results
         print(f"  Latency p50: {latency_results['latency_p50']:.1f}ms")
@@ -213,13 +213,13 @@ def main():
     print(f"{'Config':<20} {'p50 (ms)':<12} {'p95 (ms)':<12} {'Recall':<10} {'Speedup':<10}")
     print("-" * 80)
 
-    for name, benchmark in results["benchmarks"].items():
+    for name, benchmark in results["benchmarks"].items():  # type: ignore[attr-defined]
         print(
             f"{name:<20} "
-            f"{benchmark['latency_p50']:<12.1f} "
-            f"{benchmark['latency_p95']:<12.1f} "
-            f"{benchmark['recall']:<10.2%} "
-            f"{benchmark['estimated_speedup']:<10.2f}x"
+            f"{benchmark['latency_p50']:<12.1f} "  # type: ignore[index]
+            f"{benchmark['latency_p95']:<12.1f} "  # type: ignore[index]
+            f"{benchmark['recall']:<10.2%} "  # type: ignore[index]
+            f"{benchmark['estimated_speedup']:<10.2f}x"  # type: ignore[index]
         )
 
     # Save results

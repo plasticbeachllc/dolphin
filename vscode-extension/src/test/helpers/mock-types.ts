@@ -84,7 +84,7 @@ export interface MockHealthResponse {
 /**
  * HTTP response wrapper for tests
  */
-export interface HttpTestResponse<T = any> {
+export interface HttpTestResponse<T = unknown> {
   status: number;
   data: T;
   headers?: Record<string, string>;
@@ -114,7 +114,7 @@ export interface AgentEvent {
   success?: boolean;
   error?: string;
   toolName?: string;
-  toolArgs?: any;
+  toolArgs?: Record<string, unknown>;
 }
 
 /**
@@ -123,3 +123,44 @@ export interface AgentEvent {
 export interface EventHandlerDisposable {
   dispose: () => void;
 }
+
+/**
+ * HTTP request log entry for testing
+ */
+export interface HttpRequestLog {
+  method: string | undefined;
+  url: string;
+  timestamp: number;
+}
+
+/**
+ * Tool call structure for agent testing
+ */
+export interface ToolCall {
+  name: string;
+  args: Record<string, unknown>;
+  result?: unknown;
+}
+
+/**
+ * Generic extension exports type
+ */
+export interface ExtensionExports {
+  isReady?: boolean;
+  webviewProvider?: unknown;
+  [key: string]: unknown;
+}
+
+/**
+ * Mock JSON-RPC connection for testing
+ */
+export interface MockConnection {
+  sendNotification: (method: string, params?: Record<string, unknown>) => void | Promise<void>;
+  sendRequest: (method: string, params?: Record<string, unknown>) => Promise<unknown>;
+  dispose: () => void;
+}
+
+/**
+ * Generic record with string keys for test data
+ */
+export type TestRecord = Record<string, unknown>;

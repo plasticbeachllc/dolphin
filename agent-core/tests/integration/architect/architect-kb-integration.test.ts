@@ -14,7 +14,7 @@ import type { TaskInput, WorkflowUpdate, ResearchResult } from "../../../src/typ
 
 // Simple mock Claude provider for integration tests
 class MockClaudeProvider {
-  async *execute(params: any) {
+  async *execute(params: unknown) {
     const responses = {
       "claude-haiku-4-20250514": `Based on the KB search results, I found:
 - Authentication middleware in src/middleware/auth.ts
@@ -79,8 +79,8 @@ describe("ArchitectWorkflow KB Integration", () => {
     const claudeProvider = new MockClaudeProvider();
 
     workflow = new ArchitectWorkflow({
-      claudeProvider: claudeProvider as any,
-      contextBuilder: contextBuilder as any,
+      claudeProvider: claudeProvider as unknown,
+      contextBuilder: contextBuilder as unknown,
       promptBuilder,
       maxClarificationTurns: 2,
     });
@@ -251,7 +251,7 @@ describe("ArchitectWorkflow KB Integration", () => {
         context: {},
       };
 
-      let plan: any;
+      let plan: unknown;
 
       for await (const update of workflow.execute(taskInput)) {
         if (update.type === "progress" && update.data.phase === "planning" && update.data.plan) {
@@ -281,7 +281,7 @@ describe("ArchitectWorkflow KB Integration", () => {
         context: {},
       };
 
-      let plan: any;
+      let plan: unknown;
 
       for await (const update of workflow.execute(taskInput)) {
         if (update.type === "progress" && update.data.plan) {
@@ -367,8 +367,8 @@ describe("ArchitectWorkflow KB Integration", () => {
       });
 
       const offlineWorkflow = new ArchitectWorkflow({
-        claudeProvider: new MockClaudeProvider() as any,
-        contextBuilder: offlineContextBuilder as any,
+        claudeProvider: new MockClaudeProvider() as unknown,
+        contextBuilder: offlineContextBuilder as unknown,
         promptBuilder: new PromptBuilder(),
       });
 

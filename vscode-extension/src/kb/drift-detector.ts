@@ -77,8 +77,9 @@ export class DriftDetector {
 
       // Notify user
       await this.notifyUser(driftEvents);
-    } catch (error: any) {
-      this.log(`[DriftDetector] Error during drift detection: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log(`[DriftDetector] Error during drift detection: ${message}`);
     }
   }
 

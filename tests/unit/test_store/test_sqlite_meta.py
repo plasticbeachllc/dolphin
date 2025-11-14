@@ -30,6 +30,7 @@ class TestSQLiteMetadataStore:
         # Test duplicate repo handling - record_repo doesn't return ID, so we get it again
         store.record_repo("test-repo", repo_path)
         same_repo = store.get_repo_by_name("test-repo")
+        assert same_repo is not None
         assert same_repo["id"] == repo["id"], "Duplicate repo should return same ID"
 
     def test_session_management(self, temp_db_path):
@@ -40,6 +41,7 @@ class TestSQLiteMetadataStore:
         repo_path = Path("/mock/repo")
         store.record_repo("test-repo", repo_path)
         repo = store.get_repo_by_name("test-repo")
+        assert repo is not None
         repo_id = int(repo["id"])
 
         # Test session creation
@@ -93,6 +95,7 @@ class TestSQLiteMetadataStore:
         repo_path = Path("/mock/repo")
         store.record_repo("test-repo", repo_path)
         repo = store.get_repo_by_name("test-repo")
+        assert repo is not None
         repo_id = int(repo["id"])
 
         # Test file upsert idempotency
@@ -145,6 +148,7 @@ class TestSQLiteMetadataStore:
         repo_path = Path("/mock/repo")
         store.record_repo("test-repo", repo_path)
         repo = store.get_repo_by_name("test-repo")
+        assert repo is not None
         repo_id = int(repo["id"])
 
         file_id = store.upsert_file(
@@ -177,6 +181,7 @@ class TestSQLiteMetadataStore:
         repo_path = Path("/mock/repo")
         store.record_repo("test-repo", repo_path)
         repo = store.get_repo_by_name("test-repo")
+        assert repo is not None
         repo_id = int(repo["id"])
 
         file_id = store.upsert_file(
@@ -248,6 +253,7 @@ class TestSQLiteMetadataStore:
         repo_path = Path("/mock/repo")
         store.record_repo("test-repo", repo_path)
         repo = store.get_repo_by_name("test-repo")
+        assert repo is not None
         repo_id = int(repo["id"])
 
         file_id = store.upsert_file(
@@ -280,6 +286,7 @@ class TestSQLiteMetadataStore:
         repo_path = Path("/mock/repo")
         store.record_repo("test-repo", repo_path)
         repo = store.get_repo_by_name("test-repo")
+        assert repo is not None
         repo_id = int(repo["id"])
 
         file_id = store.upsert_file(

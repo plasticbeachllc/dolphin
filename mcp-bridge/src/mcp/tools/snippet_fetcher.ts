@@ -142,17 +142,18 @@ export async function fetchSnippetsInParallel(
           lastError = error as Error;
 
           // DEBUG: Log fetch errors
+          const err = error instanceof Error ? error : new Error(String(error));
           await logError("snippet_fetch_debug", "Failed to fetch snippet", {
             repo: request.repo.trim(),
             path: request.path,
-            error_name: (error as any)?.name,
-            error_message: (error as any)?.message || String(error),
+            error_name: err.name,
+            error_message: err.message,
             attempt: attempt + 1,
             will_retry: attempt < retryAttempts,
           });
 
           // Don't retry for aborted signals
-          if ((error as any)?.name === "AbortError") {
+          if (err.name === "AbortError") {
             throw error;
           }
 

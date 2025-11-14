@@ -47,6 +47,7 @@ class TestPathValidationSecurity:
         with pytest.raises(HTTPException) as exc_info:
             validate_path_within_repo(outside_file, repo_root)
 
+        assert isinstance(exc_info.value, HTTPException)
         assert exc_info.value.status_code == 403
         # PathValidator rejects with "absolute_path_outside_workspace" or "outside workspace"
         assert (
@@ -65,6 +66,7 @@ class TestPathValidationSecurity:
         with pytest.raises(HTTPException) as exc_info:
             validate_path_within_repo(malicious_path, repo_root)
 
+        assert isinstance(exc_info.value, HTTPException)
         assert exc_info.value.status_code == 403
 
     def test_reject_prefix_attack_similar_names(self, tmp_path):
@@ -88,6 +90,7 @@ class TestPathValidationSecurity:
         with pytest.raises(HTTPException) as exc_info:
             validate_path_within_repo(secret_file, repo_a)
 
+        assert isinstance(exc_info.value, HTTPException)
         assert exc_info.value.status_code == 403
         # PathValidator rejects with "absolute_path_outside_workspace" or "outside workspace"
         assert (
@@ -113,6 +116,7 @@ class TestPathValidationSecurity:
         with pytest.raises(HTTPException) as exc_info:
             validate_path_within_repo(backup_file, repo)
 
+        assert isinstance(exc_info.value, HTTPException)
         assert exc_info.value.status_code == 403
 
     def test_reject_prefix_attack_underscore(self, tmp_path):
@@ -133,6 +137,7 @@ class TestPathValidationSecurity:
         with pytest.raises(HTTPException) as exc_info:
             validate_path_within_repo(old_file, repo)
 
+        assert isinstance(exc_info.value, HTTPException)
         assert exc_info.value.status_code == 403
 
     def test_reject_symlink_outside_repo(self, tmp_path):
@@ -154,6 +159,7 @@ class TestPathValidationSecurity:
         with pytest.raises(HTTPException) as exc_info:
             validate_path_within_repo(symlink, repo_root)
 
+        assert isinstance(exc_info.value, HTTPException)
         assert exc_info.value.status_code == 403
 
     def test_accept_symlink_within_repo(self, tmp_path):
@@ -182,6 +188,7 @@ class TestPathValidationSecurity:
         with pytest.raises(HTTPException) as exc_info:
             validate_path_within_repo(system_file, repo_root)
 
+        assert isinstance(exc_info.value, HTTPException)
         assert exc_info.value.status_code in [400, 403]
 
     def test_reject_nonexistent_path_outside_repo(self, tmp_path):
@@ -194,6 +201,7 @@ class TestPathValidationSecurity:
         with pytest.raises(HTTPException) as exc_info:
             validate_path_within_repo(nonexistent, repo_root)
 
+        assert isinstance(exc_info.value, HTTPException)
         assert exc_info.value.status_code in [400, 403]
 
     def test_repo_root_itself_is_valid(self, tmp_path):
@@ -216,6 +224,7 @@ class TestPathValidationSecurity:
             validate_path_within_repo(malicious_path, repo_root)
 
         # PathValidator returns 403 for all validation errors
+        assert isinstance(exc_info.value, HTTPException)
         assert exc_info.value.status_code == 403
 
     def test_case_sensitive_path_validation(self, tmp_path):

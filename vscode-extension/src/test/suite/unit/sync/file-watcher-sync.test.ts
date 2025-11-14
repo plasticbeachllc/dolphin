@@ -226,7 +226,10 @@ describe("FileWatcher API Integration Tests", () => {
       watchers.push(watcher);
 
       // Access private shouldIgnore method for testing
-      const shouldIgnore = (watcher as any).shouldIgnore.bind(watcher);
+      type WatcherWithPrivate = {
+        shouldIgnore: (uri: vscode.Uri) => boolean;
+      };
+      const shouldIgnore = (watcher as unknown as WatcherWithPrivate).shouldIgnore.bind(watcher);
 
       // Test paths that should be ignored
       const ignoredPaths = [
@@ -249,7 +252,10 @@ describe("FileWatcher API Integration Tests", () => {
 
       const watcher = new FileWatcher(config, batchHandler);
       watchers.push(watcher);
-      const shouldIgnore = (watcher as any).shouldIgnore.bind(watcher);
+      type WatcherWithPrivate = {
+        shouldIgnore: (uri: vscode.Uri) => boolean;
+      };
+      const shouldIgnore = (watcher as unknown as WatcherWithPrivate).shouldIgnore.bind(watcher);
 
       // Test paths that should NOT be ignored
       const allowedPaths = [
@@ -272,7 +278,10 @@ describe("FileWatcher API Integration Tests", () => {
 
       const watcher = new FileWatcher(config, batchHandler);
       watchers.push(watcher);
-      const shouldIgnore = (watcher as any).shouldIgnore.bind(watcher);
+      type WatcherWithPrivate = {
+        shouldIgnore: (uri: vscode.Uri) => boolean;
+      };
+      const shouldIgnore = (watcher as unknown as WatcherWithPrivate).shouldIgnore.bind(watcher);
 
       const testUri = vscode.Uri.file("/project/src/file.ts");
       const result = shouldIgnore(testUri);
@@ -339,7 +348,9 @@ describe("FileWatcher API Integration Tests", () => {
       // Should not crash even if handler throws
       // Simulate change by directly calling handleChange
       const testUri = vscode.Uri.file("/project/test.ts");
-      (watcher as any).handleChange(testUri, "modified");
+      (
+        watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }
+      ).handleChange(testUri, "modified");
 
       // Wait for debounce and batch
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -361,7 +372,9 @@ describe("FileWatcher API Integration Tests", () => {
 
       // Simulate change
       const testUri = vscode.Uri.file("/project/test.ts");
-      (watcher as any).handleChange(testUri, "modified");
+      (
+        watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }
+      ).handleChange(testUri, "modified");
 
       // Wait for processing
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -385,9 +398,13 @@ describe("FileWatcher API Integration Tests", () => {
       const testUri1 = vscode.Uri.file("/project/test1.ts");
       const testUri2 = vscode.Uri.file("/project/test2.ts");
 
-      (watcher as any).handleChange(testUri1, "modified");
+      (
+        watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }
+      ).handleChange(testUri1, "modified");
       await new Promise((resolve) => setTimeout(resolve, 200));
-      (watcher as any).handleChange(testUri2, "modified");
+      (
+        watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }
+      ).handleChange(testUri2, "modified");
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
@@ -404,7 +421,9 @@ describe("FileWatcher API Integration Tests", () => {
 
       // Simulate a change
       const testUri = vscode.Uri.file("/project/test.ts");
-      (watcher as any).handleChange(testUri, "modified");
+      (
+        watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }
+      ).handleChange(testUri, "modified");
 
       // Wait for debounce and batch
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -426,7 +445,9 @@ describe("FileWatcher API Integration Tests", () => {
 
       // Simulate a change
       const testUri = vscode.Uri.file("/project/test.ts");
-      (watcher as any).handleChange(testUri, "modified");
+      (
+        watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }
+      ).handleChange(testUri, "modified");
 
       // Wait for processing
       await new Promise((resolve) => setTimeout(resolve, 1000));

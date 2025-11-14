@@ -108,7 +108,7 @@ export class ContextBuilder {
         throw new Error(`KB search failed: ${response.statusText}`);
       }
 
-      const results: SearchResult[] = await response.json();
+      const results = (await response.json()) as SearchResult[];
 
       // Transform to KBResult format and sort by score (descending)
       return results

@@ -1,6 +1,7 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { AgentBridge } from "../../../../agent/bridge";
+import { MockConnection, TestRecord } from "../helpers/mock-types";
 
 describe("AgentBridge Unit Tests", () => {
   let agentBridge: AgentBridge;
@@ -16,9 +17,9 @@ describe("AgentBridge Unit Tests", () => {
     // This prevents async operations from trying to use disposed resources
     if (agentBridge) {
       // Add a mock kill method to the process if it exists
-      const process = (agentBridge as any).process;
+      const process = (agentBridge as unknown as TestRecord).process as TestRecord | undefined;
       if (process && !process.kill) {
-        process.kill = () => true;
+        (process as TestRecord).kill = () => true;
       }
       agentBridge.shutdown();
     }
@@ -32,15 +33,16 @@ describe("AgentBridge Unit Tests", () => {
   describe("clearConversation", () => {
     it("Should send clear_conversation notification via JSON-RPC connection", async () => {
       // Mock the connection
-      const mockConnection = {
-        sendNotification: (method: string, _params?: any) => {
+      const mockConnection: MockConnection = {
+        sendNotification: (method: string, _params?: Record<string, unknown>) => {
           assert.strictEqual(method, "clear_conversation", "Method should be clear_conversation");
         },
+        sendRequest: () => Promise.resolve({}),
         dispose: () => {},
       };
 
       // Inject mock connection
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       // Call clearConversation
       await agentBridge.clearConversation();
@@ -48,14 +50,14 @@ describe("AgentBridge Unit Tests", () => {
 
     it("Should throw error when JSON-RPC connection is not established", async () => {
       // Don't set up a connection
-      (agentBridge as any).connection = null;
+      (agentBridge as unknown as TestRecord).connection = null;
 
       try {
         await agentBridge.clearConversation();
         assert.fail("Should have thrown an error");
-      } catch (error: any) {
+      } catch (error: unknown) {
         assert.ok(
-          error.message.includes("not established"),
+          error instanceof Error && error.message.includes("not established"),
           "Error should mention connection not established"
         );
       }
@@ -64,14 +66,14 @@ describe("AgentBridge Unit Tests", () => {
 
   describe("abortGeneration", () => {
     it("Should send abort_generation notification via JSON-RPC connection", async () => {
-      const mockConnection = {
-        sendNotification: (method: string, _params?: any) => {
+      const mockConnection: Partial<MockConnection> = {
+        sendNotification: (method: string, _params?: Record<string, unknown>) => {
           assert.strictEqual(method, "abort_generation", "Method should be abort_generation");
         },
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       await agentBridge.abortGeneration();
     });
@@ -80,22 +82,27 @@ describe("AgentBridge Unit Tests", () => {
   describe("sendMessage", () => {
     it("Should send send_message notification with content via JSON-RPC connection", async () => {
       const testContent = "Test message content";
-      let receivedParams: any;
+      let receivedParams: Record<string, unknown> | undefined;
 
-      const mockConnection = {
-        sendNotification: (method: string, params?: any) => {
+      const mockConnection: Partial<MockConnection> = {
+        sendNotification: (method: string, params?: Record<string, unknown>) => {
           assert.strictEqual(method, "send_message", "Method should be send_message");
           receivedParams = params;
         },
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       await agentBridge.sendMessage(testContent);
 
-      assert.strictEqual(receivedParams.content, testContent, "Should include message content");
-      assert.ok(receivedParams.messageId, "Should include message ID");
+      assert.ok(receivedParams, "Should have received params");
+      assert.strictEqual(
+        (receivedParams as TestRecord).content,
+        testContent,
+        "Should include message content"
+      );
+      assert.ok((receivedParams as TestRecord).messageId, "Should include message ID");
     });
   });
 
@@ -104,15 +111,15 @@ describe("AgentBridge Unit Tests", () => {
       let requestMethod: string | undefined;
       const mockResult = { authenticated: true, user: "test@example.com" };
 
-      const mockConnection = {
-        sendRequest: (method: string, _params?: any) => {
+      const mockConnection: Partial<MockConnection> = {
+        sendRequest: (method: string, _params?: Record<string, unknown>) => {
           requestMethod = method;
           return Promise.resolve(mockResult);
         },
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       const result = await agentBridge.getAuthStatus();
 
@@ -123,7 +130,7 @@ describe("AgentBridge Unit Tests", () => {
     it("Should reject on timeout", async function () {
       this.timeout(7000); // Allow time for timeout
 
-      const mockConnection = {
+      const mockConnection: Partial<MockConnection> = {
         sendRequest: () => {
           // Never resolve to simulate timeout
           return new Promise(() => {});
@@ -131,23 +138,26 @@ describe("AgentBridge Unit Tests", () => {
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       try {
         await agentBridge.getAuthStatus();
         assert.fail("Should have thrown timeout error");
-      } catch (error: any) {
-        assert.ok(error.message.includes("timeout"), "Should be a timeout error");
+      } catch (error: unknown) {
+        assert.ok(
+          error instanceof Error && error.message.includes("timeout"),
+          "Should be a timeout error"
+        );
       }
     });
 
     it("Should reject when connection not established", async () => {
-      (agentBridge as any).connection = null;
+      (agentBridge as unknown as TestRecord).connection = null;
 
       try {
         await agentBridge.getAuthStatus();
         assert.fail("Should have thrown an error");
-      } catch (error: any) {
+      } catch (error: unknown) {
         assert.ok(
           error.message.includes("not established"),
           "Error should mention connection not established"
@@ -173,7 +183,7 @@ describe("AgentBridge Unit Tests", () => {
       });
 
       // Simulate receiving an event via the event emitter
-      (agentBridge as any).eventEmitter.fire(testEvent);
+      (agentBridge as unknown as TestRecord).eventEmitter.fire(testEvent);
     });
 
     it("Should include requestId in event logs", (done) => {
@@ -184,28 +194,36 @@ describe("AgentBridge Unit Tests", () => {
       };
 
       const disposable = agentBridge.onEvent((event) => {
-        assert.strictEqual((event as any).requestId, "req-456", "Event should include requestId");
+        assert.strictEqual(
+          (event as TestRecord).requestId,
+          "req-456",
+          "Event should include requestId"
+        );
         disposable.dispose();
         done();
       });
 
-      (agentBridge as any).eventEmitter.fire(testEvent);
+      (agentBridge as unknown as TestRecord).eventEmitter.fire(testEvent);
     });
   });
 
   describe("Auto-recovery and Backoff", () => {
     it("Should not auto-restart when isShuttingDown is true", async () => {
-      (agentBridge as any).isShuttingDown = true;
+      (agentBridge as unknown as TestRecord).isShuttingDown = true;
       let restartCalled = false;
 
       // Mock start method
       const _originalStart = agentBridge.start.bind(agentBridge);
-      (agentBridge as any).start = async () => {
+      (agentBridge as unknown as TestRecord).start = async () => {
         restartCalled = true;
       };
 
       // Call handleCrash
-      await (agentBridge as any).handleCrash("/fake/path", "/fake/ext", undefined);
+      await (agentBridge as unknown as TestRecord).handleCrash(
+        "/fake/path",
+        "/fake/ext",
+        undefined
+      );
 
       assert.strictEqual(restartCalled, false, "Should not restart when shutting down");
     });
@@ -217,59 +235,67 @@ describe("AgentBridge Unit Tests", () => {
       const startTimes: number[] = [];
 
       // Mock start method to track calls
-      (agentBridge as any).start = async () => {
+      (agentBridge as unknown as TestRecord).start = async () => {
         startCallCount++;
         startTimes.push(Date.now());
       };
 
       // Mock vscode.window.showWarningMessage
-      const originalShowWarning = (global as any).vscode?.window?.showWarningMessage;
-      if (!(global as any).vscode) {
-        (global as any).vscode = { window: {} };
+      const originalShowWarning = (global as TestRecord).vscode as TestRecord | undefined;
+      if (!(global as TestRecord).vscode) {
+        (global as TestRecord).vscode = { window: {} };
       }
-      (global as any).vscode.window.showWarningMessage = () => {};
+      ((global as TestRecord).vscode as TestRecord).window = { showWarningMessage: () => {} };
 
       // Set restart attempts to 0
-      (agentBridge as any).restartAttempts = 0;
-      (agentBridge as any).isShuttingDown = false;
+      (agentBridge as unknown as TestRecord).restartAttempts = 0;
+      (agentBridge as unknown as TestRecord).isShuttingDown = false;
 
       // First crash - should restart after 1s
-      await (agentBridge as any).handleCrash("/fake/path", "/fake/ext", undefined);
+      await (agentBridge as unknown as TestRecord).handleCrash(
+        "/fake/path",
+        "/fake/ext",
+        undefined
+      );
 
       // Wait for first restart
       await new Promise((resolve) => setTimeout(resolve, 1100));
       assert.strictEqual(startCallCount, 1, "Should call start once after first crash");
       assert.strictEqual(
-        (agentBridge as any).restartAttempts,
+        (agentBridge as unknown as TestRecord).restartAttempts,
         1,
         "Should increment restart attempts"
       );
 
       // Clean up
       if (originalShowWarning) {
-        (global as any).vscode.window.showWarningMessage = originalShowWarning;
+        (global as TestRecord).vscode.window.showWarningMessage = originalShowWarning;
       }
     });
 
     it("Should stop auto-restart after max attempts", async function () {
       this.timeout(2000); // Give enough time for async operations
 
-      (agentBridge as any).restartAttempts = 3; // Max attempts
-      (agentBridge as any).maxRestartAttempts = 3;
-      (agentBridge as any).isShuttingDown = false;
+      (agentBridge as unknown as TestRecord).restartAttempts = 3; // Max attempts
+      (agentBridge as unknown as TestRecord).maxRestartAttempts = 3;
+      (agentBridge as unknown as TestRecord).isShuttingDown = false;
 
       let errorShown = false;
       let errorMessage = "";
 
       // Mock vscode.window.showErrorMessage
       const originalShowError = vscode.window.showErrorMessage;
-      (vscode.window as any).showErrorMessage = (msg: string) => {
+      (vscode.window as TestRecord).showErrorMessage = (msg: string) => {
         errorShown = true;
         errorMessage = msg;
         return Promise.resolve("Cancel");
       };
 
-      await (agentBridge as any).handleCrash("/fake/path", "/fake/ext", undefined);
+      await (agentBridge as unknown as TestRecord).handleCrash(
+        "/fake/path",
+        "/fake/ext",
+        undefined
+      );
 
       // Wait a tick for the promise to resolve
       await new Promise((resolve) => setImmediate(resolve));
@@ -278,7 +304,7 @@ describe("AgentBridge Unit Tests", () => {
       assert.ok(errorMessage.includes("crashed 3 times"), "Error should mention max attempts");
 
       // Restore
-      (vscode.window as any).showErrorMessage = originalShowError;
+      (vscode.window as TestRecord).showErrorMessage = originalShowError;
     });
   });
 
@@ -293,7 +319,7 @@ describe("AgentBridge Unit Tests", () => {
       // This will actually try to run 'which bun' which might fail in test env
       // So we'll just verify the logic without actually running it
       try {
-        await (agentBridge as any).findBun();
+        await (agentBridge as unknown as TestRecord).findBun();
       } catch (e) {
         // Expected if bun not installed
       }
@@ -308,7 +334,7 @@ describe("AgentBridge Unit Tests", () => {
 
       // Just verify the code path exists - actual execution will fail in test env
       try {
-        await (agentBridge as any).findBun();
+        await (agentBridge as unknown as TestRecord).findBun();
       } catch (e) {
         // Expected if bun not installed
       }
@@ -326,12 +352,18 @@ describe("AgentBridge Unit Tests", () => {
       const originalExistsSync = fs.existsSync;
 
       // Mock exec to fail (simulating bun not in PATH)
-      const mockExec = (cmd: string, options: any, callback: any) => {
+      const mockExec = (
+        cmd: string,
+        options: unknown,
+        callback?: (error: Error | null, stdout: string, stderr: string) => void
+      ) => {
+        let cb = callback;
         if (typeof options === "function") {
-          callback = options;
-          options = {};
+          cb = options as (error: Error | null, stdout: string, stderr: string) => void;
         }
-        callback(new Error("Command not found"), "", "");
+        if (cb) {
+          cb(new Error("Command not found"), "", "");
+        }
       };
 
       // Replace exec in child_process module
@@ -342,7 +374,9 @@ describe("AgentBridge Unit Tests", () => {
 
       Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
 
-      const result = await (agentBridge as any).findBun();
+      const result = await (
+        (agentBridge as unknown as TestRecord).findBun as () => Promise<string | null>
+      )();
       assert.strictEqual(result, null, "Should return null when bun not found");
 
       // Restore
@@ -355,7 +389,7 @@ describe("AgentBridge Unit Tests", () => {
   describe("Connection Cleanup on Shutdown", () => {
     it("Should dispose connection and clear pending requests on shutdown", () => {
       let disposeCalled = false;
-      const mockConnection = {
+      const mockConnection: Partial<MockConnection> = {
         sendNotification: () => {},
         dispose: () => {
           disposeCalled = true;
@@ -363,8 +397,8 @@ describe("AgentBridge Unit Tests", () => {
       };
 
       // Set up connection and pending requests
-      (agentBridge as any).connection = mockConnection;
-      (agentBridge as any).pendingRequests.set(1, {
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).pendingRequests.set(1, {
         resolve: () => {},
         reject: () => {},
         timeout: setTimeout(() => {}, 1000),
@@ -374,29 +408,29 @@ describe("AgentBridge Unit Tests", () => {
       const mockProcess = {
         kill: () => true,
       };
-      (agentBridge as any).process = mockProcess;
+      (agentBridge as unknown as TestRecord).process = mockProcess;
 
       agentBridge.shutdown();
 
       assert.ok(disposeCalled, "Should dispose connection");
-      assert.strictEqual((agentBridge as any).connection, null, "Connection should be null");
+      assert.strictEqual((agentBridge as TestRecord).connection, null, "Connection should be null");
       assert.strictEqual(
-        (agentBridge as any).pendingRequests.size,
+        (agentBridge as unknown as TestRecord).pendingRequests.size,
         0,
         "Pending requests should be cleared"
       );
-      assert.ok((agentBridge as any).isShuttingDown, "isShuttingDown should be true");
+      assert.ok((agentBridge as TestRecord).isShuttingDown, "isShuttingDown should be true");
     });
 
     it("Should reject all pending requests with shutdown error on shutdown", (done) => {
       let rejectionError: Error | null = null;
 
-      const mockConnection = {
+      const mockConnection: Partial<MockConnection> = {
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
-      (agentBridge as any).pendingRequests.set(1, {
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).pendingRequests.set(1, {
         resolve: () => {},
         reject: (error: Error) => {
           rejectionError = error;
@@ -407,7 +441,7 @@ describe("AgentBridge Unit Tests", () => {
       const mockProcess = {
         kill: () => true,
       };
-      (agentBridge as any).process = mockProcess;
+      (agentBridge as unknown as TestRecord).process = mockProcess;
 
       agentBridge.shutdown();
 
@@ -428,23 +462,23 @@ describe("AgentBridge Unit Tests", () => {
 
       // Override clearTimeout to track calls
       const originalClearTimeout = global.clearTimeout;
-      global.clearTimeout = (timer: any) => {
+      global.clearTimeout = (timer: string | number | NodeJS.Timeout | undefined) => {
         if (timer === mockTimer) {
           timerCleared = true;
         }
         originalClearTimeout(timer);
       };
 
-      const mockConnection = { dispose: () => {} };
-      (agentBridge as any).connection = mockConnection;
-      (agentBridge as any).pendingRequests.set(1, {
+      const mockConnection: Partial<MockConnection> = { dispose: () => {} };
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).pendingRequests.set(1, {
         resolve: () => {},
         reject: () => {},
         timeout: mockTimer,
       });
 
       const mockProcess = { kill: () => true };
-      (agentBridge as any).process = mockProcess;
+      (agentBridge as unknown as TestRecord).process = mockProcess;
 
       agentBridge.shutdown();
 
@@ -459,7 +493,7 @@ describe("AgentBridge Unit Tests", () => {
     it("Should timeout long-running requests", async function () {
       this.timeout(35000); // Allow time for timeout
 
-      const mockConnection = {
+      const mockConnection: Partial<MockConnection> = {
         sendRequest: () => {
           // Never resolve
           return new Promise(() => {});
@@ -467,13 +501,13 @@ describe("AgentBridge Unit Tests", () => {
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       const startTime = Date.now();
       try {
-        await (agentBridge as any).sendRequest("test_method", {}, 1000);
+        await (agentBridge as unknown as TestRecord).sendRequest("test_method", {}, 1000);
         assert.fail("Should have timed out");
-      } catch (error: any) {
+      } catch (error: unknown) {
         const elapsed = Date.now() - startTime;
         assert.ok(error.message.includes("timeout"), "Should be timeout error");
         assert.ok(elapsed >= 1000 && elapsed < 2000, `Should timeout after ~1s, got ${elapsed}ms`);
@@ -483,15 +517,15 @@ describe("AgentBridge Unit Tests", () => {
     it("Should clean up pending request on timeout", async function () {
       this.timeout(3000);
 
-      const mockConnection = {
+      const mockConnection: Partial<MockConnection> = {
         sendRequest: () => new Promise(() => {}),
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       try {
-        await (agentBridge as any).sendRequest("test_method", {}, 500);
+        await (agentBridge as unknown as TestRecord).sendRequest("test_method", {}, 500);
       } catch (error) {
         // Expected timeout
       }
@@ -500,7 +534,7 @@ describe("AgentBridge Unit Tests", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       assert.strictEqual(
-        (agentBridge as any).pendingRequests.size,
+        (agentBridge as unknown as TestRecord).pendingRequests.size,
         0,
         "Pending requests should be empty after timeout"
       );
@@ -538,8 +572,8 @@ describe("AgentBridge Unit Tests", () => {
         },
       ];
 
-      const mockConnection = {
-        sendRequest: (method: string, _params?: any) => {
+      const mockConnection: Partial<MockConnection> = {
+        sendRequest: (method: string, _params?: Record<string, unknown>) => {
           assert.strictEqual(
             method,
             "list_conversations",
@@ -550,7 +584,7 @@ describe("AgentBridge Unit Tests", () => {
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       const result = await agentBridge.listConversations();
 
@@ -562,14 +596,14 @@ describe("AgentBridge Unit Tests", () => {
     });
 
     it("Should return empty array when no conversations exist", async () => {
-      const mockConnection = {
-        sendRequest: (_method: string, _params?: any) => {
+      const mockConnection: Partial<MockConnection> = {
+        sendRequest: (_method: string, _params?: Record<string, unknown>) => {
           return Promise.resolve({ conversations: [] });
         },
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       const result = await agentBridge.listConversations();
 
@@ -577,14 +611,14 @@ describe("AgentBridge Unit Tests", () => {
     });
 
     it("Should handle missing conversations field in response", async () => {
-      const mockConnection = {
-        sendRequest: (_method: string, _params?: any) => {
+      const mockConnection: Partial<MockConnection> = {
+        sendRequest: (_method: string, _params?: Record<string, unknown>) => {
           return Promise.resolve({}); // No conversations field
         },
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       const result = await agentBridge.listConversations();
 
@@ -598,28 +632,31 @@ describe("AgentBridge Unit Tests", () => {
     it("Should timeout after 5 seconds", async function () {
       this.timeout(7000);
 
-      const mockConnection = {
-        sendRequest: (_method: string, _params?: any) => {
+      const mockConnection: Partial<MockConnection> = {
+        sendRequest: (_method: string, _params?: Record<string, unknown>) => {
           // Never resolve to simulate timeout
           return new Promise(() => {});
         },
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       try {
         await agentBridge.listConversations();
         assert.fail("Should have thrown timeout error");
-      } catch (error: any) {
-        assert.ok(error.message.includes("timeout"), "Should be a timeout error");
+      } catch (error: unknown) {
+        assert.ok(
+          error instanceof Error && error.message.includes("timeout"),
+          "Should be a timeout error"
+        );
       }
     });
   });
 
   describe("loadConversation", () => {
     it("Should send load_conversation request with conversationId", async () => {
-      let receivedParams: any;
+      let receivedParams: Record<string, unknown>;
       const mockResult = {
         conversation: {
           schema_version: "1.0",
@@ -639,8 +676,8 @@ describe("AgentBridge Unit Tests", () => {
         },
       };
 
-      const mockConnection = {
-        sendRequest: (method: string, params?: any) => {
+      const mockConnection: Partial<MockConnection> = {
+        sendRequest: (method: string, params?: Record<string, unknown>) => {
           assert.strictEqual(method, "load_conversation", "Should send load_conversation request");
           receivedParams = params;
           return Promise.resolve(mockResult);
@@ -648,7 +685,7 @@ describe("AgentBridge Unit Tests", () => {
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       const result = await agentBridge.loadConversation("conv-1");
 
@@ -686,12 +723,12 @@ describe("AgentBridge Unit Tests", () => {
         },
       };
 
-      const mockConnection = {
+      const mockConnection: Partial<MockConnection> = {
         sendRequest: () => Promise.resolve(mockResult),
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       const result = await agentBridge.loadConversation("branch-conv");
 
@@ -711,18 +748,21 @@ describe("AgentBridge Unit Tests", () => {
     it("Should timeout after 5 seconds", async function () {
       this.timeout(7000);
 
-      const mockConnection = {
+      const mockConnection: Partial<MockConnection> = {
         sendRequest: () => new Promise(() => {}),
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       try {
         await agentBridge.loadConversation("conv-1");
         assert.fail("Should have thrown timeout error");
-      } catch (error: any) {
-        assert.ok(error.message.includes("timeout"), "Should be a timeout error");
+      } catch (error: unknown) {
+        assert.ok(
+          error instanceof Error && error.message.includes("timeout"),
+          "Should be a timeout error"
+        );
       }
     });
   });
@@ -730,10 +770,10 @@ describe("AgentBridge Unit Tests", () => {
   describe("deleteConversation", () => {
     it("Should send delete_conversation request with conversationId", async () => {
       let receivedMethod: string | undefined;
-      let receivedParams: any;
+      let receivedParams: Record<string, unknown>;
 
-      const mockConnection = {
-        sendRequest: (method: string, params?: any) => {
+      const mockConnection: Partial<MockConnection> = {
+        sendRequest: (method: string, params?: Record<string, unknown>) => {
           receivedMethod = method;
           receivedParams = params;
           return Promise.resolve({ success: true });
@@ -741,7 +781,7 @@ describe("AgentBridge Unit Tests", () => {
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       await agentBridge.deleteConversation("conv-to-delete");
 
@@ -758,38 +798,44 @@ describe("AgentBridge Unit Tests", () => {
     });
 
     it("Should handle deletion errors", async () => {
-      const mockConnection = {
-        sendRequest: (_method: string, _params?: any) => {
+      const mockConnection: Partial<MockConnection> = {
+        sendRequest: (_method: string, _params?: Record<string, unknown>) => {
           return Promise.reject(new Error("Conversation not found"));
         },
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       try {
         await agentBridge.deleteConversation("non-existent");
         assert.fail("Should have thrown error");
-      } catch (error: any) {
-        assert.ok(error.message.includes("Conversation not found"), "Should propagate error");
+      } catch (error: unknown) {
+        assert.ok(
+          error instanceof Error && error.message.includes("Conversation not found"),
+          "Should propagate error"
+        );
       }
     });
 
     it("Should timeout after 5 seconds", async function () {
       this.timeout(7000);
 
-      const mockConnection = {
+      const mockConnection: Partial<MockConnection> = {
         sendRequest: () => new Promise(() => {}),
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       try {
         await agentBridge.deleteConversation("conv-1");
         assert.fail("Should have thrown timeout error");
-      } catch (error: any) {
-        assert.ok(error.message.includes("timeout"), "Should be a timeout error");
+      } catch (error: unknown) {
+        assert.ok(
+          error instanceof Error && error.message.includes("timeout"),
+          "Should be a timeout error"
+        );
       }
     });
   });
@@ -797,10 +843,10 @@ describe("AgentBridge Unit Tests", () => {
   describe("renameConversation", () => {
     it("Should send rename_conversation request with conversationId and newTitle", async () => {
       let receivedMethod: string | undefined;
-      let receivedParams: any;
+      let receivedParams: Record<string, unknown>;
 
-      const mockConnection = {
-        sendRequest: (method: string, params?: any) => {
+      const mockConnection: Partial<MockConnection> = {
+        sendRequest: (method: string, params?: Record<string, unknown>) => {
           receivedMethod = method;
           receivedParams = params;
           return Promise.resolve({ success: true });
@@ -808,7 +854,7 @@ describe("AgentBridge Unit Tests", () => {
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       await agentBridge.renameConversation("conv-1", "New Title");
 
@@ -822,17 +868,17 @@ describe("AgentBridge Unit Tests", () => {
     });
 
     it("Should handle empty title", async () => {
-      let receivedParams: any;
+      let receivedParams: Record<string, unknown>;
 
-      const mockConnection = {
-        sendRequest: (method: string, params?: any) => {
+      const mockConnection: Partial<MockConnection> = {
+        sendRequest: (method: string, params?: Record<string, unknown>) => {
           receivedParams = params;
           return Promise.resolve({ success: true });
         },
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       await agentBridge.renameConversation("conv-1", "");
 
@@ -840,17 +886,17 @@ describe("AgentBridge Unit Tests", () => {
     });
 
     it("Should handle special characters in title", async () => {
-      let receivedParams: any;
+      let receivedParams: Record<string, unknown>;
 
-      const mockConnection = {
-        sendRequest: (method: string, params?: any) => {
+      const mockConnection: Partial<MockConnection> = {
+        sendRequest: (method: string, params?: Record<string, unknown>) => {
           receivedParams = params;
           return Promise.resolve({ success: true });
         },
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       const specialTitle = "Test with \"quotes\" and 'apostrophes' & <html> tags";
       await agentBridge.renameConversation("conv-1", specialTitle);
@@ -863,38 +909,44 @@ describe("AgentBridge Unit Tests", () => {
     });
 
     it("Should handle rename errors", async () => {
-      const mockConnection = {
-        sendRequest: (_method: string, _params?: any) => {
+      const mockConnection: Partial<MockConnection> = {
+        sendRequest: (_method: string, _params?: Record<string, unknown>) => {
           return Promise.reject(new Error("Conversation not found"));
         },
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       try {
         await agentBridge.renameConversation("non-existent", "New Title");
         assert.fail("Should have thrown error");
-      } catch (error: any) {
-        assert.ok(error.message.includes("Conversation not found"), "Should propagate error");
+      } catch (error: unknown) {
+        assert.ok(
+          error instanceof Error && error.message.includes("Conversation not found"),
+          "Should propagate error"
+        );
       }
     });
 
     it("Should timeout after 5 seconds", async function () {
       this.timeout(7000);
 
-      const mockConnection = {
+      const mockConnection: Partial<MockConnection> = {
         sendRequest: () => new Promise(() => {}),
         dispose: () => {},
       };
 
-      (agentBridge as any).connection = mockConnection;
+      (agentBridge as unknown as TestRecord).connection = mockConnection;
 
       try {
         await agentBridge.renameConversation("conv-1", "New Title");
         assert.fail("Should have thrown timeout error");
-      } catch (error: any) {
-        assert.ok(error.message.includes("timeout"), "Should be a timeout error");
+      } catch (error: unknown) {
+        assert.ok(
+          error instanceof Error && error.message.includes("timeout"),
+          "Should be a timeout error"
+        );
       }
     });
   });

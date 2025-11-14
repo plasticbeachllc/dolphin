@@ -201,7 +201,7 @@ class TestProviderFactory:
             # Test that convenience function uses new default
             mock_response = Mock()
             mock_response.data = [Mock(embedding=[0.9] * 1536)]
-            custom_provider.client.embeddings.create.return_value = mock_response
+            custom_provider.client.embeddings.create.return_value = mock_response  # type: ignore[assignment]
 
             result = embed_texts("small", ["test"])
             assert result[0] == [0.9] * 1536

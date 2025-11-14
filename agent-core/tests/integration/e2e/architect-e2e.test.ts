@@ -25,7 +25,7 @@ class E2EMockClaudeProvider {
     this.scenario = scenario;
   }
 
-  async *execute(params: any) {
+  async *execute(params: unknown) {
     const { model } = params;
 
     let response = "";
@@ -250,15 +250,15 @@ describe("ArchitectWorkflow E2E", () => {
     const promptBuilder = new PromptBuilder();
 
     const architectWorkflow = new ArchitectWorkflow({
-      claudeProvider: claudeProvider as any,
-      contextBuilder: contextBuilder as any,
+      claudeProvider: claudeProvider as unknown,
+      contextBuilder: contextBuilder as unknown,
       promptBuilder,
       maxClarificationTurns: 2,
     });
 
     const editorWorkflow = new EditorWorkflow({
-      claudeProvider: claudeProvider as any,
-      contextBuilder: contextBuilder as any,
+      claudeProvider: claudeProvider as unknown,
+      contextBuilder: contextBuilder as unknown,
       promptBuilder,
     });
 

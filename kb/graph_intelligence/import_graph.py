@@ -40,7 +40,7 @@ class ImportGraphExtractor:
         """
         )
 
-        captures = import_query.captures(tree_root)
+        captures = import_query.captures(tree_root)  # type: ignore[attr-defined]
 
         # Create a module node for this file if not exists
         module_name = source_file.replace("/", ".").replace(".py", "")
@@ -127,7 +127,7 @@ class ImportGraphExtractor:
         """
         )
 
-        captures = import_query.captures(tree_root)
+        captures = import_query.captures(tree_root)  # type: ignore[attr-defined]
 
         # Create a module node for this file
         module_name = source_file.replace("/", ".").replace(".ts", "").replace(".tsx", "").replace(".js", "")

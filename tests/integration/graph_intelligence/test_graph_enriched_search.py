@@ -67,10 +67,10 @@ def indexed_repo(sample_python_file: Path, tmp_path: Path):
     # Create repository record
     sql_store.record_repo("test_repo", sample_python_file)
     repo_info = sql_store.get_repo_by_name("test_repo")
+    assert repo_info is not None
 
     # Process the file to extract graph data
     file_path = sample_python_file / "calculator.py"
-    from kb.chunkers.repo_config import RepoChunkingConfig
     from kb.ingest.graph_helpers import extract_graph_from_file, store_graph_data
 
     file_info_id = sql_store.upsert_file(
@@ -90,7 +90,7 @@ def indexed_repo(sample_python_file: Path, tmp_path: Path):
             file_path=file_path,
             language="python",
             text=text,
-            repo_config=RepoChunkingConfig(),
+            repo_config=None,
         )
 
         if nodes or edges:
@@ -290,6 +290,7 @@ def test_graph_context_no_graph_data(tmp_path: Path):
     # Create repo without graph data
     sql_store.record_repo("empty_repo", tmp_path)
     repo_info = sql_store.get_repo_by_name("empty_repo")
+    assert repo_info is not None
     sql_store.upsert_file(
         repo_id=repo_info["id"],
         path="test.py",
@@ -333,7 +334,7 @@ def test_graph_context_deduplication():
     from kb.retrieval.graph_context import GraphContextEnricher
 
     # Create mock enricher
-    enricher = GraphContextEnricher(graph_store=None, sql_store=None)
+    enricher = GraphContextEnricher(graph_store=None, sql_store=None)  # type: ignore[arg-type]
 
     # Test deduplication
     relationships = [

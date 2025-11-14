@@ -10,9 +10,9 @@ import type { TaskInput, TaskSession, WorkflowUpdate } from "../../../src/types/
 
 describe("Orchestrator End-to-End", () => {
   let orchestrator: Orchestrator;
-  let mockStateStore: any;
-  let mockEditorWorkflow: any;
-  let mockArchitectWorkflow: any;
+  let mockStateStore: unknown;
+  let mockEditorWorkflow: unknown;
+  let mockArchitectWorkflow: unknown;
 
   beforeEach(() => {
     // Mock StateStore

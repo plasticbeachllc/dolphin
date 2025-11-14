@@ -336,7 +336,9 @@ class TestLargeStatementChunking:
 
         # All chunks should reference the same table
         for chunk in chunks:
-            assert "large_table" in chunk.symbol_name or chunk.symbol_kind.startswith("table")
+            assert (chunk.symbol_name and "large_table" in chunk.symbol_name) or (
+                chunk.symbol_kind and chunk.symbol_kind.startswith("table")
+            )
 
     def test_chunk_preserves_metadata(self):
         """Test that large statement chunking preserves metadata."""
@@ -349,7 +351,7 @@ class TestLargeStatementChunking:
 
         # All chunks should have function metadata
         for chunk in chunks:
-            assert chunk.symbol_kind.startswith("function")
+            assert chunk.symbol_kind and chunk.symbol_kind.startswith("function")
             assert chunk.symbol_name == "get_all_users"
 
 

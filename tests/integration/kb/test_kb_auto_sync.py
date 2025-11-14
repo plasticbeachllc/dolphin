@@ -152,6 +152,7 @@ class TestAsyncIndexingFlow:
 
         sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = sql_store.get_repo_by_name("test-repo")
+        assert repo is not None
 
         # Create test file
         test_file = workspace / "hello.py"
@@ -200,6 +201,7 @@ def goodbye():
 
         # Verify chunks were created
         chunks = sql_store.get_chunks_for_file(repo["id"], "hello.py")
+        assert chunks is not None
         assert len(chunks) > 0
 
         # Cleanup
@@ -229,6 +231,7 @@ def goodbye():
 
         sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = sql_store.get_repo_by_name("test-repo")
+        assert repo is not None
 
         # Create multiple test files
         files = []
@@ -273,6 +276,7 @@ def function_{i}():
         # Verify all files were indexed
         for filename in files:
             chunks = sql_store.get_chunks_for_file(repo["id"], filename)
+            assert chunks is not None, f"No chunks found for {filename}"
             assert len(chunks) > 0, f"No chunks found for {filename}"
 
         # Cleanup
@@ -302,6 +306,7 @@ def function_{i}():
 
         sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = sql_store.get_repo_by_name("test-repo")
+        assert repo is not None
 
         # Create test file
         test_file = workspace / "test.py"
@@ -325,7 +330,9 @@ def function_{i}():
             time.sleep(1)
 
         assert status["status"] == "completed"
-        first_indexed_count = len(sql_store.get_chunks_for_file(repo["id"], "test.py"))
+        chunks = sql_store.get_chunks_for_file(repo["id"], "test.py")
+        assert chunks is not None
+        first_indexed_count = len(chunks)
 
         # Index again without changing file (incremental should skip)
         response2 = client.post(
@@ -342,7 +349,9 @@ def function_{i}():
             time.sleep(1)
 
         assert status["status"] == "completed"
-        second_indexed_count = len(sql_store.get_chunks_for_file(repo["id"], "test.py"))
+        chunks = sql_store.get_chunks_for_file(repo["id"], "test.py")
+        assert chunks is not None
+        second_indexed_count = len(chunks)
 
         # Should have same number of chunks (deduplication worked)
         assert second_indexed_count == first_indexed_count

@@ -59,7 +59,7 @@ class TestRetrievalConstants:
     def test_constants_are_frozen(self):
         """Test that RetrievalConstants is immutable (frozen dataclass)."""
         with pytest.raises(AttributeError):
-            RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER = 10
+            RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER = 10  # type: ignore[misc]
 
     def test_global_singleton_instance(self):
         """Test that RETRIEVAL_PARAMS is a RetrievalConstants instance."""

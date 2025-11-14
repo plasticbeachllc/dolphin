@@ -171,9 +171,12 @@ describe("AutoSyncManager Tests", () => {
       );
       managers.push(manager);
 
-      // Test internal batching (accessing via any to test private method)
+      // Test internal batching (accessing via type assertion to test private method)
       const changes: PendingChange[] = [];
-      const batches = (manager as any).batchChanges(changes, 10);
+      type ManagerWithBatch = {
+        batchChanges: (changes: PendingChange[], batchSize: number) => PendingChange[][];
+      };
+      const batches = (manager as unknown as ManagerWithBatch).batchChanges(changes, 10);
 
       assert.strictEqual(batches.length, 0, "Should produce no batches for empty input");
     });
@@ -208,7 +211,10 @@ describe("AutoSyncManager Tests", () => {
         },
       ];
 
-      const batches = (manager as any).batchChanges(changes, 10);
+      type ManagerWithBatch = {
+        batchChanges: (changes: PendingChange[], batchSize: number) => PendingChange[][];
+      };
+      const batches = (manager as unknown as ManagerWithBatch).batchChanges(changes, 10);
 
       assert.strictEqual(batches.length, 1, "Should create single batch");
       assert.strictEqual(batches[0].length, 3, "Batch should contain all changes");
@@ -233,7 +239,10 @@ describe("AutoSyncManager Tests", () => {
         });
       }
 
-      const batches = (manager as any).batchChanges(changes, 10);
+      type ManagerWithBatch = {
+        batchChanges: (changes: PendingChange[], batchSize: number) => PendingChange[][];
+      };
+      const batches = (manager as unknown as ManagerWithBatch).batchChanges(changes, 10);
 
       assert.strictEqual(batches.length, 3, "Should create 3 batches (10 + 10 + 5)");
       assert.strictEqual(batches[0].length, 10, "First batch should have 10 items");
@@ -265,7 +274,10 @@ describe("AutoSyncManager Tests", () => {
         },
       ];
 
-      const batches = (manager as any).batchChanges(changes, 1);
+      type ManagerWithBatch = {
+        batchChanges: (changes: PendingChange[], batchSize: number) => PendingChange[][];
+      };
+      const batches = (manager as unknown as ManagerWithBatch).batchChanges(changes, 1);
 
       assert.strictEqual(batches.length, 2, "Should create 2 batches for batch size 1");
       assert.strictEqual(batches[0].length, 1, "Each batch should have 1 item");

@@ -7,12 +7,77 @@ import threading
 from contextlib import closing
 from datetime import UTC
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from sqlalchemy import event
 from sqlmodel import SQLModel, create_engine
 
 from kb.security import PathValidator
+
+
+class RepoRecord(TypedDict):
+    """Type for repository record dictionaries."""
+
+    id: int
+    root_path: str
+    default_embed_model: str
+
+
+class FileRecord(TypedDict):
+    """Type for file record dictionaries."""
+
+    id: int
+    repo_id: int
+    path: str
+    ext: str | None
+    language: str | None
+    is_binary: bool
+    size_bytes: int | None
+    latest_commit_sha: str | None
+    created_at: str
+    updated_at: str
+
+
+class FileInfo(TypedDict):
+    """Type for minimal file info dictionaries."""
+
+    id: int
+    path: str
+
+
+class ChunkInfo(TypedDict):
+    """Type for chunk info dictionaries."""
+
+    text_hash: str
+    text: str
+    file_id: int
+    chunk_index: int
+    start_line: int
+    end_line: int
+
+
+class SnapshotRecord(TypedDict):
+    """Type for file snapshot dictionaries."""
+
+    file_id: int
+    path: str
+    mtime_ns: int
+    size_bytes: int
+    content_hash: str
+    last_indexed_at: str
+
+
+class PendingChangeRecord(TypedDict):
+    """Type for pending change record dictionaries."""
+
+    id: int
+    repo_id: int
+    file_path: str
+    change_type: str
+    old_path: str | None
+    detected_at: str
+    processed: bool
+    processed_at: str | None
 
 
 def generate_fts_content_id(repo_id: int, file_id: int, text_hash: str) -> str:
@@ -467,7 +532,7 @@ class SQLiteMetadataStore:
                 for row in rows
             ]
 
-    def get_repo_by_name(self, name: str) -> dict[str, str | int] | None:
+    def get_repo_by_name(self, name: str) -> RepoRecord | None:
         """Return repo record by name or None if not found."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
@@ -589,7 +654,7 @@ class SQLiteMetadataStore:
             row = cur.fetchone()
             return int(row[0]) if row else None
 
-    def get_file_by_path(self, repo_id: int, path: str) -> dict[str, Any] | None:
+    def get_file_by_path(self, repo_id: int, path: str) -> FileRecord | None:
         """Get file metadata by repo_id and path.
 
         Returns file record dict or None if not found.
@@ -1041,7 +1106,7 @@ class SQLiteMetadataStore:
             "content_pruned": pruned,
         }
 
-    def get_all_files_for_repo(self, repo_id: int) -> list[dict[str, object]]:
+    def get_all_files_for_repo(self, repo_id: int) -> list[dict[str, Any]]:
         """Get all files for a repository.
 
         Returns list of dicts with keys: id, path
@@ -1054,7 +1119,7 @@ class SQLiteMetadataStore:
             rows = cur.fetchall() or []
             return [{"id": int(r[0]), "path": str(r[1])} for r in rows]
 
-    def get_chunks_for_file(self, repo_id: int, path: str) -> list[dict[str, object]] | None:
+    def get_chunks_for_file(self, repo_id: int, path: str) -> list[dict[str, Any]] | None:
         """Get all chunks (content rows) for a file by repo_id and path.
 
         Args:
@@ -1556,7 +1621,8 @@ class SQLiteMetadataStore:
 
     def _cleanup_fts_entries_comprehensive(self, cur, repo_id: int, repo_name: str) -> dict:
         """Comprehensive FTS5 cleanup with multiple strategies."""
-        stats = {"by_content_id": 0, "by_repo_name": 0, "orphaned": 0, "errors": []}
+        errors: list[str] = []
+        stats = {"by_content_id": 0, "by_repo_name": 0, "orphaned": 0, "errors": errors}
 
         try:
             # Strategy 1: Delete by content_id (most precise)
@@ -1588,7 +1654,7 @@ class SQLiteMetadataStore:
             stats["orphaned"] = cur.rowcount
 
         except Exception as e:
-            stats["errors"].append(str(e))
+            errors.append(str(e))
 
         return stats
 
@@ -1721,7 +1787,8 @@ class SQLiteMetadataStore:
         Returns:
             Statistics about cleanup: {small_deleted, large_deleted, errors}
         """
-        stats = {"small_deleted": 0, "large_deleted": 0, "errors": []}
+        errors: list[str] = []
+        stats = {"small_deleted": 0, "large_deleted": 0, "errors": errors}
 
         for model in ["small", "large"]:
             try:
@@ -1736,12 +1803,12 @@ class SQLiteMetadataStore:
 
                 # Verify deletion was successful
                 if post_count > 0:
-                    stats["errors"].append(f"{model} model: {post_count} vectors remain after deletion")
+                    errors.append(f"{model} model: {post_count} vectors remain after deletion")
 
                 stats[f"{model}_deleted"] = pre_count - post_count
 
             except Exception as e:
-                stats["errors"].append(f"{model} model cleanup failed: {e}")
+                errors.append(f"{model} model cleanup failed: {e}")
 
         return stats
 
@@ -1790,20 +1857,22 @@ class SQLiteMetadataStore:
         Returns:
             Consistency report with statistics and issues
         """
-        stats = {"consistent": True, "issues": [], "vector_counts": {}}
+        issues: list[str] = []
+        vector_counts: dict[str, int] = {}
+        stats = {"consistent": True, "issues": issues, "vector_counts": vector_counts}
 
         try:
             # Count vectors in both models
             for model in ["small", "large"]:
                 count = lancedb_store.count_repo_vectors(repo_name, model=model)
-                stats["vector_counts"][model] = count
+                vector_counts[model] = count
 
             # Could add more checks here, e.g., comparing metadata chunk counts
             # with vector counts
 
         except Exception as e:
             stats["consistent"] = False
-            stats["issues"].append(f"LanceDB consistency check failed: {e}")
+            issues.append(f"LanceDB consistency check failed: {e}")
 
         return stats
 
@@ -1818,11 +1887,12 @@ class SQLiteMetadataStore:
         Returns:
             Comprehensive consistency report
         """
+        issues: list[str] = []
         consistency_report = {
             "repo_id": repo_id,
             "repo_name": repo_name,
             "valid": True,
-            "issues": [],
+            "issues": issues,
             "statistics": {},
         }
 
@@ -1853,7 +1923,7 @@ class SQLiteMetadataStore:
 
             if orphaned_locations > 0:
                 consistency_report["valid"] = False
-                consistency_report["issues"].append(f"Found {orphaned_locations} orphaned chunk locations")
+                issues.append(f"Found {orphaned_locations} orphaned chunk locations")
 
             # Check for orphaned FTS entries
             cur.execute(
@@ -1866,7 +1936,7 @@ class SQLiteMetadataStore:
 
             if orphaned_fts > 0:
                 consistency_report["valid"] = False
-                consistency_report["issues"].append(f"Found {orphaned_fts} orphaned FTS entries")
+                issues.append(f"Found {orphaned_fts} orphaned FTS entries")
 
             # Check for chunk_content without files
             cur.execute(
@@ -1880,7 +1950,7 @@ class SQLiteMetadataStore:
 
             if orphaned_content > 0:
                 consistency_report["valid"] = False
-                consistency_report["issues"].append(f"Found {orphaned_content} chunk_content rows without files")
+                issues.append(f"Found {orphaned_content} chunk_content rows without files")
 
             # Check for files without repos
             cur.execute(
@@ -1894,7 +1964,7 @@ class SQLiteMetadataStore:
 
             if orphaned_files > 0:
                 consistency_report["valid"] = False
-                consistency_report["issues"].append(f"Found {orphaned_files} files without repos")
+                issues.append(f"Found {orphaned_files} files without repos")
 
             consistency_report["statistics"] = {
                 "metadata_files": metadata_files,
@@ -1912,7 +1982,8 @@ class SQLiteMetadataStore:
 
         if not lancedb_stats["consistent"]:
             consistency_report["valid"] = False
-            consistency_report["issues"].extend(lancedb_stats["issues"])
+            if isinstance(lancedb_stats["issues"], list):
+                issues.extend(lancedb_stats["issues"])
 
         return consistency_report
 
@@ -1926,12 +1997,14 @@ class SQLiteMetadataStore:
         Returns:
             Repair report with actions taken and results
         """
+        repairs_performed: list[str] = []
+        errors: list[str] = []
         repair_report = {
             "repo_id": repo_id,
             "repo_name": repo_name,
-            "repairs_performed": [],
+            "repairs_performed": repairs_performed,
             "success": True,
-            "errors": [],
+            "errors": errors,
         }
 
         with self._connect() as conn, closing(conn.cursor()) as cur:
@@ -1957,7 +2030,7 @@ class SQLiteMetadataStore:
                         )
                     """
                     )
-                    repair_report["repairs_performed"].append(f"Deleted {cur.rowcount} orphaned chunk locations")
+                    repairs_performed.append(f"Deleted {cur.rowcount} orphaned chunk locations")
 
                 # Repair orphaned FTS entries
                 cur.execute(
@@ -1975,7 +2048,7 @@ class SQLiteMetadataStore:
                         WHERE content_id NOT IN (SELECT id FROM chunk_content)
                     """
                     )
-                    repair_report["repairs_performed"].append(f"Deleted {cur.rowcount} orphaned FTS entries")
+                    repairs_performed.append(f"Deleted {cur.rowcount} orphaned FTS entries")
 
                 # Repair orphaned chunk_content (without files)
                 cur.execute(
@@ -2023,7 +2096,7 @@ class SQLiteMetadataStore:
                         )
                     """
                     )
-                    repair_report["repairs_performed"].append(f"Deleted {cur.rowcount} orphaned chunk_content rows")
+                    repairs_performed.append(f"Deleted {cur.rowcount} orphaned chunk_content rows")
 
                 # Repair orphaned files (without repos)
                 cur.execute(
@@ -2086,14 +2159,14 @@ class SQLiteMetadataStore:
                         )
                     """
                     )
-                    repair_report["repairs_performed"].append(f"Deleted {cur.rowcount} orphaned files")
+                    repairs_performed.append(f"Deleted {cur.rowcount} orphaned files")
 
                 conn.commit()
 
             except Exception as e:
                 conn.rollback()
                 repair_report["success"] = False
-                repair_report["errors"].append(f"Repair failed: {e}")
+                errors.append(f"Repair failed: {e}")
 
         return repair_report
 
@@ -2125,7 +2198,7 @@ class SQLiteMetadataStore:
                 raise RuntimeError("Failed to get change_id from INSERT")
             return int(change_id)
 
-    def get_pending_changes(self, repo_id: int | None = None, limit: int = 1000) -> list[dict]:
+    def get_pending_changes(self, repo_id: int | None = None, limit: int = 1000) -> list[dict[str, Any]]:
         """Get unprocessed pending changes."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
             if repo_id:
@@ -2251,7 +2324,7 @@ class SQLiteMetadataStore:
             )
             conn.commit()
 
-    def get_file_snapshot(self, file_id: int) -> dict | None:
+    def get_file_snapshot(self, file_id: int) -> SnapshotRecord | None:
         """Get snapshot for a file."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(

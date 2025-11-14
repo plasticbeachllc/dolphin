@@ -5,7 +5,7 @@ from collections.abc import Awaitable, Iterable, Sequence
 from inspect import isawaitable
 from pathlib import Path
 from time import perf_counter
-from typing import Protocol
+from typing import Protocol, cast
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,7 +24,6 @@ app = FastAPI(title="Unified Knowledge Store", version="0.1.0")
 # Add CORS middleware to allow requests from VSCode webviews
 # Note: CORSMiddleware is a class, not a factory function, but FastAPI's add_middleware
 # accepts both. We need to help the type checker by explicitly typing this.
-from typing import cast
 app.add_middleware(
     cast(type, CORSMiddleware),  # type: ignore[arg-type]
     allow_origins=["*"],  # Allow all origins (webview origins are dynamic)
@@ -172,8 +171,9 @@ async def search(request: SearchRequest) -> dict[str, object]:
             temp_config_data["ann_refine_factor"] = request.ann_refine_factor
 
         # Set on backend temporarily if it supports per-request config
-        if hasattr(backend, "set_request_ann_config"):
-            backend.set_request_ann_config(temp_config_data)
+        set_config_method = getattr(backend, "set_request_ann_config", None)
+        if callable(set_config_method):
+            set_config_method(temp_config_data)
 
     started = perf_counter()
     raw_hits = backend.search(request)

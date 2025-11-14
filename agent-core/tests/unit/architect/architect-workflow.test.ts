@@ -25,7 +25,7 @@ class MockClaudeProvider {
     this.mockResponses.set(model, response);
   }
 
-  async *execute(params: any): AsyncIterableIterator<ClaudeChunk> {
+  async *execute(params: unknown): AsyncIterableIterator<ClaudeChunk> {
     const response = this.mockResponses.get(params.model) || "Mock response";
 
     // Yield response character by character (simulating streaming)
@@ -39,7 +39,7 @@ class MockClaudeProvider {
 }
 
 class MockContextBuilder {
-  async build(_params: any): Promise<Context> {
+  async build(_params: unknown): Promise<Context> {
     return {
       kbResults: [
         {
@@ -61,11 +61,11 @@ class MockContextBuilder {
 }
 
 class MockPromptBuilder {
-  buildResearchPrompt(params: any): string {
+  buildResearchPrompt(params: unknown): string {
     return `Research prompt for: ${params.task}`;
   }
 
-  buildPlanningPrompt(params: any): string {
+  buildPlanningPrompt(params: unknown): string {
     return `Planning prompt for: ${params.task}`;
   }
 }
@@ -404,9 +404,9 @@ medium`;
       };
 
       const errorWorkflow = new ArchitectWorkflow({
-        claudeProvider: errorProvider as any,
-        contextBuilder: mockContextBuilder as any,
-        promptBuilder: mockPromptBuilder as any,
+        claudeProvider: errorProvider as unknown,
+        contextBuilder: mockContextBuilder as unknown,
+        promptBuilder: mockPromptBuilder as unknown,
       });
 
       let errorCaught = false;

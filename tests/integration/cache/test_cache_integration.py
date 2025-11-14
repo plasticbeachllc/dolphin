@@ -23,7 +23,8 @@ class TestCacheWithSearchBackend:
             )
 
             assert backend.cache is not None
-            assert backend.cache.enabled is True
+            cache = backend.cache
+            assert cache.enabled is True
 
     def test_search_backend_cache_disabled(self):
         """Verify search backend can be created without cache."""
@@ -36,7 +37,8 @@ class TestCacheWithSearchBackend:
 
             # Cache should still exist but be disabled
             assert backend.cache is not None
-            assert backend.cache.enabled is False
+            cache = backend.cache
+            assert cache.enabled is False
 
     def test_cache_invalidation_workflow(self):
         """Test cache behavior during repository operations."""
@@ -47,15 +49,18 @@ class TestCacheWithSearchBackend:
                 cache_enabled=True,
             )
 
+            assert backend.cache is not None
+            cache = backend.cache
+
             # Set up some cached data
-            backend.cache.set_results("query", [{"id": "1"}], repo="test-repo")
+            cache.set_results("query", [{"id": "1"}], repo="test-repo")
 
             # Verify it's cached
-            cached = backend.cache.get_results("query", repo="test-repo")
+            cached = cache.get_results("query", repo="test-repo")
             assert cached is not None
 
             # Invalidate the repo
-            backend.cache.invalidate_repo("test-repo")
+            cache.invalidate_repo("test-repo")
 
             # In-memory cache invalidation is conservative, but should not crash
             assert True
@@ -79,6 +84,7 @@ class TestCacheConfiguration:
                 redis_url=config.redis_url,
             )
 
+            assert backend.cache is not None
             assert backend.cache.enabled is True
 
     def test_config_with_cache_disabled(self):
@@ -95,6 +101,7 @@ class TestCacheConfiguration:
                 cache_enabled=config.cache_enabled,
             )
 
+            assert backend.cache is not None
             assert backend.cache.enabled is False
 
     def test_custom_ttl_configuration(self):
@@ -122,25 +129,28 @@ class TestCacheLifecycle:
                 cache_enabled=True,
             )
 
+            assert backend.cache is not None
+            cache = backend.cache
+
             # 2. Cache some data
-            backend.cache.set_embedding("test query", "small", [0.1, 0.2, 0.3])
-            backend.cache.set_results("test query", [{"id": "1"}], repo="test")
+            cache.set_embedding("test query", "small", [0.1, 0.2, 0.3])
+            cache.set_results("test query", [{"id": "1"}], repo="test")
 
             # 3. Verify cache hits
-            assert backend.cache.get_embedding("test query", "small") is not None
-            assert backend.cache.get_results("test query", repo="test") is not None
+            assert cache.get_embedding("test query", "small") is not None
+            assert cache.get_results("test query", repo="test") is not None
 
             # 4. Check stats
-            stats = backend.cache.get_stats()
+            stats = cache.get_stats()
             assert stats["embedding_hits"] > 0
             assert stats["result_hits"] > 0
 
             # 5. Clear cache
-            backend.cache.clear()
+            cache.clear()
 
             # 6. Verify cache cleared
-            assert backend.cache.get_embedding("test query", "small") is None
-            assert backend.cache.get_results("test query", repo="test") is None
+            assert cache.get_embedding("test query", "small") is None
+            assert cache.get_results("test query", repo="test") is None
 
 
 class TestCacheErrorHandling:
@@ -157,12 +167,16 @@ class TestCacheErrorHandling:
                 cache_enabled=True,
             )
 
+            assert backend.cache is not None
+            cache = backend.cache
+
             # Simulate cache failure by replacing with broken mock
-            backend.cache.redis = MagicMock()
-            backend.cache.redis.get.side_effect = Exception("Redis down")
+            mock_redis = MagicMock()
+            mock_redis.get.side_effect = Exception("Redis down")
+            cache.redis = mock_redis
 
             # Should not crash, just return None
-            result = backend.cache.get_embedding("query", "small")
+            result = cache.get_embedding("query", "small")
             assert result is None
 
     def test_backend_works_without_cache(self):
@@ -176,6 +190,7 @@ class TestCacheErrorHandling:
 
             # Backend should still function
             assert backend is not None
+            assert backend.cache is not None
             assert backend.cache.enabled is False
 
 
@@ -191,12 +206,15 @@ class TestCacheStatistics:
                 cache_enabled=True,
             )
 
-            # Generate some cache activity
-            backend.cache.set_embedding("q1", "small", [0.1])
-            backend.cache.get_embedding("q1", "small")  # hit
-            backend.cache.get_embedding("q2", "small")  # miss
+            assert backend.cache is not None
+            cache = backend.cache
 
-            stats = backend.cache.get_stats()
+            # Generate some cache activity
+            cache.set_embedding("q1", "small", [0.1])
+            cache.get_embedding("q1", "small")  # hit
+            cache.get_embedding("q2", "small")  # miss
+
+            stats = cache.get_stats()
             assert stats["embedding_hits"] == 1
             assert stats["embedding_misses"] == 1
             assert stats["embedding_hit_rate"] == 0.5
