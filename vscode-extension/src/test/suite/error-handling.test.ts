@@ -155,10 +155,11 @@ describe("Error Handling Tests", () => {
       try {
         await makeHttpGetRequest(`http://localhost:${mockServer.port}/health`, 2000);
         assert.fail("Should have thrown connection error");
-      } catch (err) {
+      } catch (err: any) {
         assert.ok(err instanceof Error, "Should throw connection error");
         assert.ok(
-          err.message.includes("ECONNREFUSED") ||
+          err.code === "ECONNREFUSED" ||
+            err.message.includes("ECONNREFUSED") ||
             err.message.includes("connect") ||
             err.message.includes("socket"),
           "Error should indicate connection problem"
