@@ -20,7 +20,7 @@ import json
 import statistics
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from kb.api.app import SearchRequest
 from kb.api.search_backend import create_search_backend
@@ -44,7 +44,7 @@ class HybridSearchValidator:
 
     def measure_latency(
         self, request: SearchRequest, backend, num_runs: int = 10
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Measure search latency over multiple runs."""
         latencies = []
 
@@ -68,8 +68,8 @@ class HybridSearchValidator:
         }
 
     def measure_search_quality(
-        self, test_queries: List[Dict[str, Any]]
-    ) -> Dict[str, float]:
+        self, test_queries: list[dict[str, Any]]
+    ) -> dict[str, float]:
         """Measure search quality metrics."""
         hybrid_precision_scores = []
         vector_precision_scores = []
@@ -135,7 +135,7 @@ class HybridSearchValidator:
             ),
         }
 
-    def _calculate_mrr(self, results: List[Dict], ground_truth: set) -> float:
+    def _calculate_mrr(self, results: list[dict], ground_truth: set) -> float:
         """Calculate Mean Reciprocal Rank."""
         for i, result in enumerate(results):
             chunk_id = result.get("chunk_id") or result.get("id")
@@ -143,7 +143,7 @@ class HybridSearchValidator:
                 return 1.0 / (i + 1)
         return 0.0
 
-    def run_performance_validation(self) -> Dict[str, Any]:
+    def run_performance_validation(self) -> dict[str, Any]:
         """Run complete performance validation."""
         print("🚀 Starting Hybrid Search Performance Validation")
         print("=" * 60)
@@ -260,7 +260,7 @@ class HybridSearchValidator:
 
         return validation_results
 
-    def save_results(self, results: Dict[str, Any], output_file: Path) -> None:
+    def save_results(self, results: dict[str, Any], output_file: Path) -> None:
         """Save validation results to JSON file."""
         with open(output_file, "w") as f:
             json.dump(results, f, indent=2)

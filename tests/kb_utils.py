@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, Sequence
 
 from kb.api.app import SearchRequest, reset_search_backend, set_search_backend
 from kb.hashing import hash_text

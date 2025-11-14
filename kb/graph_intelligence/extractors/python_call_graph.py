@@ -1,7 +1,6 @@
 """Extract call graph from Python code using tree-sitter."""
 
 import uuid
-from typing import Dict, List, Optional, Tuple
 
 import tree_sitter_python as tspython
 from tree_sitter import Language, Node, Parser
@@ -24,7 +23,7 @@ class PythonCallGraphExtractor:
         file_id: int,
         commit_sha: str,
         branch: str,
-    ) -> Tuple[List[GraphNode], List[GraphEdge]]:
+    ) -> tuple[list[GraphNode], list[GraphEdge]]:
         """Extract call graph from Python file.
 
         Args:
@@ -64,7 +63,7 @@ class PythonCallGraphExtractor:
         file_id: int,
         commit_sha: str,
         branch: str,
-    ) -> List[GraphNode]:
+    ) -> list[GraphNode]:
         """Extract function and class definitions by walking the tree."""
         nodes = []
         class_stack = []  # Stack to track nested classes
@@ -158,7 +157,7 @@ class PythonCallGraphExtractor:
         file_id: int,
         commit_sha: str,
         branch: str,
-        parent_class: Optional[GraphNode] = None,
+        parent_class: GraphNode | None = None,
     ) -> GraphNode:
         """Extract function/method definition node."""
         name_node = node.child_by_field_name("name")
@@ -216,13 +215,13 @@ class PythonCallGraphExtractor:
         )
 
     def _extract_calls(
-        self, root: Node, definitions: List[GraphNode], repo_id: int, commit_sha: str
-    ) -> List[GraphEdge]:
+        self, root: Node, definitions: list[GraphNode], repo_id: int, commit_sha: str
+    ) -> list[GraphEdge]:
         """Extract call edges by walking the tree."""
         edges = []
 
         # Create a map of function nodes by their line ranges
-        def_map: Dict[Tuple[int, int], GraphNode] = {
+        def_map: dict[tuple[int, int], GraphNode] = {
             (node.start_line or 0, node.end_line or 0): node
             for node in definitions
             if node.node_type in (NodeType.FUNCTION, NodeType.METHOD)
@@ -270,8 +269,8 @@ class PythonCallGraphExtractor:
         return edges
 
     def _find_containing_function(
-        self, node: Node, def_map: Dict[Tuple[int, int], GraphNode]
-    ) -> Optional[GraphNode]:
+        self, node: Node, def_map: dict[tuple[int, int], GraphNode]
+    ) -> GraphNode | None:
         """Find the function/method that contains this node."""
         current = node.parent
         while current:
@@ -296,8 +295,8 @@ class PythonCallGraphExtractor:
         return "Unknown"
 
     def _resolve_callee(
-        self, name: str, definitions: List[GraphNode]
-    ) -> Optional[GraphNode]:
+        self, name: str, definitions: list[GraphNode]
+    ) -> GraphNode | None:
         """Resolve a call target name to a definition node."""
         # Simple name matching - can be enhanced with scope analysis
         for node in definitions:
@@ -305,7 +304,7 @@ class PythonCallGraphExtractor:
                 return node
         return None
 
-    def _extract_docstring(self, func_node: Node) -> Optional[str]:
+    def _extract_docstring(self, func_node: Node) -> str | None:
         """Extract docstring from function or class definition."""
         body = func_node.child_by_field_name("body")
         if body and body.child_count > 0:

@@ -4,7 +4,6 @@ import logging
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
 from sqlmodel import Session, select
 
@@ -81,7 +80,7 @@ class GraphCacheValidator:
         logger.debug(f"Cache valid for repo {self.repo_id}")
         return True
 
-    def _get_cache_state(self) -> Optional[dict]:
+    def _get_cache_state(self) -> dict | None:
         """Get current cache state from database."""
         with Session(self.db) as session:
             statement = select(GraphCacheState).where(
@@ -100,7 +99,7 @@ class GraphCacheValidator:
                 "edge_changes_since_rebuild": result.edge_changes_since_rebuild,
             }
 
-    def _get_current_commit_sha(self) -> Optional[str]:
+    def _get_current_commit_sha(self) -> str | None:
         """Get current HEAD commit SHA for repository.
 
         Returns:

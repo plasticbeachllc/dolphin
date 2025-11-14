@@ -1,6 +1,5 @@
 """Data flow analysis for tracking variable dependencies."""
 
-from typing import Dict, List, Optional, Tuple
 
 from tree_sitter import Node
 
@@ -14,7 +13,7 @@ class VariableReference:
         self,
         var_name: str,
         line: int,
-        func_id: Optional[str] = None,
+        func_id: str | None = None,
         is_definition: bool = False,
         is_mutation: bool = False,
     ):
@@ -32,8 +31,8 @@ class DataFlowAnalyzer:
         pass
 
     def extract_data_flow_python(
-        self, tree_root: Node, definitions: List[GraphNode], repo_id: int
-    ) -> List[GraphEdge]:
+        self, tree_root: Node, definitions: list[GraphNode], repo_id: int
+    ) -> list[GraphEdge]:
         """Extract data flow edges for Python code."""
         edges = []
 
@@ -73,8 +72,8 @@ class DataFlowAnalyzer:
         return edges
 
     def extract_data_flow_typescript(
-        self, tree_root: Node, definitions: List[GraphNode], repo_id: int
-    ) -> List[GraphEdge]:
+        self, tree_root: Node, definitions: list[GraphNode], repo_id: int
+    ) -> list[GraphEdge]:
         """Extract data flow edges for TypeScript code."""
         edges = []
 
@@ -113,13 +112,13 @@ class DataFlowAnalyzer:
         return edges
 
     def _find_python_variable_references(
-        self, tree_root: Node, definitions: List[GraphNode]
-    ) -> List[VariableReference]:
+        self, tree_root: Node, definitions: list[GraphNode]
+    ) -> list[VariableReference]:
         """Find all variable references in Python code."""
         refs: list[VariableReference] = []
 
         # Create a map of function nodes by line range
-        def_map: Dict[Tuple[int, int], GraphNode] = {
+        def_map: dict[tuple[int, int], GraphNode] = {
             (node.start_line or 0, node.end_line or 0): node
             for node in definitions
             if node.node_type in (NodeType.FUNCTION, NodeType.METHOD)
@@ -135,8 +134,8 @@ class DataFlowAnalyzer:
     def _walk_python_tree(
         self,
         node: Node,
-        refs: List[VariableReference],
-        def_map: Dict[Tuple[int, int], GraphNode],
+        refs: list[VariableReference],
+        def_map: dict[tuple[int, int], GraphNode],
     ) -> None:
         """Recursively walk the Python AST to find variable references."""
         # Check for assignments (variable definitions)
@@ -188,13 +187,13 @@ class DataFlowAnalyzer:
             self._walk_python_tree(child, refs, def_map)
 
     def _find_typescript_variable_references(
-        self, tree_root: Node, definitions: List[GraphNode]
-    ) -> List[VariableReference]:
+        self, tree_root: Node, definitions: list[GraphNode]
+    ) -> list[VariableReference]:
         """Find all variable references in TypeScript code."""
         refs: list[VariableReference] = []
 
         # Create a map of function nodes by line range
-        def_map: Dict[Tuple[int, int], GraphNode] = {
+        def_map: dict[tuple[int, int], GraphNode] = {
             (node.start_line or 0, node.end_line or 0): node
             for node in definitions
             if node.node_type in (NodeType.FUNCTION, NodeType.METHOD)
@@ -210,8 +209,8 @@ class DataFlowAnalyzer:
     def _walk_typescript_tree(
         self,
         node: Node,
-        refs: List[VariableReference],
-        def_map: Dict[Tuple[int, int], GraphNode],
+        refs: list[VariableReference],
+        def_map: dict[tuple[int, int], GraphNode],
     ) -> None:
         """Recursively walk the TypeScript AST to find variable references."""
         # Check for variable declarations
@@ -263,8 +262,8 @@ class DataFlowAnalyzer:
             self._walk_typescript_tree(child, refs, def_map)
 
     def _find_containing_func(
-        self, node: Node, def_map: Dict[Tuple[int, int], GraphNode]
-    ) -> Optional[GraphNode]:
+        self, node: Node, def_map: dict[tuple[int, int], GraphNode]
+    ) -> GraphNode | None:
         """Find the function that contains this node."""
         current = node.parent
         while current:

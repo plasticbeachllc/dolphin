@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any
 
 try:
     import tomllib
@@ -60,7 +61,7 @@ def _ensure_user_config() -> Path:
 class RerankingConfig:
     enabled: bool = False
     model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-    device: Optional[str] = None
+    device: str | None = None
     batch_size: int = 32
     candidate_multiplier: int = 4
     score_threshold: float = 0.3
@@ -220,7 +221,7 @@ class KBConfig:
         return config
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any]) -> "KBConfig":
+    def from_mapping(cls, data: Mapping[str, Any]) -> KBConfig:
         """Create a configuration object from a mapping, handling nested sections."""
 
         # Extract nested sections

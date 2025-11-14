@@ -1,17 +1,20 @@
 """Server startup module that initializes the search backend."""
 
 from __future__ import annotations
+
+import logging
 import os
 import sys
-import logging
-from pathlib import Path
-from datetime import datetime
 from contextlib import asynccontextmanager
+from datetime import datetime
+from pathlib import Path
+
 from fastapi import FastAPI
-from .app import app, set_search_backend, reset_search_backend, set_stores, set_pipeline
+
+from ..config import KBConfig, load_config
+from .app import app, reset_search_backend, set_pipeline, set_search_backend, set_stores
+from .middleware.metrics import metrics_endpoint, prometheus_middleware
 from .search_backend import create_search_backend
-from ..config import load_config, KBConfig
-from .middleware.metrics import prometheus_middleware, metrics_endpoint
 
 # Configure logging to output to stderr at INFO level
 logging.basicConfig(

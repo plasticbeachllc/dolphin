@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from kb.logging.structured_logger import StructuredLogger, LogLevel
+from kb.logging.structured_logger import LogLevel, StructuredLogger
 
 
 class TestStructuredLogger:

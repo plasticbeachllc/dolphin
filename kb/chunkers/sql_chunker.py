@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import List, Optional, Tuple
 
 from .graph_types import GraphEdge, GraphNode
 from .token_utils import count_tokens, get_tokenizer
@@ -61,7 +60,7 @@ def chunk_source(
     model: str = "small",
     token_target: int = 400,
     overlap_pct: float = 0.10,
-) -> List[Chunk]:
+) -> list[Chunk]:
     """Chunk SQL source into logical units.
 
     Chunking strategy:
@@ -140,7 +139,7 @@ def chunk_source(
     return chunks
 
 
-def _split_sql_statements(source: str) -> List[str]:
+def _split_sql_statements(source: str) -> list[str]:
     """Split SQL source into individual statements.
 
     Handles:
@@ -229,7 +228,7 @@ def _split_sql_statements(source: str) -> List[str]:
     return statements
 
 
-def _classify_statement(statement: str) -> Tuple[str, Optional[str]]:
+def _classify_statement(statement: str) -> tuple[str, str | None]:
     """Classify SQL statement and extract entity name.
 
     Supports:
@@ -307,8 +306,8 @@ def _chunk_large_statement(
     model: str,
     token_target: int,
     statement_type: str,
-    entity_name: Optional[str],
-) -> List[Chunk]:
+    entity_name: str | None,
+) -> list[Chunk]:
     """Break large SQL statement into smaller chunks.
 
     Uses simple line-based chunking with respect to token limits.
@@ -360,7 +359,7 @@ def _chunk_large_statement(
     return chunks
 
 
-def extract_graph_data(source: str) -> Tuple[List[GraphNode], List[GraphEdge]]:
+def extract_graph_data(source: str) -> tuple[list[GraphNode], list[GraphEdge]]:
     """Extract graph nodes and edges from SQL source for code graph.
 
     Nodes:
@@ -492,7 +491,7 @@ def extract_graph_data(source: str) -> Tuple[List[GraphNode], List[GraphEdge]]:
     return nodes, edges
 
 
-def _extract_table_references(sql: str) -> List[str]:
+def _extract_table_references(sql: str) -> list[str]:
     """Extract table names from FROM and JOIN clauses.
 
     Handles:
@@ -516,7 +515,7 @@ def _extract_table_references(sql: str) -> List[str]:
     return list(set(tables))  # Deduplicate
 
 
-def _extract_sqlmesh_dependencies(sql: str) -> List[str]:
+def _extract_sqlmesh_dependencies(sql: str) -> list[str]:
     """Extract SQLMesh model dependencies from depends_on attribute.
 
     Example:
@@ -540,7 +539,7 @@ def _extract_sqlmesh_dependencies(sql: str) -> List[str]:
     return deps
 
 
-def _extract_dbt_refs(sql: str) -> List[str]:
+def _extract_dbt_refs(sql: str) -> list[str]:
     """Extract dbt ref() dependencies.
 
     Example: {{ ref('users') }} -> ['users']
@@ -551,7 +550,7 @@ def _extract_dbt_refs(sql: str) -> List[str]:
     return matches
 
 
-def _extract_dbt_sources(sql: str) -> List[str]:
+def _extract_dbt_sources(sql: str) -> list[str]:
     """Extract dbt source() dependencies.
 
     Example: {{ source('raw', 'users') }} -> ['raw.users']
@@ -564,7 +563,7 @@ def _extract_dbt_sources(sql: str) -> List[str]:
     return [f"{schema}.{table}" for schema, table in matches]
 
 
-def _extract_dbt_macro_calls(sql: str) -> List[str]:
+def _extract_dbt_macro_calls(sql: str) -> list[str]:
     """Extract dbt macro calls.
 
     Example: {{ calculate_total(amount) }} -> ['calculate_total']

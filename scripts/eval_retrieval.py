@@ -23,9 +23,9 @@ from kb.api.app import SearchRequest
 from kb.api.search_backend import KnowledgeSearchBackend
 from kb.config import KBConfig
 from kb.embeddings.provider import create_provider
+from kb.store.graph_store import GraphStore
 from kb.store.lancedb_store import LanceDBStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
-from kb.store.graph_store import GraphStore
 
 
 class GoldenScenario:
@@ -412,11 +412,7 @@ def main():
             status_symbol = "✓" if status == "pass" else "✗"
             print(f"Status: {status_symbol} {status.upper()}")
             print(
-                "MRR: {mrr:.3f}, P@5: {p5:.3f}, R@10: {r10:.3f}".format(
-                    mrr=reciprocal_rank,
-                    p5=precision_at_k[5],
-                    r10=recall_at_k[10],
-                )
+                f"MRR: {reciprocal_rank:.3f}, P@5: {precision_at_k[5]:.3f}, R@10: {recall_at_k[10]:.3f}"
             )
 
     # Compute summary

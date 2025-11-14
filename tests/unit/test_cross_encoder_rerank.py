@@ -2,7 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-
 from kb.retrieval.cross_encoder_rerank import CrossEncoderReranker
 
 

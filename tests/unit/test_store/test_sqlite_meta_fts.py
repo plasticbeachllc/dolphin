@@ -1,6 +1,7 @@
 """Unit tests for FTS5/BM25 functionality in SQLiteMetadataStore."""
 
 import pytest
+
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
 

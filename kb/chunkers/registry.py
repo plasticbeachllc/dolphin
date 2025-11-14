@@ -27,9 +27,9 @@ Usage:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Union
 
 from .fallback_chunker import chunk_text
 from .md_chunker import chunk_markdown
@@ -51,10 +51,10 @@ __all__ = [
 _log = logging.getLogger(__name__)
 
 # Type alias for chunker functions (avoid importing ChunkList directly)
-ChunkerFunction = Callable[..., List]  # Returns list of Chunk objects
+ChunkerFunction = Callable[..., list]  # Returns list of Chunk objects
 
 # Built-in chunkers mapped to language identifiers
-_BUILTIN_CHUNKERS: Dict[str, ChunkerFunction] = {
+_BUILTIN_CHUNKERS: dict[str, ChunkerFunction] = {
     "python": chunk_python,
     "typescript": chunk_typescript,
     "typescriptreact": chunk_typescript,
@@ -71,7 +71,7 @@ _BUILTIN_CHUNKERS: Dict[str, ChunkerFunction] = {
 
 
 @lru_cache(maxsize=1)
-def _load_global_extension_map() -> Dict[str, str]:
+def _load_global_extension_map() -> dict[str, str]:
     """Load the global extension-to-language mapping using config hierarchy.
 
     Uses the same multi-level config system as the main config loader:
@@ -144,7 +144,7 @@ def _load_global_extension_map() -> Dict[str, str]:
         return {}
 
 
-def detect_language_from_extension(file_path: Union[str, Path]) -> Optional[str]:
+def detect_language_from_extension(file_path: str | Path) -> str | None:
     """Detect language identifier from file extension.
 
     Args:
@@ -183,7 +183,7 @@ def detect_language_from_extension(file_path: Union[str, Path]) -> Optional[str]
     return language if language != "text" else None
 
 
-def get_chunker_for_file(file_path: Union[str, Path]) -> Optional[ChunkerFunction]:
+def get_chunker_for_file(file_path: str | Path) -> ChunkerFunction | None:
     """Get the appropriate chunker for a file based on its extension.
 
     Args:
@@ -234,9 +234,9 @@ def chunk_file(
     language: str,
     text: str,
     repo_config: RepoChunkingConfig,
-    token_target: Optional[int] = None,
-    overlap_pct: Optional[float] = None,
-) -> List:  # Returns list of Chunk objects
+    token_target: int | None = None,
+    overlap_pct: float | None = None,
+) -> list:  # Returns list of Chunk objects
     """High-level interface for chunking a file with repository configuration.
 
     This is the primary entry point for chunking files in the knowledge base pipeline.

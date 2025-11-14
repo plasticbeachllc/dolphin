@@ -11,7 +11,7 @@ import math
 import time
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 from kb.retrieval.ann_tuning import ANNParams
 
@@ -37,7 +37,7 @@ class SearchMetrics:
     result_count: int
     """Number of results returned"""
 
-    quality_score: Optional[float] = None
+    quality_score: float | None = None
     """Optional quality score (0-1) if available"""
 
     timestamp: float = 0.0
@@ -130,12 +130,12 @@ class AdaptiveNProbes:
         self._last_adjustment = 0.0
 
         # Moving averages
-        self._ema_latency: Optional[float] = None
+        self._ema_latency: float | None = None
         self._ema_alpha = 0.2  # Smoothing factor
 
     def get_params(
         self,
-        query_type: Optional[str] = None,
+        query_type: str | None = None,
         top_k: int = 10,
     ) -> ANNParams:
         """Get current ANN parameters.
@@ -172,7 +172,7 @@ class AdaptiveNProbes:
         query_id: str,
         latency_ms: float,
         result_count: int,
-        quality_score: Optional[float] = None,
+        quality_score: float | None = None,
     ) -> None:
         """Record a search operation for adaptive tuning.
 
@@ -288,7 +288,7 @@ class AdaptiveNProbes:
             last_adjustment=self._last_adjustment,
         )
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get detailed statistics about adaptive tuning.
 
         Returns:
@@ -390,7 +390,7 @@ class AdaptiveNProbes:
 class GlobalAdaptiveNProbes:
     """Global singleton for adaptive nprobes tuning."""
 
-    _instance: Optional[AdaptiveNProbes] = None
+    _instance: AdaptiveNProbes | None = None
 
     @classmethod
     def get_instance(
@@ -416,7 +416,7 @@ class GlobalAdaptiveNProbes:
 
 
 def get_adaptive_params(
-    query_type: Optional[str] = None,
+    query_type: str | None = None,
     top_k: int = 10,
     target_latency_ms: float = 150.0,
 ) -> ANNParams:
@@ -438,7 +438,7 @@ def record_search_performance(
     query_id: str,
     latency_ms: float,
     result_count: int,
-    quality_score: Optional[float] = None,
+    quality_score: float | None = None,
 ) -> None:
     """Record search performance for adaptive tuning.
 

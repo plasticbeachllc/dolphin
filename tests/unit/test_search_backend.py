@@ -1,9 +1,10 @@
-import pytest
-from unittest.mock import MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock
 
-from kb.api.search_backend import KnowledgeSearchBackend, create_search_backend
+import pytest
+
 from kb.api.app import SearchRequest
+from kb.api.search_backend import KnowledgeSearchBackend, create_search_backend
 
 
 @pytest.fixture

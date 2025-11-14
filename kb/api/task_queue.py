@@ -7,7 +7,6 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Dict, List, Optional
 
 
 class TaskStatus(str, Enum):
@@ -23,28 +22,28 @@ class IndexTask:
 
     task_id: str
     repo: str
-    files: List[str]
+    files: list[str]
     status: TaskStatus = TaskStatus.QUEUED
     progress: int = 0
     total: int = 0
     indexed: int = 0  # Track indexed chunks during processing
     skipped: int = 0  # Track skipped chunks during processing
-    current_file: Optional[str] = None  # Currently processing file path
-    error: Optional[str] = None
+    current_file: str | None = None  # Currently processing file path
+    error: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    result: Optional[Dict] = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    result: dict | None = None
 
 
 class TaskQueue:
     """In-memory task queue for KB indexing operations."""
 
     def __init__(self):
-        self.tasks: Dict[str, IndexTask] = {}
+        self.tasks: dict[str, IndexTask] = {}
         self._lock = asyncio.Lock()
 
-    def create_task(self, repo: str, files: List[str]) -> IndexTask:
+    def create_task(self, repo: str, files: list[str]) -> IndexTask:
         """Create a new indexing task."""
         task = IndexTask(
             task_id=str(uuid.uuid4()), repo=repo, files=files, total=len(files)
@@ -55,13 +54,13 @@ class TaskQueue:
     async def update_task(
         self,
         task_id: str,
-        status: Optional[TaskStatus] = None,
-        progress: Optional[int] = None,
-        indexed: Optional[int] = None,
-        skipped: Optional[int] = None,
-        current_file: Optional[str] = None,
-        error: Optional[str] = None,
-        result: Optional[Dict] = None,
+        status: TaskStatus | None = None,
+        progress: int | None = None,
+        indexed: int | None = None,
+        skipped: int | None = None,
+        current_file: str | None = None,
+        error: str | None = None,
+        result: dict | None = None,
     ):
         """Update task status and progress."""
         async with self._lock:
@@ -95,11 +94,11 @@ class TaskQueue:
             if result:
                 task.result = result
 
-    def get_task(self, task_id: str) -> Optional[IndexTask]:
+    def get_task(self, task_id: str) -> IndexTask | None:
         """Get task by ID."""
         return self.tasks.get(task_id)
 
-    def get_all_tasks(self, repo: Optional[str] = None) -> List[IndexTask]:
+    def get_all_tasks(self, repo: str | None = None) -> list[IndexTask]:
         """Get all tasks, optionally filtered by repo."""
         tasks = list(self.tasks.values())
         if repo:
@@ -126,7 +125,7 @@ class TaskQueue:
 
 
 # Global task queue instance
-_task_queue: Optional[TaskQueue] = None
+_task_queue: TaskQueue | None = None
 
 
 def get_task_queue() -> TaskQueue:

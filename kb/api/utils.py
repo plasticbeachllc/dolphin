@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-from kb.security import PathValidator, PathValidationError
+from kb.security import PathValidationError, PathValidator
 
 
 def validate_path_within_repo(file_path: Path, repo_root: Path) -> Path:

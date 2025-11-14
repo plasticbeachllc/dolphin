@@ -387,7 +387,7 @@ class TestPhase2Integration:
         # Test 2: Parallel parsing
         parse_jobs = []
         for candidate in candidates[:10]:  # Test subset
-            with open(candidate.abs_path, "r") as f:
+            with open(candidate.abs_path) as f:
                 content = f.read()
 
             parse_jobs.append(
@@ -408,7 +408,7 @@ class TestPhase2Integration:
         ast_cache = ASTCache(max_size=100)
         for result in results:
             if result.success:
-                with open(result.file_path, "r") as f:
+                with open(result.file_path) as f:
                     content = f.read()
                 content_hash = hash_text(content)
                 ast_cache.put(
@@ -417,7 +417,7 @@ class TestPhase2Integration:
 
         # Verify cache works
         first_result = results[0]
-        with open(first_result.file_path, "r") as f:
+        with open(first_result.file_path) as f:
             content = f.read()
         content_hash = hash_text(content)
         cached = ast_cache.get(str(first_result.file_path), content_hash)

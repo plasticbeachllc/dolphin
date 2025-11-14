@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Dict, List, Sequence
 
 from ..chunkers.types import Chunk
 
 
-def build_desired_map(chunks: Sequence[Chunk]) -> Dict[str, List[Dict]]:
+def build_desired_map(chunks: Sequence[Chunk]) -> dict[str, list[dict]]:
     """Build a mapping from text_hash to list of occurrence dictionaries.
 
     Args:
@@ -25,7 +25,7 @@ def build_desired_map(chunks: Sequence[Chunk]) -> Dict[str, List[Dict]]:
           - symbol_path
           - heading_h1, heading_h2, heading_h3 (if present)
     """
-    desired_map: Dict[str, List[Dict]] = {}
+    desired_map: dict[str, list[dict]] = {}
 
     for chunk in chunks:
         # Ensure chunk has a text_hash
@@ -57,7 +57,7 @@ def build_desired_map(chunks: Sequence[Chunk]) -> Dict[str, List[Dict]]:
 
 def git_changed_files_modified_added(
     repo_root: Path, from_commit: str, to_commit: str = "HEAD"
-) -> List[str]:
+) -> list[str]:
     """Get list of modified and added files between two commits.
 
     This uses three-way comparison via merge-base to correctly handle pulls and merges:
@@ -109,7 +109,7 @@ def git_changed_files_modified_added(
 
 def git_changed_files_deleted(
     repo_root: Path, from_commit: str, to_commit: str = "HEAD"
-) -> List[str]:
+) -> list[str]:
     """Get list of deleted files between two commits.
 
     Uses merge-base comparison to correctly detect deletions after pulls/merges.
@@ -153,7 +153,7 @@ def git_changed_files_deleted(
         raise RuntimeError(f"Failed to get git diff for deleted files: {e.stderr}")
 
 
-def get_all_tracked_files(repo_root: Path) -> List[str]:
+def get_all_tracked_files(repo_root: Path) -> list[str]:
     """Get all tracked files in the repository.
 
     Args:

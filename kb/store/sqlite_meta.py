@@ -5,11 +5,13 @@ import logging
 import sqlite3
 import threading
 from contextlib import closing
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import event
 from sqlmodel import SQLModel, create_engine
+
 from kb.security import PathValidator
 
 
@@ -505,11 +507,11 @@ class SQLiteMetadataStore:
         self, repo_id: int, commit_sha: str, branch: str, embed_model: str
     ) -> int:
         """Create a new ingestion session and return its id."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         with self._connect() as conn, closing(conn.cursor()) as cur:
             # Use ISO format timestamp for consistency with other timestamp fields
-            created_at = datetime.now(timezone.utc).isoformat()
+            created_at = datetime.now(UTC).isoformat()
 
             cur.execute(
                 """
@@ -2353,8 +2355,8 @@ class SQLiteMetadataStore:
 
     def detect_drift(self, repo_id: int) -> list[dict]:
         """Detect files that changed since last snapshot."""
-        from pathlib import Path
         import hashlib
+        from pathlib import Path
 
         # Get repo info
         with self._connect() as conn, closing(conn.cursor()) as cur:

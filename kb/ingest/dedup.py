@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Tuple, Set
 
 from ..chunkers.types import Chunk
-from ..store.sqlite_meta import SQLiteMetadataStore
 from ..hashing import hash_text
+from ..store.sqlite_meta import SQLiteMetadataStore
 
 __all__ = ["ChunkDeduplicator"]
 
@@ -27,7 +26,7 @@ class ChunkDeduplicator:
 
     def get_existing_hashes_set(
         self, repo_id: int, file_id: int, embed_model: str
-    ) -> Set[str]:
+    ) -> set[str]:
         """Return the set of existing text hashes for a file+model.
 
         On failure to query the store, returns an empty set (conservative).
@@ -53,8 +52,8 @@ class ChunkDeduplicator:
             return set()
 
     def filter_unchanged_chunks(
-        self, chunks: List[Chunk], repo_id: int, file_id: int, embed_model: str
-    ) -> Tuple[List[Chunk], List[Chunk]]:
+        self, chunks: list[Chunk], repo_id: int, file_id: int, embed_model: str
+    ) -> tuple[list[Chunk], list[Chunk]]:
         """Separate changed from unchanged chunks using text-hash dedup.
 
         - Unchanged: chunk.text_hash exists in the file's existing hash set
@@ -62,8 +61,8 @@ class ChunkDeduplicator:
         """
         existing_hashes = self.get_existing_hashes_set(repo_id, file_id, embed_model)
 
-        changed: List[Chunk] = []
-        unchanged: List[Chunk] = []
+        changed: list[Chunk] = []
+        unchanged: list[Chunk] = []
 
         for ch in chunks:
             # Ensure the chunk has a text_hash; compute if missing

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from typing import Optional
 
 from sqlalchemy import Column, ForeignKey, Index, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
@@ -14,20 +13,20 @@ from sqlmodel import Field, SQLModel
 class Repo(SQLModel, table=True):
     __tablename__ = "repos"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
     root_path: str
     default_embed_model: str = Field(default="large")
 
     # Timestamps (managed by DML in store methods)
-    created_at: Optional[str] = Field(default=None)
-    updated_at: Optional[str] = Field(default=None)
+    created_at: str | None = Field(default=None)
+    updated_at: str | None = Field(default=None)
 
 
 class Session(SQLModel, table=True):
     __tablename__ = "sessions"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     repo_id: int = Field(foreign_key="repos.id")
 
     commit_sha: str
@@ -45,10 +44,10 @@ class Session(SQLModel, table=True):
     )  # Added for Phase 6: tracks chunks removed from deleted files
 
     # Notes and lifecycle
-    notes: Optional[str] = Field(default=None)
-    ended_at: Optional[str] = Field(default=None)
+    notes: str | None = Field(default=None)
+    ended_at: str | None = Field(default=None)
 
-    created_at: Optional[str] = Field(default=None)
+    created_at: str | None = Field(default=None)
 
 
 class File(SQLModel, table=True):
@@ -58,19 +57,19 @@ class File(SQLModel, table=True):
         Index("ix_files_repo_id", "repo_id"),
     )
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     repo_id: int = Field(foreign_key="repos.id")
 
     path: str
-    ext: Optional[str] = Field(default=None)
-    language: Optional[str] = Field(default=None)
+    ext: str | None = Field(default=None)
+    language: str | None = Field(default=None)
     is_binary: bool = Field(default=False)
-    size_bytes: Optional[int] = Field(default=None)
+    size_bytes: int | None = Field(default=None)
 
-    latest_commit_sha: Optional[str] = Field(default=None)
+    latest_commit_sha: str | None = Field(default=None)
 
-    created_at: Optional[str] = Field(default=None)
-    updated_at: Optional[str] = Field(default=None)
+    created_at: str | None = Field(default=None)
+    updated_at: str | None = Field(default=None)
 
 
 class ChunkContent(SQLModel, table=True):
@@ -95,8 +94,8 @@ class ChunkContent(SQLModel, table=True):
     text_hash: str
     embed_model: str
 
-    first_indexed_at: Optional[str] = Field(default=None)
-    last_indexed_at: Optional[str] = Field(default=None)
+    first_indexed_at: str | None = Field(default=None)
+    last_indexed_at: str | None = Field(default=None)
 
 
 class ChunkLocation(SQLModel, table=True):
@@ -118,11 +117,11 @@ class ChunkLocation(SQLModel, table=True):
     start_line: int
     end_line: int
 
-    symbol_kind: Optional[str] = Field(default=None)
-    symbol_name: Optional[str] = Field(default=None)
-    symbol_path: Optional[str] = Field(default=None)
+    symbol_kind: str | None = Field(default=None)
+    symbol_name: str | None = Field(default=None)
+    symbol_path: str | None = Field(default=None)
 
-    last_seen_at: Optional[str] = Field(default=None)
+    last_seen_at: str | None = Field(default=None)
 
 
 # =====================
@@ -168,11 +167,11 @@ class CodeNode(SQLModel, table=True):
     language: str  # 'python', 'typescript', 'sql', 'svelte'
 
     # Optional metadata (language-specific)
-    signature: Optional[str] = Field(
+    signature: str | None = Field(
         default=None
     )  # Function signature or type definition
-    docstring: Optional[str] = Field(default=None)  # Documentation/comments
-    visibility: Optional[str] = Field(
+    docstring: str | None = Field(default=None)  # Documentation/comments
+    visibility: str | None = Field(
         default=None
     )  # 'public', 'private', 'protected', 'exported'
     is_async: bool = Field(default=False)
@@ -235,13 +234,13 @@ class CodeEdge(SQLModel, table=True):
     repo_id: int = Field(foreign_key="repos.id")  # Repository reference for filtering
 
     # Context
-    line_number: Optional[int] = Field(
+    line_number: int | None = Field(
         default=None
     )  # Where this relationship occurs in source
     is_direct: bool = Field(default=True)  # Direct vs. transitive relationship
 
     # Optional metadata
-    relationship_metadata: Optional[str] = Field(
+    relationship_metadata: str | None = Field(
         default=None
     )  # JSON for language-specific details
 
@@ -278,7 +277,7 @@ class NodeAlias(SQLModel, table=True):
     # Alias information
     alias_name: str  # Imported/aliased name
     alias_qualified_name: str  # Full alias path
-    line_number: Optional[int] = Field(default=None)
+    line_number: int | None = Field(default=None)
 
 
 class CrossRepoReference(SQLModel, table=True):
@@ -303,13 +302,13 @@ class CrossRepoReference(SQLModel, table=True):
 
     # Target (external reference)
     target_package: str  # npm package, pip package, etc.
-    target_module: Optional[str] = Field(default=None)
-    target_symbol: Optional[str] = Field(default=None)
+    target_module: str | None = Field(default=None)
+    target_symbol: str | None = Field(default=None)
     reference_type: str  # 'import', 'call', 'type_reference'
 
     # Location
     file_id: int = Field(foreign_key="files.id")
-    line_number: Optional[int] = Field(default=None)
+    line_number: int | None = Field(default=None)
 
     # Lifecycle
     first_seen_at: str
@@ -331,14 +330,14 @@ class PendingChange(SQLModel, table=True):
         Index("idx_pending_changes_detected", "detected_at"),
     )
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     repo_id: int = Field(foreign_key="repos.id")
     file_path: str
     change_type: str  # 'created', 'modified', 'deleted', 'renamed'
-    old_path: Optional[str] = Field(default=None)  # For rename operations
+    old_path: str | None = Field(default=None)  # For rename operations
     detected_at: str
     processed: bool = Field(default=False)
-    processed_at: Optional[str] = Field(default=None)
+    processed_at: str | None = Field(default=None)
 
 
 class FileSnapshot(SQLModel, table=True):
@@ -381,13 +380,13 @@ class GraphMetrics(SQLModel, table=True):
             nullable=False,
         )
     )
-    pagerank: Optional[float] = Field(default=None)
-    betweenness_centrality: Optional[float] = Field(default=None)
+    pagerank: float | None = Field(default=None)
+    betweenness_centrality: float | None = Field(default=None)
     in_degree: int = Field(default=0)
     out_degree: int = Field(default=0)
-    cyclomatic_complexity: Optional[int] = Field(default=None)
-    community_id: Optional[int] = Field(default=None)
-    computed_at: Optional[str] = Field(default=None)
+    cyclomatic_complexity: int | None = Field(default=None)
+    community_id: int | None = Field(default=None)
+    computed_at: str | None = Field(default=None)
 
 
 class GraphSnapshot(SQLModel, table=True):
@@ -396,15 +395,15 @@ class GraphSnapshot(SQLModel, table=True):
     __tablename__ = "graph_snapshots"
     __table_args__ = (Index("ix_graph_snapshots_repo_commit", "repo_id", "commit_sha"),)
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     repo_id: int = Field(foreign_key="repos.id")
     commit_sha: str
-    commit_message: Optional[str] = Field(default=None)
-    commit_timestamp: Optional[str] = Field(default=None)
+    commit_message: str | None = Field(default=None)
+    commit_timestamp: str | None = Field(default=None)
     node_count: int = Field(default=0)
     edge_count: int = Field(default=0)
-    snapshot_data: Optional[bytes] = Field(default=None)  # Compressed NetworkX graph
-    created_at: Optional[str] = Field(default=None)
+    snapshot_data: bytes | None = Field(default=None)  # Compressed NetworkX graph
+    created_at: str | None = Field(default=None)
 
 
 class GraphCacheState(SQLModel, table=True):
@@ -414,7 +413,7 @@ class GraphCacheState(SQLModel, table=True):
 
     repo_id: int = Field(primary_key=True, foreign_key="repos.id")
     commit_sha: str = Field(default="")
-    last_rebuild_at: Optional[str] = Field(default=None)
+    last_rebuild_at: str | None = Field(default=None)
     node_count: int = Field(default=0)
     edge_count: int = Field(default=0)
     edge_changes_since_rebuild: int = Field(default=0)

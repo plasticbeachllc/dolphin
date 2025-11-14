@@ -4,7 +4,7 @@ Instruments all endpoints with essential metrics for debugging and latency monit
 """
 
 import time
-from typing import Callable
+from collections.abc import Callable
 
 from fastapi import Request
 from fastapi.responses import Response as FastAPIResponse

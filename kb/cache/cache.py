@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 _log = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class QueryCache:
 
     def __init__(
         self,
-        redis_client: Optional[Any] = None,
+        redis_client: Any | None = None,
         embedding_ttl: int = 3600,
         result_ttl: int = 900,
         enabled: bool = True,
@@ -69,7 +69,7 @@ class QueryCache:
         combined = "|".join(parts)
         return hashlib.sha256(combined.encode()).hexdigest()[:16]
 
-    def get_embedding(self, query: str, model: str) -> Optional[list[float]]:
+    def get_embedding(self, query: str, model: str) -> list[float] | None:
         """Get cached embedding for a query.
 
         Args:
@@ -132,7 +132,7 @@ class QueryCache:
         except Exception as e:
             _log.warning("Cache write error for embedding: %s", e)
 
-    def get_results(self, query: str, **params: Any) -> Optional[list[dict[str, Any]]]:
+    def get_results(self, query: str, **params: Any) -> list[dict[str, Any]] | None:
         """Get cached search results.
 
         Args:
@@ -292,7 +292,7 @@ class QueryCache:
 
 
 def create_cache(
-    redis_url: Optional[str] = None,
+    redis_url: str | None = None,
     embedding_ttl: int = 3600,
     result_ttl: int = 900,
     enabled: bool = True,

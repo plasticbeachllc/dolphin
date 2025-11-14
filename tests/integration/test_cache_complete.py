@@ -4,7 +4,6 @@ import subprocess
 import time
 from pathlib import Path
 
-
 from kb.api.app import SearchRequest
 from kb.api.search_backend import KnowledgeSearchBackend
 from kb.cache import QueryCache

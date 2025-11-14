@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import datetime
+from collections.abc import Awaitable, Iterable, Sequence
 from inspect import isawaitable
 from pathlib import Path
 from time import perf_counter
-from typing import Awaitable, Iterable, Protocol, Sequence
+from typing import Protocol
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from .task_queue import TaskStatus, get_task_queue
-from .utils import validate_path_within_repo, GitRepository
 from ..store.sqlite_meta import generate_fts_content_id
+from .task_queue import TaskStatus, get_task_queue
+from .utils import GitRepository, validate_path_within_repo
 
 # Constants
 EMBEDDING_BATCH_SIZE = 128
@@ -352,7 +353,7 @@ async def fetch_file_slice(
 
         # Read file and extract lines
         try:
-            with open(full_path, "r", encoding="utf-8") as f:
+            with open(full_path, encoding="utf-8") as f:
                 all_lines = f.readlines()
 
             # Convert to 0-indexed
@@ -645,15 +646,15 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             return
 
         # Process files
-        from ..ingest.dedup import ChunkDeduplicator
         from ..chunkers.registry import (
-            detect_language_from_extension,
             chunk_file as chunk_file_with_config,
+            detect_language_from_extension,
         )
         from ..chunkers.repo_config import load_repo_chunking_config
-        from ..hashing import hash_text
         from ..embeddings.provider import embed_texts_async
+        from ..hashing import hash_text
         from ..ingest._helpers import build_desired_map, representative_text_for_hash
+        from ..ingest.dedup import ChunkDeduplicator
 
         # Get commit info for provenance
         git_repo = GitRepository(root)
@@ -847,7 +848,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                             "token_count": occ_token_counts.get(
                                 (occ["start_line"], occ["end_line"]), 0
                             ),
-                            "created_at": datetime.datetime.now(datetime.timezone.utc),
+                            "created_at": datetime.datetime.now(datetime.UTC),
                         }
                     )
 
@@ -1177,8 +1178,8 @@ async def reindex_repo(
         # For full reindex, use pipeline's full_reindex flag
         if request.mode == "full":
             # Queue full reindex task
-            from pathlib import Path
             import logging
+            from pathlib import Path
 
             logger = logging.getLogger(__name__)
             repo_id = int(repo["id"])
@@ -1229,8 +1230,9 @@ async def reindex_repo(
         else:
             # Incremental mode: use existing git-diff-based indexing
             # Get changed files since last commit
-            from ..ingest._helpers import git_changed_files_modified_added
             from pathlib import Path
+
+            from ..ingest._helpers import git_changed_files_modified_added
 
             repo_id = int(repo["id"])
             root = Path(repo["root_path"])

@@ -1,29 +1,31 @@
 """Search backend implementation connecting embeddings, vector search, and metadata."""
 
 from __future__ import annotations
-import math
-import uuid
-from pathlib import Path
-from typing import Optional, Sequence, List, Dict, Any
-import time
 
+import math
+import time
+import uuid
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any
+
+from ..cache import QueryCache, create_cache
 from ..config import KBConfig
+from ..constants.retrieval_config import RETRIEVAL_PARAMS
 from ..embeddings.provider import (
     EmbeddingProvider,
     create_provider,
     set_default_provider,
 )
+from ..logging.structured_logger import StructuredLogger
+from ..retrieval.ann_tuning import ANNParams
+from ..retrieval.cross_encoder_rerank import CrossEncoderReranker
+from ..retrieval.graph_context import GraphContextEnricher
+from ..retrieval.rankers import maximal_marginal_relevance, reciprocal_rank_fusion
+from ..store.graph_store import GraphStore
 from ..store.lancedb_store import LanceDBStore
 from ..store.sqlite_meta import SQLiteMetadataStore
-from ..store.graph_store import GraphStore
-from ..cache import QueryCache, create_cache
-from ..retrieval.rankers import reciprocal_rank_fusion, maximal_marginal_relevance
-from ..retrieval.cross_encoder_rerank import CrossEncoderReranker
-from ..retrieval.ann_tuning import ANNParams
-from ..retrieval.graph_context import GraphContextEnricher
 from .app import SearchRequest
-from ..logging.structured_logger import StructuredLogger
-from ..constants.retrieval_config import RETRIEVAL_PARAMS
 
 
 class KnowledgeSearchBackend:
@@ -32,11 +34,11 @@ class KnowledgeSearchBackend:
         embedding_provider: EmbeddingProvider,
         lance_store: LanceDBStore,
         sql_store: SQLiteMetadataStore,
-        cache: Optional[QueryCache] = None,
+        cache: QueryCache | None = None,
         hybrid_search_enabled: bool = True,
-        reranker: Optional[CrossEncoderReranker] = None,
-        config: Optional[KBConfig] = None,
-        graph_store: Optional[GraphStore] = None,
+        reranker: CrossEncoderReranker | None = None,
+        config: KBConfig | None = None,
+        graph_store: GraphStore | None = None,
     ):
         self.embedding_provider = embedding_provider
         self.lance_store = lance_store
@@ -734,8 +736,8 @@ class KnowledgeSearchBackend:
         return result
 
     def _hydrate_docs_for_reranking(
-        self, hits: List[Dict], sql_store: SQLiteMetadataStore
-    ) -> List[Dict]:
+        self, hits: list[dict], sql_store: SQLiteMetadataStore
+    ) -> list[dict]:
         ids_to_fetch = [h["chunk_id"] for h in hits if "content" not in h]
         if not ids_to_fetch:
             return hits
@@ -751,7 +753,7 @@ class KnowledgeSearchBackend:
 
         return hits
 
-    def set_request_ann_config(self, config: Dict[str, Any]) -> None:
+    def set_request_ann_config(self, config: dict[str, Any]) -> None:
         """Set per-request ANN configuration overrides.
 
         Args:

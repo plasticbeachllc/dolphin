@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -21,19 +22,19 @@ class SearchResult:
     id: str
     score: float
     text: str
-    repo: Optional[str] = None
-    path: Optional[str] = None
-    start_line: Optional[int] = None
-    end_line: Optional[int] = None
-    metadata: Optional[Dict[str, Any]] = None
-    search_type: Optional[str] = None  # 'vector' or 'bm25'
+    repo: str | None = None
+    path: str | None = None
+    start_line: int | None = None
+    end_line: int | None = None
+    metadata: dict[str, Any] | None = None
+    search_type: str | None = None  # 'vector' or 'bm25'
 
 
 def reciprocal_rank_fusion(
-    result_lists: List[List[SearchResult]],
+    result_lists: list[list[SearchResult]],
     k: int = 60,
-    top_k: Optional[int] = None,
-) -> List[SearchResult]:
+    top_k: int | None = None,
+) -> list[SearchResult]:
     """Merge multiple result lists using Reciprocal Rank Fusion (RRF).
 
     The RRF algorithm assigns a score to each document based on its rank
@@ -55,8 +56,8 @@ def reciprocal_rank_fusion(
         return []
 
     # Build rank maps for each list
-    rrf_scores: Dict[str, float] = {}
-    id_to_result: Dict[str, SearchResult] = {}
+    rrf_scores: dict[str, float] = {}
+    id_to_result: dict[str, SearchResult] = {}
 
     for results in result_lists:
         for rank, result in enumerate(results, start=1):
@@ -108,8 +109,8 @@ class ParallelHybridSearch:
 
     def __init__(
         self,
-        vector_search_fn: Optional[Callable] = None,
-        bm25_search_fn: Optional[Callable] = None,
+        vector_search_fn: Callable | None = None,
+        bm25_search_fn: Callable | None = None,
         enable_parallel: bool = True,
         vector_store: Any = None,
         bm25_store: Any = None,
@@ -135,7 +136,7 @@ class ParallelHybridSearch:
                 )
             )
         else:
-            self.vector_search_fn: Optional[Callable[[Any, Any], Any]] = (
+            self.vector_search_fn: Callable[[Any, Any], Any] | None = (
                 vector_search_fn
             )
 
@@ -144,7 +145,7 @@ class ParallelHybridSearch:
                 query, top_k, **kwargs
             )
         else:
-            self.bm25_search_fn: Optional[Callable[[Any, Any], Any]] = bm25_search_fn
+            self.bm25_search_fn: Callable[[Any, Any], Any] | None = bm25_search_fn
 
         self.enable_parallel = enable_parallel
         self.vector_store = vector_store
@@ -161,10 +162,10 @@ class ParallelHybridSearch:
     async def search_async(
         self,
         query: str,
-        query_embedding: Optional[List[float]] = None,
+        query_embedding: list[float] | None = None,
         top_k: int = 10,
         **kwargs,
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """Execute hybrid search with parallel execution.
 
         Args:
@@ -223,10 +224,10 @@ class ParallelHybridSearch:
 
         # Merge results using reciprocal rank fusion
         # Handle potential exceptions by converting to empty list
-        vec_list: List[SearchResult] = (
+        vec_list: list[SearchResult] = (
             vector_results if not isinstance(vector_results, BaseException) else []
         )
-        bm25_list: List[SearchResult] = (
+        bm25_list: list[SearchResult] = (
             bm25_results if not isinstance(bm25_results, BaseException) else []
         )
         merged = self._merge_results(
@@ -239,10 +240,10 @@ class ParallelHybridSearch:
 
     async def _vector_search_async(
         self,
-        query_embedding: Optional[List[float]],
+        query_embedding: list[float] | None,
         top_k: int,
         **kwargs,
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """Execute vector search asynchronously.
 
         Args:
@@ -286,7 +287,7 @@ class ParallelHybridSearch:
         query: str,
         top_k: int,
         **kwargs,
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """Execute BM25 search asynchronously.
 
         Args:
@@ -325,10 +326,10 @@ class ParallelHybridSearch:
     async def _search_sequential(
         self,
         query: str,
-        query_embedding: Optional[List[float]],
+        query_embedding: list[float] | None,
         top_k: int,
         **kwargs,
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """Fall back to sequential search.
 
         Args:
@@ -363,11 +364,11 @@ class ParallelHybridSearch:
 
     def _merge_results(
         self,
-        vector_results: List[SearchResult],
-        bm25_results: List[SearchResult],
+        vector_results: list[SearchResult],
+        bm25_results: list[SearchResult],
         top_k: int = 10,
         k: int = 60,  # RRF parameter
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """Merge results using Reciprocal Rank Fusion (RRF).
 
         Args:
@@ -389,10 +390,10 @@ class ParallelHybridSearch:
     def search(
         self,
         query: str,
-        query_embedding: Optional[List[float]] = None,
+        query_embedding: list[float] | None = None,
         top_k: int = 10,
         **kwargs,
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """Synchronous wrapper around search_async.
 
         Args:
@@ -417,7 +418,7 @@ class ParallelHybridSearch:
             self.search_async(query, query_embedding, top_k, **kwargs)
         )
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get search statistics.
 
         Returns:
@@ -456,7 +457,7 @@ class ParallelHybridSearch:
 
 def create_parallel_search(
     vector_fn: Callable,
-    bm25_fn: Optional[Callable] = None,
+    bm25_fn: Callable | None = None,
 ) -> ParallelHybridSearch:
     """Create parallel hybrid search instance.
 

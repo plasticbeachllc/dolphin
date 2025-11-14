@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any, Iterable, Sequence, Union
+from typing import Any
 
 
 class LanceDBStore:
@@ -11,12 +12,12 @@ class LanceDBStore:
     embedding dimensions and ensure the root directory exists.
     """
 
-    def __init__(self, root: Union[str, Path]) -> None:
+    def __init__(self, root: str | Path) -> None:
         # Handle both file paths and in-memory URIs
         # In-memory URIs like "memory://name" should remain as strings
         if isinstance(root, str) and root.startswith("memory://"):
             # Keep memory:// URIs as strings for LanceDB
-            self.root: Union[str, Path] = root
+            self.root: str | Path = root
         else:
             # Convert file paths to Path objects
             self.root = Path(root) if isinstance(root, str) else root
@@ -132,7 +133,7 @@ class LanceDBStore:
                     "heading_h2": None,
                     "heading_h3": None,
                     "token_count": 0,
-                    "created_at": datetime.datetime.now(datetime.timezone.utc),
+                    "created_at": datetime.datetime.now(datetime.UTC),
                 }
                 # Create table with the dummy row
                 table = db.create_table(name, data=[dummy_row])

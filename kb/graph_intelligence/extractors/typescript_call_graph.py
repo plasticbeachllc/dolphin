@@ -1,7 +1,6 @@
 """Extract call graph from TypeScript code using tree-sitter."""
 
 import uuid
-from typing import Dict, List, Optional, Tuple
 
 import tree_sitter_typescript as tsts
 from tree_sitter import Language, Node, Parser
@@ -24,7 +23,7 @@ class TypeScriptCallGraphExtractor:
         file_id: int,
         commit_sha: str,
         branch: str,
-    ) -> Tuple[List[GraphNode], List[GraphEdge]]:
+    ) -> tuple[list[GraphNode], list[GraphEdge]]:
         """Extract call graph from TypeScript file.
 
         Args:
@@ -70,7 +69,7 @@ class TypeScriptCallGraphExtractor:
         file_id: int,
         commit_sha: str,
         branch: str,
-    ) -> List[GraphNode]:
+    ) -> list[GraphNode]:
         """Extract function, method, and class definitions by walking the tree."""
         nodes = []
         class_stack = []  # Stack to track nested classes
@@ -252,7 +251,7 @@ class TypeScriptCallGraphExtractor:
         file_id: int,
         commit_sha: str,
         branch: str,
-        parent_class: Optional[GraphNode] = None,
+        parent_class: GraphNode | None = None,
     ) -> GraphNode:
         """Extract method definition node."""
         name_node = node.child_by_field_name("name")
@@ -313,7 +312,7 @@ class TypeScriptCallGraphExtractor:
         file_id: int,
         commit_sha: str,
         branch: str,
-    ) -> Optional[GraphNode]:
+    ) -> GraphNode | None:
         """Extract arrow function assigned to a variable."""
         # Get the variable declarator
         name_node = node.child_by_field_name("name")
@@ -412,8 +411,8 @@ class TypeScriptCallGraphExtractor:
         )
 
     def _extract_relationships(
-        self, root: Node, definitions: List[GraphNode], repo_id: int, commit_sha: str
-    ) -> List[GraphEdge]:
+        self, root: Node, definitions: list[GraphNode], repo_id: int, commit_sha: str
+    ) -> list[GraphEdge]:
         """Extract relationship edges (implements, extends) by walking the tree."""
         edges = []
 
@@ -530,13 +529,13 @@ class TypeScriptCallGraphExtractor:
         return edges
 
     def _extract_calls(
-        self, root: Node, definitions: List[GraphNode], repo_id: int, commit_sha: str
-    ) -> List[GraphEdge]:
+        self, root: Node, definitions: list[GraphNode], repo_id: int, commit_sha: str
+    ) -> list[GraphEdge]:
         """Extract call edges by walking the tree."""
         edges = []
 
         # Create a map of function nodes by their line ranges
-        def_map: Dict[Tuple[int, int], GraphNode] = {
+        def_map: dict[tuple[int, int], GraphNode] = {
             (node.start_line or 0, node.end_line or 0): node
             for node in definitions
             if node.node_type in (NodeType.FUNCTION, NodeType.METHOD)
@@ -584,8 +583,8 @@ class TypeScriptCallGraphExtractor:
         return edges
 
     def _find_containing_function(
-        self, node: Node, def_map: Dict[Tuple[int, int], GraphNode]
-    ) -> Optional[GraphNode]:
+        self, node: Node, def_map: dict[tuple[int, int], GraphNode]
+    ) -> GraphNode | None:
         """Find the function/method that contains this node."""
         current = node.parent
         while current:
@@ -610,8 +609,8 @@ class TypeScriptCallGraphExtractor:
         return "Unknown"
 
     def _resolve_callee(
-        self, name: str, definitions: List[GraphNode]
-    ) -> Optional[GraphNode]:
+        self, name: str, definitions: list[GraphNode]
+    ) -> GraphNode | None:
         """Resolve a call target name to a definition node."""
         # Simple name matching - can be enhanced with scope analysis
         for node in definitions:
@@ -627,7 +626,7 @@ class TypeScriptCallGraphExtractor:
                 return True
         return False
 
-    def _extract_comment(self, node: Node) -> Optional[str]:
+    def _extract_comment(self, node: Node) -> str | None:
         """Extract JSDoc or line comment before the node."""
         # Look for comment in previous siblings
         if not node.parent:

@@ -2,7 +2,6 @@
 
 from unittest.mock import Mock
 
-
 from kb.retrieval.graph_context import (
     GraphContextEnricher,
     format_graph_context_for_llm,

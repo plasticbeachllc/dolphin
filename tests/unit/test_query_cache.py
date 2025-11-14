@@ -4,11 +4,7 @@ import time
 
 import pytest
 
-from kb.cache.query_cache import (
-    QueryResultCache,
-    clear_query_cache,
-    get_query_cache,
-)
+from kb.cache.query_cache import QueryResultCache, clear_query_cache, get_query_cache
 
 
 class TestQueryResultCache:

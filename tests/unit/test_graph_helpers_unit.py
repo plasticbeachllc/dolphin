@@ -2,13 +2,14 @@
 
 from pathlib import Path
 from unittest.mock import Mock
+
+from kb.chunkers.graph_types import GraphEdge, GraphNode
 from kb.ingest.graph_helpers import (
-    extract_graph_from_file,
-    store_graph_data,
     cleanup_graph_for_file,
     cleanup_graph_for_repo,
+    extract_graph_from_file,
+    store_graph_data,
 )
-from kb.chunkers.graph_types import GraphNode, GraphEdge
 
 
 class TestExtractGraphFromFile:

@@ -2,7 +2,6 @@
 
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Optional
 
 
 class CoverageManager:
@@ -21,7 +20,7 @@ class CoverageManager:
         """
         pass
 
-    def generate_report(self, output_dir: Optional[Path] = None) -> Dict[str, float]:
+    def generate_report(self, output_dir: Path | None = None) -> dict[str, float]:
         """Generate coverage report and return metrics.
 
         Args:
@@ -58,7 +57,7 @@ class CoverageManager:
         # Get coverage summary
         return self._get_coverage_summary()
 
-    def _get_coverage_summary(self) -> Dict[str, float]:
+    def _get_coverage_summary(self) -> dict[str, float]:
         """Get coverage summary from coverage tool.
 
         Returns:
@@ -118,7 +117,7 @@ class CoverageManager:
 
 
 def run_tests_with_coverage(
-    test_paths: List[str] = None,
+    test_paths: list[str] = None,
     source_dir: str = "pb_kb/src",
     min_coverage: float = 0.0,
     output_dir: Path = None,

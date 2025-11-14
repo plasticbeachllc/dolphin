@@ -11,11 +11,10 @@ Migration Steps:
 4. Re-insert entries with new content IDs (deduplicating as needed)
 """
 
-import sqlite3
-import logging
 import hashlib
+import logging
+import sqlite3
 from pathlib import Path
-from typing import Dict, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +40,7 @@ def generate_fts_content_id(repo_id: int, file_id: int, text_hash: str) -> str:
 
 def get_repo_and_file_ids(
     conn: sqlite3.Connection, repo_name: str, file_path: str
-) -> Tuple[int | None, int | None]:
+) -> tuple[int | None, int | None]:
     """Get repo_id and file_id from names/paths.
 
     Args:
@@ -72,7 +71,7 @@ def get_repo_and_file_ids(
     return repo_id, file_row[0]
 
 
-def migrate_fts5_content_ids(db_path: Path) -> Dict[str, int]:
+def migrate_fts5_content_ids(db_path: Path) -> dict[str, int]:
     """Migrate existing FTS5 content IDs to new deterministic format.
 
     Args:
@@ -124,7 +123,7 @@ def migrate_fts5_content_ids(db_path: Path) -> Dict[str, int]:
         )
 
         # Step 2: Transform entries to new format
-        new_entries: Dict[str, Dict] = {}  # Use dict to deduplicate by new content_id
+        new_entries: dict[str, dict] = {}  # Use dict to deduplicate by new content_id
 
         for entry in old_entries:
             repo_name = entry["repo"]

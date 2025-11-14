@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
 

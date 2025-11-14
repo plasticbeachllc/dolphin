@@ -2,7 +2,7 @@
 
 import pytest
 
-from kb.constants.retrieval_config import RetrievalConstants, RETRIEVAL_PARAMS
+from kb.constants.retrieval_config import RETRIEVAL_PARAMS, RetrievalConstants
 
 
 class TestRetrievalConstants:
@@ -136,8 +136,10 @@ class TestRetrievalConstants:
 
     def test_constants_import_from_config_module(self):
         """Test that constants can be imported from kb.config."""
-        from kb.constants import RETRIEVAL_PARAMS as imported_params
-        from kb.constants import RetrievalConstants as imported_class
+        from kb.constants import (
+            RETRIEVAL_PARAMS as imported_params,
+            RetrievalConstants as imported_class,
+        )
 
         assert imported_params is RETRIEVAL_PARAMS
         assert imported_class is RetrievalConstants

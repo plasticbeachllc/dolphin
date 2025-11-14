@@ -9,11 +9,7 @@ They verify:
 Tiktoken is required for all tests (enforced by setup_tiktoken fixture).
 """
 
-from kb.chunkers.token_utils import (
-    count_tokens,
-    get_tokenizer,
-    window_text_by_tokens,
-)
+from kb.chunkers.token_utils import count_tokens, get_tokenizer, window_text_by_tokens
 
 
 class TestRealTiktokenBehavior:

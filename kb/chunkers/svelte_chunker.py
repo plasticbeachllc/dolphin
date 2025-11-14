@@ -19,7 +19,6 @@ from __future__ import annotations
 import logging
 import re
 from html.parser import HTMLParser
-from typing import List, Tuple
 
 from .graph_types import GraphEdge, GraphNode
 from .token_utils import count_tokens, get_tokenizer
@@ -85,7 +84,7 @@ def chunk_source(
     model: str = "small",
     token_target: int = 400,
     overlap_pct: float = 0.10,
-) -> List[Chunk]:
+) -> list[Chunk]:
     """Chunk Svelte component into logical units.
 
     Strategy:
@@ -218,7 +217,7 @@ def chunk_source(
 
 def _chunk_template(
     template: str, start_line: int, tokenizer, token_target: int
-) -> List[Chunk]:
+) -> list[Chunk]:
     """Chunk Svelte template by component usage and control flow.
 
     Identifies:
@@ -291,7 +290,7 @@ def _chunk_template(
     return chunks
 
 
-def _fallback_chunking(source: str, model: str, token_target: int) -> List[Chunk]:
+def _fallback_chunking(source: str, model: str, token_target: int) -> list[Chunk]:
     """Fallback: simple token-based chunking."""
     from .fallback_chunker import chunk_text
 
@@ -300,7 +299,7 @@ def _fallback_chunking(source: str, model: str, token_target: int) -> List[Chunk
 
 def extract_graph_data(
     source: str, component_name: str
-) -> Tuple[List[GraphNode], List[GraphEdge]]:
+) -> tuple[list[GraphNode], list[GraphEdge]]:
     """Extract graph nodes and edges from Svelte component.
 
     Nodes:

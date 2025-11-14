@@ -1,7 +1,7 @@
 """Integration tests for search functionality."""
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 
@@ -20,7 +20,7 @@ class MockSearchBackend:
         self.lancedb_store = lancedb_store
         self.search_calls = []
 
-    def search(self, request: SearchRequest) -> List[Dict[str, Any]]:
+    def search(self, request: SearchRequest) -> list[dict[str, Any]]:
         """Mock search implementation that returns predictable results."""
         self.search_calls.append(request)
 

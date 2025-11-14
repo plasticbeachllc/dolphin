@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 from kb.chunkers import (
     Chunk,
     RepoChunkingConfig,

@@ -3,7 +3,6 @@
 import logging
 import time
 from datetime import datetime
-from typing import Optional
 
 import networkx as nx  # type: ignore[import-untyped]
 from sqlmodel import Session, select
@@ -37,8 +36,8 @@ class GraphManager:
         self.repo_id = repo_id
 
         # In-memory cache
-        self._graph: Optional[nx.DiGraph] = None
-        self._last_rebuild: Optional[datetime] = None
+        self._graph: nx.DiGraph | None = None
+        self._last_rebuild: datetime | None = None
 
         # Validator
         self.validator = GraphCacheValidator(

@@ -3,7 +3,6 @@
 from pathlib import Path
 from unittest.mock import patch
 
-
 from kb.chunkers.types import Chunk
 from kb.hashing import hash_text
 from kb.ingest.dedup import ChunkDeduplicator

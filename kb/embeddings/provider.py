@@ -9,10 +9,9 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import os
-from typing import List, Optional
 
-from ..ingest.error_logging import with_retry
 from ..cache import QueryCache
+from ..ingest.error_logging import with_retry
 
 SUPPORTED_MODELS = {
     "small": 1536,
@@ -65,7 +64,7 @@ class EmbeddingProvider:
         self.model_dimensions = SUPPORTED_MODELS.copy()
 
     @with_retry(max_attempts=3, delays=(1.0, 2.0, 4.0))
-    def embed_texts(self, model: str, texts: List[str]) -> List[List[float]]:
+    def embed_texts(self, model: str, texts: list[str]) -> list[list[float]]:
         """Embed a list of texts using the specified model.
 
         Args:
@@ -88,8 +87,8 @@ class EmbeddingProvider:
         return [[0.0] * dimension for _ in texts]
 
     async def embed_texts_async(
-        self, model: str, texts: List[str]
-    ) -> List[List[float]]:
+        self, model: str, texts: list[str]
+    ) -> list[list[float]]:
         """Embed texts asynchronously (base implementation uses sync fallback).
 
         Args:
@@ -113,9 +112,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         batch_size: int = 100,
-        cache: Optional[QueryCache] = None,
+        cache: QueryCache | None = None,
         validate_key: bool = True,
     ):
         """Initialize OpenAI embedding provider.
@@ -137,7 +136,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
         # Lazy import to avoid requiring openai if using stub provider
         try:
-            from openai import OpenAI, AsyncOpenAI
+            from openai import AsyncOpenAI, OpenAI
 
             self._openai_module = OpenAI
             self._async_openai_module = AsyncOpenAI
@@ -204,7 +203,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             await self.async_client.close()
 
     @with_retry(max_attempts=3, delays=(1.0, 2.0, 4.0))
-    def embed_texts(self, model: str, texts: List[str]) -> List[List[float]]:
+    def embed_texts(self, model: str, texts: list[str]) -> list[list[float]]:
         """Embed texts using OpenAI API.
 
         Args:
@@ -227,9 +226,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         openai_model = OPENAI_MODEL_MAP[model]
 
         # Check cache for each text and collect uncached texts
-        all_embeddings: List[Optional[List[float]]] = [None] * len(texts)
-        uncached_indices: List[int] = []
-        uncached_texts: List[str] = []
+        all_embeddings: list[list[float] | None] = [None] * len(texts)
+        uncached_indices: list[int] = []
+        uncached_texts: list[str] = []
 
         for i, text in enumerate(texts):
             if self.cache:
@@ -272,8 +271,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
     @with_async_retry(max_attempts=3, delays=(1.0, 2.0, 4.0))
     async def embed_texts_async(
-        self, model: str, texts: List[str]
-    ) -> List[List[float]]:
+        self, model: str, texts: list[str]
+    ) -> list[list[float]]:
         """Embed texts using OpenAI API asynchronously (non-blocking).
 
         Args:
@@ -296,9 +295,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         openai_model = OPENAI_MODEL_MAP[model]
 
         # Check cache for each text and collect uncached texts
-        all_embeddings: List[Optional[List[float]]] = [None] * len(texts)
-        uncached_indices: List[int] = []
-        uncached_texts: List[str] = []
+        all_embeddings: list[list[float] | None] = [None] * len(texts)
+        uncached_indices: list[int] = []
+        uncached_texts: list[str] = []
 
         for i, text in enumerate(texts):
             if self.cache:
@@ -348,7 +347,7 @@ _provider_context: contextvars.ContextVar[EmbeddingProvider] = contextvars.Conte
 )
 
 
-def embed_texts(model: str, texts: List[str]) -> List[List[float]]:
+def embed_texts(model: str, texts: list[str]) -> list[list[float]]:
     """Convenience function to embed texts using the default provider.
 
     Args:
@@ -362,7 +361,7 @@ def embed_texts(model: str, texts: List[str]) -> List[List[float]]:
     return provider.embed_texts(model, texts)
 
 
-def embed_texts_with_retry(model: str, texts: List[str]) -> List[List[float]]:
+def embed_texts_with_retry(model: str, texts: list[str]) -> list[list[float]]:
     """Convenience function with explicit retry for use in pipeline.
 
     This is an alias for embed_texts that includes retry logic.
@@ -370,7 +369,7 @@ def embed_texts_with_retry(model: str, texts: List[str]) -> List[List[float]]:
     return embed_texts(model, texts)
 
 
-async def embed_texts_async(model: str, texts: List[str]) -> List[List[float]]:
+async def embed_texts_async(model: str, texts: list[str]) -> list[list[float]]:
     """Async convenience function to embed texts using the default provider.
 
     Args:

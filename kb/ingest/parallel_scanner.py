@@ -8,9 +8,9 @@ sequential scanning.
 from __future__ import annotations
 
 import multiprocessing as mp
+from collections.abc import Iterable
 from functools import partial
 from pathlib import Path
-from typing import Iterable, List
 
 from pathspec import PathSpec
 
@@ -19,11 +19,11 @@ from .scanner import FileCandidate, ScannerError, _is_binary
 
 
 def _process_file_batch(
-    file_paths: List[str],
+    file_paths: list[str],
     root: Path,
-    submods: List[str],
-    ignore_patterns: List[str],
-) -> List[FileCandidate]:
+    submods: list[str],
+    ignore_patterns: list[str],
+) -> list[FileCandidate]:
     """Process a batch of files in a worker process.
 
     Args:
@@ -36,7 +36,7 @@ def _process_file_batch(
         List of FileCandidate objects for valid files
     """
     spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
-    candidates: List[FileCandidate] = []
+    candidates: list[FileCandidate] = []
 
     for rel in file_paths:
         # Skip submodules
@@ -90,7 +90,7 @@ def scan_repo_parallel(
     ignores: Iterable[str],
     num_workers: int | None = None,
     batch_size: int = 100,
-) -> List[FileCandidate]:
+) -> list[FileCandidate]:
     """Scan a git repo for candidate files using parallel processing.
 
     This is a drop-in replacement for scan_repo() that uses multiprocessing
@@ -147,7 +147,7 @@ def scan_repo_parallel(
         ignore_patterns=ignore_patterns,
     )
 
-    all_candidates: List[FileCandidate] = []
+    all_candidates: list[FileCandidate] = []
 
     try:
         with mp.Pool(processes=num_workers) as pool:

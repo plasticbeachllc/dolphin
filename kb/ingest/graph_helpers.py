@@ -6,8 +6,10 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any
 
-from kb.chunkers.graph_types import GraphEdge as ChunkerGraphEdge
-from kb.chunkers.graph_types import GraphNode as ChunkerGraphNode
+from kb.chunkers.graph_types import (
+    GraphEdge as ChunkerGraphEdge,
+    GraphNode as ChunkerGraphNode,
+)
 from kb.store.graph_store import GraphStore
 
 

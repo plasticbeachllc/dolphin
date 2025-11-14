@@ -7,7 +7,7 @@ search result chunks.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from kb.store.graph_store import GraphStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
@@ -38,11 +38,11 @@ class GraphContextEnricher:
 
     def enrich_search_results(
         self,
-        results: List[Dict[str, Any]],
+        results: list[dict[str, Any]],
         include_callsites: bool = True,
         include_implementations: bool = True,
         include_dependencies: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Enrich search results with graph context.
 
         Args:
@@ -74,11 +74,11 @@ class GraphContextEnricher:
 
     def _get_graph_context_for_result(
         self,
-        result: Dict[str, Any],
+        result: dict[str, Any],
         include_callsites: bool = True,
         include_implementations: bool = True,
         include_dependencies: bool = True,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Get graph context for a single search result.
 
         Args:
@@ -165,7 +165,7 @@ class GraphContextEnricher:
         include_callsites: bool = True,
         include_implementations: bool = True,
         include_dependencies: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get relationships for a node.
 
         Args:
@@ -280,8 +280,8 @@ class GraphContextEnricher:
         return start1 <= end2 and start2 <= end1
 
     def _deduplicate_relationships(
-        self, relationships: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, relationships: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Remove duplicate relationships.
 
         Args:
@@ -317,7 +317,7 @@ class GraphContextEnricher:
         return deduped
 
 
-def format_graph_context_for_llm(graph_context: Dict[str, Any]) -> str:
+def format_graph_context_for_llm(graph_context: dict[str, Any]) -> str:
     """Format graph context into human-readable text for LLM consumption.
 
     Args:

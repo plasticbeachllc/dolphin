@@ -8,16 +8,16 @@ This module provides structured JSON logging with:
 - Feature parity with TypeScript observability stack
 """
 
-import logging
 import json
-import traceback
+import logging
 import re
+import traceback
 import unicodedata
-from typing import Any, Dict, Optional
-from datetime import datetime, timezone
-from enum import IntEnum
-from urllib.parse import unquote
 from contextvars import ContextVar
+from datetime import UTC, datetime
+from enum import IntEnum
+from typing import Any
+from urllib.parse import unquote
 
 try:
     from opentelemetry import trace
@@ -28,7 +28,7 @@ except ImportError:
 
 
 # Global context variable for async request context
-_request_context: ContextVar[Dict[str, Any]] = ContextVar("request_context", default={})
+_request_context: ContextVar[dict[str, Any]] = ContextVar("request_context", default={})
 
 
 class LogLevel(IntEnum):
@@ -71,7 +71,7 @@ class StructuredLogger:
     # JWT/Bearer tokens
     _JWT_PATTERN = re.compile(r"eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+")
 
-    def __init__(self, name: str, default_context: Optional[Dict[str, Any]] = None):
+    def __init__(self, name: str, default_context: dict[str, Any] | None = None):
         """Initialize structured logger.
 
         Args:
@@ -88,7 +88,7 @@ class StructuredLogger:
             self.logger.addHandler(handler)
             self.logger.setLevel(logging.INFO)
 
-    def _extract_trace_context(self) -> Dict[str, str]:
+    def _extract_trace_context(self) -> dict[str, str]:
         """Extract OpenTelemetry trace context from current span.
 
         Returns:
@@ -112,7 +112,7 @@ class StructuredLogger:
 
         return {}
 
-    def _extract_async_context(self) -> Dict[str, Any]:
+    def _extract_async_context(self) -> dict[str, Any]:
         """Extract async context from contextvars.
 
         Returns:
@@ -172,7 +172,7 @@ class StructuredLogger:
         else:
             return value
 
-    def _sanitize_dict(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def _sanitize_dict(self, data: dict[str, Any]) -> dict[str, Any]:
         """Sanitize dictionary for PII with circular reference detection.
 
         Args:
@@ -220,8 +220,8 @@ class StructuredLogger:
         self,
         level: LogLevel,
         message: str,
-        context: Optional[Dict[str, Any]] = None,
-        error: Optional[Exception] = None,
+        context: dict[str, Any] | None = None,
+        error: Exception | None = None,
     ):
         """Internal logging method with OpenTelemetry and PII sanitization.
 
@@ -233,7 +233,7 @@ class StructuredLogger:
         """
         # Build base entry with timestamp and level
         entry = {
-            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "level": level.name,
             "message": message,
         }
@@ -259,7 +259,7 @@ class StructuredLogger:
         # Log as JSON
         self.logger.log(level, json.dumps(entry))
 
-    def debug(self, message: str, context: Optional[Dict[str, Any]] = None):
+    def debug(self, message: str, context: dict[str, Any] | None = None):
         """Log debug message (development/troubleshooting only).
 
         Args:
@@ -268,7 +268,7 @@ class StructuredLogger:
         """
         self._log(LogLevel.DEBUG, message, context)
 
-    def info(self, message: str, context: Optional[Dict[str, Any]] = None):
+    def info(self, message: str, context: dict[str, Any] | None = None):
         """Log info message (important events worth monitoring).
 
         Args:
@@ -280,8 +280,8 @@ class StructuredLogger:
     def warning(
         self,
         message: str,
-        context: Optional[Dict[str, Any]] = None,
-        error: Optional[Exception] = None,
+        context: dict[str, Any] | None = None,
+        error: Exception | None = None,
     ):
         """Log warning message (recoverable issues).
 
@@ -295,8 +295,8 @@ class StructuredLogger:
     def error(
         self,
         message: str,
-        context: Optional[Dict[str, Any]] = None,
-        error: Optional[Exception] = None,
+        context: dict[str, Any] | None = None,
+        error: Exception | None = None,
     ):
         """Log error message (serious issues requiring attention).
 
@@ -310,8 +310,8 @@ class StructuredLogger:
     def critical(
         self,
         message: str,
-        context: Optional[Dict[str, Any]] = None,
-        error: Optional[Exception] = None,
+        context: dict[str, Any] | None = None,
+        error: Exception | None = None,
     ):
         """Log critical message (system-level failures).
 
@@ -322,7 +322,7 @@ class StructuredLogger:
         """
         self._log(LogLevel.CRITICAL, message, context, error)
 
-    def create_child(self, context: Dict[str, Any]) -> "StructuredLogger":
+    def create_child(self, context: dict[str, Any]) -> "StructuredLogger":
         """Create child logger with additional context.
 
         Args:
@@ -371,7 +371,7 @@ def clear_request_context() -> None:
     _request_context.set({})
 
 
-def get_request_context() -> Dict[str, Any]:
+def get_request_context() -> dict[str, Any]:
     """Get the current async request context.
 
     Returns:

@@ -2,7 +2,6 @@
 
 import textwrap
 
-
 from kb.chunkers.ts_chunker import chunk_source as ts_chunk_source
 
 

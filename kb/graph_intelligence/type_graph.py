@@ -1,6 +1,5 @@
 """Type relationship extraction for inheritance and interfaces."""
 
-from typing import List
 
 import tree_sitter_python as tspython
 import tree_sitter_typescript as tsts
@@ -23,8 +22,8 @@ class TypeGraphExtractor:
         repo_id: int,
         file_id: int,
         commit_sha: str,
-        existing_classes: List[GraphNode],
-    ) -> List[GraphEdge]:
+        existing_classes: list[GraphNode],
+    ) -> list[GraphEdge]:
         """Extract Python inheritance relationships."""
         edges = []
 
@@ -100,8 +99,8 @@ class TypeGraphExtractor:
         repo_id: int,
         file_id: int,
         commit_sha: str,
-        existing_classes: List[GraphNode],
-    ) -> List[GraphEdge]:
+        existing_classes: list[GraphNode],
+    ) -> list[GraphEdge]:
         """Extract TypeScript inheritance and interface implementation."""
         edges = []
 
@@ -194,7 +193,7 @@ class TypeGraphExtractor:
 
         return edges
 
-    def _extract_python_bases(self, bases_node: Node) -> List[str]:
+    def _extract_python_bases(self, bases_node: Node) -> list[str]:
         """Extract base class names from Python argument list."""
         base_classes = []
 

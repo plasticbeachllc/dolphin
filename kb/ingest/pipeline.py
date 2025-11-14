@@ -1,41 +1,41 @@
 from __future__ import annotations
 
-import subprocess
 import datetime
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
 
 from pathspec import PathSpec
 
+from ..chunkers.registry import (
+    chunk_file as chunk_file_with_config,
+    detect_language_from_extension,
+)
 from ..config import KBConfig
+from ..embeddings.provider import embed_texts_with_retry
+from ..graph_intelligence.graph_manager import GraphManager
+from ..hashing import hash_text
+from ..ignores import build_ignore_set, load_repo_ignores
+from ..ingest._helpers import (
+    build_desired_map,
+    get_all_tracked_files,
+    git_changed_files_deleted,
+    git_changed_files_modified_added,
+    representative_text_for_hash,
+)
+from ..ingest.dedup import ChunkDeduplicator
+from ..ingest.error_logging import ErrorLogger
+from ..ingest.graph_helpers import (
+    cleanup_graph_for_file,
+    cleanup_graph_for_repo,
+    extract_graph_from_file,
+    store_graph_data,
+)
+from ..ingest.scanner import FileCandidate, scan_repo
 from ..store import LanceDBStore, SQLiteMetadataStore
 from ..store.graph_store import GraphStore
 from ..store.sqlite_meta import generate_fts_content_id
-from ..graph_intelligence.graph_manager import GraphManager
-from ..ingest.scanner import FileCandidate, scan_repo
-from ..ignores import build_ignore_set, load_repo_ignores
-from ..ingest.dedup import ChunkDeduplicator
-from ..ingest._helpers import (
-    build_desired_map,
-    git_changed_files_modified_added,
-    git_changed_files_deleted,
-    get_all_tracked_files,
-    representative_text_for_hash,
-)
-from ..ingest.error_logging import ErrorLogger
-from ..ingest.graph_helpers import (
-    extract_graph_from_file,
-    store_graph_data,
-    cleanup_graph_for_file,
-    cleanup_graph_for_repo,
-)
-from ..embeddings.provider import embed_texts_with_retry
-from ..chunkers.registry import (
-    detect_language_from_extension,
-    chunk_file as chunk_file_with_config,
-)
-from ..hashing import hash_text
 
 
 @dataclass
@@ -46,7 +46,7 @@ class IngestionPipeline:
     lancedb: LanceDBStore
     metadata: SQLiteMetadataStore
     graph_store: GraphStore | None = None
-    graph_managers: Dict[int, GraphManager] | None = None  # repo_id -> GraphManager
+    graph_managers: dict[int, GraphManager] | None = None  # repo_id -> GraphManager
 
     def __post_init__(self):
         """Initialize graph store if not provided."""
@@ -81,7 +81,7 @@ class IngestionPipeline:
             )
         return self.graph_managers[repo_id]
 
-    def compute_graph_metrics(self, repo_id: int) -> Dict[str, Any]:
+    def compute_graph_metrics(self, repo_id: int) -> dict[str, Any]:
         """Compute and store graph metrics for a repository.
 
         This method should be called after indexing to compute PageRank,
@@ -330,7 +330,7 @@ class IngestionPipeline:
         ignore_patterns.update(extra_security)
 
         # Scan
-        candidates: List[FileCandidate] = scan_repo(root, ignore_patterns)
+        candidates: list[FileCandidate] = scan_repo(root, ignore_patterns)
 
         summary = {
             "repo": repo_name,
@@ -382,7 +382,7 @@ class IngestionPipeline:
         dry_run: bool = False,
         force: bool = False,
         full_reindex: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Perform full indexing pipeline for the named repository.
 
         This method implements the Phase 6 indexing pipeline:
@@ -605,7 +605,7 @@ class IngestionPipeline:
                 skipped_occurrences = len(unchanged_chunks)
 
                 # Embed only new hashes (batched)
-                hash_to_vec: Dict[str, Any] = {}
+                hash_to_vec: dict[str, Any] = {}
                 if new_hashes and not dry_run:
                     hashes_list = sorted(new_hashes)
                     batch_size = 128
@@ -636,7 +636,7 @@ class IngestionPipeline:
                     )
 
                     # Build a quick lookup for token_count by occurrence position
-                    occ_token_counts: Dict[tuple[int, int], int] = {
+                    occ_token_counts: dict[tuple[int, int], int] = {
                         (ch.start_line, ch.end_line): getattr(ch, "token_count", 0)
                         for ch in chunks
                     }
@@ -675,7 +675,7 @@ class IngestionPipeline:
                                         (occ["start_line"], occ["end_line"]), 0
                                     ),
                                     "created_at": datetime.datetime.now(
-                                        datetime.timezone.utc
+                                        datetime.UTC
                                     ),
                                 }
                             )

@@ -1,7 +1,8 @@
 """Unit tests for path validation security."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 from fastapi import HTTPException
 
 from kb.api.utils import validate_path_within_repo

@@ -16,11 +16,7 @@ from sqlmodel import Session, select
 from kb.graph_intelligence.graph_manager import GraphManager
 from kb.ingest.graph_helpers import extract_graph_from_file, store_graph_data
 from kb.store.graph_store import GraphStore
-from kb.store.sql_models import (
-    CodeEdge,
-    CodeNode,
-    GraphMetrics,
-)
+from kb.store.sql_models import CodeEdge, CodeNode, GraphMetrics
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
 

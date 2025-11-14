@@ -14,7 +14,6 @@ Key security features:
 import re
 import unicodedata
 from pathlib import Path
-from typing import List, Optional
 from urllib.parse import unquote
 
 
@@ -42,8 +41,8 @@ class PathValidator:
         base_dir: str | Path,
         allow_symlinks: bool = False,
         must_exist: bool = False,
-        allowed_extensions: Optional[List[str]] = None,
-        disallowed_patterns: Optional[List[str]] = None,
+        allowed_extensions: list[str] | None = None,
+        disallowed_patterns: list[str] | None = None,
         error_prefix: str = "Access denied",
     ):
         """
@@ -207,7 +206,7 @@ class PathValidator:
 
         return resolved_path
 
-    def validate_batch(self, paths: List[str | Path]) -> List[Path]:
+    def validate_batch(self, paths: list[str | Path]) -> list[Path]:
         """
         Validate multiple paths in batch.
 

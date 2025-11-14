@@ -11,7 +11,7 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from queue import Empty, Full, Queue
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +232,7 @@ class SQLiteConnectionPool:
 
 
 # Global pool instance
-_connection_pool: Optional[SQLiteConnectionPool] = None
+_connection_pool: SQLiteConnectionPool | None = None
 
 
 def get_connection_pool(

@@ -15,7 +15,6 @@ import logging
 import re
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import List, Optional, Tuple
 
 import tree_sitter_javascript as tsjs
 import tree_sitter_typescript as tsts
@@ -53,8 +52,8 @@ def _get_parser(lang: str) -> Parser:
 @dataclass(frozen=True)
 class Symbol:
     kind: str
-    name: Optional[str]
-    path: Optional[str]
+    name: str | None
+    path: str | None
     start_byte: int
     end_byte: int
     start_row: int
@@ -156,9 +155,9 @@ def _build_chunks_for_text(
     model: str,
     token_target: int,
     overlap_tokens: int,
-    symbol_kind: Optional[str],
-    symbol_name: Optional[str],
-    symbol_path: Optional[str],
+    symbol_kind: str | None,
+    symbol_name: str | None,
+    symbol_path: str | None,
 ) -> list[Chunk]:
     """Window text by tokens and convert to Chunk objects.
 
@@ -206,7 +205,7 @@ def _fallback_token_windows(
     model: str,
     token_target: int,
     overlap_pct: float,
-) -> List[Chunk]:
+) -> list[Chunk]:
     """Fallback chunking using token windows across the entire source."""
     tokenizer = get_tokenizer(model)
     if not (0.0 <= overlap_pct <= 1.0):
@@ -228,16 +227,16 @@ def _fallback_token_windows(
     )
 
 
-def _build_line_offsets(text: str) -> List[int]:
+def _build_line_offsets(text: str) -> list[int]:
     """Return character offsets where each line starts (0-based)."""
-    offsets: List[int] = [0]
+    offsets: list[int] = [0]
     for idx, ch in enumerate(text):
         if ch == "\n":
             offsets.append(idx + 1)
     return offsets
 
 
-def _offset_to_abs_line(start_row: int, line_offsets: List[int], offset: int) -> int:
+def _offset_to_abs_line(start_row: int, line_offsets: list[int], offset: int) -> int:
     """Convert a character offset within text to an absolute 1-based line number.
 
     start_row is 0-based row of the text's first line within the full source.
@@ -246,7 +245,7 @@ def _offset_to_abs_line(start_row: int, line_offsets: List[int], offset: int) ->
     return (start_row + LINE_NUMBER_BASE) + max(0, line_idx)
 
 
-def _trim_and_tokenize(raw_text: str, tokenizer) -> Tuple[str, int, int, int]:
+def _trim_and_tokenize(raw_text: str, tokenizer) -> tuple[str, int, int, int]:
     """Trim leading and trailing newlines and count tokens.
 
     Returns (trimmed_text, token_count, leading_newlines, trailing_newlines).
@@ -260,7 +259,7 @@ def _trim_and_tokenize(raw_text: str, tokenizer) -> Tuple[str, int, int, int]:
     return trimmed, token_count, lead_trim, trail_trim
 
 
-def _extract_symbols(root, source: str) -> List[Symbol]:
+def _extract_symbols(root, source: str) -> list[Symbol]:
     """Extract TS/TSX/JS symbols.
 
     Captures:
@@ -274,16 +273,16 @@ def _extract_symbols(root, source: str) -> List[Symbol]:
     - type_alias_declaration → kind='type_alias', name='Alias'
     - enum_declaration → kind='enum', name='Enum'
     """
-    results: List[Symbol] = []
+    results: list[Symbol] = []
 
-    class_stack: List[str] = []
+    class_stack: list[str] = []
 
     def node_text(n) -> str:
         if n is None:
             return ""
         return source[n.start_byte : n.end_byte]
 
-    def simple_name_from_path(path_text: str) -> Optional[str]:
+    def simple_name_from_path(path_text: str) -> str | None:
         # Best-effort: take last identifier in a dotted path or plain identifier
         m = re.search(r"([A-Za-z_$][A-Za-z0-9_$]*)$", path_text)
         return m.group(1) if m else None
@@ -525,7 +524,7 @@ def _extract_symbols(root, source: str) -> List[Symbol]:
 
 def extract_graph_data(
     source: str, *, lang: str = "typescript"
-) -> Tuple[List[GraphNode], List[GraphEdge]]:
+) -> tuple[list[GraphNode], list[GraphEdge]]:
     """Extract graph nodes and edges from TypeScript/JavaScript source for code graph.
 
     Nodes:
@@ -587,7 +586,7 @@ def extract_graph_data(
     return nodes, edges
 
 
-def _extract_ts_edges(root, source: str, edges: List[GraphEdge]):
+def _extract_ts_edges(root, source: str, edges: list[GraphEdge]):
     """Extract graph edges (imports, calls, inheritance, type deps) from TS/JS AST."""
 
     def node_text(n) -> str:
@@ -595,7 +594,7 @@ def _extract_ts_edges(root, source: str, edges: List[GraphEdge]):
             return ""
         return source[n.start_byte : n.end_byte]
 
-    def visit(node, current_context: Optional[str] = None):
+    def visit(node, current_context: str | None = None):
         """Visit nodes and extract edges."""
         ntype = node.type
 
@@ -653,7 +652,7 @@ def _extract_ts_edges(root, source: str, edges: List[GraphEdge]):
             func_name = node_text(name_node) if name_node else None
 
             if current_context:
-                qualified: Optional[str] = (
+                qualified: str | None = (
                     f"{current_context}.{func_name}" if func_name else current_context
                 )
             else:
@@ -729,7 +728,7 @@ def _extract_ts_edges(root, source: str, edges: List[GraphEdge]):
         # Interface extends
         if ntype == "interface_declaration":
             name_node = node.child_by_field_name("name")
-            interface_name: Optional[str] = node_text(name_node) if name_node else None
+            interface_name: str | None = node_text(name_node) if name_node else None
 
             # Check for extends clause
             for child in node.children:
@@ -775,7 +774,7 @@ def _extract_ts_edges(root, source: str, edges: List[GraphEdge]):
 
 
 def _extract_type_references(
-    type_node, source_name: str, edges: List[GraphEdge], line_number: int
+    type_node, source_name: str, edges: list[GraphEdge], line_number: int
 ):
     """Extract type references from a type annotation node."""
 

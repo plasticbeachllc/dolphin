@@ -13,7 +13,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from ..cache.ast_cache import get_ast_cache
 from ..chunkers.types import Chunk
@@ -151,7 +151,7 @@ class OptimizedIngestionPipeline:
             )
 
         # Map absolute paths to candidates for quick lookup
-        candidate_by_abs: Dict[Path, Any] = {
+        candidate_by_abs: dict[Path, Any] = {
             candidate.abs_path.resolve(): candidate for candidate in candidates
         }
 
@@ -162,13 +162,13 @@ class OptimizedIngestionPipeline:
         print("Parsing and chunking files...")
         parse_start = time.time()
 
-        parse_jobs: List[ParseJob] = []
+        parse_jobs: list[ParseJob] = []
         files_skipped = 0
 
         for candidate in candidates:
             # Read file content
             try:
-                with open(candidate.abs_path, "r", encoding="utf-8") as f:
+                with open(candidate.abs_path, encoding="utf-8") as f:
                     content = f.read()
             except Exception:
                 continue
@@ -218,7 +218,7 @@ class OptimizedIngestionPipeline:
             parse_results = [_parse_file_worker(job) for job in parse_jobs]
 
         # Store successful parses in AST cache
-        all_chunks: List[tuple[str, List[Chunk]]] = []
+        all_chunks: list[tuple[str, list[Chunk]]] = []
         for result in parse_results:
             if result.success and result.chunks:
                 abs_path = Path(result.file_path).resolve()
@@ -237,7 +237,7 @@ class OptimizedIngestionPipeline:
 
                 # Cache the chunks
                 if self.ast_cache:
-                    with open(result.file_path, "r", encoding="utf-8") as f:
+                    with open(result.file_path, encoding="utf-8") as f:
                         content = f.read()
                     content_hash = hash_text(content)
                     self.ast_cache.put(rel_path, content_hash, result.chunks, language)
@@ -250,7 +250,7 @@ class OptimizedIngestionPipeline:
         print("Embedding chunks...")
         embed_start = time.time()
 
-        chunks_to_embed: List[tuple[str, Chunk]] = []
+        chunks_to_embed: list[tuple[str, Chunk]] = []
         chunks_reused = 0
 
         for file_path, chunks in all_chunks:
@@ -280,7 +280,7 @@ class OptimizedIngestionPipeline:
                 ),
             )
 
-            all_embeddings: List[List[float]] = []
+            all_embeddings: list[list[float]] = []
             for batch in batcher.create_batches(texts):
                 batch_start = time.time()
                 embeddings = self.embedding_provider.embed_texts(

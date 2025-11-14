@@ -60,7 +60,7 @@ class ANNParams:
             raise ValueError(f"refine_factor must be >= 1, got {self.refine_factor}")
 
     @classmethod
-    def for_speed(cls) -> "ANNParams":
+    def for_speed(cls) -> ANNParams:
         """Optimized for speed (95% recall, 2x faster).
 
         Use when:
@@ -81,7 +81,7 @@ class ANNParams:
         )
 
     @classmethod
-    def for_accuracy(cls) -> "ANNParams":
+    def for_accuracy(cls) -> ANNParams:
         """Optimized for accuracy (99% recall, same speed as default).
 
         Use when:
@@ -102,7 +102,7 @@ class ANNParams:
         )
 
     @classmethod
-    def for_development(cls) -> "ANNParams":
+    def for_development(cls) -> ANNParams:
         """Exact search for development/debugging.
 
         Use when:
@@ -122,7 +122,7 @@ class ANNParams:
     @classmethod
     def adaptive(
         cls, query_type: str = "concept", top_k: int = 10, dataset_size: int = 100000
-    ) -> "ANNParams":
+    ) -> ANNParams:
         """Adaptive parameters based on query characteristics.
 
         Args:
@@ -187,7 +187,7 @@ class ANNParams:
         }
 
     @classmethod
-    def from_config(cls, config) -> "ANNParams":
+    def from_config(cls, config) -> ANNParams:
         """Create ANNParams from configuration.
 
         Args:

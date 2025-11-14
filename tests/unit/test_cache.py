@@ -2,7 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-
 from kb.cache import QueryCache, create_cache
 
 

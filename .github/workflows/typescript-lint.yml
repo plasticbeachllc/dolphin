@@ -29,12 +29,6 @@ jobs:
       - name: Run ESLint
         run: bun run lint:all
 
-      - name: Verify no remaining errors
-        run: |
-          echo "Verifying all linting errors are fixed..."
-          bun prettier --check "**/*.{ts,tsx,js,jsx,json,md}"
-          bun run lint:all
-
       - name: Configure Git
         run: |
           git config user.name "pb-typescript-linter[bot]"

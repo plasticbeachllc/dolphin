@@ -1,7 +1,7 @@
 """Factory for creating test backends with different configurations."""
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from tests.kb_utils import InMemoryKBBackend
 
@@ -50,7 +50,7 @@ class TestBackendFactory:
     @staticmethod
     def create_test_config(
         repo_path: Path, backend_type: str = "memory", **backend_kwargs
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a complete test configuration.
 
         Args:

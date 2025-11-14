@@ -8,9 +8,11 @@ Tests critical async scenarios:
 - Resource cleanup (AsyncOpenAI client)
 """
 
-import pytest
 import asyncio
-from kb.embeddings.provider import OpenAIEmbeddingProvider, EmbeddingProvider
+
+import pytest
+
+from kb.embeddings.provider import EmbeddingProvider, OpenAIEmbeddingProvider
 
 
 class TestAsyncEmbeddings:

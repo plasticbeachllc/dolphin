@@ -1,11 +1,13 @@
-import pytest
-from pathlib import Path
 import tempfile
+from pathlib import Path
 from unittest.mock import patch
-from kb.api.search_backend import create_search_backend
+
+import pytest
+
 from kb.api.app import SearchRequest
-from kb.store.sqlite_meta import SQLiteMetadataStore
+from kb.api.search_backend import create_search_backend
 from kb.store.lancedb_store import LanceDBStore
+from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
 @pytest.fixture

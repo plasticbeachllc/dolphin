@@ -1,7 +1,6 @@
 """Import and dependency graph extraction."""
 
 import uuid
-from typing import List, Optional
 
 import tree_sitter_python as tspython
 import tree_sitter_typescript as tsts
@@ -24,8 +23,8 @@ class ImportGraphExtractor:
         file_id: int,
         repo_id: int,
         commit_sha: str,
-        all_files: List[str],
-    ) -> tuple[List[GraphNode], List[GraphEdge]]:
+        all_files: list[str],
+    ) -> tuple[list[GraphNode], list[GraphEdge]]:
         """Extract Python import statements and create import edges."""
         nodes = []
         edges = []
@@ -120,8 +119,8 @@ class ImportGraphExtractor:
         file_id: int,
         repo_id: int,
         commit_sha: str,
-        all_files: List[str],
-    ) -> tuple[List[GraphNode], List[GraphEdge]]:
+        all_files: list[str],
+    ) -> tuple[list[GraphNode], list[GraphEdge]]:
         """Extract TypeScript/JavaScript import statements."""
         nodes = []
         edges = []
@@ -214,8 +213,8 @@ class ImportGraphExtractor:
         return nodes, edges
 
     def _resolve_python_import(
-        self, import_path: str, all_files: List[str]
-    ) -> Optional[str]:
+        self, import_path: str, all_files: list[str]
+    ) -> str | None:
         """Resolve a Python import path to an actual file in the repo."""
         # Convert dotted import to file path
         possible_paths = [
@@ -230,8 +229,8 @@ class ImportGraphExtractor:
         return None
 
     def _resolve_typescript_import(
-        self, import_path: str, source_file: str, all_files: List[str]
-    ) -> Optional[str]:
+        self, import_path: str, source_file: str, all_files: list[str]
+    ) -> str | None:
         """Resolve a TypeScript import path to an actual file."""
         # Handle relative imports
         if import_path.startswith("."):

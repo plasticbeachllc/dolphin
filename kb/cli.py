@@ -7,21 +7,21 @@ including knowledge base management, API serving, and persona management.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import typer
 
-
 # Import kb CLI functions for top-level commands
 # Import subcommand apps
-from kb.ingest.cli import add_repo as kb_add_repo
-from kb.ingest.cli import app as kb_app
-from kb.ingest.cli import index as kb_index
-from kb.ingest.cli import init as kb_init
-from kb.ingest.cli import list_files as kb_list_files
-from kb.ingest.cli import prune_ignored as kb_prune_ignored
-from kb.ingest.cli import rm_repo as kb_rm_repo
-from kb.ingest.cli import status as kb_status
+from kb.ingest.cli import (
+    add_repo as kb_add_repo,
+    app as kb_app,
+    index as kb_index,
+    init as kb_init,
+    list_files as kb_list_files,
+    prune_ignored as kb_prune_ignored,
+    rm_repo as kb_rm_repo,
+    status as kb_status,
+)
 
 
 def get_version() -> str:
@@ -70,7 +70,7 @@ app.add_typer(kb_app, name="kb", help="Knowledge base management commands")
 
 @app.command()
 def init(
-    config_path: Optional[Path] = typer.Option(
+    config_path: Path | None = typer.Option(
         None, "--config", help="Optional config path."
     ),
 ) -> None:
@@ -118,7 +118,7 @@ def index(
 
 @app.command()
 def status(
-    name: Optional[str] = typer.Argument(None, help="Optional repository name."),
+    name: str | None = typer.Argument(None, help="Optional repository name."),
 ) -> None:
     """Report knowledge store status with detailed repository listing."""
     kb_status(name)
@@ -146,10 +146,10 @@ def list_files(
 @app.command()
 def search(
     query: str = typer.Argument(..., help="Search query."),
-    repos: Optional[list[str]] = typer.Option(
+    repos: list[str] | None = typer.Option(
         None, "--repo", "-r", help="Repository name(s) to search."
     ),
-    path_prefix: Optional[list[str]] = typer.Option(
+    path_prefix: list[str] | None = typer.Option(
         None, "--path", "-p", help="Filter by path prefix."
     ),
     top_k: int = typer.Option(8, "--top-k", "-k", help="Number of results to return."),
@@ -185,8 +185,8 @@ def search(
 
 def _search_local(
     query: str,
-    repos: Optional[list[str]],
-    path_prefix: Optional[list[str]],
+    repos: list[str] | None,
+    path_prefix: list[str] | None,
     top_k: int,
     score_cutoff: float,
     embed_model: str,
@@ -229,8 +229,8 @@ def _search_local(
 
 def _search_remote(
     query: str,
-    repos: Optional[list[str]],
-    path_prefix: Optional[list[str]],
+    repos: list[str] | None,
+    path_prefix: list[str] | None,
     top_k: int,
     score_cutoff: float,
     embed_model: str,

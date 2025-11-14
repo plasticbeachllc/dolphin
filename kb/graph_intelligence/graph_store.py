@@ -1,7 +1,6 @@
 """Graph store wrapper for graph intelligence operations."""
 
 from contextlib import closing
-from typing import List, Optional
 
 from kb.store.graph_store import GraphStore as BaseGraphStore
 
@@ -19,7 +18,7 @@ class GraphStore:
         """
         self.base_store = base_store
 
-    def upsert_nodes(self, nodes: List[GraphNode]) -> List[str]:
+    def upsert_nodes(self, nodes: list[GraphNode]) -> list[str]:
         """Batch insert or update graph nodes.
 
         Args:
@@ -57,7 +56,7 @@ class GraphStore:
 
         return node_ids
 
-    def upsert_edges(self, edges: List[GraphEdge]) -> List[str]:
+    def upsert_edges(self, edges: list[GraphEdge]) -> list[str]:
         """Batch insert or update graph edges.
 
         Args:
@@ -125,7 +124,7 @@ class GraphStore:
                 conn.rollback()
                 raise
 
-    def get_metrics(self, node_id: str) -> Optional[GraphMetrics]:
+    def get_metrics(self, node_id: str) -> GraphMetrics | None:
         """Get metrics for a node.
 
         Args:
@@ -157,7 +156,7 @@ class GraphStore:
                 community_id=int(row[6]) if row[6] is not None else None,
             )
 
-    def get_nodes_by_file(self, file_path: str, repo_id: int) -> List[GraphNode]:
+    def get_nodes_by_file(self, file_path: str, repo_id: int) -> list[GraphNode]:
         """Get all nodes in a file.
 
         Args:
@@ -202,7 +201,7 @@ class GraphStore:
 
         return result
 
-    def get_edges_by_source(self, source_node_id: str) -> List[GraphEdge]:
+    def get_edges_by_source(self, source_node_id: str) -> list[GraphEdge]:
         """Get all edges originating from a node.
 
         Args:

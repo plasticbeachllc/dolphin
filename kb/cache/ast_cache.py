@@ -10,7 +10,7 @@ import pickle
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from ..chunkers.types import Chunk
 
@@ -21,7 +21,7 @@ class CachedAST:
 
     file_path: str
     content_hash: str
-    chunks: List[Chunk]
+    chunks: list[Chunk]
     language: str
     timestamp: float
 
@@ -62,7 +62,7 @@ class ASTCache:
         self,
         file_path: str,
         content_hash: str,
-    ) -> List[Chunk] | None:
+    ) -> list[Chunk] | None:
         """Get cached chunks for a file.
 
         Args:
@@ -87,7 +87,7 @@ class ASTCache:
         self,
         file_path: str,
         content_hash: str,
-        chunks: List[Chunk],
+        chunks: list[Chunk],
         language: str,
     ) -> None:
         """Store chunks in cache.
@@ -150,7 +150,7 @@ class ASTCache:
             return 0.0
         return (self._hits / total) * 100
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """Get cache statistics.
 
         Returns:

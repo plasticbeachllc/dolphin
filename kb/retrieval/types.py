@@ -1,5 +1,5 @@
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 @dataclass
@@ -12,21 +12,21 @@ class Document:
     path: str
     start_line: int
     end_line: int
-    language: Optional[str] = None
-    symbol_kind: Optional[str] = None
-    symbol_name: Optional[str] = None
-    symbol_path: Optional[str] = None
-    score: Optional[float] = None
-    rerank_score: Optional[float] = None
-    commit: Optional[str] = None
-    branch: Optional[str] = None
-    source: Optional[str] = "vector"
+    language: str | None = None
+    symbol_kind: str | None = None
+    symbol_name: str | None = None
+    symbol_path: str | None = None
+    score: float | None = None
+    rerank_score: float | None = None
+    commit: str | None = None
+    branch: str | None = None
+    source: str | None = "vector"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert the document to a dictionary."""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Document":
+    def from_dict(cls, data: dict[str, Any]) -> "Document":
         """Create a document from a dictionary."""
         return cls(**data)
