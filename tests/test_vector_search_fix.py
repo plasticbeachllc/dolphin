@@ -91,11 +91,11 @@ def test_hybrid_search_comparison():
         print(f"Hybrid:      {hybrid_time:.1f}ms ({len(hybrid_results)} results)")
         print(f"Overhead:    {hybrid_time - vector_time:.1f}ms")
 
-        return True
+        assert True
 
     except Exception as e:
         print(f"❌ Error during comparison test: {e}")
-        return False
+        assert False
 
 
 def main():

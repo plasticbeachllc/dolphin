@@ -43,14 +43,14 @@ def test_mcp_search():
         if result.returncode != 0:
             print("❌ MCP server error:")
             print(result.stderr)
-            return False
+            assert False
 
         # Parse response
         response = json.loads(result.stdout.strip())
 
         if "error" in response:
             print(f"❌ MCP error: {response['error']}")
-            return False
+            assert False
 
         # Extract results
         content = response.get("result", {}).get("content", [])
@@ -77,24 +77,24 @@ def test_mcp_search():
                     print("-" * 60)
                     print(context_snippet)
                     print("-" * 60)
-                return True
+                assert True
 
         print("⚠️  No graph context found in results")
         print("   This is expected if:")
         print("   - Repository hasn't been reindexed yet")
         print("   - No code entities overlap with search results")
         print()
-        return False
+        assert False
 
     except subprocess.TimeoutExpired:
         print("❌ MCP server timeout")
-        return False
+        assert False
     except json.JSONDecodeError as e:
         print(f"❌ Failed to parse MCP response: {e}")
-        return False
+        assert False
     except Exception as e:
         print(f"❌ Test failed: {e}")
-        return False
+        assert False
 
 
 if __name__ == "__main__":
