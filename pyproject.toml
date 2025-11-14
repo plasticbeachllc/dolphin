@@ -120,6 +120,7 @@ dev = [
     "pytest-asyncio>=1.2.0",
     "ruff>=0.1.0",
     "twine>=6.2.0",
+    "ty>=0.0.1a26",
 ]
 test = [
     "fakeredis>=2.32.0",
