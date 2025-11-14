@@ -591,8 +591,8 @@ class SQLiteMetadataStore:
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 """
-                SELECT commit_sha FROM sessions 
-                WHERE repo_id = ? AND status = 'succeeded' 
+                SELECT commit_sha FROM sessions
+                WHERE repo_id = ? AND status = 'succeeded'
                 ORDER BY id DESC LIMIT 1
                 """,
                 (int(repo_id),),
@@ -1548,7 +1548,7 @@ class SQLiteMetadataStore:
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 """
-                SELECT id, status, created_at FROM sessions 
+                SELECT id, status, created_at FROM sessions
                 WHERE repo_id = ? AND status NOT IN ('succeeded', 'failed', 'aborted')
                 ORDER BY created_at DESC
             """,
@@ -1561,7 +1561,7 @@ class SQLiteMetadataStore:
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 """
-                UPDATE sessions 
+                UPDATE sessions
                 SET status = 'aborted', ended_at = datetime('now')
                 WHERE repo_id = ? AND status NOT IN ('succeeded', 'failed', 'aborted')
             """,
@@ -1586,7 +1586,7 @@ class SQLiteMetadataStore:
         # Count chunk locations
         cur.execute(
             """
-            SELECT COUNT(*) FROM chunk_locations 
+            SELECT COUNT(*) FROM chunk_locations
             WHERE content_id IN (SELECT id FROM chunk_content WHERE repo_id = ?)
         """,
             (repo_id,),
@@ -1613,9 +1613,9 @@ class SQLiteMetadataStore:
             # Strategy 1: Delete by content_id (most precise)
             cur.execute(
                 """
-                DELETE FROM chunks_fts 
+                DELETE FROM chunks_fts
                 WHERE content_id IN (
-                    SELECT cc.id FROM chunk_content cc 
+                    SELECT cc.id FROM chunk_content cc
                     WHERE cc.repo_id = ?
                 )
             """,
@@ -1630,7 +1630,7 @@ class SQLiteMetadataStore:
             # Strategy 3: Delete orphaned entries (validation)
             cur.execute(
                 """
-                DELETE FROM chunks_fts 
+                DELETE FROM chunks_fts
                 WHERE content_id NOT IN (
                     SELECT id FROM chunk_content
                 )

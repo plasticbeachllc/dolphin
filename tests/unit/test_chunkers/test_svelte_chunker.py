@@ -20,16 +20,16 @@ class TestBasicSvelteChunking:
         <script>
             export let name;
             let count = 0;
-            
+
             function increment() {
                 count += 1;
             }
         </script>
-        
+
         <button on:click={increment}>
             Clicks: {count}
         </button>
-        
+
         <style>
             button { color: blue; }
         </style>
@@ -47,12 +47,12 @@ class TestBasicSvelteChunking:
         <script context="module">
             export const API_URL = "/api";
         </script>
-        
+
         <script>
             export let userId;
             let user = null;
         </script>
-        
+
         <div>{user?.name}</div>
         """
         chunks = chunk_source(source)
@@ -66,10 +66,10 @@ class TestBasicSvelteChunking:
         source = """
         <script>
             import Component from './Component.svelte';
-            
+
             export let title = "Default";
             let items = [];
-            
+
             async function loadItems() {
                 items = await fetch('/api/items').then(r => r.json());
             }
@@ -88,9 +88,9 @@ class TestBasicSvelteChunking:
         <script>
             export let color = "blue";
         </script>
-        
+
         <div>Styled content</div>
-        
+
         <style>
             div {
                 color: var(--color);
@@ -110,7 +110,7 @@ class TestBasicSvelteChunking:
         <script>
             let items = [1, 2, 3];
         </script>
-        
+
         <div>
             {#each items as item}
                 <p>{item}</p>
@@ -135,7 +135,7 @@ class TestSvelteFeatures:
             export let age = 0;
             export let email;
         </script>
-        
+
         <div>
             <p>Name: {name}</p>
             <p>Age: {age}</p>
@@ -155,14 +155,14 @@ class TestSvelteFeatures:
         <script>
             import { writable } from 'svelte/store';
             import { userStore } from './stores';
-            
+
             const count = writable(0);
-            
+
             function increment() {
                 $count += 1;
             }
         </script>
-        
+
         <div>Count: {$count}</div>
         <div>User: {$userStore.name}</div>
         """
@@ -179,7 +179,7 @@ class TestSvelteFeatures:
                 console.log('count changed:', count);
             }
         </script>
-        
+
         <div>
             <p>Count: {count}</p>
             <p>Doubled: {doubled}</p>
@@ -193,14 +193,14 @@ class TestSvelteFeatures:
         source = """
         <script>
             import { createEventDispatcher } from 'svelte';
-            
+
             const dispatch = createEventDispatcher();
-            
+
             function handleClick() {
                 dispatch('message', { text: 'Hello' });
             }
         </script>
-        
+
         <button on:click={handleClick}>Send</button>
         """
         chunks = chunk_source(source)
@@ -251,7 +251,7 @@ class TestGraphExtraction:
             import Button from './Button.svelte';
             import Card from './Card.svelte';
         </script>
-        
+
         <Card>
             <Button>Click me</Button>
             <Button variant="secondary">Cancel</Button>
@@ -275,7 +275,7 @@ class TestGraphExtraction:
             export let subtitle = "";
             export let count = 0;
         </script>
-        
+
         <div>
             <h1>{title}</h1>
             <h2>{subtitle}</h2>
@@ -301,10 +301,10 @@ class TestGraphExtraction:
         source = """
         <script>
             import { userStore, settingsStore } from './stores';
-            
+
             let userName = $userStore.name;
         </script>
-        
+
         <div>
             User: {$userStore.name}
             Theme: {$settingsStore.theme}
@@ -326,11 +326,11 @@ class TestGraphExtraction:
         <script>
             import { createEventDispatcher } from 'svelte';
             const dispatch = createEventDispatcher();
-            
+
             function handleSubmit() {
                 dispatch('submit', { data });
             }
-            
+
             function handleCancel() {
                 dispatch('cancel');
             }
@@ -357,10 +357,10 @@ class TestComplexComponents:
         source = f"""
         <script>
             export let data;
-            
+
             {chr(10).join(functions)}
         </script>
-        
+
         <div>Content</div>
         """
 
@@ -375,14 +375,14 @@ class TestComplexComponents:
                 return { data: await fetchData() };
             };
         </script>
-        
+
         <script>
             export let data;
             let processed = processData(data);
         </script>
-        
+
         <div>{processed}</div>
-        
+
         <style>
             div { padding: 1rem; }
         </style>
@@ -444,7 +444,7 @@ class TestEdgeCases:
         <script
             // Unclosed script tag
             export let broken;
-        
+
         <div>Content</div>
         """
         # Should fall back to simple chunking

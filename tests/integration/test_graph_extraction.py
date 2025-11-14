@@ -43,14 +43,14 @@ def helper_function(x: int) -> int:
 
 class DataProcessor:
     \"\"\"Data processor class.\"\"\"
-    
+
     def __init__(self, name: str):
         self.name = name
-    
+
     def process(self, data: List[int]) -> List[int]:
         \"\"\"Process data using helper.\"\"\"
         return [helper_function(x) for x in data]
-    
+
     def validate(self) -> bool:
         \"\"\"Validate processor state.\"\"\"
         return len(self.name) > 0
@@ -86,7 +86,7 @@ class UserService implements UserRepository {
         // Implementation
         return { id, name: "test" };
     }
-    
+
     async saveUser(user: User): Promise<void> {
         if (!validateUser(user)) {
             throw new Error("Invalid user");

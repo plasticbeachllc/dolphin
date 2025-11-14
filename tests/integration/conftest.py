@@ -21,7 +21,7 @@ import sys
 class MainApplication:
     def __init__(self):
         self.config = {}
-    
+
     def run(self):
         print("Running application")
         return True
@@ -76,7 +76,7 @@ class TestMainApplication:
     def test_initialization(self):
         app = MainApplication()
         assert app.config == {}
-    
+
     def test_run_method(self):
         app = MainApplication()
         result = app.run()

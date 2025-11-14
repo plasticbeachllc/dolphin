@@ -238,7 +238,7 @@ def calculate(x, y):
 class DataProcessor:
     def __init__(self):
         self.data = []
-    
+
     def process(self, item):
         self.data.append(item)
 """

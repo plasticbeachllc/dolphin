@@ -53,10 +53,10 @@ class TestBasicSQLChunking:
         """Test chunking multiple SQL statements."""
         source = """
         CREATE TABLE users (id SERIAL PRIMARY KEY);
-        
+
         CREATE VIEW active_users AS
         SELECT * FROM users WHERE active = true;
-        
+
         CREATE FUNCTION get_user(user_id INT)
         RETURNS TABLE(id INT, name VARCHAR) AS $$
         BEGIN
@@ -136,7 +136,7 @@ class TestSQLMeshChunking:
             name="user_analytics",
             kind="full"
         );
-        
+
         SELECT
             user_id,
             COUNT(*) as event_count
@@ -155,7 +155,7 @@ class TestSQLMeshChunking:
             name="user_summary",
             depends_on=["raw_users", "raw_events"]
         );
-        
+
         SELECT u.*, COUNT(e.id) as event_count
         FROM raw_users u
         LEFT JOIN raw_events e ON u.id = e.user_id
@@ -174,7 +174,7 @@ class TestDBTChunking:
         """Test chunking dbt model."""
         source = """
         {% model name="user_analytics" %}
-        
+
         SELECT
             user_id,
             COUNT(*) as event_count
@@ -253,7 +253,7 @@ class TestGraphExtraction:
             name="user_summary",
             depends_on=["raw_users", "raw_events"]
         );
-        
+
         SELECT * FROM raw_users;
         """
         nodes, edges = extract_graph_data(source)
@@ -271,7 +271,7 @@ class TestGraphExtraction:
         """Test extracting dbt ref() dependencies."""
         source = """
         {% model name="user_analytics" %}
-        
+
         SELECT
             u.id,
             COUNT(e.id) as event_count
@@ -292,7 +292,7 @@ class TestGraphExtraction:
         """Test extracting dbt source() dependencies."""
         source = """
         {% model name="staging_users" %}
-        
+
         SELECT * FROM {{ source('raw', 'users') }}
         """
         nodes, edges = extract_graph_data(source)
@@ -306,7 +306,7 @@ class TestGraphExtraction:
         """Test extracting dbt macro calls."""
         source = """
         {% model name="user_totals" %}
-        
+
         SELECT
             user_id,
             {{ calculate_total('amount') }} as total
@@ -370,7 +370,7 @@ class TestEdgeCases:
         source = """
         INSERT INTO messages (text)
         VALUES ('Hello; world');
-        
+
         SELECT * FROM messages;
         """
         chunks = chunk_source(source)
