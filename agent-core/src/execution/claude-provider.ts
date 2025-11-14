@@ -38,8 +38,7 @@ export class AuthManager {
 
   constructor(options: AuthManagerOptions = {}) {
     this.apiKeyEnvVar = options.apiKeyEnvVar ?? "ANTHROPIC_API_KEY";
-    this.settingsPath =
-      options.settingsPath ?? join(homedir(), ".claude", "settings.json");
+    this.settingsPath = options.settingsPath ?? join(homedir(), ".claude", "settings.json");
   }
 
   private hasOAuthToken(): boolean {
@@ -102,7 +101,7 @@ export class AuthManager {
 
     if (status.mode === "api_key") {
       console.warn(
-        `[Claude Auth] Using ${this.apiKeyEnvVar} (pay-as-you-go). Consider running 'claude auth login' for subscription benefits.`,
+        `[Claude Auth] Using ${this.apiKeyEnvVar} (pay-as-you-go). Consider running 'claude auth login' for subscription benefits.`
       );
     }
   }

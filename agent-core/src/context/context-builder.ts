@@ -137,7 +137,7 @@ export class ContextBuilder {
 
     if (!existsSync(this.workspaceRoot)) {
       console.warn(
-        `[ContextBuilder] Workspace root '${this.workspaceRoot}' not found. Skipping explicit file loads.`,
+        `[ContextBuilder] Workspace root '${this.workspaceRoot}' not found. Skipping explicit file loads.`
       );
       return files;
     }
@@ -148,7 +148,7 @@ export class ContextBuilder {
     } catch (error) {
       console.error(
         `[ContextBuilder] Failed to initialize path validator for '${this.workspaceRoot}':`,
-        error,
+        error
       );
       return files;
     }
