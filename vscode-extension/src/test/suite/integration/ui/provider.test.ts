@@ -23,7 +23,9 @@ describe("DolphinViewProvider Unit Tests", () => {
 
     // Then shutdown agent bridge to stop async operations
     if (mockAgentBridge) {
-      const process = (mockAgentBridge as unknown as Record<string, unknown>).process as Record<string, unknown> | undefined;
+      const process = (mockAgentBridge as unknown as Record<string, unknown>).process as
+        | Record<string, unknown>
+        | undefined;
       if (process && !process.kill) {
         process.kill = () => true;
       }

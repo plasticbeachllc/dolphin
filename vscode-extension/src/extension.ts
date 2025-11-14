@@ -314,7 +314,11 @@ export async function activate(context: vscode.ExtensionContext) {
           // Update view provider with new bridge
           if (viewProvider) {
             // Create new view provider with updated bridge
-            viewProvider = new DolphinViewProvider(context.extensionUri, outputChannel, agentBridge);
+            viewProvider = new DolphinViewProvider(
+              context.extensionUri,
+              outputChannel,
+              agentBridge
+            );
           }
 
           outputChannel.appendLine("[KB Restart] Agent and KB restarted successfully");
@@ -526,7 +530,9 @@ async function queueFilesForIndexing(files: string[], priority = 5): Promise<voi
 
   // Write to agent bridge stdin
   // Access private process via type assertion (internal bridge communication)
-  const bridge = agentBridge as unknown as { process?: { stdin?: { write: (data: string) => void } } };
+  const bridge = agentBridge as unknown as {
+    process?: { stdin?: { write: (data: string) => void } };
+  };
   if (bridge.process?.stdin) {
     bridge.process.stdin.write(JSON.stringify(message) + "\n");
   } else {
@@ -552,7 +558,10 @@ async function getKBStatus(): Promise<Record<string, unknown>> {
     // Access private process and pendingRequests via type assertion
     const bridge = agentBridge as unknown as {
       process?: { stdin?: { write: (data: string) => void } };
-      pendingRequests?: Map<number, { resolve: (value: unknown) => void; reject: (error: unknown) => void }>;
+      pendingRequests?: Map<
+        number,
+        { resolve: (value: unknown) => void; reject: (error: unknown) => void }
+      >;
     };
 
     // Set up response handler

@@ -30,7 +30,11 @@ export class AgentBridge {
   private outputChannel: vscode.OutputChannel;
   private pendingRequests: Map<
     number,
-    { resolve: (value: unknown) => void; reject: (error: unknown) => void; timeout?: NodeJS.Timeout }
+    {
+      resolve: (value: unknown) => void;
+      reject: (error: unknown) => void;
+      timeout?: NodeJS.Timeout;
+    }
   > = new Map();
   private connection: MessageConnection | null = null;
   private restartAttempts = 0;
@@ -91,7 +95,8 @@ export class AgentBridge {
 
       // Set up error handler
       this.connection.onError((error: unknown) => {
-        const errorMessage = Array.isArray(error) && error.length > 0 ? String(error[0]) : String(error);
+        const errorMessage =
+          Array.isArray(error) && error.length > 0 ? String(error[0]) : String(error);
         this.outputChannel.appendLine(`[AgentBridge] Connection error: ${errorMessage}`);
       });
 
@@ -336,7 +341,9 @@ export class AgentBridge {
   // Phase 5: Conversation Management Methods
 
   async listConversations(): Promise<ConversationListItem[]> {
-    const result = await this.sendRequest("list_conversations", undefined, 3000) as { conversations?: ConversationListItem[] };
+    const result = (await this.sendRequest("list_conversations", undefined, 3000)) as {
+      conversations?: ConversationListItem[];
+    };
     return result.conversations || [];
   }
 

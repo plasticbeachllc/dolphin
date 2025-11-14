@@ -333,7 +333,10 @@ export class MockAgentBridge {
     for (const toolCall of this.toolCallQueue) {
       this.emitToHandlers("tool_call_started", toolCall as unknown as Record<string, unknown>);
       await new Promise((resolve) => setTimeout(resolve, 20));
-      this.emitToHandlers("tool_call_completed", { ...(toolCall as unknown as Record<string, unknown>), result: "mock result" });
+      this.emitToHandlers("tool_call_completed", {
+        ...(toolCall as unknown as Record<string, unknown>),
+        result: "mock result",
+      });
     }
 
     // Emit response

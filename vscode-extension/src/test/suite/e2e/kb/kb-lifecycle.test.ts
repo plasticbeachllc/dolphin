@@ -47,17 +47,19 @@ describe("KB Lifecycle Management", function () {
       configureMockKB({ health: true });
 
       const http = require("http");
-      const response = await new Promise<{ status: number | undefined; data: unknown }>((resolve, _reject) => {
-        http.get(`http://localhost:${kbServer.port}/health`, (res: http.IncomingMessage) => {
-          let data = "";
-          res.on("data", (chunk: Buffer) => {
-            data += chunk;
+      const response = await new Promise<{ status: number | undefined; data: unknown }>(
+        (resolve, _reject) => {
+          http.get(`http://localhost:${kbServer.port}/health`, (res: http.IncomingMessage) => {
+            let data = "";
+            res.on("data", (chunk: Buffer) => {
+              data += chunk;
+            });
+            res.on("end", () => {
+              resolve({ status: res.statusCode, data: JSON.parse(data) });
+            });
           });
-          res.on("end", () => {
-            resolve({ status: res.statusCode, data: JSON.parse(data) });
-          });
-        });
-      });
+        }
+      );
 
       assert.strictEqual(response.status, 200, "Health check should return 200");
       assert.strictEqual(response.data.status, "ok", "Should return ok status");
@@ -70,17 +72,19 @@ describe("KB Lifecycle Management", function () {
       configureMockKB({ health: false });
 
       const http = require("http");
-      const response = await new Promise<{ status: number | undefined; data: unknown }>((resolve, _reject) => {
-        http.get(`http://localhost:${kbServer.port}/health`, (res: http.IncomingMessage) => {
-          let data = "";
-          res.on("data", (chunk: Buffer) => {
-            data += chunk;
+      const response = await new Promise<{ status: number | undefined; data: unknown }>(
+        (resolve, _reject) => {
+          http.get(`http://localhost:${kbServer.port}/health`, (res: http.IncomingMessage) => {
+            let data = "";
+            res.on("data", (chunk: Buffer) => {
+              data += chunk;
+            });
+            res.on("end", () => {
+              resolve({ status: res.statusCode, data: JSON.parse(data) });
+            });
           });
-          res.on("end", () => {
-            resolve({ status: res.statusCode, data: JSON.parse(data) });
-          });
-        });
-      });
+        }
+      );
 
       assert.strictEqual(response.status, 503, "Unhealthy check should return 503");
       assert.strictEqual(response.data.status, "error", "Should return error status");
@@ -128,33 +132,35 @@ describe("KB Lifecycle Management", function () {
       });
 
       const http = require("http");
-      const response = await new Promise<{ status: number | undefined; data: unknown }>((resolve, reject) => {
-        const postData = JSON.stringify({ query: "test", top_k: 10 });
-        const options = {
-          hostname: "localhost",
-          port: kbServer.port,
-          path: "/search",
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Content-Length": Buffer.byteLength(postData),
-          },
-        };
+      const response = await new Promise<{ status: number | undefined; data: unknown }>(
+        (resolve, reject) => {
+          const postData = JSON.stringify({ query: "test", top_k: 10 });
+          const options = {
+            hostname: "localhost",
+            port: kbServer.port,
+            path: "/search",
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Content-Length": Buffer.byteLength(postData),
+            },
+          };
 
-        const req = http.request(options, (res: http.IncomingMessage) => {
-          let data = "";
-          res.on("data", (chunk: Buffer) => {
-            data += chunk;
+          const req = http.request(options, (res: http.IncomingMessage) => {
+            let data = "";
+            res.on("data", (chunk: Buffer) => {
+              data += chunk;
+            });
+            res.on("end", () => {
+              resolve({ status: res.statusCode, data: JSON.parse(data) });
+            });
           });
-          res.on("end", () => {
-            resolve({ status: res.statusCode, data: JSON.parse(data) });
-          });
-        });
 
-        req.on("error", reject);
-        req.write(postData);
-        req.end();
-      });
+          req.on("error", reject);
+          req.write(postData);
+          req.end();
+        }
+      );
 
       assert.strictEqual(response.status, 200, "Search should return 200");
       assert.ok(response.data.hits, "Should return hits");
@@ -178,17 +184,22 @@ describe("KB Lifecycle Management", function () {
       });
 
       const http = require("http");
-      const response = await new Promise<{ status: number | undefined; data: unknown }>((resolve, _reject) => {
-        http.get(`http://localhost:${kbServer.port}/metadata/test`, (res: http.IncomingMessage) => {
-          let data = "";
-          res.on("data", (chunk: Buffer) => {
-            data += chunk;
-          });
-          res.on("end", () => {
-            resolve({ status: res.statusCode, data: JSON.parse(data) });
-          });
-        });
-      });
+      const response = await new Promise<{ status: number | undefined; data: unknown }>(
+        (resolve, _reject) => {
+          http.get(
+            `http://localhost:${kbServer.port}/metadata/test`,
+            (res: http.IncomingMessage) => {
+              let data = "";
+              res.on("data", (chunk: Buffer) => {
+                data += chunk;
+              });
+              res.on("end", () => {
+                resolve({ status: res.statusCode, data: JSON.parse(data) });
+              });
+            }
+          );
+        }
+      );
 
       assert.strictEqual(response.status, 200, "Metadata should return 200");
       assert.ok(response.data.repos, "Should have repos");

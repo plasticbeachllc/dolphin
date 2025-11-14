@@ -12,7 +12,7 @@ export default [
       "test-workspace/**",
       ".uv-cache/**",
       "*.log",
-      "*.txt"
+      "*.txt",
     ],
   },
   {

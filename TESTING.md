@@ -8,6 +8,7 @@ This document describes the test structure and available test commands for the D
 ## Quick Reference
 
 **Run all tests:**
+
 ```bash
 just test-all                    # All tests across all projects
 just test-unit-all               # All unit tests
@@ -16,6 +17,7 @@ just test-e2e-all                # All E2E tests
 ```
 
 **Run tests by project:**
+
 ```bash
 just test-python [TYPE]          # Python tests (TYPE: unit, integration, e2e, or all)
 just test-agent-core [TYPE]      # Agent Core tests
@@ -25,6 +27,7 @@ just test-webview                # Webview tests (unit)
 ```
 
 **Run tests by domain:**
+
 ```bash
 just test-python-domain DOMAIN [TYPE]       # e.g., search, ingest, api
 just test-agent-core-domain DOMAIN [TYPE]   # e.g., architect, orchestrator
@@ -32,6 +35,7 @@ just test-extension-domain DOMAIN [TYPE]    # e.g., core, editor, sync
 ```
 
 **Examples:**
+
 ```bash
 just test-python unit                       # All Python unit tests
 just test-python-domain search              # All search tests (unit + integration)
@@ -104,6 +108,7 @@ Fast, isolated tests organized by domain:
 - `constants/` - Configuration constants tests
 
 **Run specific domain tests:**
+
 ```bash
 just test-python-domain search unit         # Search unit tests
 just test-python-domain ingest unit         # Ingest unit tests
@@ -127,6 +132,7 @@ Tests that integrate components within a domain:
 - `search/` - Search integration, hybrid search, and reranking tests
 
 **Run specific domain integration tests:**
+
 ```bash
 just test-python-domain search integration              # Search integration tests
 just test-python-domain graph_intelligence integration  # Graph integration tests
@@ -144,6 +150,7 @@ Full workflow tests:
 - `workflows/` - Complete indexing and search workflow tests
 
 **Run e2e tests:**
+
 ```bash
 just test-python e2e                 # All Python E2E tests
 uv run pytest tests/e2e/workflows/   # Directly with pytest
@@ -163,6 +170,7 @@ Fast, isolated tests organized by domain:
 - `state/` - State store tests
 
 **Run specific domain unit tests:**
+
 ```bash
 just test-agent-core unit                      # All agent-core unit tests
 just test-agent-core-domain architect unit     # Architect domain only
@@ -180,6 +188,7 @@ Tests that integrate components within a domain:
 - `e2e/` - Full end-to-end workflow tests
 
 **Run specific domain integration tests:**
+
 ```bash
 just test-agent-core integration                   # All agent-core integration tests
 just test-agent-core-domain architect integration  # Architect integration tests
@@ -187,6 +196,7 @@ just test-agent-core-domain kb integration         # KB integration tests
 ```
 
 **Run e2e tests:**
+
 ```bash
 just test-agent-core e2e   # All agent-core E2E tests
 ```
@@ -205,6 +215,7 @@ Fast, isolated tests organized by domain:
 - `commands/` - Commands registry tests
 
 **Run specific domain unit tests:**
+
 ```bash
 just test-extension unit                    # All extension unit tests
 just test-extension-domain core unit        # Core domain only
@@ -222,6 +233,7 @@ Tests that integrate components within a domain:
 - `core/` - Extension activation tests
 
 **Run specific domain integration tests:**
+
 ```bash
 just test-extension integration                    # All extension integration tests
 just test-extension-domain agent integration       # Agent integration tests
@@ -237,6 +249,7 @@ Full workflow tests:
 - `workflows/` - Complete integration workflow tests
 
 **Run e2e tests:**
+
 ```bash
 just test-extension e2e                        # All extension E2E tests
 just test-extension-domain conversations e2e   # Conversations E2E only
@@ -254,16 +267,19 @@ just test-extension-domain kb e2e              # KB lifecycle E2E only
 ## Utility Commands
 
 **Run specific files:**
+
 ```bash
 just test-file FILE                         # Run a specific test file
 ```
 
 **Run tests with coverage:**
+
 ```bash
 just test-coverage                          # Python tests with coverage report
 ```
 
 **Run tests directly with pytest (Python):**
+
 ```bash
 uv run pytest tests/unit/search/            # Run specific domain tests
 uv run pytest tests/unit/ -v                # Run with verbose output
@@ -273,16 +289,19 @@ uv run pytest tests/unit/ -k "test_search"  # Run tests matching pattern
 ## Recommended Workflow
 
 1. **During development:** Run domain-specific unit tests
+
    ```bash
    just test-python-domain search unit        # Fast feedback on your changes
    ```
 
 2. **Before committing:** Run all unit tests
+
    ```bash
    just test-unit-all                         # Ensure nothing broke
    ```
 
 3. **Before creating PR:** Run integration tests
+
    ```bash
    just test-integration-all                  # Catch integration issues
    ```

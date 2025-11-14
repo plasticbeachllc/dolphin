@@ -112,19 +112,13 @@ function formatGraphContext(graphContext: unknown): string {
   // Format relationships grouped by type
   const relationships = ctx.relationships || [];
   if (relationships.length > 0) {
-    const callsTo = relationships.filter(
-      (r) => r.type === "calls" && r.direction === "outgoing"
-    );
-    const calledBy = relationships.filter(
-      (r) => r.type === "calls" && r.direction === "incoming"
-    );
+    const callsTo = relationships.filter((r) => r.type === "calls" && r.direction === "outgoing");
+    const calledBy = relationships.filter((r) => r.type === "calls" && r.direction === "incoming");
     const inherits = relationships.filter(
       (r) => r.type === "inherits" && r.direction === "outgoing"
     );
     const implementations = relationships.filter((r) => r.type === "implements");
-    const imports = relationships.filter(
-      (r) => r.type === "imports" && r.direction === "outgoing"
-    );
+    const imports = relationships.filter((r) => r.type === "imports" && r.direction === "outgoing");
 
     if (callsTo.length > 0) {
       lines.push("**Calls:**");
@@ -456,7 +450,12 @@ export function makeSearchKnowledge(): {
         // First pass: cap each resource text to SHRUNK_SNIPPET_CHAR_CAP
         for (let i = 0; i < content.length && size > CAP_BYTES; i++) {
           const block = content[i];
-          if (block.type === "resource" && "resource" in block && block.resource && "text" in block.resource) {
+          if (
+            block.type === "resource" &&
+            "resource" in block &&
+            block.resource &&
+            "text" in block.resource
+          ) {
             const txt = block.resource.text as string;
             if (txt.length > SHRUNK_SNIPPET_CHAR_CAP) {
               block.resource.text = txt.slice(0, SHRUNK_SNIPPET_CHAR_CAP);
@@ -467,7 +466,12 @@ export function makeSearchKnowledge(): {
         // Second pass: cap further to MIN_SNIPPET_CHAR_FLOOR if still too big
         for (let i = 0; i < content.length && size > CAP_BYTES; i++) {
           const block = content[i];
-          if (block.type === "resource" && "resource" in block && block.resource && "text" in block.resource) {
+          if (
+            block.type === "resource" &&
+            "resource" in block &&
+            block.resource &&
+            "text" in block.resource
+          ) {
             const txt = block.resource.text as string;
             if (txt.length > MIN_SNIPPET_CHAR_FLOOR) {
               block.resource.text = txt.slice(0, MIN_SNIPPET_CHAR_FLOOR);
@@ -482,7 +486,12 @@ export function makeSearchKnowledge(): {
         for (let i = transformedRes.hits.length - 1; i >= 0 && size > CAP_BYTES; i--) {
           const blockIdx = i + 2; // +2 to skip summary and promptReady
           const block = result.content[blockIdx];
-          if (block?.type === "resource" && "resource" in block && block.resource && "text" in block.resource) {
+          if (
+            block?.type === "resource" &&
+            "resource" in block &&
+            block.resource &&
+            "text" in block.resource
+          ) {
             // Replace with empty string to satisfy SDK schema while trimming payload
             block.resource.text = "";
             size = jsonSizeBytes(result);

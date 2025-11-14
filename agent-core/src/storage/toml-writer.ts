@@ -43,7 +43,7 @@ export class TOMLWriter<T> {
       const content = await readFile(this.filepath, "utf-8");
       return tomlParse(content) as T;
     } catch (error: unknown) {
-      if (error instanceof Error && 'code' in error && error.code === "ENOENT") {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") {
         return null; // File doesn't exist yet
       }
       throw error; // Re-throw parse errors or other issues
@@ -63,7 +63,7 @@ export class TOMLWriter<T> {
     try {
       await unlink(this.filepath);
     } catch (error: unknown) {
-      if (!(error instanceof Error && 'code' in error && error.code === "ENOENT")) {
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
         throw error;
       }
     }

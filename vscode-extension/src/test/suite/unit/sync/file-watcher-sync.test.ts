@@ -348,7 +348,9 @@ describe("FileWatcher API Integration Tests", () => {
       // Should not crash even if handler throws
       // Simulate change by directly calling handleChange
       const testUri = vscode.Uri.file("/project/test.ts");
-      (watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }).handleChange(testUri, "modified");
+      (
+        watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }
+      ).handleChange(testUri, "modified");
 
       // Wait for debounce and batch
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -370,7 +372,9 @@ describe("FileWatcher API Integration Tests", () => {
 
       // Simulate change
       const testUri = vscode.Uri.file("/project/test.ts");
-      (watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }).handleChange(testUri, "modified");
+      (
+        watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }
+      ).handleChange(testUri, "modified");
 
       // Wait for processing
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -394,9 +398,13 @@ describe("FileWatcher API Integration Tests", () => {
       const testUri1 = vscode.Uri.file("/project/test1.ts");
       const testUri2 = vscode.Uri.file("/project/test2.ts");
 
-      (watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }).handleChange(testUri1, "modified");
+      (
+        watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }
+      ).handleChange(testUri1, "modified");
       await new Promise((resolve) => setTimeout(resolve, 200));
-      (watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }).handleChange(testUri2, "modified");
+      (
+        watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }
+      ).handleChange(testUri2, "modified");
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
@@ -413,7 +421,9 @@ describe("FileWatcher API Integration Tests", () => {
 
       // Simulate a change
       const testUri = vscode.Uri.file("/project/test.ts");
-      (watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }).handleChange(testUri, "modified");
+      (
+        watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }
+      ).handleChange(testUri, "modified");
 
       // Wait for debounce and batch
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -435,7 +445,9 @@ describe("FileWatcher API Integration Tests", () => {
 
       // Simulate a change
       const testUri = vscode.Uri.file("/project/test.ts");
-      (watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }).handleChange(testUri, "modified");
+      (
+        watcher as unknown as { handleChange: (uri: vscode.Uri, changeType: string) => void }
+      ).handleChange(testUri, "modified");
 
       // Wait for processing
       await new Promise((resolve) => setTimeout(resolve, 1000));

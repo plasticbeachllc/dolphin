@@ -45,7 +45,12 @@ describe("DolphinCodeActionProvider Tests", () => {
         triggerKind: vscode.CodeActionTriggerKind.Invoke,
       };
 
-      const result = provider.provideCodeActions(document, range, context, {} as vscode.CancellationToken);
+      const result = provider.provideCodeActions(
+        document,
+        range,
+        context,
+        {} as vscode.CancellationToken
+      );
       const actions = await resolveActions(result);
 
       assert.strictEqual(actions.length, 0, "Should return empty array for empty selection");
@@ -64,7 +69,12 @@ describe("DolphinCodeActionProvider Tests", () => {
         triggerKind: vscode.CodeActionTriggerKind.Invoke,
       };
 
-      const result = provider.provideCodeActions(document, range, context, {} as vscode.CancellationToken);
+      const result = provider.provideCodeActions(
+        document,
+        range,
+        context,
+        {} as vscode.CancellationToken
+      );
       const actions = await resolveActions(result);
 
       assert.ok(actions.length > 0, "Should return code actions for non-empty selection");
@@ -84,7 +94,12 @@ describe("DolphinCodeActionProvider Tests", () => {
         triggerKind: vscode.CodeActionTriggerKind.Invoke,
       };
 
-      const result = provider.provideCodeActions(document, range, context, {} as vscode.CancellationToken);
+      const result = provider.provideCodeActions(
+        document,
+        range,
+        context,
+        {} as vscode.CancellationToken
+      );
       const actions = await resolveActions(result);
 
       assert.ok(actions.length > 0);
@@ -111,7 +126,12 @@ describe("DolphinCodeActionProvider Tests", () => {
         triggerKind: vscode.CodeActionTriggerKind.Invoke,
       };
 
-      const result = provider.provideCodeActions(document, range, context, {} as vscode.CancellationToken);
+      const result = provider.provideCodeActions(
+        document,
+        range,
+        context,
+        {} as vscode.CancellationToken
+      );
       const actions = await resolveActions(result);
 
       const refactorAction = actions.find((a) =>
@@ -136,7 +156,12 @@ describe("DolphinCodeActionProvider Tests", () => {
         triggerKind: vscode.CodeActionTriggerKind.Invoke,
       };
 
-      const result = provider.provideCodeActions(document, range, context, {} as vscode.CancellationToken);
+      const result = provider.provideCodeActions(
+        document,
+        range,
+        context,
+        {} as vscode.CancellationToken
+      );
       const actions = await resolveActions(result);
 
       const testAction = actions.find((a) =>
@@ -160,7 +185,12 @@ describe("DolphinCodeActionProvider Tests", () => {
         triggerKind: vscode.CodeActionTriggerKind.Invoke,
       };
 
-      const result = provider.provideCodeActions(document, range, context, {} as vscode.CancellationToken);
+      const result = provider.provideCodeActions(
+        document,
+        range,
+        context,
+        {} as vscode.CancellationToken
+      );
       const actions = await resolveActions(result);
 
       const documentAction = actions.find((a) =>
@@ -185,7 +215,12 @@ describe("DolphinCodeActionProvider Tests", () => {
         triggerKind: vscode.CodeActionTriggerKind.Invoke,
       };
 
-      const result = provider.provideCodeActions(document, range, context, {} as vscode.CancellationToken);
+      const result = provider.provideCodeActions(
+        document,
+        range,
+        context,
+        {} as vscode.CancellationToken
+      );
       const actions = await resolveActions(result);
 
       const explainAction = actions.find((a) =>
@@ -220,7 +255,12 @@ describe("DolphinCodeActionProvider Tests", () => {
         triggerKind: vscode.CodeActionTriggerKind.Invoke,
       };
 
-      const result = provider.provideCodeActions(document, range, context, {} as vscode.CancellationToken);
+      const result = provider.provideCodeActions(
+        document,
+        range,
+        context,
+        {} as vscode.CancellationToken
+      );
       const actions = await resolveActions(result);
 
       assert.strictEqual(
@@ -246,7 +286,12 @@ describe("DolphinCodeActionProvider Tests", () => {
           triggerKind: vscode.CodeActionTriggerKind.Invoke,
         };
 
-        const result = provider.provideCodeActions(document, range, context, {} as vscode.CancellationToken);
+        const result = provider.provideCodeActions(
+          document,
+          range,
+          context,
+          {} as vscode.CancellationToken
+        );
         const actions = await resolveActions(result);
 
         assert.ok(actions.length === 4, `Should provide 4 actions for ${lang}`);

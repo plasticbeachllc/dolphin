@@ -152,7 +152,9 @@ class AgentCoreV2 {
 
     // List available tools
     const tools = await this.mcpClient.listTools();
-    console.error(`[Agent Core V2] Available tools: ${tools.map((t: { name: string }) => t.name).join(", ")}`);
+    console.error(
+      `[Agent Core V2] Available tools: ${tools.map((t: { name: string }) => t.name).join(", ")}`
+    );
 
     // Check Claude authentication
     const authStatus = await this.claudeProvider.getAuthStatus();

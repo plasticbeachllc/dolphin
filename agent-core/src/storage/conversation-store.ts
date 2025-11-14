@@ -1,8 +1,5 @@
 // agent-core/src/storage/conversation-store.ts
-import type {
-  Conversation,
-  ConversationMetadata,
-} from "../../../../shared/types/state";
+import type { Conversation, ConversationMetadata } from "../../../../shared/types/state";
 import { TOMLWriter } from "./toml-writer";
 import { join as pathJoin } from "path";
 import { mkdir, readdir } from "fs/promises";
@@ -119,24 +116,24 @@ export class ConversationStore {
       const filtered = conversations.filter((conv): conv is Conversation => conv !== null);
 
       const result = filtered.map((conv) => {
-          const convMetadata = conv.metadata || {
-            title: "Untitled Conversation",
-            files: [],
-            token_count: 0,
-            pinned: false,
-          };
-          const convId = conv.conversation.id;
-          const createdAt = conv.conversation.created_at;
-          const updatedAt = conv.conversation.updated_at;
-          const messageCount = conv.messages.length;
-          return {
-            id: convId,
-            metadata: convMetadata,
-            created_at: createdAt,
-            updated_at: updatedAt,
-            message_count: messageCount,
-          };
-        });
+        const convMetadata = conv.metadata || {
+          title: "Untitled Conversation",
+          files: [],
+          token_count: 0,
+          pinned: false,
+        };
+        const convId = conv.conversation.id;
+        const createdAt = conv.conversation.created_at;
+        const updatedAt = conv.conversation.updated_at;
+        const messageCount = conv.messages.length;
+        return {
+          id: convId,
+          metadata: convMetadata,
+          created_at: createdAt,
+          updated_at: updatedAt,
+          message_count: messageCount,
+        };
+      });
 
       console.error(`[ConversationStore] Returning ${result.length} conversations`);
       return result;

@@ -28,7 +28,13 @@ export type AgentEvent =
   | { type: "plan_generated"; plan: Plan; requestId?: string }
   | { type: "plan_step_started"; stepId: string; description: string; requestId?: string }
   | { type: "plan_step_completed"; stepId: string; result: unknown; requestId?: string }
-  | { type: "tool_call_started"; toolId: string; tool: string; input: Record<string, unknown>; requestId?: string }
+  | {
+      type: "tool_call_started";
+      toolId: string;
+      tool: string;
+      input: Record<string, unknown>;
+      requestId?: string;
+    }
   | {
       type: "tool_call_progress";
       toolId: string;

@@ -180,7 +180,11 @@ export class JSONRPCSerializer {
   /**
    * Send a response to a request
    */
-  async respond(id: string | number, result: unknown, output: NodeJS.WritableStream): Promise<void> {
+  async respond(
+    id: string | number,
+    result: unknown,
+    output: NodeJS.WritableStream
+  ): Promise<void> {
     const message: JSONRPCMessage = {
       jsonrpc: "2.0",
       id,

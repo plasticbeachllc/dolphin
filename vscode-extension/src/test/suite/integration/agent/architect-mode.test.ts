@@ -41,7 +41,9 @@ describe("Architect Mode E2E Tests", function () {
         outputChannel.appendLine(`[Test] Event: ${event.type}`);
       });
     } catch (error: unknown) {
-      outputChannel.appendLine(`[Test] Agent startup failed: ${error instanceof Error ? error.message : String(error)}`);
+      outputChannel.appendLine(
+        `[Test] Agent startup failed: ${error instanceof Error ? error.message : String(error)}`
+      );
       // Skip tests if agent can't start
       this.skip();
     }

@@ -81,8 +81,9 @@ export function createToolResult(
     Array.isArray(mcpResult.content)
   ) {
     formattedContent = mcpResult.content
-      .filter((block: unknown): block is { type: string; text: string } =>
-        typeof block === "object" && block !== null && "type" in block && block.type === "text"
+      .filter(
+        (block: unknown): block is { type: string; text: string } =>
+          typeof block === "object" && block !== null && "type" in block && block.type === "text"
       )
       .map((block) => block.text)
       .join("\n\n");

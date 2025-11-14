@@ -300,7 +300,10 @@ export class ClaudeToolExecutor {
           } else if (currentToolUse !== null) {
             // Finalize tool use block
             try {
-              currentToolUse.input = JSON.parse(currentToolUse.inputJson) as Record<string, unknown>;
+              currentToolUse.input = JSON.parse(currentToolUse.inputJson) as Record<
+                string,
+                unknown
+              >;
             } catch (error) {
               console.error("[ToolExecutor] Failed to parse tool input JSON:", error);
               currentToolUse.input = {};
@@ -494,7 +497,8 @@ export class ClaudeToolExecutor {
           if (mcpResult.isError) {
             // Extract error message from MCP result
             const content = mcpResult.content as Array<{ text?: string }> | undefined;
-            const errorMessage = (content && content[0] ? content[0].text : undefined) || "Tool execution failed";
+            const errorMessage =
+              (content && content[0] ? content[0].text : undefined) || "Tool execution failed";
 
             // Emit error event
             this.config.onEvent({
@@ -536,7 +540,10 @@ export class ClaudeToolExecutor {
           });
 
           // Return error result
-          return createErrorResult(toolCall.id, error instanceof Error ? error : new Error(String(error)));
+          return createErrorResult(
+            toolCall.id,
+            error instanceof Error ? error : new Error(String(error))
+          );
         }
       })
     );

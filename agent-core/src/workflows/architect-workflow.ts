@@ -509,9 +509,7 @@ export class ArchitectWorkflow implements IWorkflow {
       content: planContent,
       filesToModify: parsedPlan.files_to_modify || parsedPlan.filesToModify || [],
       filesToCreate: parsedPlan.files_to_create || parsedPlan.filesToCreate || [],
-      steps: (parsedPlan.steps || []).map((s) =>
-        typeof s === "string" ? s : s.description
-      ),
+      steps: (parsedPlan.steps || []).map((s) => (typeof s === "string" ? s : s.description)),
       complexity: parsedPlan.complexity || "medium",
       estimatedTokens:
         parsedPlan.estimated_tokens ||

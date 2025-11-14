@@ -448,7 +448,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               data,
             });
           } catch (error: unknown) {
-              const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Error registering repo: ${errorMessage}`
             );
@@ -472,7 +472,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               data,
             });
           } catch (error: unknown) {
-              const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Error getting KB stats: ${errorMessage}`
             );
@@ -500,7 +500,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               data,
             });
           } catch (error: unknown) {
-              const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Error triggering reindex: ${errorMessage}`
             );
@@ -534,7 +534,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             });
             this.outputChannel.appendLine(`[DolphinViewProvider] Response sent successfully`);
           } catch (error: unknown) {
-              const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Error getting index status: ${errorMessage}`
             );
@@ -564,7 +564,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               data,
             });
           } catch (error: unknown) {
-              const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Error clearing index: ${errorMessage}`
             );
