@@ -1,7 +1,6 @@
 import type {
   Tool,
   CallToolResult,
-  EmbeddedResource,
   TextContent,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -29,7 +28,7 @@ interface ApiSearchHit {
   branch?: string;
 }
 
-interface ApiSearchResponse {
+interface _ApiSearchResponse {
   hits: ApiSearchHit[];
   meta: {
     top_k?: number;
@@ -67,10 +66,10 @@ const INPUT_SHAPE = {
 
 const INPUT = z.object(INPUT_SHAPE);
 
-type Input = z.infer<typeof INPUT>;
+type _Input = z.infer<typeof INPUT>;
 
 const CAP_BYTES = 70 * 1024;
-const PER_SNIPPET_CHAR_CAP = 1000;
+const _PER_SNIPPET_CHAR_CAP = 1000;
 const SHRUNK_SNIPPET_CHAR_CAP = 600;
 const MIN_SNIPPET_CHAR_FLOOR = 300;
 
@@ -450,7 +449,7 @@ export function makeSearchKnowledge(): {
       if (size > CAP_BYTES) {
         while (result.content.length > 1 && size > CAP_BYTES) {
           // Keep summary at index 0; attempt to keep promptReady at index 1 if present
-          const dropIndex = result.content.length - 1;
+          const _dropIndex = result.content.length - 1;
           // pop content and its meta hit
           result.content.pop();
           metaHits.pop();

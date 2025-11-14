@@ -15,7 +15,7 @@ const INPUT_SHAPE = {
 
 const INPUT = z.object(INPUT_SHAPE);
 
-type Input = z.infer<typeof INPUT>;
+// type _Input = z.infer<typeof INPUT>;
 
 export function makeFileWrite(): {
   definition: Tool;
@@ -33,7 +33,7 @@ export function makeFileWrite(): {
     },
   };
 
-  const handler = async (args: any, signal?: AbortSignal): Promise<CallToolResult> => {
+  const handler = async (args: any, _signal?: AbortSignal): Promise<CallToolResult> => {
     try {
       const input = INPUT.parse(args?.input ?? args);
       const workspaceRoot = path.resolve(process.cwd());

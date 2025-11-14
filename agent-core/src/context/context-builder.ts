@@ -7,14 +7,12 @@
  */
 
 import { readFile } from "fs/promises";
-import { join } from "path";
 import { PathValidator } from "../../../shared/security/path-validator";
 import type {
   Context,
   ContextBuildParams,
   KBResult,
   FileContent,
-  SearchParams,
   SearchResult,
 } from "../types/index.js";
 

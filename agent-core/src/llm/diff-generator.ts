@@ -2,8 +2,8 @@
 import * as Diff from "diff";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { PathValidator } from "../../../../shared/security/path-validator";
-import type { FileDiff, DiffHunk } from "../../../../shared/types/events";
+import { PathValidator } from "../../../shared/security/path-validator";
+import type { FileDiff, DiffHunk } from "../../../shared/types/events";
 
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB
 const BINARY_FILE_EXTENSIONS = new Set([
@@ -334,7 +334,7 @@ export async function generateFileWriteDiff(
 
     // Validate path to prevent directory traversal attacks
     const validator = new PathValidator({ baseDir: workspaceRoot });
-    const fullPath = validator.validate(filePath);
+    const _fullPath = validator.validate(filePath);
 
     // Check if this was a new file creation
     if (toolResult.created_new) {

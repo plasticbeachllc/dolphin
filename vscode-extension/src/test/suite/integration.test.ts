@@ -7,10 +7,8 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import {
   waitForExtensionActivation,
-  sleep,
   makeHttpGetRequest,
   makeHttpPostRequest,
-  assertCommandExecutes,
 } from '../helpers/test-utils';
 import { MockKBServer } from '../helpers/mock-services';
 import {

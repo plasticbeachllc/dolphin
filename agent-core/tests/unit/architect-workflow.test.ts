@@ -2,7 +2,7 @@
  * Unit tests for ArchitectWorkflow
  */
 
-import { describe, test, expect, beforeEach, mock } from "bun:test";
+import { describe, test, expect, beforeEach } from "bun:test";
 import { ArchitectWorkflow } from "../../src/workflows/architect-workflow";
 import type {
   TaskInput,
@@ -36,7 +36,7 @@ class MockClaudeProvider {
 }
 
 class MockContextBuilder {
-  async build(params: any): Promise<Context> {
+  async build(_params: any): Promise<Context> {
     return {
       kbResults: [
         {
@@ -164,7 +164,7 @@ describe("ArchitectWorkflow", () => {
       );
 
       const updates: WorkflowUpdate[] = [];
-      let clarificationResult: ClarificationResult | undefined;
+      let _clarificationResult: ClarificationResult | undefined;
 
       for await (const update of workflow.execute(taskInput)) {
         updates.push(update);
@@ -174,7 +174,7 @@ describe("ArchitectWorkflow", () => {
           update.data.phase === "clarification" &&
           update.data.result
         ) {
-          clarificationResult = update.data.result;
+          _clarificationResult = update.data.result;
         }
 
         // Break after clarification completes
@@ -428,19 +428,19 @@ medium`;
         workflow.abort();
       }, 10);
 
-      let aborted = false;
+      let _aborted = false;
 
       try {
         for await (const update of workflow.execute(taskInput)) {
           // Should eventually throw due to abort
           if (update.type === "error") {
-            aborted = true;
+            _aborted = true;
             break;
           }
         }
       } catch (error) {
         if (error instanceof Error && error.message === "Workflow aborted") {
-          aborted = true;
+          _aborted = true;
         }
       }
 

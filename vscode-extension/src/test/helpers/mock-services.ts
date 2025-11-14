@@ -206,7 +206,7 @@ export class MockKBServer {
   /**
    * Generate mock search response
    */
-  private generateMockSearchResponse(request: MockSearchRequest): MockSearchResponse {
+  private generateMockSearchResponse(_request: MockSearchRequest): MockSearchResponse {
     // Use configured search results if available, otherwise use defaults
     const hits: MockSearchResult[] = this.searchResults || [
       {
@@ -458,7 +458,7 @@ export class MockAgentBridge {
   /**
    * Wait for agent to be ready (mock implementation for tests)
    */
-  async waitForReady(timeout = 60000): Promise<void> {
+  async waitForReady(_timeout = 60000): Promise<void> {
     // Mock always ready
     return Promise.resolve();
   }

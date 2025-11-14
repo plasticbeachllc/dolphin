@@ -6,10 +6,9 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { EditorWorkflow } from "../../src/workflows/editor-workflow";
-import { ClaudeProvider } from "../../src/execution/claude-provider";
 import { ContextBuilder } from "../../src/context/context-builder";
 import { PromptBuilder } from "../../src/prompts/prompt-builder";
-import type { TaskInput, WorkflowUpdate, ClaudeChunk } from "../../src/types/index";
+import type { TaskInput, WorkflowUpdate } from "../../src/types/index";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -300,7 +299,7 @@ describe("EditorWorkflow Integration", () => {
   describe("Context Building", () => {
     it("should build context with explicit files", async () => {
       // Mock file reading
-      const mockReadFile = mock(async () => "const test = 1;");
+      const _mockReadFile = mock(async () => "const test = 1;");
 
       const input: TaskInput = {
         mode: "editor",

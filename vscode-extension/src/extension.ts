@@ -542,7 +542,7 @@ async function getKBStatus(): Promise<any> {
     }, 5000);
 
     // Create temporary listener for response
-    const handleResponse = (event: any) => {
+    const _handleResponse = (event: any) => {
       if (event.type === "kb_status_response") {
         clearTimeout(timeout);
         resolve(event.data);
@@ -571,7 +571,7 @@ async function getKBStatus(): Promise<any> {
 }
 
 // Crash recovery function (Phase 5)
-async function recoverFromCrash(context: vscode.ExtensionContext): Promise<void> {
+async function recoverFromCrash(_context: vscode.ExtensionContext): Promise<void> {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (!workspaceFolder) {
     return;

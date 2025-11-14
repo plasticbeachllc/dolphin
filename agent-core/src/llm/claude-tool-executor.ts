@@ -2,7 +2,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { ClaudeClient } from "./claude-client";
 import type { MCPClient } from "../mcp/mcp-client";
-import type { AgentEvent } from "../../../../shared/types/events";
+import type { AgentEvent } from "../../../shared/types/events";
 import {
   mapMCPToAnthropic,
   extractToolCalls,

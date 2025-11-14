@@ -1,8 +1,6 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { AgentBridge } from "../../agent/bridge";
-import { ChildProcess } from "child_process";
-import { EventEmitter } from "events";
 
 describe("AgentBridge Unit Tests", () => {
   let agentBridge: AgentBridge;
@@ -32,7 +30,7 @@ describe("AgentBridge Unit Tests", () => {
     it("Should send clear_conversation notification via JSON-RPC connection", async () => {
       // Mock the connection
       const mockConnection = {
-        sendNotification: (method: string, params?: any) => {
+        sendNotification: (method: string, _params?: any) => {
           assert.strictEqual(method, "clear_conversation", "Method should be clear_conversation");
         },
         dispose: () => {},
@@ -64,7 +62,7 @@ describe("AgentBridge Unit Tests", () => {
   describe("abortGeneration", () => {
     it("Should send abort_generation notification via JSON-RPC connection", async () => {
       const mockConnection = {
-        sendNotification: (method: string, params?: any) => {
+        sendNotification: (method: string, _params?: any) => {
           assert.strictEqual(method, "abort_generation", "Method should be abort_generation");
         },
         dispose: () => {},
@@ -104,7 +102,7 @@ describe("AgentBridge Unit Tests", () => {
       const mockResult = { authenticated: true, user: "test@example.com" };
 
       const mockConnection = {
-        sendRequest: (method: string, params?: any) => {
+        sendRequest: (method: string, _params?: any) => {
           requestMethod = method;
           return Promise.resolve(mockResult);
         },
@@ -198,7 +196,7 @@ describe("AgentBridge Unit Tests", () => {
       let restartCalled = false;
 
       // Mock start method
-      const originalStart = agentBridge.start.bind(agentBridge);
+      const _originalStart = agentBridge.start.bind(agentBridge);
       (agentBridge as any).start = async () => {
         restartCalled = true;
       };
@@ -286,9 +284,8 @@ describe("AgentBridge Unit Tests", () => {
       const originalPlatform = process.platform;
       Object.defineProperty(process, "platform", { value: "linux", configurable: true });
 
-      const { exec } = require("child_process");
-      const { promisify } = require("util");
-      const execAsync = promisify(exec);
+      const { exec: _exec } = require("child_process");
+      const { promisify: _promisify } = require("util");
 
       // This will actually try to run 'which bun' which might fail in test env
       // So we'll just verify the logic without actually running it
@@ -320,7 +317,7 @@ describe("AgentBridge Unit Tests", () => {
     it("Should check platform-specific paths", async () => {
       const originalPlatform = process.platform;
       const { exec } = require("child_process");
-      const { promisify } = require("util");
+      const _promisify = require("util").promisify;
       const originalExec = exec;
       const fs = require("fs");
       const originalExistsSync = fs.existsSync;
@@ -539,7 +536,7 @@ describe("AgentBridge Unit Tests", () => {
       ];
 
       const mockConnection = {
-        sendRequest: (method: string, params?: any) => {
+        sendRequest: (method: string, _params?: any) => {
           assert.strictEqual(
             method,
             "list_conversations",
@@ -563,7 +560,7 @@ describe("AgentBridge Unit Tests", () => {
 
     it("Should return empty array when no conversations exist", async () => {
       const mockConnection = {
-        sendRequest: (method: string, params?: any) => {
+        sendRequest: (_method: string, _params?: any) => {
           return Promise.resolve({ conversations: [] });
         },
         dispose: () => {},
@@ -578,7 +575,7 @@ describe("AgentBridge Unit Tests", () => {
 
     it("Should handle missing conversations field in response", async () => {
       const mockConnection = {
-        sendRequest: (method: string, params?: any) => {
+        sendRequest: (_method: string, _params?: any) => {
           return Promise.resolve({}); // No conversations field
         },
         dispose: () => {},
@@ -599,7 +596,7 @@ describe("AgentBridge Unit Tests", () => {
       this.timeout(7000);
 
       const mockConnection = {
-        sendRequest: (method: string, params?: any) => {
+        sendRequest: (_method: string, _params?: any) => {
           // Never resolve to simulate timeout
           return new Promise(() => {});
         },
@@ -759,7 +756,7 @@ describe("AgentBridge Unit Tests", () => {
 
     it("Should handle deletion errors", async () => {
       const mockConnection = {
-        sendRequest: (method: string, params?: any) => {
+        sendRequest: (_method: string, _params?: any) => {
           return Promise.reject(new Error("Conversation not found"));
         },
         dispose: () => {},
@@ -864,7 +861,7 @@ describe("AgentBridge Unit Tests", () => {
 
     it("Should handle rename errors", async () => {
       const mockConnection = {
-        sendRequest: (method: string, params?: any) => {
+        sendRequest: (_method: string, _params?: any) => {
           return Promise.reject(new Error("Conversation not found"));
         },
         dispose: () => {},

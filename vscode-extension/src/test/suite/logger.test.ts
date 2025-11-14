@@ -1,6 +1,6 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { Logger, LogLevel } from "../../utils/logger";
+import { Logger } from "../../utils/logger";
 
 describe("Logger Unit Tests", () => {
   let outputChannel: vscode.OutputChannel;
@@ -180,7 +180,7 @@ describe("Logger Unit Tests", () => {
 
   describe("Different Log Levels", () => {
     beforeEach(() => {
-      const originalGet = vscode.workspace.getConfiguration;
+      const _originalGet = vscode.workspace.getConfiguration;
       vscode.workspace.getConfiguration = () =>
         ({
           get: (key: string, defaultValue?: any) => (key === "logLevel" ? "debug" : defaultValue),

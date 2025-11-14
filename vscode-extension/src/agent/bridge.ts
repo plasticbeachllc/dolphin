@@ -12,22 +12,7 @@ import {
   StreamMessageWriter,
   createMessageConnection,
   MessageConnection,
-  NotificationType,
-  RequestType,
 } from "vscode-jsonrpc/node";
-
-interface Message {
-  jsonrpc: "2.0";
-  id?: number;
-  method?: string;
-  params?: any;
-  result?: any;
-  error?: {
-    code: number;
-    message: string;
-    data?: any;
-  };
-}
 
 /**
  * AgentBridge manages communication with the Agent Core process via JSON-RPC.
@@ -144,7 +129,7 @@ export class AgentBridge {
       }
 
       // Reject all pending requests
-      for (const [id, pending] of this.pendingRequests.entries()) {
+      for (const [_id, pending] of this.pendingRequests.entries()) {
         if (pending.timeout) {
           clearTimeout(pending.timeout);
         }
@@ -375,7 +360,7 @@ export class AgentBridge {
     }
 
     // Clean up all pending requests
-    for (const [id, pending] of this.pendingRequests.entries()) {
+    for (const [_id, pending] of this.pendingRequests.entries()) {
       if (pending.timeout) {
         clearTimeout(pending.timeout);
       }

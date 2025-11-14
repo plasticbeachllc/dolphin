@@ -155,7 +155,7 @@ export class JSONRPCSerializer {
     // Note: In production, this would need a response handler
     // For now, this is a placeholder for the request pattern
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const _timer = setTimeout(() => {
         reject(new Error(`Request timeout: ${method}`));
       }, timeout);
 

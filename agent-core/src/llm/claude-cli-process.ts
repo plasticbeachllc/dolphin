@@ -1,5 +1,5 @@
 // agent-core/src/llm/claude-cli-process.ts
-import { spawn, ChildProcess } from "child_process";
+import { spawn } from "child_process";
 import * as readline from "readline";
 import type Anthropic from "@anthropic-ai/sdk";
 
@@ -68,7 +68,7 @@ export async function* runClaudeCode(
     model = "claude-sonnet-4-20250514",
     maxOutputTokens = 16000,
     cwd,
-    timeout = 600000, // 10 minutes like Kilocode
+    timeout: _timeout = 600000, // 10 minutes like Kilocode
   } = options;
 
   // Build CLI arguments (matching Kilocode's implementation)

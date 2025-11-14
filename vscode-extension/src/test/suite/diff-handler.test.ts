@@ -4,13 +4,13 @@ import * as path from "path";
 import { DiffHandler, DiffChange } from "../../editor/diff-handler";
 
 describe("DiffHandler Tests", () => {
-  let testWorkspaceUri: vscode.Uri;
+  let _testWorkspaceUri: vscode.Uri;
 
   before(async function () {
     // Get or create a workspace folder for testing
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (workspaceFolders && workspaceFolders.length > 0) {
-      testWorkspaceUri = workspaceFolders[0].uri;
+      _testWorkspaceUri = workspaceFolders[0].uri;
     } else {
       // Skip tests if no workspace is available
       this.skip();
@@ -51,7 +51,7 @@ describe("DiffHandler Tests", () => {
       const workspaceFolders = vscode.workspace.workspaceFolders;
 
       if (!workspaceFolders || workspaceFolders.length === 0) {
-        const diff: DiffChange = {
+        const _diff: DiffChange = {
           filePath: "test.ts",
           oldContent: "",
           newContent: "const x = 1;",

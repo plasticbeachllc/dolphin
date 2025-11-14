@@ -148,7 +148,7 @@ describe("Architect Mode E2E Tests", function () {
     const allContent = contentEvents.map((e) => e.delta).join("");
 
     // For a query unlikely to find results, should show gaps
-    const hasGaps = allContent.includes("Information Gaps") || allContent.includes("gaps");
+    const _hasGaps = allContent.includes("Information Gaps") || allContent.includes("gaps");
     // Note: This test might need adjustment based on actual codebase
   });
 

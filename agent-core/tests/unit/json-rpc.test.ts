@@ -188,11 +188,11 @@ describe("JSONRPCSerializer", () => {
 
 describe("JSONRPCServer", () => {
   let server: JSONRPCServer;
-  let inputChunks: Buffer[] = [];
+  let _inputChunks: Buffer[] = [];
   let outputData: string[] = [];
 
   beforeEach(() => {
-    inputChunks = [];
+    _inputChunks = [];
     outputData = [];
 
     const mockInput = {
@@ -224,7 +224,7 @@ describe("JSONRPCServer", () => {
   });
 
   it("should register and call method handlers", async () => {
-    const handler = mock(async (params: any) => ({ success: true }));
+    const handler = mock(async (_params: any) => ({ success: true }));
     server.registerMethod("test_method", handler);
 
     const message: JSONRPCMessage = {

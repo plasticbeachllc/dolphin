@@ -4,8 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { StateStore } from "../../src/state/state-store";
-import { rm, mkdir } from "fs/promises";
-import { join } from "path";
+import { rm } from "fs/promises";
 import type { TaskSession } from "../../src/types/index";
 
 const TEST_STORAGE_PATH = ".dolphin-test";

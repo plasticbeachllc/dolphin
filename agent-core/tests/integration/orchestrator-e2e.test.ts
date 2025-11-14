@@ -6,8 +6,6 @@
 
 import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { Orchestrator } from "../../src/orchestrator/orchestrator";
-import { EditorWorkflow } from "../../src/workflows/editor-workflow";
-import { StateStore } from "../../src/state/state-store";
 import type { TaskInput, TaskSession, WorkflowUpdate } from "../../src/types/index";
 
 describe("Orchestrator End-to-End", () => {
@@ -22,14 +20,14 @@ describe("Orchestrator End-to-End", () => {
       saveSession: mock(async (session: TaskSession) => {
         console.log("[Test] Saving session:", session.id);
       }),
-      loadSession: mock(async (sessionId: string) => null),
+      loadSession: mock(async (_sessionId: string) => null),
       savePlan: mock(async () => {}),
       loadPlan: mock(async () => null),
     };
 
     // Mock EditorWorkflow
     mockEditorWorkflow = {
-      execute: mock(async function* (input: TaskInput): AsyncIterableIterator<WorkflowUpdate> {
+      execute: mock(async function* (_input: TaskInput): AsyncIterableIterator<WorkflowUpdate> {
         yield {
           type: "state_change",
           sessionId: "test",
@@ -58,7 +56,7 @@ describe("Orchestrator End-to-End", () => {
 
     // Mock ArchitectWorkflow with full planning cycle
     mockArchitectWorkflow = {
-      execute: mock(async function* (input: TaskInput): AsyncIterableIterator<WorkflowUpdate> {
+      execute: mock(async function* (_input: TaskInput): AsyncIterableIterator<WorkflowUpdate> {
         // Research phase
         yield {
           type: "state_change",
@@ -366,7 +364,7 @@ describe("Orchestrator End-to-End", () => {
         context: {},
       };
 
-      const session = await orchestrator.startTask(input);
+      const _session = await orchestrator.startTask(input);
 
       // Wait for plan to be generated
       await new Promise((resolve) => setTimeout(resolve, 200));

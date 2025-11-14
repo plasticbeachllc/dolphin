@@ -8,7 +8,7 @@
 
 import * as TOML from "@iarna/toml";
 import { readFile, writeFile, mkdir, readdir, unlink, stat } from "fs/promises";
-import { join, dirname, resolve, relative } from "path";
+import { join, resolve, relative } from "path";
 import { existsSync } from "fs";
 import { PathValidator } from "../../../shared/security/path-validator";
 import { z } from "zod";

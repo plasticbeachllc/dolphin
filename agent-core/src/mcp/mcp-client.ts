@@ -72,7 +72,7 @@ export class MCPClient {
       console.error(`[MCP Client] Process exited with code ${code}`);
 
       // Reject all pending requests
-      for (const [id, pending] of this.pendingRequests) {
+      for (const [_id, pending] of this.pendingRequests) {
         clearTimeout(pending.timeout);
         pending.reject(new Error("MCP Bridge process exited"));
       }

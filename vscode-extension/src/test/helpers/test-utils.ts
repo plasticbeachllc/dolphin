@@ -66,7 +66,7 @@ export async function waitForExtensionActivation(
 /**
  * Get a webview by view ID
  */
-export async function getWebview(viewId: string, timeout = 5000): Promise<void> {
+export async function getWebview(viewId: string, _timeout = 5000): Promise<void> {
   // Execute command to focus the webview, which will cause it to load
   await vscode.commands.executeCommand(`${viewId}.focus`);
   await sleep(500); // Give it time to render
@@ -117,7 +117,7 @@ export function captureOutputChannel(name: string): {
   dispose: () => void;
 } {
   const content: string[] = [];
-  const originalAppendLine = vscode.window.createOutputChannel(name).appendLine;
+  const _originalAppendLine = vscode.window.createOutputChannel(name).appendLine;
 
   // Note: This is a simplified version. In real implementation,
   // you'd need to hook into the actual output channel.

@@ -137,7 +137,7 @@ export class ArchitectWorkflow implements IWorkflow {
     sessionId: string,
     input: TaskInput
   ): AsyncGenerator<WorkflowUpdate, ResearchResult, unknown> {
-    const startTime = Date.now();
+    const _startTime = Date.now();
     const kbSearches: KBSearch[] = [];
     const relevantFiles: string[] = [];
 
@@ -402,7 +402,7 @@ export class ArchitectWorkflow implements IWorkflow {
     sessionId: string,
     input: TaskInput,
     research: ResearchResult,
-    clarification: ClarificationResult
+    _clarification: ClarificationResult
   ): AsyncGenerator<WorkflowUpdate, Plan, unknown> {
     yield {
       type: "progress",
@@ -459,13 +459,13 @@ export class ArchitectWorkflow implements IWorkflow {
 
     // Parse plan from markdown with robust TOML extraction
     let parsedPlan: any;
-    let parseSource = "toml";
+    let _parseSource = "toml";
 
     try {
       // Try robust TOML parsing first
       const result = parsePlanFromMarkdown(planContent);
       parsedPlan = result.plan;
-      parseSource = result.source;
+      _parseSource = result.source;
       console.log(`[ArchitectWorkflow] Plan parsed from ${result.source}`);
     } catch (tomlError) {
       // Fallback to legacy markdown parsing
@@ -474,7 +474,7 @@ export class ArchitectWorkflow implements IWorkflow {
         tomlError
       );
       parsedPlan = parseLegacyMarkdownPlan(planContent);
-      parseSource = "legacy-markdown";
+      _parseSource = "legacy-markdown";
     }
 
     // Convert TOML snake_case to Plan camelCase

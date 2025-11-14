@@ -3,7 +3,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as toml from "@iarna/toml";
 import { randomBytes } from "crypto";
-import { PathValidator } from "../../../../shared/security/path-validator";
+import { PathValidator } from "../../../shared/security/path-validator";
 
 export class TOMLWriter<T> {
   private filepath: string;

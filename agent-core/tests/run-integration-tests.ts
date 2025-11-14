@@ -41,7 +41,7 @@ async function runTestSuite(suitePath: string): Promise<TestResult> {
     });
 
     let stdout = "";
-    let stderr = "";
+    let _stderr = "";
 
     process.stdout.on("data", (chunk) => {
       stdout += chunk.toString();
@@ -49,11 +49,11 @@ async function runTestSuite(suitePath: string): Promise<TestResult> {
     });
 
     process.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
+      _stderr += chunk.toString();
       process.stderr.write(chunk);
     });
 
-    process.on("close", (code) => {
+    process.on("close", (_code) => {
       const duration = Date.now() - startTime;
 
       // Parse test results from output

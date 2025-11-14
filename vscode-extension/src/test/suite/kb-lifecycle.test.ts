@@ -14,7 +14,6 @@ import {
 } from "../helpers/mock-manager";
 import {
   activateExtension,
-  waitForCondition,
   assertCommandExists,
 } from "../helpers/shared-fixtures";
 import { TEST_COMMANDS } from "../helpers/test-constants";
@@ -51,7 +50,7 @@ describe("KB Lifecycle Management", function () {
       configureMockKB({ health: true });
 
       const http = require("http");
-      const response = await new Promise<any>((resolve, reject) => {
+      const response = await new Promise<any>((resolve, _reject) => {
         http.get(`http://localhost:${kbServer.port}/health`, (res: any) => {
           let data = "";
           res.on("data", (chunk: any) => {
@@ -74,7 +73,7 @@ describe("KB Lifecycle Management", function () {
       configureMockKB({ health: false });
 
       const http = require("http");
-      const response = await new Promise<any>((resolve, reject) => {
+      const response = await new Promise<any>((resolve, _reject) => {
         http.get(`http://localhost:${kbServer.port}/health`, (res: any) => {
           let data = "";
           res.on("data", (chunk: any) => {
@@ -182,7 +181,7 @@ describe("KB Lifecycle Management", function () {
       });
 
       const http = require("http");
-      const response = await new Promise<any>((resolve, reject) => {
+      const response = await new Promise<any>((resolve, _reject) => {
         http.get(`http://localhost:${kbServer.port}/metadata/test`, (res: any) => {
           let data = "";
           res.on("data", (chunk: any) => {

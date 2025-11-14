@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { ContextBuilder } from "../../src/context/context-builder";
-import type { ContextBuildParams, KBResult } from "../../src/types/index";
+import type { ContextBuildParams } from "../../src/types/index";
 
 describe("Knowledge Bank Integration", () => {
   let contextBuilder: ContextBuilder;

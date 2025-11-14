@@ -22,7 +22,7 @@ describe("DolphinCodeActionProvider Tests", () => {
   beforeEach(() => {
     // Create mock view provider
     mockViewProvider = {
-      prefillInput: (text: string) => {
+      prefillInput: (_text: string) => {
         // Mock implementation
       },
     };
