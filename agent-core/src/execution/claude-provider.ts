@@ -1,4 +1,8 @@
 // agent-core/src/execution/claude-provider.ts
+import { existsSync, readFileSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
+
 import type { AgentEvent } from "../../../shared/types/events";
 import { ClaudeClient, type AuthMode } from "../llm/claude-client";
 import {
@@ -7,11 +11,111 @@ import {
 } from "../llm/claude-tool-executor";
 import { MCPClient } from "../mcp/mcp-client";
 
+export interface AuthStatus {
+  authenticated: boolean;
+  mode: "subscription" | "api_key" | "none";
+  source?: string;
+  warning?: string;
+  error?: string;
+}
+
+export interface AuthManagerOptions {
+  settingsPath?: string;
+  apiKeyEnvVar?: string;
+}
+
+/**
+ * Lightweight helper for detecting Claude authentication state.
+ *
+ * The integration tests exercise OAuth detection via the Claude CLI as well as
+ * fallback Anthropic API key usage. We intentionally keep the implementation
+ * resilient: the presence of a settings file is treated as an OAuth login even
+ * if the JSON cannot be parsed so corrupted files don't break the workflow.
+ */
+export class AuthManager {
+  private readonly settingsPath: string;
+  private readonly apiKeyEnvVar: string;
+
+  constructor(options: AuthManagerOptions = {}) {
+    this.apiKeyEnvVar = options.apiKeyEnvVar ?? "ANTHROPIC_API_KEY";
+    this.settingsPath =
+      options.settingsPath ?? join(homedir(), ".claude", "settings.json");
+  }
+
+  private hasOAuthToken(): boolean {
+    if (!existsSync(this.settingsPath)) {
+      return false;
+    }
+
+    try {
+      const raw = readFileSync(this.settingsPath, "utf-8");
+      if (!raw.trim()) {
+        return true;
+      }
+
+      const data = JSON.parse(raw) as { token?: string } | undefined;
+      return !!data?.token;
+    } catch {
+      // Treat unreadable files as an existing OAuth login – aligns with tests
+      // that expect corrupted files to still indicate subscription auth.
+      return true;
+    }
+  }
+
+  async detectAuthStatus(): Promise<AuthStatus> {
+    const hasOAuth = this.hasOAuthToken();
+    const apiKey = process.env[this.apiKeyEnvVar];
+
+    if (hasOAuth) {
+      return {
+        authenticated: true,
+        mode: "subscription",
+        source: "Claude CLI OAuth",
+        warning: apiKey
+          ? `${this.apiKeyEnvVar} ignored because Claude CLI OAuth is active.`
+          : undefined,
+      };
+    }
+
+    if (apiKey) {
+      return {
+        authenticated: true,
+        mode: "api_key",
+        source: this.apiKeyEnvVar,
+        warning: `Using ${this.apiKeyEnvVar} (pay-as-you-go). Consider running 'claude auth login' for subscription benefits.`,
+      };
+    }
+
+    return {
+      authenticated: false,
+      mode: "none",
+      error: `Claude is not authenticated. Run 'claude auth login' or set ${this.apiKeyEnvVar}.`,
+    };
+  }
+
+  async ensureAuthenticated(): Promise<void> {
+    const status = await this.detectAuthStatus();
+
+    if (!status.authenticated) {
+      throw new Error(status.error ?? "Claude is not authenticated.");
+    }
+
+    if (status.mode === "api_key") {
+      console.warn(
+        `[Claude Auth] Using ${this.apiKeyEnvVar} (pay-as-you-go). Consider running 'claude auth login' for subscription benefits.`,
+      );
+    }
+  }
+}
+
 export interface ClaudeProviderConfig {
-  claudeClient: ClaudeClient;
-  mcpClient: MCPClient;
-  maxToolRounds?: number;
   workspaceRoot: string;
+  claudeClient?: ClaudeClient;
+  mcpClient?: MCPClient;
+  maxToolRounds?: number;
+  authManager?: AuthManager;
+  toolExecutor?: ClaudeToolExecutor;
+  onEvent?: (event: AgentEvent) => void;
 }
 
 export interface ExecuteParams {
@@ -41,22 +145,38 @@ export interface ExecuteResult {
 export class ClaudeProvider {
   private executor: ClaudeToolExecutor;
   private claudeClient: ClaudeClient;
+  private mcpClient: MCPClient;
   private workspaceRoot: string;
+  private authManager: AuthManager;
+  private maxToolRounds: number;
+  private defaultOnEvent: (event: AgentEvent) => void;
 
   constructor(config: ClaudeProviderConfig) {
-    this.claudeClient = config.claudeClient;
     this.workspaceRoot = config.workspaceRoot;
+    this.authManager = config.authManager ?? new AuthManager();
+
+    this.claudeClient =
+      config.claudeClient ??
+      new ClaudeClient({
+        model: "claude-sonnet-4-20250514",
+        maxTokens: 4096,
+        temperature: 1.0,
+      });
+
+    this.mcpClient = config.mcpClient ?? new MCPClient();
+    this.maxToolRounds = config.maxToolRounds ?? 10;
+    this.defaultOnEvent =
+      config.onEvent ?? ((event) => console.error(`[ClaudeProvider] Event: ${event.type}`));
 
     // Create tool executor with default event handler if none provided
-    this.executor = new ClaudeToolExecutor({
-      claudeClient: config.claudeClient,
-      mcpClient: config.mcpClient,
-      maxToolRounds: config.maxToolRounds || 10,
-      onEvent: (event) => {
-        // Default: log events
-        console.error(`[ClaudeProvider] Event: ${event.type}`);
-      },
-    });
+    this.executor =
+      config.toolExecutor ??
+      new ClaudeToolExecutor({
+        claudeClient: this.claudeClient,
+        mcpClient: this.mcpClient,
+        maxToolRounds: this.maxToolRounds,
+        onEvent: this.defaultOnEvent,
+      });
   }
 
   /**
@@ -69,8 +189,8 @@ export class ClaudeProvider {
     if (params.onEvent) {
       executor = new ClaudeToolExecutor({
         claudeClient: this.claudeClient,
-        mcpClient: this.executor["config"].mcpClient,
-        maxToolRounds: this.executor["config"].maxToolRounds,
+        mcpClient: this.mcpClient,
+        maxToolRounds: this.maxToolRounds,
         onEvent: params.onEvent,
       });
 
@@ -99,6 +219,14 @@ export class ClaudeProvider {
    */
   abort(): void {
     this.executor.abort();
+  }
+
+  async detectAuthStatus(): Promise<AuthStatus> {
+    return await this.authManager.detectAuthStatus();
+  }
+
+  async ensureAuthenticated(): Promise<void> {
+    await this.authManager.ensureAuthenticated();
   }
 
   /**

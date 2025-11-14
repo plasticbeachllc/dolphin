@@ -146,6 +146,23 @@ for await (const update of orchestrator.subscribeToUpdates(session.id)) {
 }
 ```
 
+### Authentication Helpers
+
+`ClaudeProvider` ships with a lightweight `AuthManager` that understands both
+Claude CLI OAuth logins and the `ANTHROPIC_API_KEY` environment variable. You
+can use it directly, or call the convenience methods on `ClaudeProvider`:
+
+```typescript
+import { AuthManager, ClaudeProvider } from "./src/execution/claude-provider";
+
+const provider = new ClaudeProvider({ workspaceRoot: "/path/to/workspace" });
+await provider.ensureAuthenticated();
+
+const authManager = new AuthManager();
+const status = await authManager.detectAuthStatus();
+console.log(status.mode, status.warning);
+```
+
 ---
 
 ## Testing
