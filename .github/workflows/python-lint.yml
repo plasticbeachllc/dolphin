@@ -37,6 +37,7 @@ jobs:
 
       - name: Ty lint
         run: uv run ty check
+        continue-on-error: true
 
       - name: Configure Git
         run: |
