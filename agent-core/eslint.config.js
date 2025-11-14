@@ -35,6 +35,15 @@ export default [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_" },
       ],
+      // Security-focused rules
+      "@typescript-eslint/no-unsafe-assignment": "warn",
+      "@typescript-eslint/no-unsafe-member-access": "warn",
+      "@typescript-eslint/no-unsafe-call": "warn",
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/await-thenable": "error",
+      "no-eval": "error",
+      "no-implied-eval": "error",
+      "no-new-func": "error",
     },
   },
   {
@@ -70,6 +79,10 @@ export default [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_" },
       ],
+      // Security-focused rules (less strict for tests)
+      "no-eval": "error",
+      "no-implied-eval": "error",
+      "no-new-func": "error",
     },
   },
   {
