@@ -38,6 +38,7 @@ def sample_repo_and_file(temp_db):
     # Create repo
     meta_store.record_repo("test-repo", Path("/tmp/test-repo"))
     repo = meta_store.get_repo_by_name("test-repo")
+    assert repo is not None
     repo_id = repo["id"]
 
     # Create file
@@ -555,6 +556,7 @@ class TestCleanupOperations:
         # Create repo
         meta_store.record_repo("test-repo", Path("/tmp/test-repo"))
         repo = meta_store.get_repo_by_name("test-repo")
+        assert repo is not None
         repo_id = repo["id"]
 
         # Create original file
@@ -634,6 +636,7 @@ class TestCleanupOperations:
         # Create repo
         meta_store.record_repo("test-repo", Path("/tmp/test-repo"))
         repo = meta_store.get_repo_by_name("test-repo")
+        assert repo is not None
         repo_id = repo["id"]
 
         # Create two files
@@ -761,6 +764,7 @@ class TestCleanupOperations:
         # Create repo
         meta_store.record_repo("test-repo", Path("/tmp/test-repo"))
         repo = meta_store.get_repo_by_name("test-repo")
+        assert repo is not None
         repo_id = repo["id"]
 
         # Create file

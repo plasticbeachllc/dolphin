@@ -120,9 +120,9 @@ describe("Integration Tests", () => {
       // Make a request to KB
       const http = require("http");
       await new Promise((resolve) => {
-        http.get(`http://localhost:${mockServer.port}/health`, (res: any) => {
-          res.on("data", () => {});
-          res.on("end", resolve);
+        http.get(`http://localhost:${mockServer.port}/health`, (res: unknown) => {
+          (res as { on: (event: string, callback: () => void) => void }).on("data", () => {});
+          (res as { on: (event: string, callback: () => void) => void }).on("end", resolve);
         });
       });
 

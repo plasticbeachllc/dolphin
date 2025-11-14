@@ -80,7 +80,7 @@ def write_continue_config(
     personas: list[Persona],
     compiled_messages: dict[str, str],
     target_dir: Path,
-    manifest_file: Path = None,
+    manifest_file: Path | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """Write Continue configuration files to private directory.

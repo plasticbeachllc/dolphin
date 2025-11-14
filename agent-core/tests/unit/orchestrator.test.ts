@@ -8,9 +8,9 @@ import type { TaskInput } from "../../src/types/index";
 
 describe("Orchestrator", () => {
   let orchestrator: Orchestrator;
-  let mockStateStore: any;
-  let mockEditorWorkflow: any;
-  let mockArchitectWorkflow: any;
+  let mockStateStore: unknown;
+  let mockEditorWorkflow: unknown;
+  let mockArchitectWorkflow: unknown;
 
   beforeEach(() => {
     // Create mock state store
@@ -231,7 +231,7 @@ describe("Orchestrator", () => {
       };
 
       const session = await orchestrator.startTask(input);
-      const updates: any[] = [];
+      const updates: unknown[] = [];
 
       // Subscribe to updates
       const subscription = orchestrator.subscribeToUpdates(session.id);

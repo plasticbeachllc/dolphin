@@ -72,7 +72,7 @@ def check_lancedb_tables_directly():
 
         # Get table names
         table_names = db.table_names()
-        print(f"Found {len(table_names)} tables: {table_names}")
+        print(f"Found {len(table_names)} tables: {table_names}")  # type: ignore[arg-type]
 
         for table_name in table_names:
             try:
@@ -83,7 +83,7 @@ def check_lancedb_tables_directly():
 
                 if count > 0:
                     # Sample some records
-                    sample = table.head(3)
+                    sample = table.head(3)  # type: ignore[attr-defined]
                     print("   Sample records:")
                     for i, record in enumerate(sample):
                         print(f"     {i + 1}. {record}")

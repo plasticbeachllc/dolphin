@@ -6,7 +6,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 try:
-    from datasets import load_dataset
+    from datasets import load_dataset  # type: ignore[unresolved-import]
 
     print("Loading SWE-Bench Lite dataset...")
     dataset = load_dataset("princeton-nlp/SWE-bench_Lite", split="test")

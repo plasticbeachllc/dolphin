@@ -328,7 +328,7 @@ class SWEBenchOrchestrator:
                 repos_to_cleanup.add(repo_name)
 
             # Also check database for any repos matching our cloned repos
-            with store._get_connection() as conn:
+            with store._get_connection() as conn:  # type: ignore[attr-defined]
                 cursor = conn.execute("SELECT id, name FROM repos")
                 db_repos = cursor.fetchall()
 

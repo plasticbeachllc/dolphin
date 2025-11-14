@@ -22,7 +22,7 @@ class TestServerInitialization:
                 initialize_search_backend()
                 backend = get_search_backend()
                 assert backend is not None
-                assert backend.embedding_provider.__class__.__name__ == "EmbeddingProvider"
+                assert backend.embedding_provider.__class__.__name__ == "EmbeddingProvider"  # type: ignore[attr-defined]
 
     def test_initialize_with_openai_provider(self):
         """Test initialization with OpenAI provider and API key."""
@@ -64,4 +64,4 @@ class TestServerInitialization:
                 initialize_search_backend()
                 backend = get_search_backend()
                 assert backend is not None
-                assert backend.embedding_provider.__class__.__name__ == "EmbeddingProvider"
+                assert backend.embedding_provider.__class__.__name__ == "EmbeddingProvider"  # type: ignore[attr-defined]

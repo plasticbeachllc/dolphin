@@ -88,7 +88,7 @@ export class MCPClient {
 
   private handleOutput(data: string) {
     try {
-      const message: MCPMessage = JSON.parse(data);
+      const message = JSON.parse(data) as MCPMessage;
 
       if (message.id !== undefined) {
         const pending = this.pendingRequests.get(message.id);

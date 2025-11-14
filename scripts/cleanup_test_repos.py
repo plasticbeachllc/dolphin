@@ -40,7 +40,7 @@ def cleanup_test_repos():
             "integration-test",
         ]
 
-        with store._get_connection() as conn:
+        with store._get_connection() as conn:  # type: ignore[attr-defined]
             cursor = conn.execute("SELECT id, name FROM repos")
             repos = cursor.fetchall()
 

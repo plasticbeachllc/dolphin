@@ -300,7 +300,7 @@ export class ClaudeToolExecutor {
           } else if (currentToolUse !== null) {
             // Finalize tool use block
             try {
-              currentToolUse.input = JSON.parse(currentToolUse.inputJson);
+              currentToolUse.input = JSON.parse(currentToolUse.inputJson) as Record<string, unknown>;
             } catch (error) {
               console.error("[ToolExecutor] Failed to parse tool input JSON:", error);
               currentToolUse.input = {};
@@ -469,13 +469,14 @@ export class ClaudeToolExecutor {
           console.error(`[ToolExecutor] Tool ${toolCall.name} completed in ${executionTime}ms`);
 
           // Generate diff for file editing tools
-          let diff = undefined;
+          let diff: string | undefined = undefined;
           if (toolName === "file_write" && mcpResult && !mcpResult.isError) {
             try {
               // Parse the result to get file info
-              const resultText = mcpResult.content?.[0]?.text;
+              const content = mcpResult.content as Array<{ text?: string }> | undefined;
+              const resultText = content && content[0] ? content[0].text : undefined;
               if (resultText) {
-                const parsedResult = JSON.parse(resultText);
+                const parsedResult = JSON.parse(resultText) as Record<string, unknown>;
                 const generatedDiff = await generateFileWriteDiff(
                   processedInput,
                   parsedResult,
@@ -492,14 +493,15 @@ export class ClaudeToolExecutor {
           // Check if MCP returned an error result
           if (mcpResult.isError) {
             // Extract error message from MCP result
-            const errorMessage = mcpResult.content?.[0]?.text || "Tool execution failed";
+            const content = mcpResult.content as Array<{ text?: string }> | undefined;
+            const errorMessage = (content && content[0] ? content[0].text : undefined) || "Tool execution failed";
 
             // Emit error event
             this.config.onEvent({
               type: "tool_call_completed",
               toolId: toolCall.id,
               result: null,
-              error: errorMessage,
+              error: errorMessage as string,
               executionTime,
             });
 
@@ -513,7 +515,7 @@ export class ClaudeToolExecutor {
             toolId: toolCall.id,
             result: mcpResult,
             executionTime,
-            diff,
+            diff: diff as string | undefined,
           });
 
           // Convert to Anthropic format

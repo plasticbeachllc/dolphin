@@ -52,7 +52,7 @@ describe("Extension Activation", function () {
     );
 
     const dolphinContainer = packageJSON.contributes.viewsContainers.activitybar.find(
-      (c: any) => c.id === "dolphin"
+      (c: { id: string; title: string }) => c.id === "dolphin"
     );
     assert.ok(dolphinContainer, "Should have dolphin view container");
     assert.strictEqual(dolphinContainer.title, "Dolphin", "Container title should be Dolphin");
@@ -67,7 +67,7 @@ describe("Extension Activation", function () {
     assert.ok(packageJSON.contributes.views.dolphin, "Should contribute to dolphin container");
 
     const chatView = packageJSON.contributes.views.dolphin.find(
-      (v: any) => v.id === "dolphin.chatView"
+      (v: { id: string; type: string }) => v.id === "dolphin.chatView"
     );
     assert.ok(chatView, "Should have chat view");
     assert.strictEqual(chatView.type, "webview", "Chat view should be webview type");

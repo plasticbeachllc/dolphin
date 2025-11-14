@@ -164,7 +164,7 @@ def check_lancedb_tables():
 
                 if count > 0:
                     # Sample some records
-                    sample = table.head(3)
+                    sample = table.head(3)  # type: ignore[attr-defined]
                     print("     Sample:")
                     for i, record in enumerate(sample):
                         print(f"       {i + 1}. {record['id']} ({record['repo']}, {record['path']})")

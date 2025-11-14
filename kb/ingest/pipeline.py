@@ -502,7 +502,7 @@ class IngestionPipeline:
                 # Extract and store code graph data
                 if self.graph_store and not dry_run:
                     try:
-                        nodes, edges = extract_graph_from_file(file_path, language, text, repo_config)
+                        nodes, edges = extract_graph_from_file(file_path, language, text, repo_config)  # type: ignore[arg-type]
                         if nodes or edges:
                             graph_stats = store_graph_data(
                                 self.graph_store,

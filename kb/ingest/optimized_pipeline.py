@@ -127,7 +127,7 @@ class OptimizedIngestionPipeline:
 
             candidates = scan_repo_parallel(
                 repo_root,
-                list(self.config.ignore_patterns if hasattr(self.config, "ignore_patterns") else []),
+                list(self.config.ignore_patterns if hasattr(self.config, "ignore_patterns") else []),  # type: ignore[arg-type]
                 num_workers=self.num_workers,
             )
         else:
@@ -135,7 +135,7 @@ class OptimizedIngestionPipeline:
 
             candidates = scan_repo(
                 repo_root,
-                list(self.config.ignore_patterns if hasattr(self.config, "ignore_patterns") else []),
+                list(self.config.ignore_patterns if hasattr(self.config, "ignore_patterns") else []),  # type: ignore[arg-type]
             )
 
         # Map absolute paths to candidates for quick lookup

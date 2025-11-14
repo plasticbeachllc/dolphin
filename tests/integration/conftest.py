@@ -184,9 +184,6 @@ def integration_backend_config(sample_repo_path: Path, temp_db_path: Path, mock_
         store_root=store_root,
         default_embed_model="small",
         ignore=["*.pyc", "__pycache__/*", "*.bin"],
-        max_file_size=1024 * 1024,  # 1MB
-        chunk_size=1000,
-        chunk_overlap=200,
     )
 
     # Use isolated database and vector store paths
@@ -209,10 +206,7 @@ def integration_backend_config(sample_repo_path: Path, temp_db_path: Path, mock_
     yield backend_config
 
     # Cleanup: Close connections
-    try:
-        metadata_store.close()
-    except Exception:
-        pass
+    # SQLiteMetadataStore doesn't have a close method - connections are managed automatically
 
 
 @pytest.fixture
@@ -232,9 +226,6 @@ def fast_backend_config(sample_repo_path: Path, temp_db_path: Path, mock_embeddi
     config = KBConfig(
         default_embed_model="small",
         ignore=["*.pyc", "__pycache__/*", "*.bin"],
-        max_file_size=1024 * 1024,
-        chunk_size=1000,
-        chunk_overlap=200,
     )
 
     # Use in-memory database for faster tests
@@ -254,10 +245,7 @@ def fast_backend_config(sample_repo_path: Path, temp_db_path: Path, mock_embeddi
 
     yield backend_config
 
-    try:
-        metadata_store.close()
-    except Exception:
-        pass
+    # SQLiteMetadataStore doesn't have a close method - connections are managed automatically
 
 
 @pytest.fixture

@@ -38,7 +38,7 @@ def compare_metric(
     }
 
 
-def compare_evaluations(baseline_path: Path, current_path: Path, threshold: float):
+def compare_evaluations(baseline_path: Path, current_path: Path, threshold: float) -> dict[str, Any]:
     """Compare two evaluation results."""
     with open(baseline_path) as f:
         baseline = json.load(f)
@@ -46,7 +46,7 @@ def compare_evaluations(baseline_path: Path, current_path: Path, threshold: floa
     with open(current_path) as f:
         current = json.load(f)
 
-    comparison = {
+    comparison: dict[str, Any] = {
         "baseline_file": str(baseline_path),
         "current_file": str(current_path),
         "baseline_timestamp": baseline.get("timestamp"),

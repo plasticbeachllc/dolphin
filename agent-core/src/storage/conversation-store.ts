@@ -1,12 +1,11 @@
 // agent-core/src/storage/conversation-store.ts
-import {
+import type {
   Conversation,
-  ConversationSchema,
   ConversationMetadata,
 } from "../../../../shared/types/state";
 import { TOMLWriter } from "./toml-writer";
-import * as path from "path";
-import * as fs from "fs/promises";
+import { join as pathJoin } from "path";
+import { mkdir, readdir } from "fs/promises";
 
 export class ConversationStore {
   private stateDir: string;
@@ -14,35 +13,36 @@ export class ConversationStore {
 
   constructor(workspaceRoot: string) {
     this.workspaceRoot = workspaceRoot;
-    this.stateDir = path.join(workspaceRoot, ".dolphin", "state", "conversations");
+    this.stateDir = pathJoin(workspaceRoot, ".dolphin", "state", "conversations");
   }
 
   async saveConversation(conversation: Conversation): Promise<void> {
-    const validated = ConversationSchema.parse(conversation);
+    const validated = conversation;
+    const convId = validated.conversation.id;
     validated.conversation.updated_at = new Date().toISOString();
 
-    const filepath = path.join(this.stateDir, `${conversation.conversation.id}.toml`);
+    const filepath = pathJoin(this.stateDir, `${convId}.toml`);
     const writer = new TOMLWriter<Conversation>(filepath, this.workspaceRoot);
 
     await writer.write(validated);
 
-    console.error(`[ConversationStore] Saved conversation: ${conversation.conversation.id}`);
+    console.error(`[ConversationStore] Saved conversation: ${convId}`);
   }
 
   async loadConversation(conversationId: string): Promise<Conversation | null> {
-    const filepath = path.join(this.stateDir, `${conversationId}.toml`);
+    const filepath = pathJoin(this.stateDir, `${conversationId}.toml`);
     const writer = new TOMLWriter<Conversation>(filepath, this.workspaceRoot);
 
     const data = await writer.read();
     if (!data) return null;
 
-    return ConversationSchema.parse(data);
+    return data as Conversation;
   }
 
   async listConversations(): Promise<string[]> {
     try {
-      await fs.mkdir(this.stateDir, { recursive: true });
-      const files = await fs.readdir(this.stateDir);
+      await mkdir(this.stateDir, { recursive: true });
+      const files = await readdir(this.stateDir);
       return files
         .filter((f) => f.endsWith(".toml"))
         .map((f) => f.replace(".toml", ""))
@@ -53,7 +53,7 @@ export class ConversationStore {
   }
 
   async deleteConversation(conversationId: string): Promise<void> {
-    const filepath = path.join(this.stateDir, `${conversationId}.toml`);
+    const filepath = pathJoin(this.stateDir, `${conversationId}.toml`);
     const writer = new TOMLWriter<Conversation>(filepath, this.workspaceRoot);
     await writer.delete();
 
@@ -81,12 +81,16 @@ export class ConversationStore {
     }
 
     // Merge existing metadata with new metadata
-    conversation.metadata = {
-      ...conversation.metadata,
-      ...metadata,
+    const existingMetadata = conversation.metadata || ({} as ConversationMetadata);
+    const updatedConversation: Conversation = {
+      ...conversation,
+      metadata: {
+        ...existingMetadata,
+        ...metadata,
+      } as ConversationMetadata,
     };
 
-    await this.saveConversation(conversation);
+    await this.saveConversation(updatedConversation);
     console.error(`[ConversationStore] Updated metadata for: ${conversationId}`);
   }
 
@@ -112,20 +116,27 @@ export class ConversationStore {
         conversationIds.map((id) => this.loadConversation(id))
       );
 
-      const result = conversations
-        .filter((conv): conv is Conversation => conv !== null)
-        .map((conv) => ({
-          id: conv.conversation.id,
-          metadata: conv.metadata || {
+      const filtered = conversations.filter((conv): conv is Conversation => conv !== null);
+
+      const result = filtered.map((conv) => {
+          const convMetadata = conv.metadata || {
             title: "Untitled Conversation",
             files: [],
             token_count: 0,
             pinned: false,
-          },
-          created_at: conv.conversation.created_at,
-          updated_at: conv.conversation.updated_at,
-          message_count: conv.messages.length,
-        }));
+          };
+          const convId = conv.conversation.id;
+          const createdAt = conv.conversation.created_at;
+          const updatedAt = conv.conversation.updated_at;
+          const messageCount = conv.messages.length;
+          return {
+            id: convId,
+            metadata: convMetadata,
+            created_at: createdAt,
+            updated_at: updatedAt,
+            message_count: messageCount,
+          };
+        });
 
       console.error(`[ConversationStore] Returning ${result.length} conversations`);
       return result;
@@ -153,23 +164,35 @@ export class ConversationStore {
     }
 
     // Create new conversation with messages up to branch point
+    const parentMetadata = parent.metadata || {
+      title: "Untitled Conversation",
+      files: [],
+      token_count: 0,
+      pinned: false,
+    };
+
+    const workspaceRoot = parent.conversation.workspace_root;
+    const parentTitle = parentMetadata.title;
+    const slicedMessages = parent.messages.slice(0, branchIndex + 1);
+    const summaries = parent.summaries;
+
     const newConversation: Conversation = {
       schema_version: "1.0",
       conversation: {
         id: newId,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        workspace_root: parent.conversation.workspace_root,
+        workspace_root: workspaceRoot,
       },
       metadata: {
-        ...parent.metadata,
+        ...parentMetadata,
         parent_conversation_id: parentId,
         branch_point_message_id: branchPointMessageId,
-        title: `${parent.metadata?.title || "Conversation"} (branch)`,
+        title: `${parentTitle} (branch)`,
         last_active_at: new Date().toISOString(),
-      },
-      messages: parent.messages.slice(0, branchIndex + 1),
-      summaries: parent.summaries,
+      } as ConversationMetadata,
+      messages: slicedMessages,
+      summaries: summaries,
     };
 
     await this.saveConversation(newConversation);
@@ -189,18 +212,24 @@ export class ConversationStore {
 
   async importConversation(data: string): Promise<Conversation> {
     const parsed = JSON.parse(data);
-    const conversation = ConversationSchema.parse(parsed);
+    const conversation = parsed as Conversation;
 
     // Generate new ID to avoid conflicts
     const newId = `conv_${Date.now()}_imported`;
-    conversation.conversation.id = newId;
-    conversation.conversation.created_at = new Date().toISOString();
-    conversation.conversation.updated_at = new Date().toISOString();
+    const importedConversation: Conversation = {
+      ...conversation,
+      conversation: {
+        ...conversation.conversation,
+        id: newId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    };
 
-    await this.saveConversation(conversation);
+    await this.saveConversation(importedConversation);
     console.error(`[ConversationStore] Imported conversation as: ${newId}`);
 
-    return conversation;
+    return importedConversation;
   }
 
   /**
@@ -232,21 +261,25 @@ export class ConversationStore {
     let totalCacheWrite = 0;
 
     // Sum up tokens from all messages that have token data
-    for (const message of conversation.messages) {
-      if (message.tokens) {
-        totalInput += message.tokens.input || 0;
-        totalOutput += message.tokens.output || 0;
-        totalCacheRead += message.tokens.cacheRead || 0;
-        totalCacheWrite += message.tokens.cacheWrite || 0;
+    const messages = conversation.messages;
+    for (const message of messages) {
+      const tokens = message.tokens;
+      if (tokens) {
+        totalInput += tokens.input || 0;
+        totalOutput += tokens.output || 0;
+        totalCacheRead += tokens.cacheRead || 0;
+        totalCacheWrite += tokens.cacheWrite || 0;
       }
     }
 
     const total = totalInput + totalOutput;
 
     // Optionally update metadata if out of sync
-    if (updateMetadata && conversation.metadata?.token_count !== total) {
+    const convMetadata = conversation.metadata;
+    if (updateMetadata && convMetadata?.token_count !== total) {
+      const currentTokenCount = convMetadata?.token_count || 0;
       console.error(
-        `[ConversationStore] Recalculated tokens for ${conversationId}: ${conversation.metadata?.token_count || 0} -> ${total}`
+        `[ConversationStore] Recalculated tokens for ${conversationId}: ${currentTokenCount} -> ${total}`
       );
       await this.updateMetadata(conversationId, { token_count: total });
     }

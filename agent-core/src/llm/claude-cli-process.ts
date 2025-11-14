@@ -139,7 +139,7 @@ export async function* runClaudeCode(
   try {
     // Handle stderr
     child.stderr.setEncoding("utf-8");
-    child.stderr.on("data", (data) => {
+    child.stderr.on("data", (data: Buffer | string) => {
       processState.stderrLogs += data.toString();
     });
 

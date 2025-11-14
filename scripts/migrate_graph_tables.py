@@ -28,7 +28,7 @@ def migrate_graph_tables():
     try:
         # Initialize store (this will trigger migration)
         store = SQLiteMetadataStore(db_path)
-        store._ensure_schema()
+        store._ensure_schema()  # type: ignore[attr-defined]
 
         print("✅ Graph tables created successfully!")
         print()

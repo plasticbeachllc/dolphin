@@ -199,8 +199,10 @@ export class ArchitectWorkflow implements IWorkflow {
       context,
       thinkingMode: "normal",
     })) {
-      if (chunk.type === "text") {
-        findings += chunk.content;
+      const typedChunk = chunk as { type: string; content?: string };
+      if (typedChunk.type === "text") {
+        const content = typedChunk.content as string;
+        findings += content;
 
         yield {
           type: "chunk",
@@ -208,7 +210,7 @@ export class ArchitectWorkflow implements IWorkflow {
           timestamp: new Date().toISOString(),
           data: {
             type: "text",
-            content: chunk.content,
+            content: content,
             phase: "research",
           },
         };
@@ -297,8 +299,10 @@ export class ArchitectWorkflow implements IWorkflow {
         systemPrompt: this.getClarificationSystemPrompt(conversationTurns),
         thinkingMode: "normal",
       })) {
-        if (chunk.type === "text") {
-          llmResponse += chunk.content;
+        const typedChunk = chunk as { type: string; content?: string };
+        if (typedChunk.type === "text") {
+          const content = typedChunk.content as string;
+          llmResponse += content;
 
           yield {
             type: "chunk",
@@ -306,7 +310,7 @@ export class ArchitectWorkflow implements IWorkflow {
             timestamp: new Date().toISOString(),
             data: {
               type: "text",
-              content: chunk.content,
+              content: content,
               phase: "clarification",
             },
           };
@@ -441,8 +445,10 @@ export class ArchitectWorkflow implements IWorkflow {
       context,
       thinkingMode: "extended",
     })) {
-      if (chunk.type === "text") {
-        planContent += chunk.content;
+      const typedChunk = chunk as { type: string; content?: string };
+      if (typedChunk.type === "text") {
+        const content = typedChunk.content as string;
+        planContent += content;
 
         yield {
           type: "chunk",
@@ -450,7 +456,7 @@ export class ArchitectWorkflow implements IWorkflow {
           timestamp: new Date().toISOString(),
           data: {
             type: "text",
-            content: chunk.content,
+            content: content,
             phase: "planning",
           },
         };

@@ -12,6 +12,7 @@ import statistics
 import sys
 import time
 from collections import defaultdict
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +28,7 @@ from kb.store.lancedb_store import LanceDBStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
-def extract_unique_files(results: list[dict], top_k: int = 5) -> list[str]:
+def extract_unique_files(results: Sequence[dict[str, Any]], top_k: int = 5) -> list[str]:
     """Extract unique file paths from search results.
 
     Results from the backend have a 'path' field containing the file path.
@@ -48,23 +49,23 @@ def extract_unique_files(results: list[dict], top_k: int = 5) -> list[str]:
     return unique_files
 
 
-def normalize_file_path(path: str, repo_root: Path) -> str:
+def normalize_file_path(path: str | Path, repo_root: Path) -> str:
     """Normalize file path relative to repo root."""
-    path = Path(path)
+    path_obj = Path(path)
 
     # Try to make relative to repo root
     try:
-        rel_path = path.relative_to(repo_root)
+        rel_path = path_obj.relative_to(repo_root)
         return str(rel_path)
     except ValueError:
         pass
 
     # If already relative, return as-is
-    if not path.is_absolute():
-        return str(path)
+    if not path_obj.is_absolute():
+        return str(path_obj)
 
     # Otherwise, return filename
-    return path.name
+    return path_obj.name
 
 
 def evaluate_instance(
@@ -159,11 +160,11 @@ def evaluate_instance(
         }
 
 
-def load_swe_bench_instances(dataset_path: Path, repo_filter: list[str] = None) -> list[dict]:
+def load_swe_bench_instances(dataset_path: Path, repo_filter: list[str] | None = None) -> list[dict]:
     """Load SWE-Bench Lite instances, optionally filtered by repo."""
     # Try loading from HuggingFace datasets
     try:
-        from datasets import load_dataset
+        from datasets import load_dataset  # type: ignore[import-untyped]
 
         dataset = load_dataset("princeton-nlp/SWE-bench_Lite", split="test")
 
@@ -241,16 +242,17 @@ def main():
     # Initialize backend
     print("Initializing search backend...")
     config = KBConfig()
-    lance_store = LanceDBStore(root=config.lancedb_path)
-    sql_store = SQLiteMetadataStore(config.sqlite_db_path)
-    graph_store = GraphStore(config.sqlite_db_path)
-    provider = create_provider(config)
+    store_root = config.resolved_store_root()
+    lance_store = LanceDBStore(root=store_root / "lancedb")
+    sql_store = SQLiteMetadataStore(store_root / "metadata.db")
+    graph_store = GraphStore(store_root / "metadata.db")
+    provider = create_provider(config.embedding_provider)
 
     backend = KnowledgeSearchBackend(
+        embedding_provider=provider,
         lance_store=lance_store,
         sql_store=sql_store,
         graph_store=graph_store,
-        provider=provider,
         config=config,
     )
 

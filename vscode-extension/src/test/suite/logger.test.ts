@@ -33,8 +33,8 @@ describe("Logger Unit Tests", () => {
       const originalGet = vscode.workspace.getConfiguration;
       vscode.workspace.getConfiguration = () =>
         ({
-          get: (key: string, defaultValue?: any) => (key === "logLevel" ? "error" : defaultValue),
-        }) as any;
+          get: (key: string, defaultValue?: unknown) => (key === "logLevel" ? "error" : defaultValue),
+        }) as vscode.WorkspaceConfiguration;
 
       logger.error("Error message");
       logger.warn("Warning message");
@@ -55,8 +55,8 @@ describe("Logger Unit Tests", () => {
       const originalGet = vscode.workspace.getConfiguration;
       vscode.workspace.getConfiguration = () =>
         ({
-          get: (key: string, defaultValue?: any) => (key === "logLevel" ? "warn" : defaultValue),
-        }) as any;
+          get: (key: string, defaultValue?: unknown) => (key === "logLevel" ? "warn" : defaultValue),
+        }) as vscode.WorkspaceConfiguration;
 
       logger.error("Error message");
       logger.warn("Warning message");
@@ -74,8 +74,8 @@ describe("Logger Unit Tests", () => {
       const originalGet = vscode.workspace.getConfiguration;
       vscode.workspace.getConfiguration = () =>
         ({
-          get: (key: string, defaultValue?: any) => (key === "logLevel" ? "info" : defaultValue),
-        }) as any;
+          get: (key: string, defaultValue?: unknown) => (key === "logLevel" ? "info" : defaultValue),
+        }) as vscode.WorkspaceConfiguration;
 
       logger.error("Error message");
       logger.warn("Warning message");
@@ -94,8 +94,8 @@ describe("Logger Unit Tests", () => {
       const originalGet = vscode.workspace.getConfiguration;
       vscode.workspace.getConfiguration = () =>
         ({
-          get: (key: string, defaultValue?: any) => (key === "logLevel" ? "debug" : defaultValue),
-        }) as any;
+          get: (key: string, defaultValue?: unknown) => (key === "logLevel" ? "debug" : defaultValue),
+        }) as vscode.WorkspaceConfiguration;
 
       logger.error("Error message");
       logger.warn("Warning message");
@@ -115,8 +115,8 @@ describe("Logger Unit Tests", () => {
       const originalGet = vscode.workspace.getConfiguration;
       vscode.workspace.getConfiguration = () =>
         ({
-          get: (key: string, defaultValue?: any) => (key === "logLevel" ? "invalid" : defaultValue),
-        }) as any;
+          get: (key: string, defaultValue?: unknown) => (key === "logLevel" ? "invalid" : defaultValue),
+        }) as vscode.WorkspaceConfiguration;
 
       logger.error("Error message");
       logger.warn("Warning message");
@@ -134,8 +134,8 @@ describe("Logger Unit Tests", () => {
       const originalGet = vscode.workspace.getConfiguration;
       vscode.workspace.getConfiguration = () =>
         ({
-          get: (key: string, defaultValue?: any) => (key === "logLevel" ? "debug" : defaultValue),
-        }) as any;
+          get: (key: string, defaultValue?: unknown) => (key === "logLevel" ? "debug" : defaultValue),
+        }) as vscode.WorkspaceConfiguration;
 
       logger.info("Test message");
 
@@ -148,8 +148,8 @@ describe("Logger Unit Tests", () => {
       const originalGet = vscode.workspace.getConfiguration;
       vscode.workspace.getConfiguration = () =>
         ({
-          get: (key: string, defaultValue?: any) => (key === "logLevel" ? "debug" : defaultValue),
-        }) as any;
+          get: (key: string, defaultValue?: unknown) => (key === "logLevel" ? "debug" : defaultValue),
+        }) as vscode.WorkspaceConfiguration;
 
       logger.info("Test message");
 
@@ -163,8 +163,8 @@ describe("Logger Unit Tests", () => {
       const originalGet = vscode.workspace.getConfiguration;
       vscode.workspace.getConfiguration = () =>
         ({
-          get: (key: string, defaultValue?: any) => (key === "logLevel" ? "debug" : defaultValue),
-        }) as any;
+          get: (key: string, defaultValue?: unknown) => (key === "logLevel" ? "debug" : defaultValue),
+        }) as vscode.WorkspaceConfiguration;
 
       logger.error("Error occurred");
 
@@ -183,8 +183,8 @@ describe("Logger Unit Tests", () => {
       const _originalGet = vscode.workspace.getConfiguration;
       vscode.workspace.getConfiguration = () =>
         ({
-          get: (key: string, defaultValue?: any) => (key === "logLevel" ? "debug" : defaultValue),
-        }) as any;
+          get: (key: string, defaultValue?: unknown) => (key === "logLevel" ? "debug" : defaultValue),
+        }) as vscode.WorkspaceConfiguration;
     });
 
     it("Should log error messages", () => {
@@ -221,8 +221,8 @@ describe("Logger Unit Tests", () => {
       const originalGet = vscode.workspace.getConfiguration;
       vscode.workspace.getConfiguration = () =>
         ({
-          get: (key: string, defaultValue?: any) => (key === "logLevel" ? "debug" : defaultValue),
-        }) as any;
+          get: (key: string, defaultValue?: unknown) => (key === "logLevel" ? "debug" : defaultValue),
+        }) as vscode.WorkspaceConfiguration;
 
       const logger1 = new Logger(outputChannel, "Category1");
       const logger2 = new Logger(outputChannel, "Category2");

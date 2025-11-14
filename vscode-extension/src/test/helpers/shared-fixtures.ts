@@ -6,12 +6,13 @@
 import * as vscode from "vscode";
 import * as assert from "assert";
 import { sleep } from "./test-utils";
+import { ExtensionExports } from "./mock-types";
 
 /**
  * Extension activation fixture with proper waiting.
  * Use this instead of duplicating activation logic in every test.
  */
-export async function activateExtension(): Promise<vscode.Extension<any>> {
+export async function activateExtension(): Promise<vscode.Extension<ExtensionExports>> {
   const ext = vscode.extensions.getExtension("pb.dolphin");
   assert.ok(ext, "Extension should be installed");
 
@@ -28,7 +29,7 @@ export async function activateExtension(): Promise<vscode.Extension<any>> {
 /**
  * Wait for extension to be fully initialized.
  */
-async function waitForExtensionReady(ext: vscode.Extension<any>): Promise<void> {
+async function waitForExtensionReady(ext: vscode.Extension<ExtensionExports>): Promise<void> {
   const maxWait = 5000; // 5 seconds max
   const checkInterval = 100; // Check every 100ms
   let elapsed = 0;
@@ -144,7 +145,7 @@ export async function createTestDocument(
 /**
  * Get extension exports with type safety.
  */
-export function getExtensionExports<T = any>(): T | undefined {
+export function getExtensionExports<T = unknown>(): T | undefined {
   const ext = vscode.extensions.getExtension("pb.dolphin");
   if (!ext?.isActive) {
     return undefined;

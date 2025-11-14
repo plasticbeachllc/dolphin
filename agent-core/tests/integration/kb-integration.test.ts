@@ -57,7 +57,7 @@ describe("Knowledge Bank Integration", () => {
           };
         }
         return { ok: false };
-      }) as any;
+      }) as unknown;
 
       const params: ContextBuildParams = {
         searchQuery: "helper function",
@@ -77,7 +77,7 @@ describe("Knowledge Bank Integration", () => {
       // Mock KB failure
       global.fetch = mock(async () => {
         throw new Error("Connection refused");
-      }) as any;
+      }) as unknown;
 
       const params: ContextBuildParams = {
         searchQuery: "test query",
@@ -97,7 +97,7 @@ describe("Knowledge Bank Integration", () => {
       global.fetch = mock(async () => ({
         ok: false,
         statusText: "Internal Server Error",
-      })) as any;
+      })) as unknown;
 
       const params: ContextBuildParams = {
         searchQuery: "test query",
@@ -118,7 +118,7 @@ describe("Knowledge Bank Integration", () => {
         json: async () => {
           throw new Error("Invalid JSON");
         },
-      })) as any;
+      })) as unknown;
 
       const params: ContextBuildParams = {
         searchQuery: "test query",
@@ -149,7 +149,7 @@ describe("Knowledge Bank Integration", () => {
             chunk_id: "chunk_1",
           },
         ],
-      })) as any;
+      })) as unknown;
 
       const params: ContextBuildParams = {
         searchQuery: "test",
@@ -178,7 +178,7 @@ describe("Knowledge Bank Integration", () => {
             chunk_id: "chunk_1",
           },
         ],
-      })) as any;
+      })) as unknown;
 
       const params: ContextBuildParams = {
         searchQuery: "test",
@@ -207,7 +207,7 @@ describe("Knowledge Bank Integration", () => {
             score: 0.9,
             chunk_id: "chunk_1",
           }),
-      })) as any;
+      })) as unknown;
 
       const params: ContextBuildParams = {
         searchQuery: "test",
@@ -236,7 +236,7 @@ describe("Knowledge Bank Integration", () => {
             score: 0.9,
             chunk_id: "chunk_1",
           }),
-      })) as any;
+      })) as unknown;
 
       const params: ContextBuildParams = {
         searchQuery: "test",
@@ -284,7 +284,7 @@ describe("Knowledge Bank Integration", () => {
             chunk_id: "chunk_3",
           },
         ],
-      })) as any;
+      })) as unknown;
 
       const params: ContextBuildParams = {
         searchQuery: "test",
@@ -325,7 +325,7 @@ describe("Knowledge Bank Integration", () => {
             chunk_id: "chunk_2",
           },
         ],
-      })) as any;
+      })) as unknown;
 
       const params: ContextBuildParams = {
         searchQuery: "test",
@@ -359,7 +359,7 @@ describe("Knowledge Bank Integration", () => {
             },
           ],
         };
-      }) as any;
+      }) as unknown;
 
       const startTime = Date.now();
 
@@ -383,7 +383,7 @@ describe("Knowledge Bank Integration", () => {
       global.fetch = mock(async () => ({
         ok: true,
         json: async () => [],
-      })) as any;
+      })) as unknown;
 
       const params: ContextBuildParams = {
         searchQuery: "nonexistent",
@@ -424,7 +424,7 @@ describe("Knowledge Bank Integration", () => {
             chunk_id: "chunk_1",
           },
         ],
-      })) as any;
+      })) as unknown;
 
       const params: ContextBuildParams = {
         searchQuery: "test",

@@ -26,8 +26,8 @@ def test_mcp_search():
     }
 
     print("🔍 Testing MCP search_knowledge tool with graph context...")
-    print(f"Query: {test_request['params']['arguments']['query']}")
-    print(f"Repo: {test_request['params']['arguments']['repos']}")
+    print(f"Query: {test_request['params']['arguments']['query']}")  # type: ignore[index]
+    print(f"Repo: {test_request['params']['arguments']['repos']}")  # type: ignore[index]
     print()
 
     try:

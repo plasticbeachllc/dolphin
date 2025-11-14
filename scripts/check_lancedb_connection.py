@@ -60,7 +60,7 @@ def check_lancedb_connection():
                 print(f"  📊 {table_name}: {count} records")
 
                 if count > 0:
-                    sample = table.head(3)
+                    sample = table.head(3)  # type: ignore[attr-defined]
                     print("     Sample record:")
                     print(f"     {sample}")
 

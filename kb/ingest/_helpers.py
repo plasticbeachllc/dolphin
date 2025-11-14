@@ -5,11 +5,10 @@ from __future__ import annotations
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
-from ..chunkers.types import Chunk
 
-
-def build_desired_map(chunks: Sequence[Chunk]) -> dict[str, list[dict]]:
+def build_desired_map(chunks: Sequence[Any]) -> dict[str, list[dict]]:
     """Build a mapping from text_hash to list of occurrence dictionaries.
 
     Args:
@@ -171,7 +170,7 @@ def get_all_tracked_files(repo_root: Path) -> list[str]:
         raise RuntimeError(f"Failed to get tracked files: {e.stderr}")
 
 
-def representative_text_for_hash(text_hash: str, chunks: Sequence[Chunk]) -> str:
+def representative_text_for_hash(text_hash: str, chunks: Sequence[Any]) -> str:
     """Get representative text for a given text_hash from chunks.
 
     Args:

@@ -20,15 +20,15 @@ class ChunkTestData:
     """Test chunk for testing."""
 
     text: str
-    text_hash: str
+    text_hash: str | None
     start_line: int
     end_line: int
-    symbol_kind: str = None
-    symbol_name: str = None
-    symbol_path: str = None
-    heading_h1: str = None
-    heading_h2: str = None
-    heading_h3: str = None
+    symbol_kind: str | None = None
+    symbol_name: str | None = None
+    symbol_path: str | None = None
+    heading_h1: str | None = None
+    heading_h2: str | None = None
+    heading_h3: str | None = None
 
 
 class TestBuildDesiredMap:

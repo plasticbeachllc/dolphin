@@ -35,7 +35,7 @@ class TypeGraphExtractor:
         """
         )
 
-        captures = inheritance_query.captures(tree_root)
+        captures = inheritance_query.captures(tree_root)  # type: ignore[attr-defined]
 
         # Process captures in pairs (class_name, bases)
         for i in range(0, len(captures), 2):
@@ -112,7 +112,7 @@ class TypeGraphExtractor:
         """
         )
 
-        captures = class_query.captures(tree_root)
+        captures = class_query.captures(tree_root)  # type: ignore[attr-defined]
 
         # Track which class we're currently processing
         current_class_name = None

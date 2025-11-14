@@ -51,6 +51,7 @@ class TestSnapshotTracking:
 
         sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = sql_store.get_repo_by_name("test-repo")
+        assert repo is not None
 
         # Create test file
         test_file = workspace / "sample.py"
@@ -131,6 +132,7 @@ class TestSnapshotTracking:
 
         sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = sql_store.get_repo_by_name("test-repo")
+        assert repo is not None
 
         # Create and index file (version 1)
         test_file = workspace / "evolving.py"
@@ -154,7 +156,9 @@ class TestSnapshotTracking:
 
         # Get first snapshot
         file_record = sql_store.get_file_by_path(repo["id"], "evolving.py")
+        assert file_record is not None
         snapshot1 = sql_store.get_file_snapshot(file_record["id"])
+        assert snapshot1 is not None
         hash1 = snapshot1["content_hash"]
 
         # Modify file and re-index (version 2)
@@ -178,6 +182,7 @@ class TestSnapshotTracking:
 
         # Get updated snapshot
         snapshot2 = sql_store.get_file_snapshot(file_record["id"])
+        assert snapshot2 is not None
         hash2 = snapshot2["content_hash"]
 
         # Verify snapshot was updated
@@ -211,6 +216,7 @@ class TestSnapshotTracking:
 
         sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = sql_store.get_repo_by_name("test-repo")
+        assert repo is not None
 
         # Create multiple files
         files = []
@@ -520,6 +526,7 @@ class TestAutomaticChangeProcessing:
 
         sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = sql_store.get_repo_by_name("test-repo")
+        assert repo is not None
 
         # Create test file
         test_file = workspace / "auto_process.py"
@@ -713,8 +720,10 @@ class TestPendingChangesWorkflow:
 
         # 6. Verify snapshots were created
         repo = sql_store.get_repo_by_name("test-repo")
+        assert repo is not None
         for filename in ["file1.py", "file2.py"]:
             file_record = sql_store.get_file_by_path(repo["id"], filename)
+            assert file_record is not None
             snapshot = sql_store.get_file_snapshot(file_record["id"])
             assert snapshot is not None
 

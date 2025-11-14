@@ -197,7 +197,7 @@ class TestConfigurationGeneration:
         persona = MockPersona()
         instructions = "Test instructions"
 
-        config = build_kilocode_mode_config(persona, instructions)
+        config = build_kilocode_mode_config(persona, instructions)  # type: ignore[arg-type]
 
         assert config["slug"] == "test-persona"
         assert config["name"] == "Test Persona"
@@ -222,7 +222,7 @@ class TestConfigurationGeneration:
         persona = MockPersona()
         instructions = "Test instructions"
 
-        config = build_kilocode_mode_config(persona, instructions)
+        config = build_kilocode_mode_config(persona, instructions)  # type: ignore[arg-type]
 
         assert config["temperature"] == 0.8
         assert config["max_tokens"] == 6000
@@ -244,7 +244,7 @@ class TestConfigurationGeneration:
         persona = MockPersona()
         system_content = "You are a helpful coding assistant."
 
-        config = build_kilocode_mode_config(persona, system_content)
+        config = build_kilocode_mode_config(persona, system_content)  # type: ignore[arg-type]
 
         assert config["instructions"] == "You are a helpful coding assistant."
 
@@ -319,7 +319,7 @@ class TestConfigurationWriting:
             compiled_messages = {"test-persona": "Test instructions"}
 
             write_kilocode_config(
-                personas=personas,
+                personas=personas,  # type: ignore[arg-type]
                 compiled_messages=compiled_messages,
                 guardrails="Be helpful",
                 target_dir=Path(tmpdir),
@@ -364,7 +364,7 @@ class TestConfigurationWriting:
             compiled_messages = {"test-persona": "Test instructions"}
 
             result = write_kilocode_config(
-                personas=personas,
+                personas=personas,  # type: ignore[arg-type]
                 compiled_messages=compiled_messages,
                 guardrails="Be helpful",
                 target_dir=Path(tmpdir),
@@ -403,7 +403,7 @@ class TestConfigurationWriting:
             assert not config_dir.exists()
 
             write_kilocode_config(
-                personas=personas,
+                personas=personas,  # type: ignore[arg-type]
                 compiled_messages=compiled_messages,
                 guardrails="Be helpful",
                 target_dir=Path(tmpdir),

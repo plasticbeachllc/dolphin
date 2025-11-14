@@ -535,7 +535,7 @@ def cleanup_test_repo(temp_store_root: Path) -> None:
         store = SQLiteMetadataStore(db_path)
         store.initialize()
 
-        with store._get_connection() as conn:
+        with store._get_connection() as conn:  # type: ignore[attr-defined]
             # Delete test_repo and all associated data
             cursor = conn.execute("SELECT id FROM repos WHERE name = ?", ("test_repo",))
             repo_row = cursor.fetchone()

@@ -88,7 +88,7 @@ export class JSONRPCParser {
 
       if (messageBuffer.length > 0) {
         try {
-          const message: JSONRPCMessage = JSON.parse(messageBuffer.toString("utf-8"));
+          const message = JSON.parse(messageBuffer.toString("utf-8")) as JSONRPCMessage;
           await this.onMessage(message);
         } catch (error) {
           console.error("[JSON-RPC] Failed to parse message:", error);

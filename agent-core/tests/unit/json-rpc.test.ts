@@ -113,7 +113,7 @@ describe("JSONRPCSerializer", () => {
         if (callback) callback();
         return true;
       },
-    }) as any;
+    }) as unknown;
 
   it("should serialize message with Content-Length header", async () => {
     const message: JSONRPCMessage = {
@@ -199,15 +199,15 @@ describe("JSONRPCServer", () => {
       on: (event: string, handler: (chunk: Buffer) => void) => {
         if (event === "data") {
           // Store handler for later triggering
-          (mockInput as any)._dataHandler = handler;
+          (mockInput as unknown)._dataHandler = handler;
         }
       },
       emit: (event: string, data: Buffer) => {
-        if (event === "data" && (mockInput as any)._dataHandler) {
-          (mockInput as any)._dataHandler(data);
+        if (event === "data" && (mockInput as unknown)._dataHandler) {
+          (mockInput as unknown)._dataHandler(data);
         }
       },
-    } as any;
+    } as unknown;
 
     const mockOutput = {
       write: (data: string, callback?: () => void) => {
@@ -215,16 +215,16 @@ describe("JSONRPCServer", () => {
         if (callback) callback();
         return true;
       },
-    } as any;
+    } as unknown;
 
     server = new JSONRPCServer(mockInput, mockOutput);
 
     // Store mock input for triggering events
-    (server as any)._mockInput = mockInput;
+    (server as unknown)._mockInput = mockInput;
   });
 
   it("should register and call method handlers", async () => {
-    const handler = mock(async (_params: any) => ({ success: true }));
+    const handler = mock(async (_params: unknown) => ({ success: true }));
     server.registerMethod("test_method", handler);
 
     const message: JSONRPCMessage = {
@@ -237,7 +237,7 @@ describe("JSONRPCServer", () => {
     const payload = JSON.stringify(message);
     const framedMessage = `Content-Length: ${Buffer.byteLength(payload)}\r\n\r\n${payload}`;
 
-    (server as any)._mockInput.emit("data", Buffer.from(framedMessage));
+    (server as unknown)._mockInput.emit("data", Buffer.from(framedMessage));
 
     // Wait for async processing
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -257,7 +257,7 @@ describe("JSONRPCServer", () => {
     const payload = JSON.stringify(message);
     const framedMessage = `Content-Length: ${Buffer.byteLength(payload)}\r\n\r\n${payload}`;
 
-    (server as any)._mockInput.emit("data", Buffer.from(framedMessage));
+    (server as unknown)._mockInput.emit("data", Buffer.from(framedMessage));
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
@@ -282,7 +282,7 @@ describe("JSONRPCServer", () => {
     const payload = JSON.stringify(message);
     const framedMessage = `Content-Length: ${Buffer.byteLength(payload)}\r\n\r\n${payload}`;
 
-    (server as any)._mockInput.emit("data", Buffer.from(framedMessage));
+    (server as unknown)._mockInput.emit("data", Buffer.from(framedMessage));
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
@@ -306,7 +306,7 @@ describe("JSONRPCServer", () => {
     const payload = JSON.stringify(message);
     const framedMessage = `Content-Length: ${Buffer.byteLength(payload)}\r\n\r\n${payload}`;
 
-    (server as any)._mockInput.emit("data", Buffer.from(framedMessage));
+    (server as unknown)._mockInput.emit("data", Buffer.from(framedMessage));
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 

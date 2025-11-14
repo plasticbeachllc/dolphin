@@ -239,7 +239,7 @@ class TestMarkdownChunker:
             assert "author:" not in chunk.text
 
             # But the actual content should be preserved
-            if "Actual Content" in chunk.h1:
+            if chunk.h1 and "Actual Content" in chunk.h1:
                 assert "This is the main content" in chunk.text
 
     def test_markdown_mixed_content_types(self):

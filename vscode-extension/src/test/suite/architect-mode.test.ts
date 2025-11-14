@@ -14,7 +14,7 @@ describe("Architect Mode E2E Tests", function () {
 
   let agentBridge: AgentBridge;
   let outputChannel: vscode.OutputChannel;
-  let receivedEvents: any[] = [];
+  let receivedEvents: Array<Record<string, unknown>> = [];
 
   before(async function () {
     this.timeout(120000); // Increase timeout for agent startup
@@ -40,8 +40,8 @@ describe("Architect Mode E2E Tests", function () {
         receivedEvents.push(event);
         outputChannel.appendLine(`[Test] Event: ${event.type}`);
       });
-    } catch (error: any) {
-      outputChannel.appendLine(`[Test] Agent startup failed: ${error.message}`);
+    } catch (error: unknown) {
+      outputChannel.appendLine(`[Test] Agent startup failed: ${error instanceof Error ? error.message : String(error)}`);
       // Skip tests if agent can't start
       this.skip();
     }
@@ -208,7 +208,7 @@ describe("Architect Mode E2E Tests", function () {
   /**
    * Helper function to wait for a specific event type
    */
-  function waitForEvent(eventType: string, timeout: number): Promise<any> {
+  function waitForEvent(eventType: string, timeout: number): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new Error(`Timeout waiting for event: ${eventType}`));

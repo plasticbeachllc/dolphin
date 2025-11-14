@@ -44,6 +44,7 @@ def test_five_component_verification():
             content_id="test_chunk",
             repo="test_repo",
             path="test.py",
+            text_hash="test_hash",
             content="class UserController handles authentication",
             symbol_name="UserController",
             symbol_path="controllers.UserController",

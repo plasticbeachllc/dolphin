@@ -47,10 +47,10 @@ describe("KB Lifecycle Management", function () {
       configureMockKB({ health: true });
 
       const http = require("http");
-      const response = await new Promise<any>((resolve, _reject) => {
-        http.get(`http://localhost:${kbServer.port}/health`, (res: any) => {
+      const response = await new Promise<{ status: number | undefined; data: unknown }>((resolve, _reject) => {
+        http.get(`http://localhost:${kbServer.port}/health`, (res: http.IncomingMessage) => {
           let data = "";
-          res.on("data", (chunk: any) => {
+          res.on("data", (chunk: Buffer) => {
             data += chunk;
           });
           res.on("end", () => {
@@ -70,10 +70,10 @@ describe("KB Lifecycle Management", function () {
       configureMockKB({ health: false });
 
       const http = require("http");
-      const response = await new Promise<any>((resolve, _reject) => {
-        http.get(`http://localhost:${kbServer.port}/health`, (res: any) => {
+      const response = await new Promise<{ status: number | undefined; data: unknown }>((resolve, _reject) => {
+        http.get(`http://localhost:${kbServer.port}/health`, (res: http.IncomingMessage) => {
           let data = "";
-          res.on("data", (chunk: any) => {
+          res.on("data", (chunk: Buffer) => {
             data += chunk;
           });
           res.on("end", () => {
@@ -128,7 +128,7 @@ describe("KB Lifecycle Management", function () {
       });
 
       const http = require("http");
-      const response = await new Promise<any>((resolve, reject) => {
+      const response = await new Promise<{ status: number | undefined; data: unknown }>((resolve, reject) => {
         const postData = JSON.stringify({ query: "test", top_k: 10 });
         const options = {
           hostname: "localhost",
@@ -141,9 +141,9 @@ describe("KB Lifecycle Management", function () {
           },
         };
 
-        const req = http.request(options, (res: any) => {
+        const req = http.request(options, (res: http.IncomingMessage) => {
           let data = "";
-          res.on("data", (chunk: any) => {
+          res.on("data", (chunk: Buffer) => {
             data += chunk;
           });
           res.on("end", () => {
@@ -178,10 +178,10 @@ describe("KB Lifecycle Management", function () {
       });
 
       const http = require("http");
-      const response = await new Promise<any>((resolve, _reject) => {
-        http.get(`http://localhost:${kbServer.port}/metadata/test`, (res: any) => {
+      const response = await new Promise<{ status: number | undefined; data: unknown }>((resolve, _reject) => {
+        http.get(`http://localhost:${kbServer.port}/metadata/test`, (res: http.IncomingMessage) => {
           let data = "";
-          res.on("data", (chunk: any) => {
+          res.on("data", (chunk: Buffer) => {
             data += chunk;
           });
           res.on("end", () => {
@@ -203,14 +203,14 @@ describe("KB Lifecycle Management", function () {
       // Make multiple requests
       const http = require("http");
       await new Promise((resolve) => {
-        http.get(`http://localhost:${kbServer.port}/health`, (res: any) => {
+        http.get(`http://localhost:${kbServer.port}/health`, (res: http.IncomingMessage) => {
           res.on("data", () => {});
           res.on("end", resolve);
         });
       });
 
       await new Promise((resolve) => {
-        http.get(`http://localhost:${kbServer.port}/metadata/test`, (res: any) => {
+        http.get(`http://localhost:${kbServer.port}/metadata/test`, (res: http.IncomingMessage) => {
           res.on("data", () => {});
           res.on("end", resolve);
         });
@@ -302,7 +302,7 @@ describe("KB Lifecycle Management", function () {
 
       const http = require("http");
       await new Promise((resolve) => {
-        http.get(`http://localhost:${kbServer.port}/health`, (res: any) => {
+        http.get(`http://localhost:${kbServer.port}/health`, (res: http.IncomingMessage) => {
           res.on("data", () => {});
           res.on("end", resolve);
         });
@@ -333,7 +333,7 @@ describe("KB Lifecycle Management", function () {
           },
         };
 
-        const req = http.request(options, (res: any) => {
+        const req = http.request(options, (res: http.IncomingMessage) => {
           res.on("data", () => {});
           res.on("end", resolve);
         });

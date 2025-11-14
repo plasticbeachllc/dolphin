@@ -42,7 +42,7 @@ describe("Webview Tests", () => {
     );
 
     const dolphinContainer = packageJSON.contributes.viewsContainers.activitybar.find(
-      (c: any) => c.id === "dolphin"
+      (c: { id: string; title: string }) => c.id === "dolphin"
     );
 
     assert.ok(dolphinContainer, "Dolphin view container should exist");
@@ -59,7 +59,7 @@ describe("Webview Tests", () => {
     assert.ok(packageJSON.contributes.views.dolphin, "Extension should have dolphin views");
 
     const chatView = packageJSON.contributes.views.dolphin.find(
-      (v: any) => v.id === "dolphin.chatView"
+      (v: { id: string; name: string; type: string }) => v.id === "dolphin.chatView"
     );
 
     assert.ok(chatView, "Chat view should exist");
@@ -76,7 +76,7 @@ describe("Webview Tests", () => {
     assert.ok(packageJSON.contributes.keybindings, "Extension should have keybindings");
 
     const focusInputBinding = packageJSON.contributes.keybindings.find(
-      (kb: any) => kb.command === "dolphin.focusInput"
+      (kb: { command: string; key: string; mac?: string }) => kb.command === "dolphin.focusInput"
     );
 
     assert.ok(focusInputBinding, "Focus input keybinding should exist");

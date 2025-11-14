@@ -163,7 +163,7 @@ describe("Claude Authentication Integration", () => {
       // Mock console.warn
       const originalWarn = console.warn;
       const warnings: string[] = [];
-      console.warn = mock((...args: any[]) => {
+      console.warn = mock((...args: unknown[]) => {
         warnings.push(args.join(" "));
       });
 

@@ -33,7 +33,7 @@ def rerank_backend(tmp_path):
 
     config = KBConfig(
         store_root=store_root,
-        retrieval={"reranking": {"enabled": True, "model_name": "test-model"}},
+        retrieval={"reranking": {"enabled": True, "model_name": "test-model"}},  # type: ignore[arg-type]
     )
 
     lancedb = LanceDBStore(config.store_root)

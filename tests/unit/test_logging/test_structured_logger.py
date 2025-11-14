@@ -30,7 +30,7 @@ class TestStructuredLogger:
         logger.logger.setLevel(logging.DEBUG)
 
         # Attach output stream to logger for test access
-        logger._test_output = log_output
+        logger._test_output = log_output  # type: ignore[attr-defined]
 
         return logger
 
@@ -123,7 +123,7 @@ class TestStructuredLogger:
         logger.logger.handlers.clear()
         logger.logger.addHandler(handler)
         logger.logger.setLevel(logging.DEBUG)
-        logger._test_output = log_output
+        logger._test_output = log_output  # type: ignore[attr-defined]
 
         logger.info("Test message")
 
@@ -143,7 +143,7 @@ class TestStructuredLogger:
         child.logger.handlers.clear()
         child.logger.addHandler(handler)
         child.logger.setLevel(logging.DEBUG)
-        child._test_output = log_output
+        child._test_output = log_output  # type: ignore[attr-defined]
 
         child.info("Child message", {"extra": "data"})
 
@@ -164,12 +164,12 @@ class TestStructuredLogger:
         parent.logger.handlers.clear()
         parent.logger.addHandler(handler)
         parent.logger.setLevel(logging.DEBUG)
-        parent._test_output = log_output
+        parent._test_output = log_output  # type: ignore[attr-defined]
 
         child = parent.create_child({"request_id": "xyz"})
         child.logger.handlers.clear()
         child.logger.addHandler(handler)
-        child._test_output = log_output
+        child._test_output = log_output  # type: ignore[attr-defined]
 
         child.info("Test")
 
