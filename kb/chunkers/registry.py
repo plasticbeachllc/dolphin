@@ -58,12 +58,8 @@ _BUILTIN_CHUNKERS: dict[str, ChunkerFunction] = {
     "python": chunk_python,
     "typescript": chunk_typescript,
     "typescriptreact": chunk_typescript,
-    "javascript": lambda text, **kwargs: chunk_typescript(
-        text, lang="javascript", **kwargs
-    ),
-    "javascriptreact": lambda text, **kwargs: chunk_typescript(
-        text, lang="javascript", **kwargs
-    ),
+    "javascript": lambda text, **kwargs: chunk_typescript(text, lang="javascript", **kwargs),
+    "javascriptreact": lambda text, **kwargs: chunk_typescript(text, lang="javascript", **kwargs),
     "markdown": chunk_markdown,
     "sql": chunk_sql,
     "svelte": chunk_svelte,
@@ -90,9 +86,7 @@ def _load_global_extension_map() -> dict[str, str]:
             try:
                 import tomli as tomllib  # type: ignore[import-not-found, no-redef]
             except ImportError:
-                _log.warning(
-                    "No TOML library (tomli) available. Language detection will be disabled."
-                )
+                _log.warning("No TOML library (tomli) available. Language detection will be disabled.")
                 return {}
 
         from pathlib import Path as PathLib

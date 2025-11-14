@@ -33,7 +33,6 @@ def basic_backend(mock_providers):
     return KnowledgeSearchBackend(embedding_provider, lance_store, sql_store, hybrid_search_enabled=True)
 
 
-
 class TestKnowledgeSearchBackend:
     def test_search_basic_hybrid(self, basic_backend):
         """Test that hybrid search correctly fuses vector and BM25 results."""
@@ -44,9 +43,7 @@ class TestKnowledgeSearchBackend:
         )
 
         embedding_provider.embed_texts.return_value = [[0.1] * 1536]
-        lance_store.query.return_value = [
-            {"id": "chunk1", "_distance": 0.2, "repo": "test", "path": "p1.py"}
-        ]
+        lance_store.query.return_value = [{"id": "chunk1", "_distance": 0.2, "repo": "test", "path": "p1.py"}]
         # `reciprocal_rank_fusion` expects the `id_field` to be 'chunk_id'
         sql_store.bm25_search.return_value = [
             {
@@ -85,9 +82,7 @@ class TestKnowledgeSearchBackend:
 
         embedding_provider.embed_texts.return_value = [[0.1] * 1536]
         # Vector search result will rank at position 1, giving RRF score ~0.016
-        lance_store.query.return_value = [
-            {"id": "chunk1", "_distance": 0.1, "repo": "repo", "path": "test.py"}
-        ]
+        lance_store.query.return_value = [{"id": "chunk1", "_distance": 0.1, "repo": "repo", "path": "test.py"}]
         # BM25 result will rank at position 2, giving RRF score ~0.016 (similar rank)
         sql_store.bm25_search.return_value = [
             {
@@ -249,9 +244,7 @@ class TestSearchBackendIntegration:
         # Verify FTS indexing worked
         with real_backend.sql_store._connect() as conn:
             cur = conn.cursor()
-            cur.execute(
-                "SELECT content_id, content FROM chunks_fts WHERE repo = 'test-repo'"
-            )
+            cur.execute("SELECT content_id, content FROM chunks_fts WHERE repo = 'test-repo'")
             fts_rows = cur.fetchall()
             logging.info(f"Test: FTS entries after indexing: {len(fts_rows)}")
             for row in fts_rows:

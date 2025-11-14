@@ -108,8 +108,8 @@ def test_vector_search_detailed():
     store_root = Path.home() / ".dolphin" / "knowledge_store"
 
     try:
-        from kb.store.lancedb_store import LanceDBStore
         from kb.embeddings.provider import create_provider
+        from kb.store.lancedb_store import LanceDBStore
 
         print(f"Testing with store root: {store_root}")
 

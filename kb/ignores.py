@@ -61,9 +61,7 @@ DEFAULT_IGNORE_PATTERNS: tuple[str, ...] = (
 )
 
 
-def build_ignore_set(
-    extra: Iterable[str] | None = None, exceptions: Iterable[str] | None = None
-) -> set[str]:
+def build_ignore_set(extra: Iterable[str] | None = None, exceptions: Iterable[str] | None = None) -> set[str]:
     """Return the default ignore patterns merged with any extras, excluding exceptions."""
     patterns = set(DEFAULT_IGNORE_PATTERNS)
     if extra:
@@ -152,7 +150,5 @@ def load_repo_ignores(repo_root: Path) -> tuple[set[str], set[str]]:
         return expanded_patterns, expanded_exceptions
     except Exception:
         # On parse issues, fail closed (no additional repo ignores)
-        _log.warning(
-            "Failed to load repo ignore configuration from %s", cfg, exc_info=True
-        )
+        _log.warning("Failed to load repo ignore configuration from %s", cfg, exc_info=True)
         return set(), set()

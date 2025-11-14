@@ -220,9 +220,7 @@ class GraphManager:
             graph = self._graph
 
         if graph.number_of_nodes() == 0:
-            logger.warning(
-                f"Cannot compute metrics: empty graph for repo {self.repo_id}"
-            )
+            logger.warning(f"Cannot compute metrics: empty graph for repo {self.repo_id}")
             return {}
 
         logger.info(f"Computing metrics for repo {self.repo_id}")
@@ -241,9 +239,7 @@ class GraphManager:
         try:
             if graph.number_of_nodes() > 1000:
                 # Sample for performance
-                betweenness = nx.betweenness_centrality(
-                    graph, k=min(100, graph.number_of_nodes())
-                )
+                betweenness = nx.betweenness_centrality(graph, k=min(100, graph.number_of_nodes()))
             else:
                 betweenness = nx.betweenness_centrality(graph)
             metrics["betweenness_centrality"] = betweenness
@@ -294,9 +290,7 @@ class GraphManager:
             out_degree = metrics.get("out_degree", {})
             community = metrics.get("community", {})
 
-            all_nodes = (
-                set(pagerank.keys()) | set(betweenness.keys()) | set(in_degree.keys())
-            )
+            all_nodes = set(pagerank.keys()) | set(betweenness.keys()) | set(in_degree.keys())
 
             for node_id in all_nodes:
                 # Check if metrics record exists

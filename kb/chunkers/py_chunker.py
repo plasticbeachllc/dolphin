@@ -19,7 +19,6 @@ __all__ = ["chunk_source", "extract_graph_data"]
 _PY_PARSER: Parser | None = None
 
 
-
 def _get_python_parser() -> Parser:
     """Return a cached tree-sitter Parser configured for Python.
 
@@ -70,16 +69,12 @@ def chunk_source(
         root = tree.root_node
     except Exception as e:
         _log.warning("Tree-sitter parse failed; falling back to token windows: %s", e)
-        return _fallback_token_windows(
-            source, model=model, token_target=token_target, overlap_pct=overlap_pct
-        )
+        return _fallback_token_windows(source, model=model, token_target=token_target, overlap_pct=overlap_pct)
 
     symbols = list(_extract_symbols(root, source))
 
     if not symbols:
-        return _fallback_token_windows(
-            source, model=model, token_target=token_target, overlap_pct=overlap_pct
-        )
+        return _fallback_token_windows(source, model=model, token_target=token_target, overlap_pct=overlap_pct)
 
     chunks: list[Chunk] = []
     tok = get_tokenizer(model)
@@ -95,9 +90,7 @@ def chunk_source(
             continue
 
         # If symbol is small enough, emit as one chunk; else window
-        windows = window_text_by_tokens(
-            symbol_text, model=model, target=token_target, overlap=overlap
-        )
+        windows = window_text_by_tokens(symbol_text, model=model, target=token_target, overlap=overlap)
 
         # Build line-start offsets for mapping within this construct
         line_offsets = _build_line_offsets(symbol_text)
@@ -109,9 +102,7 @@ def chunk_source(
             abs_start_line = _offset_to_abs_line(start_row, line_offsets, start_char)
             abs_end_line = abs_start_line + raw_text.count("\n")
 
-            trimmed_text, token_count, lead_trim, trail_trim = _trim_and_tokenize(
-                raw_text, tok
-            )
+            trimmed_text, token_count, lead_trim, trail_trim = _trim_and_tokenize(raw_text, tok)
             if not trimmed_text:
                 continue
 
@@ -143,9 +134,7 @@ def _fallback_token_windows(
     """Fallback: simple token-windowing across the entire file."""
     tok = get_tokenizer(model)
     overlap = max(0, int(token_target * overlap_pct))
-    windows = window_text_by_tokens(
-        source, model=model, target=token_target, overlap=overlap
-    )
+    windows = window_text_by_tokens(source, model=model, target=token_target, overlap=overlap)
     # Build line-start offsets for entire file
     line_offsets = _build_line_offsets(source)
 
@@ -156,9 +145,7 @@ def _fallback_token_windows(
         abs_start_line = _offset_to_abs_line(0, line_offsets, start_char)
         abs_end_line = abs_start_line + raw_text.count("\n")
 
-        trimmed_text, token_count, lead_trim, trail_trim = _trim_and_tokenize(
-            raw_text, tok
-        )
+        trimmed_text, token_count, lead_trim, trail_trim = _trim_and_tokenize(raw_text, tok)
         if not trimmed_text:
             continue
 
@@ -378,9 +365,7 @@ def _extract_edges(root, source: str, edges: list[GraphEdge]):
             name_node = node.child_by_field_name("name")
             func_name = node_text(name_node) if name_node else None
             if current_context:
-                qualified = (
-                    f"{current_context}.{func_name}" if func_name else current_context
-                )
+                qualified = f"{current_context}.{func_name}" if func_name else current_context
             else:
                 qualified: str | None = func_name
 

@@ -41,10 +41,7 @@ class TestTokenUtilities:
 
     def test_window_text_by_tokens_with_overlap(self):
         """Test token windowing with overlap between windows."""
-        text = (
-            "This is a longer text that should be split into multiple windows with overlap."
-            * 5
-        )
+        text = "This is a longer text that should be split into multiple windows with overlap." * 5
         windows = window_text_by_tokens(text, model="small", target=20, overlap=5)
 
         assert len(windows) > 1

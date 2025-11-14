@@ -171,9 +171,7 @@ class OptimizedIngestionPipeline:
                     continue
 
             # Check if file can be skipped entirely (incremental)
-            if inc_indexer and inc_indexer.should_skip_file(
-                candidate.rel_path, content_hash
-            ):
+            if inc_indexer and inc_indexer.should_skip_file(candidate.rel_path, content_hash):
                 files_skipped += 1
                 continue
 
@@ -191,9 +189,7 @@ class OptimizedIngestionPipeline:
 
         # Parse files in parallel
         if self.enable_parallel and parse_jobs:
-            parse_results = parse_files_parallel(
-                parse_jobs, num_workers=self.num_workers
-            )
+            parse_results = parse_files_parallel(parse_jobs, num_workers=self.num_workers)
         else:
             from .parallel_parser import _parse_file_worker
 
@@ -281,11 +277,7 @@ class OptimizedIngestionPipeline:
         # Calculate stats
         throughput = (len(candidates) / total_time) * 60 if total_time > 0 else 0
         baseline_throughput = 500  # files/min (baseline)
-        speedup = (
-            f"{throughput / baseline_throughput:.1f}x"
-            if baseline_throughput > 0
-            else "N/A"
-        )
+        speedup = f"{throughput / baseline_throughput:.1f}x" if baseline_throughput > 0 else "N/A"
 
         stats = IndexingStats(
             total_files=len(candidates),

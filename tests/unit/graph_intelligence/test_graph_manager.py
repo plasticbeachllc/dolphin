@@ -339,12 +339,8 @@ class TestIntegration:
                     with patch.object(manager.validator, "update_cache_state"):
                         with patch("kb.graph_intelligence.graph_manager.Session") as mock_session:
                             mock_session_inst = MagicMock()
-                            mock_session.return_value.__enter__.return_value = (
-                                mock_session_inst
-                            )
-                            mock_session_inst.exec.return_value.first.return_value = (
-                                None
-                            )
+                            mock_session.return_value.__enter__.return_value = mock_session_inst
+                            mock_session_inst.exec.return_value.first.return_value = None
 
                             # Get graph (triggers rebuild)
                             graph = manager.get_graph()

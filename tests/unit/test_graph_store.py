@@ -127,9 +127,7 @@ class TestNodeOperations:
         # Verify updates were applied
         node = graph_store.get_node_by_id(node_id2)
         assert node["end_line"] == 25
-        assert (
-            node["signature"] == "def calculate_total(items: list, tax: float) -> float"
-        )
+        assert node["signature"] == "def calculate_total(items: list, tax: float) -> float"
         assert node["commit_sha"] == "def456"
 
     def test_get_node_by_id_not_found(self, graph_store):
@@ -180,15 +178,11 @@ class TestNodeOperations:
         )
 
         # Find with correct repo
-        node = graph_store.find_node_by_qualified_name(
-            "myapp.helpers.helper", repo_id=repo_id
-        )
+        node = graph_store.find_node_by_qualified_name("myapp.helpers.helper", repo_id=repo_id)
         assert node is not None
 
         # Try with wrong repo
-        node = graph_store.find_node_by_qualified_name(
-            "myapp.helpers.helper", repo_id=9999
-        )
+        node = graph_store.find_node_by_qualified_name("myapp.helpers.helper", repo_id=9999)
         assert node is None
 
     def test_get_nodes_for_file(self, graph_store, sample_repo_and_file):
@@ -469,9 +463,7 @@ class TestCleanupOperations:
         nodes = graph_store.get_nodes_for_file(file_id)
         assert len(nodes) == 0
 
-    def test_delete_nodes_for_file_cascades_edges(
-        self, graph_store, sample_repo_and_file
-    ):
+    def test_delete_nodes_for_file_cascades_edges(self, graph_store, sample_repo_and_file):
         """Test that deleting nodes also deletes associated edges."""
         repo_id, file_id = sample_repo_and_file
 
@@ -842,9 +834,7 @@ class TestSchemaMigration:
         cur = conn.cursor()
 
         # Get the CREATE TABLE statement
-        cur.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='code_edges'"
-        )
+        cur.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='code_edges'")
         schema = cur.fetchone()[0]
 
         # Verify CASCADE DELETE is in the schema for both foreign keys

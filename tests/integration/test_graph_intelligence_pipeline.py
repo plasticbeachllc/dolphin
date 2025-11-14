@@ -384,9 +384,7 @@ class TestEdgeCases:
         # Create initial commit
         readme = empty_repo / "README.md"
         readme.write_text("# Empty Repo")
-        subprocess.run(
-            ["git", "add", "."], cwd=empty_repo, check=True, capture_output=True
-        )
+        subprocess.run(["git", "add", "."], cwd=empty_repo, check=True, capture_output=True)
         subprocess.run(
             ["git", "commit", "-m", "Initial"],
             cwd=empty_repo,

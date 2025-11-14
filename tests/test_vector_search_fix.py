@@ -4,8 +4,9 @@ Simple test to verify vector search is working with populated data.
 """
 
 from pathlib import Path
-from kb.api.search_backend import create_search_backend
+
 from kb.api.app import SearchRequest
+from kb.api.search_backend import create_search_backend
 
 
 def test_vector_search_with_populated_data():
@@ -38,9 +39,7 @@ def test_vector_search_with_populated_data():
 
     # Test backend creation
     try:
-        backend = create_search_backend(
-            store_root=store_root, hybrid_search_enabled=False
-        )
+        backend = create_search_backend(store_root=store_root, hybrid_search_enabled=False)
         print("✅ SearchBackend created successfully")
     except Exception as e:
         print(f"❌ Error creating search backend: {e}")
@@ -68,12 +67,8 @@ def test_hybrid_search_comparison():
 
     try:
         # Create both backends
-        vector_backend = create_search_backend(
-            store_root=store_root, hybrid_search_enabled=False
-        )
-        hybrid_backend = create_search_backend(
-            store_root=store_root, hybrid_search_enabled=True
-        )
+        vector_backend = create_search_backend(store_root=store_root, hybrid_search_enabled=False)
+        hybrid_backend = create_search_backend(store_root=store_root, hybrid_search_enabled=True)
 
         # Test query
         request = SearchRequest(query="authentication", top_k=5)

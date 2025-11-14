@@ -109,10 +109,7 @@ class TestNegativeFiltering:
 
         # Should only include production TypeScript files
         assert len(filtered) == 2
-        assert all(
-            r["path"].endswith(".ts") and not r["path"].endswith(".spec.ts")
-            for r in filtered
-        )
+        assert all(r["path"].endswith(".ts") and not r["path"].endswith(".spec.ts") for r in filtered)
 
     def test_exclude_paths_and_patterns_combined(self):
         """Test using both exclude_paths and exclude_patterns together."""

@@ -72,9 +72,7 @@ class TestRecordPendingChangesEndpoint:
         data = response.json()
         assert data["change_ids"] == []
 
-    def test_record_changes_missing_file_path(
-        self, kb_api_client, registered_test_repo
-    ):
+    def test_record_changes_missing_file_path(self, kb_api_client, registered_test_repo):
         """Test recording change without file_path fails validation."""
         response = kb_api_client.post(
             f"/v1/repos/{registered_test_repo['name']}/changes",
@@ -83,9 +81,7 @@ class TestRecordPendingChangesEndpoint:
 
         assert response.status_code == 422  # Validation error
 
-    def test_record_changes_missing_change_type(
-        self, kb_api_client, registered_test_repo
-    ):
+    def test_record_changes_missing_change_type(self, kb_api_client, registered_test_repo):
         """Test recording change without change_type fails validation."""
         response = kb_api_client.post(
             f"/v1/repos/{registered_test_repo['name']}/changes",
@@ -94,9 +90,7 @@ class TestRecordPendingChangesEndpoint:
 
         assert response.status_code == 422  # Validation error
 
-    def test_record_changes_invalid_change_type(
-        self, kb_api_client, registered_test_repo
-    ):
+    def test_record_changes_invalid_change_type(self, kb_api_client, registered_test_repo):
         """Test recording change with invalid change_type."""
         response = kb_api_client.post(
             f"/v1/repos/{registered_test_repo['name']}/changes",
@@ -120,9 +114,7 @@ class TestGetPendingChangesEndpoint:
         assert "changes" in data
         assert data["changes"] == []
 
-    def test_get_pending_changes_after_recording(
-        self, kb_api_client, registered_test_repo
-    ):
+    def test_get_pending_changes_after_recording(self, kb_api_client, registered_test_repo):
         """Test getting pending changes after recording some."""
         # Record changes first
         kb_api_client.post(
@@ -173,9 +165,7 @@ class TestGetPendingChangesEndpoint:
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
 
-    def test_get_pending_changes_excludes_processed(
-        self, kb_api_client, registered_test_repo
-    ):
+    def test_get_pending_changes_excludes_processed(self, kb_api_client, registered_test_repo):
         """Test that processed changes are excluded."""
         # Record changes
         record_response = kb_api_client.post(
@@ -231,9 +221,7 @@ class TestMarkChangesProcessedEndpoint:
         data = response.json()
         assert data["processed_count"] == 2
 
-    def test_mark_changes_processed_empty_list(
-        self, kb_api_client, registered_test_repo
-    ):
+    def test_mark_changes_processed_empty_list(self, kb_api_client, registered_test_repo):
         """Test marking with empty change_ids list."""
         response = kb_api_client.post(
             f"/v1/repos/{registered_test_repo['name']}/changes/mark-processed",
@@ -244,9 +232,7 @@ class TestMarkChangesProcessedEndpoint:
         data = response.json()
         assert data["processed_count"] == 0
 
-    def test_mark_changes_processed_nonexistent_ids(
-        self, kb_api_client, registered_test_repo
-    ):
+    def test_mark_changes_processed_nonexistent_ids(self, kb_api_client, registered_test_repo):
         """Test marking non-existent change IDs."""
         response = kb_api_client.post(
             f"/v1/repos/{registered_test_repo['name']}/changes/mark-processed",
@@ -268,17 +254,13 @@ class TestMarkChangesProcessedEndpoint:
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
 
-    def test_mark_changes_processed_missing_param(
-        self, kb_api_client, registered_test_repo
-    ):
+    def test_mark_changes_processed_missing_param(self, kb_api_client, registered_test_repo):
         """Test marking without change_ids parameter fails validation."""
         response = kb_api_client.post(f"/v1/repos/{registered_test_repo['name']}/changes/mark-processed", json={})
 
         assert response.status_code == 422  # Validation error
 
-    def test_mark_changes_processed_removes_from_pending(
-        self, kb_api_client, registered_test_repo
-    ):
+    def test_mark_changes_processed_removes_from_pending(self, kb_api_client, registered_test_repo):
         """Test that marked changes are removed from pending list."""
         # Record changes
         record_response = kb_api_client.post(
@@ -311,9 +293,7 @@ class TestDetectDriftEndpoint:
         # May have events or be empty depending on repo state
         assert isinstance(data["drift_events"], list)
 
-    def test_detect_drift_with_modified_file(
-        self, kb_api_client, registered_test_repo, mock_kb_stores
-    ):
+    def test_detect_drift_with_modified_file(self, kb_api_client, registered_test_repo, mock_kb_stores):
         """Test drift detection for modified file."""
         sql_store, _ = mock_kb_stores
         workspace = registered_test_repo["workspace"]
@@ -355,9 +335,7 @@ class TestDetectDriftEndpoint:
 
         # Should detect the modification
         if len(data["drift_events"]) > 0:
-            modified_events = [
-                e for e in data["drift_events"] if e["drift_type"] == "modified"
-            ]
+            modified_events = [e for e in data["drift_events"] if e["drift_type"] == "modified"]
             assert any(e["path"] == "test.py" for e in modified_events)
 
     def test_detect_drift_nonexistent_repo(self, kb_api_client):
@@ -447,9 +425,7 @@ class TestFileSyncEndpointIntegration:
         pending = kb_api_client.get(f"/v1/repos/{repo_name}/pending-changes")
         assert len(pending.json()["changes"]) == 3
 
-    def test_drift_detection_after_indexing(
-        self, kb_api_client, registered_test_repo, mock_kb_stores
-    ):
+    def test_drift_detection_after_indexing(self, kb_api_client, registered_test_repo, mock_kb_stores):
         """Test drift detection workflow after simulated indexing."""
         sql_store, _ = mock_kb_stores
         workspace = registered_test_repo["workspace"]

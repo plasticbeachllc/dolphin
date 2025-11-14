@@ -29,9 +29,7 @@ class ErrorLogger:
         # Generate log filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         session_suffix = f"_session_{session_id}" if session_id else ""
-        self.log_file = (
-            self.log_dir / f"indexing_errors_{timestamp}{session_suffix}.log"
-        )
+        self.log_file = self.log_dir / f"indexing_errors_{timestamp}{session_suffix}.log"
 
         # Lazy logger/file creation
         self._logger_name = f"pb_kb_ingest_{self.session_id or 'unknown'}"

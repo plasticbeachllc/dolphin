@@ -24,7 +24,6 @@ from ..store.sqlite_meta import SQLiteMetadataStore
 from .app import SearchRequest
 
 
-
 class KnowledgeSearchBackend:
     def __init__(
         self,
@@ -203,9 +202,7 @@ class KnowledgeSearchBackend:
         # UNCOMMENTED AND CORRECTED RERANKING LOGIC
         if self.reranker and hits:
             docs_to_rerank = self._hydrate_docs_for_reranking(hits, self.sql_store)
-            reranked_docs = self.reranker.rerank(
-                request.query, docs_to_rerank, top_k=request.top_k
-            )
+            reranked_docs = self.reranker.rerank(request.query, docs_to_rerank, top_k=request.top_k)
             # The reranked_docs now have the final score. We need to merge them back
             # while preserving the order and original hits.
             reranked_ids = {doc["chunk_id"] for doc in reranked_docs}
@@ -221,12 +218,8 @@ class KnowledgeSearchBackend:
             cfg_mmr_enabled = False
             cfg_mmr_lambda = RETRIEVAL_PARAMS.MMR_LAMBDA_DEFAULT
 
-        mmr_enabled = (
-            request.mmr_enabled if request.mmr_enabled is not None else cfg_mmr_enabled
-        )
-        mmr_lambda = (
-            request.mmr_lambda if request.mmr_lambda is not None else cfg_mmr_lambda
-        )
+        mmr_enabled = request.mmr_enabled if request.mmr_enabled is not None else cfg_mmr_enabled
+        mmr_lambda = request.mmr_lambda if request.mmr_lambda is not None else cfg_mmr_lambda
 
         if mmr_enabled and hits:
             try:
@@ -291,9 +284,7 @@ class KnowledgeSearchBackend:
             if chunk_ids_needing_content:
                 try:
                     # Use helper to hydrate content
-                    hydrated_content = self._hydrate_chunk_content(
-                        chunk_ids_needing_content, self.sql_store
-                    )
+                    hydrated_content = self._hydrate_chunk_content(chunk_ids_needing_content, self.sql_store)
 
                     # Apply hydrated content to results
                     for result in final_results:
@@ -433,9 +424,7 @@ class KnowledgeSearchBackend:
                 assert request.exclude_patterns is not None
                 for pattern in request.exclude_patterns:
                     # Match against both full path and basename
-                    if fnmatch.fnmatch(str(path), pattern) or fnmatch.fnmatch(
-                        path.name, pattern
-                    ):
+                    if fnmatch.fnmatch(str(path), pattern) or fnmatch.fnmatch(path.name, pattern):
                         return True
                 return False
 

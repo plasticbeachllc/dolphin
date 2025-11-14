@@ -470,9 +470,7 @@ def main():
 
     # Overall status
     print("\n" + "=" * 80)
-    overall_passed = (
-        overall_summary.get("mrr", 0) >= 0.85 and overall_summary.get("p@5", 0) >= 0.80
-    )
+    overall_passed = overall_summary.get("mrr", 0) >= 0.85 and overall_summary.get("p@5", 0) >= 0.80
     if overall_passed:
         print("Status: PASS ✓")
     else:

@@ -195,9 +195,7 @@ def goodbye():
 
         # Verify completion
         assert final_status is not None, "Indexing did not complete within 30 seconds"
-        assert final_status["status"] == "completed", (
-            f"Indexing failed: {final_status.get('error')}"
-        )
+        assert final_status["status"] == "completed", f"Indexing failed: {final_status.get('error')}"
         assert final_status["total"] == 1
 
         # Verify chunks were created
@@ -229,9 +227,7 @@ def goodbye():
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(
-            name="test-repo", path=workspace, default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = sql_store.get_repo_by_name("test-repo")
 
         # Create multiple test files
@@ -304,9 +300,7 @@ def function_{i}():
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(
-            name="test-repo", path=workspace, default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = sql_store.get_repo_by_name("test-repo")
 
         # Create test file

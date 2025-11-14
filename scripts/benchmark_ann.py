@@ -210,9 +210,7 @@ def main():
     print("\n" + "=" * 80)
     print("COMPARISON TABLE")
     print("=" * 80)
-    print(
-        f"{'Config':<20} {'p50 (ms)':<12} {'p95 (ms)':<12} {'Recall':<10} {'Speedup':<10}"
-    )
+    print(f"{'Config':<20} {'p50 (ms)':<12} {'p95 (ms)':<12} {'Recall':<10} {'Speedup':<10}")
     print("-" * 80)
 
     for name, benchmark in results["benchmarks"].items():

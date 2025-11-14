@@ -15,13 +15,14 @@ Estimated cost: <$0.01 USD per run.
 """
 
 from __future__ import annotations
+
 import os
+import socket
+import subprocess
 import sys
 import tempfile
-import subprocess
-from pathlib import Path
 import time
-import socket
+from pathlib import Path
 
 # Color codes for terminal output
 GREEN = "\033[92m"
@@ -63,13 +64,9 @@ def check_prerequisites() -> bool:
 
     # Check Python version
     if sys.version_info < (3, 12):
-        log_error(
-            f"Python 3.12+ required (found {sys.version_info.major}.{sys.version_info.minor})"
-        )
+        log_error(f"Python 3.12+ required (found {sys.version_info.major}.{sys.version_info.minor})")
         return False
-    log_success(
-        f"Python version OK ({sys.version_info.major}.{sys.version_info.minor})"
-    )
+    log_success(f"Python version OK ({sys.version_info.major}.{sys.version_info.minor})")
 
     return True
 
@@ -175,15 +172,9 @@ export class StringUtils {
 
     # Initialize git repo (required by Dolphin)
     subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True
-    )
-    subprocess.run(
-        ["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True
-    )
-    subprocess.run(
-        ["git", "config", "commit.gpgsign", "false"], cwd=repo_dir, check=True
-    )
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=repo_dir, check=True)
     subprocess.run(["git", "add", "."], cwd=repo_dir, check=True)
     subprocess.run(
         ["git", "commit", "-m", "Initial commit"],
@@ -196,14 +187,10 @@ export class StringUtils {
     return repo_dir
 
 
-def run_command(
-    cmd: list[str], cwd: Path | None = None, env: dict | None = None
-) -> tuple[bool, str, str]:
+def run_command(cmd: list[str], cwd: Path | None = None, env: dict | None = None) -> tuple[bool, str, str]:
     """Run a command and return success status, stdout, stderr."""
     try:
-        result = subprocess.run(
-            cmd, cwd=cwd, capture_output=True, text=True, check=False, env=env
-        )
+        result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False, env=env)
         return result.returncode == 0, result.stdout, result.stderr
     except Exception as e:
         return False, "", str(e)
@@ -310,9 +297,7 @@ def _run_search_and_api_test(store_root: Path, port: int) -> tuple[bool, bool]:
         config_content = config_path.read_text()
         original_config = config_content
         # Replace endpoint port
-        config_content = config_content.replace(
-            'endpoint = "127.0.0.1:7777"', f'endpoint = "127.0.0.1:{port}"'
-        )
+        config_content = config_content.replace('endpoint = "127.0.0.1:7777"', f'endpoint = "127.0.0.1:{port}"')
         config_path.write_text(config_content)
 
     try:
@@ -378,9 +363,7 @@ def _run_search_and_api_test(store_root: Path, port: int) -> tuple[bool, bool]:
 
         # Test health endpoint
         log_step("  Testing /health endpoint...")
-        success, stdout, stderr = run_command(
-            ["curl", "-s", f"http://127.0.0.1:{port}/health"]
-        )
+        success, stdout, stderr = run_command(["curl", "-s", f"http://127.0.0.1:{port}/health"])
 
         if success and "ok" in stdout.lower():
             log_success("  Health endpoint OK")
@@ -390,9 +373,7 @@ def _run_search_and_api_test(store_root: Path, port: int) -> tuple[bool, bool]:
 
         # Test repos endpoint
         log_step("  Testing /repos endpoint...")
-        success, stdout, stderr = run_command(
-            ["curl", "-s", f"http://127.0.0.1:{port}/repos"]
-        )
+        success, stdout, stderr = run_command(["curl", "-s", f"http://127.0.0.1:{port}/repos"])
 
         if success and "test_repo" in stdout:
             log_success("  Repos endpoint OK")
@@ -423,8 +404,8 @@ def _run_reranking_test(store_root: Path) -> bool:
 
     # Check if reranking dependencies are available
     try:
-        import torch
         import sentence_transformers
+        import torch
 
         log_step("  ✓ Reranking dependencies found (torch + sentence-transformers)")
     except ImportError:
@@ -538,9 +519,7 @@ def cleanup_test_repo(temp_store_root: Path) -> None:
             # temporary store root to keep cleanup best-effort.
             config_store_root = temp_store_root
         except Exception as config_error:
-            log_warning(
-                f"Cleanup warning: could not load config ({config_error}); using temp store root"
-            )
+            log_warning(f"Cleanup warning: could not load config ({config_error}); using temp store root")
             config_store_root = temp_store_root
 
         store_root = config_store_root
@@ -624,9 +603,7 @@ def main():
             print(f"\n{BLUE}{'─' * 70}{RESET}")
             log_step("Test 2: Repository Indexing")
             print(f"{BLUE}{'─' * 70}{RESET}")
-            test_results["indexing"] = _run_repository_indexing_test(
-                repo_path, store_root
-            )
+            test_results["indexing"] = _run_repository_indexing_test(repo_path, store_root)
             if test_results["indexing"]:
                 log_success("Indexing test PASSED")
             else:
@@ -663,8 +640,9 @@ def main():
 
             # Check database before stopping server
             log_step("\n  Verifying indexed data in database...")
-            from kb.store import SQLiteMetadataStore
             import os
+
+            from kb.store import SQLiteMetadataStore
 
             # Temporarily set env var for this check
             old_env = os.environ.get("DOLPHIN_STORE_ROOT")
@@ -745,9 +723,7 @@ def main():
             print(f"{BLUE}{'=' * 70}{RESET}\n")
 
             for test_name, passed in test_results.items():
-                status = (
-                    f"{GREEN}✓ PASSED{RESET}" if passed else f"{RED}✗ FAILED{RESET}"
-                )
+                status = f"{GREEN}✓ PASSED{RESET}" if passed else f"{RED}✗ FAILED{RESET}"
                 print(f"  {test_name.capitalize():20s} {status}")
 
             tests_passed = sum(test_results.values())

@@ -153,9 +153,7 @@ class ImportGraphExtractor:
                 import_path = node.text.decode("utf8").strip("\"'")
 
                 # Try to resolve to a file in the repo
-                target_file = self._resolve_typescript_import(
-                    import_path, source_file, all_files
-                )
+                target_file = self._resolve_typescript_import(import_path, source_file, all_files)
 
                 if target_file:
                     # Create target module node

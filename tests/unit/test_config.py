@@ -134,10 +134,7 @@ class TestKBConfig:
         }
         config = KBConfig.from_mapping(data)
         assert isinstance(config.concurrency, int) and config.concurrency == 7
-        assert (
-            isinstance(config.retrieval.score_cutoff, float)
-            and config.retrieval.score_cutoff == 0.5
-        )
+        assert isinstance(config.retrieval.score_cutoff, float) and config.retrieval.score_cutoff == 0.5
         assert isinstance(config.retrieval.top_k, int) and config.retrieval.top_k == 12
 
     def test_config_ignore_exceptions_field(self):

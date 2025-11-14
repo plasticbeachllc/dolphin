@@ -115,9 +115,7 @@ class TestOpenAIEmbeddingProvider:
             ]
             mock_openai_class.return_value = mock_client
 
-            provider = OpenAIEmbeddingProvider(
-                api_key="test-key", batch_size=100, validate_key=False
-            )
+            provider = OpenAIEmbeddingProvider(api_key="test-key", batch_size=100, validate_key=False)
             result = provider.embed_texts("small", texts)
 
             assert len(result) == 250

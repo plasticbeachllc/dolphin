@@ -225,9 +225,7 @@ class TestIndexCommand:
 
     def test_index_flags_combination(self, tmp_path):
         """Test index with multiple flags combined."""
-        result = runner.invoke(
-            app, ["index", "test-repo", "--dry-run", "--force", "--full"]
-        )
+        result = runner.invoke(app, ["index", "test-repo", "--dry-run", "--force", "--full"])
         # Should accept all flags
         assert result.exit_code in [0, 1, 2]  # Various failure modes are ok
 
@@ -362,9 +360,7 @@ class TestBuildPipeline:
             pipeline = _build_pipeline(config)
 
             assert pipeline is not None
-            mock_create.assert_called_once_with(
-                "openai", api_key="test-key-12345", batch_size=100
-            )
+            mock_create.assert_called_once_with("openai", api_key="test-key-12345", batch_size=100)
 
 
 class TestConfigTemplate:

@@ -14,9 +14,7 @@ from kb.store.sqlite_meta import SQLiteMetadataStore
 def hybrid_backend():
     with tempfile.TemporaryDirectory() as temp_dir:
         store_root = Path(temp_dir)
-        backend = create_search_backend(
-            store_root=store_root, hybrid_search_enabled=True
-        )
+        backend = create_search_backend(store_root=store_root, hybrid_search_enabled=True)
         yield backend
 
 
@@ -24,9 +22,7 @@ def hybrid_backend():
 def hybrid_backend_disabled():
     with tempfile.TemporaryDirectory() as temp_dir:
         store_root = Path(temp_dir)
-        backend = create_search_backend(
-            store_root=store_root, hybrid_search_enabled=False
-        )
+        backend = create_search_backend(store_root=store_root, hybrid_search_enabled=False)
         yield backend
 
 

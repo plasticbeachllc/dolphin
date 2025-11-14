@@ -276,9 +276,7 @@ class TestRegisterRepoEndpoint:
 class TestIndexEndpoint:
     """Test POST /v1/index endpoint for queueing file indexing."""
 
-    def test_index_files_success(
-        self, kb_api_client, registered_test_repo, mock_pipeline
-    ):
+    def test_index_files_success(self, kb_api_client, registered_test_repo, mock_pipeline):
         """Test successfully queueing files for indexing."""
         from kb.api.app import set_pipeline
 
@@ -332,9 +330,7 @@ class TestIndexEndpoint:
 
         assert response.status_code == 422  # Validation error
 
-    def test_index_files_incremental_flag(
-        self, kb_api_client, registered_test_repo, mock_pipeline
-    ):
+    def test_index_files_incremental_flag(self, kb_api_client, registered_test_repo, mock_pipeline):
         """Test incremental flag is passed correctly."""
         from kb.api.app import set_pipeline
 
@@ -358,9 +354,7 @@ class TestIndexEndpoint:
 class TestIndexStatusEndpoint:
     """Test GET /v1/index/status/{task_id} endpoint."""
 
-    def test_get_task_status_queued(
-        self, kb_api_client, registered_test_repo, mock_pipeline
-    ):
+    def test_get_task_status_queued(self, kb_api_client, registered_test_repo, mock_pipeline):
         """Test getting status of queued task."""
         from kb.api.app import set_pipeline
 
@@ -389,9 +383,7 @@ class TestIndexStatusEndpoint:
 
         assert response.status_code == 404
 
-    def test_get_task_status_structure(
-        self, kb_api_client, registered_test_repo, mock_pipeline
-    ):
+    def test_get_task_status_structure(self, kb_api_client, registered_test_repo, mock_pipeline):
         """Test status response structure."""
         from kb.api.app import set_pipeline
 
@@ -433,9 +425,7 @@ class TestIndexTasksEndpoint:
         assert "tasks" in data
         assert isinstance(data["tasks"], list)
 
-    def test_list_tasks_with_tasks(
-        self, kb_api_client, registered_test_repo, mock_pipeline
-    ):
+    def test_list_tasks_with_tasks(self, kb_api_client, registered_test_repo, mock_pipeline):
         """Test listing tasks."""
         from kb.api.app import set_pipeline
 
@@ -453,9 +443,7 @@ class TestIndexTasksEndpoint:
         assert "tasks" in data
         assert len(data["tasks"]) >= 2
 
-    def test_list_tasks_filtered_by_repo(
-        self, kb_api_client, mock_kb_stores, mock_pipeline, temp_dir
-    ):
+    def test_list_tasks_filtered_by_repo(self, kb_api_client, mock_kb_stores, mock_pipeline, temp_dir):
         """Test listing tasks filtered by repository."""
         from kb.api.app import set_pipeline
 
@@ -469,12 +457,8 @@ class TestIndexTasksEndpoint:
         workspace2 = temp_dir / "workspace2"
         workspace2.mkdir()
 
-        sql_store.record_repo(
-            name="repo1", path=workspace1, default_embed_model="large"
-        )
-        sql_store.record_repo(
-            name="repo2", path=workspace2, default_embed_model="large"
-        )
+        sql_store.record_repo(name="repo1", path=workspace1, default_embed_model="large")
+        sql_store.record_repo(name="repo2", path=workspace2, default_embed_model="large")
 
         # Queue tasks for each repo
         kb_api_client.post("/v1/index", json={"repo": "repo1", "files": ["a.py"]})
@@ -491,9 +475,7 @@ class TestIndexTasksEndpoint:
         for task in data["tasks"]:
             assert task["repo"] == "repo1"
 
-    def test_list_tasks_response_structure(
-        self, kb_api_client, registered_test_repo, mock_pipeline
-    ):
+    def test_list_tasks_response_structure(self, kb_api_client, registered_test_repo, mock_pipeline):
         """Test task list response structure."""
         from kb.api.app import set_pipeline
 

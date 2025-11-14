@@ -10,9 +10,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # Test the current SQL chunker on a real file
-sql_file = Path(
-    "/Users/tdc/worktable/lighthouse/apps/web/drizzle/0000_legal_doctor_strange.sql"
-)
+sql_file = Path("/Users/tdc/worktable/lighthouse/apps/web/drizzle/0000_legal_doctor_strange.sql")
 
 print("=" * 80)
 

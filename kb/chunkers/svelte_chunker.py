@@ -340,9 +340,7 @@ def extract_graph_data(source: str, component_name: str) -> tuple[list[GraphNode
         script_content = script_data["content"]
 
         # 1. Extract imports
-        import_pattern = (
-            r'import\s+(?:{[^}]+}|\*\s+as\s+\w+|\w+)\s+from\s+["\']([^"\']+)["\']'
-        )
+        import_pattern = r'import\s+(?:{[^}]+}|\*\s+as\s+\w+|\w+)\s+from\s+["\']([^"\']+)["\']'
         imports = re.findall(import_pattern, script_content)
         for imp in imports:
             # Extract component name from path

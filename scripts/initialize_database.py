@@ -5,6 +5,7 @@ Run this script to create all necessary tables including FTS5 for hybrid search.
 """
 
 from pathlib import Path
+
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
@@ -31,9 +32,7 @@ def main():
         print("\nVerifying tables...")
         with sql_store._connect() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-            )
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
             tables = [row[0] for row in cursor.fetchall()]
 
         print(f"✅ Created {len(tables)} tables: {tables}")
@@ -46,9 +45,7 @@ def main():
 
         print("\n🎉 Database initialization complete!")
         print("\nNext steps:")
-        print(
-            "1. Index a repository: uv run python -m kb.cli index --repo my-repo /path/to/repo"
-        )
+        print("1. Index a repository: uv run python -m kb.cli index --repo my-repo /path/to/repo")
         print("2. Test hybrid search: uv run tests/test_hybrid_search_performance.py")
 
     except Exception as e:

@@ -63,9 +63,7 @@ class RepoChunkingConfig:
 
     repo_path: Path
     default_window_size: int = DEFAULT_WINDOW_SIZE
-    per_language: dict[str, int] = field(
-        default_factory=lambda: DEFAULT_PER_LANGUAGE.copy()
-    )
+    per_language: dict[str, int] = field(default_factory=lambda: DEFAULT_PER_LANGUAGE.copy())
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
     tokenizer_encoding: str = DEFAULT_TOKENIZER_ENCODING
     overlap_pct: float = DEFAULT_OVERLAP_PCT

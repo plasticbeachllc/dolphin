@@ -32,11 +32,7 @@ class TestTypeScriptChunker:
         assert isinstance(chunks, list)
 
         # Require Tree-sitter symbols; fallback (symbol_kind=None) must not occur
-        kinds = {
-            (c.symbol_kind, c.symbol_name, c.symbol_path)
-            for c in chunks
-            if c.symbol_kind
-        }
+        kinds = {(c.symbol_kind, c.symbol_name, c.symbol_path) for c in chunks if c.symbol_kind}
         if kinds:
             # at least one method and one function must be present
             assert any(k[0] == "method" for k in kinds), "Expected at least one method symbol"
@@ -46,12 +42,8 @@ class TestTypeScriptChunker:
         # Note: canonicalize_text may change line count, so use original source
         total_lines = len(src.splitlines())
         for c in chunks:
-            assert 1 <= c.start_line <= total_lines, (
-                f"start_line {c.start_line} out of range 1-{total_lines}"
-            )
-            assert 1 <= c.end_line <= total_lines, (
-                f"end_line {c.end_line} out of range 1-{total_lines}"
-            )
+            assert 1 <= c.start_line <= total_lines, f"start_line {c.start_line} out of range 1-{total_lines}"
+            assert 1 <= c.end_line <= total_lines, f"end_line {c.end_line} out of range 1-{total_lines}"
 
     def test_react_component_chunking(self):
         """Test React component extraction."""
@@ -81,9 +73,7 @@ class TestTypeScriptChunker:
 
         if component_chunks:  # If Tree-sitter is available
             # Should find both functional and class components
-            function_components = [
-                c for c in component_chunks if c.symbol_kind == "function"
-            ]
+            function_components = [c for c in component_chunks if c.symbol_kind == "function"]
             class_components = [c for c in component_chunks if c.symbol_kind == "class"]
 
             assert len(function_components) >= 1

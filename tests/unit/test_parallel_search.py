@@ -150,9 +150,7 @@ class TestParallelHybridSearch:
         assert embedding_provider.embed_query.called
 
     @pytest.mark.asyncio
-    async def test_search_async_with_existing_embedding(
-        self, search_engine, mock_stores
-    ):
+    async def test_search_async_with_existing_embedding(self, search_engine, mock_stores):
         """Test search with pre-computed embedding."""
         vector_store, bm25_store, _ = mock_stores
 

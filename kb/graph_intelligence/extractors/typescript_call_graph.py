@@ -303,9 +303,7 @@ class TypeScriptCallGraphExtractor:
 
         # Check if async
         is_async = self._is_async(arrow_func_node)
-        signature = (
-            f"const {func_name} = {'async ' if is_async else ''}{params_text} => ..."
-        )
+        signature = f"const {func_name} = {'async ' if is_async else ''}{params_text} => ..."
 
         # Extract docstring/comment
         docstring = self._extract_comment(node.parent) if node.parent else None

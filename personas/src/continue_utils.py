@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 try:
     import yaml
 except ModuleNotFoundError as exc:  # pragma: no cover - should be in deps
-    raise RuntimeError(
-        "PyYAML is required. Install with `uv pip install pyyaml`."
-    ) from exc
+    raise RuntimeError("PyYAML is required. Install with `uv pip install pyyaml`.") from exc
 
 from .persona_utils import Persona, write_json
 
@@ -18,7 +16,7 @@ class ContinueError(Exception):
     """Raised when Continue configuration generation fails."""
 
 
-def build_continue_entry(persona: Persona, system_message: str) -> Dict[str, Any]:
+def build_continue_entry(persona: Persona, system_message: str) -> dict[str, Any]:
     """Build a Continue model entry from a persona."""
     roles = persona.raw.get("continue", {}).get("roles")
     if not roles:
@@ -26,7 +24,7 @@ def build_continue_entry(persona: Persona, system_message: str) -> Dict[str, Any
     elif isinstance(roles, str):
         roles = [roles]
 
-    entry: Dict[str, Any] = {
+    entry: dict[str, Any] = {
         "name": persona.name,
         "title": persona.name,
         "provider": persona.provider_kind,
@@ -44,7 +42,7 @@ def build_continue_entry(persona: Persona, system_message: str) -> Dict[str, Any
         "presence_penalty": "presencePenalty",
         "frequency_penalty": "frequencyPenalty",
     }
-    default_completion: Dict[str, Any] = {}
+    default_completion: dict[str, Any] = {}
 
     for key, value in persona.params.items():
         if value is None:
@@ -79,12 +77,12 @@ def build_continue_entry(persona: Persona, system_message: str) -> Dict[str, Any
 
 
 def write_continue_config(
-    personas: List[Persona],
-    compiled_messages: Dict[str, str],
+    personas: list[Persona],
+    compiled_messages: dict[str, str],
     target_dir: Path,
     manifest_file: Path = None,
     dry_run: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Write Continue configuration files to private directory.
 
     Args:
@@ -124,9 +122,7 @@ def write_continue_config(
 
     # Add default autocomplete model if not present
     has_qwen_autocomplete = any(
-        ("autocomplete" in (entry.get("roles") or []))
-        or entry.get("model") == "qwen2.5-coder:1.5b"
-        for entry in models
+        ("autocomplete" in (entry.get("roles") or [])) or entry.get("model") == "qwen2.5-coder:1.5b" for entry in models
     )
 
     if not has_qwen_autocomplete:
@@ -160,9 +156,7 @@ def write_continue_config(
         base_dir.mkdir(parents=True, exist_ok=True)
         if output_file.exists():
             output_file.unlink()
-        output_file.write_text(
-            yaml.safe_dump(config_payload, sort_keys=False), encoding="utf-8"
-        )
+        output_file.write_text(yaml.safe_dump(config_payload, sort_keys=False), encoding="utf-8")
 
         if manifest_file:
             write_json(manifest_file, manifest_entries, dry_run=dry_run)
@@ -175,7 +169,7 @@ def write_continue_config(
         }
 
 
-def validate_continue_config(config_path: Path) -> List[str]:
+def validate_continue_config(config_path: Path) -> list[str]:
     """Validate a Continue configuration file and return any issues."""
 
     issues = []
@@ -185,7 +179,7 @@ def validate_continue_config(config_path: Path) -> List[str]:
         return issues
 
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
     except yaml.YAMLError as e:
         issues.append(f"Invalid YAML in {config_path}: {e}")
@@ -216,8 +210,6 @@ def validate_continue_config(config_path: Path) -> List[str]:
         required_fields = ["name", "provider", "model"]
         for field in required_fields:
             if field not in model:
-                issues.append(
-                    f"Model {i} missing required field '{field}' in {config_path}"
-                )
+                issues.append(f"Model {i} missing required field '{field}' in {config_path}")
 
     return issues

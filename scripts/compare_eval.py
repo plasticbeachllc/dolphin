@@ -129,12 +129,8 @@ def print_comparison(comparison: dict):
     # Metrics comparison
     print("\nOverall metrics:")
     for metric, data in comparison["metrics"].items():
-        arrow = (
-            "📈" if data["pct_change"] > 0 else "📉" if data["pct_change"] < 0 else "➡️"
-        )
-        status_icon = (
-            "❌" if data["regression"] else "✅" if data["improvement"] else "➡️"
-        )
+        arrow = "📈" if data["pct_change"] > 0 else "📉" if data["pct_change"] < 0 else "➡️"
+        status_icon = "❌" if data["regression"] else "✅" if data["improvement"] else "➡️"
 
         print(
             f"  {metric.upper()}: {data['baseline']:.3f} → {data['current']:.3f} "

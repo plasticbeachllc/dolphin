@@ -276,9 +276,7 @@ class LanceDBStore:
         path_expr = repr(path)
         if keep_ids:
             id_list = ", ".join(repr(_id) for _id in sorted(keep_ids))
-            filter_expr = (
-                f"repo = {repo_expr} AND path = {path_expr} AND id NOT IN ({id_list})"
-            )
+            filter_expr = f"repo = {repo_expr} AND path = {path_expr} AND id NOT IN ({id_list})"
         else:
             filter_expr = f"repo = {repo_expr} AND path = {path_expr}"
 
@@ -434,9 +432,7 @@ class LanceDBStore:
             # Handle empty table or other search errors
             return []
 
-    def get_chunk_by_id(
-        self, chunk_id: str, model: str = "small"
-    ) -> dict[str, Any] | None:
+    def get_chunk_by_id(self, chunk_id: str, model: str = "small") -> dict[str, Any] | None:
         """Retrieve a chunk by its ID from the vector store.
 
         Args:

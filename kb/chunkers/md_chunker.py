@@ -184,11 +184,7 @@ def _scan_sections(lines: Sequence[str], *, initial_h1: str | None = None) -> It
     while i < len(tokens):
         tok = tokens[i]
         if tok.type == "heading_open" and tok.map:
-            level = (
-                int(tok.tag[1])
-                if tok.tag.startswith("h") and tok.tag[1:].isdigit()
-                else 0
-            )
+            level = int(tok.tag[1]) if tok.tag.startswith("h") and tok.tag[1:].isdigit() else 0
             title = ""
             if i + 1 < len(tokens) and tokens[i + 1].type == "inline":
                 title = tokens[i + 1].content.strip()

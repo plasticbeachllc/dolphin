@@ -51,9 +51,7 @@ class TestSQLiteMetadataStore:
         store.bump_session_counters(session_id, files_indexed=5, chunks_indexed=2)
 
         # Verify counter updates
-        def _query_one(
-            db_path: Path, sql: str, params: tuple[Any, ...] = ()
-        ) -> tuple | None:
+        def _query_one(db_path: Path, sql: str, params: tuple[Any, ...] = ()) -> tuple | None:
             con = sqlite3.connect(db_path)
             cur = con.cursor()
             cur.execute(sql, params)
@@ -159,10 +157,7 @@ class TestSQLiteMetadataStore:
         )
 
         # Test chunk content hashing APIs start empty
-        assert (
-            store.get_existing_content_hashes_for_file(repo_id, file_id, "small")
-            == set()
-        )
+        assert store.get_existing_content_hashes_for_file(repo_id, file_id, "small") == set()
 
         # Test content upsert
         hash_a = "a" * 64
@@ -172,9 +167,7 @@ class TestSQLiteMetadataStore:
         # Re-upsert should return same id and just bump last_indexed_at
         cid_a2 = store.upsert_chunk_content_row(repo_id, file_id, hash_a, "small")
         assert cid_a1 == cid_a2
-        assert store.get_existing_content_hashes_for_file(
-            repo_id, file_id, "small"
-        ) == {hash_a}
+        assert store.get_existing_content_hashes_for_file(repo_id, file_id, "small") == {hash_a}
 
     def test_location_synchronization(self, temp_db_path):
         """Test chunk location tracking and synchronization."""
@@ -274,13 +267,9 @@ class TestSQLiteMetadataStore:
         assert cid_b != cid_a
 
         # Prune should remove content not in current hashes
-        pruned = store.prune_invalidated_content_for_file(
-            repo_id, file_id, "small", {hash_a}
-        )
+        pruned = store.prune_invalidated_content_for_file(repo_id, file_id, "small", {hash_a})
         assert pruned == 1
-        hashes_after_prune = store.get_existing_content_hashes_for_file(
-            repo_id, file_id, "small"
-        )
+        hashes_after_prune = store.get_existing_content_hashes_for_file(repo_id, file_id, "small")
         assert hashes_after_prune == {hash_a}
 
     def test_sync_file_state_end_to_end(self, temp_db_path):

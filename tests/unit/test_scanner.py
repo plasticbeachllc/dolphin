@@ -83,9 +83,7 @@ class TestScannerBasic:
 
         # Add and commit only the tracked file
         subprocess.run(["git", "-C", str(repo_path), "add", "src/ok.py"], check=True)
-        subprocess.run(
-            ["git", "-C", str(repo_path), "commit", "-m", "add ok"], check=True
-        )
+        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "add ok"], check=True)
 
         ignores = build_ignore_set()
         results = scan_repo(repo_path, ignores)
@@ -108,9 +106,7 @@ class TestScannerBasic:
         # Add file to submodule and commit
         (sub_root / "sub.txt").write_text("hi\n")
         subprocess.run(["git", "-C", str(sub_root), "add", "sub.txt"], check=True)
-        subprocess.run(
-            ["git", "-C", str(sub_root), "commit", "-m", "sub init"], check=True
-        )
+        subprocess.run(["git", "-C", str(sub_root), "commit", "-m", "sub init"], check=True)
 
         # Add submodule to super repo
         subprocess.run(
@@ -179,9 +175,7 @@ class TestIgnorePatterns:
 
         # Add and commit
         subprocess.run(["git", "-C", str(repo_path), "add", "-A"], check=True)
-        subprocess.run(
-            ["git", "-C", str(repo_path), "commit", "-m", "add files"], check=True
-        )
+        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "add files"], check=True)
 
         ignores = build_ignore_set()
         results = scan_repo(repo_path, ignores)

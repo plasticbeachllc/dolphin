@@ -9,9 +9,9 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from kb.store.sqlite_meta import SQLiteMetadataStore
-from kb.api.search_backend import create_search_backend
 from kb.api.app import SearchRequest
+from kb.api.search_backend import create_search_backend
+from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
 def test_five_component_verification():
@@ -31,9 +31,7 @@ def test_five_component_verification():
         # Verify FTS5 table exists
         with sql_store._connect() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
-            )
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
             result = cursor.fetchone()
             assert result is not None, "FTS5 table should exist"
             print("   ✅ FTS5 virtual table created successfully")
@@ -88,17 +86,11 @@ def test_five_component_verification():
         print("\n3. Testing SearchBackend Integration...")
 
         # Test backend creation with hybrid search enabled
-        backend = create_search_backend(
-            store_root=store_root, hybrid_search_enabled=True
-        )
-        assert backend.hybrid_search_enabled, (
-            "Backend should have hybrid search enabled"
-        )
+        backend = create_search_backend(store_root=store_root, hybrid_search_enabled=True)
+        assert backend.hybrid_search_enabled, "Backend should have hybrid search enabled"
         assert hasattr(backend, "lance_store"), "Backend should have lance store"
         assert hasattr(backend, "sql_store"), "Backend should have sql store"
-        assert hasattr(backend.sql_store, "bm25_search"), (
-            "SQL store should have bm25_search"
-        )
+        assert hasattr(backend.sql_store, "bm25_search"), "SQL store should have bm25_search"
         print("   ✅ SearchBackend integration working correctly")
 
         # 4. Test RRF Fusion
@@ -118,9 +110,7 @@ def test_five_component_verification():
 
         fused = reciprocal_rank_fusion([vector_results, bm25_results], k=60)
         assert len(fused) >= 2, "Should have fused results"
-        assert "B" in [r["chunk_id"] for r in fused], (
-            "Should include items from both searches"
-        )
+        assert "B" in [r["chunk_id"] for r in fused], "Should include items from both searches"
         print("   ✅ RRF fusion working correctly")
 
         # 5. Test End-to-End with Mocks
@@ -134,9 +124,7 @@ def test_five_component_verification():
         # Test search with mocked vector results
         request = SearchRequest(query="authentication", top_k=5)
 
-        with patch.object(
-            backend.lance_store, "query", return_value=mock_vector_results
-        ):
+        with patch.object(backend.lance_store, "query", return_value=mock_vector_results):
             results = backend.search(request)
 
         assert isinstance(results, list), "Should return a list of results"

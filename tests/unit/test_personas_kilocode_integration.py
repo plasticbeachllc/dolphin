@@ -4,20 +4,21 @@ Tests the integration between personas system and KiloCode Custom Modes,
 including provider mapping, configuration generation, and validation.
 """
 
-import tempfile
 import json
+import tempfile
+import tomllib
 from pathlib import Path
 from unittest.mock import patch
+
 import pytest
 
 from personas.src.kilocode_utils import (
     KiloCodeError,
-    map_provider_to_kilocode,
     build_kilocode_mode_config,
-    write_kilocode_config,
+    map_provider_to_kilocode,
     validate_kilocode_config,
+    write_kilocode_config,
 )
-import tomllib
 
 
 class TestProviderMapping:
@@ -38,9 +39,7 @@ class TestProviderMapping:
         assert config["provider"] == "anthropic"
         assert config["apiKey"] == "sk-ant-test123"  # Direct value now
         assert config["apiModelId"] == "claude-3-5-sonnet-20241022"
-        assert (
-            "anthropicBaseUrl" not in config
-        )  # Should not be present when not specified
+        assert "anthropicBaseUrl" not in config  # Should not be present when not specified
         assert "kilocodeToken" not in config
         assert "openAiNativeApiKey" not in config
 
@@ -59,9 +58,7 @@ class TestProviderMapping:
         assert config["provider"] == "openai-native"
         assert config["openAiNativeApiKey"] == "sk-test123"  # Direct value now
         assert config["apiModelId"] == "gpt-4o"
-        assert (
-            "openAiNativeBaseUrl" not in config
-        )  # Should not be present when not specified
+        assert "openAiNativeBaseUrl" not in config  # Should not be present when not specified
         assert "openAiApiKey" not in config
 
     def test_openai_with_custom_base_url(self):

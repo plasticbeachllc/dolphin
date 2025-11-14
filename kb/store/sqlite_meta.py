@@ -273,9 +273,7 @@ class SQLiteMetadataStore:
         import sqlite3
 
         try:
-            cur.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='code_nodes_fts'"
-            )
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='code_nodes_fts'")
             if cur.fetchone():
                 return  # Already exists
 
@@ -380,9 +378,7 @@ class SQLiteMetadataStore:
             )
             conn.commit()
 
-    def register_repo(
-        self, name: str, path: str | Path, *, default_embed_model: str = "small"
-    ) -> None:
+    def register_repo(self, name: str, path: str | Path, *, default_embed_model: str = "small") -> None:
         """Alias for record_repo for backward compatibility.
 
         Args:
@@ -487,9 +483,7 @@ class SQLiteMetadataStore:
                 "default_embed_model": str(row[2]),
             }
 
-    def begin_session(
-        self, repo_id: int, commit_sha: str, branch: str, embed_model: str
-    ) -> int:
+    def begin_session(self, repo_id: int, commit_sha: str, branch: str, embed_model: str) -> int:
         """Create a new ingestion session and return its id."""
         from datetime import datetime
 
@@ -509,9 +503,7 @@ class SQLiteMetadataStore:
             conn.commit()
             return int(cur.lastrowid)
 
-    def set_session_status(
-        self, session_id: int, status: str, notes: str | None = None
-    ) -> None:
+    def set_session_status(self, session_id: int, status: str, notes: str | None = None) -> None:
         """Update a session status; set ended_at when terminal."""
         terminal = {"succeeded", "failed", "aborted"}
         with self._connect() as conn, closing(conn.cursor()) as cur:
@@ -685,9 +677,7 @@ class SQLiteMetadataStore:
     # Chunk content and location APIs
     # =====================
 
-    def get_existing_content_hashes_for_file(
-        self, repo_id: int, file_id: int, embed_model: str
-    ) -> set[str]:
+    def get_existing_content_hashes_for_file(self, repo_id: int, file_id: int, embed_model: str) -> set[str]:
         """Return the set of distinct text_hash values for a file and model."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
@@ -701,9 +691,7 @@ class SQLiteMetadataStore:
             rows = cur.fetchall() or []
             return {str(r[0]) for r in rows}
 
-    def get_existing_content_map_for_file(
-        self, repo_id: int, file_id: int, embed_model: str
-    ) -> dict[str, str]:
+    def get_existing_content_map_for_file(self, repo_id: int, file_id: int, embed_model: str) -> dict[str, str]:
         """Return mapping text_hash -> content_id for a file and model."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
@@ -756,9 +744,7 @@ class SQLiteMetadataStore:
                 conn.rollback()
                 raise
 
-    def get_existing_locations_for_content_ids(
-        self, content_ids: list[str]
-    ) -> dict[str, list[dict[str, object]]]:
+    def get_existing_locations_for_content_ids(self, content_ids: list[str]) -> dict[str, list[dict[str, object]]]:
         """Return existing locations for a set of content_ids.
 
         Returns dict: content_id -> list of {start_line, end_line, symbol_kind, symbol_name, symbol_path}
@@ -972,9 +958,7 @@ class SQLiteMetadataStore:
         - new_hashes: set of hashes not yet present for this file+model
         - existing_map: dict mapping existing hash -> content_id
         """
-        existing_map = self.get_existing_content_map_for_file(
-            repo_id, file_id, embed_model
-        )
+        existing_map = self.get_existing_content_map_for_file(repo_id, file_id, embed_model)
         new_hashes = set(desired_hashes) - set(existing_map.keys())
         return new_hashes, existing_map
 
@@ -1032,9 +1016,7 @@ class SQLiteMetadataStore:
         """
         desired_hashes = set(desired.keys())
         # Ensure content rows for all desired hashes
-        mapping = self.ensure_content_rows_for_file(
-            repo_id, file_id, embed_model, list(desired_hashes)
-        )
+        mapping = self.ensure_content_rows_for_file(repo_id, file_id, embed_model, list(desired_hashes))
 
         # Sync locations for each content
         inserted = updated = deleted = 0
@@ -1049,9 +1031,7 @@ class SQLiteMetadataStore:
             deleted += stats.get("deleted", 0)
 
         # Prune invalidated content for this file
-        pruned = self.prune_invalidated_content_for_file(
-            repo_id, file_id, embed_model, desired_hashes
-        )
+        pruned = self.prune_invalidated_content_for_file(repo_id, file_id, embed_model, desired_hashes)
 
         return {
             "content_upserted": len(desired_hashes),
@@ -1074,9 +1054,7 @@ class SQLiteMetadataStore:
             rows = cur.fetchall() or []
             return [{"id": int(r[0]), "path": str(r[1])} for r in rows]
 
-    def get_chunks_for_file(
-        self, repo_id: int, path: str
-    ) -> list[dict[str, object]] | None:
+    def get_chunks_for_file(self, repo_id: int, path: str) -> list[dict[str, object]] | None:
         """Get all chunks (content rows) for a file by repo_id and path.
 
         Args:
@@ -1576,9 +1554,7 @@ class SQLiteMetadataStore:
 
         return counts
 
-    def _cleanup_fts_entries_comprehensive(
-        self, cur, repo_id: int, repo_name: str
-    ) -> dict:
+    def _cleanup_fts_entries_comprehensive(self, cur, repo_id: int, repo_name: str) -> dict:
         """Comprehensive FTS5 cleanup with multiple strategies."""
         stats = {"by_content_id": 0, "by_repo_name": 0, "orphaned": 0, "errors": []}
 
@@ -1769,9 +1745,7 @@ class SQLiteMetadataStore:
 
         return stats
 
-    def rm_repo_with_lancedb(
-        self, lancedb_store, name: str, force: bool = False
-    ) -> dict:
+    def rm_repo_with_lancedb(self, lancedb_store, name: str, force: bool = False) -> dict:
         """Enhanced repository removal with LanceDB cleanup validation.
 
         This implements Phase 2 Fix 2.1 from the remediation plan:
@@ -1833,9 +1807,7 @@ class SQLiteMetadataStore:
 
         return stats
 
-    def validate_repo_consistency(
-        self, lancedb_store, repo_id: int, repo_name: str
-    ) -> dict:
+    def validate_repo_consistency(self, lancedb_store, repo_id: int, repo_name: str) -> dict:
         """Comprehensive consistency validation between metadata and vector stores.
 
         Args:

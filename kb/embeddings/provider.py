@@ -173,11 +173,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             # If we get here, the API key is valid
         except Exception as e:
             error_msg = str(e)
-            if (
-                "401" in error_msg
-                or "invalid" in error_msg.lower()
-                or "incorrect" in error_msg.lower()
-            ):
+            if "401" in error_msg or "invalid" in error_msg.lower() or "incorrect" in error_msg.lower():
                 raise RuntimeError(
                     f"\n{'=' * 70}\n"
                     f"OPENAI API KEY VALIDATION FAILED\n"

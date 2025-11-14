@@ -115,9 +115,7 @@ class PythonCallGraphExtractor:
         docstring = self._extract_docstring(node)
 
         # Build qualified name
-        qualified_name = (
-            f"{file_path.replace('/', '.').replace('.py', '')}.{class_name}"
-        )
+        qualified_name = f"{file_path.replace('/', '.').replace('.py', '')}.{class_name}"
 
         return GraphNode(
             id=str(uuid.uuid4()),
@@ -159,9 +157,7 @@ class PythonCallGraphExtractor:
             qualified_name = f"{parent_class.qualified_name}.{func_name}"
         else:
             node_type = NodeType.FUNCTION
-            qualified_name = (
-                f"{file_path.replace('/', '.').replace('.py', '')}.{func_name}"
-            )
+            qualified_name = f"{file_path.replace('/', '.').replace('.py', '')}.{func_name}"
 
         # Extract parameters for signature
         params_node = node.child_by_field_name("parameters")

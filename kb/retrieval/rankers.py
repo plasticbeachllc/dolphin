@@ -242,9 +242,7 @@ def maximal_marginal_relevance(
                 diversity_penalty = max_similarity
 
             # MMR score
-            mmr_score = (lambda_param * relevance) - (
-                (1 - lambda_param) * diversity_penalty
-            )
+            mmr_score = (lambda_param * relevance) - ((1 - lambda_param) * diversity_penalty)
             mmr_scores.append((mmr_score, candidate))
 
         # Select best MMR candidate
@@ -253,9 +251,7 @@ def maximal_marginal_relevance(
         # Find the MMR score for the selected candidate and add it
         for score, candidate in mmr_scores:
             if candidate.get(id_field) == best_candidate.get(id_field):
-                best_candidate = dict(
-                    best_candidate
-                )  # Make a copy to avoid modifying original
+                best_candidate = dict(best_candidate)  # Make a copy to avoid modifying original
                 best_candidate["mmr_score"] = score
                 break
 
@@ -286,13 +282,9 @@ def combine_with_confidence(
     """
     # Choose fusion method
     if fusion_method == "rrf":
-        fused_results = reciprocal_rank_fusion(
-            result_lists, id_field=id_field, **fusion_kwargs
-        )
+        fused_results = reciprocal_rank_fusion(result_lists, id_field=id_field, **fusion_kwargs)
     elif fusion_method == "weighted":
-        fused_results = weighted_fusion(
-            result_lists, id_field=id_field, **fusion_kwargs
-        )
+        fused_results = weighted_fusion(result_lists, id_field=id_field, **fusion_kwargs)
     else:
         raise ValueError(f"Unknown fusion method: {fusion_method}")
 

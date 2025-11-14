@@ -29,9 +29,7 @@ class TestFallbackChunker:
     def test_multi_chunk_with_overlap(self):
         """Long text should be split into overlapping chunks."""
         # Create a text with enough tokens to require multiple chunks
-        lines = [
-            f"Line {i}: This is some content that will be tokenized." for i in range(50)
-        ]
+        lines = [f"Line {i}: This is some content that will be tokenized." for i in range(50)]
         text = "\n".join(lines)
 
         chunks = chunk_text(text, token_target=100, overlap_pct=0.10)
@@ -89,9 +87,7 @@ class TestFallbackChunker:
 
     def test_overlap_creates_redundancy(self):
         """Overlapping chunks should share some content."""
-        lines = [
-            f"Line {i}: Content for testing overlap functionality." for i in range(30)
-        ]
+        lines = [f"Line {i}: Content for testing overlap functionality." for i in range(30)]
         text = "\n".join(lines)
 
         # Get chunks with overlap
@@ -157,10 +153,7 @@ class TestFallbackChunker:
     def test_target_token_size(self):
         """Test that chunks approximate the target token size."""
         # Create text that should generate multiple chunks
-        lines = [
-            f"This is line {i} with enough content to create tokens."
-            for i in range(100)
-        ]
+        lines = [f"This is line {i} with enough content to create tokens." for i in range(100)]
         text = "\n".join(lines)
 
         target_tokens = 50

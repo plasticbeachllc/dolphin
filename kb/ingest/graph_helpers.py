@@ -43,9 +43,7 @@ def extract_graph_from_file(
         try:
             return _extract_with_intelligence(file_path, lang_key, text)
         except Exception as e:
-            print(
-                f"  Warning: Enhanced graph extraction failed for {file_path}, falling back to basic: {e}"
-            )
+            print(f"  Warning: Enhanced graph extraction failed for {file_path}, falling back to basic: {e}")
 
     # Fall back to basic chunker extraction
     import kb.chunkers.py_chunker as py_chunker
@@ -97,10 +95,7 @@ def _extract_with_intelligence(
     Returns:
         Tuple of (nodes, edges) in chunker format
     """
-    from kb.graph_intelligence.extractors import (
-        PythonCallGraphExtractor,
-        TypeScriptCallGraphExtractor,
-    )
+    from kb.graph_intelligence.extractors import PythonCallGraphExtractor, TypeScriptCallGraphExtractor
 
     # Use appropriate extractor
     if language == "python":

@@ -136,9 +136,7 @@ class TestSafeFTS5Creation:
         with store._connect() as conn:
             with closing(conn.cursor()) as cur:
                 # Check table exists
-                cur.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
-                )
+                cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
                 assert cur.fetchone() is not None
 
                 # Check table schema

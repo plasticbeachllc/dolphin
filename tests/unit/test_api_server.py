@@ -2,8 +2,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from kb.api.server import initialize_search_backend
 from kb.api.app import get_search_backend, reset_search_backend
+from kb.api.server import initialize_search_backend
 from kb.config import KBConfig
 
 
@@ -22,9 +22,7 @@ class TestServerInitialization:
                 initialize_search_backend()
                 backend = get_search_backend()
                 assert backend is not None
-                assert (
-                    backend.embedding_provider.__class__.__name__ == "EmbeddingProvider"
-                )
+                assert backend.embedding_provider.__class__.__name__ == "EmbeddingProvider"
 
     def test_initialize_with_openai_provider(self):
         """Test initialization with OpenAI provider and API key."""
@@ -42,9 +40,7 @@ class TestServerInitialization:
                 # Mock the create_provider to return OpenAIEmbeddingProvider without validation
                 from kb.embeddings.provider import OpenAIEmbeddingProvider
 
-                mock_provider = OpenAIEmbeddingProvider(
-                    api_key="test-key", validate_key=False
-                )
+                mock_provider = OpenAIEmbeddingProvider(api_key="test-key", validate_key=False)
                 mock_create.return_value = mock_provider
 
                 initialize_search_backend()
@@ -68,6 +64,4 @@ class TestServerInitialization:
                 initialize_search_backend()
                 backend = get_search_backend()
                 assert backend is not None
-                assert (
-                    backend.embedding_provider.__class__.__name__ == "EmbeddingProvider"
-                )
+                assert backend.embedding_provider.__class__.__name__ == "EmbeddingProvider"

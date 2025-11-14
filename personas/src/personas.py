@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
 
 import typer
 
 try:
     import yaml
 except ModuleNotFoundError as exc:  # pragma: no cover - should be in deps
-    raise RuntimeError(
-        "PyYAML is required. Install with `uv pip install pyyaml`."
-    ) from exc
+    raise RuntimeError("PyYAML is required. Install with `uv pip install pyyaml`.") from exc
 
+from .continue_utils import ContinueError, validate_continue_config, write_continue_config
+from .kilocode_utils import KiloCodeError, validate_kilocode_config, write_kilocode_config
 from .persona_utils import (
     Persona,
     PersonaError,
@@ -20,16 +19,6 @@ from .persona_utils import (
     iter_persona_dirs,
     load_persona,
     write_json,
-)
-from .continue_utils import (
-    ContinueError,
-    write_continue_config,
-    validate_continue_config,
-)
-from .kilocode_utils import (
-    KiloCodeError,
-    write_kilocode_config,
-    validate_kilocode_config,
 )
 
 app = typer.Typer(
@@ -41,7 +30,7 @@ PERSONAS_SUBDIR = "cast"
 SRC_SUBDIR = "src"
 
 
-def _read_overlay(overlay: Optional[Path], overlay_text: Optional[str]) -> str:
+def _read_overlay(overlay: Path | None, overlay_text: str | None) -> str:
     if overlay and overlay_text:
         raise PersonaError("Use either --overlay or --overlay-text, not both")
 
@@ -67,14 +56,14 @@ def _load_guardrails(personas_root: Path) -> str:
     return guardrails_path.read_text(encoding="utf-8")
 
 
-def _list_personas(personas_root: Path) -> List[Persona]:
+def _list_personas(personas_root: Path) -> list[Persona]:
     try:
         directories = list(iter_persona_dirs(personas_root / PERSONAS_SUBDIR))
     except PersonaError as exc:
         typer.secho(f"error: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from exc
 
-    personas: List[Persona] = []
+    personas: list[Persona] = []
 
     if not directories:
         typer.echo(f"No personas found in {personas_root}")
@@ -90,10 +79,7 @@ def _list_personas(personas_root: Path) -> List[Persona]:
             typer.echo(f"  - {directory.name}: error ({exc})", err=True)
             continue
         personas.append(persona)
-        typer.echo(
-            f"  - {persona.id}: {persona.name}"
-            f" [{persona.provider_kind}:{persona.provider_model}]"
-        )
+        typer.echo(f"  - {persona.id}: {persona.name} [{persona.provider_kind}:{persona.provider_model}]")
 
     return personas
 
@@ -106,18 +92,18 @@ def preview(
         "-p",
         help="Path to the personas root directory.",
     ),
-    persona_id: Optional[str] = typer.Option(
+    persona_id: str | None = typer.Option(
         None,
         "--id",
         "-i",
         help="Persona id (directory name) to preview.",
     ),
-    overlay: Optional[Path] = typer.Option(
+    overlay: Path | None = typer.Option(
         None,
         "--overlay",
         help="Path to an overlay file appended after guardrails.",
     ),
-    overlay_text: Optional[str] = typer.Option(
+    overlay_text: str | None = typer.Option(
         None,
         "--overlay-text",
         help="Inline overlay text appended after guardrails.",
@@ -216,13 +202,13 @@ def generate(
         "-p",
         help="Path to the personas root directory.",
     ),
-    out: Optional[Path] = typer.Option(
+    out: Path | None = typer.Option(
         None,
         "--out",
         "-o",
         help="Path to write the configuration output (auto-determined if not specified).",
     ),
-    manifest: Optional[Path] = typer.Option(
+    manifest: Path | None = typer.Option(
         None,
         "--manifest",
         "-m",
@@ -253,7 +239,7 @@ def generate(
         "--continue",
         help="Generate Continue configuration.",
     ),
-    target_format: Optional[str] = typer.Option(
+    target_format: str | None = typer.Option(
         None,
         "--target-format",
         help="Target format for output: 'kilocode' or 'continue' (alternative to --kilocode/--continue flags).",
@@ -315,8 +301,8 @@ def generate(
         else:  # continue
             out = Path(".")  # Directory, will create .continue-config subdirectory
 
-    personas_list: List[Persona] = []
-    warnings: List[str] = []
+    personas_list: list[Persona] = []
+    warnings: list[str] = []
 
     try:
         directories = list(iter_persona_dirs(personas_root / PERSONAS_SUBDIR))
@@ -405,26 +391,18 @@ def generate(
             )
 
             if dry_run:
-                typer.echo(
-                    f"(dry-run) Would generate KiloCode config with {result['modes_count']} modes"
-                )
+                typer.echo(f"(dry-run) Would generate KiloCode config with {result['modes_count']} modes")
                 typer.echo(f"(dry-run) Would write to: {result['output_directory']}")
                 for file_path in result["generated_files"]:
                     typer.echo(f"  - {file_path}")
             else:
-                typer.echo(
-                    f"Generated KiloCode config with {result['modes_count']} modes"
-                )
+                typer.echo(f"Generated KiloCode config with {result['modes_count']} modes")
                 typer.echo(f"Configuration written to: {result['output_directory']}")
 
                 # Validate generated configurations
                 validation_errors = []
                 for persona in personas_list:
-                    config_file = (
-                        Path(result["output_directory"])
-                        / "modes"
-                        / f"{persona.id}.json"
-                    )
+                    config_file = Path(result["output_directory"]) / "modes" / f"{persona.id}.json"
                     errors = validate_kilocode_config(config_file)
                     validation_errors.extend(errors)
 
@@ -472,13 +450,9 @@ def generate(
         try:
             target_dir = out.parent if out.parent != Path(".") else Path(".")
             if dry_run:
-                result = write_continue_config(
-                    personas_list, compiled_messages, target_dir, manifest, dry_run=True
-                )
+                result = write_continue_config(personas_list, compiled_messages, target_dir, manifest, dry_run=True)
                 typer.echo(yaml.safe_dump(result["config_payload"], sort_keys=False))
-                typer.echo(
-                    f"(dry-run) Would write {result['models_count']} models to {result['output_file']}"
-                )
+                typer.echo(f"(dry-run) Would write {result['models_count']} models to {result['output_file']}")
                 if manifest:
                     typer.echo(f"(dry-run) Would write manifest to {manifest}")
             else:
@@ -489,9 +463,7 @@ def generate(
                     manifest,
                     dry_run=False,
                 )
-                typer.echo(
-                    f"Wrote {result['models_count']} models to {result['output_file']}"
-                )
+                typer.echo(f"Wrote {result['models_count']} models to {result['output_file']}")
                 if manifest and result["manifest_file"]:
                     typer.echo(f"Wrote manifest to {result['manifest_file']}")
 
@@ -503,9 +475,7 @@ def generate(
                     for error in validation_errors:
                         typer.secho(f"  - {error}", fg=typer.colors.YELLOW)
                 else:
-                    typer.secho(
-                        "✓ Configuration validated successfully", fg=typer.colors.GREEN
-                    )
+                    typer.secho("✓ Configuration validated successfully", fg=typer.colors.GREEN)
 
         except ContinueError as exc:
             typer.secho(

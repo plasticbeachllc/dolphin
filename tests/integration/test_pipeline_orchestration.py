@@ -211,9 +211,7 @@ def test_function():
         # Create various files
         (repo_path / "src" / "main.py").write_text("def main(): pass")
         (repo_path / "src" / "utils.py").write_text("def helper(): return True")
-        (repo_path / "docs" / "README.md").write_text(
-            "# Project\n\nDocumentation here."
-        )
+        (repo_path / "docs" / "README.md").write_text("# Project\n\nDocumentation here.")
         (repo_path / "docs" / "API.md").write_text("# API\n\n## Endpoints")
         (repo_path / "data" / "config.json").write_text('{"key": "value"}')
 

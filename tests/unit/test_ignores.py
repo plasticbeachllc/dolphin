@@ -305,9 +305,7 @@ class TestIgnoreExceptions:
 
         # Exception should remove pattern parts but logs/important.txt is an exception
         assert "logs/important.txt" not in result  # Exception NOT in ignore patterns
-        assert (
-            "**/logs/important.txt" not in result
-        )  # Exception expansion also NOT in patterns
+        assert "**/logs/important.txt" not in result  # Exception expansion also NOT in patterns
         # But the base "logs" pattern should still be there (to ignore other log files)
         assert "logs" in result
         assert "**/logs" in result

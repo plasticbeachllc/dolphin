@@ -89,9 +89,7 @@ def add_repo(
 @app.command()
 def rm_repo(
     name: str = typer.Argument(..., help="Repository name to remove."),
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Skip confirmation prompt."
-    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt."),
 ) -> None:
     """Remove a repository and all its data from the knowledge store."""
     kb_rm_repo(name=name, force=force)
@@ -101,12 +99,8 @@ def rm_repo(
 def index(
     name: str = typer.Argument(..., help="Name of the repository to index."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Run without persisting."),
-    force: bool = typer.Option(
-        False, "--force", help="Bypass clean working tree check."
-    ),
-    full: bool = typer.Option(
-        False, "--full", help="Process all files instead of incremental diff."
-    ),
+    force: bool = typer.Option(False, "--force", help="Bypass clean working tree check."),
+    full: bool = typer.Option(False, "--full", help="Process all files instead of incremental diff."),
 ) -> None:
     """Run the full indexing pipeline for the specified repository."""
     kb_index(name=name, dry_run=dry_run, force=force, full=full)
@@ -123,9 +117,7 @@ def status(
 @app.command()
 def prune_ignored(
     name: str = typer.Argument(..., help="Repository name to clean up."),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="Show what would be removed without persisting."
-    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be removed without persisting."),
 ) -> None:
     """Remove chunks for files that match the ignore patterns."""
     kb_prune_ignored(name, dry_run)
@@ -145,18 +137,10 @@ def search(
     repos: list[str] | None = typer.Option(None, "--repo", "-r", help="Repository name(s) to search."),
     path_prefix: list[str] | None = typer.Option(None, "--path", "-p", help="Filter by path prefix."),
     top_k: int = typer.Option(8, "--top-k", "-k", help="Number of results to return."),
-    score_cutoff: float = typer.Option(
-        0.0, "--score-cutoff", "-s", help="Minimum similarity score."
-    ),
-    embed_model: str = typer.Option(
-        "large", "--embed-model", "-m", help="Embedding model to use (small|large)."
-    ),
-    local: bool = typer.Option(
-        False, "--local", "-l", help="Use local backend (no server required)."
-    ),
-    show_content: bool = typer.Option(
-        False, "--show-content", "-c", help="Display code snippets."
-    ),
+    score_cutoff: float = typer.Option(0.0, "--score-cutoff", "-s", help="Minimum similarity score."),
+    embed_model: str = typer.Option("large", "--embed-model", "-m", help="Embedding model to use (small|large)."),
+    local: bool = typer.Option(False, "--local", "-l", help="Use local backend (no server required)."),
+    show_content: bool = typer.Option(False, "--show-content", "-c", help="Display code snippets."),
 ) -> None:
     """Search indexed code semantically.
 
@@ -166,13 +150,9 @@ def search(
         dolphin search "error handling" --local --show-content
     """
     if local:
-        _search_local(
-            query, repos, path_prefix, top_k, score_cutoff, embed_model, show_content
-        )
+        _search_local(query, repos, path_prefix, top_k, score_cutoff, embed_model, show_content)
     else:
-        _search_remote(
-            query, repos, path_prefix, top_k, score_cutoff, embed_model, show_content
-        )
+        _search_remote(query, repos, path_prefix, top_k, score_cutoff, embed_model, show_content)
 
 
 def _search_local(
@@ -286,9 +266,7 @@ def _display_results(hits: list, show_content: bool, sql_store=None) -> None:
         end_line = hit.get("end_line", 0)
 
         # Header
-        typer.secho(
-            f"\n{i}. {repo}/{path}:{start_line}-{end_line}", fg="cyan", bold=True
-        )
+        typer.secho(f"\n{i}. {repo}/{path}:{start_line}-{end_line}", fg="cyan", bold=True)
         typer.echo(f"   Score: {score:.10f}")
 
         # Symbol info
@@ -331,9 +309,7 @@ def list_repos() -> None:
 
 @app.command()
 def reset_all(
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Skip confirmation prompt."
-    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt."),
 ) -> None:
     """Reset the entire knowledge store (delete everything).
 

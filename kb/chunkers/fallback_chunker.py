@@ -47,9 +47,7 @@ def chunk_text(
         abs_end_line = abs_start_line + raw_text.count("\n")
 
         # Trim leading/trailing newlines and recompute token count
-        trimmed_text, token_count, lead_trim, trail_trim = _trim_and_tokenize(
-            raw_text, tok
-        )
+        trimmed_text, token_count, lead_trim, trail_trim = _trim_and_tokenize(raw_text, tok)
         if not trimmed_text:
             continue
 

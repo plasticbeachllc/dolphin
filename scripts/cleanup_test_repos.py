@@ -47,9 +47,7 @@ def cleanup_test_repos():
             deleted_count = 0
             for repo_id, repo_name in repos:
                 # Check if this looks like a test repository
-                is_test_repo = any(
-                    pattern in repo_name.lower() for pattern in test_repo_patterns
-                )
+                is_test_repo = any(pattern in repo_name.lower() for pattern in test_repo_patterns)
 
                 if is_test_repo:
                     print(f"  Deleting test repository: {repo_name} (id={repo_id})")
@@ -57,9 +55,7 @@ def cleanup_test_repos():
                     # Delete all data associated with this repo
                     conn.execute("DELETE FROM chunks WHERE repo_id = ?", (repo_id,))
                     conn.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
-                    conn.execute(
-                        "DELETE FROM scan_sessions WHERE repo_id = ?", (repo_id,)
-                    )
+                    conn.execute("DELETE FROM scan_sessions WHERE repo_id = ?", (repo_id,))
                     conn.execute("DELETE FROM repos WHERE id = ?", (repo_id,))
 
                     deleted_count += 1

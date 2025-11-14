@@ -4,7 +4,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from .persona_utils import Persona
 
@@ -13,9 +13,7 @@ class KiloCodeError(Exception):
     """Raised when KiloCode configuration generation fails."""
 
 
-def map_provider_to_kilocode(
-    persona_name: str, persona_config: Dict[str, Any]
-) -> Dict[str, Any]:
+def map_provider_to_kilocode(persona_name: str, persona_config: dict[str, Any]) -> dict[str, Any]:
     """Map persona provider configuration to KiloCode format based on official documentation."""
 
     provider_kind = persona_config.get("provider", "").lower()
@@ -92,9 +90,7 @@ def map_provider_to_kilocode(
         }
 
     elif provider_kind == "ollama":
-        base_url = persona_config.get("base_url") or persona_config.get(
-            "api_base", "http://localhost:11434"
-        )
+        base_url = persona_config.get("base_url") or persona_config.get("api_base", "http://localhost:11434")
         config = {
             "id": "default",
             "provider": "ollama",
@@ -124,7 +120,7 @@ def map_provider_to_kilocode(
     return config
 
 
-def build_kilocode_mode_config(persona: Persona, system_message: str) -> Dict[str, Any]:
+def build_kilocode_mode_config(persona: Persona, system_message: str) -> dict[str, Any]:
     """Build a KiloCode Custom Mode configuration from a persona."""
 
     # Convert persona to persona_config format for mapping
@@ -179,18 +175,14 @@ def build_kilocode_mode_config(persona: Persona, system_message: str) -> Dict[st
         clean_options = {}
         for key, value in persona.provider_options.items():
             # Skip self-referential keys
-            if key != "provider_options" and not (
-                isinstance(value, dict) and value is persona.provider_options
-            ):
+            if key != "provider_options" and not (isinstance(value, dict) and value is persona.provider_options):
                 clean_options[key] = value
         mode_config["metadata"] = clean_options
 
     return mode_config
 
 
-def generate_kilocode_instructions(
-    system_text: str, guardrails: str = "", persona_name: str = ""
-) -> str:
+def generate_kilocode_instructions(system_text: str, guardrails: str = "", persona_name: str = "") -> str:
     """Generate KiloCode Custom Instructions from persona system text."""
 
     instructions = []
@@ -214,7 +206,7 @@ def generate_kilocode_instructions(
     return "\n".join(instructions)
 
 
-def generate_kilocode_workflow(personas: List[Persona]) -> str:
+def generate_kilocode_workflow(personas: list[Persona]) -> str:
     """Generate KiloCode workflow file with slash commands for persona switching."""
 
     workflow_content = [
@@ -250,12 +242,12 @@ def generate_kilocode_workflow(personas: List[Persona]) -> str:
 
 
 def write_kilocode_config(
-    personas: List[Persona],
-    compiled_messages: Dict[str, str],
+    personas: list[Persona],
+    compiled_messages: dict[str, str],
     guardrails: str,
     target_dir: Path,
     dry_run: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Write KiloCode configuration files to private directory.
 
     Args:
@@ -286,9 +278,7 @@ def write_kilocode_config(
         mode_file = modes_dir / f"{persona.id}.json"
 
         if not dry_run:
-            mode_file.write_text(
-                json.dumps(mode_config, indent=2) + "\n", encoding="utf-8"
-            )
+            mode_file.write_text(json.dumps(mode_config, indent=2) + "\n", encoding="utf-8")
         generated_files.append(str(mode_file))
 
     # Generate workflows
@@ -346,9 +336,7 @@ def write_kilocode_config(
 
     master_file = base_dir / "config.json"
     if not dry_run:
-        master_file.write_text(
-            json.dumps(master_config, indent=2) + "\n", encoding="utf-8"
-        )
+        master_file.write_text(json.dumps(master_config, indent=2) + "\n", encoding="utf-8")
     generated_files.append(str(master_file))
 
     return {
@@ -359,7 +347,7 @@ def write_kilocode_config(
     }
 
 
-def validate_kilocode_config(config_or_path) -> List[str]:
+def validate_kilocode_config(config_or_path) -> list[str]:
     """Validate a KiloCode configuration file and return any issues.
 
     Args:
@@ -379,7 +367,7 @@ def validate_kilocode_config(config_or_path) -> List[str]:
             return issues
 
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
+            with open(config_path, encoding="utf-8") as f:
                 config = json.load(f)
         except json.JSONDecodeError as e:
             issues.append(f"Invalid JSON in {config_path}: {e}")
@@ -399,9 +387,7 @@ def validate_kilocode_config(config_or_path) -> List[str]:
 
     # Check if this is a basic provider config (flat structure) or full mode config
     # A flat provider config has id, provider, and apiModelId but no name/slug/instructions
-    has_provider_fields = (
-        "id" in config and "provider" in config and "apiModelId" in config
-    )
+    has_provider_fields = "id" in config and "provider" in config and "apiModelId" in config
     has_mode_fields = "name" in config or "slug" in config or "instructions" in config
     is_flat_provider = has_provider_fields and not has_mode_fields
 
@@ -414,9 +400,7 @@ def validate_kilocode_config(config_or_path) -> List[str]:
 
         # Check for provider-specific API key field
         provider = config.get("provider", "")
-        api_key_fields = [
-            key for key in config.keys() if key.endswith("ApiKey") or key == "apiKey"
-        ]
+        api_key_fields = [key for key in config.keys() if key.endswith("ApiKey") or key == "apiKey"]
 
         # Some providers like ollama don't require API keys
         if provider not in ["ollama"]:
@@ -439,13 +423,9 @@ def validate_kilocode_config(config_or_path) -> List[str]:
             if isinstance(provider, dict):
                 # Nested provider structure
                 if "provider" not in provider:
-                    raise KiloCodeError(
-                        f"Missing required provider field 'provider'{location}"
-                    )
+                    raise KiloCodeError(f"Missing required provider field 'provider'{location}")
                 if "apiModelId" not in provider:
-                    raise KiloCodeError(
-                        f"Missing required provider field 'apiModelId'{location}"
-                    )
+                    raise KiloCodeError(f"Missing required provider field 'apiModelId'{location}")
 
         # Validate instructions are not empty
         if "instructions" in config and not config["instructions"].strip():
@@ -455,8 +435,6 @@ def validate_kilocode_config(config_or_path) -> List[str]:
         if "slug" in config:
             slug = config["slug"]
             if not re.match(r"^[a-z0-9]+(?:-[a-z0-9]+)*$", slug):
-                issues.append(
-                    f"Invalid slug format '{slug}'{location}. Should be kebab-case."
-                )
+                issues.append(f"Invalid slug format '{slug}'{location}. Should be kebab-case.")
 
     return issues

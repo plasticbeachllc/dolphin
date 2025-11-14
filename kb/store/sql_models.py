@@ -39,9 +39,7 @@ class Session(SQLModel, table=True):
     chunks_indexed: int = Field(default=0)
     vectors_written: int = Field(default=0)
     chunks_skipped: int = Field(default=0)
-    chunks_pruned: int = Field(
-        default=0
-    )  # Added for Phase 6: tracks chunks removed from deleted files
+    chunks_pruned: int = Field(default=0)  # Added for Phase 6: tracks chunks removed from deleted files
 
     # Notes and lifecycle
     notes: str | None = Field(default=None)
@@ -241,9 +239,7 @@ class NodeAlias(SQLModel, table=True):
 
     __tablename__ = "node_aliases"
     __table_args__ = (
-        UniqueConstraint(
-            "node_id", "file_id", "alias_qualified_name", name="uq_node_alias_identity"
-        ),
+        UniqueConstraint("node_id", "file_id", "alias_qualified_name", name="uq_node_alias_identity"),
         Index("ix_node_aliases_name", "alias_name"),
         Index("ix_node_aliases_qualified", "alias_qualified_name"),
         Index("ix_node_aliases_node", "node_id"),
@@ -253,11 +249,7 @@ class NodeAlias(SQLModel, table=True):
     id: str = Field(primary_key=True)  # UUID
 
     # References - CASCADE DELETE to remove aliases when node is deleted
-    node_id: str = Field(
-        sa_column=Column(
-            String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False
-        )
-    )
+    node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False))
     file_id: int = Field(foreign_key="files.id")
 
     # Alias information

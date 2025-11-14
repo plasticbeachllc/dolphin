@@ -99,9 +99,7 @@ def check_vector_file_structure():
             if vector_files:
                 # Check file sizes
                 total_size = sum(f.stat().st_size for f in vector_files)
-                print(
-                    f"📏 Total size: {total_size:,} bytes ({total_size / 1024 / 1024:.1f} MB)"
-                )
+                print(f"📏 Total size: {total_size:,} bytes ({total_size / 1024 / 1024:.1f} MB)")
 
                 # Sample a few files
                 print("📄 Sample files:")

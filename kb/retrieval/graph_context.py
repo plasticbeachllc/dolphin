@@ -356,21 +356,9 @@ def format_graph_context_for_llm(graph_context: dict[str, Any]) -> str:
     relationships = graph_context.get("relationships", [])
     if relationships:
         # Group by type and direction
-        calls_to = [
-            r
-            for r in relationships
-            if r["type"] == "calls" and r["direction"] == "outgoing"
-        ]
-        called_by = [
-            r
-            for r in relationships
-            if r["type"] == "calls" and r["direction"] == "incoming"
-        ]
-        inherits = [
-            r
-            for r in relationships
-            if r["type"] == "inherits" and r["direction"] == "outgoing"
-        ]
+        calls_to = [r for r in relationships if r["type"] == "calls" and r["direction"] == "outgoing"]
+        called_by = [r for r in relationships if r["type"] == "calls" and r["direction"] == "incoming"]
+        inherits = [r for r in relationships if r["type"] == "inherits" and r["direction"] == "outgoing"]
         implements = [r for r in relationships if r["type"] == "implements"]
         imports = [r for r in relationships if r["type"] == "imports" and r["direction"] == "outgoing"]
 
@@ -378,9 +366,7 @@ def format_graph_context_for_llm(graph_context: dict[str, Any]) -> str:
             lines.append("### Calls:")
             for rel in calls_to[:5]:  # Limit to top 5
                 target = rel["target"]
-                line_info = (
-                    f" (line {rel['line_number']})" if rel.get("line_number") else ""
-                )
+                line_info = f" (line {rel['line_number']})" if rel.get("line_number") else ""
                 lines.append(f"- → `{target['qualified_name']}`{line_info}")
             lines.append("")
 
@@ -388,9 +374,7 @@ def format_graph_context_for_llm(graph_context: dict[str, Any]) -> str:
             lines.append("### Called by:")
             for rel in called_by[:5]:  # Limit to top 5
                 source = rel["source"]
-                line_info = (
-                    f" (line {rel['line_number']})" if rel.get("line_number") else ""
-                )
+                line_info = f" (line {rel['line_number']})" if rel.get("line_number") else ""
                 lines.append(f"- ← `{source['qualified_name']}`{line_info}")
             lines.append("")
 

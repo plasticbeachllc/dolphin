@@ -22,9 +22,9 @@ from kb.api.app import SearchRequest
 from kb.api.search_backend import KnowledgeSearchBackend
 from kb.config import KBConfig
 from kb.embeddings.provider import create_provider
+from kb.store.graph_store import GraphStore
 from kb.store.lancedb_store import LanceDBStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
-from kb.store.graph_store import GraphStore
 
 
 def extract_unique_files(results: list[dict], top_k: int = 5) -> list[str]:
@@ -38,11 +38,7 @@ def extract_unique_files(results: list[dict], top_k: int = 5) -> list[str]:
     for result in results:
         # Backend returns 'path' field from LanceDB schema
         # Fallback to metadata.path or file for compatibility
-        file_path = (
-            result.get("path")
-            or result.get("metadata", {}).get("path")
-            or result.get("file", "")
-        )
+        file_path = result.get("path") or result.get("metadata", {}).get("path") or result.get("file", "")
         if file_path and file_path not in seen_files:
             seen_files.add(file_path)
             unique_files.append(file_path)
@@ -163,9 +159,7 @@ def evaluate_instance(
         }
 
 
-def load_swe_bench_instances(
-    dataset_path: Path, repo_filter: list[str] = None
-) -> list[dict]:
+def load_swe_bench_instances(dataset_path: Path, repo_filter: list[str] = None) -> list[dict]:
     """Load SWE-Bench Lite instances, optionally filtered by repo."""
     # Try loading from HuggingFace datasets
     try:
@@ -201,15 +195,12 @@ def load_swe_bench_instances(
             return data
 
     raise FileNotFoundError(
-        f"Could not load SWE-Bench instances from {dataset_path}. "
-        "Run setup first or download dataset."
+        f"Could not load SWE-Bench instances from {dataset_path}. Run setup first or download dataset."
     )
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Evaluate Dolphin on SWE-Bench Lite file identification"
-    )
+    parser = argparse.ArgumentParser(description="Evaluate Dolphin on SWE-Bench Lite file identification")
 
     parser.add_argument(
         "--dataset",
@@ -217,25 +208,17 @@ def main():
         default=Path("test-data/swe_bench_instances.json"),
         help="Path to SWE-Bench instances",
     )
-    parser.add_argument(
-        "--repos", nargs="+", help="Filter to specific repos (e.g., django/django)"
-    )
+    parser.add_argument("--repos", nargs="+", help="Filter to specific repos (e.g., django/django)")
     parser.add_argument(
         "--repos-dir",
         type=Path,
         default=Path("test-repos/swe-bench"),
         help="Directory containing cloned repos",
     )
-    parser.add_argument(
-        "--top-k", type=int, default=5, help="Number of files to predict (default: 5)"
-    )
+    parser.add_argument("--top-k", type=int, default=5, help="Number of files to predict (default: 5)")
     parser.add_argument("--output", type=Path, help="Output JSON file for results")
-    parser.add_argument(
-        "--verbose", action="store_true", help="Show detailed per-instance output"
-    )
-    parser.add_argument(
-        "--limit", type=int, help="Limit number of instances to evaluate"
-    )
+    parser.add_argument("--verbose", action="store_true", help="Show detailed per-instance output")
+    parser.add_argument("--limit", type=int, help="Limit number of instances to evaluate")
 
     args = parser.parse_args()
 
@@ -318,9 +301,7 @@ def main():
         # Track metrics by repo
         if result["status"] == "success":
             metrics = result["metrics"]
-            metrics_by_repo[repo]["precision"].append(
-                metrics[f"precision@{args.top_k}"]
-            )
+            metrics_by_repo[repo]["precision"].append(metrics[f"precision@{args.top_k}"])
             metrics_by_repo[repo]["recall"].append(metrics[f"recall@{args.top_k}"])
             metrics_by_repo[repo]["mrr"].append(metrics["mrr"])
 
@@ -334,16 +315,8 @@ def main():
     print("RESULTS")
     print(f"{'=' * 80}\n")
 
-    all_precision = [
-        r["metrics"][f"precision@{args.top_k}"]
-        for r in results
-        if r["status"] == "success"
-    ]
-    all_recall = [
-        r["metrics"][f"recall@{args.top_k}"]
-        for r in results
-        if r["status"] == "success"
-    ]
+    all_precision = [r["metrics"][f"precision@{args.top_k}"] for r in results if r["status"] == "success"]
+    all_recall = [r["metrics"][f"recall@{args.top_k}"] for r in results if r["status"] == "success"]
     all_mrr = [r["metrics"]["mrr"] for r in results if r["status"] == "success"]
 
     avg_precision = statistics.mean(all_precision) if all_precision else 0.0
@@ -354,9 +327,7 @@ def main():
     print(f"  Precision@{args.top_k}: {avg_precision:.3f}")
     print(f"  Recall@{args.top_k}: {avg_recall:.3f}")
     print(f"  MRR: {avg_mrr:.3f}")
-    print(
-        f"  Success rate: {len(all_precision)}/{len(results)} ({len(all_precision) / len(results) * 100:.1f}%)"
-    )
+    print(f"  Success rate: {len(all_precision)}/{len(results)} ({len(all_precision) / len(results) * 100:.1f}%)")
 
     # Aider baseline comparison
     print("\nComparison to Aider Baseline:")

@@ -74,9 +74,7 @@ def init(
     typer.echo(f"LanceDB root initialized at {lancedb.root}")
 
     if created:
-        typer.echo(
-            "Initialization complete. You can now run 'kb add-repo' and 'kb index'."
-        )
+        typer.echo("Initialization complete. You can now run 'kb add-repo' and 'kb index'.")
     else:
         typer.echo("Initialization verified. Nothing else to do.")
 
@@ -114,12 +112,8 @@ def add_repo(
 def index(
     name: str = typer.Argument(..., help="Name of the repository to index."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Run without persisting."),
-    force: bool = typer.Option(
-        False, "--force", help="Bypass clean working tree check."
-    ),
-    full: bool = typer.Option(
-        False, "--full", help="Process all files instead of incremental diff."
-    ),
+    force: bool = typer.Option(False, "--force", help="Bypass clean working tree check."),
+    full: bool = typer.Option(False, "--full", help="Process all files instead of incremental diff."),
 ) -> None:
     """Run the full indexing pipeline for the specified repository.
 
@@ -186,9 +180,7 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
 @app.command("prune-ignored")
 def prune_ignored(
     name: str = typer.Argument(..., help="Repository name to clean up."),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="Show what would be removed without persisting."
-    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be removed without persisting."),
 ) -> None:
     """Remove chunks for files that match the ignore patterns.
 
@@ -312,9 +304,7 @@ def prune_ignored(
 @app.command("rm-repo")
 def rm_repo(
     name: str = typer.Argument(..., help="Repository name to remove."),
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Skip confirmation and active session checks."
-    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation and active session checks."),
 ) -> None:
     """Remove a repository and all its data from the knowledge store.
 
@@ -465,9 +455,7 @@ def reset_repo(
                 typer.echo(f"⚠️  Cleanup warnings: {len(result['lancedb_warnings'])}", err=True)
 
         except Exception as e:
-            typer.echo(
-                f"Warning: Enhanced cleanup failed, continuing anyway: {e}", err=True
-            )
+            typer.echo(f"Warning: Enhanced cleanup failed, continuing anyway: {e}", err=True)
 
     # Re-register repo
     metadata.record_repo(name=name, path=repo_path, default_embed_model=model)
@@ -519,22 +507,12 @@ def list_files(
 @app.command()
 def search(
     query: str = typer.Argument(..., help="Search query."),
-    repos: list[str] | None = typer.Option(
-        None, "--repo", "-r", help="Repository name(s) to search."
-    ),
-    path_prefix: list[str] | None = typer.Option(
-        None, "--path", "-p", help="Filter by path prefix."
-    ),
+    repos: list[str] | None = typer.Option(None, "--repo", "-r", help="Repository name(s) to search."),
+    path_prefix: list[str] | None = typer.Option(None, "--path", "-p", help="Filter by path prefix."),
     top_k: int = typer.Option(8, "--top-k", "-k", help="Number of results to return."),
-    score_cutoff: float = typer.Option(
-        0.0, "--score-cutoff", "-s", help="Minimum similarity score."
-    ),
-    embed_model: str = typer.Option(
-        "large", "--embed-model", "-m", help="Embedding model to use (small|large)."
-    ),
-    show_content: bool = typer.Option(
-        False, "--show-content", "-c", help="Display code snippets."
-    ),
+    score_cutoff: float = typer.Option(0.0, "--score-cutoff", "-s", help="Minimum similarity score."),
+    embed_model: str = typer.Option("large", "--embed-model", "-m", help="Embedding model to use (small|large)."),
+    show_content: bool = typer.Option(False, "--show-content", "-c", help="Display code snippets."),
 ) -> None:
     """Search indexed code semantically (local backend).
 
@@ -584,9 +562,7 @@ def search(
             end_line = hit.get("end_line", 0)
 
             # Header
-            typer.secho(
-                f"\n{i}. {repo}/{path}:{start_line}-{end_line}", fg="cyan", bold=True
-            )
+            typer.secho(f"\n{i}. {repo}/{path}:{start_line}-{end_line}", fg="cyan", bold=True)
             typer.echo(f"   Score: {score:.3f}")
 
             # Symbol info
@@ -696,9 +672,7 @@ def validate_repo(
 @app.command("repair-repo")
 def repair_repo(
     name: str = typer.Argument(..., help="Repository name to repair."),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="Show what would be repaired without making changes."
-    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be repaired without making changes."),
 ) -> None:
     """Repair consistency issues in a repository.
 
@@ -789,9 +763,7 @@ def list_repos() -> None:
 
 @app.command("reset-all")
 def reset_all(
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Skip confirmation prompt."
-    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt."),
 ) -> None:
     """Reset the entire knowledge store (delete everything).
 
@@ -829,9 +801,7 @@ def reset_all(
     # Confirm unless --force
     if not force:
         typer.echo()
-        confirm = typer.confirm(
-            "Are you absolutely sure you want to delete everything?"
-        )
+        confirm = typer.confirm("Are you absolutely sure you want to delete everything?")
         if not confirm:
             typer.echo("Aborted.")
             raise typer.Exit(code=0)

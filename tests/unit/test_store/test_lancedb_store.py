@@ -104,8 +104,7 @@ def test_initialize_collections_creates_tables(monkeypatch, mocked_lancedb, tmp_
     fake_pa = types.SimpleNamespace(
         field=lambda *args, **kwargs: object(),
         schema=lambda fields: object(),
-        list_=lambda t,
-        size=None: t,  # Accept optional size parameter for fixed-size lists
+        list_=lambda t, size=None: t,  # Accept optional size parameter for fixed-size lists
         float32=lambda: object(),
         string=lambda: object(),
         int32=lambda: object(),

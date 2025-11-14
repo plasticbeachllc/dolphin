@@ -341,9 +341,7 @@ class TestLargeStatementChunking:
     def test_chunk_preserves_metadata(self):
         """Test that large statement chunking preserves metadata."""
         # Create a long function
-        lines = ["SELECT * FROM users"] + [
-            f"UNION ALL SELECT * FROM users_{i}" for i in range(50)
-        ]
+        lines = ["SELECT * FROM users"] + [f"UNION ALL SELECT * FROM users_{i}" for i in range(50)]
         source = f"CREATE FUNCTION get_all_users() RETURNS TABLE(id INT) AS $$\n{chr(10).join(lines)}\n$$ LANGUAGE sql;"
 
         chunks = chunk_source(source, token_target=200)

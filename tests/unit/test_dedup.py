@@ -35,9 +35,7 @@ class TestChunkDeduplication:
         embed_model = "small"
 
         def _make_chunk(text: str, start: int) -> Chunk:
-            return Chunk(
-                text=text, start_line=start, end_line=start, token_count=len(text)
-            )
+            return Chunk(text=text, start_line=start, end_line=start, token_count=len(text))
 
         chunk_new = _make_chunk("print('hi')\n", 1)
         chunk_new.text_hash = hash_text(chunk_new.text)
@@ -75,18 +73,14 @@ class TestChunkDeduplication:
         embed_model = "small"
 
         def _make_chunk(text: str, start: int) -> Chunk:
-            return Chunk(
-                text=text, start_line=start, end_line=start, token_count=len(text)
-            )
+            return Chunk(text=text, start_line=start, end_line=start, token_count=len(text))
 
         chunk_new = _make_chunk("print('hi')\n", 1)
         chunk_new.text_hash = hash_text(chunk_new.text)
         chunk_without_hash = _make_chunk("print('bye')\n", 2)
 
         # Persist one chunk hash and ensure it is recognized as unchanged
-        store.upsert_chunk_content_row(
-            repo_id, file_id, chunk_new.text_hash, embed_model
-        )
+        store.upsert_chunk_content_row(repo_id, file_id, chunk_new.text_hash, embed_model)
         changed, unchanged = dedup.filter_unchanged_chunks(
             [chunk_new, chunk_without_hash], repo_id, file_id, embed_model
         )
@@ -116,9 +110,7 @@ class TestChunkDeduplication:
         embed_model = "small"
 
         def _make_chunk(text: str, start: int) -> Chunk:
-            return Chunk(
-                text=text, start_line=start, end_line=start, token_count=len(text)
-            )
+            return Chunk(text=text, start_line=start, end_line=start, token_count=len(text))
 
         chunk_new = _make_chunk("print('hi')\n", 1)
         chunk_new.text_hash = hash_text(chunk_new.text)
@@ -164,9 +156,7 @@ class TestChunkDeduplication:
         embed_model = "small"
 
         def _make_chunk(text: str, start: int) -> Chunk:
-            return Chunk(
-                text=text, start_line=start, end_line=start, token_count=len(text)
-            )
+            return Chunk(text=text, start_line=start, end_line=start, token_count=len(text))
 
         chunk = _make_chunk("print('moved')\n", 1)
         chunk.text_hash = hash_text(chunk.text)
@@ -203,9 +193,7 @@ class TestChunkDeduplication:
         dedup = ChunkDeduplicator(store)
 
         def _make_chunk(text: str, start: int) -> Chunk:
-            return Chunk(
-                text=text, start_line=start, end_line=start, token_count=len(text)
-            )
+            return Chunk(text=text, start_line=start, end_line=start, token_count=len(text))
 
         chunk = _make_chunk("print('hi')\n", 1)
         chunk.text_hash = hash_text(chunk.text)

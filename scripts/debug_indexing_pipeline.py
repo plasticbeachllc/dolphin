@@ -36,9 +36,7 @@ def check_repository_status():
 
         if repos:
             for repo in repos:
-                print(
-                    f"  ✅ {repo[0]}: {repo[1]} (embed: {repo[2]}, updated: {repo[3]})"
-                )
+                print(f"  ✅ {repo[0]}: {repo[1]} (embed: {repo[2]}, updated: {repo[3]})")
         else:
             print("  ❌ No repositories found")
 
@@ -59,9 +57,7 @@ def check_repository_status():
         if sessions:
             for session in sessions:
                 print(f"  📝 Session {session[0]}: {session[1]} ({session[2]})")
-                print(
-                    f"     Model: {session[3]}, Files: {session[4]}, Chunks: {session[5]}, Vectors: {session[6]}"
-                )
+                print(f"     Model: {session[3]}, Files: {session[4]}, Chunks: {session[5]}, Vectors: {session[6]}")
                 print(f"     Created: {session[7]}, Ended: {session[8]}")
                 if session[9]:
                     print(f"     Notes: {session[9]}")
@@ -95,9 +91,7 @@ def check_repository_status():
             sample_files = cursor.fetchall()
             print("  📄 Sample files:")
             for file in sample_files:
-                print(
-                    f"     {file[1]}:{file[0]} ({file[2]}, {file[4]}binary, {file[3]} bytes)"
-                )
+                print(f"     {file[1]}:{file[0]} ({file[2]}, {file[4]}binary, {file[3]} bytes)")
         else:
             print("  ❌ No files catalogued")
 
@@ -173,9 +167,7 @@ def check_lancedb_tables():
                     sample = table.head(3)
                     print("     Sample:")
                     for i, record in enumerate(sample):
-                        print(
-                            f"       {i + 1}. {record['id']} ({record['repo']}, {record['path']})"
-                        )
+                        print(f"       {i + 1}. {record['id']} ({record['repo']}, {record['path']})")
                 else:
                     print("     ⚠️  Empty table")
 
@@ -208,9 +200,7 @@ def check_error_logs():
             if errors:
                 print(f"Found {len(errors)} errors:")
                 for error in errors[-10:]:  # Last 10 errors
-                    print(
-                        f"  ❌ {error.get('timestamp', 'unknown')}: {error.get('path', 'unknown')}"
-                    )
+                    print(f"  ❌ {error.get('timestamp', 'unknown')}: {error.get('path', 'unknown')}")
                     print(f"     {error.get('error', 'Unknown error')}")
             else:
                 print("✅ No errors in log")

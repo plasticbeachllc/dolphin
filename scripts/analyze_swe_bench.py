@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Analyze SWE-Bench Lite to determine best repos for benchmarking."""
 
-from collections import Counter, defaultdict
 import json
+from collections import Counter, defaultdict
 from pathlib import Path
 
 try:

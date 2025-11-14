@@ -144,13 +144,9 @@ class KBConfig:
         if "batch_size" in data:
             config.batch_size = cls._coerce_optional(data["batch_size"], int)
         if "candidate_multiplier" in data:
-            config.candidate_multiplier = cls._coerce_optional(
-                data["candidate_multiplier"], int
-            )
+            config.candidate_multiplier = cls._coerce_optional(data["candidate_multiplier"], int)
         if "score_threshold" in data:
-            config.score_threshold = cls._coerce_optional(
-                data["score_threshold"], float
-            )
+            config.score_threshold = cls._coerce_optional(data["score_threshold"], float)
 
         return config
 
@@ -182,9 +178,7 @@ class KBConfig:
         if "metric" in data:
             config.metric = data["metric"]
         if "estimated_dataset_size" in data:
-            config.estimated_dataset_size = cls._coerce_optional(
-                data["estimated_dataset_size"], int
-            )
+            config.estimated_dataset_size = cls._coerce_optional(data["estimated_dataset_size"], int)
         if "default_query_type" in data:
             config.default_query_type = data["default_query_type"]
 
@@ -194,9 +188,7 @@ class KBConfig:
     def _build_retrieval_config(cls, data: dict) -> RetrievalConfig:
         """Build retrieval configuration from mapping."""
         reranking_data = data.get("reranking", {}) if isinstance(data, dict) else {}
-        hybrid_search_data = (
-            data.get("hybrid_search", {}) if isinstance(data, dict) else {}
-        )
+        hybrid_search_data = data.get("hybrid_search", {}) if isinstance(data, dict) else {}
         ann_data = data.get("ann", {}) if isinstance(data, dict) else {}
 
         config = RetrievalConfig(
@@ -210,9 +202,7 @@ class KBConfig:
         if "top_k" in data:
             config.top_k = cls._coerce_optional(data["top_k"], int)
         if "max_snippet_tokens" in data:
-            config.max_snippet_tokens = cls._coerce_optional(
-                data["max_snippet_tokens"], int
-            )
+            config.max_snippet_tokens = cls._coerce_optional(data["max_snippet_tokens"], int)
         if "mmr_enabled" in data:
             config.mmr_enabled = cls._coerce_optional(data["mmr_enabled"], bool)
         if "mmr_lambda" in data:
@@ -318,9 +308,7 @@ def load_config(path: Path | None = None, repo_path: Path | None = None) -> KBCo
     # 1) Explicit path
     if path is not None:
         if not path.exists():
-            raise FileNotFoundError(
-                f"Config not found at {path}. Run 'dolphin init' to create one."
-            )
+            raise FileNotFoundError(f"Config not found at {path}. Run 'dolphin init' to create one.")
         _log.debug("Loading config from explicit path: %s", path)
         with path.open("rb") as f:
             config_data = tomllib.load(f) or {}
@@ -337,9 +325,7 @@ def load_config(path: Path | None = None, repo_path: Path | None = None) -> KBCo
     if not config_data and path is None:
         user_config = USER_CONFIG_PATH
         if not user_config.exists():
-            raise FileNotFoundError(
-                "No configuration found. Create one with 'dolphin init' or provide --config path."
-            )
+            raise FileNotFoundError("No configuration found. Create one with 'dolphin init' or provide --config path.")
         _log.debug("Loading user config: %s", user_config)
         with user_config.open("rb") as f:
             config_data = tomllib.load(f) or {}

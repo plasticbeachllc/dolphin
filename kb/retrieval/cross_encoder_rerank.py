@@ -86,9 +86,7 @@ class CrossEncoderReranker:
     ) -> list[dict]:
         """Reranks results using the cross-encoder model."""
         if not self.enabled or not self.model:
-            _log.warning(
-                "Cross-encoder is not available or enabled. Returning original order."
-            )
+            _log.warning("Cross-encoder is not available or enabled. Returning original order.")
             return list(results[:top_k])
 
         if not results:
@@ -106,11 +104,7 @@ class CrossEncoderReranker:
                 result["rerank_score"] = float(score)
 
             # Filter and sort
-            reranked_results = [
-                r
-                for r in results
-                if score_threshold is None or r["rerank_score"] >= score_threshold
-            ]
+            reranked_results = [r for r in results if score_threshold is None or r["rerank_score"] >= score_threshold]
             reranked_results.sort(key=lambda x: x["rerank_score"], reverse=True)
 
             return reranked_results[:top_k]

@@ -271,9 +271,7 @@ class TestTaskQueueCleanup:
 
         # Create a failed task
         task = queue.create_task(repo="test-repo", files=["file.py"])
-        await queue.update_task(
-            task.task_id, status=TaskStatus.FAILED, error="Test error"
-        )
+        await queue.update_task(task.task_id, status=TaskStatus.FAILED, error="Test error")
 
         # Manually set completed_at to 2 hours ago
         task.completed_at = datetime.now(UTC) - timedelta(hours=2)

@@ -174,6 +174,5 @@ def main():
     uvicorn.run("kb.api.server:app_with_lifespan", host="0.0.0.0", port=8000, reload=True)
 
 
-
 if __name__ == "__main__":
     main()

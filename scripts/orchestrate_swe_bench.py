@@ -27,9 +27,7 @@ from kb.store.sqlite_meta import SQLiteMetadataStore
 class SWEBenchOrchestrator:
     """Orchestrates SWE-Bench Lite evaluation workflow."""
 
-    def __init__(
-        self, repos_dir: Path, index_dir: Path, config_path: Path, state_file: Path
-    ):
+    def __init__(self, repos_dir: Path, index_dir: Path, config_path: Path, state_file: Path):
         self.repos_dir = repos_dir
         self.index_dir = index_dir
         self.config_path = config_path
@@ -269,9 +267,7 @@ class SWEBenchOrchestrator:
             return 0.0
 
         try:
-            result = subprocess.run(
-                ["du", "-sm", str(path)], capture_output=True, text=True, timeout=30
-            )
+            result = subprocess.run(["du", "-sm", str(path)], capture_output=True, text=True, timeout=30)
             if result.returncode == 0:
                 return float(result.stdout.split()[0])
         except:
@@ -343,9 +339,7 @@ class SWEBenchOrchestrator:
 
                     # Check if repo name matches any cloned repo
                     for cloned_repo in self.state.get("repos_cloned", {}).keys():
-                        if repo_name == cloned_repo or repo_name == cloned_repo.replace(
-                            "/", "__"
-                        ):
+                        if repo_name == cloned_repo or repo_name == cloned_repo.replace("/", "__"):
                             should_delete = True
                             break
 
@@ -359,9 +353,7 @@ class SWEBenchOrchestrator:
                         # Delete all data associated with this repo
                         conn.execute("DELETE FROM chunks WHERE repo_id = ?", (repo_id,))
                         conn.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
-                        conn.execute(
-                            "DELETE FROM scan_sessions WHERE repo_id = ?", (repo_id,)
-                        )
+                        conn.execute("DELETE FROM scan_sessions WHERE repo_id = ?", (repo_id,))
                         conn.execute("DELETE FROM repos WHERE id = ?", (repo_id,))
 
                         deleted_count += 1
@@ -388,9 +380,7 @@ class SWEBenchOrchestrator:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Orchestrate SWE-Bench Lite evaluation setup"
-    )
+    parser = argparse.ArgumentParser(description="Orchestrate SWE-Bench Lite evaluation setup")
 
     parser.add_argument(
         "--repos-dir",
@@ -426,9 +416,7 @@ def main():
     subparsers.add_parser("status", help="Show current setup status")
 
     # Cleanup command
-    subparsers.add_parser(
-        "cleanup", help="Remove all registered SWE-Bench repos from database"
-    )
+    subparsers.add_parser("cleanup", help="Remove all registered SWE-Bench repos from database")
 
     # Clone command
     clone_parser = subparsers.add_parser("clone", help="Clone specific repo")
@@ -437,9 +425,7 @@ def main():
     # Index command
     index_parser = subparsers.add_parser("index", help="Index specific repo")
     index_parser.add_argument("repo", help="Repo name")
-    index_parser.add_argument(
-        "--model", choices=["small", "large"], default="small", help="Embedding model"
-    )
+    index_parser.add_argument("--model", choices=["small", "large"], default="small", help="Embedding model")
 
     args = parser.parse_args()
 

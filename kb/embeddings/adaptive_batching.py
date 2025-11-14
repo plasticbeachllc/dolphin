@@ -120,15 +120,11 @@ class AdaptiveBatcher:
             estimated_size = self.max_batch_size
 
         # Apply constraints
-        estimated_size = max(
-            self.min_batch_size, min(estimated_size, self.max_batch_size)
-        )
+        estimated_size = max(self.min_batch_size, min(estimated_size, self.max_batch_size))
 
         # Adjust based on recent performance
         if self._recent_metrics:
-            recent_avg = sum(m.avg_tokens for m in self._recent_metrics) / len(
-                self._recent_metrics
-            )
+            recent_avg = sum(m.avg_tokens for m in self._recent_metrics) / len(self._recent_metrics)
             if recent_avg > 0:
                 adjusted_size = int(self.target_tokens / recent_avg)
                 # Blend estimate with adjusted size
@@ -162,12 +158,8 @@ class AdaptiveBatcher:
                 "avg_processing_time": 0,
             }
 
-        avg_batch_size = sum(m.batch_size for m in self._recent_metrics) / len(
-            self._recent_metrics
-        )
-        avg_tokens = sum(m.total_tokens for m in self._recent_metrics) / len(
-            self._recent_metrics
-        )
+        avg_batch_size = sum(m.batch_size for m in self._recent_metrics) / len(self._recent_metrics)
+        avg_tokens = sum(m.total_tokens for m in self._recent_metrics) / len(self._recent_metrics)
 
         times = [m.processing_time for m in self._recent_metrics if m.processing_time]
         avg_time = sum(times) / len(times) if times else 0

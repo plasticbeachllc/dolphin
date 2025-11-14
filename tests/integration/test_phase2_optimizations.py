@@ -49,9 +49,7 @@ class TestParallelScanning:
             (repo_dir / f"file_{i}.py").write_text(f"# File {i}\nprint('hello')")
 
         # Add files to git
-        subprocess.run(
-            ["git", "add", "."], cwd=repo_dir, check=True, capture_output=True
-        )
+        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
 
         # Scan with parallel scanner
         candidates = scan_repo_parallel(repo_dir, [])
@@ -89,9 +87,7 @@ class TestParallelScanning:
             (repo_dir / f"file_{i}.py").write_text(f"# File {i}\n" + "x = 1\n" * 100)
 
         # Add files to git
-        subprocess.run(
-            ["git", "add", "."], cwd=repo_dir, check=True, capture_output=True
-        )
+        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
 
         # Sequential scan
         start = time.time()
@@ -374,9 +370,7 @@ class TestPhase2Integration:
             (repo_dir / f"module_{i}.py").write_text(f"# Module {i}\ndef function_{i}():\n    return {i}\n")
 
         # Add files to git
-        subprocess.run(
-            ["git", "add", "."], cwd=repo_dir, check=True, capture_output=True
-        )
+        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
 
         # Test 1: Parallel scanning
         candidates = scan_repo_parallel(repo_dir, [], num_workers=4)
@@ -409,9 +403,7 @@ class TestPhase2Integration:
                 with open(result.file_path) as f:
                     content = f.read()
                 content_hash = hash_text(content)
-                ast_cache.put(
-                    str(result.file_path), content_hash, result.chunks, "python"
-                )
+                ast_cache.put(str(result.file_path), content_hash, result.chunks, "python")
 
         # Verify cache works
         first_result = results[0]

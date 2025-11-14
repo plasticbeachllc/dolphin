@@ -137,9 +137,7 @@ class ParallelHybridSearch:
             self.vector_search_fn: Callable[[Any, Any], Any] | None = vector_search_fn
 
         if bm25_search_fn is None and bm25_store is not None:
-            self.bm25_search_fn = lambda query, top_k, **kwargs: bm25_store.search(
-                query, top_k, **kwargs
-            )
+            self.bm25_search_fn = lambda query, top_k, **kwargs: bm25_store.search(query, top_k, **kwargs)
         else:
             self.bm25_search_fn: Callable[[Any, Any], Any] | None = bm25_search_fn
 

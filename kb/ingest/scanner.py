@@ -27,9 +27,7 @@ class ScannerError(RuntimeError):
 
 def _git(root: Path, *args: str) -> bytes:
     try:
-        return subprocess.check_output(
-            ["git", "-C", str(root), *args], stderr=subprocess.STDOUT
-        )
+        return subprocess.check_output(["git", "-C", str(root), *args], stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError as e:
         raise ScannerError(e.output.decode("utf-8", errors="ignore"))
 

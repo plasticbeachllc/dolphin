@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Migrate database to add code graph tables."""
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 # Add kb to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -38,9 +38,7 @@ def migrate_graph_tables():
             cursor = conn.cursor()
 
             # Check for graph tables
-            cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'code_%'"
-            )
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'code_%'")
             tables = cursor.fetchall()
 
             print("Graph tables created:")

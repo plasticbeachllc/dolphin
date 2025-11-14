@@ -56,16 +56,12 @@ def test_mcp_search():
         content = response.get("result", {}).get("content", [])
 
         print("✅ Search completed successfully!")
-        print(
-            f"📊 Results: {len([c for c in content if c.get('type') == 'resource'])} hits"
-        )
+        print(f"📊 Results: {len([c for c in content if c.get('type') == 'resource'])} hits")
         print()
 
         # Check for graph context in prompt-ready text
         for block in content:
-            if block.get("type") == "text" and "Code Graph Context" in block.get(
-                "text", ""
-            ):
+            if block.get("type") == "text" and "Code Graph Context" in block.get("text", ""):
                 print("✅ Graph context found in results!")
                 print()
                 # Print a snippet
@@ -76,9 +72,7 @@ def test_mcp_search():
                     None,
                 )
                 if context_start is not None:
-                    context_snippet = "\n".join(
-                        lines[context_start : context_start + 20]
-                    )
+                    context_snippet = "\n".join(lines[context_start : context_start + 20])
                     print("Sample graph context:")
                     print("-" * 60)
                     print(context_snippet)

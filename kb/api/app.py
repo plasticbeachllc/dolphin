@@ -231,9 +231,7 @@ async def list_repos() -> dict[str, list[dict[str, object]]]:
                 file_count = cur.fetchone()[0]
 
                 # Count chunks for this repo
-                cur.execute(
-                    "SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,)
-                )
+                cur.execute("SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,))
                 chunk_count = cur.fetchone()[0]
 
                 repos.append(
@@ -532,14 +530,10 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
     # Validate path exists
     repo_path = Path(request.path)
     if not repo_path.exists():
-        raise HTTPException(
-            status_code=400, detail=f"Path does not exist: {request.path}"
-        )
+        raise HTTPException(status_code=400, detail=f"Path does not exist: {request.path}")
 
     if not repo_path.is_dir():
-        raise HTTPException(
-            status_code=400, detail=f"Path is not a directory: {request.path}"
-        )
+        raise HTTPException(status_code=400, detail=f"Path is not a directory: {request.path}")
 
     # Register the repository
     try:
@@ -555,9 +549,7 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
         # Get the registered repo to retrieve its ID
         repo = _sql_store.get_repo_by_name(request.name)
         if not repo:
-            raise HTTPException(
-                status_code=500, detail="Failed to retrieve registered repository"
-            )
+            raise HTTPException(status_code=500, detail="Failed to retrieve registered repository")
 
         # Return normalized path from database to ensure consistency
         return RegisterRepoResponse(
@@ -569,9 +561,7 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to register repository: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to register repository: {str(e)}")
 
 
 @app.post("/v1/admin/rebuild-fts5")
@@ -726,10 +716,8 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
 
             # Deduplicate by text_hash
             chunk_deduplicator = ChunkDeduplicator(_sql_store)
-            changed_chunks, unchanged_chunks = (
-                chunk_deduplicator.filter_unchanged_chunks(
-                    chunks, repo_id, file_id, embed_model
-                )
+            changed_chunks, unchanged_chunks = chunk_deduplicator.filter_unchanged_chunks(
+                chunks, repo_id, file_id, embed_model
             )
             new_hashes = {c.text_hash for c in changed_chunks}
             skipped_occurrences = len(unchanged_chunks)
@@ -845,9 +833,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
 
             # Prune any stale vectors for this file/model
             if desired_row_ids:
-                _lance_store.prune_file_rows(
-                    repo_name, filepath, model=embed_model, keep_ids=desired_row_ids
-                )
+                _lance_store.prune_file_rows(repo_name, filepath, model=embed_model, keep_ids=desired_row_ids)
             else:
                 _lance_store.prune_file_rows(repo_name, filepath, model=embed_model)
 
@@ -870,9 +856,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             # Automatically mark pending changes for this file as processed
             # This file has been successfully indexed, so any pending changes
             # that triggered the indexing are now resolved
-            _sql_store.mark_changes_for_file_processed(
-                repo_id=repo_id, file_path=filepath
-            )
+            _sql_store.mark_changes_for_file_processed(repo_id=repo_id, file_path=filepath)
 
             # Update task with current indexed/skipped counts
             await task_queue.update_task(task_id, indexed=chunks_indexed, skipped=chunks_skipped)
@@ -946,9 +930,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
 
 
 @app.post("/v1/index")
-async def index_files(
-    request: IndexRequest, background_tasks: BackgroundTasks
-) -> IndexResponse:
+async def index_files(request: IndexRequest, background_tasks: BackgroundTasks) -> IndexResponse:
     """Queue files for indexing and return immediately with task ID.
 
     This endpoint creates an indexing task and processes it in the background.
@@ -960,18 +942,14 @@ async def index_files(
     # Validate repo exists
     repo = _sql_store.get_repo_by_name(request.repo)
     if not repo:
-        raise HTTPException(
-            status_code=404, detail=f"Repository '{request.repo}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Repository '{request.repo}' not found")
 
     # Create task
     task_queue = get_task_queue()
     task = task_queue.create_task(request.repo, request.files)
 
     # Queue background processing
-    background_tasks.add_task(
-        _process_index_task, task.task_id, request.repo, request.files
-    )
+    background_tasks.add_task(_process_index_task, task.task_id, request.repo, request.files)
 
     return IndexResponse(
         task_id=task.task_id,
@@ -1052,9 +1030,7 @@ async def get_repo_stats(repo_name: str) -> RepoStatsResponse:
             files_count = cur.fetchone()[0]
 
             # Count chunks
-            cur.execute(
-                "SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,)
-            )
+            cur.execute("SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,))
             chunks_count = cur.fetchone()[0]
 
             # Sum token counts (from LanceDB metadata or estimate)
@@ -1099,9 +1075,7 @@ async def get_repo_stats(repo_name: str) -> RepoStatsResponse:
         import logging
 
         logging.error(f"Failed to get stats for repo {repo_name}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get repo stats: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get repo stats: {str(e)}")
 
 
 @app.post("/v1/repos/{repo_name}/reindex")
@@ -1206,9 +1180,7 @@ async def reindex_repo(repo_name: str, request: ReindexRequest, background_tasks
                     commit_sha = git_repo.get_current_commit()
 
                     # Get changed files
-                    changed_files = git_changed_files_modified_added(
-                        root, last_success, commit_sha
-                    )
+                    changed_files = git_changed_files_modified_added(root, last_success, commit_sha)
                 except Exception:
                     # Fallback: queue all tracked files
                     from ..ingest._helpers import get_all_tracked_files
@@ -1239,9 +1211,7 @@ async def reindex_repo(repo_name: str, request: ReindexRequest, background_tasks
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to trigger reindex: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to trigger reindex: {str(e)}")
 
 
 @app.delete("/v1/repos/{repo_name}/index")
@@ -1260,9 +1230,7 @@ async def clear_repo_index(repo_name: str, confirmed: bool = False) -> dict:
     # Get repo
     repo = _sql_store.get_repo_by_name(repo_name)
     if not repo:
-        raise HTTPException(
-            status_code=404, detail=f"Repository '{repo_name}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
 
     repo_id = int(repo["id"])
 
@@ -1296,9 +1264,7 @@ async def record_pending_changes(repo_name: str, request: PendingChangeRequest) 
     # Get repo
     repo = _sql_store.get_repo_by_name(repo_name)
     if not repo:
-        raise HTTPException(
-            status_code=404, detail=f"Repository '{repo_name}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
 
     repo_id = int(repo["id"])
 
@@ -1318,9 +1284,7 @@ async def record_pending_changes(repo_name: str, request: PendingChangeRequest) 
             "message": f"Recorded {len(change_ids)} pending changes for '{repo_name}'",
         }
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to record changes: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to record changes: {str(e)}")
 
 
 @app.get("/v1/repos/{repo_name}/pending-changes")
@@ -1336,9 +1300,7 @@ async def get_pending_changes(repo_name: str, limit: int = 1000) -> dict:
     # Get repo
     repo = _sql_store.get_repo_by_name(repo_name)
     if not repo:
-        raise HTTPException(
-            status_code=404, detail=f"Repository '{repo_name}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
 
     repo_id = int(repo["id"])
 
@@ -1351,9 +1313,7 @@ async def get_pending_changes(repo_name: str, limit: int = 1000) -> dict:
 
         return {"changes": changes, "total": len(changes)}
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get pending changes: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get pending changes: {str(e)}")
 
 
 @app.post("/v1/repos/{repo_name}/changes/mark-processed")
@@ -1368,9 +1328,7 @@ async def mark_changes_processed(repo_name: str, request: MarkProcessedRequest) 
     # Get repo
     repo = _sql_store.get_repo_by_name(repo_name)
     if not repo:
-        raise HTTPException(
-            status_code=404, detail=f"Repository '{repo_name}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
 
     try:
         processed = _sql_store.mark_changes_processed(request.change_ids)
@@ -1380,9 +1338,7 @@ async def mark_changes_processed(repo_name: str, request: MarkProcessedRequest) 
             "message": f"Marked {processed} changes as processed",
         }
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to mark changes as processed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to mark changes as processed: {str(e)}")
 
 
 @app.get("/v1/repos/{repo_name}/drift")
@@ -1398,9 +1354,7 @@ async def detect_drift(repo_name: str) -> DriftDetectionResponse:
     # Get repo
     repo = _sql_store.get_repo_by_name(repo_name)
     if not repo:
-        raise HTTPException(
-            status_code=404, detail=f"Repository '{repo_name}' not found"
-        )
+        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
 
     repo_id = int(repo["id"])
 

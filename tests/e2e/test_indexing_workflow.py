@@ -152,9 +152,7 @@ def refresh_token(old_token):
         initial_files = result1["files_indexed"]
 
         # Full re-index (use full_reindex=True to drop and rebuild entire index)
-        result2 = pipeline.index(
-            repo_name, dry_run=False, force=True, full_reindex=True
-        )
+        result2 = pipeline.index(repo_name, dry_run=False, force=True, full_reindex=True)
 
         # Full reindex creates a fresh session (may reuse ID 1 after dropping old sessions)
         assert result2["session_id"] is not None

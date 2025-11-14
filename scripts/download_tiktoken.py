@@ -20,9 +20,7 @@ def download_tiktoken_encodings():
     try:
         import tiktoken
     except ImportError:
-        print(
-            "ERROR: tiktoken not installed. Run: uv sync --group test", file=sys.stderr
-        )
+        print("ERROR: tiktoken not installed. Run: uv sync --group test", file=sys.stderr)
         return False
 
     print("Downloading tiktoken encoding data...")
@@ -51,9 +49,7 @@ def download_tiktoken_encodings():
         print("Reason:")
         for name, error in failed:
             if "403" in error or "Forbidden" in error:
-                print(
-                    "  Network access to OpenAI's blob storage is blocked (403 Forbidden)"
-                )
+                print("  Network access to OpenAI's blob storage is blocked (403 Forbidden)")
                 break
             print(f"  {name}: {error}")
 
@@ -66,12 +62,8 @@ def download_tiktoken_encodings():
         print("  • Production code uses real tiktoken when embedding data is available")
         print()
         print("To use real tiktoken in production:")
-        print(
-            "  1. Ensure network access to https://openaipublic.blob.core.windows.net"
-        )
-        print(
-            "  2. OR pre-download tiktoken data in an environment with network access"
-        )
+        print("  1. Ensure network access to https://openaipublic.blob.core.windows.net")
+        print("  2. OR pre-download tiktoken data in an environment with network access")
         print("  3. OR copy cached data to ~/.cache/tiktoken/")
         print()
         return False

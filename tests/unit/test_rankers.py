@@ -142,9 +142,7 @@ class TestWeightedFusion:
         fused_unnormalized = weighted_fusion([list1, list2], [0.5, 0.5], normalize=False)
 
         # Should have different results due to normalization
-        assert (
-            fused_normalized[0]["fused_score"] != fused_unnormalized[0]["fused_score"]
-        )
+        assert fused_normalized[0]["fused_score"] != fused_unnormalized[0]["fused_score"]
 
     def test_missing_scores(self):
         """Test handling of missing scores."""
@@ -256,9 +254,7 @@ class TestMaximalMarginalRelevance:
         diversity_scores = [r["mmr_score"] for r in result_diversity]
 
         # Should have different score distributions
-        assert relevance_scores != diversity_scores, (
-            "Different lambda values should produce different MMR scores"
-        )
+        assert relevance_scores != diversity_scores, "Different lambda values should produce different MMR scores"
 
     def test_top_k_limit(self):
         """Test top_k parameter limits results."""
