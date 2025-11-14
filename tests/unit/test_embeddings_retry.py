@@ -1,7 +1,5 @@
 """Tests for embedding provider retry logic."""
 
-import time
-import types
 import pytest
 
 from kb.embeddings.provider import (

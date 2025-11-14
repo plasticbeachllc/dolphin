@@ -18,7 +18,6 @@ Requirements:
 
 import json
 import statistics
-import tempfile
 import time
 from pathlib import Path
 from typing import Any, Dict, List
@@ -183,12 +182,12 @@ class HybridSearchValidator:
             latency_request, self.vector_only_backend, num_runs=20
         )
 
-        print(f"Hybrid Search Latency:")
+        print("Hybrid Search Latency:")
         print(f"  Mean: {hybrid_latency['mean_ms']:.1f}ms")
         print(f"  Median: {hybrid_latency['median_ms']:.1f}ms")
         print(f"  P95: {hybrid_latency['p95_ms']:.1f}ms")
 
-        print(f"Vector-Only Search Latency:")
+        print("Vector-Only Search Latency:")
         print(f"  Mean: {vector_latency['mean_ms']:.1f}ms")
         print(f"  Median: {vector_latency['median_ms']:.1f}ms")
         print(f"  P95: {vector_latency['p95_ms']:.1f}ms")

@@ -11,7 +11,6 @@ Key security features:
 - URL-encoding attack prevention
 """
 
-import os
 import re
 import unicodedata
 from pathlib import Path

@@ -214,7 +214,6 @@ async def list_repos() -> dict[str, list[dict[str, object]]]:
 
     # Query all repos from SQL store
     try:
-        import sqlite3
         from contextlib import closing
 
         repos = []
@@ -646,7 +645,6 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             return
 
         # Process files
-        import subprocess
         from ..ingest.dedup import ChunkDeduplicator
         from ..chunkers.registry import (
             detect_language_from_extension,
@@ -1233,7 +1231,6 @@ async def reindex_repo(
             # Get changed files since last commit
             from ..ingest._helpers import git_changed_files_modified_added
             from pathlib import Path
-            import subprocess
 
             repo_id = int(repo["id"])
             root = Path(repo["root_path"])
@@ -1497,14 +1494,14 @@ async def _process_full_reindex_task(
             )
             # Clear existing index
             _pipeline._drop_repo_index(repo_id, repo_name)
-            logger.info(f"[Full Reindex Task] Index cleared successfully")
+            logger.info("[Full Reindex Task] Index cleared successfully")
 
         logger.info(
             f"[Full Reindex Task] About to process {len(files)} files for {repo_name}"
         )
         # Now process all files using standard indexing
         await _process_index_task(task_id, repo_name, files)
-        logger.info(f"[Full Reindex Task] Completed processing")
+        logger.info("[Full Reindex Task] Completed processing")
 
     except Exception as e:
         import traceback

@@ -1,8 +1,6 @@
 """Graph store wrapper for graph intelligence operations."""
 
-import sqlite3
 from contextlib import closing
-from datetime import datetime
 from typing import List, Optional
 
 from kb.store.graph_store import GraphStore as BaseGraphStore

@@ -6,7 +6,7 @@ Instruments all endpoints with essential metrics for debugging and latency monit
 import time
 from typing import Callable
 
-from fastapi import Request, Response
+from fastapi import Request
 from fastapi.responses import Response as FastAPIResponse
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
@@ -129,7 +129,7 @@ async def prometheus_middleware(request: Request, call_next: Callable):
         response = await call_next(request)
         status_code = response.status_code
         return response
-    except Exception as e:
+    except Exception:
         status_code = 500
         raise
     finally:

@@ -36,12 +36,12 @@ print(f"\n📁 FILES: {files_count} files indexed")
 # 3. Check chunk_content
 cursor.execute("SELECT COUNT(*), embed_model FROM chunk_content GROUP BY embed_model")
 chunks = cursor.fetchall()
-print(f"\n🧩 CHUNK_CONTENT:")
+print("\n🧩 CHUNK_CONTENT:")
 for row in chunks:
     print(f"  {row[1]} model: {row[0]} chunks")
 
 # 4. Check FTS5 table - CRITICAL
-print(f"\n🔍 FTS5 TABLE (chunks_fts):")
+print("\n🔍 FTS5 TABLE (chunks_fts):")
 try:
     cursor.execute("SELECT COUNT(*) FROM chunks_fts")
     fts_count = cursor.fetchone()[0]
@@ -55,7 +55,7 @@ try:
             "SELECT content_id, repo, path, text_hash, substr(content, 1, 100) FROM chunks_fts LIMIT 5"
         )
         samples = cursor.fetchall()
-        print(f"  Sample entries:")
+        print("  Sample entries:")
         for s in samples:
             print(
                 f"    - content_id: {s[0][:16]}... repo: {s[1]}, file: {s[2]}, text_hash: {s[3][:16]}..."
@@ -69,13 +69,13 @@ try:
         print(f"  Columns: {col_names}")
 
         if "text_hash" not in col_names:
-            print(f"  ⚠️  WARNING: text_hash column missing from FTS5!")
+            print("  ⚠️  WARNING: text_hash column missing from FTS5!")
 
 except sqlite3.Error as e:
     print(f"  ❌ Error querying FTS5: {e}")
 
 # 5. Check LanceDB tables
-print(f"\n🎯 LANCEDB TABLES:")
+print("\n🎯 LANCEDB TABLES:")
 try:
     import lancedb
 
@@ -100,7 +100,7 @@ except Exception as e:
     print(f"  ❌ Error accessing LanceDB: {e}")
 
 # 6. Test BM25 search directly
-print(f"\n🔎 TESTING BM25 SEARCH DIRECTLY:")
+print("\n🔎 TESTING BM25 SEARCH DIRECTLY:")
 try:
     test_query = "validation"
     cursor.execute(
@@ -124,7 +124,7 @@ try:
                 f"    - content_id: {r[0][:16]}..., repo: {r[1]}, file: {r[2]}, score: {r[3]:.4f}"
             )
     else:
-        print(f"  ❌ NO RESULTS from BM25 search!")
+        print("  ❌ NO RESULTS from BM25 search!")
 
 except sqlite3.Error as e:
     print(f"  ❌ Error running BM25 search: {e}")
@@ -134,7 +134,7 @@ cursor.execute(
     "SELECT id, commit_sha, branch, embed_model, status, chunks_indexed FROM sessions ORDER BY id DESC LIMIT 3"
 )
 sessions = cursor.fetchall()
-print(f"\n📊 RECENT SESSIONS:")
+print("\n📊 RECENT SESSIONS:")
 for s in sessions:
     print(f"  Session {s[0]}: {s[4]}, {s[5]} chunks, model: {s[3]}")
 

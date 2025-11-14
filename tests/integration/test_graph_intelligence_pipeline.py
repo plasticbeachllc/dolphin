@@ -14,10 +14,9 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from sqlmodel import Session, create_engine
+from sqlmodel import Session
 
 from kb.config import KBConfig
-from kb.graph_intelligence.graph_manager import GraphManager
 from kb.ingest.pipeline import IngestionPipeline
 from kb.store import LanceDBStore, SQLiteMetadataStore
 from kb.store.graph_store import GraphStore

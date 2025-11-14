@@ -11,7 +11,7 @@ Mathematical Background:
 
 from __future__ import annotations
 
-from typing import Sequence, Any, Callable, Optional
+from typing import Sequence, Any, Callable
 import math
 
 from ..constants.retrieval_config import RETRIEVAL_PARAMS

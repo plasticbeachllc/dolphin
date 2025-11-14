@@ -8,8 +8,6 @@ Tests cover:
 - Graph extraction (nodes and edges)
 """
 
-import pytest
-
 from kb.chunkers.sql_chunker import chunk_source, detect_sql_dialect, extract_graph_data
 
 

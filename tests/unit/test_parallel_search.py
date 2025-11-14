@@ -1,7 +1,6 @@
 """Unit tests for parallel hybrid search."""
 
-import asyncio
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 

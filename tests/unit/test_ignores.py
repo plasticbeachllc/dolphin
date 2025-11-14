@@ -1,9 +1,5 @@
 """Unit tests for ignore pattern handling."""
 
-from pathlib import Path
-
-import pytest
-
 from kb.ignores import DEFAULT_IGNORE_PATTERNS, build_ignore_set, load_repo_ignores
 
 

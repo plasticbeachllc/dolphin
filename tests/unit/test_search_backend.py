@@ -1,11 +1,9 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from pathlib import Path
 
 from kb.api.search_backend import KnowledgeSearchBackend, create_search_backend
 from kb.api.app import SearchRequest
-from kb.config import KBConfig
-import math
 
 
 @pytest.fixture
@@ -146,8 +144,6 @@ def real_backend(tmp_path: Path):
 
     # Cleanup: Clear any existing test data from previous runs
     with backend.sql_store._connect() as conn:
-        from contextlib import closing
-
         cur = conn.cursor()
         # Clear FTS5 table
         cur.execute("DELETE FROM chunks_fts")
@@ -173,8 +169,6 @@ def real_backend(tmp_path: Path):
     # Post-test cleanup to ensure no data persists
     try:
         with backend.sql_store._connect() as conn:
-            from contextlib import closing
-
             cur = conn.cursor()
             cur.execute("DELETE FROM chunks_fts")
             conn.commit()
@@ -222,8 +216,6 @@ class TestSearchBackendIntegration:
 
         # Verify FTS indexing worked
         with real_backend.sql_store._connect() as conn:
-            from contextlib import closing
-
             cur = conn.cursor()
             cur.execute(
                 "SELECT content_id, content FROM chunks_fts WHERE repo = 'test-repo'"

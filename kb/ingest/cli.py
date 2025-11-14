@@ -167,7 +167,7 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
 
     # Get aggregate counts
     summary = metadata.summarize()
-    typer.echo(f"\n📊 Knowledge Store Summary:")
+    typer.echo("\n📊 Knowledge Store Summary:")
     typer.echo(f"  Total repositories: {summary['repos']}")
     typer.echo(f"  Total files: {summary['files']}")
     typer.echo(f"  Total chunks: {summary['chunks']}")
@@ -175,14 +175,14 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
     # List all registered repositories
     repos = metadata.list_all_repos()
     if repos:
-        typer.echo(f"\n📚 Registered Repositories:")
+        typer.echo("\n📚 Registered Repositories:")
         for repo in repos:
             typer.echo(f"\n  • {repo['name']}")
             typer.echo(f"    Path: {repo['root_path']}")
             typer.echo(f"    Embed Model: {repo['default_embed_model']}")
             typer.echo(f"    Created: {repo['created_at']}")
     else:
-        typer.echo(f"\n  No repositories registered.")
+        typer.echo("\n  No repositories registered.")
 
     typer.echo()
 
@@ -240,7 +240,7 @@ def prune_ignored(
         if bun_in_repo:
             typer.echo(f"Debug: bun patterns in repo_level: {bun_in_repo}", err=True)
         else:
-            typer.echo(f"Debug: NO bun patterns in repo_level", err=True)
+            typer.echo("Debug: NO bun patterns in repo_level", err=True)
     if repo_level_patterns:
         ignore_patterns.update(repo_level_patterns)
     # Apply repo-level exceptions
@@ -261,7 +261,7 @@ def prune_ignored(
         if bun_patterns:
             typer.echo(f"Debug: bun-related patterns: {bun_patterns}", err=True)
         else:
-            typer.echo(f"Debug: NO bun patterns found!", err=True)
+            typer.echo("Debug: NO bun patterns found!", err=True)
     # Get all files for this repo
     files = metadata.get_all_files_for_repo(repo_id)
 
@@ -300,7 +300,7 @@ def prune_ignored(
                 total_chunks_pruned += len(file_chunks) if file_chunks else 0
 
     if dry_run:
-        typer.echo(f"[DRY RUN] Would prune:")
+        typer.echo("[DRY RUN] Would prune:")
         typer.echo(f"  Files: {len(pruned_files)}")
         typer.echo(f"  Chunks: {total_chunks_pruned}")
         for f in pruned_files[:10]:
@@ -357,7 +357,7 @@ def rm_repo(
         typer.echo(
             f"  Found {len(active_sessions)} active indexing session(s).", err=True
         )
-        typer.echo(f"  Use --force to override and abort active sessions.", err=True)
+        typer.echo("  Use --force to override and abort active sessions.", err=True)
         raise typer.Exit(code=1)
 
     # Confirm deletion unless --force
@@ -379,7 +379,7 @@ def rm_repo(
         # Display cleanup statistics
         stats = result["cleanup_stats"]
         typer.echo(f"\n✓ Repository '{name}' removed successfully.")
-        typer.echo(f"\nCleanup Statistics:")
+        typer.echo("\nCleanup Statistics:")
         typer.echo(f"  Files deleted: {stats['files_deleted']}")
         typer.echo(f"  Chunk content deleted: {stats['content_deleted']}")
         typer.echo(f"  Chunk locations deleted: {stats['locations_deleted']}")
@@ -387,20 +387,20 @@ def rm_repo(
 
         # FTS5 cleanup details
         fts_stats = stats["fts5_entries"]
-        typer.echo(f"\n  FTS5 Cleanup:")
+        typer.echo("\n  FTS5 Cleanup:")
         typer.echo(f"    By content_id: {fts_stats['by_content_id']}")
         typer.echo(f"    By repo name: {fts_stats['by_repo_name']}")
         typer.echo(f"    Orphaned entries: {fts_stats['orphaned']}")
 
         # LanceDB cleanup details
         lance_stats = stats["lancedb_vectors"]
-        typer.echo(f"\n  LanceDB Cleanup:")
+        typer.echo("\n  LanceDB Cleanup:")
         typer.echo(f"    Small model vectors: {lance_stats['small_deleted']}")
         typer.echo(f"    Large model vectors: {lance_stats['large_deleted']}")
 
         # Show warnings if any
         if "lancedb_warnings" in result:
-            typer.echo(f"\n⚠️  Warnings:")
+            typer.echo("\n⚠️  Warnings:")
             for warning in result["lancedb_warnings"]:
                 typer.echo(f"    {warning}", err=True)
 
@@ -681,7 +681,7 @@ def validate_repo(
 
         # Display statistics
         stats = report["statistics"]
-        typer.echo(f"\nStatistics:")
+        typer.echo("\nStatistics:")
         typer.echo(f"  Files: {stats['metadata_files']}")
         typer.echo(f"  Chunks: {stats['metadata_chunks']}")
         typer.echo(f"  Locations: {stats['metadata_locations']}")
@@ -692,7 +692,7 @@ def validate_repo(
 
         # LanceDB stats
         lancedb_stats = report["lancedb"]
-        typer.echo(f"\nLanceDB Vectors:")
+        typer.echo("\nLanceDB Vectors:")
         for model, count in lancedb_stats["vector_counts"].items():
             typer.echo(f"  {model}: {count}")
 
@@ -743,7 +743,7 @@ def repair_repo(
             typer.echo(f"\n✓ No repairs needed for '{name}'.")
             return
 
-        typer.echo(f"\n[DRY RUN] Would repair the following issues:")
+        typer.echo("\n[DRY RUN] Would repair the following issues:")
         for issue in report["issues"]:
             typer.echo(f"  - {issue}")
 
@@ -765,13 +765,13 @@ def repair_repo(
         if repair_report["success"]:
             if repair_report["repairs_performed"]:
                 typer.echo(f"\n✓ Repository '{name}' repaired successfully.")
-                typer.echo(f"\nRepairs performed:")
+                typer.echo("\nRepairs performed:")
                 for repair in repair_report["repairs_performed"]:
                     typer.echo(f"  - {repair}")
             else:
                 typer.echo(f"\n✓ No repairs needed for '{name}'.")
         else:
-            typer.echo(f"\n⚠️  Repair completed with errors:", err=True)
+            typer.echo("\n⚠️  Repair completed with errors:", err=True)
             for error in repair_report["errors"]:
                 typer.echo(f"  - {error}", err=True)
             raise typer.Exit(code=1)
@@ -833,11 +833,11 @@ def reset_all(
 
     # Show what will be deleted
     summary = metadata.summarize()
-    typer.echo(f"\n⚠️  WARNING: This will delete EVERYTHING:")
+    typer.echo("\n⚠️  WARNING: This will delete EVERYTHING:")
     typer.echo(f"  • {len(repos)} repositories")
     typer.echo(f"  • {summary['files']} files")
     typer.echo(f"  • {summary['chunks']} chunks")
-    typer.echo(f"\nRepositories to be removed:")
+    typer.echo("\nRepositories to be removed:")
     for repo in repos:
         typer.echo(f"  - {repo['name']} ({repo['root_path']})")
 
@@ -852,7 +852,7 @@ def reset_all(
             raise typer.Exit(code=0)
 
     # Remove all repos using enhanced cleanup
-    typer.echo(f"\n🧹 Removing all repositories with comprehensive cleanup...")
+    typer.echo("\n🧹 Removing all repositories with comprehensive cleanup...")
     total_stats = {
         "repos_removed": 0,
         "files_deleted": 0,
@@ -890,8 +890,8 @@ def reset_all(
             typer.echo(f"  ✗ {error_msg}", err=True)
 
     # Display final summary
-    typer.echo(f"\n✅ Reset complete!")
-    typer.echo(f"\nCleanup Statistics:")
+    typer.echo("\n✅ Reset complete!")
+    typer.echo("\nCleanup Statistics:")
     typer.echo(f"  Repositories removed: {total_stats['repos_removed']}")
     typer.echo(f"  Files deleted: {total_stats['files_deleted']}")
     typer.echo(f"  Chunks deleted: {total_stats['content_deleted']}")
@@ -905,7 +905,7 @@ def reset_all(
             typer.echo(f"  - {error}", err=True)
 
     typer.echo(f"\nConfiguration preserved at: {config.resolved_store_root()}")
-    typer.echo(f"You can now run 'dolphin kb add-repo' to register new repositories.")
+    typer.echo("You can now run 'dolphin kb add-repo' to register new repositories.")
 
 
 def main() -> None:

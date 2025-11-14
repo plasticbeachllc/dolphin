@@ -26,7 +26,6 @@ from kb.embeddings.provider import create_provider
 from kb.store.lancedb_store import LanceDBStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
 from kb.store.graph_store import GraphStore
-from kb.retrieval.ann_tuning import ANNParams
 
 
 class GoldenScenario:

@@ -4,7 +4,6 @@ kb/security/test_path_validator.py
 Comprehensive security tests for PathValidator.
 """
 
-import os
 import tempfile
 from pathlib import Path
 

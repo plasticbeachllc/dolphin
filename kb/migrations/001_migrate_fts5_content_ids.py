@@ -15,7 +15,7 @@ import sqlite3
 import logging
 import hashlib
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
 logger = logging.getLogger(__name__)
 

@@ -11,7 +11,7 @@ import math
 import time
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from kb.retrieval.ann_tuning import ANNParams
 

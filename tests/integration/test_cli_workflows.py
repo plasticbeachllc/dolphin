@@ -1,13 +1,8 @@
 """Integration tests for CLI workflows."""
 
-import subprocess
-from pathlib import Path
-
-import pytest
 from typer.testing import CliRunner
 
 from kb.ingest.cli import app
-from kb.store import SQLiteMetadataStore
 
 runner = CliRunner()
 

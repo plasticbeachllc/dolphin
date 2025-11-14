@@ -1,7 +1,5 @@
 """Tests for negative filtering functionality in search backend."""
 
-import pytest
-
 from kb.api.app import SearchRequest
 from kb.api.search_backend import KnowledgeSearchBackend
 

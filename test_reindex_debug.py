@@ -104,7 +104,6 @@ mapping = sql_store.ensure_content_rows_for_file(
 print(f"  Mapping size: {len(mapping)}")
 
 # Check what's in chunk_content now
-import sqlite3
 
 with sql_store._connect() as conn:
     cur = conn.cursor()

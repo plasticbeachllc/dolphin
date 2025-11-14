@@ -1,9 +1,6 @@
 """Unit tests for FTS5/BM25 functionality in SQLiteMetadataStore."""
 
 import pytest
-from pathlib import Path
-import tempfile
-from unittest.mock import patch, MagicMock
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
 

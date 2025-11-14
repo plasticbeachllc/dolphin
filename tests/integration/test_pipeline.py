@@ -1,7 +1,6 @@
 """Integration tests for KB pipeline component interactions."""
 
 from pathlib import Path
-from typing import Any, Dict
 
 import pytest
 

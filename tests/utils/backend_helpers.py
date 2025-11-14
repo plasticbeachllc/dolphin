@@ -1,7 +1,7 @@
 """Factory for creating test backends with different configurations."""
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from tests.kb_utils import InMemoryKBBackend
 

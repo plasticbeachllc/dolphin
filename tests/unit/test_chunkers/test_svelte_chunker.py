@@ -8,8 +8,6 @@ Tests cover:
 - Graph extraction (nodes and edges)
 """
 
-import pytest
-
 from kb.chunkers.svelte_chunker import chunk_source, extract_graph_data
 
 

@@ -6,13 +6,11 @@ including knowledge base management, API serving, and persona management.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Optional
 
 import typer
 
-from kb.api.server import app_with_lifespan
 
 # Import kb CLI functions for top-level commands
 # Import subcommand apps

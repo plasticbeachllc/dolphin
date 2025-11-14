@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from kb.api.task_queue import IndexTask, TaskQueue, TaskStatus
+from kb.api.task_queue import TaskStatus
 
 
 class TestTaskQueueCreation:

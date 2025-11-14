@@ -190,7 +190,7 @@ class TestSearchWorkflow:
             )
             # Should return empty or handle gracefully
             assert isinstance(results, list)
-        except Exception as e:
+        except Exception:
             # Some implementations might raise on empty query
             # That's acceptable
             pass

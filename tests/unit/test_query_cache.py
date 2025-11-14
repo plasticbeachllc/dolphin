@@ -5,7 +5,6 @@ import time
 import pytest
 
 from kb.cache.query_cache import (
-    CachedQuery,
     QueryResultCache,
     clear_query_cache,
     get_query_cache,

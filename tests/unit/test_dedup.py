@@ -1,10 +1,8 @@
 """Unit tests for content-based deduplication."""
 
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 
 from kb.chunkers.types import Chunk
 from kb.hashing import hash_text

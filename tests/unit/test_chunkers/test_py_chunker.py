@@ -1,9 +1,5 @@
 """Unit tests for Python symbol-level chunking."""
 
-from pathlib import Path
-
-import pytest
-
 from kb.chunkers.py_chunker import chunk_source
 from kb.hashing import canonicalize_text
 

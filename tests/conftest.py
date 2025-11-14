@@ -1,6 +1,5 @@
 """Pytest configuration and shared fixtures for KB pipeline tests."""
 
-import shutil
 import tempfile
 from pathlib import Path
 from typing import Generator
@@ -223,8 +222,6 @@ def ensure_tiktoken_available(force_refresh: bool = False) -> bool:
             shutil.rmtree(cache_dir)
 
     try:
-        import tiktoken
-
         # Try to load and validate encoding
         is_valid, error_msg = validate_tiktoken_cache()
 
@@ -290,7 +287,7 @@ def setup_tiktoken(request):
         print("Validating downloaded data...", end=" ", flush=True)
         is_valid, error_msg = validate_tiktoken_cache()
         if not is_valid:
-            print(f"✗ Validation failed!")
+            print("✗ Validation failed!")
             print(f"Error: {error_msg}")
             raise RuntimeError(f"Downloaded tiktoken data is invalid: {error_msg}")
 
@@ -400,8 +397,6 @@ def cleanup_test_repos():
     def _cleanup():
         """Perform the actual cleanup of test repositories."""
         try:
-            from pathlib import Path
-
             from kb.config import CONFIG_ROOT
             from kb.store.sqlite_meta import SQLiteMetadataStore
 
@@ -484,7 +479,6 @@ def pytest_collection_modifyitems(config, items):
 @pytest.fixture
 def mock_kb_stores(temp_db_path):
     """Mock KB stores (SQLite + LanceDB) for testing."""
-    from unittest.mock import MagicMock
 
     from kb.store.sqlite_meta import SQLiteMetadataStore
 
@@ -550,7 +544,7 @@ def kb_api_client(mock_kb_stores):
 @pytest.fixture
 def mock_pipeline():
     """Mock KB pipeline for testing indexing without real embedding calls."""
-    from unittest.mock import AsyncMock, MagicMock
+    from unittest.mock import AsyncMock
 
     pipeline = MagicMock()
 

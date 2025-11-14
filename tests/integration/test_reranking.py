@@ -1,6 +1,6 @@
 import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -9,7 +9,6 @@ from kb.api.search_backend import create_search_backend
 from kb.chunkers.types import Chunk
 from kb.config import KBConfig
 from kb.ingest.pipeline import IngestionPipeline
-from kb.retrieval.types import Document
 from kb.store import LanceDBStore, SQLiteMetadataStore
 
 

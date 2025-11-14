@@ -6,7 +6,6 @@ files, resulting in 40%+ parse time reduction on incremental indexing.
 
 from __future__ import annotations
 
-import hashlib
 import pickle
 from collections import OrderedDict
 from dataclasses import dataclass

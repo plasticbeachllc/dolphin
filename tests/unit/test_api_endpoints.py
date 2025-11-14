@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 
 from kb.api.app import (
@@ -485,7 +484,7 @@ class TestIndexTasksEndpoint:
         self, kb_api_client, mock_kb_stores, mock_pipeline, temp_dir
     ):
         """Test listing tasks filtered by repository."""
-        from kb.api.app import set_pipeline, set_stores
+        from kb.api.app import set_pipeline
 
         sql_store, lance_store = mock_kb_stores
         set_stores(sql_store, lance_store)

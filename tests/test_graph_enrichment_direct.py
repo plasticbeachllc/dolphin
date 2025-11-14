@@ -49,7 +49,7 @@ def main():
         "score": 0.95,
     }
 
-    print(f"\n🔍 Testing enrichment with mock result:")
+    print("\n🔍 Testing enrichment with mock result:")
     print(f"   Path: {mock_result['path']}")
     print(f"   Lines: {mock_result['start_line']}-{mock_result['end_line']}")
 
@@ -61,7 +61,7 @@ def main():
             include_dependencies=True,
         )
 
-        print(f"\n✅ Enrichment succeeded!")
+        print("\n✅ Enrichment succeeded!")
         print(f"   Results count: {len(enriched)}")
 
         if enriched:
@@ -71,25 +71,25 @@ def main():
 
             if has_graph:
                 gc = result["graph_context"]
-                print(f"\n🎉 SUCCESS! Graph context found:")
+                print("\n🎉 SUCCESS! Graph context found:")
                 print(f"   Nodes: {len(gc.get('nodes', []))}")
                 print(f"   Edges: {len(gc.get('edges', []))}")
 
                 if gc.get("nodes"):
-                    print(f"\n   Sample nodes:")
+                    print("\n   Sample nodes:")
                     for node in gc["nodes"][:3]:
                         print(
                             f"      - {node.get('qualified_name')} ({node.get('kind')})"
                         )
 
                 if gc.get("edges"):
-                    print(f"\n   Sample edges:")
+                    print("\n   Sample edges:")
                     for edge in gc["edges"][:3]:
                         print(
                             f"      - {edge.get('relationship_type')}: {edge.get('source_name')} → {edge.get('target_name')}"
                         )
             else:
-                print(f"\n❌ No graph_context in result")
+                print("\n❌ No graph_context in result")
                 print(f"   Available keys: {list(result.keys())}")
 
     except Exception as e:

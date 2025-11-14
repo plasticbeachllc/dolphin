@@ -23,11 +23,10 @@ from ..embeddings.provider import EmbeddingProvider
 from ..hashing import hash_text
 from ..store import LanceDBStore, SQLiteMetadataStore
 from ..store.graph_store import GraphStore
-from .incremental import IncrementalIndexer, compute_chunk_diff
-from .parallel_parser import ParseJob, get_chunk_cache, parse_files_parallel
+from .incremental import IncrementalIndexer
+from .parallel_parser import ParseJob, parse_files_parallel
 
 # Import Phase 2 optimizations
-from .parallel_scanner import scan_repo_parallel
 
 
 @dataclass
@@ -328,7 +327,7 @@ class OptimizedIngestionPipeline:
         )
 
         print(f"\n{'=' * 60}")
-        print(f"Indexing Complete")
+        print("Indexing Complete")
         print(f"{'=' * 60}")
         print(f"Total files: {stats.total_files}")
         print(f"Files processed: {stats.files_processed}")

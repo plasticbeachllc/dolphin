@@ -94,7 +94,6 @@ class LanceDBStore:
         - chunks_large: 3072-dim embeddings
         """
         # Import locally to avoid import cost when unused.
-        import pyarrow as pa  # type: ignore
 
         # Use cached connection
         db = self.connect()

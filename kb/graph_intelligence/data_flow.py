@@ -1,6 +1,6 @@
 """Data flow analysis for tracking variable dependencies."""
 
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from tree_sitter import Node
 

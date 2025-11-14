@@ -13,8 +13,6 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any
 
-from kb.chunkers.graph_types import GraphEdge, GraphNode
-
 
 class GraphStore:
     """Graph database store for code entities and relationships."""

@@ -1,7 +1,5 @@
 """Unit tests for adaptive nprobes tuning."""
 
-import time
-
 import pytest
 
 from kb.retrieval.ann_tuning import ANNParams

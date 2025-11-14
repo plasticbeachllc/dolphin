@@ -6,9 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from kb.api.app import SearchRequest
-from kb.api.search_backend import KnowledgeSearchBackend, create_search_backend
-from kb.ingest.pipeline import IngestionPipeline
 from kb.retrieval.graph_context import (
     GraphContextEnricher,
     format_graph_context_for_llm,

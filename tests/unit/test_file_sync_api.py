@@ -1,12 +1,5 @@
 """Unit tests for file sync API endpoints."""
 
-from pathlib import Path
-
-import pytest
-from fastapi.testclient import TestClient
-
-from kb.api.app import app, reset_stores, set_stores
-
 
 class TestRecordPendingChangesEndpoint:
     """Test POST /v1/repos/{repo_name}/changes endpoint."""
@@ -350,7 +343,6 @@ class TestDetectDriftEndpoint:
         test_file.write_text("def test(): pass")
 
         # Record file and create snapshot with old state
-        import hashlib
 
         file_id = sql_store.upsert_file(
             repo_id=repo["id"],

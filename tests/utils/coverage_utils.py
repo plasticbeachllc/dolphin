@@ -1,7 +1,6 @@
 """Manage test coverage collection and reporting."""
 
 import subprocess
-import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 

@@ -7,13 +7,10 @@ This test module validates the implementation of the remediation plan's Phase 1:
 - Comprehensive validation mechanisms
 """
 
-import sqlite3
-import tempfile
 import threading
-import time
 from contextlib import closing
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
 import pytest
 

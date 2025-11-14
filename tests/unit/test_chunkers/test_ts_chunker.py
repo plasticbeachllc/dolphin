@@ -2,10 +2,8 @@
 
 import textwrap
 
-import pytest
 
 from kb.chunkers.ts_chunker import chunk_source as ts_chunk_source
-from kb.hashing import canonicalize_text
 
 
 class TestTypeScriptChunker:

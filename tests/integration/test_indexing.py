@@ -1,14 +1,11 @@
 """Integration tests for indexing functionality."""
 
 from pathlib import Path
-from typing import Any, Dict, List
 
 import pytest
 
-from kb.chunkers.registry import get_chunker_for_file
 from kb.config import KBConfig
 from kb.ingest.pipeline import IngestionPipeline
-from kb.ingest.scanner import scan_repo
 from kb.store import LanceDBStore, SQLiteMetadataStore
 from tests.utils.mock_services import MockEmbeddingService
 
@@ -331,7 +328,6 @@ class TestIndexingPerformance:
     ):
         """Test indexing behavior under concurrent operations."""
         import threading
-        import time
 
         # Setup
         config = KBConfig(

@@ -2,7 +2,6 @@
 
 import textwrap
 
-import pytest
 
 from kb.chunkers.md_chunker import chunk_markdown
 from kb.hashing import canonicalize_text

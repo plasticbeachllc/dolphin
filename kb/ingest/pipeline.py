@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sqlite3
 import subprocess
 import datetime
 from dataclasses import dataclass
@@ -33,7 +32,6 @@ from ..ingest.graph_helpers import (
 )
 from ..embeddings.provider import embed_texts_with_retry
 from ..chunkers.registry import (
-    get_chunker_for_file,
     detect_language_from_extension,
     chunk_file as chunk_file_with_config,
 )
@@ -165,7 +163,7 @@ class IngestionPipeline:
             repo_name: Repository name
         """
         # Delete from LanceDB (both models)
-        print(f"  Clearing vectors from LanceDB...")
+        print("  Clearing vectors from LanceDB...")
         for model in ["small", "large"]:
             try:
                 self.lancedb.delete_repo(repo_name, model=model)
@@ -174,7 +172,7 @@ class IngestionPipeline:
 
         # Delete code graph data
         if self.graph_store:
-            print(f"  Clearing code graph data...")
+            print("  Clearing code graph data...")
             try:
                 nodes_deleted = cleanup_graph_for_repo(self.graph_store, repo_id)
                 print(f"  Deleted {nodes_deleted} graph nodes and associated edges")
@@ -182,10 +180,8 @@ class IngestionPipeline:
                 print(f"  Warning: Could not delete graph data: {e}")
 
         # Delete from metadata database
-        print(f"  Clearing metadata...")
+        print("  Clearing metadata...")
         with self.metadata._connect() as conn:
-            from contextlib import closing
-
             cur = conn.cursor()
 
             # Helper to check if table exists
@@ -267,7 +263,7 @@ class IngestionPipeline:
                     )
 
                 conn.commit()
-                print(f"  Metadata cleared successfully")
+                print("  Metadata cleared successfully")
             except Exception as e:
                 conn.rollback()
                 print(f"  Error clearing metadata: {e}")

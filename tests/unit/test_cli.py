@@ -1,6 +1,5 @@
 """Comprehensive unit tests for CLI commands."""
 
-import subprocess
 from pathlib import Path
 
 import pytest

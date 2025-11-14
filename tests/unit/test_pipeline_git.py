@@ -1,7 +1,6 @@
 """Unit tests for pipeline git operations."""
 
 import subprocess
-from pathlib import Path
 
 import pytest
 

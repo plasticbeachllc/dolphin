@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 import tempfile
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from kb.api.search_backend import create_search_backend
 from kb.api.app import SearchRequest
 from kb.store.sqlite_meta import SQLiteMetadataStore

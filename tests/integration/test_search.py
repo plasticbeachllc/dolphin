@@ -6,7 +6,6 @@ from typing import Any, Dict, List
 import pytest
 
 from kb.api.app import SearchRequest, reset_search_backend, set_search_backend
-from kb.config import KBConfig
 from kb.store import LanceDBStore, SQLiteMetadataStore
 from tests.utils.mock_services import MockEmbeddingService
 

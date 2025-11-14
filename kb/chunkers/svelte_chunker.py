@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 import re
 from html.parser import HTMLParser
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 from .graph_types import GraphEdge, GraphNode
 from .token_utils import count_tokens, get_tokenizer

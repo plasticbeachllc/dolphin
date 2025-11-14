@@ -1512,7 +1512,6 @@ class SQLiteMetadataStore:
                 fallback_rows = cur.fetchall()
 
                 # Read content from files (best effort)
-                from pathlib import Path
 
                 for row in fallback_rows:
                     chunk_id, file_path, repo_root, start_line, end_line = row

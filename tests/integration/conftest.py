@@ -1,7 +1,6 @@
 """Additional fixtures for integration tests."""
 
 from pathlib import Path
-from typing import Generator
 
 import pytest
 

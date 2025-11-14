@@ -4,7 +4,7 @@ import bisect
 import logging
 import re
 from dataclasses import dataclass
-from typing import Iterable, Iterator, List, Optional, Sequence, Tuple
+from typing import Iterator, List, Optional, Sequence, Tuple
 
 import yaml  # type: ignore[import-untyped]
 from markdown_it import MarkdownIt

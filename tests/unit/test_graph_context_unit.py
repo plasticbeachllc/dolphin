@@ -1,8 +1,7 @@
 """Unit tests for graph context enrichment."""
 
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
-import pytest
 
 from kb.retrieval.graph_context import (
     GraphContextEnricher,

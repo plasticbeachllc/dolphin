@@ -1,10 +1,6 @@
 """Tests for knowledge base configuration."""
 
-from pathlib import Path
-
-import pytest
-
-from kb.config import KBConfig, RerankingConfig, RetrievalConfig, load_config
+from kb.config import KBConfig, RetrievalConfig, load_config
 
 
 class TestKBConfig:

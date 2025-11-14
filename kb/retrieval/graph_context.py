@@ -8,7 +8,6 @@ search result chunks.
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from pathlib import Path
 
 from kb.store.graph_store import GraphStore
 from kb.store.sqlite_meta import SQLiteMetadataStore

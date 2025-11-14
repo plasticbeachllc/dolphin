@@ -1,7 +1,5 @@
 """Tests for Maximal Marginal Relevance (MMR) algorithm."""
 
-import pytest
-
 from kb.retrieval.rankers import maximal_marginal_relevance
 
 

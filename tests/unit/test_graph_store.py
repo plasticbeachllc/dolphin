@@ -740,8 +740,6 @@ class TestCleanupOperations:
 
         # Verify FTS entry exists
         with graph_store._connect() as conn:
-            from contextlib import closing
-
             cur = conn.cursor()
             cur.execute(
                 "SELECT COUNT(*) FROM code_nodes_fts WHERE node_id = ?", (node_id,)

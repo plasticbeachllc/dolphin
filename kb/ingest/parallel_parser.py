@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import multiprocessing as mp
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Dict, List
 
 from ..chunkers.registry import get_chunker_for_file
 from ..chunkers.types import Chunk
@@ -121,7 +120,6 @@ class ParallelChunkCache:
         Args:
             max_size: Maximum number of files to cache (default: 1000)
         """
-        from functools import lru_cache
 
         self.max_size = max_size
         self._cache: Dict[tuple[str, str], List[Chunk]] = {}

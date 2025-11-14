@@ -9,10 +9,9 @@ from __future__ import annotations
 import logging
 import sqlite3
 import threading
-import time
 from contextlib import contextmanager
 from queue import Empty, Full, Queue
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 

@@ -1,8 +1,6 @@
 """Unit tests for repository scanning and file enumeration."""
 
 import subprocess
-import tempfile
-from pathlib import Path
 
 import pytest
 

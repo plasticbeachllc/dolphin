@@ -1,11 +1,11 @@
 """Import and dependency graph extraction."""
 
 import uuid
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import tree_sitter_python as tspython
 import tree_sitter_typescript as tsts
-from tree_sitter import Language, Node, Parser
+from tree_sitter import Language, Node
 
 from .models import EdgeType, GraphEdge, GraphNode, NodeType
 

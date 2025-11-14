@@ -19,7 +19,6 @@ from ..store.graph_store import GraphStore
 from ..cache import QueryCache, create_cache
 from ..retrieval.rankers import reciprocal_rank_fusion, maximal_marginal_relevance
 from ..retrieval.cross_encoder_rerank import CrossEncoderReranker
-from ..retrieval.types import Document
 from ..retrieval.ann_tuning import ANNParams
 from ..retrieval.graph_context import GraphContextEnricher
 from .app import SearchRequest
@@ -621,8 +620,6 @@ class KnowledgeSearchBackend:
 
                 # Query metadata store for the content_id
                 with self.sql_store._connect() as conn:
-                    from contextlib import closing
-
                     cur = conn.cursor()
                     cur.execute(
                         """
@@ -979,7 +976,7 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     graph_store = None
     try:
         graph_store = GraphStore(config.resolved_store_root() / "metadata.db")
-    except Exception as e:
+    except Exception:
         # Graph store is optional - no logging needed for expected absence
         pass
 

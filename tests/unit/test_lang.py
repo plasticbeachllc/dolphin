@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-import pytest
 
 from kb.ingest.lang import classify_language
 

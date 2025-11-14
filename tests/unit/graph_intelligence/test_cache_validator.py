@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from kb.graph_intelligence.cache_validator import GraphCacheValidator
-from kb.store.sql_models import GraphCacheState, Repo
 
 
 @pytest.fixture

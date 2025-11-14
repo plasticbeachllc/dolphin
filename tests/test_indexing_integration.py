@@ -29,7 +29,7 @@ def test_indexing_workflow():
         lance_store.initialize_collections()
 
         # Check what gets created
-        print(f"\n2. Checking what was created...")
+        print("\n2. Checking what was created...")
 
         if store_root.exists():
             for item in store_root.iterdir():
@@ -41,7 +41,7 @@ def test_indexing_workflow():
                     print(f"   📄 {item.name}")
 
         # Try to add some test vector data manually
-        print(f"\n3. Testing vector data insertion...")
+        print("\n3. Testing vector data insertion...")
 
         test_vector = [0.1] * 1536  # Small model dimension
         test_chunk = {
@@ -61,12 +61,12 @@ def test_indexing_workflow():
 
         try:
             lance_store.upsert_chunks("test_repo", [test_chunk], model="small")
-            print(f"   ✅ Vector data inserted successfully")
+            print("   ✅ Vector data inserted successfully")
         except Exception as e:
             print(f"   ❌ Vector insertion failed: {e}")
 
         # Test search with the inserted data
-        print(f"\n4. Testing search with inserted data...")
+        print("\n4. Testing search with inserted data...")
 
         try:
             results = lance_store.query(test_vector, model="small", top_k=5)
@@ -81,7 +81,7 @@ def check_sqlite_metadata():
     """Check what's in the SQLite metadata store."""
 
     store_root = Path.home() / ".dolphin" / "knowledge_store"
-    print(f"\n🔍 Checking SQLite Metadata")
+    print("\n🔍 Checking SQLite Metadata")
     print("=" * 30)
 
     try:
@@ -107,7 +107,7 @@ def check_sqlite_metadata():
                         "SELECT content_id, repo, path FROM chunk_content LIMIT 3"
                     )
                     samples = cursor.fetchall()
-                    print(f"Sample chunks:")
+                    print("Sample chunks:")
                     for sample in samples:
                         print(f"  - {sample}")
 
@@ -121,7 +121,7 @@ def check_sqlite_metadata():
             if "repos" in tables:
                 cursor.execute("SELECT name, root_path FROM repos")
                 repos = cursor.fetchall()
-                print(f"Repositories:")
+                print("Repositories:")
                 for repo in repos:
                     print(f"  - {repo[0]}: {repo[1]}")
 
@@ -135,11 +135,11 @@ def main():
     test_indexing_workflow()
     check_sqlite_metadata()
 
-    print(f"\n💡 Analysis:")
-    print(f"If repositories are indexed but vectors are missing:")
-    print(f"1. Check if LanceDB collections are created during indexing")
-    print(f"2. Verify vector embedding generation is working")
-    print(f"3. Ensure upsert_chunks is being called with actual vector data")
+    print("\n💡 Analysis:")
+    print("If repositories are indexed but vectors are missing:")
+    print("1. Check if LanceDB collections are created during indexing")
+    print("2. Verify vector embedding generation is working")
+    print("3. Ensure upsert_chunks is being called with actual vector data")
 
 
 if __name__ == "__main__":

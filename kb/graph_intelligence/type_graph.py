@@ -1,11 +1,10 @@
 """Type relationship extraction for inheritance and interfaces."""
 
-import uuid
-from typing import List, Optional
+from typing import List
 
 import tree_sitter_python as tspython
 import tree_sitter_typescript as tsts
-from tree_sitter import Language, Node, Parser
+from tree_sitter import Language, Node
 
 from .models import EdgeType, GraphEdge, GraphNode, NodeType
 

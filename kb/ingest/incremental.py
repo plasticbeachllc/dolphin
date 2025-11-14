@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Dict, List, Set
 
 from ..chunkers.types import Chunk
 from ..hashing import hash_text
@@ -90,7 +90,6 @@ def get_existing_chunk_hashes(
     Returns:
         Set of content hashes for existing chunks
     """
-    import sqlite3
 
     with metadata_store._connect() as conn:
         cur = conn.cursor()

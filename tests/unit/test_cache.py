@@ -1,9 +1,7 @@
 """Unit tests for query caching functionality."""
 
-import time
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from kb.cache import QueryCache, create_cache
 

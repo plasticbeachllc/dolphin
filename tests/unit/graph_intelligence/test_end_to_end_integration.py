@@ -9,10 +9,9 @@ import subprocess
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from sqlmodel import Session, create_engine, select
+from sqlmodel import Session, select
 
 from kb.graph_intelligence.graph_manager import GraphManager
 from kb.ingest.graph_helpers import extract_graph_from_file, store_graph_data
@@ -20,10 +19,7 @@ from kb.store.graph_store import GraphStore
 from kb.store.sql_models import (
     CodeEdge,
     CodeNode,
-    File,
-    GraphCacheState,
     GraphMetrics,
-    Repo,
 )
 from kb.store.sqlite_meta import SQLiteMetadataStore
 

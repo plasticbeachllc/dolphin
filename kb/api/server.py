@@ -90,7 +90,7 @@ def initialize_search_backend() -> None:
     print(f"✅ Search backend ready (store: {store_root})", file=sys.stderr)
 
     # Initialize ingestion pipeline for full reindex operations
-    print(f"🔧 Initializing ingestion pipeline...", file=sys.stderr)
+    print("🔧 Initializing ingestion pipeline...", file=sys.stderr)
     from ..ingest.pipeline import IngestionPipeline
     from ..store.graph_store import GraphStore
 
@@ -102,11 +102,11 @@ def initialize_search_backend() -> None:
         graph_store=GraphStore(backend.sql_store.db_path),
     )
     set_pipeline(pipeline)
-    print(f"✅ Ingestion pipeline ready", file=sys.stderr)
+    print("✅ Ingestion pipeline ready", file=sys.stderr)
 
 
 # Initialize search backend when module loads (before uvicorn starts)
-print(f"🚀 Initializing KB server...", file=sys.stderr)
+print("🚀 Initializing KB server...", file=sys.stderr)
 initialize_search_backend()
 
 # Add Prometheus metrics middleware to the app
@@ -143,18 +143,18 @@ async def lifespan_handler(app_instance: FastAPI):
     yield  # Application is running
 
     # Shutdown: Clean up resources
-    print(f"🛑 Shutting down KB server...", file=sys.stderr)
+    print("🛑 Shutting down KB server...", file=sys.stderr)
 
     # Close embedding provider if it has async client
     if _embedding_provider and hasattr(_embedding_provider, "close"):
         try:
             await _embedding_provider.close()
-            print(f"✅ Closed embedding provider", file=sys.stderr)
+            print("✅ Closed embedding provider", file=sys.stderr)
         except Exception as e:
             print(f"⚠️  Failed to close embedding provider: {e}", file=sys.stderr)
 
     reset_search_backend()
-    print(f"✅ KB server shutdown complete", file=sys.stderr)
+    print("✅ KB server shutdown complete", file=sys.stderr)
 
 
 # Assign lifespan to the app

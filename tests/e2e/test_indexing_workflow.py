@@ -4,9 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from kb.ingest.pipeline import IngestionPipeline
-from kb.store import SQLiteMetadataStore
-
 
 class TestIndexingWorkflow:
     """End-to-end tests for indexing workflow."""

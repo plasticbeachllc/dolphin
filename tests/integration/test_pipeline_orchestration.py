@@ -1,7 +1,6 @@
 """Integration tests for complete KB pipeline orchestration."""
 
 import subprocess
-import tempfile
 from pathlib import Path
 
 import pytest

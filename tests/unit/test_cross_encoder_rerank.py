@@ -1,8 +1,7 @@
 """Unit tests for the CrossEncoderReranker."""
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
-import pytest
 
 from kb.retrieval.cross_encoder_rerank import CrossEncoderReranker
 

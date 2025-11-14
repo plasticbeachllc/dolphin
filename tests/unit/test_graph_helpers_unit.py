@@ -1,8 +1,7 @@
 """Unit tests for graph extraction helpers."""
 
-import pytest
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock
 from kb.ingest.graph_helpers import (
     extract_graph_from_file,
     store_graph_data,

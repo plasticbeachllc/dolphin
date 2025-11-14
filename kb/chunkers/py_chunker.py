@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import bisect
 import logging
-import re
 from typing import List, NamedTuple, Optional, Tuple
 
 import tree_sitter_python as tspython

@@ -1,8 +1,5 @@
 """Basic smoke tests for CLI functionality."""
 
-from pathlib import Path
-
-import pytest
 from typer.testing import CliRunner
 
 from kb.ingest.cli import app

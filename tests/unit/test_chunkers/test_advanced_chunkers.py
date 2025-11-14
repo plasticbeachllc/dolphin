@@ -1,9 +1,5 @@
 """Advanced tests for chunkers: python, markdown, and fallback behavior."""
 
-from pathlib import Path
-
-import pytest
-
 from kb.chunkers.fallback_chunker import chunk_text as chunk_fallback
 from kb.chunkers.md_chunker import chunk_markdown
 from kb.chunkers.py_chunker import chunk_source as chunk_python
