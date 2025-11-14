@@ -318,7 +318,7 @@ class TestConfigurationWriting:
             personas = [MockPersona()]
             compiled_messages = {"test-persona": "Test instructions"}
 
-            result = write_kilocode_config(
+            write_kilocode_config(
                 personas=personas,
                 compiled_messages=compiled_messages,
                 guardrails="Be helpful",
@@ -402,7 +402,7 @@ class TestConfigurationWriting:
             config_dir = Path(tmpdir) / ".kilocode-config"
             assert not config_dir.exists()
 
-            result = write_kilocode_config(
+            write_kilocode_config(
                 personas=personas,
                 compiled_messages=compiled_messages,
                 guardrails="Be helpful",

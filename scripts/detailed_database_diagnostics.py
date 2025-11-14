@@ -118,7 +118,7 @@ def test_vector_search_detailed():
         lance_store.initialize_collections()  # Ensure collections exist
 
         # Create embedding provider
-        provider = create_provider("stub")  # Use stub for testing
+        create_provider("stub")  # Use stub for testing
 
         # Generate test query vector (1536 dimensions for small model)
         import numpy as np

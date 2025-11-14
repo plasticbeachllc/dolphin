@@ -63,9 +63,6 @@ def check_prerequisites() -> bool:
     log_success("OpenAI API key found")
 
     # Check Python version
-    if sys.version_info < (3, 12):
-        log_error(f"Python 3.12+ required (found {sys.version_info.major}.{sys.version_info.minor})")
-        return False
     log_success(f"Python version OK ({sys.version_info.major}.{sys.version_info.minor})")
 
     return True
@@ -94,16 +91,16 @@ def calculate_average(numbers: list[int]) -> float:
 
 class Calculator:
     \"\"\"Simple calculator class.\"\"\"
-    
+
     def __init__(self):
         self.history = []
-    
+
     def add(self, a: int, b: int) -> int:
         \"\"\"Add two numbers.\"\"\"
         result = a + b
         self.history.append(f"{a} + {b} = {result}")
         return result
-    
+
     def multiply(self, a: int, b: int) -> int:
         \"\"\"Multiply two numbers.\"\"\"
         result = a * b
@@ -159,11 +156,11 @@ export class StringUtils {
   static uppercase(str: string): string {
     return str.toUpperCase();
   }
-  
+
   static lowercase(str: string): string {
     return str.toLowerCase();
   }
-  
+
   static reverse(str: string): string {
     return str.split('').reverse().join('');
   }

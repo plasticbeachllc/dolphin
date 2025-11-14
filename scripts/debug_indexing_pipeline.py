@@ -28,7 +28,7 @@ def check_repository_status():
         # Check repos table
         print("📋 Repositories:")
         cursor.execute("""
-            SELECT name, root_path, default_embed_model, 
+            SELECT name, root_path, default_embed_model,
                    datetime(updated_at) as updated_at
             FROM repos ORDER BY name
         """)
@@ -43,13 +43,13 @@ def check_repository_status():
         # Check sessions table
         print("\n📊 Indexing Sessions:")
         cursor.execute("""
-            SELECT s.id, r.name, s.status, s.embed_model, 
+            SELECT s.id, r.name, s.status, s.embed_model,
                    s.files_indexed, s.chunks_indexed, s.vectors_written,
                    datetime(s.created_at) as created_at,
                    datetime(s.ended_at) as ended_at,
                    s.notes
-            FROM sessions s 
-            JOIN repos r ON s.repo_id = r.id 
+            FROM sessions s
+            JOIN repos r ON s.repo_id = r.id
             ORDER BY s.id DESC LIMIT 10
         """)
         sessions = cursor.fetchall()

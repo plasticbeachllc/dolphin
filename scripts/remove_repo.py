@@ -44,7 +44,7 @@ def remove_repo(repo_name: str) -> None:
         for file_id in file_ids:
             cur.execute(
                 """
-                DELETE FROM chunk_locations 
+                DELETE FROM chunk_locations
                 WHERE content_id IN (
                     SELECT id FROM chunk_content WHERE file_id = ?
                 )
