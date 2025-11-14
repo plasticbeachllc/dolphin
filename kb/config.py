@@ -263,11 +263,11 @@ class KBConfig:
             if cache_data.get("embedding_ttl") is not None:
                 config_kwargs['embedding_cache_ttl'] = cls._coerce_optional(cache_data.get("embedding_ttl"), int)
             if cache_data.get("result_ttl") is not None:
-                config_kwargs['result_cache_ttl'] = _coerce_optional(cache_data.get("result_ttl"), int)
-        
+                config_kwargs['result_cache_ttl'] = cls._coerce_optional(cache_data.get("result_ttl"), int)
+
         # Also support top-level cache_enabled parameter (for backward compatibility)
         if "cache_enabled" in data:
-            config_kwargs['cache_enabled'] = _coerce_optional(data.get("cache_enabled"), bool)
+            config_kwargs['cache_enabled'] = cls._coerce_optional(data.get("cache_enabled"), bool)
         if "redis_url" in data:
             config_kwargs['redis_url'] = data.get("redis_url")
 

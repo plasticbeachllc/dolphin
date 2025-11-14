@@ -283,7 +283,7 @@ def prune_ignored(
                     conn.commit()
             else:
                 # In dry-run, just count what would be pruned
-                file_chunks = metadata.get_chunks_for_file(file_id)
+                file_chunks = metadata.get_chunks_for_file(repo_id, file_path)
                 total_chunks_pruned += len(file_chunks) if file_chunks else 0
     
     if dry_run:

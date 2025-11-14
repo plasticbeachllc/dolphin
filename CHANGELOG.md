@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Missing Dependencies**
+  - Added `networkx>=3.0` for graph intelligence features
+  - Added `scipy>=1.11.0` for PageRank computation in network analysis
+
+### Fixed
+- **Code Quality Issues**
+  - Fixed `_coerce_optional` method calls missing `cls.` prefix in `kb/config.py:266, 270`
+  - Fixed incorrect type hints in `kb/ingest/graph_helpers.py` (GraphNode and GraphEdge imports)
+  - Fixed incorrect variable name in error logging in `kb/api/app.py:382` (file_path → path)
+  - Fixed incorrect method call signature in `kb/ingest/cli.py:286` for `get_chunks_for_file()`
+- **Test Infrastructure**
+  - Removed problematic manual test script that was interfering with pytest collection
+
 ## [1.0.0] - 2025-11-12
 
 This is the first major release of Dolphin, marking a significant milestone in AI-powered development tooling. Version 1.0.0 represents a complete, production-ready platform with comprehensive testing, accessibility compliance, and a beautiful VSCode extension.

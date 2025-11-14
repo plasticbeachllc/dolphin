@@ -8,7 +8,7 @@ from typing import Any
 
 from kb.chunkers.graph_types import GraphNode as ChunkerGraphNode, GraphEdge as ChunkerGraphEdge
 from kb.chunkers.types import Chunk
-from kb.store.graph_store import GraphStore
+from kb.store.graph_store import GraphStore, GraphNode, GraphEdge
 
 
 def extract_graph_from_file(

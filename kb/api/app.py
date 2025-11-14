@@ -379,7 +379,7 @@ async def fetch_file_slice(
         raise
     except Exception as e:
         import logging
-        logging.error(f"Error reading file: {file_path}", exc_info=True)
+        logging.error(f"Error reading file: {path}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
 
 
