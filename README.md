@@ -208,8 +208,6 @@ claude
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-See [TESTING.md](TESTING.md) for complete setup instructions.
-
 ## REST API
 
 ```bash
