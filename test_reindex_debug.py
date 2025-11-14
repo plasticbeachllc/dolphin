@@ -6,13 +6,18 @@ import sys
 from pathlib import Path
 
 # Set up logging to see DEBUG output
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] [%(name)s] %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
+)
 
 # Add kb to path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from kb.store.sqlite_meta import SQLiteMetadataStore
-from kb.chunkers.registry import detect_language_from_extension, chunk_file as chunk_file_with_config
+from kb.chunkers.registry import (
+    detect_language_from_extension,
+    chunk_file as chunk_file_with_config,
+)
 from kb.chunkers.repo_config import load_repo_chunking_config
 from kb.hashing import hash_text
 from kb.ingest._helpers import build_desired_map
@@ -57,7 +62,7 @@ file_id = sql_store.upsert_file(
     ext=file_path.suffix,
     language=None,
     is_binary=False,
-    size_bytes=file_path.stat().st_size
+    size_bytes=file_path.stat().st_size,
 )
 print(f"  File ID: {file_id}")
 
@@ -100,9 +105,13 @@ print(f"  Mapping size: {len(mapping)}")
 
 # Check what's in chunk_content now
 import sqlite3
+
 with sql_store._connect() as conn:
     cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM chunk_content WHERE repo_id = ? AND file_id = ?", (repo_id, file_id))
+    cur.execute(
+        "SELECT COUNT(*) FROM chunk_content WHERE repo_id = ? AND file_id = ?",
+        (repo_id, file_id),
+    )
     count = cur.fetchone()[0]
     print(f"  chunk_content rows for this file: {count}")
 

@@ -51,11 +51,15 @@ try:
         print("  ❌ FTS5 TABLE IS EMPTY! This is why search returns 0 results!")
     else:
         # Sample some FTS5 entries
-        cursor.execute("SELECT content_id, repo, path, text_hash, substr(content, 1, 100) FROM chunks_fts LIMIT 5")
+        cursor.execute(
+            "SELECT content_id, repo, path, text_hash, substr(content, 1, 100) FROM chunks_fts LIMIT 5"
+        )
         samples = cursor.fetchall()
         print(f"  Sample entries:")
         for s in samples:
-            print(f"    - content_id: {s[0][:16]}... repo: {s[1]}, file: {s[2]}, text_hash: {s[3][:16]}...")
+            print(
+                f"    - content_id: {s[0][:16]}... repo: {s[1]}, file: {s[2]}, text_hash: {s[3][:16]}..."
+            )
             print(f"      content preview: {s[4][:80]}...")
 
         # Check if text_hash column exists
@@ -64,7 +68,7 @@ try:
         col_names = [c[1] for c in columns]
         print(f"  Columns: {col_names}")
 
-        if 'text_hash' not in col_names:
+        if "text_hash" not in col_names:
             print(f"  ⚠️  WARNING: text_hash column missing from FTS5!")
 
 except sqlite3.Error as e:
@@ -74,6 +78,7 @@ except sqlite3.Error as e:
 print(f"\n🎯 LANCEDB TABLES:")
 try:
     import lancedb
+
     db = lancedb.connect(str(lancedb_dir))
     tables = db.table_names()
     print(f"  Available tables: {tables}")
@@ -98,13 +103,16 @@ except Exception as e:
 print(f"\n🔎 TESTING BM25 SEARCH DIRECTLY:")
 try:
     test_query = "validation"
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT content_id, repo, path, -bm25(chunks_fts) as score
         FROM chunks_fts
         WHERE chunks_fts MATCH ?
         ORDER BY score DESC
         LIMIT 5
-    """, (test_query,))
+    """,
+        (test_query,),
+    )
 
     results = cursor.fetchall()
     print(f"  Query: '{test_query}'")
@@ -112,7 +120,9 @@ try:
 
     if results:
         for r in results:
-            print(f"    - content_id: {r[0][:16]}..., repo: {r[1]}, file: {r[2]}, score: {r[3]:.4f}")
+            print(
+                f"    - content_id: {r[0][:16]}..., repo: {r[1]}, file: {r[2]}, score: {r[3]:.4f}"
+            )
     else:
         print(f"  ❌ NO RESULTS from BM25 search!")
 
@@ -120,7 +130,9 @@ except sqlite3.Error as e:
     print(f"  ❌ Error running BM25 search: {e}")
 
 # 7. Check sessions
-cursor.execute("SELECT id, commit_sha, branch, embed_model, status, chunks_indexed FROM sessions ORDER BY id DESC LIMIT 3")
+cursor.execute(
+    "SELECT id, commit_sha, branch, embed_model, status, chunks_indexed FROM sessions ORDER BY id DESC LIMIT 3"
+)
 sessions = cursor.fetchall()
 print(f"\n📊 RECENT SESSIONS:")
 for s in sessions:

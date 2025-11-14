@@ -22,24 +22,28 @@ cursor = conn.cursor()
 
 # Check FTS5 distribution by repo
 print("\n📊 FTS5 CHUNKS BY REPO:")
-cursor.execute("""
+cursor.execute(
+    """
     SELECT repo, COUNT(*) as count
     FROM chunks_fts
     GROUP BY repo
     ORDER BY count DESC
-""")
+"""
+)
 for row in cursor.fetchall():
     print(f"  {row[0]}: {row[1]} chunks")
 
 # Check chunk_content distribution by repo
 print("\n📊 CHUNK_CONTENT BY REPO:")
-cursor.execute("""
+cursor.execute(
+    """
     SELECT r.name, COUNT(cc.id) as count
     FROM chunk_content cc
     JOIN repos r ON cc.repo_id = r.id
     GROUP BY r.name
     ORDER BY count DESC
-""")
+"""
+)
 for row in cursor.fetchall():
     print(f"  {row[0]}: {row[1]} chunks")
 
@@ -48,22 +52,28 @@ print("\n🔎 TESTING BM25 SEARCH BY REPO:")
 print("  Query: 'validation'")
 repos = ["dolphin", "blue-whale"]
 for repo in repos:
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT COUNT(*) as count
         FROM chunks_fts
         WHERE chunks_fts MATCH ? AND repo = ?
-    """, ("validation", repo))
+    """,
+        ("validation", repo),
+    )
     count = cursor.fetchone()[0]
     print(f"  {repo}: {count} results")
 
     if count > 0:
         # Show sample
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT path, substr(content, 1, 80) as preview
             FROM chunks_fts
             WHERE chunks_fts MATCH ? AND repo = ?
             LIMIT 1
-        """, ("validation", repo))
+        """,
+            ("validation", repo),
+        )
         row = cursor.fetchone()
         if row:
             print(f"    Sample: {row[0]}")
@@ -71,13 +81,15 @@ for repo in repos:
 
 # Check files by repo
 print("\n📁 FILES BY REPO:")
-cursor.execute("""
+cursor.execute(
+    """
     SELECT r.name, COUNT(f.id) as count
     FROM files f
     JOIN repos r ON f.repo_id = r.id
     GROUP BY r.name
     ORDER BY count DESC
-""")
+"""
+)
 for row in cursor.fetchall():
     print(f"  {row[0]}: {row[1]} files")
 

@@ -4,27 +4,25 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { StateStore } from "../../src/state/state-store";
-import { rm } from "fs/promises";
+import { rm, mkdtemp } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
 import type { TaskSession } from "../../src/types/index";
-
-const TEST_STORAGE_PATH = ".dolphin-test";
 
 describe("StateStore", () => {
   let stateStore: StateStore;
+  let testStoragePath: string;
 
   beforeEach(async () => {
-    // Clean up test directory
-    try {
-      await rm(TEST_STORAGE_PATH, { recursive: true, force: true });
-    } catch {}
-
-    stateStore = new StateStore({ storagePath: TEST_STORAGE_PATH });
+    // Create temporary directory in OS temp location
+    testStoragePath = await mkdtemp(join(tmpdir(), "dolphin-test-"));
+    stateStore = new StateStore({ storagePath: testStoragePath });
   });
 
   afterEach(async () => {
-    // Clean up after tests
+    // Clean up temporary test directory
     try {
-      await rm(TEST_STORAGE_PATH, { recursive: true, force: true });
+      await rm(testStoragePath, { recursive: true, force: true });
     } catch {}
   });
 
