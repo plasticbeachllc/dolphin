@@ -28,14 +28,14 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
 
-      - name: Black format
-        uses: psf/black@stable
+      - name: Ruff check
+        run: uv run ruff check --fix
 
-      - name: Analyze code with pylint
-        run: uv run pylint $(git ls-files '*.py')
+      - name: Ruff format
+        run: uv run ruff format
 
-      - name: Analyze code with mypy
-        run: uv run mypy $(git ls-files '*.py')
+      - name: Ty lint
+        run: uv run ty check
 
       - name: Configure Git
         run: |
