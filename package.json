@@ -7,8 +7,7 @@
     "vscode-extension/webview",
     "agent-core",
     "mcp-bridge",
-    "shared",
-    "golden-scenarios"
+    "shared"
   ],
   "scripts": {
     "setup": "npm install && cd vscode-extension/webview && bun install && cd ../.. && cd agent-core && bun install && cd .. && cd mcp-bridge && bun install",
@@ -16,6 +15,7 @@
     "build:webview": "cd vscode-extension/webview && bun run build",
     "build:agent": "cd agent-core && bun run build",
     "build:all": "npm run build:extension && npm run build:webview && npm run build:agent",
+    "lint:all": "cd mcp-bridge && bun run lint && cd ../agent-core && bun run lint && cd ../vscode-extension && bun run lint",
     "test:agent": "cd agent-core && bun test",
     "test:mcp": "cd mcp-bridge && npm run test:clean",
     "test:kb": "cd kb && pytest tests/",
