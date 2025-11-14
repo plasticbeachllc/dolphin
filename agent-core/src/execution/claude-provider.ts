@@ -65,14 +65,22 @@ export class AuthManager {
     const hasOAuth = this.hasOAuthToken();
     const apiKey = process.env[this.apiKeyEnvVar];
 
+    // When both OAuth and API key are present, Claude CLI prioritizes the API key
+    // This means the user will incur pay-per-token charges despite having a subscription
+    if (hasOAuth && apiKey) {
+      return {
+        authenticated: true,
+        mode: "api_key",
+        source: this.apiKeyEnvVar,
+        warning: `${this.apiKeyEnvVar} is set. Claude CLI will use API key billing (pay-per-token) instead of your subscription. To use subscription: unset ${this.apiKeyEnvVar}.`,
+      };
+    }
+
     if (hasOAuth) {
       return {
         authenticated: true,
         mode: "subscription",
         source: "Claude CLI OAuth",
-        warning: apiKey
-          ? `${this.apiKeyEnvVar} ignored because Claude CLI OAuth is active.`
-          : undefined,
       };
     }
 

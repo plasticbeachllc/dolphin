@@ -95,7 +95,7 @@ describe("Claude Authentication Integration", () => {
       expect(status.warning).toContain("pay-as-you-go");
     });
 
-    it("should prefer OAuth over API key", async () => {
+    it("should detect API key takes precedence when both present", async () => {
       // Create OAuth settings
       const settingsDir = join(homedir(), ".claude");
       if (!existsSync(settingsDir)) {
@@ -111,8 +111,10 @@ describe("Claude Authentication Integration", () => {
       const status = await authManager.detectAuthStatus();
 
       expect(status.authenticated).toBe(true);
-      expect(status.mode).toBe("subscription");
-      expect(status.warning).toContain("ANTHROPIC_API_KEY ignored");
+      expect(status.mode).toBe("api_key");
+      expect(status.source).toBe("ANTHROPIC_API_KEY");
+      expect(status.warning).toContain("Claude CLI will use API key billing");
+      expect(status.warning).toContain("pay-per-token");
 
       // Cleanup
       try {
@@ -282,7 +284,7 @@ describe("Claude Authentication Integration", () => {
   });
 
   describe("Authentication Warnings", () => {
-    it("should warn when both auth methods present", async () => {
+    it("should warn when both auth methods present (API key takes precedence)", async () => {
       const authManager = new AuthManager();
 
       // Create OAuth settings
@@ -300,7 +302,9 @@ describe("Claude Authentication Integration", () => {
       const status = await authManager.detectAuthStatus();
 
       expect(status.warning).toBeDefined();
-      expect(status.warning).toContain("ignored");
+      expect(status.warning).toContain("API key billing");
+      expect(status.warning).toContain("pay-per-token");
+      expect(status.mode).toBe("api_key");
 
       // Cleanup
       try {
