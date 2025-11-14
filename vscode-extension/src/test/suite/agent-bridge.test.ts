@@ -12,10 +12,8 @@ describe("AgentBridge Unit Tests", () => {
   });
 
   afterEach(() => {
-    outputChannel.dispose();
-  });
-
-  afterEach(() => {
+    // CRITICAL: Shutdown AgentBridge BEFORE disposing output channel
+    // This prevents async operations from trying to use disposed resources
     if (agentBridge) {
       // Add a mock kill method to the process if it exists
       const process = (agentBridge as any).process;
@@ -23,6 +21,11 @@ describe("AgentBridge Unit Tests", () => {
         process.kill = () => true;
       }
       agentBridge.shutdown();
+    }
+    
+    // Dispose output channel AFTER shutdown completes
+    if (outputChannel) {
+      outputChannel.dispose();
     }
   });
 

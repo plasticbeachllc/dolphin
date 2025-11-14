@@ -32,14 +32,12 @@ jobs:
 
       - name: Ruff check
         run: uv run ruff check --fix
-        continue-on-error: true
 
       - name: Ruff format
         run: uv run ruff format
 
       - name: Ty lint
         run: uv run ty check
-        continue-on-error: true
 
       - name: Verify no remaining errors
         run: |

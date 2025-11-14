@@ -9,7 +9,8 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "types": ["bun-types"],
-    "sourceMap": true
+    "sourceMap": true,
+    "typeRoots": ["./node_modules/@types", "./node_modules/bun-types"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "tests", "../shared/**/__tests__/**"]

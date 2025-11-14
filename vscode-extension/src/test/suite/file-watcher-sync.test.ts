@@ -6,6 +6,7 @@ describe("FileWatcher API Integration Tests", () => {
   let testConfig: WatcherConfig;
   let batchHandler: (changes: ChangeEvent[]) => Promise<void>;
   let receivedBatches: ChangeEvent[][];
+  let watchers: FileWatcher[] = [];
 
   beforeEach(() => {
     receivedBatches = [];
@@ -18,13 +19,22 @@ describe("FileWatcher API Integration Tests", () => {
       batchIntervalMs: 500,
       excludePatterns: ["**/node_modules/**", "**/.git/**"],
     };
+    watchers = [];
+  });
+
+  afterEach(() => {
+    // CRITICAL: Dispose all watchers to clean up timers
+    for (const watcher of watchers) {
+      watcher.dispose();
+    }
+    watchers = [];
   });
 
   describe("Initialization", () => {
     it("Should create FileWatcher without API config", () => {
       const watcher = new FileWatcher(testConfig, batchHandler);
+      watchers.push(watcher);
       assert.ok(watcher, "Watcher should be created");
-      watcher.dispose();
     });
 
     it("Should create FileWatcher with API config", () => {
@@ -35,8 +45,8 @@ describe("FileWatcher API Integration Tests", () => {
       };
 
       const watcher = new FileWatcher(apiConfig, batchHandler);
+      watchers.push(watcher);
       assert.ok(watcher, "Watcher should be created with API config");
-      watcher.dispose();
     });
 
     it("Should create FileWatcher with only apiBaseUrl", () => {
@@ -46,8 +56,8 @@ describe("FileWatcher API Integration Tests", () => {
       };
 
       const watcher = new FileWatcher(partialConfig, batchHandler);
+      watchers.push(watcher);
       assert.ok(watcher, "Should create with partial API config");
-      watcher.dispose();
     });
 
     it("Should create FileWatcher with only repoName", () => {
@@ -57,8 +67,8 @@ describe("FileWatcher API Integration Tests", () => {
       };
 
       const watcher = new FileWatcher(partialConfig, batchHandler);
+      watchers.push(watcher);
       assert.ok(watcher, "Should create with partial API config");
-      watcher.dispose();
     });
   });
 
@@ -73,8 +83,8 @@ describe("FileWatcher API Integration Tests", () => {
 
       for (const config of configs) {
         const watcher = new FileWatcher(config, batchHandler);
+        watchers.push(watcher);
         assert.ok(watcher, `Should accept debounceMs: ${config.debounceMs}`);
-        watcher.dispose();
       }
     });
 
@@ -88,8 +98,8 @@ describe("FileWatcher API Integration Tests", () => {
 
       for (const config of configs) {
         const watcher = new FileWatcher(config, batchHandler);
+        watchers.push(watcher);
         assert.ok(watcher, `Should accept batchIntervalMs: ${config.batchIntervalMs}`);
-        watcher.dispose();
       }
     });
 
@@ -104,8 +114,8 @@ describe("FileWatcher API Integration Tests", () => {
       for (const patterns of excludePatterns) {
         const config = { ...testConfig, excludePatterns: patterns };
         const watcher = new FileWatcher(config, batchHandler);
+        watchers.push(watcher);
         assert.ok(watcher, `Should accept patterns: ${patterns.join(", ")}`);
-        watcher.dispose();
       }
     });
   });
@@ -119,8 +129,8 @@ describe("FileWatcher API Integration Tests", () => {
       };
 
       const watcher = new FileWatcher(config, batchHandler);
+      watchers.push(watcher);
       assert.ok(watcher, "Should accept localhost URL");
-      watcher.dispose();
     });
 
     it("Should handle 127.0.0.1 API URLs", () => {
@@ -131,8 +141,8 @@ describe("FileWatcher API Integration Tests", () => {
       };
 
       const watcher = new FileWatcher(config, batchHandler);
+      watchers.push(watcher);
       assert.ok(watcher, "Should accept 127.0.0.1 URL");
-      watcher.dispose();
     });
 
     it("Should handle HTTPS API URLs", () => {
@@ -143,8 +153,8 @@ describe("FileWatcher API Integration Tests", () => {
       };
 
       const watcher = new FileWatcher(config, batchHandler);
+      watchers.push(watcher);
       assert.ok(watcher, "Should accept HTTPS URL");
-      watcher.dispose();
     });
 
     it("Should handle different repository names", () => {
@@ -165,8 +175,8 @@ describe("FileWatcher API Integration Tests", () => {
         };
 
         const watcher = new FileWatcher(config, batchHandler);
+        watchers.push(watcher);
         assert.ok(watcher, `Should accept repo name: ${repoName}`);
-        watcher.dispose();
       }
     });
   });
@@ -174,15 +184,19 @@ describe("FileWatcher API Integration Tests", () => {
   describe("Disposal", () => {
     it("Should properly dispose without starting", () => {
       const watcher = new FileWatcher(testConfig, batchHandler);
+      watchers.push(watcher);
       watcher.dispose();
+      watchers.pop(); // Remove since we manually disposed
       assert.ok(true, "Should dispose cleanly");
     });
 
     it("Should handle multiple dispose calls", () => {
       const watcher = new FileWatcher(testConfig, batchHandler);
+      watchers.push(watcher);
       watcher.dispose();
       watcher.dispose();
       watcher.dispose();
+      watchers.pop(); // Remove since we manually disposed
       assert.ok(true, "Should handle multiple dispose calls");
     });
 
@@ -194,7 +208,9 @@ describe("FileWatcher API Integration Tests", () => {
       };
 
       const watcher = new FileWatcher(config, batchHandler);
+      watchers.push(watcher);
       watcher.dispose();
+      watchers.pop(); // Remove since we manually disposed
       assert.ok(true, "Should dispose with API config");
     });
   });
@@ -207,6 +223,7 @@ describe("FileWatcher API Integration Tests", () => {
       };
 
       const watcher = new FileWatcher(config, batchHandler);
+      watchers.push(watcher);
 
       // Access private shouldIgnore method for testing
       const shouldIgnore = (watcher as any).shouldIgnore.bind(watcher);
@@ -222,8 +239,6 @@ describe("FileWatcher API Integration Tests", () => {
         const result = shouldIgnore(uri);
         assert.strictEqual(result, true, `Should ignore ${uri.fsPath}`);
       }
-
-      watcher.dispose();
     });
 
     it("Should not ignore files that do not match patterns", () => {
@@ -233,6 +248,7 @@ describe("FileWatcher API Integration Tests", () => {
       };
 
       const watcher = new FileWatcher(config, batchHandler);
+      watchers.push(watcher);
       const shouldIgnore = (watcher as any).shouldIgnore.bind(watcher);
 
       // Test paths that should NOT be ignored
@@ -246,8 +262,6 @@ describe("FileWatcher API Integration Tests", () => {
         const result = shouldIgnore(uri);
         assert.strictEqual(result, false, `Should not ignore ${uri.fsPath}`);
       }
-
-      watcher.dispose();
     });
 
     it("Should handle empty exclude patterns", () => {
@@ -257,13 +271,13 @@ describe("FileWatcher API Integration Tests", () => {
       };
 
       const watcher = new FileWatcher(config, batchHandler);
+      watchers.push(watcher);
       const shouldIgnore = (watcher as any).shouldIgnore.bind(watcher);
 
       const testUri = vscode.Uri.file("/project/src/file.ts");
       const result = shouldIgnore(testUri);
 
       assert.strictEqual(result, false, "Should not ignore any files with empty patterns");
-      watcher.dispose();
     });
   });
 

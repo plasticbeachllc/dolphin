@@ -8,6 +8,8 @@ import { AgentBridge } from "../agent/bridge";
 export class DolphinViewProvider implements vscode.WebviewViewProvider {
   private webviewView?: vscode.WebviewView;
   private workspaceChangeDisposable?: vscode.Disposable;
+  private eventListenerDisposable?: vscode.Disposable;
+  private isDisposed = false;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -16,23 +18,41 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
   ) {
     // Set up event forwarding immediately when AgentBridge is available
     if (this.agentBridge) {
-      this.agentBridge.onEvent((event) => {
+      this.eventListenerDisposable = this.agentBridge.onEvent((event) => {
+        // Check if disposed before processing events
+        if (this.isDisposed) {
+          return;
+        }
+
         // Phase 7: Extract and log correlation ID for event tracking
         const requestId = (event as any).requestId || "unknown";
-        this.outputChannel.appendLine(
-          `[DolphinViewProvider] Received event from agent: ${event.type} (requestId: ${requestId})`
-        );
+        try {
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] Received event from agent: ${event.type} (requestId: ${requestId})`
+          );
+        } catch {
+          // Output channel may be disposed
+          return;
+        }
 
         // Forward to webview if it's available
         if (this.webviewView) {
-          this.outputChannel.appendLine(
-            `[DolphinViewProvider] Forwarding event to webview: ${event.type} (requestId: ${requestId})`
-          );
-          this.webviewView.webview.postMessage(event);
+          try {
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] Forwarding event to webview: ${event.type} (requestId: ${requestId})`
+            );
+            this.webviewView.webview.postMessage(event);
+          } catch {
+            // Webview may be disposed
+          }
         } else {
-          this.outputChannel.appendLine(
-            `[DolphinViewProvider] Webview not ready yet, event will be queued (requestId: ${requestId})`
-          );
+          try {
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] Webview not ready yet, event will be queued (requestId: ${requestId})`
+            );
+          } catch {
+            // Output channel may be disposed
+          }
         }
       });
     }
@@ -79,12 +99,25 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
    * Post a message to the webview
    */
   public postMessage(message: any): void {
+    // Don't post messages if disposed
+    if (this.isDisposed) {
+      return;
+    }
+
     if (this.webviewView) {
-      this.webviewView.webview.postMessage(message);
+      try {
+        this.webviewView.webview.postMessage(message);
+      } catch {
+        // Webview may be disposed
+      }
     } else {
-      this.outputChannel.appendLine(
-        `[DolphinViewProvider] Cannot post message - webview not ready`
-      );
+      try {
+        this.outputChannel.appendLine(
+          `[DolphinViewProvider] Cannot post message - webview not ready`
+        );
+      } catch {
+        // Output channel may be disposed
+      }
     }
   }
 
@@ -739,5 +772,27 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
   private getNonce(): string {
     const crypto = require("crypto");
     return crypto.randomBytes(16).toString("base64");
+  }
+
+  /**
+   * Dispose of all resources and cleanup
+   */
+  public dispose(): void {
+    this.isDisposed = true;
+
+    // Dispose event listener first to stop receiving events
+    if (this.eventListenerDisposable) {
+      this.eventListenerDisposable.dispose();
+      this.eventListenerDisposable = undefined;
+    }
+
+    // Dispose workspace change listener
+    if (this.workspaceChangeDisposable) {
+      this.workspaceChangeDisposable.dispose();
+      this.workspaceChangeDisposable = undefined;
+    }
+
+    // Clear webview reference (don't dispose it - VSCode manages webview lifecycle)
+    this.webviewView = undefined;
   }
 }

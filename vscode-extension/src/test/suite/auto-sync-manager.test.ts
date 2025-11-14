@@ -5,9 +5,21 @@ import { AutoSyncManager, AutoSyncConfig, PendingChange } from "../../kb/auto-sy
 describe("AutoSyncManager Tests", () => {
   let outputChannel: vscode.OutputChannel;
   let mockConfig: AutoSyncConfig;
+  let managers: AutoSyncManager[] = [];
+
+  // Create output channel ONCE for all tests to avoid DisposableStore warnings
+  before(() => {
+    outputChannel = vscode.window.createOutputChannel("AutoSyncManager Test");
+  });
+
+  // Clean up output channel AFTER all tests
+  after(() => {
+    if (outputChannel) {
+      outputChannel.dispose();
+    }
+  });
 
   beforeEach(() => {
-    outputChannel = vscode.window.createOutputChannel("Test");
     mockConfig = {
       enabled: true,
       mode: "smart",
@@ -15,10 +27,15 @@ describe("AutoSyncManager Tests", () => {
       maxBatchSize: 10,
       checkIntervalMs: 5000,
     };
+    managers = [];
   });
 
   afterEach(() => {
-    outputChannel.dispose();
+    // Dispose all managers after each test
+    for (const manager of managers) {
+      manager.dispose();
+    }
+    managers = [];
   });
 
   describe("Initialization", () => {
@@ -29,6 +46,7 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       assert.ok(manager, "Manager should be created");
     });
@@ -41,10 +59,10 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       await manager.start();
       // Should not throw and should log disabled message
-      manager.dispose();
       assert.ok(true, "Should handle disabled state gracefully");
     });
 
@@ -56,9 +74,9 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       await manager.start();
-      manager.dispose();
       assert.ok(true, "Should handle off mode gracefully");
     });
   });
@@ -72,9 +90,9 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       assert.ok(manager, "Should accept manual mode");
-      manager.dispose();
     });
 
     it("Should accept smart mode configuration", () => {
@@ -85,9 +103,9 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       assert.ok(manager, "Should accept smart mode");
-      manager.dispose();
     });
 
     it("Should accept aggressive mode configuration", () => {
@@ -98,9 +116,9 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       assert.ok(manager, "Should accept aggressive mode");
-      manager.dispose();
     });
 
     it("Should use provided idleTimeMs setting", () => {
@@ -111,9 +129,9 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       assert.ok(manager, "Should accept custom idle time");
-      manager.dispose();
     });
 
     it("Should use provided maxBatchSize setting", () => {
@@ -124,9 +142,9 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       assert.ok(manager, "Should accept custom batch size");
-      manager.dispose();
     });
 
     it("Should use provided checkIntervalMs setting", () => {
@@ -137,9 +155,9 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       assert.ok(manager, "Should accept custom check interval");
-      manager.dispose();
     });
   });
 
@@ -151,13 +169,13 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       // Test internal batching (accessing via any to test private method)
       const changes: PendingChange[] = [];
       const batches = (manager as any).batchChanges(changes, 10);
 
       assert.strictEqual(batches.length, 0, "Should produce no batches for empty input");
-      manager.dispose();
     });
 
     it("Should create single batch for changes within limit", () => {
@@ -167,6 +185,7 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       const changes: PendingChange[] = [
         {
@@ -193,7 +212,6 @@ describe("AutoSyncManager Tests", () => {
 
       assert.strictEqual(batches.length, 1, "Should create single batch");
       assert.strictEqual(batches[0].length, 3, "Batch should contain all changes");
-      manager.dispose();
     });
 
     it("Should split changes into multiple batches when exceeding limit", () => {
@@ -203,6 +221,7 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       const changes: PendingChange[] = [];
       for (let i = 0; i < 25; i++) {
@@ -220,7 +239,6 @@ describe("AutoSyncManager Tests", () => {
       assert.strictEqual(batches[0].length, 10, "First batch should have 10 items");
       assert.strictEqual(batches[1].length, 10, "Second batch should have 10 items");
       assert.strictEqual(batches[2].length, 5, "Third batch should have 5 items");
-      manager.dispose();
     });
 
     it("Should respect batch size of 1", () => {
@@ -230,6 +248,7 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       const changes: PendingChange[] = [
         {
@@ -251,7 +270,6 @@ describe("AutoSyncManager Tests", () => {
       assert.strictEqual(batches.length, 2, "Should create 2 batches for batch size 1");
       assert.strictEqual(batches[0].length, 1, "Each batch should have 1 item");
       assert.strictEqual(batches[1].length, 1, "Each batch should have 1 item");
-      manager.dispose();
     });
   });
 
@@ -263,9 +281,12 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
-      // Should not throw
+      // Manually dispose for this test
       manager.dispose();
+      // Remove from managers array since we manually disposed
+      managers.pop();
       assert.ok(true, "Disposal should complete without errors");
     });
 
@@ -276,10 +297,13 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       manager.dispose();
       manager.dispose();
       manager.dispose();
+      // Remove from managers array since we manually disposed
+      managers.pop();
       assert.ok(true, "Multiple dispose calls should not cause errors");
     });
 
@@ -290,9 +314,10 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       await manager.start();
-      manager.dispose();
+      // Will be disposed in afterEach
       assert.ok(true, "Should dispose cleanly after starting");
     });
   });
@@ -306,9 +331,9 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       assert.ok(manager, "Manual mode manager should be created");
-      manager.dispose();
     });
 
     it("Smart mode should be initialized", () => {
@@ -319,9 +344,9 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       assert.ok(manager, "Smart mode manager should be created");
-      manager.dispose();
     });
 
     it("Aggressive mode should be initialized", () => {
@@ -332,9 +357,9 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       assert.ok(manager, "Aggressive mode manager should be created");
-      manager.dispose();
     });
   });
 
@@ -346,6 +371,7 @@ describe("AutoSyncManager Tests", () => {
         "http://invalid-url-that-does-not-exist",
         outputChannel
       );
+      managers.push(manager);
 
       // Start manager - it will try to fetch pending changes
       // This should not crash even if API is unavailable
@@ -354,7 +380,6 @@ describe("AutoSyncManager Tests", () => {
       // Wait a bit for periodic check to attempt
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      manager.dispose();
       assert.ok(true, "Should handle API errors without crashing");
     });
 
@@ -365,11 +390,11 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:99999", // Invalid port
         outputChannel
       );
+      managers.push(manager);
 
       await manager.start();
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      manager.dispose();
       assert.ok(true, "Should handle invalid API responses");
     });
   });
@@ -390,9 +415,9 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       assert.ok(manager, "Should work with default configuration");
-      manager.dispose();
     });
 
     it("Should work with minimal configuration", () => {
@@ -410,9 +435,9 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       assert.ok(manager, "Should work with minimal configuration");
-      manager.dispose();
     });
 
     it("Should work with extreme configuration values", () => {
@@ -430,9 +455,9 @@ describe("AutoSyncManager Tests", () => {
         "http://localhost:8765",
         outputChannel
       );
+      managers.push(manager);
 
       assert.ok(manager, "Should work with extreme configuration values");
-      manager.dispose();
     });
   });
 
@@ -447,9 +472,9 @@ describe("AutoSyncManager Tests", () => {
           "http://localhost:8765",
           outputChannel
         );
+        managers.push(manager);
 
         assert.ok(manager, `Should accept repo name: ${repo}`);
-        manager.dispose();
       }
     });
 
@@ -458,9 +483,9 @@ describe("AutoSyncManager Tests", () => {
 
       for (const url of urls) {
         const manager = new AutoSyncManager(mockConfig, "test-repo", url, outputChannel);
+        managers.push(manager);
 
         assert.ok(manager, `Should accept API URL: ${url}`);
-        manager.dispose();
       }
     });
   });

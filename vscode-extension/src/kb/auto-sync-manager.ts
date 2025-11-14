@@ -21,6 +21,17 @@ export class AutoSyncManager {
   private lastActivityTime: number = Date.now();
   private activityTracker: vscode.Disposable | null = null;
   private isProcessing: boolean = false;
+  private isDisposed: boolean = false;
+
+  private log(message: string): void {
+    if (!this.isDisposed) {
+      try {
+        this.outputChannel.appendLine(message);
+      } catch {
+        // Silently fail if output channel is disposed
+      }
+    }
+  }
 
   constructor(
     private config: AutoSyncConfig,
@@ -31,11 +42,11 @@ export class AutoSyncManager {
 
   async start() {
     if (!this.config.enabled || this.config.mode === "off") {
-      this.outputChannel.appendLine("[AutoSync] Auto-sync disabled");
+      this.log("[AutoSync] Auto-sync disabled");
       return;
     }
 
-    this.outputChannel.appendLine(`[AutoSync] Starting in '${this.config.mode}' mode`);
+    this.log(`[AutoSync] Starting in '${this.config.mode}' mode`);
 
     // Track user activity for idle detection
     this.startActivityTracking();
@@ -47,7 +58,9 @@ export class AutoSyncManager {
   private startActivityTracking() {
     // Track text document changes
     this.activityTracker = vscode.workspace.onDidChangeTextDocument(() => {
-      this.lastActivityTime = Date.now();
+      if (!this.isDisposed) {
+        this.lastActivityTime = Date.now();
+      }
     });
   }
 
@@ -57,13 +70,15 @@ export class AutoSyncManager {
     }
 
     this.checkTimer = setInterval(async () => {
-      await this.checkAndSync();
+      if (!this.isDisposed) {
+        await this.checkAndSync();
+      }
     }, this.config.checkIntervalMs);
   }
 
   private async checkAndSync() {
-    if (this.isProcessing) {
-      return; // Skip if already processing
+    if (this.isDisposed || this.isProcessing) {
+      return; // Skip if disposed or already processing
     }
 
     try {
@@ -76,7 +91,7 @@ export class AutoSyncManager {
         return;
       }
 
-      this.outputChannel.appendLine(`[AutoSync] Found ${changes.length} pending changes`);
+      this.log(`[AutoSync] Found ${changes.length} pending changes`);
 
       // Handle based on mode
       switch (this.config.mode) {
@@ -91,13 +106,17 @@ export class AutoSyncManager {
           break;
       }
     } catch (error: any) {
-      this.outputChannel.appendLine(`[AutoSync] Error during sync: ${error.message}`);
+      this.log(`[AutoSync] Error during sync: ${error.message}`);
     } finally {
       this.isProcessing = false;
     }
   }
 
   private async handleManualMode(changes: PendingChange[]) {
+    if (this.isDisposed) {
+      return;
+    }
+
     // Notify user and require confirmation
     const choice = await vscode.window.showInformationMessage(
       `${changes.length} file(s) changed. Sync now?`,
@@ -115,10 +134,10 @@ export class AutoSyncManager {
     const idleTime = Date.now() - this.lastActivityTime;
 
     if (idleTime >= this.config.idleTimeMs) {
-      this.outputChannel.appendLine(`[AutoSync] User idle for ${idleTime}ms, syncing...`);
+      this.log(`[AutoSync] User idle for ${idleTime}ms, syncing...`);
       await this.processPendingChanges(changes);
     } else {
-      this.outputChannel.appendLine(`[AutoSync] User active (idle: ${idleTime}ms), deferring sync`);
+      this.log(`[AutoSync] User active (idle: ${idleTime}ms), deferring sync`);
     }
   }
 
@@ -131,7 +150,7 @@ export class AutoSyncManager {
     // Batch changes
     const batches = this.batchChanges(changes, this.config.maxBatchSize);
 
-    this.outputChannel.appendLine(`[AutoSync] Processing ${batches.length} batch(es)`);
+    this.log(`[AutoSync] Processing ${batches.length} batch(es)`);
 
     for (const batch of batches) {
       try {
@@ -143,11 +162,9 @@ export class AutoSyncManager {
         // after successfully indexing each file
         await this.triggerIndexing(filePaths);
 
-        this.outputChannel.appendLine(
-          `[AutoSync] Queued batch of ${batch.length} files for indexing`
-        );
+        this.log(`[AutoSync] Queued batch of ${batch.length} files for indexing`);
       } catch (error: any) {
-        this.outputChannel.appendLine(`[AutoSync] Error queuing batch: ${error.message}`);
+        this.log(`[AutoSync] Error queuing batch: ${error.message}`);
         // Continue with next batch even if one fails
       }
     }
@@ -195,6 +212,8 @@ export class AutoSyncManager {
   }
 
   dispose() {
+    this.isDisposed = true;
+
     if (this.checkTimer) {
       clearInterval(this.checkTimer);
       this.checkTimer = null;
@@ -205,6 +224,6 @@ export class AutoSyncManager {
       this.activityTracker = null;
     }
 
-    this.outputChannel.appendLine("[AutoSync] Disposed");
+    this.log("[AutoSync] Disposed");
   }
 }

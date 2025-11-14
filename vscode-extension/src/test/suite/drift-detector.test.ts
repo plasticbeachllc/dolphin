@@ -4,28 +4,45 @@ import { DriftDetector, DriftEvent } from "../../kb/drift-detector";
 
 describe("DriftDetector Tests", () => {
   let outputChannel: vscode.OutputChannel;
+  let detectors: DriftDetector[] = [];
+
+  // Create output channel ONCE for all tests to avoid DisposableStore warnings
+  before(() => {
+    outputChannel = vscode.window.createOutputChannel("DriftDetector Test");
+  });
+
+  // Clean up output channel AFTER all tests
+  after(() => {
+    if (outputChannel) {
+      outputChannel.dispose();
+    }
+  });
 
   beforeEach(() => {
-    outputChannel = vscode.window.createOutputChannel("Test");
+    detectors = [];
   });
 
   afterEach(() => {
-    outputChannel.dispose();
+    // Dispose all detectors after each test
+    for (const detector of detectors) {
+      detector.dispose();
+    }
+    detectors = [];
   });
 
   describe("Initialization", () => {
     it("Should create DriftDetector instance", () => {
       const detector = new DriftDetector("test-repo", "http://localhost:8765", outputChannel);
+      detectors.push(detector);
 
       assert.ok(detector, "Detector should be created");
-      detector.dispose();
     });
 
     it("Should use default check interval when not specified", () => {
       const detector = new DriftDetector("test-repo", "http://localhost:8765", outputChannel);
+      detectors.push(detector);
 
       assert.ok(detector, "Should use default interval");
-      detector.dispose();
     });
 
     it("Should use custom check interval when specified", () => {
@@ -36,9 +53,9 @@ describe("DriftDetector Tests", () => {
         outputChannel,
         customInterval
       );
+      detectors.push(detector);
 
       assert.ok(detector, "Should accept custom interval");
-      detector.dispose();
     });
 
     it("Should accept very short check interval for testing", () => {
@@ -49,9 +66,9 @@ describe("DriftDetector Tests", () => {
         outputChannel,
         shortInterval
       );
+      detectors.push(detector);
 
       assert.ok(detector, "Should accept short interval");
-      detector.dispose();
     });
 
     it("Should accept very long check interval", () => {
@@ -62,26 +79,32 @@ describe("DriftDetector Tests", () => {
         outputChannel,
         longInterval
       );
+      detectors.push(detector);
 
       assert.ok(detector, "Should accept long interval");
-      detector.dispose();
     });
   });
 
   describe("Disposal", () => {
     it("Should properly dispose resources", () => {
       const detector = new DriftDetector("test-repo", "http://localhost:8765", outputChannel);
+      detectors.push(detector);
 
       detector.dispose();
+      // Remove from array since we manually disposed
+      detectors.pop();
       assert.ok(true, "Disposal should complete without errors");
     });
 
     it("Should handle multiple dispose calls", () => {
       const detector = new DriftDetector("test-repo", "http://localhost:8765", outputChannel);
+      detectors.push(detector);
 
       detector.dispose();
       detector.dispose();
       detector.dispose();
+      // Remove from array since we manually disposed
+      detectors.pop();
       assert.ok(true, "Multiple dispose calls should not cause errors");
     });
 
@@ -94,6 +117,7 @@ describe("DriftDetector Tests", () => {
         outputChannel,
         100 // Short interval for testing
       );
+      detectors.push(detector);
 
       // Start will fail due to unavailable API, but should handle gracefully
       try {
@@ -102,15 +126,18 @@ describe("DriftDetector Tests", () => {
         // Expected - API not available in test
       }
 
-      detector.dispose();
+      // Will be disposed in afterEach
       assert.ok(true, "Should dispose cleanly after starting");
     });
 
     it("Should clear timer on disposal", () => {
       const detector = new DriftDetector("test-repo", "http://localhost:8765", outputChannel, 100);
+      detectors.push(detector);
 
       // Access private checkTimer to verify it gets cleared
       detector.dispose();
+      // Remove from array since we manually disposed
+      detectors.pop();
 
       // Timer should be null after disposal
       assert.ok(true, "Timer should be cleared");
@@ -165,6 +192,7 @@ describe("DriftDetector Tests", () => {
         "http://invalid-url-that-does-not-exist",
         outputChannel
       );
+      detectors.push(detector);
 
       // detectDrift should not throw even if API is unavailable
       try {
@@ -175,8 +203,6 @@ describe("DriftDetector Tests", () => {
         // Some errors may propagate, but they should be caught internally
         assert.ok(true, "Error was caught");
       }
-
-      detector.dispose();
     });
 
     it("Should handle network failures", async function () {
@@ -187,6 +213,7 @@ describe("DriftDetector Tests", () => {
         "http://localhost:99999", // Invalid port
         outputChannel
       );
+      detectors.push(detector);
 
       try {
         await detector.detectDrift();
@@ -194,14 +221,13 @@ describe("DriftDetector Tests", () => {
       } catch (error) {
         assert.ok(true, "Network error handled");
       }
-
-      detector.dispose();
     });
 
     it("Should handle malformed API responses", async function () {
       this.timeout(5000);
 
       const detector = new DriftDetector("test-repo", "http://localhost:8765", outputChannel);
+      detectors.push(detector);
 
       // If API returns unexpected format, should handle gracefully
       try {
@@ -210,14 +236,13 @@ describe("DriftDetector Tests", () => {
       } catch (error) {
         assert.ok(true, "Malformed response handled");
       }
-
-      detector.dispose();
     });
 
     it("Should continue operation after error", async function () {
       this.timeout(5000);
 
       const detector = new DriftDetector("test-repo", "http://invalid", outputChannel, 100);
+      detectors.push(detector);
 
       // First detection (will fail)
       try {
@@ -233,8 +258,6 @@ describe("DriftDetector Tests", () => {
       } catch (error) {
         assert.ok(true, "Can handle multiple errors");
       }
-
-      detector.dispose();
     });
   });
 
@@ -244,9 +267,9 @@ describe("DriftDetector Tests", () => {
 
       for (const repo of repos) {
         const detector = new DriftDetector(repo, "http://localhost:8765", outputChannel);
+        detectors.push(detector);
 
         assert.ok(detector, `Should accept repo name: ${repo}`);
-        detector.dispose();
       }
     });
 
@@ -260,9 +283,9 @@ describe("DriftDetector Tests", () => {
 
       for (const url of urls) {
         const detector = new DriftDetector("test-repo", url, outputChannel);
+        detectors.push(detector);
 
         assert.ok(detector, `Should accept API URL: ${url}`);
-        detector.dispose();
       }
     });
 
@@ -277,9 +300,9 @@ describe("DriftDetector Tests", () => {
 
       for (const name of complexNames) {
         const detector = new DriftDetector(name, "http://localhost:8765", outputChannel);
+        detectors.push(detector);
 
         assert.ok(detector, `Should accept complex repo name: ${name}`);
-        detector.dispose();
       }
     });
   });
@@ -292,9 +315,9 @@ describe("DriftDetector Tests", () => {
         outputChannel,
         3600000 // 1 hour
       );
+      detectors.push(detector);
 
       assert.ok(detector, "Should accept hourly interval");
-      detector.dispose();
     });
 
     it("Should accept per-minute interval", () => {
@@ -304,9 +327,9 @@ describe("DriftDetector Tests", () => {
         outputChannel,
         60000 // 1 minute
       );
+      detectors.push(detector);
 
       assert.ok(detector, "Should accept per-minute interval");
-      detector.dispose();
     });
 
     it("Should accept daily interval", () => {
@@ -316,9 +339,9 @@ describe("DriftDetector Tests", () => {
         outputChannel,
         86400000 // 24 hours
       );
+      detectors.push(detector);
 
       assert.ok(detector, "Should accept daily interval");
-      detector.dispose();
     });
 
     it("Should accept rapid interval for testing", () => {
@@ -328,27 +351,26 @@ describe("DriftDetector Tests", () => {
         outputChannel,
         10 // Very rapid for tests
       );
+      detectors.push(detector);
 
       assert.ok(detector, "Should accept rapid interval");
-      detector.dispose();
     });
   });
 
   describe("Concurrent Detectors", () => {
     it("Should handle multiple detector instances", () => {
       const detector1 = new DriftDetector("repo1", "http://localhost:8765", outputChannel);
+      detectors.push(detector1);
 
       const detector2 = new DriftDetector("repo2", "http://localhost:8765", outputChannel);
+      detectors.push(detector2);
 
       const detector3 = new DriftDetector("repo3", "http://localhost:8765", outputChannel);
+      detectors.push(detector3);
 
       assert.ok(detector1, "First detector created");
       assert.ok(detector2, "Second detector created");
       assert.ok(detector3, "Third detector created");
-
-      detector1.dispose();
-      detector2.dispose();
-      detector3.dispose();
     });
 
     it("Should handle different intervals for different repos", () => {
@@ -358,6 +380,7 @@ describe("DriftDetector Tests", () => {
         outputChannel,
         1000
       );
+      detectors.push(detector1);
 
       const detector2 = new DriftDetector(
         "slow-repo",
@@ -365,21 +388,22 @@ describe("DriftDetector Tests", () => {
         outputChannel,
         10000
       );
+      detectors.push(detector2);
 
       assert.ok(detector1, "Fast detector created");
       assert.ok(detector2, "Slow detector created");
-
-      detector1.dispose();
-      detector2.dispose();
     });
   });
 
   describe("Lifecycle Management", () => {
     it("Should dispose before start", () => {
       const detector = new DriftDetector("test-repo", "http://localhost:8765", outputChannel);
+      detectors.push(detector);
 
       // Dispose before starting
       detector.dispose();
+      // Remove from array since we manually disposed
+      detectors.pop();
       assert.ok(true, "Should handle dispose before start");
     });
 
@@ -393,6 +417,7 @@ describe("DriftDetector Tests", () => {
           outputChannel,
           100
         );
+        detectors.push(detector);
 
         try {
           await detector.start();
@@ -401,6 +426,7 @@ describe("DriftDetector Tests", () => {
         }
 
         detector.dispose();
+        detectors.pop();
       }
 
       assert.ok(true, "Should handle rapid cycles");
@@ -415,9 +441,9 @@ describe("DriftDetector Tests", () => {
         outputChannel,
         3600000 // 1 hour - realistic for production
       );
+      detectors.push(detector);
 
       assert.ok(detector, "Should work with realistic config");
-      detector.dispose();
     });
 
     it("Should work with development configuration", () => {
@@ -427,9 +453,9 @@ describe("DriftDetector Tests", () => {
         outputChannel,
         5000 // 5 seconds - fast for development
       );
+      detectors.push(detector);
 
       assert.ok(detector, "Should work with dev config");
-      detector.dispose();
     });
 
     it("Should work with conservative configuration", () => {
@@ -439,9 +465,9 @@ describe("DriftDetector Tests", () => {
         outputChannel,
         43200000 // 12 hours - conservative for important repos
       );
+      detectors.push(detector);
 
       assert.ok(detector, "Should work with conservative config");
-      detector.dispose();
     });
   });
 });

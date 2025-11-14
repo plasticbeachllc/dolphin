@@ -15,10 +15,27 @@ describe("DolphinViewProvider Unit Tests", () => {
     provider = new DolphinViewProvider(extensionUri, outputChannel, mockAgentBridge);
   });
 
-  afterEach(() => {
-    outputChannel.dispose();
+  afterEach(async () => {
+    // CRITICAL: Dispose provider FIRST to stop event forwarding
+    if (provider) {
+      provider.dispose();
+    }
+    
+    // Then shutdown agent bridge to stop async operations
     if (mockAgentBridge) {
+      const process = (mockAgentBridge as any).process;
+      if (process && !process.kill) {
+        process.kill = () => true;
+      }
       mockAgentBridge.shutdown();
+    }
+    
+    // Wait for shutdown to complete before disposing output channel
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    // Finally dispose output channel
+    if (outputChannel) {
+      outputChannel.dispose();
     }
   });
 

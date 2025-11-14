@@ -17,6 +17,8 @@ def mock_providers():
             "get_chunk_contents",
             "get_chunk_by_id",
             "get_chunk_by_content_identity",
+            "get_repo_by_name",
+            "get_file_id",
             "index_chunk_for_fts",
         ]
     )
@@ -47,10 +49,17 @@ class TestKnowledgeSearchBackend:
         ]
         # `reciprocal_rank_fusion` expects the `id_field` to be 'chunk_id'
         sql_store.bm25_search.return_value = [
-            {"chunk_id": "chunk2", "score": 25.0, "repo": "test", "path": "p2.py"}
+            {"chunk_id": "chunk2", "score": 25.0, "repo": "test", "path": "p2.py", "text_hash": "hash2"}
         ]
-        # Mock the hydration call for the BM25 result
-        sql_store.get_chunk_by_id.return_value = {"path": "p2.py", "chunk_id": "chunk2"}
+        # Mock the hydration methods for the BM25 result
+        sql_store.get_repo_by_name.return_value = {"id": 1}
+        sql_store.get_file_id.return_value = 2
+        sql_store.get_chunk_by_content_identity.return_value = {
+            "path": "p2.py",
+            "chunk_id": "chunk2",
+            "start_line": 1,
+            "end_line": 10,
+        }
 
         request = SearchRequest(query="test", top_k=10)
         results = basic_backend.search(request)
@@ -75,11 +84,16 @@ class TestKnowledgeSearchBackend:
         ]
         # BM25 result will rank at position 2, giving RRF score ~0.016 (similar rank)
         sql_store.bm25_search.return_value = [
-            {"chunk_id": "chunk2", "score": 5.0, "repo": "repo", "path": "test.py"}
+            {"chunk_id": "chunk2", "score": 5.0, "repo": "repo", "path": "test.py", "text_hash": "hash2"}
         ]
-        sql_store.get_chunk_by_id.return_value = {
+        # Mock the hydration methods for the BM25 result
+        sql_store.get_repo_by_name.return_value = {"id": 1}
+        sql_store.get_file_id.return_value = 2
+        sql_store.get_chunk_by_content_identity.return_value = {
             "path": "test.py",
             "chunk_id": "chunk2",
+            "start_line": 1,
+            "end_line": 10,
         }
 
         # Use low cutoff (0.0) to accept RRF scores (~0.016)
@@ -102,7 +116,11 @@ class TestKnowledgeSearchBackend:
             basic_backend.sql_store,
         )
 
-        deterministic_id = "1:2:abcdef"
+        # Mock the new lookup methods
+        sql_store.get_repo_by_name = MagicMock(return_value={"id": 1})
+        sql_store.get_file_id = MagicMock(return_value=2)
+
+        deterministic_id = "32char_deterministic_hash_id"
         sql_store.get_chunk_by_content_identity.return_value = {
             "chunk_id": "uuid-123",
             "text_hash": "abcdef",
@@ -122,12 +140,16 @@ class TestKnowledgeSearchBackend:
                     "chunk_id": deterministic_id,
                     "repo": "repo",
                     "path": "repo/file.py",
+                    "text_hash": "abcdef",  # Now includes text_hash from BM25 search
                     "score": 5.0,
                 }
             ],
             sql_store,
         )
 
+        # Verify the new lookup flow was used
+        sql_store.get_repo_by_name.assert_called_once_with("repo")
+        sql_store.get_file_id.assert_called_once_with(1, "repo/file.py")
         sql_store.get_chunk_by_content_identity.assert_called_once_with(1, 2, "abcdef")
         sql_store.get_chunk_by_id.assert_not_called()
         assert hydrated[0]["start_line"] == 10

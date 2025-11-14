@@ -37,6 +37,7 @@ export class AgentBridge {
   private maxRestartAttempts = 3;
   private restartBackoffs = [1000, 3000, 10000]; // 1s, 3s, 10s
   private isShuttingDown = false;
+  private restartTimers: NodeJS.Timeout[] = []; // Track restart timers for cleanup
 
   public readonly onEvent = this.eventEmitter.event;
 
@@ -162,17 +163,27 @@ export class AgentBridge {
     extensionPath: string,
     apiKey?: string
   ): Promise<void> {
+    // Check if we're shutting down before doing anything
+    if (this.isShuttingDown) {
+      return;
+    }
+
     if (this.restartAttempts >= this.maxRestartAttempts) {
-      this.outputChannel.appendLine(
-        `[AgentBridge] Maximum restart attempts (${this.maxRestartAttempts}) reached. Not restarting.`
-      );
+      try {
+        this.outputChannel.appendLine(
+          `[AgentBridge] Maximum restart attempts (${this.maxRestartAttempts}) reached. Not restarting.`
+        );
+      } catch {
+        // Output channel may be disposed
+      }
+
       const action = await vscode.window.showErrorMessage(
         `Dolphin Agent crashed ${this.maxRestartAttempts} times and will not restart automatically. Check Output > Dolphin Agent for details.`,
         "Retry",
         "Cancel"
       );
 
-      if (action === "Retry") {
+      if (action === "Retry" && !this.isShuttingDown) {
         this.restartAttempts = 0;
         this.start(agentCorePath, extensionPath, apiKey);
       }
@@ -182,17 +193,33 @@ export class AgentBridge {
     const backoff = this.restartBackoffs[this.restartAttempts];
     this.restartAttempts++;
 
-    this.outputChannel.appendLine(
-      `[AgentBridge] Attempting restart ${this.restartAttempts}/${this.maxRestartAttempts} in ${backoff}ms...`
-    );
+    try {
+      this.outputChannel.appendLine(
+        `[AgentBridge] Attempting restart ${this.restartAttempts}/${this.maxRestartAttempts} in ${backoff}ms...`
+      );
+    } catch {
+      // Output channel may be disposed
+    }
 
     vscode.window.showWarningMessage(
       `Dolphin Agent crashed. Restarting (attempt ${this.restartAttempts}/${this.maxRestartAttempts})...`
     );
 
-    setTimeout(() => {
-      this.start(agentCorePath, extensionPath, apiKey);
+    // Store timer so we can cancel it on shutdown
+    const timer = setTimeout(() => {
+      // Remove this timer from the list
+      const index = this.restartTimers.indexOf(timer);
+      if (index > -1) {
+        this.restartTimers.splice(index, 1);
+      }
+      
+      // Only restart if not shutting down
+      if (!this.isShuttingDown) {
+        this.start(agentCorePath, extensionPath, apiKey);
+      }
     }, backoff);
+    
+    this.restartTimers.push(timer);
   }
 
   private async findBun(): Promise<string | null> {
@@ -329,11 +356,26 @@ export class AgentBridge {
    */
   public async waitForReady(timeout = 60000): Promise<void> {
     return new Promise((resolve, reject) => {
+      // Check if already shutting down
+      if (this.isShuttingDown) {
+        reject(new Error("Agent bridge is shutting down"));
+        return;
+      }
+
       const timer = setTimeout(() => {
+        disposable.dispose();
         reject(new Error("Agent Core did not become ready within 60s"));
       }, timeout);
 
       const disposable = this.onEvent((event) => {
+        // Double-check we're not shutting down when event arrives
+        if (this.isShuttingDown) {
+          clearTimeout(timer);
+          disposable.dispose();
+          reject(new Error("Agent bridge is shutting down"));
+          return;
+        }
+
         if (event.type === "agent_ready") {
           clearTimeout(timer);
           disposable.dispose();
@@ -353,6 +395,12 @@ export class AgentBridge {
       // Output channel may already be disposed in tests
     }
 
+    // Cancel all restart timers to prevent async operations after disposal
+    for (const timer of this.restartTimers) {
+      clearTimeout(timer);
+    }
+    this.restartTimers = [];
+
     // Dispose connection first
     if (this.connection) {
       this.connection.dispose();
@@ -367,6 +415,9 @@ export class AgentBridge {
       pending.reject(new Error("Agent bridge is shutting down"));
     }
     this.pendingRequests.clear();
+
+    // Dispose event emitter to prevent new event listeners
+    this.eventEmitter.dispose();
 
     // Kill the process
     this.process?.kill("SIGTERM");

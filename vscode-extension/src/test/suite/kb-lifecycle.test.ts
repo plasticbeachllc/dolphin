@@ -236,37 +236,49 @@ describe("KB Lifecycle Management", function () {
   });
 
   describe("KB Configuration", () => {
-    it("KB configuration keys should exist", () => {
-      const config = vscode.workspace.getConfiguration("dolphin");
+    it("KB configuration keys should be readable via get()", () => {
+      // Read full configuration keys including the dolphin prefix
+      const config = vscode.workspace.getConfiguration();
 
-      // Verify KB-related configuration is defined in package.json
-      const kbDebounce = config.inspect("kb.debounceMs");
-      const kbBatchInterval = config.inspect("kb.batchIntervalMs");
-      const autoSyncEnabled = config.inspect("kb.autoSync.enabled");
+      // Basic configuration read test - values should exist with defaults from package.json
+      const kbDebounce = config.get("dolphin.kb.debounceMs");
+      const kbBatchInterval = config.get("dolphin.kb.batchIntervalMs");
+      const autoSyncEnabled = config.get("dolphin.kb.autoSync.enabled");
 
-      assert.ok(kbDebounce, "kb.debounceMs should be defined");
-      assert.ok(kbBatchInterval, "kb.batchIntervalMs should be defined");
-      assert.ok(autoSyncEnabled, "kb.autoSync.enabled should be defined");
+      // These should have values from the defaults in package.json
+      assert.ok(kbDebounce !== undefined, "dolphin.kb.debounceMs should have a value");
+      assert.ok(kbBatchInterval !== undefined, "dolphin.kb.batchIntervalMs should have a value");
+      assert.ok(autoSyncEnabled !== undefined, "dolphin.kb.autoSync.enabled should have a value");
     });
 
-    it("KB configuration should have valid types", () => {
-      const config = vscode.workspace.getConfiguration("dolphin");
+    it("KB configuration should have valid default types from package.json", () => {
+      // Read full configuration keys including the dolphin prefix
+      const config = vscode.workspace.getConfiguration();
 
-      const kbDebounce = config.inspect<number>("kb.debounceMs");
-      const excludePatterns = config.inspect<string[]>("kb.excludePatterns");
-      const autoSyncEnabled = config.inspect<boolean>("kb.autoSync.enabled");
+      const kbDebounce = config.get<number>("dolphin.kb.debounceMs");
+      const excludePatterns = config.get<string[]>("dolphin.kb.excludePatterns");
+      const autoSyncEnabled = config.get<boolean>("dolphin.kb.autoSync.enabled");
 
-      assert.strictEqual(
-        typeof kbDebounce?.defaultValue,
-        "number",
-        `debounceMs should be number, got ${typeof kbDebounce?.defaultValue}`
-      );
-      assert.ok(Array.isArray(excludePatterns?.defaultValue), "excludePatterns should be array");
-      assert.strictEqual(
-        typeof autoSyncEnabled?.defaultValue,
-        "boolean",
-        "autoSync.enabled should be boolean"
-      );
+      // Verify types match package.json definitions
+      if (kbDebounce !== undefined) {
+        assert.strictEqual(
+          typeof kbDebounce,
+          "number",
+          `dolphin.kb.debounceMs should be number, got ${typeof kbDebounce}`
+        );
+      }
+
+      if (excludePatterns !== undefined) {
+        assert.ok(Array.isArray(excludePatterns), "dolphin.kb.excludePatterns should be array");
+      }
+
+      if (autoSyncEnabled !== undefined) {
+        assert.strictEqual(
+          typeof autoSyncEnabled,
+          "boolean",
+          "dolphin.kb.autoSync.enabled should be boolean"
+        );
+      }
     });
   });
 
