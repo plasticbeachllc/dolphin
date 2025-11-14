@@ -127,7 +127,7 @@ class PythonCallGraphExtractor:
             start_line=node.start_point[0],
             end_line=node.end_point[0],
             language="python",
-            signature=node.text.decode("utf8")[:200],  # First 200 chars
+            signature=node.text.decode("utf8")[:200] if node.text else "",  # First 200 chars
             docstring=docstring,
             metadata={
                 "ast_type": "class_definition",
@@ -282,7 +282,7 @@ class PythonCallGraphExtractor:
             first_stmt = body.children[0]
             if first_stmt.type == "expression_statement" and first_stmt.child_count > 0:
                 expr = first_stmt.children[0]
-                if expr.type == "string":
+                if expr.type == "string" and expr.text:
                     docstring_text = expr.text.decode("utf8")
                     # Remove quotes and clean up
                     return docstring_text.strip("\"'").strip()

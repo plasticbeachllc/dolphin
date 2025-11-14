@@ -167,7 +167,11 @@ class GraphStore:
             List of GraphNode objects
         """
         # Use the base store's method to get nodes
-        nodes = self.base_store.get_nodes_by_file_path(file_path, repo_id)
+        get_nodes_method = getattr(self.base_store, "get_nodes_by_file_path", None)
+        if get_nodes_method is None:
+            # Method not yet implemented in base store
+            return []
+        nodes = get_nodes_method(file_path, repo_id)
 
         # Convert to GraphNode objects
         from .models import NodeType
@@ -210,7 +214,7 @@ class GraphStore:
         Returns:
             List of GraphEdge objects
         """
-        edges_data = self.base_store.get_edges_by_source(source_node_id)
+        edges_data = self.base_store.get_outgoing_edges(source_node_id)
 
         # Convert to GraphEdge objects
         from .models import EdgeType

@@ -7,7 +7,7 @@ from pathlib import Path
 class CoverageManager:
     """Manage test coverage collection and reporting."""
 
-    def __init__(self, source_dir: str = "pb_kb/src", output_dir: Path = None):
+    def __init__(self, source_dir: str = "pb_kb/src", output_dir: Path | None = None):
         self.source_dir = source_dir
         self.output_dir = output_dir or Path("tests/reports")
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -113,10 +113,10 @@ class CoverageManager:
 
 
 def run_tests_with_coverage(
-    test_paths: list[str] = None,
+    test_paths: list[str] | None = None,
     source_dir: str = "pb_kb/src",
     min_coverage: float = 0.0,
-    output_dir: Path = None,
+    output_dir: Path | None = None,
 ) -> bool:
     """Run tests with coverage and generate reports.
 

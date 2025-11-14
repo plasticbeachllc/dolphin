@@ -171,8 +171,9 @@ async def search(request: SearchRequest) -> dict[str, object]:
             temp_config_data["ann_refine_factor"] = request.ann_refine_factor
 
         # Set on backend temporarily if it supports per-request config
-        if hasattr(backend, "set_request_ann_config"):
-            backend.set_request_ann_config(temp_config_data)
+        set_config_method = getattr(backend, "set_request_ann_config", None)
+        if callable(set_config_method):
+            set_config_method(temp_config_data)
 
     started = perf_counter()
     raw_hits = backend.search(request)

@@ -77,6 +77,7 @@ class TestVectorPreFilter:
 
         expr = prefilter.build_filter_expression(criteria)
 
+        assert expr is not None
         assert "IN" in expr
         assert "repo1" in expr
         assert "repo2" in expr
@@ -88,6 +89,7 @@ class TestVectorPreFilter:
 
         expr = prefilter.build_filter_expression(criteria)
 
+        assert expr is not None
         assert "language = 'python'" in expr
 
     def test_build_symbol_kind_filter(self):
@@ -97,6 +99,7 @@ class TestVectorPreFilter:
 
         expr = prefilter.build_filter_expression(criteria)
 
+        assert expr is not None
         assert "symbol_kind" in expr
         assert "function" in expr
         assert "class" in expr
@@ -111,6 +114,7 @@ class TestVectorPreFilter:
 
         expr = prefilter.build_filter_expression(criteria)
 
+        assert expr is not None
         assert "token_count >= 100" in expr
         assert "token_count <= 500" in expr
 
@@ -121,6 +125,7 @@ class TestVectorPreFilter:
 
         expr = prefilter.build_filter_expression(criteria)
 
+        assert expr is not None
         assert "NOT LIKE" in expr
 
     def test_build_file_patterns_filter(self):
@@ -130,6 +135,7 @@ class TestVectorPreFilter:
 
         expr = prefilter.build_filter_expression(criteria)
 
+        assert expr is not None
         assert "LIKE" in expr
         assert ".py" in expr or ".js" in expr
 
@@ -144,6 +150,7 @@ class TestVectorPreFilter:
 
         expr = prefilter.build_filter_expression(criteria)
 
+        assert expr is not None
         assert "repo = 'repo1'" in expr
         assert "language = 'python'" in expr
         assert "token_count >= 100" in expr
@@ -322,6 +329,7 @@ class TestConvenienceFunctions:
 
         combined = combine_filters(filter1, filter2)
 
+        assert combined.repos is not None
         assert set(combined.repos) == {"repo1", "repo2"}
 
     def test_combine_filters_multiple_types(self):

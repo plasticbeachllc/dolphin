@@ -161,7 +161,7 @@ class TypeScriptCallGraphExtractor:
             start_line=node.start_point[0],
             end_line=node.end_point[0],
             language="typescript",
-            signature=node.text.decode("utf8")[:200],
+            signature=node.text.decode("utf8")[:200] if node.text else "",
             docstring=docstring,
             metadata={
                 "ast_type": "class_declaration",
@@ -358,7 +358,7 @@ class TypeScriptCallGraphExtractor:
             start_line=node.start_point[0],
             end_line=node.end_point[0],
             language="typescript",
-            signature=node.text.decode("utf8")[:200],
+            signature=node.text.decode("utf8")[:200] if node.text else "",
             docstring=docstring,
             metadata={
                 "ast_type": "interface_declaration",

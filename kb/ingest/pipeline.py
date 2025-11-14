@@ -61,6 +61,8 @@ class IngestionPipeline:
         Returns:
             GraphManager instance for the repository
         """
+        if self.graph_managers is None:
+            self.graph_managers = {}
         if repo_id not in self.graph_managers:
             # Use the database engine from the graph_store
             db_engine = self.graph_store.db if self.graph_store else None
