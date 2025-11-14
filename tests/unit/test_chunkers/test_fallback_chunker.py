@@ -102,7 +102,7 @@ class TestFallbackChunker:
         chunks_with_overlap = chunk_text(text, token_target=80, overlap_pct=0.20)
 
         # Get chunks without overlap
-        chunks_no_overlap = chunk_text(text, token_target=80, overlap_pct=0.0)
+        chunk_text(text, token_target=80, overlap_pct=0.0)
 
         # With overlap should have more chunks (or same number but with shared content)
         if len(chunks_with_overlap) > 1:

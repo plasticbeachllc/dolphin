@@ -107,7 +107,7 @@ class TestEnhancedInitialization:
         store.initialize()
         second_state = store._initialized
 
-        assert first_state == second_state == True
+        assert first_state == second_state is True
 
         # Should not create duplicate tables
         with store._connect() as conn:
@@ -244,7 +244,7 @@ class TestDatabaseIntegrityValidation:
         repo = store.get_repo_by_name("test-repo")
         repo_id = int(repo["id"])
 
-        file_id = store.upsert_file(
+        store.upsert_file(
             repo_id,
             path="src/a.py",
             ext=".py",

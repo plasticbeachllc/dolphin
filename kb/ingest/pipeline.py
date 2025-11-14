@@ -837,7 +837,7 @@ class IngestionPipeline:
             graph_manager = self.get_graph_manager(repo_id)
             # Force rebuild to get accurate total counts from database
             # This ensures cache state reflects TOTAL graph size, not just incremental changes
-            graph = graph_manager.get_graph(force_rebuild=True)
+            graph_manager.get_graph(force_rebuild=True)
             # Cache state is automatically updated in _rebuild_graph() with total counts
 
         # Print summary

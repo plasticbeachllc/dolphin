@@ -20,7 +20,7 @@ from urllib.parse import unquote
 from contextvars import ContextVar
 
 try:
-    from opentelemetry import trace, context
+    from opentelemetry import trace
 
     OTEL_AVAILABLE = True
 except ImportError:

@@ -50,7 +50,7 @@ class HybridSearchValidator:
 
         for _ in range(num_runs):
             start_time = time.time()
-            results = backend.search(request)
+            backend.search(request)
             latency = (time.time() - start_time) * 1000  # Convert to milliseconds
             latencies.append(latency)
 

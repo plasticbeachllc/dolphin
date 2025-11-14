@@ -108,7 +108,7 @@ class TestRepositoryRegistration:
             },
         )
         assert response1.status_code == 200
-        repo_id_1 = response1.json()["repo_id"]
+        response1.json()["repo_id"]
 
         # Register second time - should not fail
         response2 = client.post(
@@ -392,7 +392,7 @@ class TestTaskStatusTracking:
         sql_store.record_repo(
             name="test-repo", path=workspace, default_embed_model="large"
         )
-        repo = sql_store.get_repo_by_name("test-repo")
+        sql_store.get_repo_by_name("test-repo")
 
         # Create test file
         (workspace / "test.py").write_text("def test(): pass")
@@ -453,12 +453,12 @@ class TestTaskStatusTracking:
             name="repo1", path=workspace1, default_embed_model="large"
         )
 
-        repo1 = sql_store.get_repo_by_name("repo1")
+        sql_store.get_repo_by_name("repo1")
         sql_store.record_repo(
             name="repo2", path=workspace2, default_embed_model="large"
         )
 
-        repo2 = sql_store.get_repo_by_name("repo2")
+        sql_store.get_repo_by_name("repo2")
 
         # Create test files
         (workspace1 / "test1.py").write_text("def test1(): pass")
@@ -518,7 +518,7 @@ class TestErrorHandling:
         sql_store.record_repo(
             name="test-repo", path=workspace, default_embed_model="large"
         )
-        repo = sql_store.get_repo_by_name("test-repo")
+        sql_store.get_repo_by_name("test-repo")
 
         client = TestClient(app)
 

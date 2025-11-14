@@ -51,7 +51,7 @@ def benchmark_configuration(
         iter_latencies = []
         for _ in range(iterations):
             start = time.time()
-            results = store.query(query, model="small", top_k=10, ann_params=params)
+            store.query(query, model="small", top_k=10, ann_params=params)
             iter_latencies.append((time.time() - start) * 1000)
 
         latencies.extend(iter_latencies)

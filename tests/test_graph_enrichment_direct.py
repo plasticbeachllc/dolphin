@@ -4,15 +4,15 @@
 import sys
 from pathlib import Path
 
-# Ensure repository root is on sys.path so local kb package resolves
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
 from kb.config import load_config
 from kb.retrieval.graph_context import GraphContextEnricher
 from kb.store.graph_store import GraphStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
+
+# Ensure repository root is on sys.path so local kb package resolves
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 
 def main():

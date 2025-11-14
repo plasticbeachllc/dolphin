@@ -28,7 +28,7 @@ class TestSQLiteConnectionPool:
         # Cleanup
         try:
             Path(db_path).unlink()
-        except:
+        except Exception:
             pass
 
     def test_pool_initialization(self, temp_db):
@@ -297,7 +297,7 @@ class TestGlobalPoolHelpers:
             # Cleanup
             try:
                 Path(db_path).unlink()
-            except:
+            except Exception:
                 pass
 
     def test_close_connection_pool(self):
@@ -323,7 +323,7 @@ class TestGlobalPoolHelpers:
         finally:
             try:
                 Path(db_path).unlink()
-            except:
+            except Exception:
                 pass
 
 

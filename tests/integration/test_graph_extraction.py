@@ -332,7 +332,7 @@ class TestGraphExtraction:
         )
 
         # Re-index (incremental mode will detect the deletion via git diff)
-        result2 = pipeline.index(
+        pipeline.index(
             repo_name,
             force=True,
             dry_run=False,

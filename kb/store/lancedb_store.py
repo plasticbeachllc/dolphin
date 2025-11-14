@@ -101,7 +101,7 @@ class LanceDBStore:
         collections = [("chunks_small", "small"), ("chunks_large", "large")]
         existing = set(getattr(db, "table_names", lambda: [])())
         for name, model in collections:
-            schema = self._get_schema_for_model(model)
+            self._get_schema_for_model(model)
             dim = 1536 if model == "small" else 3072
             if name in existing:
                 # Table already exists; nothing to do.

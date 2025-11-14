@@ -2363,7 +2363,7 @@ class SQLiteMetadataStore:
             if not repo_row:
                 return []
 
-            repo_name = repo_row[0]
+            repo_row[0]
             root = Path(repo_row[1])
 
         drift_events = []

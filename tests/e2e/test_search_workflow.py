@@ -42,7 +42,7 @@ class TestSearchWorkflow:
         """Test search workflow: index → search → verify results."""
         setup = e2e_kb_setup
         pipeline = setup["pipeline"]
-        lancedb_store = setup["lancedb_store"]
+        setup["lancedb_store"]
         repo_name = setup["repo_name"]
 
         # Step 1: Index repository
@@ -76,7 +76,7 @@ class TestSearchWorkflow:
         """Test that search results are ranked by relevance."""
         setup = e2e_kb_setup
         pipeline = setup["pipeline"]
-        lancedb_store = setup["lancedb_store"]
+        setup["lancedb_store"]
         repo_name = setup["repo_name"]
 
         # Index
@@ -107,7 +107,7 @@ class TestSearchWorkflow:
         """Test search with various query types."""
         setup = e2e_kb_setup
         pipeline = setup["pipeline"]
-        lancedb_store = setup["lancedb_store"]
+        setup["lancedb_store"]
         repo_name = setup["repo_name"]
 
         # Index
@@ -140,7 +140,7 @@ class TestSearchWorkflow:
         """Test that top_k limits number of results."""
         setup = e2e_kb_setup
         pipeline = setup["pipeline"]
-        lancedb_store = setup["lancedb_store"]
+        setup["lancedb_store"]
         repo_name = setup["repo_name"]
 
         # Index
@@ -171,7 +171,7 @@ class TestSearchWorkflow:
         """Test handling of empty query."""
         setup = e2e_kb_setup
         pipeline = setup["pipeline"]
-        lancedb_store = setup["lancedb_store"]
+        setup["lancedb_store"]
         repo_name = setup["repo_name"]
 
         # Index
@@ -199,7 +199,7 @@ class TestSearchWorkflow:
         """Test search when no results match."""
         setup = e2e_kb_setup
         pipeline = setup["pipeline"]
-        lancedb_store = setup["lancedb_store"]
+        setup["lancedb_store"]
         repo_name = setup["repo_name"]
 
         # Index
@@ -227,7 +227,7 @@ class TestSearchQuality:
         """Test that exact matches are ranked highly."""
         setup = e2e_kb_setup
         pipeline = setup["pipeline"]
-        lancedb_store = setup["lancedb_store"]
+        setup["lancedb_store"]
         repo_name = setup["repo_name"]
 
         # Index
@@ -258,7 +258,7 @@ class TestSearchQuality:
         """Test semantic search finds conceptually similar content."""
         setup = e2e_kb_setup
         pipeline = setup["pipeline"]
-        lancedb_store = setup["lancedb_store"]
+        setup["lancedb_store"]
         repo_name = setup["repo_name"]
 
         # Index
@@ -294,7 +294,7 @@ class TestSearchQuality:
         """Test search differentiates code and documentation."""
         setup = e2e_kb_setup
         pipeline = setup["pipeline"]
-        lancedb_store = setup["lancedb_store"]
+        setup["lancedb_store"]
         repo_name = setup["repo_name"]
 
         # Index
@@ -338,7 +338,7 @@ class TestSearchPerformance:
 
         setup = e2e_kb_setup
         pipeline = setup["pipeline"]
-        lancedb_store = setup["lancedb_store"]
+        setup["lancedb_store"]
         repo_name = setup["repo_name"]
 
         # Index
@@ -365,7 +365,7 @@ class TestSearchPerformance:
         """Test that multiple searches are consistent."""
         setup = e2e_kb_setup
         pipeline = setup["pipeline"]
-        lancedb_store = setup["lancedb_store"]
+        setup["lancedb_store"]
         repo_name = setup["repo_name"]
 
         # Index
@@ -406,7 +406,7 @@ class TestSearchFiltering:
         """Test filtering search results by file type."""
         setup = e2e_kb_setup
         pipeline = setup["pipeline"]
-        lancedb_store = setup["lancedb_store"]
+        setup["lancedb_store"]
         repo_name = setup["repo_name"]
 
         # Index
@@ -419,7 +419,7 @@ class TestSearchFiltering:
         """Test filtering search results by file path."""
         setup = e2e_kb_setup
         pipeline = setup["pipeline"]
-        lancedb_store = setup["lancedb_store"]
+        setup["lancedb_store"]
         repo_name = setup["repo_name"]
 
         # Index

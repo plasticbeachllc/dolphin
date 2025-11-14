@@ -505,7 +505,7 @@ class TestCleanupOperations:
         )
 
         # Create edges between nodes
-        edge_id = graph_store.upsert_edge(
+        graph_store.upsert_edge(
             source_node_id=node1_id,
             target_node_id=node2_id,
             edge_type="calls",
@@ -693,7 +693,7 @@ class TestCleanupOperations:
         )
 
         # Create edge from file1 to file2
-        edge_id = graph_store.upsert_edge(
+        graph_store.upsert_edge(
             source_node_id=node1_id,
             target_node_id=node2_id,
             edge_type="calls",

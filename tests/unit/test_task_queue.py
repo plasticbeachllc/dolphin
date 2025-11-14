@@ -108,9 +108,9 @@ class TestTaskQueueRetrieval:
         """Test getting tasks filtered by repository."""
         queue = task_queue_instance
 
-        task1 = queue.create_task(repo="repo-a", files=["a.py"])
-        task2 = queue.create_task(repo="repo-b", files=["b.py"])
-        task3 = queue.create_task(repo="repo-a", files=["c.py"])
+        queue.create_task(repo="repo-a", files=["a.py"])
+        queue.create_task(repo="repo-b", files=["b.py"])
+        queue.create_task(repo="repo-a", files=["c.py"])
 
         repo_a_tasks = queue.get_all_tasks(repo="repo-a")
 

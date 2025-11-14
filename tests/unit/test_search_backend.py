@@ -96,7 +96,7 @@ class TestKnowledgeSearchBackend:
         assert len(results_high) == 0
 
     def test_hydrate_bm25_results_with_deterministic_ids(self, basic_backend):
-        embedding_provider, lance_store, sql_store = (
+        _embedding_provider, _lance_store, sql_store = (
             basic_backend.embedding_provider,
             basic_backend.lance_store,
             basic_backend.sql_store,

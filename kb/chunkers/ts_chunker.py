@@ -171,8 +171,6 @@ def _build_chunks_for_text(
     line_offsets = _build_line_offsets(text)
 
     chunks: list[Chunk] = []
-    search_from = 0
-    pos = 0  # expected start position of the next window in text
     for raw_text, start_char, end_char in windows:
         if not raw_text:
             continue

@@ -181,8 +181,8 @@ class TestMaximalMarginalRelevance:
         assert len(diversity_focused) == 4
 
         # Check that results are reordered differently
-        relevance_order = [r["chunk_id"] for r in relevance_focused]
-        diversity_order = [r["chunk_id"] for r in diversity_focused]
+        [r["chunk_id"] for r in relevance_focused]
+        [r["chunk_id"] for r in diversity_focused]
 
         # The ordering might be the same, but MMR scores should differ
         relevance_scores = [r["mmr_score"] for r in relevance_focused]

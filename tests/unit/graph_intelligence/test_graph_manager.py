@@ -261,13 +261,17 @@ class TestMetricsComputation:
         manager._graph.add_edge("A3", "B1")
 
         try:
-            import community as community_louvain
+            import importlib.util
 
-            metrics = manager.compute_metrics()
+            if importlib.util.find_spec("community") is not None:
+                metrics = manager.compute_metrics()
 
-            # Verify community detection ran
-            assert "community" in metrics
-            assert len(metrics["community"]) > 0
+                # Verify community detection ran
+                assert "community" in metrics
+                assert len(metrics["community"]) > 0
+            else:
+                # Skip if python-louvain not available
+                pytest.skip("python-louvain not installed")
         except ImportError:
             # Skip if python-louvain not available
             pytest.skip("python-louvain not installed")

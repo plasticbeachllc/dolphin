@@ -238,7 +238,7 @@ class TestStoreGraphData:
             )
         ]
 
-        stats = store_graph_data(
+        store_graph_data(
             mock_store,
             nodes,
             edges,

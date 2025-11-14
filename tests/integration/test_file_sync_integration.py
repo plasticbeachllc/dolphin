@@ -330,7 +330,7 @@ class TestPostIndexValidation:
         pending_changes = pending_response.json()["changes"]
 
         # Should have at least one pending change for the modified file
-        modified_changes = [c for c in pending_changes if c["file_path"] == files[0]]
+        [c for c in pending_changes if c["file_path"] == files[0]]
         # Note: This may not always detect mid-index changes due to timing
         # The test validates the mechanism works when timing allows
 
@@ -366,7 +366,7 @@ class TestDriftDetection:
         sql_store.record_repo(
             name="test-repo", path=workspace, default_embed_model="large"
         )
-        repo = sql_store.get_repo_by_name("test-repo")
+        sql_store.get_repo_by_name("test-repo")
 
         # Create and index file
         test_file = workspace / "tracked.py"
@@ -736,7 +736,7 @@ class TestPendingChangesWorkflow:
             },
         )
         assert changes_response.status_code == 200
-        change_ids = changes_response.json()["change_ids"]
+        changes_response.json()["change_ids"]
 
         # 2. Get pending changes
         pending_response = client.get("/v1/repos/test-repo/pending-changes")

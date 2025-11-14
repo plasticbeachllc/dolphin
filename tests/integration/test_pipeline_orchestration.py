@@ -191,7 +191,7 @@ def test_function():
             name="metadata-repo", path=repo_path, default_embed_model="small"
         )
 
-        result = pipeline.index("metadata-repo", dry_run=False, force=True)
+        pipeline.index("metadata-repo", dry_run=False, force=True)
 
         # Verify metadata was preserved
         repo = metadata_store.get_repo_by_name("metadata-repo")
@@ -347,7 +347,7 @@ def test_function():
             name="config-repo", path=repo_path, default_embed_model="small"
         )
 
-        result = pipeline.index("config-repo", dry_run=False, force=True)
+        pipeline.index("config-repo", dry_run=False, force=True)
 
         # Verify ignored files were not indexed
         repo = metadata_store.get_repo_by_name("config-repo")

@@ -293,7 +293,7 @@ def new_function():
         # Index repository
         result = pipeline.index("test_repo", force=True)
         repo_id = result["repo_id"]
-        edges_created = result["graph_edges_created"]
+        result["graph_edges_created"]
 
         # Get cache state
         graph_manager = pipeline.get_graph_manager(repo_id)
@@ -438,7 +438,7 @@ class TestEdgeCases:
         )
 
         # Re-index
-        result2 = pipeline.index("test_repo", force=True)
+        pipeline.index("test_repo", force=True)
 
         # Graph should have fewer nodes
         new_graph = graph_manager.get_graph(force_rebuild=True)
@@ -487,12 +487,12 @@ class TestPerformance:
 
         # Graph is already loaded from indexing, so first access uses cache
         start = time.time()
-        graph = graph_manager.get_graph()
+        graph_manager.get_graph()
         first_access_time = time.time() - start
 
         # Second access should also use cache
         start = time.time()
-        graph2 = graph_manager.get_graph()
+        graph_manager.get_graph()
         second_access_time = time.time() - start
 
         # Both cached accesses should be fast (< 20ms to account for test overhead)
@@ -502,7 +502,7 @@ class TestPerformance:
         # Test invalidation and rebuild
         graph_manager.invalidate_cache()
         start = time.time()
-        graph3 = graph_manager.get_graph()
+        graph_manager.get_graph()
         rebuild_time = time.time() - start
 
         # Rebuild might be slower but still reasonable for small graph
@@ -510,7 +510,7 @@ class TestPerformance:
 
         # After rebuild, cache should work again
         start = time.time()
-        graph4 = graph_manager.get_graph()
+        graph_manager.get_graph()
         cached_again_time = time.time() - start
         assert cached_again_time < 0.02  # Relaxed from 0.01 to avoid flakiness
 

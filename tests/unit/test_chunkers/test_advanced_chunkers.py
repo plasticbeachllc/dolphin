@@ -56,7 +56,7 @@ More text.
 
 
 def test_fallback_chunker_windowing_edges():
-    tok = get_tokenizer("small")
+    get_tokenizer("small")
     text = ("line\n" * 300).strip()
     chunks = chunk_fallback(text, model="small", token_target=50, overlap_pct=0.2)
     # Should produce multiple overlapping windows

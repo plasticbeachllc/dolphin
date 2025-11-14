@@ -45,7 +45,7 @@ def rerank_backend(tmp_path):
 
     pipeline = IngestionPipeline(config, lancedb, metadata)
 
-    dummy_chunks = [
+    [
         Chunk(
             text=f"dummy content {i}",
             start_line=i,
@@ -98,4 +98,4 @@ class TestRerankerIntegration:
             assert isinstance(results, list)
 
         # The test passes if reranking is properly initialized and search works
-        assert rerank_backend.reranker.enabled == True
+        assert rerank_backend.reranker.enabled

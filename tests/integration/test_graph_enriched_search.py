@@ -293,7 +293,7 @@ def test_graph_context_no_graph_data(tmp_path: Path):
     # Create repo without graph data
     sql_store.record_repo("empty_repo", tmp_path)
     repo_info = sql_store.get_repo_by_name("empty_repo")
-    file_info_id = sql_store.upsert_file(
+    sql_store.upsert_file(
         repo_id=repo_info["id"],
         path="test.py",
         ext=".py",
@@ -301,7 +301,6 @@ def test_graph_context_no_graph_data(tmp_path: Path):
         is_binary=False,
         size_bytes=0,
     )
-    file_info = {"id": file_info_id}
 
     enricher = GraphContextEnricher(graph_store=graph_store, sql_store=sql_store)
 

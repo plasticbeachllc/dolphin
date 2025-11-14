@@ -192,7 +192,7 @@ def create_endpoint(route):
             repo_name="invalidate-repo",
             embed_model=config.default_embed_model,
         )
-        initial_count = len(results1)
+        len(results1)
 
         # Modify repository
         (repo_path / "code.py").write_text(

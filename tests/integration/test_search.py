@@ -252,7 +252,7 @@ class TestSearchIntegration:
 
         from kb.api.app import search
 
-        response = await search(request)
+        await search(request)
 
         # Verify backend received correct repositories
         assert len(mock_backend.search_calls) == 1

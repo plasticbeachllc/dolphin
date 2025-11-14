@@ -121,7 +121,7 @@ class TestPipelineIntegration:
         result1 = pipeline.index("test-repo", dry_run=True, force=True)
 
         # Second incremental index (should process minimal changes)
-        result2 = pipeline.index("test-repo", dry_run=True, force=True)
+        pipeline.index("test-repo", dry_run=True, force=True)
 
         # Verify incremental indexing behavior
         assert result1["files_indexed"] > 0

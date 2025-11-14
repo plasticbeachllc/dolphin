@@ -278,7 +278,7 @@ class TestEndToEndIntegration:
         )
 
         # Build graph (creates cache state)
-        initial_graph = graph_manager.get_graph()
+        graph_manager.get_graph()
         assert graph_manager.validator.is_cache_valid()
 
         # Get initial cache state
@@ -439,10 +439,11 @@ class TestEndToEndIntegration:
 
         # Community detection should run (if python-louvain available)
         try:
-            import community as community_louvain
+            import importlib.util
 
-            assert "community" in metrics
-            assert len(metrics["community"]) > 0
+            if importlib.util.find_spec("community") is not None:
+                assert "community" in metrics
+                assert len(metrics["community"]) > 0
         except ImportError:
             # python-louvain not available, community key won't exist
             pass

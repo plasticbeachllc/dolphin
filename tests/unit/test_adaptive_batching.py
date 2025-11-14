@@ -92,7 +92,7 @@ class TestAdaptiveBatcher:
         batcher = AdaptiveBatcher()
         texts = ["text"] * 50
 
-        batches = list(batcher.create_batches(texts))
+        list(batcher.create_batches(texts))
 
         # Should have metrics for created batches
         assert len(batcher._recent_metrics) > 0
@@ -108,7 +108,7 @@ class TestAdaptiveBatcher:
         assert stats["batches_processed"] == 0
 
         # After batching
-        batches = list(batcher.create_batches(texts))
+        list(batcher.create_batches(texts))
         stats = batcher.get_stats()
 
         assert stats["batches_processed"] > 0

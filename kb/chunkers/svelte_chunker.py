@@ -230,7 +230,7 @@ def _chunk_template(
 
     # Extract component usages for metadata
     component_pattern = r"<([A-Z][A-Za-z0-9]*)[^>]*>"
-    components = re.findall(component_pattern, template)
+    re.findall(component_pattern, template)
 
     # If template is small, keep as single chunk
     token_count = count_tokens(template, tokenizer)

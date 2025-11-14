@@ -48,7 +48,7 @@ class TestIndexingWorkflow:
 
         # Step 1: Initial index
         result1 = pipeline.index(repo_name, dry_run=False, force=True)
-        initial_chunks = result1["chunks_indexed"]
+        result1["chunks_indexed"]
 
         # Step 2: Add new file and commit it
         (repo_path / "auth.py").write_text(
@@ -130,7 +130,7 @@ def refresh_token(old_token):
         (pycache_dir / "test.pyc").write_bytes(b"")
 
         # Index
-        result = pipeline.index(repo_name, dry_run=False, force=True)
+        pipeline.index(repo_name, dry_run=False, force=True)
 
         # Verify ignored files were not indexed
         repo = metadata_store.get_repo_by_name(repo_name)
@@ -238,7 +238,7 @@ SELECT * FROM users WHERE active = true;
         repo = metadata_store.get_repo_by_name("test-repo")
         assert repo is not None
         files = metadata_store.get_all_files_for_repo(repo["id"])
-        extensions = [Path(f["path"]).suffix for f in files]
+        [Path(f["path"]).suffix for f in files]
 
         assert result["files_indexed"] > 0
         # At least some files should have been processed
