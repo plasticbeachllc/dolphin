@@ -1,5 +1,4 @@
 {
-  "require": ["./out/test/suite/setup.js"],
   "ui": "bdd",
   "timeout": 20000,
   "reporter": "spec"
