@@ -184,8 +184,8 @@ cd mcp-bridge && bun test
 cd agent-core && bun test
 
 # Check code quality
-uv run python -m black kb/ tests/          # Format Python
-uv run python -m mypy kb/                  # Type check
+uv run ruff check --fix                    # Format Python
+uv run ty check                            # Type check
 ```
 
 ### 6. Architecture Awareness
@@ -766,4 +766,4 @@ uv run dolphin kb status my-repo
 
 ---
 
-**Remember:** Quality over speed. Take time to understand the architecture, write tests, update documentation, and follow established patterns. The codebase is well-structured—maintain that quality.
+**Remember:** Quality over speed. Take time to understand the architecture, write tests, update documentation, and follow established patterns. The codebase is well-structured - maintain that quality.
