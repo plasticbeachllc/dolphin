@@ -178,6 +178,12 @@ test-unit-python: setup-python
 	@uv run pytest tests/unit/ -q --tb=short || (echo "   ❌ Python unit tests failed"; exit 1)
 	@echo "   ✅ Python unit tests passed"
 
+# Run Python unit tests for a specific domain
+test-unit-python-domain DOMAIN: setup-python
+	@echo "🐍 Testing Python unit tests for {{DOMAIN}} domain..."
+	@uv run pytest tests/unit/{{DOMAIN}}/ -v --tb=short || (echo "   ❌ {{DOMAIN}} unit tests failed"; exit 1)
+	@echo "   ✅ {{DOMAIN}} unit tests passed"
+
 # Run Agent Core unit tests
 test-unit-agent-core:
 	@echo "🤖 Testing Agent Core unit tests..."
@@ -216,6 +222,12 @@ test-integration-python: setup-python
 	@echo "🐍 Testing Python integration tests (parallel)..."
 	@uv run pytest tests/integration/ -q --tb=short || (echo "   ❌ Python integration tests failed"; exit 1)
 	@echo "   ✅ Python integration tests passed"
+
+# Run Python integration tests for a specific domain
+test-integration-python-domain DOMAIN: setup-python
+	@echo "🐍 Testing Python integration tests for {{DOMAIN}} domain..."
+	@uv run pytest tests/integration/{{DOMAIN}}/ -v --tb=short || (echo "   ❌ {{DOMAIN}} integration tests failed"; exit 1)
+	@echo "   ✅ {{DOMAIN}} integration tests passed"
 
 # Run Agent Core integration tests
 test-integration-agent-core:

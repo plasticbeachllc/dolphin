@@ -22,11 +22,14 @@ just test-unit-all
 **Run unit tests by domain:**
 
 ```bash
-just test-unit-python          # Python unit tests
-just test-unit-agent-core      # Agent Core unit tests
-just test-unit-agent-core-v2   # Agent Core V2 unit tests
-just test-unit-extension       # VSCode Extension unit tests
-just test-unit-webview         # Webview unit tests
+just test-unit-python                    # All Python unit tests
+just test-unit-python-domain search      # Python search domain only
+just test-unit-python-domain ingest      # Python ingest domain only
+just test-unit-python-domain api         # Python API domain only
+just test-unit-agent-core                # Agent Core unit tests
+just test-unit-agent-core-v2             # Agent Core V2 unit tests
+just test-unit-extension                 # VSCode Extension unit tests
+just test-unit-webview                   # Webview unit tests
 ```
 
 ### 2. Integration Tests (Medium)
@@ -42,11 +45,14 @@ just test-integration-all
 **Run integration tests by domain:**
 
 ```bash
-just test-integration-python          # Python integration tests
-just test-integration-agent-core      # Agent Core integration tests
-just test-integration-agent-core-v2   # Agent Core V2 integration tests
-just test-integration-extension       # VSCode Extension integration tests
-just test-integration-mcp-bridge      # MCP Bridge integration tests
+just test-integration-python                        # All Python integration tests
+just test-integration-python-domain search          # Python search integration tests
+just test-integration-python-domain ingest          # Python ingest integration tests
+just test-integration-python-domain graph_intelligence  # Python graph integration tests
+just test-integration-agent-core                    # Agent Core integration tests
+just test-integration-agent-core-v2                 # Agent Core V2 integration tests
+just test-integration-extension                     # VSCode Extension integration tests
+just test-integration-mcp-bridge                    # MCP Bridge integration tests
 ```
 
 ### 3. End-to-End Tests (Slow)
@@ -81,8 +87,64 @@ just test-e2e-lenient  # Run tests with lenient mode (skip flaky tests)
 
 ### Python Backend
 
-- **Unit tests:** `tests/unit/` - Fast tests for individual modules
-- **Integration tests:** `tests/integration/` - Tests for search, indexing, API endpoints
+Python tests are now organized by domain within each test category. All test files follow the standard Python/pytest naming convention (`test_*.py`).
+
+#### Unit Tests (`tests/unit/`)
+
+Fast, isolated tests organized by domain:
+
+- `api/` - API endpoint tests
+- `cache/` - Caching layer tests (AST cache, query cache)
+- `chunkers/` - Text chunking and parsing tests
+- `cli/` - Command-line interface tests
+- `config/` - Configuration and repo config tests
+- `embeddings/` - Embedding provider and token utility tests
+- `graph/` - Graph context and helpers tests
+- `graph_intelligence/` - Graph intelligence and call graph tests
+- `ingest/` - Scanner, hashing, and ingestion tests
+- `logging/` - Structured logging tests
+- `pipeline/` - Task queue and connection pool tests
+- `retrieval/` - Adaptive batching and retrieval tests
+- `search/` - Search backend, ANN, MMR, and ranking tests
+- `store/` - Data store tests (LanceDB, SQLite)
+- `constants/` - Configuration constants tests
+
+**Run specific domain unit tests:**
+```bash
+uv run pytest tests/unit/search/     # Search domain only
+uv run pytest tests/unit/ingest/    # Ingest domain only
+uv run pytest tests/unit/api/       # API domain only
+```
+
+#### Integration Tests (`tests/integration/`)
+
+Tests that integrate components within a domain:
+
+- `cache/` - Cache integration and completion tests
+- `cli/` - CLI workflow integration tests
+- `graph_intelligence/` - Graph extraction and enriched search tests
+- `ingest/` - Indexing and file sync integration tests
+- `kb/` - Knowledge base auto-sync and token tests
+- `pipeline/` - Pipeline orchestration and optimization tests
+- `search/` - Search integration, hybrid search, and reranking tests
+
+**Run specific domain integration tests:**
+```bash
+uv run pytest tests/integration/search/           # Search integration tests
+uv run pytest tests/integration/graph_intelligence/  # Graph integration tests
+uv run pytest tests/integration/ingest/          # Ingest integration tests
+```
+
+#### End-to-End Tests (`tests/e2e/`)
+
+Full workflow tests:
+
+- `workflows/` - Complete indexing and search workflow tests
+
+**Run e2e tests:**
+```bash
+uv run pytest tests/e2e/workflows/   # All workflow E2E tests
+```
 
 ### TypeScript Agent Core
 
