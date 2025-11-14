@@ -24,6 +24,8 @@ export type ExtensionRequest =
 // All events include an optional requestId for correlation/logging
 export type AgentEvent =
   | { type: "agent_ready"; version: string; capabilities: string[]; requestId?: string }
+  | { type: "ready"; data: { version: string; capabilities: string[] } }
+  | { type: "workflow_update"; data: any }
   | { type: "content_delta"; delta: string; requestId?: string }
   | { type: "plan_generated"; plan: Plan; requestId?: string }
   | { type: "plan_step_started"; stepId: string; description: string; requestId?: string }
