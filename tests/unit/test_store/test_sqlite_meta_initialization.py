@@ -136,9 +136,7 @@ class TestSafeFTS5Creation:
         with store._connect() as conn:
             with closing(conn.cursor()) as cur:
                 # Check table exists
-                cur.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
-                )
+                cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
                 assert cur.fetchone() is not None
 
                 # Check table schema
@@ -300,9 +298,7 @@ class TestInitializationEdgeCases:
         store = SQLiteMetadataStore(tmp_path / "test.db")
 
         # Mock engine creation to fail
-        with patch.object(
-            store, "_engine", side_effect=Exception("Engine creation failed")
-        ):
+        with patch.object(store, "_engine", side_effect=Exception("Engine creation failed")):
             with pytest.raises(Exception, match="Engine creation failed"):
                 store.initialize()
 

@@ -39,9 +39,7 @@ class Session(SQLModel, table=True):
     chunks_indexed: int = Field(default=0)
     vectors_written: int = Field(default=0)
     chunks_skipped: int = Field(default=0)
-    chunks_pruned: int = Field(
-        default=0
-    )  # Added for Phase 6: tracks chunks removed from deleted files
+    chunks_pruned: int = Field(default=0)  # Added for Phase 6: tracks chunks removed from deleted files
 
     # Notes and lifecycle
     notes: str | None = Field(default=None)
@@ -167,13 +165,9 @@ class CodeNode(SQLModel, table=True):
     language: str  # 'python', 'typescript', 'sql', 'svelte'
 
     # Optional metadata (language-specific)
-    signature: str | None = Field(
-        default=None
-    )  # Function signature or type definition
+    signature: str | None = Field(default=None)  # Function signature or type definition
     docstring: str | None = Field(default=None)  # Documentation/comments
-    visibility: str | None = Field(
-        default=None
-    )  # 'public', 'private', 'protected', 'exported'
+    visibility: str | None = Field(default=None)  # 'public', 'private', 'protected', 'exported'
     is_async: bool = Field(default=False)
     is_generator: bool = Field(default=False)
 
@@ -219,30 +213,20 @@ class CodeEdge(SQLModel, table=True):
 
     # Relationship - with CASCADE DELETE for automatic cleanup
     source_node_id: str = Field(
-        sa_column=Column(
-            String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False
-        )
+        sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False)
     )
     target_node_id: str = Field(
-        sa_column=Column(
-            String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False
-        )
+        sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False)
     )
-    edge_type: (
-        str  # 'calls', 'imports', 'inherits', 'implements', 'depends_on_table', etc.
-    )
+    edge_type: str  # 'calls', 'imports', 'inherits', 'implements', 'depends_on_table', etc.
     repo_id: int = Field(foreign_key="repos.id")  # Repository reference for filtering
 
     # Context
-    line_number: int | None = Field(
-        default=None
-    )  # Where this relationship occurs in source
+    line_number: int | None = Field(default=None)  # Where this relationship occurs in source
     is_direct: bool = Field(default=True)  # Direct vs. transitive relationship
 
     # Optional metadata
-    relationship_metadata: str | None = Field(
-        default=None
-    )  # JSON for language-specific details
+    relationship_metadata: str | None = Field(default=None)  # JSON for language-specific details
 
     # Lifecycle
     commit_sha: str
@@ -255,9 +239,7 @@ class NodeAlias(SQLModel, table=True):
 
     __tablename__ = "node_aliases"
     __table_args__ = (
-        UniqueConstraint(
-            "node_id", "file_id", "alias_qualified_name", name="uq_node_alias_identity"
-        ),
+        UniqueConstraint("node_id", "file_id", "alias_qualified_name", name="uq_node_alias_identity"),
         Index("ix_node_aliases_name", "alias_name"),
         Index("ix_node_aliases_qualified", "alias_qualified_name"),
         Index("ix_node_aliases_node", "node_id"),
@@ -267,11 +249,7 @@ class NodeAlias(SQLModel, table=True):
     id: str = Field(primary_key=True)  # UUID
 
     # References - CASCADE DELETE to remove aliases when node is deleted
-    node_id: str = Field(
-        sa_column=Column(
-            String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False
-        )
-    )
+    node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False))
     file_id: int = Field(foreign_key="files.id")
 
     # Alias information
@@ -294,9 +272,7 @@ class CrossRepoReference(SQLModel, table=True):
 
     # Source (current repo) - CASCADE DELETE to remove references when source node is deleted
     source_node_id: str = Field(
-        sa_column=Column(
-            String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False
-        )
+        sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False)
     )
     source_repo_id: int = Field(foreign_key="repos.id")
 

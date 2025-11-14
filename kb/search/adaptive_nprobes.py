@@ -197,9 +197,7 @@ class AdaptiveNProbes:
         if self._ema_latency is None:
             self._ema_latency = latency_ms
         else:
-            self._ema_latency = (
-                self._ema_alpha * latency_ms + (1 - self._ema_alpha) * self._ema_latency
-            )
+            self._ema_latency = self._ema_alpha * latency_ms + (1 - self._ema_alpha) * self._ema_latency
 
         # Consider adjustment
         self._consider_adjustment()
@@ -230,9 +228,7 @@ class AdaptiveNProbes:
         if deviation > 0:
             # Latency too high - decrease nprobes
             adjustment_factor = 0.8  # Reduce by 20%
-            new_nprobes = max(
-                self.min_nprobes, int(self.current_nprobes * adjustment_factor)
-            )
+            new_nprobes = max(self.min_nprobes, int(self.current_nprobes * adjustment_factor))
 
             # Also reduce refine factor if needed
             if self.current_refine_factor > 5:
@@ -243,9 +239,7 @@ class AdaptiveNProbes:
         else:
             # Latency too low - can increase nprobes for better quality
             adjustment_factor = 1.2  # Increase by 20%
-            new_nprobes = min(
-                self.max_nprobes, int(self.current_nprobes * adjustment_factor)
-            )
+            new_nprobes = min(self.max_nprobes, int(self.current_nprobes * adjustment_factor))
 
             # Also increase refine factor if appropriate
             if self.current_refine_factor < 15:

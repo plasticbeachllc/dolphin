@@ -124,11 +124,7 @@ def function():
                 assert chunk.symbol_name == "function"
             elif chunk.symbol_kind is None:
                 # Module-level code chunk
-                assert (
-                    "import os" in chunk.text
-                    or "CONSTANT = 42" in chunk.text
-                    or "Module level code" in chunk.text
-                )
+                assert "import os" in chunk.text or "CONSTANT = 42" in chunk.text or "Module level code" in chunk.text
 
     def test_python_nested_classes_and_functions(self):
         """Test chunking of nested classes and functions."""

@@ -188,9 +188,7 @@ class StructuredLogger:
         try:
             json.dumps(data)
         except (TypeError, ValueError):
-            return {
-                "error": "Failed to sanitize metadata - circular reference or non-serializable object"
-            }
+            return {"error": "Failed to sanitize metadata - circular reference or non-serializable object"}
 
         sanitized = {}
         for key, value in data.items():

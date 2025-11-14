@@ -207,9 +207,7 @@ class GraphStore:
                 "last_seen_at": row[17],
             }
 
-    def find_node_by_qualified_name(
-        self, qualified_name: str, repo_id: int | None = None
-    ) -> dict[str, Any] | None:
+    def find_node_by_qualified_name(self, qualified_name: str, repo_id: int | None = None) -> dict[str, Any] | None:
         """Find a node by its qualified name.
 
         Args:
@@ -362,9 +360,7 @@ class GraphStore:
             try:
                 # If repo_id not provided, derive it from source node
                 if repo_id is None:
-                    cur.execute(
-                        "SELECT repo_id FROM code_nodes WHERE id = ?", (source_node_id,)
-                    )
+                    cur.execute("SELECT repo_id FROM code_nodes WHERE id = ?", (source_node_id,))
                     row = cur.fetchone()
                     if row:
                         repo_id = int(row[0])
@@ -408,9 +404,7 @@ class GraphStore:
                 conn.rollback()
                 raise
 
-    def get_outgoing_edges(
-        self, node_id: str, edge_type: str | None = None, limit: int = 100
-    ) -> list[dict[str, Any]]:
+    def get_outgoing_edges(self, node_id: str, edge_type: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
         """Get outgoing edges from a node.
 
         Args:
@@ -467,9 +461,7 @@ class GraphStore:
                 for row in rows
             ]
 
-    def get_incoming_edges(
-        self, node_id: str, edge_type: str | None = None, limit: int = 100
-    ) -> list[dict[str, Any]]:
+    def get_incoming_edges(self, node_id: str, edge_type: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
         """Get incoming edges to a node.
 
         Args:
@@ -637,9 +629,7 @@ class GraphStore:
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
             if repo_id is not None:
-                cur.execute(
-                    "SELECT COUNT(*) FROM code_nodes WHERE repo_id = ?", (repo_id,)
-                )
+                cur.execute("SELECT COUNT(*) FROM code_nodes WHERE repo_id = ?", (repo_id,))
             else:
                 cur.execute("SELECT COUNT(*) FROM code_nodes")
 

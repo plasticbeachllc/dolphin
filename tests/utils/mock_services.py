@@ -22,10 +22,7 @@ class MockEmbeddingService:
         embeddings = []
         for i, text in enumerate(texts):
             # Create deterministic embedding based on text content and index
-            embedding = [
-                float((hash(text) + j + i) % 100) / 100.0
-                for j in range(self.embedding_size)
-            ]
+            embedding = [float((hash(text) + j + i) % 100) / 100.0 for j in range(self.embedding_size)]
             embeddings.append(embedding)
         return embeddings
 
@@ -126,8 +123,4 @@ class MockFileSystem:
 
     def list_files(self, directory: Path, pattern: str = "*") -> list[Path]:
         """List files in a directory."""
-        return [
-            path
-            for path in self.files.keys()
-            if path.parent == directory and path.match(pattern)
-        ]
+        return [path for path in self.files.keys() if path.parent == directory and path.match(pattern)]

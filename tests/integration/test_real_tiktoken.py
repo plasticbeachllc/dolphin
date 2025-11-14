@@ -107,9 +107,7 @@ def example_function():
         for text in test_texts:
             tokens = tokenizer.encode(text)
             decoded = tokenizer.decode(tokens)
-            assert decoded == text, (
-                f"Encode/decode roundtrip failed for: {text!r}\nGot: {decoded!r}"
-            )
+            assert decoded == text, f"Encode/decode roundtrip failed for: {text!r}\nGot: {decoded!r}"
 
 
 class TestTiktokenAvailabilityHandling:

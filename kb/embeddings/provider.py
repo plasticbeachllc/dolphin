@@ -25,9 +25,7 @@ OPENAI_MODEL_MAP = {
 }
 
 
-def with_async_retry(
-    max_attempts: int = 3, delays: tuple[float, ...] = (1.0, 2.0, 4.0)
-):
+def with_async_retry(max_attempts: int = 3, delays: tuple[float, ...] = (1.0, 2.0, 4.0)):
     """Decorator for retrying async network operations with exponential backoff.
 
     Args:
@@ -86,9 +84,7 @@ class EmbeddingProvider:
         # Override this method in subclasses for real implementations
         return [[0.0] * dimension for _ in texts]
 
-    async def embed_texts_async(
-        self, model: str, texts: list[str]
-    ) -> list[list[float]]:
+    async def embed_texts_async(self, model: str, texts: list[str]) -> list[list[float]]:
         """Embed texts asynchronously (base implementation uses sync fallback).
 
         Args:
@@ -142,16 +138,14 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             self._async_openai_module = AsyncOpenAI
         except ImportError:
             raise ImportError(
-                "OpenAI package is required for OpenAIEmbeddingProvider. "
-                "Install with: pip install openai"
+                "OpenAI package is required for OpenAIEmbeddingProvider. Install with: pip install openai"
             )
 
         # Get API key from parameter or environment
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError(
-                "OpenAI API key is required. Provide via api_key parameter "
-                "or set OPENAI_API_KEY environment variable."
+                "OpenAI API key is required. Provide via api_key parameter or set OPENAI_API_KEY environment variable."
             )
 
         self.batch_size = batch_size
@@ -170,17 +164,11 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         """
         try:
             # Make a minimal test request with a tiny payload
-            self.client.embeddings.create(
-                input=["test"], model="text-embedding-3-small"
-            )
+            self.client.embeddings.create(input=["test"], model="text-embedding-3-small")
             # If we get here, the API key is valid
         except Exception as e:
             error_msg = str(e)
-            if (
-                "401" in error_msg
-                or "invalid" in error_msg.lower()
-                or "incorrect" in error_msg.lower()
-            ):
+            if "401" in error_msg or "invalid" in error_msg.lower() or "incorrect" in error_msg.lower():
                 raise RuntimeError(
                     f"\n{'=' * 70}\n"
                     f"OPENAI API KEY VALIDATION FAILED\n"
@@ -246,14 +234,10 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         if uncached_texts:
             for batch_start in range(0, len(uncached_texts), self.batch_size):
                 batch = uncached_texts[batch_start : batch_start + self.batch_size]
-                batch_indices = uncached_indices[
-                    batch_start : batch_start + self.batch_size
-                ]
+                batch_indices = uncached_indices[batch_start : batch_start + self.batch_size]
 
                 # Call OpenAI API
-                response = self.client.embeddings.create(
-                    input=batch, model=openai_model
-                )
+                response = self.client.embeddings.create(input=batch, model=openai_model)
 
                 # Extract embeddings and cache them
                 for j, item in enumerate(response.data):
@@ -263,16 +247,12 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
                     # Cache the embedding
                     if self.cache:
-                        self.cache.set_embedding(
-                            uncached_texts[batch_start + j], model, embedding
-                        )
+                        self.cache.set_embedding(uncached_texts[batch_start + j], model, embedding)
 
         return all_embeddings  # type: ignore
 
     @with_async_retry(max_attempts=3, delays=(1.0, 2.0, 4.0))
-    async def embed_texts_async(
-        self, model: str, texts: list[str]
-    ) -> list[list[float]]:
+    async def embed_texts_async(self, model: str, texts: list[str]) -> list[list[float]]:
         """Embed texts using OpenAI API asynchronously (non-blocking).
 
         Args:
@@ -315,14 +295,10 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         if uncached_texts:
             for batch_start in range(0, len(uncached_texts), self.batch_size):
                 batch = uncached_texts[batch_start : batch_start + self.batch_size]
-                batch_indices = uncached_indices[
-                    batch_start : batch_start + self.batch_size
-                ]
+                batch_indices = uncached_indices[batch_start : batch_start + self.batch_size]
 
                 # Call OpenAI API asynchronously
-                response = await self.async_client.embeddings.create(
-                    input=batch, model=openai_model
-                )
+                response = await self.async_client.embeddings.create(input=batch, model=openai_model)
 
                 # Extract embeddings and cache them
                 for j, item in enumerate(response.data):
@@ -332,9 +308,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
                     # Cache the embedding
                     if self.cache:
-                        self.cache.set_embedding(
-                            uncached_texts[batch_start + j], model, embedding
-                        )
+                        self.cache.set_embedding(uncached_texts[batch_start + j], model, embedding)
 
         return all_embeddings  # type: ignore
 
@@ -404,9 +378,7 @@ def create_provider(provider_type: str = "stub", **kwargs) -> EmbeddingProvider:
     elif provider_type == "openai":
         return OpenAIEmbeddingProvider(**kwargs)
     else:
-        raise ValueError(
-            f"Unsupported provider type: {provider_type}. Must be 'stub' or 'openai'."
-        )
+        raise ValueError(f"Unsupported provider type: {provider_type}. Must be 'stub' or 'openai'.")
 
 
 def set_default_provider(provider: EmbeddingProvider) -> None:

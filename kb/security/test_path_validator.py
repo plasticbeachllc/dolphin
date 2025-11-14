@@ -248,9 +248,7 @@ class TestPatternFiltering:
 
     def test_reject_filenames_matching_disallowed_patterns(self, test_dir):
         """Should reject filenames matching disallowed patterns."""
-        v = PathValidator(
-            base_dir=test_dir, disallowed_patterns=[r"^\.", r".*\.backup$"]
-        )
+        v = PathValidator(base_dir=test_dir, disallowed_patterns=[r"^\.", r".*\.backup$"])
 
         with pytest.raises(PathValidationError) as exc_info:
             v.validate(".hidden")
@@ -261,9 +259,7 @@ class TestPatternFiltering:
 
     def test_allow_filenames_not_matching_disallowed_patterns(self, test_dir):
         """Should allow filenames not matching disallowed patterns."""
-        v = PathValidator(
-            base_dir=test_dir, disallowed_patterns=[r"^\.", r".*\.backup$"]
-        )
+        v = PathValidator(base_dir=test_dir, disallowed_patterns=[r"^\.", r".*\.backup$"])
 
         # Should not raise
         v.validate("file.txt")

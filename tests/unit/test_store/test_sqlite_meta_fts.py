@@ -16,9 +16,7 @@ class TestFTS5IndexCreation:
         # Verify FTS5 table exists
         with store._connect() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
-            )
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
             result = cursor.fetchone()
             assert result is not None
             assert result[0] == "chunks_fts"
@@ -108,9 +106,7 @@ class TestBM25Search:
         first_result = results[0]
         assert first_result["chunk_id"] == "chunk1"  # Most relevant for exact match
         # Verify that the result contains UserController in the path or is from correct chunk
-        assert (
-            first_result["chunk_id"] == "chunk1"
-        )  # Should be the chunk containing UserController
+        assert first_result["chunk_id"] == "chunk1"  # Should be the chunk containing UserController
 
     def test_bm25_search_no_results(self, store_with_data):
         """Test BM25 search with no matching results."""
@@ -121,9 +117,7 @@ class TestBM25Search:
     def test_bm25_search_with_filters(self, store_with_data):
         """Test BM25 search with repository filter."""
         # Search only in test-repo
-        results = store_with_data.bm25_search(
-            "authentication", repo="test-repo", top_k=10
-        )
+        results = store_with_data.bm25_search("authentication", repo="test-repo", top_k=10)
 
         assert len(results) >= 1
         for result in results:
@@ -132,9 +126,7 @@ class TestBM25Search:
     def test_bm25_search_path_prefix_filter(self, store_with_data):
         """Test BM25 search with path prefix filters."""
         # Search only in src/ directory
-        results = store_with_data.bm25_search(
-            "authentication", path_prefix=["src/"], top_k=10
-        )
+        results = store_with_data.bm25_search("authentication", path_prefix=["src/"], top_k=10)
 
         assert len(results) >= 1
         for result in results:

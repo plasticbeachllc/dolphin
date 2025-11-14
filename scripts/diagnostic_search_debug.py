@@ -51,15 +51,11 @@ try:
         print("  ❌ FTS5 TABLE IS EMPTY! This is why search returns 0 results!")
     else:
         # Sample some FTS5 entries
-        cursor.execute(
-            "SELECT content_id, repo, path, text_hash, substr(content, 1, 100) FROM chunks_fts LIMIT 5"
-        )
+        cursor.execute("SELECT content_id, repo, path, text_hash, substr(content, 1, 100) FROM chunks_fts LIMIT 5")
         samples = cursor.fetchall()
         print("  Sample entries:")
         for s in samples:
-            print(
-                f"    - content_id: {s[0][:16]}... repo: {s[1]}, file: {s[2]}, text_hash: {s[3][:16]}..."
-            )
+            print(f"    - content_id: {s[0][:16]}... repo: {s[1]}, file: {s[2]}, text_hash: {s[3][:16]}...")
             print(f"      content preview: {s[4][:80]}...")
 
         # Check if text_hash column exists
@@ -120,9 +116,7 @@ try:
 
     if results:
         for r in results:
-            print(
-                f"    - content_id: {r[0][:16]}..., repo: {r[1]}, file: {r[2]}, score: {r[3]:.4f}"
-            )
+            print(f"    - content_id: {r[0][:16]}..., repo: {r[1]}, file: {r[2]}, score: {r[3]:.4f}")
     else:
         print("  ❌ NO RESULTS from BM25 search!")
 

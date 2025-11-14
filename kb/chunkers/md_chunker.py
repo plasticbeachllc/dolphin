@@ -79,9 +79,7 @@ def chunk_markdown(
     for section in sections:
         if not section.content_text.strip():
             continue
-        windows = window_text_by_tokens(
-            section.content_text, model=model, target=token_target, overlap=overlap
-        )
+        windows = window_text_by_tokens(section.content_text, model=model, target=token_target, overlap=overlap)
 
         # Build line-start offsets once per section
         line_offsets: list[int] = [0]
@@ -167,9 +165,7 @@ def _consume_front_matter_if_any(lines: Sequence[str]) -> tuple[int, str | None]
     return end + 1, title
 
 
-def _scan_sections(
-    lines: Sequence[str], *, initial_h1: str | None = None
-) -> Iterator[_Section]:
+def _scan_sections(lines: Sequence[str], *, initial_h1: str | None = None) -> Iterator[_Section]:
     """Yield _Section objects from a sequence of Markdown lines using markdown-it.
 
     Uses markdown-it-py to parse headings and obtain source line maps. We carve
@@ -188,11 +184,7 @@ def _scan_sections(
     while i < len(tokens):
         tok = tokens[i]
         if tok.type == "heading_open" and tok.map:
-            level = (
-                int(tok.tag[1])
-                if tok.tag.startswith("h") and tok.tag[1:].isdigit()
-                else 0
-            )
+            level = int(tok.tag[1]) if tok.tag.startswith("h") and tok.tag[1:].isdigit() else 0
             title = ""
             if i + 1 < len(tokens) and tokens[i + 1].type == "inline":
                 title = tokens[i + 1].content.strip()
@@ -318,9 +310,7 @@ def _is_setext_underline(line: str) -> int | None:
     return None
 
 
-def _toggle_fence_if_any(
-    line: str, in_fence: bool, fence_marker: str
-) -> tuple[bool, str]:
+def _toggle_fence_if_any(line: str, in_fence: bool, fence_marker: str) -> tuple[bool, str]:
     """Detect fence start/stop and return updated (in_fence, fence_marker)."""
     stripped = line.lstrip()
     if not in_fence:

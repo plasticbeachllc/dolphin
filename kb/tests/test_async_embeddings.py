@@ -59,9 +59,7 @@ class TestAsyncEmbeddings:
             loop_got_control = True
 
         # Run both concurrently
-        await asyncio.gather(
-            provider.embed_texts_async("small", ["test"] * 10), set_flag()
-        )
+        await asyncio.gather(provider.embed_texts_async("small", ["test"] * 10), set_flag())
 
         # Event loop should have had chance to run set_flag
         assert loop_got_control

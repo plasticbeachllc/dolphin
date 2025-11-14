@@ -246,10 +246,7 @@ class VectorPreFilter:
             self._total_filters += 1
             self._total_reduction_pct += reduction_pct
 
-            logger.debug(
-                f"Pre-filter applied: {filter_expr} "
-                f"({reduction_pct:.1f}% reduction, {filter_time_ms:.2f}ms)"
-            )
+            logger.debug(f"Pre-filter applied: {filter_expr} ({reduction_pct:.1f}% reduction, {filter_time_ms:.2f}ms)")
 
         return filtered_query, stats
 
@@ -344,11 +341,7 @@ class VectorPreFilter:
         """
         return {
             "total_filters_applied": self._total_filters,
-            "avg_reduction_pct": (
-                self._total_reduction_pct / self._total_filters
-                if self._total_filters > 0
-                else 0.0
-            ),
+            "avg_reduction_pct": (self._total_reduction_pct / self._total_filters if self._total_filters > 0 else 0.0),
             "cache_size": len(self._filter_cache),
         }
 

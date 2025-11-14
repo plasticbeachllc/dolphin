@@ -68,9 +68,7 @@ class TestMarkdownChunker:
 
         # Should have chunks with heading metadata
         h1_chunks = [c for c in chunks if c.h1 == "Main Title"]
-        h2_chunks = [
-            c for c in chunks if c.h2 == "First Section" or c.h2 == "Second Section"
-        ]
+        h2_chunks = [c for c in chunks if c.h2 == "First Section" or c.h2 == "Second Section"]
         h3_chunks = [c for c in chunks if c.h3 == "Subsection"]
 
         assert len(h1_chunks) >= 1
@@ -211,11 +209,7 @@ class TestMarkdownChunker:
         assert len(chunks) >= 1
 
         # List items should be preserved in chunks
-        list_chunks = [
-            c
-            for c in chunks
-            if "- First item" in c.text or "1. Numbered item" in c.text
-        ]
+        list_chunks = [c for c in chunks if "- First item" in c.text or "1. Numbered item" in c.text]
         assert len(list_chunks) >= 1
 
     def test_markdown_yaml_front_matter(self):

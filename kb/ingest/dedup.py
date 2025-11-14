@@ -24,19 +24,16 @@ class ChunkDeduplicator:
     def __init__(self, store: SQLiteMetadataStore):
         self.store = store
 
-    def get_existing_hashes_set(
-        self, repo_id: int, file_id: int, embed_model: str
-    ) -> set[str]:
+    def get_existing_hashes_set(self, repo_id: int, file_id: int, embed_model: str) -> set[str]:
         """Return the set of existing text hashes for a file+model.
 
         On failure to query the store, returns an empty set (conservative).
         """
         try:
-            existing = self.store.get_existing_content_hashes_for_file(
-                repo_id, file_id, embed_model
-            )
+            existing = self.store.get_existing_content_hashes_for_file(repo_id, file_id, embed_model)
             _log.info(
-                f"[DEBUG DEDUP] repo_id={repo_id}, file_id={file_id}, model={embed_model}: found {len(existing)} existing hashes"
+                f"[DEBUG DEDUP] repo_id={repo_id}, file_id={file_id}, "
+                f"model={embed_model}: found {len(existing)} existing hashes"
             )
             if existing and _log.isEnabledFor(logging.DEBUG):
                 _log.debug(f"  First 3 hashes: {list(existing)[:3]}")

@@ -59,9 +59,7 @@ class PathValidator:
         self.base_dir = Path(base_dir).resolve()
         self.allow_symlinks = allow_symlinks
         self.must_exist = must_exist
-        self.allowed_extensions = (
-            [ext.lower() for ext in allowed_extensions] if allowed_extensions else None
-        )
+        self.allowed_extensions = [ext.lower() for ext in allowed_extensions] if allowed_extensions else None
         self.disallowed_patterns = disallowed_patterns
         self.error_prefix = error_prefix
 

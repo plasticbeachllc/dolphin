@@ -114,9 +114,7 @@ class TestStructuredLogger:
 
     def test_default_context(self):
         """Test logger with default context."""
-        logger = StructuredLogger(
-            "test.context", {"service": "test-service", "version": "1.0"}
-        )
+        logger = StructuredLogger("test.context", {"service": "test-service", "version": "1.0"})
 
         # Capture output
         log_output = StringIO()

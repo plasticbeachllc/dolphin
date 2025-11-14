@@ -55,9 +55,7 @@ def build_desired_map(chunks: Sequence[Chunk]) -> dict[str, list[dict]]:
     return desired_map
 
 
-def git_changed_files_modified_added(
-    repo_root: Path, from_commit: str, to_commit: str = "HEAD"
-) -> list[str]:
+def git_changed_files_modified_added(repo_root: Path, from_commit: str, to_commit: str = "HEAD") -> list[str]:
     """Get list of modified and added files between two commits.
 
     This uses three-way comparison via merge-base to correctly handle pulls and merges:
@@ -107,9 +105,7 @@ def git_changed_files_modified_added(
         raise RuntimeError(f"Failed to get git diff: {e.stderr}")
 
 
-def git_changed_files_deleted(
-    repo_root: Path, from_commit: str, to_commit: str = "HEAD"
-) -> list[str]:
+def git_changed_files_deleted(repo_root: Path, from_commit: str, to_commit: str = "HEAD") -> list[str]:
     """Get list of deleted files between two commits.
 
     Uses merge-base comparison to correctly detect deletions after pulls/merges.

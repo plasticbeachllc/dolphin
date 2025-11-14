@@ -105,14 +105,10 @@ class CoverageManager:
         current_coverage = metrics.get("overall_coverage", 0.0)
 
         if current_coverage >= min_coverage:
-            print(
-                f"✅ Coverage check passed: {current_coverage:.1f}% >= {min_coverage}%"
-            )
+            print(f"✅ Coverage check passed: {current_coverage:.1f}% >= {min_coverage}%")
             return True
         else:
-            print(
-                f"❌ Coverage check failed: {current_coverage:.1f}% < {min_coverage}%"
-            )
+            print(f"❌ Coverage check failed: {current_coverage:.1f}% < {min_coverage}%")
             return False
 
 

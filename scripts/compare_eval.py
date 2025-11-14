@@ -34,9 +34,7 @@ def compare_metric(
         "pct_change": pct_change,
         "regression": regression,
         "improvement": improvement,
-        "status": (
-            "regression" if regression else ("improvement" if improvement else "stable")
-        ),
+        "status": ("regression" if regression else ("improvement" if improvement else "stable")),
     }
 
 
@@ -81,9 +79,7 @@ def compare_evaluations(baseline_path: Path, current_path: Path, threshold: floa
     baseline_pass_rate = baseline["summary"].get("pass_rate", 0)
     current_pass_rate = current["summary"].get("pass_rate", 0)
 
-    comparison["pass_rate"] = compare_metric(
-        baseline_pass_rate, current_pass_rate, threshold, "higher_is_better"
-    )
+    comparison["pass_rate"] = compare_metric(baseline_pass_rate, current_pass_rate, threshold, "higher_is_better")
 
     # Find newly failing and newly passing scenarios
     baseline_scenarios = {s["id"]: s for s in baseline.get("scenarios", [])}
@@ -133,12 +129,8 @@ def print_comparison(comparison: dict):
     # Metrics comparison
     print("\nOverall metrics:")
     for metric, data in comparison["metrics"].items():
-        arrow = (
-            "📈" if data["pct_change"] > 0 else "📉" if data["pct_change"] < 0 else "➡️"
-        )
-        status_icon = (
-            "❌" if data["regression"] else "✅" if data["improvement"] else "➡️"
-        )
+        arrow = "📈" if data["pct_change"] > 0 else "📉" if data["pct_change"] < 0 else "➡️"
+        status_icon = "❌" if data["regression"] else "✅" if data["improvement"] else "➡️"
 
         print(
             f"  {metric.upper()}: {data['baseline']:.3f} → {data['current']:.3f} "
@@ -184,12 +176,8 @@ def print_comparison(comparison: dict):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Compare two retrieval evaluation results"
-    )
-    parser.add_argument(
-        "baseline", type=Path, help="Baseline evaluation results (JSON)"
-    )
+    parser = argparse.ArgumentParser(description="Compare two retrieval evaluation results")
+    parser.add_argument("baseline", type=Path, help="Baseline evaluation results (JSON)")
     parser.add_argument("current", type=Path, help="Current evaluation results (JSON)")
     parser.add_argument(
         "--threshold",
@@ -197,9 +185,7 @@ def main():
         default=5.0,
         help="Regression threshold percentage (default: 5%%)",
     )
-    parser.add_argument(
-        "--output", type=Path, help="Output JSON file for comparison results"
-    )
+    parser.add_argument("--output", type=Path, help="Output JSON file for comparison results")
     parser.add_argument(
         "--fail-on-regression",
         action="store_true",

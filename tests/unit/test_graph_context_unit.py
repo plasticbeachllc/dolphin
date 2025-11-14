@@ -2,10 +2,7 @@
 
 from unittest.mock import Mock
 
-from kb.retrieval.graph_context import (
-    GraphContextEnricher,
-    format_graph_context_for_llm,
-)
+from kb.retrieval.graph_context import GraphContextEnricher, format_graph_context_for_llm
 
 
 class TestGraphContextEnricher:
@@ -322,11 +319,7 @@ class TestGraphContextEnricher:
         context = enriched[0]["graph_context"]
 
         # Find incoming call relationships
-        incoming_calls = [
-            r
-            for r in context["relationships"]
-            if r["type"] == "calls" and r["direction"] == "incoming"
-        ]
+        incoming_calls = [r for r in context["relationships"] if r["type"] == "calls" and r["direction"] == "incoming"]
         assert len(incoming_calls) >= 1
         assert incoming_calls[0]["source"]["name"] == "caller"
 
@@ -378,18 +371,14 @@ class TestGraphContextEnricher:
         ]
 
         # Test with callsites disabled
-        enriched = self.enricher.enrich_search_results(
-            results, include_callsites=False, include_dependencies=True
-        )
+        enriched = self.enricher.enrich_search_results(results, include_callsites=False, include_dependencies=True)
 
         context = enriched[0]["graph_context"]
         # Should not have any incoming calls
         # But the function can call outgoing (not filtered by include_callsites)
 
         # Test with dependencies disabled
-        enriched = self.enricher.enrich_search_results(
-            results, include_callsites=True, include_dependencies=False
-        )
+        enriched = self.enricher.enrich_search_results(results, include_callsites=True, include_dependencies=False)
 
         context = enriched[0]["graph_context"]
         # Should not have imports/depends_on edges

@@ -20,15 +20,9 @@ def temp_test_repo(tmp_path):
 
     # Initialize git repository
     subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test User"], cwd=repo_path, check=True
-    )
-    subprocess.run(
-        ["git", "config", "commit.gpgsign", "false"], cwd=repo_path, check=True
-    )
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True)
+    subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=repo_path, check=True)
 
     # Create Python file with functions and classes
     py_file = repo_path / "example.py"
@@ -135,9 +129,7 @@ class TestGraphExtraction:
 
         # Index the repository (need to register it first)
         repo_name = "test_repo"
-        metadata.record_repo(
-            name=repo_name, path=str(temp_test_repo), default_embed_model="small"
-        )
+        metadata.record_repo(name=repo_name, path=str(temp_test_repo), default_embed_model="small")
 
         result = pipeline.index(
             repo_name,
@@ -176,9 +168,7 @@ class TestGraphExtraction:
         assert "class" in node_types
 
         # Find specific nodes
-        helper_node = next(
-            (n for n in python_nodes if n["name"] == "helper_function"), None
-        )
+        helper_node = next((n for n in python_nodes if n["name"] == "helper_function"), None)
         assert helper_node is not None
         assert helper_node["node_type"] == "function"
         assert "helper_function" in helper_node["qualified_name"]
@@ -215,9 +205,7 @@ class TestGraphExtraction:
 
         # Index the repository (need to register it first)
         repo_name = "test_repo"
-        metadata.record_repo(
-            name=repo_name, path=str(temp_test_repo), default_embed_model="small"
-        )
+        metadata.record_repo(name=repo_name, path=str(temp_test_repo), default_embed_model="small")
 
         result = pipeline.index(
             repo_name,
@@ -250,20 +238,14 @@ class TestGraphExtraction:
         # Find specific nodes
         # Note: Interfaces are extracted, look for User interface
         user_interface = next(
-            (
-                n
-                for n in ts_nodes
-                if n["name"] == "User" and n["node_type"] == "interface"
-            ),
+            (n for n in ts_nodes if n["name"] == "User" and n["node_type"] == "interface"),
             None,
         )
         # If interface extraction is working, this should pass
         # If not, we may need to check if interfaces are being stored correctly
         if user_interface is None:
             # Debug: print all nodes to see what was actually extracted
-            print(
-                f"DEBUG: All TS nodes: {[(n['name'], n['node_type']) for n in ts_nodes]}"
-            )
+            print(f"DEBUG: All TS nodes: {[(n['name'], n['node_type']) for n in ts_nodes]}")
         assert user_interface is not None, (
             f"User interface not found in nodes: {[(n['name'], n['node_type']) for n in ts_nodes]}"
         )
@@ -301,9 +283,7 @@ class TestGraphExtraction:
 
         # Initial indexing (need to register it first)
         repo_name = "test_repo"
-        metadata.record_repo(
-            name=repo_name, path=str(temp_test_repo), default_embed_model="small"
-        )
+        metadata.record_repo(name=repo_name, path=str(temp_test_repo), default_embed_model="small")
 
         result1 = pipeline.index(
             repo_name,
@@ -320,9 +300,7 @@ class TestGraphExtraction:
 
         # Delete one file and commit the deletion (so git tracks it)
         (temp_test_repo / "example.py").unlink()
-        subprocess.run(
-            ["git", "add", "-A"], cwd=temp_test_repo, check=True, capture_output=True
-        )
+        subprocess.run(["git", "add", "-A"], cwd=temp_test_repo, check=True, capture_output=True)
         subprocess.run(
             ["git", "commit", "-m", "Delete example.py"],
             cwd=temp_test_repo,
@@ -342,12 +320,8 @@ class TestGraphExtraction:
         final_edge_count = graph_store.get_edge_count()
 
         # Should have fewer nodes and edges after deletion
-        assert final_node_count < initial_node_count, (
-            "Graph nodes should be pruned when files are deleted"
-        )
-        assert final_edge_count < initial_edge_count, (
-            "Graph edges should be pruned when files are deleted"
-        )
+        assert final_node_count < initial_node_count, "Graph nodes should be pruned when files are deleted"
+        assert final_edge_count < initial_edge_count, "Graph edges should be pruned when files are deleted"
 
         # Verify no nodes remain for deleted file
         py_file_id = metadata.get_file_id(repo_id, "example.py")
@@ -376,9 +350,7 @@ class TestGraphExtraction:
 
         # Index the repository (need to register it first)
         repo_name = "test_repo"
-        metadata.record_repo(
-            name=repo_name, path=str(temp_test_repo), default_embed_model="small"
-        )
+        metadata.record_repo(name=repo_name, path=str(temp_test_repo), default_embed_model="small")
 
         result = pipeline.index(
             repo_name,

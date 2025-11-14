@@ -83,11 +83,7 @@ class OptimizedIngestionPipeline:
 
         # Initialize caches
         if enable_ast_cache:
-            cache_path = (
-                Path(config.data_dir) / ".ast_cache.pkl"
-                if hasattr(config, "data_dir")
-                else None
-            )
+            cache_path = Path(config.data_dir) / ".ast_cache.pkl" if hasattr(config, "data_dir") else None
             self.ast_cache = get_ast_cache(max_size=1000, persist_path=cache_path)
         else:
             self.ast_cache = None
@@ -131,11 +127,7 @@ class OptimizedIngestionPipeline:
 
             candidates = scan_repo_parallel(
                 repo_root,
-                (
-                    self.config.ignore_patterns
-                    if hasattr(self.config, "ignore_patterns")
-                    else []
-                ),
+                (self.config.ignore_patterns if hasattr(self.config, "ignore_patterns") else []),
                 num_workers=self.num_workers,
             )
         else:
@@ -143,17 +135,11 @@ class OptimizedIngestionPipeline:
 
             candidates = scan_repo(
                 repo_root,
-                (
-                    self.config.ignore_patterns
-                    if hasattr(self.config, "ignore_patterns")
-                    else []
-                ),
+                (self.config.ignore_patterns if hasattr(self.config, "ignore_patterns") else []),
             )
 
         # Map absolute paths to candidates for quick lookup
-        candidate_by_abs: dict[Path, Any] = {
-            candidate.abs_path.resolve(): candidate for candidate in candidates
-        }
+        candidate_by_abs: dict[Path, Any] = {candidate.abs_path.resolve(): candidate for candidate in candidates}
 
         scan_time = time.time() - scan_start
         print(f"Scanned {len(candidates)} files in {scan_time:.1f}s")
@@ -185,9 +171,7 @@ class OptimizedIngestionPipeline:
                     continue
 
             # Check if file can be skipped entirely (incremental)
-            if inc_indexer and inc_indexer.should_skip_file(
-                candidate.rel_path, content_hash
-            ):
+            if inc_indexer and inc_indexer.should_skip_file(candidate.rel_path, content_hash):
                 files_skipped += 1
                 continue
 
@@ -197,11 +181,7 @@ class OptimizedIngestionPipeline:
                     file_path=candidate.abs_path,
                     content=content,
                     language=candidate.language,
-                    model=(
-                        self.config.embedding_model
-                        if hasattr(self.config, "embedding_model")
-                        else "small"
-                    ),
+                    model=(self.config.embedding_model if hasattr(self.config, "embedding_model") else "small"),
                     token_target=400,
                     overlap_pct=0.10,
                 )
@@ -209,9 +189,7 @@ class OptimizedIngestionPipeline:
 
         # Parse files in parallel
         if self.enable_parallel and parse_jobs:
-            parse_results = parse_files_parallel(
-                parse_jobs, num_workers=self.num_workers
-            )
+            parse_results = parse_files_parallel(parse_jobs, num_workers=self.num_workers)
         else:
             from .parallel_parser import _parse_file_worker
 
@@ -258,9 +236,7 @@ class OptimizedIngestionPipeline:
                 diff = inc_indexer.compute_diff(file_path, chunks)
                 chunks_to_embed.extend((file_path, c) for c in diff.new_chunks)
                 chunks_reused += diff.stats["unchanged"]
-                print(
-                    f"  {file_path}: {diff.stats['to_embed']} new, {diff.stats['unchanged']} reused"
-                )
+                print(f"  {file_path}: {diff.stats['to_embed']} new, {diff.stats['unchanged']} reused")
             else:
                 chunks_to_embed.extend((file_path, c) for c in chunks)
 
@@ -273,22 +249,14 @@ class OptimizedIngestionPipeline:
                 target_tokens=8000,
                 min_batch_size=10,
                 max_batch_size=500,
-                model=(
-                    self.config.embedding_model
-                    if hasattr(self.config, "embedding_model")
-                    else "small"
-                ),
+                model=(self.config.embedding_model if hasattr(self.config, "embedding_model") else "small"),
             )
 
             all_embeddings: list[list[float]] = []
             for batch in batcher.create_batches(texts):
                 batch_start = time.time()
                 embeddings = self.embedding_provider.embed_texts(
-                    (
-                        self.config.embedding_model
-                        if hasattr(self.config, "embedding_model")
-                        else "small"
-                    ),
+                    (self.config.embedding_model if hasattr(self.config, "embedding_model") else "small"),
                     batch,
                 )
                 all_embeddings.extend(embeddings)
@@ -309,11 +277,7 @@ class OptimizedIngestionPipeline:
         # Calculate stats
         throughput = (len(candidates) / total_time) * 60 if total_time > 0 else 0
         baseline_throughput = 500  # files/min (baseline)
-        speedup = (
-            f"{throughput / baseline_throughput:.1f}x"
-            if baseline_throughput > 0
-            else "N/A"
-        )
+        speedup = f"{throughput / baseline_throughput:.1f}x" if baseline_throughput > 0 else "N/A"
 
         stats = IndexingStats(
             total_files=len(candidates),

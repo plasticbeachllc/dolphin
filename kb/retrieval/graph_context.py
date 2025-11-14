@@ -119,9 +119,7 @@ class GraphContextEnricher:
         overlapping_nodes = [
             node
             for node in all_nodes
-            if self._ranges_overlap(
-                node["start_line"], node["end_line"], start_line, end_line
-            )
+            if self._ranges_overlap(node["start_line"], node["end_line"], start_line, end_line)
         ]
 
         if not overlapping_nodes:
@@ -153,9 +151,7 @@ class GraphContextEnricher:
             context["relationships"].extend(relationships)
 
         # Remove duplicate relationships
-        context["relationships"] = self._deduplicate_relationships(
-            context["relationships"]
-        )
+        context["relationships"] = self._deduplicate_relationships(context["relationships"])
 
         return context if context["nodes"] else None
 
@@ -180,9 +176,7 @@ class GraphContextEnricher:
         relationships = []
 
         # Get outgoing edges (what this node calls/uses/extends)
-        outgoing_edges = self.graph_store.get_outgoing_edges(
-            node_id, limit=self.max_edges_per_node
-        )
+        outgoing_edges = self.graph_store.get_outgoing_edges(node_id, limit=self.max_edges_per_node)
 
         for edge in outgoing_edges:
             edge_type = edge["edge_type"]
@@ -279,9 +273,7 @@ class GraphContextEnricher:
         """
         return start1 <= end2 and start2 <= end1
 
-    def _deduplicate_relationships(
-        self, relationships: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    def _deduplicate_relationships(self, relationships: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Remove duplicate relationships.
 
         Args:
@@ -348,35 +340,17 @@ def format_graph_context_for_llm(graph_context: dict[str, Any]) -> str:
     relationships = graph_context.get("relationships", [])
     if relationships:
         # Group by type and direction
-        calls_to = [
-            r
-            for r in relationships
-            if r["type"] == "calls" and r["direction"] == "outgoing"
-        ]
-        called_by = [
-            r
-            for r in relationships
-            if r["type"] == "calls" and r["direction"] == "incoming"
-        ]
-        inherits = [
-            r
-            for r in relationships
-            if r["type"] == "inherits" and r["direction"] == "outgoing"
-        ]
+        calls_to = [r for r in relationships if r["type"] == "calls" and r["direction"] == "outgoing"]
+        called_by = [r for r in relationships if r["type"] == "calls" and r["direction"] == "incoming"]
+        inherits = [r for r in relationships if r["type"] == "inherits" and r["direction"] == "outgoing"]
         implements = [r for r in relationships if r["type"] == "implements"]
-        imports = [
-            r
-            for r in relationships
-            if r["type"] == "imports" and r["direction"] == "outgoing"
-        ]
+        imports = [r for r in relationships if r["type"] == "imports" and r["direction"] == "outgoing"]
 
         if calls_to:
             lines.append("### Calls:")
             for rel in calls_to[:5]:  # Limit to top 5
                 target = rel["target"]
-                line_info = (
-                    f" (line {rel['line_number']})" if rel.get("line_number") else ""
-                )
+                line_info = f" (line {rel['line_number']})" if rel.get("line_number") else ""
                 lines.append(f"- → `{target['qualified_name']}`{line_info}")
             lines.append("")
 
@@ -384,9 +358,7 @@ def format_graph_context_for_llm(graph_context: dict[str, Any]) -> str:
             lines.append("### Called by:")
             for rel in called_by[:5]:  # Limit to top 5
                 source = rel["source"]
-                line_info = (
-                    f" (line {rel['line_number']})" if rel.get("line_number") else ""
-                )
+                line_info = f" (line {rel['line_number']})" if rel.get("line_number") else ""
                 lines.append(f"- ← `{source['qualified_name']}`{line_info}")
             lines.append("")
 

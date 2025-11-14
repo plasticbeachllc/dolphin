@@ -105,9 +105,7 @@ class SQLiteMetadataStore:
                     cur.execute("PRAGMA foreign_key_check")
                     foreign_key_errors = cur.fetchall()
                     if foreign_key_errors:
-                        raise RuntimeError(
-                            f"Foreign key constraint violations: {foreign_key_errors}"
-                        )
+                        raise RuntimeError(f"Foreign key constraint violations: {foreign_key_errors}")
 
                     # Enhanced table validation with schema verification
                     expected_tables = {
@@ -137,9 +135,7 @@ class SQLiteMetadataStore:
                         # Validate table schema
                         self._validate_table_schema(cur, table)
 
-                    logger.info(
-                        "[SQLiteMeta] Table validation complete, creating FTS5 tables..."
-                    )
+                    logger.info("[SQLiteMeta] Table validation complete, creating FTS5 tables...")
 
                     # Robust FTS5 creation with version checking
                     self._create_fts5_table_safe(cur)
@@ -195,9 +191,7 @@ class SQLiteMetadataStore:
         actual_cols = {col[1] for col in columns}  # col[1] is column name
         missing_cols = required_cols - actual_cols
         if missing_cols:
-            raise RuntimeError(
-                f"Table {table_name} missing required columns: {missing_cols}"
-            )
+            raise RuntimeError(f"Table {table_name} missing required columns: {missing_cols}")
 
     def _create_fts5_table_safe(self, cur) -> None:
         """Safely create FTS5 table with version and feature detection."""
@@ -213,9 +207,7 @@ class SQLiteMetadataStore:
         # Check if FTS5 is available and handle schema migration
         try:
             # Check if table already exists
-            cur.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
-            )
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
             table_exists = cur.fetchone()
             logger.info(f"[FTS5 Migration] Table exists: {bool(table_exists)}")
 
@@ -225,16 +217,12 @@ class SQLiteMetadataStore:
                 logger.info("[FTS5 Migration] Testing for text_hash column...")
                 try:
                     cur.execute("SELECT text_hash FROM chunks_fts LIMIT 0")
-                    logger.info(
-                        "[FTS5 Migration] text_hash column exists - schema is up to date"
-                    )
+                    logger.info("[FTS5 Migration] text_hash column exists - schema is up to date")
                     return  # Already has correct schema
                 except sqlite3.OperationalError as e:
                     logger.info(f"[FTS5 Migration] SELECT text_hash failed: {e}")
                     error_msg = str(e).lower()
-                    if "text_hash" in error_msg and (
-                        "no column" in error_msg or "no such column" in error_msg
-                    ):
+                    if "text_hash" in error_msg and ("no column" in error_msg or "no such column" in error_msg):
                         # Old schema - drop and recreate
                         logger.warning(
                             "[FTS5 Migration] 🔄 Migrating FTS5 table to new schema (adding text_hash column)..."
@@ -285,9 +273,7 @@ class SQLiteMetadataStore:
         import sqlite3
 
         try:
-            cur.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='code_nodes_fts'"
-            )
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='code_nodes_fts'")
             if cur.fetchone():
                 return  # Already exists
 
@@ -315,9 +301,7 @@ class SQLiteMetadataStore:
             cur.execute("PRAGMA integrity_check")
             integrity_result = cur.fetchone()
             if integrity_result and integrity_result[0] != "ok":
-                raise RuntimeError(
-                    f"Database integrity check failed: {integrity_result[0]}"
-                )
+                raise RuntimeError(f"Database integrity check failed: {integrity_result[0]}")
 
             # Check for orphaned records
             orphaned_checks = [
@@ -362,9 +346,7 @@ class SQLiteMetadataStore:
                     # Log warning but don't fail initialization for existing databases
                     print(f"Warning: Found {count} orphaned records in {check_name}")
 
-    def record_repo(
-        self, name: str, path: Path | str, *, default_embed_model: str = "small"
-    ) -> None:
+    def record_repo(self, name: str, path: Path | str, *, default_embed_model: str = "small") -> None:
         """Insert or update a repo registration.
 
         Uses raw sqlite3 for simplicity; models are already materialized.
@@ -396,9 +378,7 @@ class SQLiteMetadataStore:
             )
             conn.commit()
 
-    def register_repo(
-        self, name: str, path: str | Path, *, default_embed_model: str = "small"
-    ) -> None:
+    def register_repo(self, name: str, path: str | Path, *, default_embed_model: str = "small") -> None:
         """Alias for record_repo for backward compatibility.
 
         Args:
@@ -503,9 +483,7 @@ class SQLiteMetadataStore:
                 "default_embed_model": str(row[2]),
             }
 
-    def begin_session(
-        self, repo_id: int, commit_sha: str, branch: str, embed_model: str
-    ) -> int:
+    def begin_session(self, repo_id: int, commit_sha: str, branch: str, embed_model: str) -> int:
         """Create a new ingestion session and return its id."""
         from datetime import datetime
 
@@ -525,9 +503,7 @@ class SQLiteMetadataStore:
             conn.commit()
             return int(cur.lastrowid)
 
-    def set_session_status(
-        self, session_id: int, status: str, notes: str | None = None
-    ) -> None:
+    def set_session_status(self, session_id: int, status: str, notes: str | None = None) -> None:
         """Update a session status; set ended_at when terminal."""
         terminal = {"succeeded", "failed", "aborted"}
         with self._connect() as conn, closing(conn.cursor()) as cur:
@@ -701,9 +677,7 @@ class SQLiteMetadataStore:
     # Chunk content and location APIs
     # =====================
 
-    def get_existing_content_hashes_for_file(
-        self, repo_id: int, file_id: int, embed_model: str
-    ) -> set[str]:
+    def get_existing_content_hashes_for_file(self, repo_id: int, file_id: int, embed_model: str) -> set[str]:
         """Return the set of distinct text_hash values for a file and model."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
@@ -717,9 +691,7 @@ class SQLiteMetadataStore:
             rows = cur.fetchall() or []
             return {str(r[0]) for r in rows}
 
-    def get_existing_content_map_for_file(
-        self, repo_id: int, file_id: int, embed_model: str
-    ) -> dict[str, str]:
+    def get_existing_content_map_for_file(self, repo_id: int, file_id: int, embed_model: str) -> dict[str, str]:
         """Return mapping text_hash -> content_id for a file and model."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
@@ -772,9 +744,7 @@ class SQLiteMetadataStore:
                 conn.rollback()
                 raise
 
-    def get_existing_locations_for_content_ids(
-        self, content_ids: list[str]
-    ) -> dict[str, list[dict[str, object]]]:
+    def get_existing_locations_for_content_ids(self, content_ids: list[str]) -> dict[str, list[dict[str, object]]]:
         """Return existing locations for a set of content_ids.
 
         Returns dict: content_id -> list of {start_line, end_line, symbol_kind, symbol_name, symbol_path}
@@ -988,9 +958,7 @@ class SQLiteMetadataStore:
         - new_hashes: set of hashes not yet present for this file+model
         - existing_map: dict mapping existing hash -> content_id
         """
-        existing_map = self.get_existing_content_map_for_file(
-            repo_id, file_id, embed_model
-        )
+        existing_map = self.get_existing_content_map_for_file(repo_id, file_id, embed_model)
         new_hashes = set(desired_hashes) - set(existing_map.keys())
         return new_hashes, existing_map
 
@@ -1043,13 +1011,12 @@ class SQLiteMetadataStore:
         desired: mapping text_hash -> list of occurrence dicts
                  each occurrence dict should include start_line, end_line, and optional symbol metadata
 
-        Returns stats: {"content_upserted": int, "locations_inserted": int, "locations_updated": int, "locations_deleted": int, "content_pruned": int}
+        Returns stats: {"content_upserted": int, "locations_inserted": int,
+                       "locations_updated": int, "locations_deleted": int, "content_pruned": int}
         """
         desired_hashes = set(desired.keys())
         # Ensure content rows for all desired hashes
-        mapping = self.ensure_content_rows_for_file(
-            repo_id, file_id, embed_model, list(desired_hashes)
-        )
+        mapping = self.ensure_content_rows_for_file(repo_id, file_id, embed_model, list(desired_hashes))
 
         # Sync locations for each content
         inserted = updated = deleted = 0
@@ -1064,9 +1031,7 @@ class SQLiteMetadataStore:
             deleted += stats.get("deleted", 0)
 
         # Prune invalidated content for this file
-        pruned = self.prune_invalidated_content_for_file(
-            repo_id, file_id, embed_model, desired_hashes
-        )
+        pruned = self.prune_invalidated_content_for_file(repo_id, file_id, embed_model, desired_hashes)
 
         return {
             "content_upserted": len(desired_hashes),
@@ -1089,9 +1054,7 @@ class SQLiteMetadataStore:
             rows = cur.fetchall() or []
             return [{"id": int(r[0]), "path": str(r[1])} for r in rows]
 
-    def get_chunks_for_file(
-        self, repo_id: int, path: str
-    ) -> list[dict[str, object]] | None:
+    def get_chunks_for_file(self, repo_id: int, path: str) -> list[dict[str, object]] | None:
         """Get all chunks (content rows) for a file by repo_id and path.
 
         Args:
@@ -1106,9 +1069,7 @@ class SQLiteMetadataStore:
             return None
 
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute(
-                "SELECT id FROM chunk_content WHERE file_id = ?", (int(file_id),)
-            )
+            cur.execute("SELECT id FROM chunk_content WHERE file_id = ?", (int(file_id),))
             rows = cur.fetchall() or []
             return [{"id": str(r[0])} for r in rows]
 
@@ -1269,12 +1230,8 @@ class SQLiteMetadataStore:
                 cur.execute("SELECT text_hash FROM chunks_fts LIMIT 0")
             except sqlite3.OperationalError as e:
                 error_msg = str(e).lower()
-                if "text_hash" in error_msg and (
-                    "no column" in error_msg or "no such column" in error_msg
-                ):
-                    logger.warning(
-                        f"[FTS5 Migration] Runtime check: text_hash column missing ({e}), migrating now..."
-                    )
+                if "text_hash" in error_msg and ("no column" in error_msg or "no such column" in error_msg):
+                    logger.warning(f"[FTS5 Migration] Runtime check: text_hash column missing ({e}), migrating now...")
                     cur.execute("DROP TABLE IF EXISTS chunks_fts")
                     cur.execute(
                         """
@@ -1451,12 +1408,8 @@ class SQLiteMetadataStore:
             if location:
                 metadata.update(
                     {
-                        "start_line": (
-                            int(location[0]) if location[0] is not None else None
-                        ),
-                        "end_line": (
-                            int(location[1]) if location[1] is not None else None
-                        ),
+                        "start_line": (int(location[0]) if location[0] is not None else None),
+                        "end_line": (int(location[1]) if location[1] is not None else None),
                         "symbol_kind": location[2],
                         "symbol_name": location[3],
                         "symbol_path": location[4],
@@ -1527,9 +1480,7 @@ class SQLiteMetadataStore:
                         validator = PathValidator(base_dir=repo_root)
                         full_path = validator.validate(file_path)
                         if full_path.exists():
-                            lines = full_path.read_text(
-                                encoding="utf-8", errors="ignore"
-                            ).splitlines()
+                            lines = full_path.read_text(encoding="utf-8", errors="ignore").splitlines()
                             # Extract lines (1-indexed to 0-indexed)
                             chunk_lines = lines[start_line - 1 : end_line]
                             result[str(chunk_id)] = "\n".join(chunk_lines)
@@ -1603,9 +1554,7 @@ class SQLiteMetadataStore:
 
         return counts
 
-    def _cleanup_fts_entries_comprehensive(
-        self, cur, repo_id: int, repo_name: str
-    ) -> dict:
+    def _cleanup_fts_entries_comprehensive(self, cur, repo_id: int, repo_name: str) -> dict:
         """Comprehensive FTS5 cleanup with multiple strategies."""
         stats = {"by_content_id": 0, "by_repo_name": 0, "orphaned": 0, "errors": []}
 
@@ -1716,9 +1665,7 @@ class SQLiteMetadataStore:
             # Delete in proper foreign key order with validation
             try:
                 # 1. FTS5 entries (clean by content_id first, then by repo name)
-                fts_cleanup_stats = self._cleanup_fts_entries_comprehensive(
-                    cur, repo_id, name
-                )
+                fts_cleanup_stats = self._cleanup_fts_entries_comprehensive(cur, repo_id, name)
 
                 # 2. Chunk locations (foreign key to chunk_content)
                 locations_deleted = self._delete_chunk_locations_by_repo(cur, repo_id)
@@ -1737,14 +1684,10 @@ class SQLiteMetadataStore:
 
                 # Validate cleanup was comprehensive
                 post_cleanup_counts = self._get_repo_data_counts(cur, repo_id, name)
-                cleanup_success = self._validate_cleanup_success(
-                    pre_cleanup_counts, post_cleanup_counts
-                )
+                cleanup_success = self._validate_cleanup_success(pre_cleanup_counts, post_cleanup_counts)
 
                 if not cleanup_success and not force:
-                    raise RuntimeError(
-                        f"Cleanup validation failed: {post_cleanup_counts}"
-                    )
+                    raise RuntimeError(f"Cleanup validation failed: {post_cleanup_counts}")
 
                 conn.commit()
 
@@ -1793,9 +1736,7 @@ class SQLiteMetadataStore:
 
                 # Verify deletion was successful
                 if post_count > 0:
-                    stats["errors"].append(
-                        f"{model} model: {post_count} vectors remain after deletion"
-                    )
+                    stats["errors"].append(f"{model} model: {post_count} vectors remain after deletion")
 
                 stats[f"{model}_deleted"] = pre_count - post_count
 
@@ -1804,9 +1745,7 @@ class SQLiteMetadataStore:
 
         return stats
 
-    def rm_repo_with_lancedb(
-        self, lancedb_store, name: str, force: bool = False
-    ) -> dict:
+    def rm_repo_with_lancedb(self, lancedb_store, name: str, force: bool = False) -> dict:
         """Enhanced repository removal with LanceDB cleanup validation.
 
         This implements Phase 2 Fix 2.1 from the remediation plan:
@@ -1868,9 +1807,7 @@ class SQLiteMetadataStore:
 
         return stats
 
-    def validate_repo_consistency(
-        self, lancedb_store, repo_id: int, repo_name: str
-    ) -> dict:
+    def validate_repo_consistency(self, lancedb_store, repo_id: int, repo_name: str) -> dict:
         """Comprehensive consistency validation between metadata and vector stores.
 
         Args:
@@ -1894,13 +1831,12 @@ class SQLiteMetadataStore:
             cur.execute("SELECT COUNT(*) FROM files WHERE repo_id = ?", (repo_id,))
             metadata_files = cur.fetchone()[0]
 
-            cur.execute(
-                "SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,)
-            )
+            cur.execute("SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,))
             metadata_chunks = cur.fetchone()[0]
 
             cur.execute(
-                "SELECT COUNT(*) FROM chunk_locations WHERE content_id IN (SELECT id FROM chunk_content WHERE repo_id = ?)",
+                "SELECT COUNT(*) FROM chunk_locations "
+                "WHERE content_id IN (SELECT id FROM chunk_content WHERE repo_id = ?)",
                 (repo_id,),
             )
             metadata_locations = cur.fetchone()[0]
@@ -1917,9 +1853,7 @@ class SQLiteMetadataStore:
 
             if orphaned_locations > 0:
                 consistency_report["valid"] = False
-                consistency_report["issues"].append(
-                    f"Found {orphaned_locations} orphaned chunk locations"
-                )
+                consistency_report["issues"].append(f"Found {orphaned_locations} orphaned chunk locations")
 
             # Check for orphaned FTS entries
             cur.execute(
@@ -1932,9 +1866,7 @@ class SQLiteMetadataStore:
 
             if orphaned_fts > 0:
                 consistency_report["valid"] = False
-                consistency_report["issues"].append(
-                    f"Found {orphaned_fts} orphaned FTS entries"
-                )
+                consistency_report["issues"].append(f"Found {orphaned_fts} orphaned FTS entries")
 
             # Check for chunk_content without files
             cur.execute(
@@ -1948,9 +1880,7 @@ class SQLiteMetadataStore:
 
             if orphaned_content > 0:
                 consistency_report["valid"] = False
-                consistency_report["issues"].append(
-                    f"Found {orphaned_content} chunk_content rows without files"
-                )
+                consistency_report["issues"].append(f"Found {orphaned_content} chunk_content rows without files")
 
             # Check for files without repos
             cur.execute(
@@ -1964,9 +1894,7 @@ class SQLiteMetadataStore:
 
             if orphaned_files > 0:
                 consistency_report["valid"] = False
-                consistency_report["issues"].append(
-                    f"Found {orphaned_files} files without repos"
-                )
+                consistency_report["issues"].append(f"Found {orphaned_files} files without repos")
 
             consistency_report["statistics"] = {
                 "metadata_files": metadata_files,
@@ -2029,9 +1957,7 @@ class SQLiteMetadataStore:
                         )
                     """
                     )
-                    repair_report["repairs_performed"].append(
-                        f"Deleted {cur.rowcount} orphaned chunk locations"
-                    )
+                    repair_report["repairs_performed"].append(f"Deleted {cur.rowcount} orphaned chunk locations")
 
                 # Repair orphaned FTS entries
                 cur.execute(
@@ -2049,9 +1975,7 @@ class SQLiteMetadataStore:
                         WHERE content_id NOT IN (SELECT id FROM chunk_content)
                     """
                     )
-                    repair_report["repairs_performed"].append(
-                        f"Deleted {cur.rowcount} orphaned FTS entries"
-                    )
+                    repair_report["repairs_performed"].append(f"Deleted {cur.rowcount} orphaned FTS entries")
 
                 # Repair orphaned chunk_content (without files)
                 cur.execute(
@@ -2099,9 +2023,7 @@ class SQLiteMetadataStore:
                         )
                     """
                     )
-                    repair_report["repairs_performed"].append(
-                        f"Deleted {cur.rowcount} orphaned chunk_content rows"
-                    )
+                    repair_report["repairs_performed"].append(f"Deleted {cur.rowcount} orphaned chunk_content rows")
 
                 # Repair orphaned files (without repos)
                 cur.execute(
@@ -2164,9 +2086,7 @@ class SQLiteMetadataStore:
                         )
                     """
                     )
-                    repair_report["repairs_performed"].append(
-                        f"Deleted {cur.rowcount} orphaned files"
-                    )
+                    repair_report["repairs_performed"].append(f"Deleted {cur.rowcount} orphaned files")
 
                 conn.commit()
 
@@ -2202,9 +2122,7 @@ class SQLiteMetadataStore:
             conn.commit()
             return change_id
 
-    def get_pending_changes(
-        self, repo_id: int | None = None, limit: int = 1000
-    ) -> list[dict]:
+    def get_pending_changes(self, repo_id: int | None = None, limit: int = 1000) -> list[dict]:
         """Get unprocessed pending changes."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
             if repo_id:
@@ -2385,17 +2303,13 @@ class SQLiteMetadataStore:
                 file_path = root / path
 
                 if not file_path.exists():
-                    drift_events.append(
-                        {"file_id": file_id, "path": path, "drift_type": "deleted"}
-                    )
+                    drift_events.append({"file_id": file_id, "path": path, "drift_type": "deleted"})
                     continue
 
                 stat = file_path.stat()
                 if stat.st_mtime_ns != snapshot_mtime or stat.st_size != snapshot_size:
                     current_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
                     if current_hash != snapshot_hash:
-                        drift_events.append(
-                            {"file_id": file_id, "path": path, "drift_type": "modified"}
-                        )
+                        drift_events.append({"file_id": file_id, "path": path, "drift_type": "modified"})
 
         return drift_events

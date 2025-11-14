@@ -84,9 +84,7 @@ class TestPipelineGitOperations:
         with pytest.raises(RuntimeError, match="Working tree has tracked changes"):
             pipeline._ensure_clean_working_tree(git_repo)
 
-    def test_ensure_clean_working_tree_fails_with_staged_changes(
-        self, pipeline, git_repo
-    ):
+    def test_ensure_clean_working_tree_fails_with_staged_changes(self, pipeline, git_repo):
         """Test _ensure_clean_working_tree fails with staged changes."""
         # Create initial commit
         file1 = git_repo / "test.txt"
@@ -146,9 +144,7 @@ class TestPipelineIgnorePatterns:
     @pytest.fixture
     def pipeline(self, tmp_path):
         """Create a pipeline instance for testing."""
-        config = KBConfig(
-            store_root=tmp_path, embedding_provider="stub", ignore=["*.log", "tmp"]
-        )
+        config = KBConfig(store_root=tmp_path, embedding_provider="stub", ignore=["*.log", "tmp"])
         metadata = SQLiteMetadataStore(tmp_path / "test.db")
         metadata.initialize()
         lancedb = LanceDBStore(tmp_path / "lancedb")

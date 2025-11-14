@@ -123,9 +123,7 @@ class ASTCache:
         Args:
             file_path: Path to the file
         """
-        keys_to_remove = [
-            key for key in self._cache.keys() if key.startswith(f"{file_path}:")
-        ]
+        keys_to_remove = [key for key in self._cache.keys() if key.startswith(f"{file_path}:")]
         for key in keys_to_remove:
             del self._cache[key]
 

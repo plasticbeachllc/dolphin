@@ -163,11 +163,7 @@ def chunk_source(
                     start_line=script_start + chunk.start_line - 1,
                     end_line=script_start + chunk.end_line - 1,
                     token_count=chunk.token_count,
-                    symbol_kind=(
-                        f"{kind_prefix}{chunk.symbol_kind}"
-                        if chunk.symbol_kind
-                        else f"{kind_prefix}code"
-                    ),
+                    symbol_kind=(f"{kind_prefix}{chunk.symbol_kind}" if chunk.symbol_kind else f"{kind_prefix}code"),
                     symbol_name=chunk.symbol_name,
                     symbol_path=chunk.symbol_path,
                 )
@@ -215,9 +211,7 @@ def chunk_source(
     return chunks
 
 
-def _chunk_template(
-    template: str, start_line: int, tokenizer, token_target: int
-) -> list[Chunk]:
+def _chunk_template(template: str, start_line: int, tokenizer, token_target: int) -> list[Chunk]:
     """Chunk Svelte template by component usage and control flow.
 
     Identifies:
@@ -297,9 +291,7 @@ def _fallback_chunking(source: str, model: str, token_target: int) -> list[Chunk
     return chunk_text(source, model=model, token_target=token_target)
 
 
-def extract_graph_data(
-    source: str, component_name: str
-) -> tuple[list[GraphNode], list[GraphEdge]]:
+def extract_graph_data(source: str, component_name: str) -> tuple[list[GraphNode], list[GraphEdge]]:
     """Extract graph nodes and edges from Svelte component.
 
     Nodes:
@@ -348,9 +340,7 @@ def extract_graph_data(
         script_content = script_data["content"]
 
         # 1. Extract imports
-        import_pattern = (
-            r'import\s+(?:{[^}]+}|\*\s+as\s+\w+|\w+)\s+from\s+["\']([^"\']+)["\']'
-        )
+        import_pattern = r'import\s+(?:{[^}]+}|\*\s+as\s+\w+|\w+)\s+from\s+["\']([^"\']+)["\']'
         imports = re.findall(import_pattern, script_content)
         for imp in imports:
             # Extract component name from path

@@ -164,10 +164,7 @@ class SQLiteConnectionPool:
                     self._overflow_connections += 1
                     conn = self._create_connection()
                     self._created_connections += 1
-                    logger.info(
-                        f"Created overflow connection "
-                        f"({self._overflow_count}/{self.max_overflow})"
-                    )
+                    logger.info(f"Created overflow connection ({self._overflow_count}/{self.max_overflow})")
                     return conn
                 else:
                     raise TimeoutError(
@@ -221,9 +218,7 @@ class SQLiteConnectionPool:
             "created_connections": self._created_connections,
             "reused_connections": self._reused_connections,
             "overflow_connections": self._overflow_connections,
-            "reuse_rate": (
-                self._reused_connections / max(1, self._created_connections) * 100
-            ),
+            "reuse_rate": (self._reused_connections / max(1, self._created_connections) * 100),
         }
 
     def __del__(self):

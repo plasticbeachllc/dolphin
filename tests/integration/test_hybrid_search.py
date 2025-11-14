@@ -14,9 +14,7 @@ from kb.store.sqlite_meta import SQLiteMetadataStore
 def hybrid_backend():
     with tempfile.TemporaryDirectory() as temp_dir:
         store_root = Path(temp_dir)
-        backend = create_search_backend(
-            store_root=store_root, hybrid_search_enabled=True
-        )
+        backend = create_search_backend(store_root=store_root, hybrid_search_enabled=True)
         yield backend
 
 
@@ -24,9 +22,7 @@ def hybrid_backend():
 def hybrid_backend_disabled():
     with tempfile.TemporaryDirectory() as temp_dir:
         store_root = Path(temp_dir)
-        backend = create_search_backend(
-            store_root=store_root, hybrid_search_enabled=False
-        )
+        backend = create_search_backend(store_root=store_root, hybrid_search_enabled=False)
         yield backend
 
 
@@ -77,9 +73,7 @@ def populated_backend():
         sql_store.bulk_index_chunks_for_fts(test_chunks)
 
         # Create backend
-        backend = create_search_backend(
-            store_root=store_root, hybrid_search_enabled=True
-        )
+        backend = create_search_backend(store_root=store_root, hybrid_search_enabled=True)
 
         # Mock the stores to use our test data
         backend.sql_store = sql_store
@@ -130,9 +124,7 @@ class TestHybridSearchExecution:
             },
         ]
 
-        with patch.object(
-            populated_backend.lance_store, "query", return_value=mock_vector_results
-        ):
+        with patch.object(populated_backend.lance_store, "query", return_value=mock_vector_results):
             results = populated_backend.search(request)
 
         assert isinstance(results, list)
@@ -153,9 +145,7 @@ class TestHybridSearchExecution:
             },
         ]
 
-        with patch.object(
-            populated_backend.lance_store, "query", return_value=mock_vector_results
-        ):
+        with patch.object(populated_backend.lance_store, "query", return_value=mock_vector_results):
             results = populated_backend.search(request)
 
         assert isinstance(results, list)
@@ -195,9 +185,7 @@ class TestHybridSearchExecution:
             },
         ]
 
-        with patch.object(
-            populated_backend.lance_store, "query", return_value=mock_vector_results
-        ):
+        with patch.object(populated_backend.lance_store, "query", return_value=mock_vector_results):
             results = populated_backend.search(request)
 
         assert isinstance(results, list)
@@ -231,9 +219,7 @@ class TestBM25Integration:
             {"id": "test1", "_distance": 0.3, "repo": "test-repo", "path": "test.py"},
         ]
 
-        with patch.object(
-            populated_backend.lance_store, "query", return_value=mock_vector_results
-        ):
+        with patch.object(populated_backend.lance_store, "query", return_value=mock_vector_results):
             results = populated_backend.search(request)
 
         assert isinstance(results, list)
@@ -272,9 +258,7 @@ class TestErrorHandling:
         """Test fallback to BM25-only when vector search fails."""
         request = SearchRequest(query="test")
 
-        mock_bm25_results = [
-            {"chunk_id": "bm251", "repo": "test-repo", "path": "test.py", "score": 0.8}
-        ]
+        mock_bm25_results = [{"chunk_id": "bm251", "repo": "test-repo", "path": "test.py", "score": 0.8}]
 
         # Simulate vector search failure
         with (
@@ -283,12 +267,8 @@ class TestErrorHandling:
                 "query",
                 side_effect=Exception("Vector Error"),
             ),
-            patch.object(
-                hybrid_backend.sql_store, "bm25_search", return_value=mock_bm25_results
-            ),
-            patch.object(
-                hybrid_backend, "_hydrate_bm25_results", return_value=mock_bm25_results
-            ),
+            patch.object(hybrid_backend.sql_store, "bm25_search", return_value=mock_bm25_results),
+            patch.object(hybrid_backend, "_hydrate_bm25_results", return_value=mock_bm25_results),
         ):
             results = hybrid_backend.search(request)
             # Should return BM25 results
@@ -335,9 +315,7 @@ class TestSearchRequestHandling:
             ]
 
             with (
-                patch.object(
-                    hybrid_backend.lance_store, "query", return_value=mock_results
-                ),
+                patch.object(hybrid_backend.lance_store, "query", return_value=mock_results),
                 patch.object(hybrid_backend.sql_store, "bm25_search", return_value=[]),
             ):
                 results = hybrid_backend.search(request)
@@ -351,14 +329,10 @@ class TestSearchRequestHandling:
         for model in ["small", "large"]:
             request = SearchRequest(query="test", embed_model=model)
 
-            mock_results = [
-                {"id": "test1", "_distance": 0.5, "repo": "test", "path": "test.py"}
-            ]
+            mock_results = [{"id": "test1", "_distance": 0.5, "repo": "test", "path": "test.py"}]
 
             with (
-                patch.object(
-                    hybrid_backend.lance_store, "query", return_value=mock_results
-                ),
+                patch.object(hybrid_backend.lance_store, "query", return_value=mock_results),
                 patch.object(hybrid_backend.sql_store, "bm25_search", return_value=[]),
             ):
                 results = hybrid_backend.search(request)
@@ -385,15 +359,9 @@ class TestPerformanceCharacteristics:
         ]
 
         with (
-            patch.object(
-                hybrid_backend.lance_store, "query", return_value=mock_vector_results
-            ),
-            patch.object(
-                hybrid_backend.sql_store, "bm25_search", return_value=mock_bm25_results
-            ),
-            patch.object(
-                hybrid_backend, "_hydrate_bm25_results", return_value=mock_bm25_results
-            ),
+            patch.object(hybrid_backend.lance_store, "query", return_value=mock_vector_results),
+            patch.object(hybrid_backend.sql_store, "bm25_search", return_value=mock_bm25_results),
+            patch.object(hybrid_backend, "_hydrate_bm25_results", return_value=mock_bm25_results),
         ):
             results = hybrid_backend.search(request)
 

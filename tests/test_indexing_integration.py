@@ -103,9 +103,7 @@ def check_sqlite_metadata():
                 print(f"Chunk records: {chunk_count}")
 
                 if chunk_count > 0:
-                    cursor.execute(
-                        "SELECT content_id, repo, path FROM chunk_content LIMIT 3"
-                    )
+                    cursor.execute("SELECT content_id, repo, path FROM chunk_content LIMIT 3")
                     samples = cursor.fetchall()
                     print("Sample chunks:")
                     for sample in samples:

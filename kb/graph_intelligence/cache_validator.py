@@ -15,9 +15,7 @@ logger = logging.getLogger(__name__)
 class GraphCacheValidator:
     """Validates whether cached NetworkX graph is still current."""
 
-    def __init__(
-        self, db, repo_id: int, edge_change_threshold: int = 5, ttl_minutes: int = 10
-    ):
+    def __init__(self, db, repo_id: int, edge_change_threshold: int = 5, ttl_minutes: int = 10):
         """Initialize cache validator.
 
         Args:
@@ -64,14 +62,9 @@ class GraphCacheValidator:
         # Check 3: Time-based invalidation
         if cache_state["last_rebuild_at"]:
             try:
-                cache_age = datetime.now() - datetime.fromisoformat(
-                    cache_state["last_rebuild_at"]
-                )
+                cache_age = datetime.now() - datetime.fromisoformat(cache_state["last_rebuild_at"])
                 if cache_age > self.ttl:
-                    logger.info(
-                        f"Cache invalid for repo {self.repo_id}: "
-                        f"age {cache_age} exceeds TTL {self.ttl}"
-                    )
+                    logger.info(f"Cache invalid for repo {self.repo_id}: age {cache_age} exceeds TTL {self.ttl}")
                     return False
             except (ValueError, TypeError) as e:
                 logger.warning(f"Invalid cache timestamp: {e}")
@@ -83,9 +76,7 @@ class GraphCacheValidator:
     def _get_cache_state(self) -> dict | None:
         """Get current cache state from database."""
         with Session(self.db) as session:
-            statement = select(GraphCacheState).where(
-                GraphCacheState.repo_id == self.repo_id
-            )
+            statement = select(GraphCacheState).where(GraphCacheState.repo_id == self.repo_id)
             result = session.exec(statement).first()
 
             if not result:
@@ -134,9 +125,7 @@ class GraphCacheValidator:
             if result.returncode == 0:
                 return result.stdout.strip()
             else:
-                logger.warning(
-                    f"Git command failed for repo {self.repo_id}: {result.stderr}"
-                )
+                logger.warning(f"Git command failed for repo {self.repo_id}: {result.stderr}")
                 return None
 
         except (subprocess.TimeoutExpired, FileNotFoundError) as e:
@@ -160,9 +149,7 @@ class GraphCacheValidator:
         """
         with Session(self.db) as session:
             # Get or create cache state
-            statement = select(GraphCacheState).where(
-                GraphCacheState.repo_id == self.repo_id
-            )
+            statement = select(GraphCacheState).where(GraphCacheState.repo_id == self.repo_id)
             cache_state = session.exec(statement).first()
 
             if cache_state:
@@ -194,15 +181,11 @@ class GraphCacheValidator:
             count: Number of edge changes to add (default: 1)
         """
         with Session(self.db) as session:
-            statement = select(GraphCacheState).where(
-                GraphCacheState.repo_id == self.repo_id
-            )
+            statement = select(GraphCacheState).where(GraphCacheState.repo_id == self.repo_id)
             cache_state = session.exec(statement).first()
 
             if cache_state:
                 cache_state.edge_changes_since_rebuild += count
                 session.commit()
             else:
-                logger.warning(
-                    f"Cannot increment edge changes: no cache state for repo {self.repo_id}"
-                )
+                logger.warning(f"Cannot increment edge changes: no cache state for repo {self.repo_id}")

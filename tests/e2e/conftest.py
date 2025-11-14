@@ -98,9 +98,7 @@ This is a sample authentication project.
         )
 
         # Commit all files
-        subprocess.run(
-            ["git", "add", "."], cwd=repo_dir, check=True, capture_output=True
-        )
+        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
         subprocess.run(
             ["git", "commit", "--no-verify", "-m", "Initial commit"],
             cwd=repo_dir,
@@ -128,17 +126,13 @@ def e2e_kb_setup(e2e_test_repo: Path) -> Generator[dict, None, None]:
         lancedb_store.initialize_collections()
 
         # Create config
-        config = KBConfig(
-            default_embed_model="small", ignore=["*.pyc", "__pycache__/*", ".git/*"]
-        )
+        config = KBConfig(default_embed_model="small", ignore=["*.pyc", "__pycache__/*", ".git/*"])
 
         # Create pipeline
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         # Register repository
-        metadata_store.record_repo(
-            name="test-repo", path=e2e_test_repo, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="test-repo", path=e2e_test_repo, default_embed_model="small")
 
         yield {
             "pipeline": pipeline,

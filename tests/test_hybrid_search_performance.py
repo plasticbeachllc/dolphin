@@ -35,16 +35,10 @@ class HybridSearchValidator:
         config = load_config()
         config.store_root = store_root
 
-        self.backend = create_search_backend(
-            store_root=store_root, hybrid_search_enabled=True
-        )
-        self.vector_only_backend = create_search_backend(
-            store_root=store_root, hybrid_search_enabled=False
-        )
+        self.backend = create_search_backend(store_root=store_root, hybrid_search_enabled=True)
+        self.vector_only_backend = create_search_backend(store_root=store_root, hybrid_search_enabled=False)
 
-    def measure_latency(
-        self, request: SearchRequest, backend, num_runs: int = 10
-    ) -> dict[str, float]:
+    def measure_latency(self, request: SearchRequest, backend, num_runs: int = 10) -> dict[str, float]:
         """Measure search latency over multiple runs."""
         latencies = []
 
@@ -57,19 +51,13 @@ class HybridSearchValidator:
         return {
             "mean_ms": statistics.mean(latencies),
             "median_ms": statistics.median(latencies),
-            "p95_ms": (
-                statistics.quantiles(latencies, n=20)[18]
-                if len(latencies) >= 20
-                else max(latencies)
-            ),
+            "p95_ms": (statistics.quantiles(latencies, n=20)[18] if len(latencies) >= 20 else max(latencies)),
             "min_ms": min(latencies),
             "max_ms": max(latencies),
             "stddev_ms": statistics.stdev(latencies) if len(latencies) > 1 else 0.0,
         }
 
-    def measure_search_quality(
-        self, test_queries: list[dict[str, Any]]
-    ) -> dict[str, float]:
+    def measure_search_quality(self, test_queries: list[dict[str, Any]]) -> dict[str, float]:
         """Measure search quality metrics."""
         hybrid_precision_scores = []
         vector_precision_scores = []
@@ -106,31 +94,15 @@ class HybridSearchValidator:
             vector_mrr_scores.append(vector_mrr)
 
         return {
-            "hybrid_precision_mean": (
-                statistics.mean(hybrid_precision_scores)
-                if hybrid_precision_scores
-                else 0.0
-            ),
-            "vector_precision_mean": (
-                statistics.mean(vector_precision_scores)
-                if vector_precision_scores
-                else 0.0
-            ),
-            "hybrid_mrr_mean": (
-                statistics.mean(hybrid_mrr_scores) if hybrid_mrr_scores else 0.0
-            ),
-            "vector_mrr_mean": (
-                statistics.mean(vector_mrr_scores) if vector_mrr_scores else 0.0
-            ),
+            "hybrid_precision_mean": (statistics.mean(hybrid_precision_scores) if hybrid_precision_scores else 0.0),
+            "vector_precision_mean": (statistics.mean(vector_precision_scores) if vector_precision_scores else 0.0),
+            "hybrid_mrr_mean": (statistics.mean(hybrid_mrr_scores) if hybrid_mrr_scores else 0.0),
+            "vector_mrr_mean": (statistics.mean(vector_mrr_scores) if vector_mrr_scores else 0.0),
             "precision_improvement": (
-                (
-                    statistics.mean(hybrid_precision_scores)
-                    - statistics.mean(vector_precision_scores)
-                )
+                (statistics.mean(hybrid_precision_scores) - statistics.mean(vector_precision_scores))
                 / statistics.mean(vector_precision_scores)
                 * 100
-                if vector_precision_scores
-                and statistics.mean(vector_precision_scores) > 0
+                if vector_precision_scores and statistics.mean(vector_precision_scores) > 0
                 else 0.0
             ),
         }
@@ -175,12 +147,8 @@ class HybridSearchValidator:
         print("-" * 40)
 
         latency_request = SearchRequest(query="authentication", top_k=5)
-        hybrid_latency = self.measure_latency(
-            latency_request, self.backend, num_runs=20
-        )
-        vector_latency = self.measure_latency(
-            latency_request, self.vector_only_backend, num_runs=20
-        )
+        hybrid_latency = self.measure_latency(latency_request, self.backend, num_runs=20)
+        vector_latency = self.measure_latency(latency_request, self.vector_only_backend, num_runs=20)
 
         print("Hybrid Search Latency:")
         print(f"  Mean: {hybrid_latency['mean_ms']:.1f}ms")
@@ -223,8 +191,7 @@ class HybridSearchValidator:
                 "hybrid_latency_mean_ms_target": 100.0,  # Should be under 100ms
                 "precision_improvement_target_percent": 40.0,  # +40% improvement
                 "hybrid_latency_passed": hybrid_latency["mean_ms"] < 100.0,
-                "precision_improvement_passed": quality_metrics["precision_improvement"]
-                >= 20.0,
+                "precision_improvement_passed": quality_metrics["precision_improvement"] >= 20.0,
             },
         }
 
@@ -272,13 +239,9 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Validate Hybrid Search Performance")
-    parser.add_argument(
-        "--store-root", type=Path, help="Knowledge base store root path"
-    )
+    parser.add_argument("--store-root", type=Path, help="Knowledge base store root path")
     parser.add_argument("--output", type=Path, help="Output file for results")
-    parser.add_argument(
-        "--num-runs", type=int, default=20, help="Number of latency test runs"
-    )
+    parser.add_argument("--num-runs", type=int, default=20, help="Number of latency test runs")
 
     args = parser.parse_args()
 

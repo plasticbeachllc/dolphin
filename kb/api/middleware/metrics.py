@@ -8,15 +8,7 @@ from collections.abc import Callable
 
 from fastapi import Request
 from fastapi.responses import Response as FastAPIResponse
-from prometheus_client import (
-    CONTENT_TYPE_LATEST,
-    REGISTRY,
-    Counter,
-    Gauge,
-    Histogram,
-    Info,
-    generate_latest,
-)
+from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, Counter, Gauge, Histogram, Info, generate_latest
 
 # ============================================================================
 # Metrics Definitions
@@ -58,9 +50,7 @@ search_query_tokens = Histogram(
 )
 
 # Embedding metrics
-embedding_tokens_total = Counter(
-    "kb_embedding_tokens_total", "Total tokens embedded", ["repo_name"]
-)
+embedding_tokens_total = Counter("kb_embedding_tokens_total", "Total tokens embedded", ["repo_name"])
 
 embedding_api_latency_seconds = Histogram(
     "kb_embedding_api_latency_seconds",
@@ -85,13 +75,9 @@ vector_search_duration_seconds = Histogram(
 )
 
 # Index metrics
-index_size_bytes = Gauge(
-    "kb_index_size_bytes", "Total index size in bytes", ["repo_name"]
-)
+index_size_bytes = Gauge("kb_index_size_bytes", "Total index size in bytes", ["repo_name"])
 
-indexed_chunks_total = Gauge(
-    "kb_indexed_chunks_total", "Total number of indexed chunks", ["repo_name"]
-)
+indexed_chunks_total = Gauge("kb_indexed_chunks_total", "Total number of indexed chunks", ["repo_name"])
 
 # System info
 kb_info = Info("kb_api", "Knowledge Bank API information")
@@ -143,13 +129,9 @@ async def prometheus_middleware(request: Request, call_next: Callable):
         # Record metrics
         duration = time.perf_counter() - start_time
 
-        http_requests_total.labels(
-            method=method, endpoint=path, status_code=status_code, repo_name=repo_name
-        ).inc()
+        http_requests_total.labels(method=method, endpoint=path, status_code=status_code, repo_name=repo_name).inc()
 
-        http_request_duration_seconds.labels(
-            method=method, endpoint=path, repo_name=repo_name
-        ).observe(duration)
+        http_request_duration_seconds.labels(method=method, endpoint=path, repo_name=repo_name).observe(duration)
 
 
 # ============================================================================
@@ -161,9 +143,7 @@ async def metrics_endpoint(request: Request) -> FastAPIResponse:
     """
     Expose Prometheus metrics at /metrics endpoint.
     """
-    return FastAPIResponse(
-        content=generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST
-    )
+    return FastAPIResponse(content=generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)
 
 
 # ============================================================================
@@ -171,15 +151,11 @@ async def metrics_endpoint(request: Request) -> FastAPIResponse:
 # ============================================================================
 
 
-def record_search_query(
-    repo_name: str, search_type: str, result_count: int, query_tokens: int
-):
+def record_search_query(repo_name: str, search_type: str, result_count: int, query_tokens: int):
     """Record metrics for a search query."""
     search_queries_total.labels(repo_name=repo_name, search_type=search_type).inc()
 
-    search_result_count.labels(repo_name=repo_name, search_type=search_type).observe(
-        result_count
-    )
+    search_result_count.labels(repo_name=repo_name, search_type=search_type).observe(result_count)
 
     search_query_tokens.labels(repo_name=repo_name).observe(query_tokens)
 
@@ -198,9 +174,7 @@ def record_embedding_call(repo_name: str, tokens: int, latency_seconds: float):
 
 def record_db_query(operation: str, table: str, duration_seconds: float):
     """Record metrics for database query."""
-    db_query_duration_seconds.labels(operation=operation, table=table).observe(
-        duration_seconds
-    )
+    db_query_duration_seconds.labels(operation=operation, table=table).observe(duration_seconds)
 
 
 def update_index_metrics(repo_name: str, size_bytes: int, chunk_count: int):

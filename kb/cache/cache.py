@@ -169,9 +169,7 @@ class QueryCache:
             _log.warning("Cache read error for results: %s", e)
             return None
 
-    def set_results(
-        self, query: str, results: list[dict[str, Any]], **params: Any
-    ) -> None:
+    def set_results(self, query: str, results: list[dict[str, Any]], **params: Any) -> None:
         """Cache search results.
 
         Args:
@@ -263,22 +261,14 @@ class QueryCache:
         Returns:
             Dictionary with cache hit/miss statistics and rates
         """
-        total_embedding_requests = (
-            self.stats["embedding_hits"] + self.stats["embedding_misses"]
-        )
+        total_embedding_requests = self.stats["embedding_hits"] + self.stats["embedding_misses"]
         total_result_requests = self.stats["result_hits"] + self.stats["result_misses"]
 
         embedding_hit_rate = (
-            self.stats["embedding_hits"] / total_embedding_requests
-            if total_embedding_requests > 0
-            else 0.0
+            self.stats["embedding_hits"] / total_embedding_requests if total_embedding_requests > 0 else 0.0
         )
 
-        result_hit_rate = (
-            self.stats["result_hits"] / total_result_requests
-            if total_result_requests > 0
-            else 0.0
-        )
+        result_hit_rate = self.stats["result_hits"] / total_result_requests if total_result_requests > 0 else 0.0
 
         return {
             "embedding_hits": self.stats["embedding_hits"],
@@ -321,13 +311,11 @@ def create_cache(
             _log.info("Connected to Redis cache at %s", redis_url)
         except ImportError:
             _log.warning(
-                "Redis package not available. Install with: pip install redis. "
-                "Using in-memory cache as fallback."
+                "Redis package not available. Install with: pip install redis. Using in-memory cache as fallback."
             )
         except Exception as e:
             _log.warning(
-                "Failed to connect to Redis at %s: %s. "
-                "Using in-memory cache as fallback.",
+                "Failed to connect to Redis at %s: %s. Using in-memory cache as fallback.",
                 redis_url,
                 e,
             )

@@ -83,9 +83,7 @@ def reciprocal_rank_fusion(
 
             # Keep original scores for reference
             original_score = result.get(score_field, 0.0)
-            all_documents[doc_id].setdefault("original_scores", []).append(
-                original_score
-            )
+            all_documents[doc_id].setdefault("original_scores", []).append(original_score)
 
             # Copy other metadata from first occurrence
             if len(all_documents[doc_id]["rankings"]) == 1:
@@ -94,9 +92,7 @@ def reciprocal_rank_fusion(
                         all_documents[doc_id][key] = value
 
     # Sort by RRF score (descending) and return
-    fused_results = sorted(
-        all_documents.values(), key=lambda x: x["rrf_score"], reverse=True
-    )
+    fused_results = sorted(all_documents.values(), key=lambda x: x["rrf_score"], reverse=True)
 
     return fused_results
 
@@ -138,8 +134,7 @@ def weighted_fusion(
                 normalized = [
                     {
                         **r,
-                        "normalized_score": (r.get(score_field, 0.0) - min_score)
-                        / (max_score - min_score),
+                        "normalized_score": (r.get(score_field, 0.0) - min_score) / (max_score - min_score),
                     }
                     for r in result_list
                 ]
@@ -147,12 +142,7 @@ def weighted_fusion(
                 normalized = [{**r, "normalized_score": 1.0} for r in result_list]
             normalized_lists.append(normalized)
         else:
-            normalized_lists.append(
-                [
-                    {**r, "normalized_score": r.get(score_field, 0.0)}
-                    for r in result_list
-                ]
-            )
+            normalized_lists.append([{**r, "normalized_score": r.get(score_field, 0.0)} for r in result_list])
 
     # Combine scores
     all_documents = {}
@@ -181,9 +171,7 @@ def weighted_fusion(
                         all_documents[doc_id][key] = value
 
     # Sort by fused score (descending)
-    fused_results = sorted(
-        all_documents.values(), key=lambda x: x["fused_score"], reverse=True
-    )
+    fused_results = sorted(all_documents.values(), key=lambda x: x["fused_score"], reverse=True)
 
     return fused_results
 
@@ -249,17 +237,12 @@ def maximal_marginal_relevance(
                 candidate_query_vector = candidate.get("query_vector", query_vector)
 
                 max_similarity = max(
-                    cosine_similarity(
-                        candidate_query_vector, s.get("query_vector", query_vector)
-                    )
-                    for s in selected
+                    cosine_similarity(candidate_query_vector, s.get("query_vector", query_vector)) for s in selected
                 )
                 diversity_penalty = max_similarity
 
             # MMR score
-            mmr_score = (lambda_param * relevance) - (
-                (1 - lambda_param) * diversity_penalty
-            )
+            mmr_score = (lambda_param * relevance) - ((1 - lambda_param) * diversity_penalty)
             mmr_scores.append((mmr_score, candidate))
 
         # Select best MMR candidate
@@ -268,19 +251,13 @@ def maximal_marginal_relevance(
         # Find the MMR score for the selected candidate and add it
         for score, candidate in mmr_scores:
             if candidate.get(id_field) == best_candidate.get(id_field):
-                best_candidate = dict(
-                    best_candidate
-                )  # Make a copy to avoid modifying original
+                best_candidate = dict(best_candidate)  # Make a copy to avoid modifying original
                 best_candidate["mmr_score"] = score
                 break
 
         selected.append(best_candidate)
         # Remove the original candidate (not the copy) from the list
-        original_index = next(
-            i
-            for i, c in enumerate(candidates)
-            if c.get(id_field) == best_candidate.get(id_field)
-        )
+        original_index = next(i for i, c in enumerate(candidates) if c.get(id_field) == best_candidate.get(id_field))
         candidates.pop(original_index)
 
     return selected
@@ -305,13 +282,9 @@ def combine_with_confidence(
     """
     # Choose fusion method
     if fusion_method == "rrf":
-        fused_results = reciprocal_rank_fusion(
-            result_lists, id_field=id_field, **fusion_kwargs
-        )
+        fused_results = reciprocal_rank_fusion(result_lists, id_field=id_field, **fusion_kwargs)
     elif fusion_method == "weighted":
-        fused_results = weighted_fusion(
-            result_lists, id_field=id_field, **fusion_kwargs
-        )
+        fused_results = weighted_fusion(result_lists, id_field=id_field, **fusion_kwargs)
     else:
         raise ValueError(f"Unknown fusion method: {fusion_method}")
 

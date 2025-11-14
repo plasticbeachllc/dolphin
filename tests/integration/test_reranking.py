@@ -68,9 +68,7 @@ def rerank_backend(tmp_path):
         pipeline.index(repo_name="test_repo", full_reindex=True)
 
     # Now, create the search backend using the pre-populated stores
-    backend = create_search_backend(
-        store_root=store_root, reranker_config={"enabled": True, "model": "test-model"}
-    )
+    backend = create_search_backend(store_root=store_root, reranker_config={"enabled": True, "model": "test-model"})
 
     assert backend is not None, "Backend creation failed"
     assert backend.reranker is not None, "Reranker was not initialized"

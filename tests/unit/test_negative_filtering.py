@@ -24,9 +24,7 @@ class TestNegativeFiltering:
 
         request = SearchRequest(query="test", exclude_paths=["tests/"])
 
-        backend = KnowledgeSearchBackend(
-            embedding_provider=None, lance_store=None, sql_store=None
-        )
+        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
 
         filtered = backend._apply_request_filters(results, request)
 
@@ -57,13 +55,9 @@ class TestNegativeFiltering:
             {"chunk_id": "5", "repo": "test", "path": "src/utils.py", "score": 0.5},
         ]
 
-        request = SearchRequest(
-            query="test", exclude_paths=["tests/", "node_modules/", "dist/"]
-        )
+        request = SearchRequest(query="test", exclude_paths=["tests/", "node_modules/", "dist/"])
 
-        backend = KnowledgeSearchBackend(
-            embedding_provider=None, lance_store=None, sql_store=None
-        )
+        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
 
         filtered = backend._apply_request_filters(results, request)
 
@@ -86,13 +80,9 @@ class TestNegativeFiltering:
             {"chunk_id": "5", "repo": "test", "path": "config.json", "score": 0.5},
         ]
 
-        request = SearchRequest(
-            query="test", exclude_patterns=["**/test_*.py", "*.json"]
-        )
+        request = SearchRequest(query="test", exclude_patterns=["**/test_*.py", "*.json"])
 
-        backend = KnowledgeSearchBackend(
-            embedding_provider=None, lance_store=None, sql_store=None
-        )
+        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
 
         filtered = backend._apply_request_filters(results, request)
 
@@ -111,22 +101,15 @@ class TestNegativeFiltering:
             {"chunk_id": "5", "repo": "test", "path": "src/utils.ts", "score": 0.5},
         ]
 
-        request = SearchRequest(
-            query="test", exclude_patterns=["*.spec.ts", "*.toml", "*.json"]
-        )
+        request = SearchRequest(query="test", exclude_patterns=["*.spec.ts", "*.toml", "*.json"])
 
-        backend = KnowledgeSearchBackend(
-            embedding_provider=None, lance_store=None, sql_store=None
-        )
+        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
 
         filtered = backend._apply_request_filters(results, request)
 
         # Should only include production TypeScript files
         assert len(filtered) == 2
-        assert all(
-            r["path"].endswith(".ts") and not r["path"].endswith(".spec.ts")
-            for r in filtered
-        )
+        assert all(r["path"].endswith(".ts") and not r["path"].endswith(".spec.ts") for r in filtered)
 
     def test_exclude_paths_and_patterns_combined(self):
         """Test using both exclude_paths and exclude_patterns together."""
@@ -155,9 +138,7 @@ class TestNegativeFiltering:
             exclude_patterns=["test_*.py", "*.json"],
         )
 
-        backend = KnowledgeSearchBackend(
-            embedding_provider=None, lance_store=None, sql_store=None
-        )
+        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
 
         filtered = backend._apply_request_filters(results, request)
 
@@ -187,9 +168,7 @@ class TestNegativeFiltering:
             exclude_patterns=["test_*.py", "*.json"],  # But exclude tests and configs
         )
 
-        backend = KnowledgeSearchBackend(
-            embedding_provider=None, lance_store=None, sql_store=None
-        )
+        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
 
         filtered = backend._apply_request_filters(results, request)
 
@@ -207,9 +186,7 @@ class TestNegativeFiltering:
 
         request = SearchRequest(query="test", exclude_paths=["tests/"])
 
-        backend = KnowledgeSearchBackend(
-            embedding_provider=None, lance_store=None, sql_store=None
-        )
+        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
 
         filtered = backend._apply_request_filters(results, request)
 
@@ -226,9 +203,7 @@ class TestNegativeFiltering:
 
         request = SearchRequest(query="test", exclude_paths=[], exclude_patterns=[])
 
-        backend = KnowledgeSearchBackend(
-            embedding_provider=None, lance_store=None, sql_store=None
-        )
+        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
 
         filtered = backend._apply_request_filters(results, request)
 
@@ -247,9 +222,7 @@ class TestNegativeFiltering:
             # exclude_paths and exclude_patterns not specified
         )
 
-        backend = KnowledgeSearchBackend(
-            embedding_provider=None, lance_store=None, sql_store=None
-        )
+        backend = KnowledgeSearchBackend(embedding_provider=None, lance_store=None, sql_store=None)
 
         filtered = backend._apply_request_filters(results, request)
 

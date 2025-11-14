@@ -1,6 +1,5 @@
 """Data flow analysis for tracking variable dependencies."""
 
-
 from tree_sitter import Node
 
 from .models import EdgeType, GraphEdge, GraphNode, NodeType
@@ -30,9 +29,7 @@ class DataFlowAnalyzer:
     def __init__(self):
         pass
 
-    def extract_data_flow_python(
-        self, tree_root: Node, definitions: list[GraphNode], repo_id: int
-    ) -> list[GraphEdge]:
+    def extract_data_flow_python(self, tree_root: Node, definitions: list[GraphNode], repo_id: int) -> list[GraphEdge]:
         """Extract data flow edges for Python code."""
         edges = []
 
@@ -51,9 +48,7 @@ class DataFlowAnalyzer:
                         and def_ref.line < ref.line
                     ):
                         # Create an edge from the using function to the defining function
-                        edge_type = (
-                            EdgeType.MODIFIES if ref.is_mutation else EdgeType.USES
-                        )
+                        edge_type = EdgeType.MODIFIES if ref.is_mutation else EdgeType.USES
                         edges.append(
                             GraphEdge(
                                 source_id=ref.func_id,
@@ -91,9 +86,7 @@ class DataFlowAnalyzer:
                         and def_ref.func_id
                         and def_ref.line < ref.line
                     ):
-                        edge_type = (
-                            EdgeType.MODIFIES if ref.is_mutation else EdgeType.USES
-                        )
+                        edge_type = EdgeType.MODIFIES if ref.is_mutation else EdgeType.USES
                         edges.append(
                             GraphEdge(
                                 source_id=ref.func_id,
@@ -261,9 +254,7 @@ class DataFlowAnalyzer:
         for child in node.children:
             self._walk_typescript_tree(child, refs, def_map)
 
-    def _find_containing_func(
-        self, node: Node, def_map: dict[tuple[int, int], GraphNode]
-    ) -> GraphNode | None:
+    def _find_containing_func(self, node: Node, def_map: dict[tuple[int, int], GraphNode]) -> GraphNode | None:
         """Find the function that contains this node."""
         current = node.parent
         while current:

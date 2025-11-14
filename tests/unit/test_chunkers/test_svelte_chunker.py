@@ -392,11 +392,7 @@ class TestComplexComponents:
 
         # Should have chunks from both scripts
         module_chunks = [c for c in chunks if "module" in str(c.symbol_kind)]
-        script_chunks = [
-            c
-            for c in chunks
-            if "script" in str(c.symbol_kind) and "module" not in str(c.symbol_kind)
-        ]
+        script_chunks = [c for c in chunks if "script" in str(c.symbol_kind) and "module" not in str(c.symbol_kind)]
 
         assert len(module_chunks) > 0
         assert len(script_chunks) > 0

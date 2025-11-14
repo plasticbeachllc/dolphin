@@ -343,11 +343,7 @@ class TestAdaptiveNProbes:
         stats = tuner.get_stats()
 
         # EMA should be somewhere between min and max
-        assert (
-            stats["min_latency_ms"]
-            <= stats["ema_latency_ms"]
-            <= stats["max_latency_ms"]
-        )
+        assert stats["min_latency_ms"] <= stats["ema_latency_ms"] <= stats["max_latency_ms"]
 
 
 class TestGlobalAdaptiveNProbes:

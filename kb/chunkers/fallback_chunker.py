@@ -32,9 +32,7 @@ def chunk_text(
 
     tok = get_tokenizer(model)
     overlap = max(0, int(token_target * overlap_pct))
-    windows = window_text_by_tokens(
-        text, model=model, target=token_target, overlap=overlap
-    )
+    windows = window_text_by_tokens(text, model=model, target=token_target, overlap=overlap)
 
     # Build line-start offsets for entire file
     line_offsets = _build_line_offsets(text)
@@ -49,9 +47,7 @@ def chunk_text(
         abs_end_line = abs_start_line + raw_text.count("\n")
 
         # Trim leading/trailing newlines and recompute token count
-        trimmed_text, token_count, lead_trim, trail_trim = _trim_and_tokenize(
-            raw_text, tok
-        )
+        trimmed_text, token_count, lead_trim, trail_trim = _trim_and_tokenize(raw_text, tok)
         if not trimmed_text:
             continue
 

@@ -78,15 +78,14 @@ def main():
                 if gc.get("nodes"):
                     print("\n   Sample nodes:")
                     for node in gc["nodes"][:3]:
-                        print(
-                            f"      - {node.get('qualified_name')} ({node.get('kind')})"
-                        )
+                        print(f"      - {node.get('qualified_name')} ({node.get('kind')})")
 
                 if gc.get("edges"):
                     print("\n   Sample edges:")
                     for edge in gc["edges"][:3]:
                         print(
-                            f"      - {edge.get('relationship_type')}: {edge.get('source_name')} → {edge.get('target_name')}"
+                            f"      - {edge.get('relationship_type')}: "
+                            f"{edge.get('source_name')} → {edge.get('target_name')}"
                         )
             else:
                 print("\n❌ No graph_context in result")

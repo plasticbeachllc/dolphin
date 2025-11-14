@@ -11,9 +11,7 @@ _log = logging.getLogger(__name__)
 
 # Try to import sentence_transformers at module level for easier mocking
 try:
-    from sentence_transformers import (
-        CrossEncoder as _CrossEncoder,  # type: ignore[import-not-found]
-    )
+    from sentence_transformers import CrossEncoder as _CrossEncoder  # type: ignore[import-not-found]
 
     _SENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
@@ -85,9 +83,7 @@ class CrossEncoderReranker:
     ) -> list[dict]:
         """Reranks results using the cross-encoder model."""
         if not self.enabled or not self.model:
-            _log.warning(
-                "Cross-encoder is not available or enabled. Returning original order."
-            )
+            _log.warning("Cross-encoder is not available or enabled. Returning original order.")
             return list(results[:top_k])
 
         if not results:
@@ -96,9 +92,7 @@ class CrossEncoderReranker:
         pairs = [[query, r.get(text_field, "")] for r in results]
 
         try:
-            scores = self.model.predict(
-                pairs, batch_size=self.batch_size, show_progress_bar=False
-            )
+            scores = self.model.predict(pairs, batch_size=self.batch_size, show_progress_bar=False)
 
             if isinstance(scores, np.ndarray):
                 scores = scores.tolist()
@@ -107,11 +101,7 @@ class CrossEncoderReranker:
                 result["rerank_score"] = float(score)
 
             # Filter and sort
-            reranked_results = [
-                r
-                for r in results
-                if score_threshold is None or r["rerank_score"] >= score_threshold
-            ]
+            reranked_results = [r for r in results if score_threshold is None or r["rerank_score"] >= score_threshold]
             reranked_results.sort(key=lambda x: x["rerank_score"], reverse=True)
 
             return reranked_results[:top_k]

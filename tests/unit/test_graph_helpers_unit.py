@@ -23,18 +23,14 @@ class TestExtractGraphFromFile:
 
     def test_extract_graph_from_unsupported_language(self):
         """Test graph extraction from unsupported language returns empty."""
-        nodes, edges = extract_graph_from_file(
-            Path("/repo/file.txt"), "text", "plain text content"
-        )
+        nodes, edges = extract_graph_from_file(Path("/repo/file.txt"), "text", "plain text content")
 
         assert nodes == []
         assert edges == []
 
     def test_extract_graph_from_markdown_file(self):
         """Test that markdown files don't support graph extraction."""
-        nodes, edges = extract_graph_from_file(
-            Path("/repo/README.md"), "markdown", "# Title\n\nContent"
-        )
+        nodes, edges = extract_graph_from_file(Path("/repo/README.md"), "markdown", "# Title\n\nContent")
 
         assert nodes == []
         assert edges == []

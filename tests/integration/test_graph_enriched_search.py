@@ -6,10 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from kb.retrieval.graph_context import (
-    GraphContextEnricher,
-    format_graph_context_for_llm,
-)
+from kb.retrieval.graph_context import GraphContextEnricher, format_graph_context_for_llm
 from kb.store.graph_store import GraphStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
 

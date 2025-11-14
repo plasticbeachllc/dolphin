@@ -45,9 +45,7 @@ class TaskQueue:
 
     def create_task(self, repo: str, files: list[str]) -> IndexTask:
         """Create a new indexing task."""
-        task = IndexTask(
-            task_id=str(uuid.uuid4()), repo=repo, files=files, total=len(files)
-        )
+        task = IndexTask(task_id=str(uuid.uuid4()), repo=repo, files=files, total=len(files))
         self.tasks[task.task_id] = task
         return task
 

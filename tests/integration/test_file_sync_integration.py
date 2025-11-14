@@ -49,9 +49,7 @@ class TestSnapshotTracking:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(
-            name="test-repo", path=workspace, default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = sql_store.get_repo_by_name("test-repo")
 
         # Create test file
@@ -82,9 +80,7 @@ class TestSnapshotTracking:
             time.sleep(1)
 
         # Check if task completed successfully
-        assert task_completed, (
-            f"Task did not complete within timeout. Final status: {final_status}"
-        )
+        assert task_completed, f"Task did not complete within timeout. Final status: {final_status}"
         assert final_status == "completed", (
             f"Task failed with status: {final_status}, error: {status_data.get('error')}"
         )
@@ -94,9 +90,7 @@ class TestSnapshotTracking:
 
         # Verify snapshot was created
         file_record = sql_store.get_file_by_path(repo["id"], "sample.py")
-        assert file_record is not None, (
-            f"File record not found after successful indexing. Task status: {status_data}"
-        )
+        assert file_record is not None, f"File record not found after successful indexing. Task status: {status_data}"
 
         snapshot = sql_store.get_file_snapshot(file_record["id"])
         assert snapshot is not None
@@ -135,9 +129,7 @@ class TestSnapshotTracking:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(
-            name="test-repo", path=workspace, default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = sql_store.get_repo_by_name("test-repo")
 
         # Create and index file (version 1)
@@ -153,10 +145,7 @@ class TestSnapshotTracking:
 
         # Wait for completion
         for _ in range(30):
-            if (
-                client.get(f"/v1/index/status/{task_id1}").json()["status"]
-                == "completed"
-            ):
+            if client.get(f"/v1/index/status/{task_id1}").json()["status"] == "completed":
                 break
             time.sleep(1)
 
@@ -180,10 +169,7 @@ class TestSnapshotTracking:
 
         # Wait for completion
         for _ in range(30):
-            if (
-                client.get(f"/v1/index/status/{task_id2}").json()["status"]
-                == "completed"
-            ):
+            if client.get(f"/v1/index/status/{task_id2}").json()["status"] == "completed":
                 break
             time.sleep(1)
 
@@ -223,9 +209,7 @@ class TestSnapshotTracking:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(
-            name="test-repo", path=workspace, default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = sql_store.get_repo_by_name("test-repo")
 
         # Create multiple files
@@ -238,17 +222,12 @@ class TestSnapshotTracking:
 
         # Index all files
         client = TestClient(app)
-        response = client.post(
-            "/v1/index", json={"repo": "test-repo", "files": files, "incremental": True}
-        )
+        response = client.post("/v1/index", json={"repo": "test-repo", "files": files, "incremental": True})
         task_id = response.json()["task_id"]
 
         # Wait for completion
         for _ in range(60):
-            if (
-                client.get(f"/v1/index/status/{task_id}").json()["status"]
-                == "completed"
-            ):
+            if client.get(f"/v1/index/status/{task_id}").json()["status"] == "completed":
                 break
             time.sleep(1)
 
@@ -294,9 +273,7 @@ class TestPostIndexValidation:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(
-            name="test-repo", path=workspace, default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
 
         # Create multiple files to increase indexing time
         files = []
@@ -308,9 +285,7 @@ class TestPostIndexValidation:
 
         # Start indexing
         client = TestClient(app)
-        response = client.post(
-            "/v1/index", json={"repo": "test-repo", "files": files, "incremental": True}
-        )
+        response = client.post("/v1/index", json={"repo": "test-repo", "files": files, "incremental": True})
         task_id = response.json()["task_id"]
 
         # Modify a file while indexing is in progress
@@ -363,9 +338,7 @@ class TestDriftDetection:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(
-            name="test-repo", path=workspace, default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         sql_store.get_repo_by_name("test-repo")
 
         # Create and index file
@@ -381,10 +354,7 @@ class TestDriftDetection:
 
         # Wait for indexing to complete
         for _ in range(30):
-            if (
-                client.get(f"/v1/index/status/{task_id}").json()["status"]
-                == "completed"
-            ):
+            if client.get(f"/v1/index/status/{task_id}").json()["status"] == "completed":
                 break
             time.sleep(1)
 
@@ -406,11 +376,7 @@ class TestDriftDetection:
         drift_events = drift_response2.json()["drift_events"]
 
         # Should detect modification
-        modified_events = [
-            d
-            for d in drift_events
-            if d["path"] == "tracked.py" and d["drift_type"] == "modified"
-        ]
+        modified_events = [d for d in drift_events if d["path"] == "tracked.py" and d["drift_type"] == "modified"]
         assert len(modified_events) == 1
 
         # Cleanup
@@ -437,9 +403,7 @@ class TestDriftDetection:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(
-            name="test-repo", path=workspace, default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
 
         # Create and index file
         test_file = workspace / "to_delete.py"
@@ -454,10 +418,7 @@ class TestDriftDetection:
 
         # Wait for completion
         for _ in range(30):
-            if (
-                client.get(f"/v1/index/status/{task_id}").json()["status"]
-                == "completed"
-            ):
+            if client.get(f"/v1/index/status/{task_id}").json()["status"] == "completed":
                 break
             time.sleep(1)
 
@@ -472,11 +433,7 @@ class TestDriftDetection:
         drift_events = drift_response.json()["drift_events"]
 
         # Should detect deletion
-        deleted_events = [
-            d
-            for d in drift_events
-            if d["path"] == "to_delete.py" and d["drift_type"] == "deleted"
-        ]
+        deleted_events = [d for d in drift_events if d["path"] == "to_delete.py" and d["drift_type"] == "deleted"]
         assert len(deleted_events) == 1
 
         # Cleanup
@@ -503,9 +460,7 @@ class TestDriftDetection:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(
-            name="test-repo", path=workspace, default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
 
         # Create and index file
         test_file = workspace / "stable.py"
@@ -520,10 +475,7 @@ class TestDriftDetection:
 
         # Wait for completion
         for _ in range(30):
-            if (
-                client.get(f"/v1/index/status/{task_id}").json()["status"]
-                == "completed"
-            ):
+            if client.get(f"/v1/index/status/{task_id}").json()["status"] == "completed":
                 break
             time.sleep(1)
 
@@ -566,9 +518,7 @@ class TestAutomaticChangeProcessing:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(
-            name="test-repo", path=workspace, default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = sql_store.get_repo_by_name("test-repo")
 
         # Create test file
@@ -580,9 +530,7 @@ class TestAutomaticChangeProcessing:
         # 1. Record pending change (simulating file watcher)
         changes_response = client.post(
             "/v1/repos/test-repo/changes",
-            json={
-                "changes": [{"file_path": "auto_process.py", "change_type": "created"}]
-            },
+            json={"changes": [{"file_path": "auto_process.py", "change_type": "created"}]},
         )
         assert changes_response.status_code == 200
         change_ids = changes_response.json()["change_ids"]
@@ -605,10 +553,7 @@ class TestAutomaticChangeProcessing:
 
         # Wait for completion
         for _ in range(30):
-            if (
-                client.get(f"/v1/index/status/{task_id}").json()["status"]
-                == "completed"
-            ):
+            if client.get(f"/v1/index/status/{task_id}").json()["status"] == "completed":
                 break
             time.sleep(1)
 
@@ -654,9 +599,7 @@ class TestPendingChangesWorkflow:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(
-            name="test-repo", path=workspace, default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
 
         # Record pending changes
         client = TestClient(app)
@@ -713,9 +656,7 @@ class TestPendingChangesWorkflow:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(
-            name="test-repo", path=workspace, default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
 
         # Create test files
         file1 = workspace / "file1.py"
@@ -756,10 +697,7 @@ class TestPendingChangesWorkflow:
 
         # Wait for completion
         for _ in range(30):
-            if (
-                client.get(f"/v1/index/status/{task_id}").json()["status"]
-                == "completed"
-            ):
+            if client.get(f"/v1/index/status/{task_id}").json()["status"] == "completed":
                 break
             time.sleep(1)
 

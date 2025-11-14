@@ -245,27 +245,21 @@ def _classify_statement(statement: str) -> tuple[str, str | None]:
 
     # SQLMesh MODEL() declaration
     # Example: MODEL(name="user_analytics", ...)
-    sqlmesh_match = re.search(
-        r'MODEL\s*\(\s*name\s*=\s*["\']([^"\']+)["\']', statement, re.IGNORECASE
-    )
+    sqlmesh_match = re.search(r'MODEL\s*\(\s*name\s*=\s*["\']([^"\']+)["\']', statement, re.IGNORECASE)
     if sqlmesh_match:
         model_name = sqlmesh_match.group(1)
         return "sqlmesh_model", model_name
 
     # dbt model block
     # Example: {% model name="user_analytics" %}
-    dbt_model_match = re.search(
-        r'\{%\s*model\s+name\s*=\s*["\']([^"\']+)["\']', statement, re.IGNORECASE
-    )
+    dbt_model_match = re.search(r'\{%\s*model\s+name\s*=\s*["\']([^"\']+)["\']', statement, re.IGNORECASE)
     if dbt_model_match:
         model_name = dbt_model_match.group(1)
         return "dbt_model", model_name
 
     # dbt macro
     # Example: {% macro calculate_total(column_name) %}
-    dbt_macro_match = re.search(
-        r"\{%\s*macro\s+([A-Za-z_][A-Za-z0-9_]*)", statement, re.IGNORECASE
-    )
+    dbt_macro_match = re.search(r"\{%\s*macro\s+([A-Za-z_][A-Za-z0-9_]*)", statement, re.IGNORECASE)
     if dbt_macro_match:
         macro_name = dbt_macro_match.group(1)
         return "dbt_macro", macro_name

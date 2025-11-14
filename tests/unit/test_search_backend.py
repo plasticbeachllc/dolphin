@@ -30,9 +30,7 @@ def mock_providers():
 def basic_backend(mock_providers):
     """A basic backend with hybrid search enabled."""
     embedding_provider, lance_store, sql_store = mock_providers
-    return KnowledgeSearchBackend(
-        embedding_provider, lance_store, sql_store, hybrid_search_enabled=True
-    )
+    return KnowledgeSearchBackend(embedding_provider, lance_store, sql_store, hybrid_search_enabled=True)
 
 
 class TestKnowledgeSearchBackend:
@@ -45,12 +43,16 @@ class TestKnowledgeSearchBackend:
         )
 
         embedding_provider.embed_texts.return_value = [[0.1] * 1536]
-        lance_store.query.return_value = [
-            {"id": "chunk1", "_distance": 0.2, "repo": "test", "path": "p1.py"}
-        ]
+        lance_store.query.return_value = [{"id": "chunk1", "_distance": 0.2, "repo": "test", "path": "p1.py"}]
         # `reciprocal_rank_fusion` expects the `id_field` to be 'chunk_id'
         sql_store.bm25_search.return_value = [
-            {"chunk_id": "chunk2", "score": 25.0, "repo": "test", "path": "p2.py", "text_hash": "hash2"}
+            {
+                "chunk_id": "chunk2",
+                "score": 25.0,
+                "repo": "test",
+                "path": "p2.py",
+                "text_hash": "hash2",
+            }
         ]
         # Mock the hydration methods for the BM25 result
         sql_store.get_repo_by_name.return_value = {"id": 1}
@@ -80,12 +82,16 @@ class TestKnowledgeSearchBackend:
 
         embedding_provider.embed_texts.return_value = [[0.1] * 1536]
         # Vector search result will rank at position 1, giving RRF score ~0.016
-        lance_store.query.return_value = [
-            {"id": "chunk1", "_distance": 0.1, "repo": "repo", "path": "test.py"}
-        ]
+        lance_store.query.return_value = [{"id": "chunk1", "_distance": 0.1, "repo": "repo", "path": "test.py"}]
         # BM25 result will rank at position 2, giving RRF score ~0.016 (similar rank)
         sql_store.bm25_search.return_value = [
-            {"chunk_id": "chunk2", "score": 5.0, "repo": "repo", "path": "test.py", "text_hash": "hash2"}
+            {
+                "chunk_id": "chunk2",
+                "score": 5.0,
+                "repo": "repo",
+                "path": "test.py",
+                "text_hash": "hash2",
+            }
         ]
         # Mock the hydration methods for the BM25 result
         sql_store.get_repo_by_name.return_value = {"id": 1}
@@ -226,9 +232,7 @@ class TestSearchBackendIntegration:
                 "path": "test.py",
             }
         ]
-        real_backend.lance_store.upsert_chunks(
-            "test-repo", chunks_to_upsert, model="small"
-        )
+        real_backend.lance_store.upsert_chunks("test-repo", chunks_to_upsert, model="small")
         real_backend.sql_store.index_chunk_for_fts(
             content_id=chunk_id,
             repo="test-repo",
@@ -240,9 +244,7 @@ class TestSearchBackendIntegration:
         # Verify FTS indexing worked
         with real_backend.sql_store._connect() as conn:
             cur = conn.cursor()
-            cur.execute(
-                "SELECT content_id, content FROM chunks_fts WHERE repo = 'test-repo'"
-            )
+            cur.execute("SELECT content_id, content FROM chunks_fts WHERE repo = 'test-repo'")
             fts_rows = cur.fetchall()
             logging.info(f"Test: FTS entries after indexing: {len(fts_rows)}")
             for row in fts_rows:
@@ -254,12 +256,11 @@ class TestSearchBackendIntegration:
         logging.info(f"Test: Search returned {len(results)} results")
         for i, result in enumerate(results):
             logging.info(
-                f"  Result {i}: chunk_id={result.get('chunk_id')}, score={result.get('score')}, repo={result.get('repo')}, path={result.get('path')}"
+                f"  Result {i}: chunk_id={result.get('chunk_id')}, "
+                f"score={result.get('score')}, repo={result.get('repo')}, path={result.get('path')}"
             )
 
         assert len(results) >= 1, f"Expected at least 1 result, got {len(results)}"
         assert "score" in results[0], f"Result missing 'score' field: {results[0]}"
         # Expect the production-format chunk ID
-        assert results[0]["chunk_id"] == chunk_id, (
-            f"Expected chunk_id {chunk_id}, got {results[0]['chunk_id']}"
-        )
+        assert results[0]["chunk_id"] == chunk_id, f"Expected chunk_id {chunk_id}, got {results[0]['chunk_id']}"

@@ -80,9 +80,7 @@ class TestMaximalMarginalRelevance:
             {"id": "b", "score": 0.8, "query_vector": query_vector},
         ]
 
-        reranked = maximal_marginal_relevance(
-            query_vector, results, lambda_param=0.7, id_field="id"
-        )
+        reranked = maximal_marginal_relevance(query_vector, results, lambda_param=0.7, id_field="id")
 
         assert len(reranked) == 2
         assert all("mmr_score" in r for r in reranked)
@@ -167,14 +165,10 @@ class TestMaximalMarginalRelevance:
         ]
 
         # High lambda (relevance-focused)
-        relevance_focused = maximal_marginal_relevance(
-            query_vector, results, lambda_param=0.9
-        )
+        relevance_focused = maximal_marginal_relevance(query_vector, results, lambda_param=0.9)
 
         # Low lambda (diversity-focused)
-        diversity_focused = maximal_marginal_relevance(
-            query_vector, results, lambda_param=0.3
-        )
+        diversity_focused = maximal_marginal_relevance(query_vector, results, lambda_param=0.3)
 
         # Both should preserve all results but potentially reorder
         assert len(relevance_focused) == 4

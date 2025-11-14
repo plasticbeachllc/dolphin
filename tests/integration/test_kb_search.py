@@ -42,9 +42,7 @@ def test_search_returns_provenance_rich_snippets():
         assert hit["total_tokens"] > hit["snippet_tokens"]
         assert hit["truncated"] is True
         snippet_lc = hit["snippet"].lower()
-        assert "calibration" in snippet_lc and "metrics" in snippet_lc, (
-            "Snippet should retain the query terms"
-        )
+        assert "calibration" in snippet_lc and "metrics" in snippet_lc, "Snippet should retain the query terms"
 
         # Meta payload echoes request parameters.
         assert data["meta"]["max_snippet_tokens"] == 12

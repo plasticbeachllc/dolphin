@@ -38,9 +38,7 @@ def generate_fts_content_id(repo_id: int, file_id: int, text_hash: str) -> str:
     return hashlib.sha256(composite.encode()).hexdigest()[:32]
 
 
-def get_repo_and_file_ids(
-    conn: sqlite3.Connection, repo_name: str, file_path: str
-) -> tuple[int | None, int | None]:
+def get_repo_and_file_ids(conn: sqlite3.Connection, repo_name: str, file_path: str) -> tuple[int | None, int | None]:
     """Get repo_id and file_id from names/paths.
 
     Args:
@@ -61,9 +59,7 @@ def get_repo_and_file_ids(
     repo_id = repo_row[0]
 
     # Get file_id
-    cursor.execute(
-        "SELECT id FROM files WHERE repo_id = ? AND path = ?", (repo_id, file_path)
-    )
+    cursor.execute("SELECT id FROM files WHERE repo_id = ? AND path = ?", (repo_id, file_path))
     file_row = cursor.fetchone()
     if not file_row:
         return repo_id, None
@@ -95,13 +91,9 @@ def migrate_fts5_content_ids(db_path: Path) -> dict[str, int]:
 
     try:
         # Step 1: Check if FTS5 table exists and has data
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
         if not cursor.fetchone():
-            logger.info(
-                "[FTS5 Migration 001] No chunks_fts table found, skipping migration"
-            )
+            logger.info("[FTS5 Migration 001] No chunks_fts table found, skipping migration")
             return stats
 
         # Read all existing FTS5 entries
@@ -118,9 +110,7 @@ def migrate_fts5_content_ids(db_path: Path) -> dict[str, int]:
             logger.info("[FTS5 Migration 001] No entries to migrate")
             return stats
 
-        logger.info(
-            f"[FTS5 Migration 001] Read {stats['entries_read']} entries from chunks_fts"
-        )
+        logger.info(f"[FTS5 Migration 001] Read {stats['entries_read']} entries from chunks_fts")
 
         # Step 2: Transform entries to new format
         new_entries: dict[str, dict] = {}  # Use dict to deduplicate by new content_id
@@ -135,8 +125,7 @@ def migrate_fts5_content_ids(db_path: Path) -> dict[str, int]:
 
             if repo_id is None or file_id is None:
                 logger.warning(
-                    f"[FTS5 Migration 001] Skipping entry: "
-                    f"repo={repo_name}, path={file_path} (not found in metadata)"
+                    f"[FTS5 Migration 001] Skipping entry: repo={repo_name}, path={file_path} (not found in metadata)"
                 )
                 stats["errors"] += 1
                 continue
@@ -147,10 +136,7 @@ def migrate_fts5_content_ids(db_path: Path) -> dict[str, int]:
             # Check for duplicates (same content indexed with different embed_models)
             if new_content_id in new_entries:
                 stats["duplicates_merged"] += 1
-                logger.debug(
-                    f"[FTS5 Migration 001] Duplicate found: "
-                    f"{new_content_id} (keeping first occurrence)"
-                )
+                logger.debug(f"[FTS5 Migration 001] Duplicate found: {new_content_id} (keeping first occurrence)")
                 continue
 
             # Store entry with new content_id
@@ -238,9 +224,7 @@ def check_migration_needed(db_path: Path) -> bool:
         cursor = conn.cursor()
 
         # Check if table exists
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
         if not cursor.fetchone():
             return False  # No table, no migration needed
 

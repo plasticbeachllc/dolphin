@@ -21,9 +21,7 @@ class TestPipelineIntegration:
     ):
         """Test complete pipeline scanning workflow."""
         # Setup
-        config = KBConfig(
-            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
-        )
+        config = KBConfig(default_embed_model="small", ignore=["*.pyc", "__pycache__/*"])
 
         # Create stores
         metadata_store = SQLiteMetadataStore(temp_db_path)
@@ -34,9 +32,7 @@ class TestPipelineIntegration:
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         # Register test repository
-        metadata_store.record_repo(
-            name="test-repo", path=sample_repo_path, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="test-repo", path=sample_repo_path, default_embed_model="small")
 
         # Test scanning
         result = pipeline.scan("test-repo", dry_run=True, force=True)
@@ -59,9 +55,7 @@ class TestPipelineIntegration:
     ):
         """Test complete pipeline indexing workflow."""
         # Setup
-        config = KBConfig(
-            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
-        )
+        config = KBConfig(default_embed_model="small", ignore=["*.pyc", "__pycache__/*"])
 
         # Create stores
         metadata_store = SQLiteMetadataStore(temp_db_path)
@@ -72,9 +66,7 @@ class TestPipelineIntegration:
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         # Register test repository
-        metadata_store.record_repo(
-            name="test-repo", path=sample_repo_path, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="test-repo", path=sample_repo_path, default_embed_model="small")
 
         # Test indexing with dry run
         result = pipeline.index("test-repo", dry_run=True, force=True)
@@ -100,9 +92,7 @@ class TestPipelineIntegration:
     ):
         """Test incremental indexing workflow."""
         # Setup
-        config = KBConfig(
-            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
-        )
+        config = KBConfig(default_embed_model="small", ignore=["*.pyc", "__pycache__/*"])
 
         # Create stores
         metadata_store = SQLiteMetadataStore(temp_db_path)
@@ -113,9 +103,7 @@ class TestPipelineIntegration:
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         # Register test repository
-        metadata_store.record_repo(
-            name="test-repo", path=sample_repo_path, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="test-repo", path=sample_repo_path, default_embed_model="small")
 
         # First full index
         result1 = pipeline.index("test-repo", dry_run=True, force=True)
@@ -136,9 +124,7 @@ class TestPipelineIntegration:
     ):
         """Test pipeline error handling and recovery."""
         # Setup
-        config = KBConfig(
-            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
-        )
+        config = KBConfig(default_embed_model="small", ignore=["*.pyc", "__pycache__/*"])
 
         # Create stores
         metadata_store = SQLiteMetadataStore(temp_db_path)
@@ -177,9 +163,7 @@ class TestPipelineAsyncIntegration:
         import asyncio
 
         # Setup
-        config = KBConfig(
-            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
-        )
+        config = KBConfig(default_embed_model="small", ignore=["*.pyc", "__pycache__/*"])
 
         # Create stores
         metadata_store = SQLiteMetadataStore(temp_db_path)
@@ -189,23 +173,16 @@ class TestPipelineAsyncIntegration:
         # Register multiple repositories
         repo_names = [f"test-repo-{i}" for i in range(3)]
         for repo_name in repo_names:
-            metadata_store.record_repo(
-                name=repo_name, path=sample_repo_path, default_embed_model="small"
-            )
+            metadata_store.record_repo(name=repo_name, path=sample_repo_path, default_embed_model="small")
 
         # Create pipelines
-        pipelines = [
-            IngestionPipeline(config, lancedb_store, metadata_store) for _ in repo_names
-        ]
+        pipelines = [IngestionPipeline(config, lancedb_store, metadata_store) for _ in repo_names]
 
         # Run concurrent scans
         async def run_scan(pipeline, repo_name):
             return pipeline.scan(repo_name, dry_run=True, force=True)
 
-        tasks = [
-            run_scan(pipeline, repo_name)
-            for pipeline, repo_name in zip(pipelines, repo_names)
-        ]
+        tasks = [run_scan(pipeline, repo_name) for pipeline, repo_name in zip(pipelines, repo_names)]
 
         results = await asyncio.gather(*tasks)
 

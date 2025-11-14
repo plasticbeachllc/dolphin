@@ -41,10 +41,7 @@ class TestTokenUtilities:
 
     def test_window_text_by_tokens_with_overlap(self):
         """Test token windowing with overlap between windows."""
-        text = (
-            "This is a longer text that should be split into multiple windows with overlap."
-            * 5
-        )
+        text = "This is a longer text that should be split into multiple windows with overlap." * 5
         windows = window_text_by_tokens(text, model="small", target=20, overlap=5)
 
         assert len(windows) > 1
@@ -146,9 +143,7 @@ Line 10"""
         count = count_tokens(unicode_text)
         assert count > 0
 
-        windows = window_text_by_tokens(
-            unicode_text, model="small", target=10, overlap=2
-        )
+        windows = window_text_by_tokens(unicode_text, model="small", target=10, overlap=2)
         assert len(windows) >= 1
 
         # Verify content preservation

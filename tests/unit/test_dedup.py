@@ -35,9 +35,7 @@ class TestChunkDeduplication:
         embed_model = "small"
 
         def _make_chunk(text: str, start: int) -> Chunk:
-            return Chunk(
-                text=text, start_line=start, end_line=start, token_count=len(text)
-            )
+            return Chunk(text=text, start_line=start, end_line=start, token_count=len(text))
 
         chunk_new = _make_chunk("print('hi')\n", 1)
         chunk_new.text_hash = hash_text(chunk_new.text)
@@ -75,18 +73,14 @@ class TestChunkDeduplication:
         embed_model = "small"
 
         def _make_chunk(text: str, start: int) -> Chunk:
-            return Chunk(
-                text=text, start_line=start, end_line=start, token_count=len(text)
-            )
+            return Chunk(text=text, start_line=start, end_line=start, token_count=len(text))
 
         chunk_new = _make_chunk("print('hi')\n", 1)
         chunk_new.text_hash = hash_text(chunk_new.text)
         chunk_without_hash = _make_chunk("print('bye')\n", 2)
 
         # Persist one chunk hash and ensure it is recognized as unchanged
-        store.upsert_chunk_content_row(
-            repo_id, file_id, chunk_new.text_hash, embed_model
-        )
+        store.upsert_chunk_content_row(repo_id, file_id, chunk_new.text_hash, embed_model)
         changed, unchanged = dedup.filter_unchanged_chunks(
             [chunk_new, chunk_without_hash], repo_id, file_id, embed_model
         )
@@ -116,9 +110,7 @@ class TestChunkDeduplication:
         embed_model = "small"
 
         def _make_chunk(text: str, start: int) -> Chunk:
-            return Chunk(
-                text=text, start_line=start, end_line=start, token_count=len(text)
-            )
+            return Chunk(text=text, start_line=start, end_line=start, token_count=len(text))
 
         chunk_new = _make_chunk("print('hi')\n", 1)
         chunk_new.text_hash = hash_text(chunk_new.text)
@@ -127,9 +119,7 @@ class TestChunkDeduplication:
         with patch.object(store, "get_existing_content_hashes_for_file") as mock_method:
             mock_method.side_effect = RuntimeError("boom")
 
-            changed, unchanged = dedup.filter_unchanged_chunks(
-                [chunk_new], repo_id, file_id, embed_model
-            )
+            changed, unchanged = dedup.filter_unchanged_chunks([chunk_new], repo_id, file_id, embed_model)
 
             assert len(changed) == 1 and len(unchanged) == 0
 
@@ -166,9 +156,7 @@ class TestChunkDeduplication:
         embed_model = "small"
 
         def _make_chunk(text: str, start: int) -> Chunk:
-            return Chunk(
-                text=text, start_line=start, end_line=start, token_count=len(text)
-            )
+            return Chunk(text=text, start_line=start, end_line=start, token_count=len(text))
 
         chunk = _make_chunk("print('moved')\n", 1)
         chunk.text_hash = hash_text(chunk.text)
@@ -177,9 +165,7 @@ class TestChunkDeduplication:
         store.upsert_chunk_content_row(repo_id, file1_id, chunk.text_hash, embed_model)
 
         # Now check the same chunk in file2 - should be treated as changed (moved)
-        changed, unchanged = dedup.filter_unchanged_chunks(
-            [chunk], repo_id, file2_id, embed_model
-        )
+        changed, unchanged = dedup.filter_unchanged_chunks([chunk], repo_id, file2_id, embed_model)
 
         # The chunk is the same content but in a different file, so it should be changed
         assert len(changed) == 1
@@ -207,9 +193,7 @@ class TestChunkDeduplication:
         dedup = ChunkDeduplicator(store)
 
         def _make_chunk(text: str, start: int) -> Chunk:
-            return Chunk(
-                text=text, start_line=start, end_line=start, token_count=len(text)
-            )
+            return Chunk(text=text, start_line=start, end_line=start, token_count=len(text))
 
         chunk = _make_chunk("print('hi')\n", 1)
         chunk.text_hash = hash_text(chunk.text)
@@ -218,15 +202,11 @@ class TestChunkDeduplication:
         store.upsert_chunk_content_row(repo_id, file_id, chunk.text_hash, "small")
 
         # Check with small model - should be unchanged
-        changed, unchanged = dedup.filter_unchanged_chunks(
-            [chunk], repo_id, file_id, "small"
-        )
+        changed, unchanged = dedup.filter_unchanged_chunks([chunk], repo_id, file_id, "small")
         assert unchanged == [chunk]
         assert len(changed) == 0
 
         # Check with large model - should be changed (different embedding model)
-        changed, unchanged = dedup.filter_unchanged_chunks(
-            [chunk], repo_id, file_id, "large"
-        )
+        changed, unchanged = dedup.filter_unchanged_chunks([chunk], repo_id, file_id, "large")
         assert len(unchanged) == 0
         assert len(changed) == 1

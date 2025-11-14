@@ -1,6 +1,5 @@
 """Type relationship extraction for inheritance and interfaces."""
 
-
 import tree_sitter_python as tspython
 import tree_sitter_typescript as tsts
 from tree_sitter import Language, Node
@@ -51,11 +50,7 @@ class TypeGraphExtractor:
 
                 # Find the GraphNode for this class
                 source_class = next(
-                    (
-                        cls
-                        for cls in existing_classes
-                        if cls.name == class_name and cls.file_path == file_path
-                    ),
+                    (cls for cls in existing_classes if cls.name == class_name and cls.file_path == file_path),
                     None,
                 )
 
@@ -68,11 +63,7 @@ class TypeGraphExtractor:
                 for base_class_name in base_classes:
                     # Try to find the base class in existing classes
                     target_class = next(
-                        (
-                            cls
-                            for cls in existing_classes
-                            if cls.name == base_class_name
-                        ),
+                        (cls for cls in existing_classes if cls.name == base_class_name),
                         None,
                     )
 
@@ -132,11 +123,7 @@ class TypeGraphExtractor:
                 current_class_name = node.text.decode("utf8")
                 # Find the GraphNode for this class
                 current_class_node = next(
-                    (
-                        cls
-                        for cls in existing_classes
-                        if cls.name == current_class_name and cls.file_path == file_path
-                    ),
+                    (cls for cls in existing_classes if cls.name == current_class_name and cls.file_path == file_path),
                     None,
                 )
 
@@ -168,12 +155,7 @@ class TypeGraphExtractor:
 
                 # Try to find the interface
                 interface_node = next(
-                    (
-                        cls
-                        for cls in existing_classes
-                        if cls.name == interface_name
-                        and cls.node_type == NodeType.CLASS
-                    ),
+                    (cls for cls in existing_classes if cls.name == interface_name and cls.node_type == NodeType.CLASS),
                     None,
                 )
 

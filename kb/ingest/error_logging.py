@@ -29,9 +29,7 @@ class ErrorLogger:
         # Generate log filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         session_suffix = f"_session_{session_id}" if session_id else ""
-        self.log_file = (
-            self.log_dir / f"indexing_errors_{timestamp}{session_suffix}.log"
-        )
+        self.log_file = self.log_dir / f"indexing_errors_{timestamp}{session_suffix}.log"
 
         # Lazy logger/file creation
         self._logger_name = f"pb_kb_ingest_{self.session_id or 'unknown'}"
@@ -51,9 +49,7 @@ class ErrorLogger:
             # File handler
             file_handler = logging.FileHandler(self.log_file)
             file_handler.setLevel(logging.ERROR)
-            file_formatter = logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-            )
+            file_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
             file_handler.setFormatter(file_formatter)
             logger.addHandler(file_handler)
 
@@ -113,9 +109,7 @@ class ErrorLogger:
 # Convenience function for quick error logging without full setup
 
 
-def log_error_to_file(
-    repo_root: Path, message: str, session_id: str | None = None
-) -> None:
+def log_error_to_file(repo_root: Path, message: str, session_id: str | None = None) -> None:
     """Quick convenience function to log an error without full ErrorLogger setup.
 
     Args:

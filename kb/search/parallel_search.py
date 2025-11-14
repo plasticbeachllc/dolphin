@@ -130,20 +130,14 @@ class ParallelHybridSearch:
         """
         # Create wrapper functions from stores if provided
         if vector_search_fn is None and vector_store is not None:
-            self.vector_search_fn = (
-                lambda query_embedding, top_k, **kwargs: vector_store.query(
-                    query_embedding, top_k, **kwargs
-                )
+            self.vector_search_fn = lambda query_embedding, top_k, **kwargs: vector_store.query(
+                query_embedding, top_k, **kwargs
             )
         else:
-            self.vector_search_fn: Callable[[Any, Any], Any] | None = (
-                vector_search_fn
-            )
+            self.vector_search_fn: Callable[[Any, Any], Any] | None = vector_search_fn
 
         if bm25_search_fn is None and bm25_store is not None:
-            self.bm25_search_fn = lambda query, top_k, **kwargs: bm25_store.search(
-                query, top_k, **kwargs
-            )
+            self.bm25_search_fn = lambda query, top_k, **kwargs: bm25_store.search(query, top_k, **kwargs)
         else:
             self.bm25_search_fn: Callable[[Any, Any], Any] | None = bm25_search_fn
 
@@ -187,14 +181,10 @@ class ParallelHybridSearch:
 
         if not self.enable_parallel or self.bm25_search_fn is None:
             # Fall back to sequential
-            return await self._search_sequential(
-                query, query_embedding, top_k, **kwargs
-            )
+            return await self._search_sequential(query, query_embedding, top_k, **kwargs)
 
         # Execute searches in parallel
-        vector_task = asyncio.create_task(
-            self._vector_search_async(query_embedding, top_k, **kwargs)
-        )
+        vector_task = asyncio.create_task(self._vector_search_async(query_embedding, top_k, **kwargs))
 
         bm25_task = asyncio.create_task(self._bm25_search_async(query, top_k, **kwargs))
 
@@ -218,18 +208,12 @@ class ParallelHybridSearch:
         except Exception as e:
             logger.error(f"Parallel search failed: {e}")
             # Fall back to sequential
-            return await self._search_sequential(
-                query, query_embedding, top_k, **kwargs
-            )
+            return await self._search_sequential(query, query_embedding, top_k, **kwargs)
 
         # Merge results using reciprocal rank fusion
         # Handle potential exceptions by converting to empty list
-        vec_list: list[SearchResult] = (
-            vector_results if not isinstance(vector_results, BaseException) else []
-        )
-        bm25_list: list[SearchResult] = (
-            bm25_results if not isinstance(bm25_results, BaseException) else []
-        )
+        vec_list: list[SearchResult] = vector_results if not isinstance(vector_results, BaseException) else []
+        bm25_list: list[SearchResult] = bm25_results if not isinstance(bm25_results, BaseException) else []
         merged = self._merge_results(
             vec_list,
             bm25_list,
@@ -260,11 +244,7 @@ class ParallelHybridSearch:
         loop = asyncio.get_event_loop()
         results = await loop.run_in_executor(
             None,
-            lambda: (
-                self.vector_search_fn(query_embedding, top_k, **kwargs)
-                if self.vector_search_fn
-                else []
-            ),
+            lambda: (self.vector_search_fn(query_embedding, top_k, **kwargs) if self.vector_search_fn else []),
         )
 
         return [
@@ -350,9 +330,7 @@ class ParallelHybridSearch:
                     query_embedding = self.embedding_provider.embed_query(query)
 
         # Vector search
-        vector_results = await self._vector_search_async(
-            query_embedding, top_k, **kwargs
-        )
+        vector_results = await self._vector_search_async(query_embedding, top_k, **kwargs)
 
         # BM25 search
         bm25_results = []
@@ -414,9 +392,7 @@ class ParallelHybridSearch:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-        return loop.run_until_complete(
-            self.search_async(query, query_embedding, top_k, **kwargs)
-        )
+        return loop.run_until_complete(self.search_async(query, query_embedding, top_k, **kwargs))
 
     def get_stats(self) -> dict[str, Any]:
         """Get search statistics.

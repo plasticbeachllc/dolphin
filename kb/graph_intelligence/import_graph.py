@@ -69,9 +69,7 @@ class ImportGraphExtractor:
 
                 if target_file:
                     # Create target module node
-                    target_module_name = target_file.replace("/", ".").replace(
-                        ".py", ""
-                    )
+                    target_module_name = target_file.replace("/", ".").replace(".py", "")
                     target_module_node = GraphNode(
                         id=str(uuid.uuid4()),
                         repo_id=repo_id,
@@ -97,11 +95,7 @@ class ImportGraphExtractor:
                             repo_id=repo_id,
                             attributes={
                                 "import_line": node.start_point[0],
-                                "import_type": (
-                                    "from"
-                                    if capture_name == "from_module"
-                                    else "import"
-                                ),
+                                "import_type": ("from" if capture_name == "from_module" else "import"),
                                 "commit_sha": commit_sha,
                             },
                         )
@@ -136,12 +130,7 @@ class ImportGraphExtractor:
         captures = import_query.captures(tree_root)
 
         # Create a module node for this file
-        module_name = (
-            source_file.replace("/", ".")
-            .replace(".ts", "")
-            .replace(".tsx", "")
-            .replace(".js", "")
-        )
+        module_name = source_file.replace("/", ".").replace(".ts", "").replace(".tsx", "").replace(".js", "")
         source_module_node = GraphNode(
             id=str(uuid.uuid4()),
             repo_id=repo_id,
@@ -164,17 +153,12 @@ class ImportGraphExtractor:
                 import_path = node.text.decode("utf8").strip("\"'")
 
                 # Try to resolve to a file in the repo
-                target_file = self._resolve_typescript_import(
-                    import_path, source_file, all_files
-                )
+                target_file = self._resolve_typescript_import(import_path, source_file, all_files)
 
                 if target_file:
                     # Create target module node
                     target_module_name = (
-                        target_file.replace("/", ".")
-                        .replace(".ts", "")
-                        .replace(".tsx", "")
-                        .replace(".js", "")
+                        target_file.replace("/", ".").replace(".ts", "").replace(".tsx", "").replace(".js", "")
                     )
                     target_module_node = GraphNode(
                         id=str(uuid.uuid4()),
@@ -212,9 +196,7 @@ class ImportGraphExtractor:
 
         return nodes, edges
 
-    def _resolve_python_import(
-        self, import_path: str, all_files: list[str]
-    ) -> str | None:
+    def _resolve_python_import(self, import_path: str, all_files: list[str]) -> str | None:
         """Resolve a Python import path to an actual file in the repo."""
         # Convert dotted import to file path
         possible_paths = [
@@ -228,9 +210,7 @@ class ImportGraphExtractor:
 
         return None
 
-    def _resolve_typescript_import(
-        self, import_path: str, source_file: str, all_files: list[str]
-    ) -> str | None:
+    def _resolve_typescript_import(self, import_path: str, source_file: str, all_files: list[str]) -> str | None:
         """Resolve a TypeScript import path to an actual file."""
         # Handle relative imports
         if import_path.startswith("."):

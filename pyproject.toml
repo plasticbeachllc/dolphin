@@ -238,6 +238,8 @@ disable = [
 ]
 
 [tool.ruff]
+line-length = 120
+
 # Configure linting behavior
 [tool.ruff.lint]
 select = [

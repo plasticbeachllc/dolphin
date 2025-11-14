@@ -132,21 +132,15 @@ def generate_test_queries(n: int = 10, dim: int = 1536) -> list[list[float]]:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Benchmark ANN parameter configurations for LanceDB"
-    )
+    parser = argparse.ArgumentParser(description="Benchmark ANN parameter configurations for LanceDB")
     parser.add_argument(
         "--store-path",
         type=Path,
         default=Path.home() / ".dolphin" / "knowledge_store",
         help="Path to LanceDB store",
     )
-    parser.add_argument(
-        "--queries", type=int, default=10, help="Number of test queries"
-    )
-    parser.add_argument(
-        "--iterations", type=int, default=50, help="Iterations per query"
-    )
+    parser.add_argument("--queries", type=int, default=10, help="Number of test queries")
+    parser.add_argument("--iterations", type=int, default=50, help="Iterations per query")
     parser.add_argument("--output", type=Path, help="Output JSON file for results")
 
     args = parser.parse_args()
@@ -164,9 +158,7 @@ def main():
     ground_truth_params = ANNParams.for_development()
     ground_truth_results = []
     for query in queries:
-        results = store.query(
-            query, model="small", top_k=10, ann_params=ground_truth_params
-        )
+        results = store.query(query, model="small", top_k=10, ann_params=ground_truth_params)
         ground_truth_results.append({r["id"] for r in results})
 
     # Benchmark configurations
@@ -197,9 +189,7 @@ def main():
         print(f"  nprobes={params.nprobes}, refine_factor={params.refine_factor}")
 
         # Latency benchmark
-        latency_results = benchmark_configuration(
-            store, params, queries, args.iterations
-        )
+        latency_results = benchmark_configuration(store, params, queries, args.iterations)
 
         # Recall benchmark
         recall = benchmark_recall(store, params, queries, ground_truth_results)
@@ -220,9 +210,7 @@ def main():
     print("\n" + "=" * 80)
     print("COMPARISON TABLE")
     print("=" * 80)
-    print(
-        f"{'Config':<20} {'p50 (ms)':<12} {'p95 (ms)':<12} {'Recall':<10} {'Speedup':<10}"
-    )
+    print(f"{'Config':<20} {'p50 (ms)':<12} {'p95 (ms)':<12} {'Recall':<10} {'Speedup':<10}")
     print("-" * 80)
 
     for name, benchmark in results["benchmarks"].items():

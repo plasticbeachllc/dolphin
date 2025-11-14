@@ -164,9 +164,7 @@ def match_result(actual: dict, expected: dict) -> bool:
     return True
 
 
-def evaluate_scenario(
-    scenario: GoldenScenario, backend: KnowledgeSearchBackend, top_k: int = 10
-) -> dict[str, Any]:
+def evaluate_scenario(scenario: GoldenScenario, backend: KnowledgeSearchBackend, top_k: int = 10) -> dict[str, Any]:
     """Evaluate a single scenario."""
     # Run query
     repo = scenario.repo or ""
@@ -234,9 +232,7 @@ def evaluate_scenario(
 
         # Precision@K
         relevant_in_top_k = sum(
-            1
-            for actual in actual_results[:k]
-            if any(match_result(actual, exp) for exp in expected)
+            1 for actual in actual_results[:k] if any(match_result(actual, exp) for exp in expected)
         )
         precision_at_k[k] = relevant_in_top_k / k if k > 0 else 0.0
 
@@ -253,10 +249,7 @@ def evaluate_scenario(
     difficulty = scenario.difficulty
     threshold = thresholds.get(difficulty, thresholds["medium"])
 
-    passed = (
-        reciprocal_rank >= threshold["mrr"]
-        and precision_at_k.get(5, 0.0) >= threshold["p@5"]
-    )
+    passed = reciprocal_rank >= threshold["mrr"] and precision_at_k.get(5, 0.0) >= threshold["p@5"]
 
     return {
         "id": scenario.id,
@@ -272,19 +265,13 @@ def evaluate_scenario(
             "r@10": recall_at_k.get(10, 0.0),
         },
         "expected_count": len(expected),
-        "found_count": sum(
-            1
-            for actual in actual_results
-            if any(match_result(actual, exp) for exp in expected)
-        ),
+        "found_count": sum(1 for actual in actual_results if any(match_result(actual, exp) for exp in expected)),
         "actual_results": actual_results[:5],  # Top 5 for reporting
     }
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Evaluate retrieval quality using golden scenarios"
-    )
+    parser = argparse.ArgumentParser(description="Evaluate retrieval quality using golden scenarios")
     parser.add_argument(
         "--scenarios",
         type=Path,
@@ -298,9 +285,7 @@ def main():
     )
     parser.add_argument("--output", type=Path, help="Output JSON file for results")
     parser.add_argument("--verbose", action="store_true", help="Show per-query results")
-    parser.add_argument(
-        "--top-k", type=int, default=10, help="Number of results to retrieve per query"
-    )
+    parser.add_argument("--top-k", type=int, default=10, help="Number of results to retrieve per query")
     parser.add_argument(
         "--store-path",
         type=Path,
@@ -411,9 +396,7 @@ def main():
         if args.verbose:
             status_symbol = "✓" if status == "pass" else "✗"
             print(f"Status: {status_symbol} {status.upper()}")
-            print(
-                f"MRR: {reciprocal_rank:.3f}, P@5: {precision_at_k[5]:.3f}, R@10: {recall_at_k[10]:.3f}"
-            )
+            print(f"MRR: {reciprocal_rank:.3f}, P@5: {precision_at_k[5]:.3f}, R@10: {recall_at_k[10]:.3f}")
 
     # Compute summary
     overall_summary = overall_metrics.compute_summary()
@@ -487,9 +470,7 @@ def main():
 
     # Overall status
     print("\n" + "=" * 80)
-    overall_passed = (
-        overall_summary.get("mrr", 0) >= 0.85 and overall_summary.get("p@5", 0) >= 0.80
-    )
+    overall_passed = overall_summary.get("mrr", 0) >= 0.85 and overall_summary.get("p@5", 0) >= 0.80
     if overall_passed:
         print("Status: PASS ✓")
     else:
@@ -512,13 +493,9 @@ def main():
             "pass_rate": passed / len(scenarios) if scenarios else 0,
             "metrics": overall_summary,
         },
-        "by_category": {
-            category: metrics.compute_summary()
-            for category, metrics in metrics_by_category.items()
-        },
+        "by_category": {category: metrics.compute_summary() for category, metrics in metrics_by_category.items()},
         "by_difficulty": {
-            difficulty: metrics.compute_summary()
-            for difficulty, metrics in metrics_by_difficulty.items()
+            difficulty: metrics.compute_summary() for difficulty, metrics in metrics_by_difficulty.items()
         },
         "scenarios": results,
     }

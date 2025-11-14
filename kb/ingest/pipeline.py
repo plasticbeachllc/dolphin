@@ -8,10 +8,7 @@ from typing import Any
 
 from pathspec import PathSpec
 
-from ..chunkers.registry import (
-    chunk_file as chunk_file_with_config,
-    detect_language_from_extension,
-)
+from ..chunkers.registry import chunk_file as chunk_file_with_config, detect_language_from_extension
 from ..config import KBConfig
 from ..embeddings.provider import embed_texts_with_retry
 from ..graph_intelligence.graph_manager import GraphManager
@@ -119,18 +116,12 @@ class IngestionPipeline:
             "metrics_computed": True,
             "pagerank_nodes": len(metrics.get("pagerank", {})),
             "betweenness_nodes": len(metrics.get("betweenness_centrality", {})),
-            "communities": (
-                len(set(metrics.get("community", {}).values()))
-                if "community" in metrics
-                else 0
-            ),
+            "communities": (len(set(metrics.get("community", {}).values())) if "community" in metrics else 0),
         }
 
     def _git(self, root: Path, *args: str) -> str:
         try:
-            out = subprocess.check_output(
-                ["git", "-C", str(root), *args], stderr=subprocess.STDOUT
-            )
+            out = subprocess.check_output(["git", "-C", str(root), *args], stderr=subprocess.STDOUT)
             return out.decode("utf-8")
         except subprocess.CalledProcessError as e:
             raise RuntimeError(e.output.decode("utf-8", errors="ignore"))
@@ -138,16 +129,10 @@ class IngestionPipeline:
     def _ensure_clean_working_tree(self, root: Path) -> None:
         # only consider tracked files
         try:
-            subprocess.check_call(
-                ["git", "-C", str(root), "update-index", "-q", "--refresh"]
-            )
-            subprocess.check_call(
-                ["git", "-C", str(root), "diff-index", "--quiet", "HEAD", "--"]
-            )
+            subprocess.check_call(["git", "-C", str(root), "update-index", "-q", "--refresh"])
+            subprocess.check_call(["git", "-C", str(root), "diff-index", "--quiet", "HEAD", "--"])
         except subprocess.CalledProcessError:
-            raise RuntimeError(
-                "Working tree has tracked changes; commit or stash before indexing."
-            )
+            raise RuntimeError("Working tree has tracked changes; commit or stash before indexing.")
 
     def _drop_repo_index(self, repo_id: int, repo_name: str) -> None:
         """Drop all indexed data for a repository (vectors and metadata).
@@ -246,9 +231,7 @@ class IngestionPipeline:
 
                 # 5. Delete file snapshots (references files)
                 if table_exists("file_snapshots"):
-                    cur.execute(
-                        "DELETE FROM file_snapshots WHERE repo_id = ?", (repo_id,)
-                    )
+                    cur.execute("DELETE FROM file_snapshots WHERE repo_id = ?", (repo_id,))
 
                 # 6. Delete files
                 cur.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
@@ -258,9 +241,7 @@ class IngestionPipeline:
 
                 # 8. Delete pending changes
                 if table_exists("pending_changes"):
-                    cur.execute(
-                        "DELETE FROM pending_changes WHERE repo_id = ?", (repo_id,)
-                    )
+                    cur.execute("DELETE FROM pending_changes WHERE repo_id = ?", (repo_id,))
 
                 conn.commit()
                 print("  Metadata cleared successfully")
@@ -269,9 +250,7 @@ class IngestionPipeline:
                 print(f"  Error clearing metadata: {e}")
                 raise
 
-    def scan(
-        self, repo_name: str, *, dry_run: bool = False, force: bool = False
-    ) -> dict:
+    def scan(self, repo_name: str, *, dry_run: bool = False, force: bool = False) -> dict:
         """Perform scanning for the named repository and persist file catalog.
 
         Returns a summary dictionary with counts and session info.
@@ -287,24 +266,18 @@ class IngestionPipeline:
         from ..embeddings.provider import SUPPORTED_MODELS
 
         if embed_model not in SUPPORTED_MODELS:
-            raise ValueError(
-                f"Unsupported embed model configured for repo {repo_name}: {embed_model}"
-            )
+            raise ValueError(f"Unsupported embed model configured for repo {repo_name}: {embed_model}")
 
         # Ensure clean working tree and capture provenance (unless forced)
         if not force:
             self._ensure_clean_working_tree(root)
         else:
-            print(
-                f"Warning: force=True, skipping clean working tree check for {repo_name}"
-            )
+            print(f"Warning: force=True, skipping clean working tree check for {repo_name}")
         commit_sha = self._git(root, "rev-parse", "HEAD").strip()
         branch = self._git(root, "rev-parse", "--abbrev-ref", "HEAD").strip()
 
         # Start session
-        session_id = self.metadata.begin_session(
-            repo_id, commit_sha, branch, embed_model
-        )
+        session_id = self.metadata.begin_session(repo_id, commit_sha, branch, embed_model)
 
         # Build ignore set (merge config + security patterns)
         extra_security = {
@@ -317,9 +290,7 @@ class IngestionPipeline:
             "**/*service_account.json",
             "**/*auth.json",
         }
-        ignore_patterns = build_ignore_set(
-            self.config.ignore, self.config.ignore_exceptions
-        )
+        ignore_patterns = build_ignore_set(self.config.ignore, self.config.ignore_exceptions)
         # Merge repo-level ignores from .dolphin/config.toml
         repo_level_patterns, repo_level_exceptions = load_repo_ignores(root)
         if repo_level_patterns:
@@ -353,16 +324,12 @@ class IngestionPipeline:
                     is_binary=c.is_binary,
                     size_bytes=c.size_bytes,
                 )
-            self.metadata.bump_session_counters(
-                session_id, files_indexed=len(candidates)
-            )
+            self.metadata.bump_session_counters(session_id, files_indexed=len(candidates))
             # Leave session running if next phases will proceed; here we mark succeeded for scan-only
             self.metadata.set_session_status(session_id, "succeeded")
         else:
             # Dry run: leave session as running but record file count
-            self.metadata.bump_session_counters(
-                session_id, files_indexed=len(candidates)
-            )
+            self.metadata.bump_session_counters(session_id, files_indexed=len(candidates))
 
         summary["files_kept"] = len(candidates)
         return summary
@@ -371,9 +338,7 @@ class IngestionPipeline:
         """Compatibility wrapper: call scan and print a summary."""
         _ = repo_path
         result = self.scan(repo_name, dry_run=dry_run)
-        print(
-            f"Scan complete for {repo_name}: files_kept={result['files_kept']}, session={result['session_id']}"
-        )
+        print(f"Scan complete for {repo_name}: files_kept={result['files_kept']}, session={result['session_id']}")
 
     def index(
         self,
@@ -413,17 +378,13 @@ class IngestionPipeline:
         from ..embeddings.provider import SUPPORTED_MODELS
 
         if embed_model not in SUPPORTED_MODELS:
-            raise ValueError(
-                f"Unsupported embed model configured for repo {repo_name}: {embed_model}"
-            )
+            raise ValueError(f"Unsupported embed model configured for repo {repo_name}: {embed_model}")
 
         # Ensure clean working tree and capture provenance (unless forced)
         if not force:
             self._ensure_clean_working_tree(root)
         else:
-            print(
-                f"Warning: force=True, skipping clean working tree check for {repo_name}"
-            )
+            print(f"Warning: force=True, skipping clean working tree check for {repo_name}")
 
         commit_sha = self._git(root, "rev-parse", "HEAD").strip()
         branch = self._git(root, "rev-parse", "--abbrev-ref", "HEAD").strip()
@@ -437,9 +398,7 @@ class IngestionPipeline:
         last_success = self.metadata.get_last_successful_commit(repo_id)
 
         # Start session
-        session_id = self.metadata.begin_session(
-            repo_id, commit_sha, branch, embed_model
-        )
+        session_id = self.metadata.begin_session(repo_id, commit_sha, branch, embed_model)
 
         # Initialize error logger (lazy file creation on first error)
         error_logger = ErrorLogger(root, str(session_id))
@@ -455,9 +414,7 @@ class IngestionPipeline:
             "**/*service_account.json",
             "**/*auth.json",
         }
-        ignore_patterns = build_ignore_set(
-            self.config.ignore, self.config.ignore_exceptions
-        )
+        ignore_patterns = build_ignore_set(self.config.ignore, self.config.ignore_exceptions)
         repo_level_patterns, repo_level_exceptions = load_repo_ignores(root)
         if repo_level_patterns:
             ignore_patterns.update(repo_level_patterns)
@@ -473,18 +430,12 @@ class IngestionPipeline:
             changed_files = get_all_tracked_files(root)
             deleted_files = []
         else:
-            print(
-                f"Incremental mode: processing files changed since {last_success[:8]}"
-            )
-            changed_files = git_changed_files_modified_added(
-                root, last_success, commit_sha
-            )
+            print(f"Incremental mode: processing files changed since {last_success[:8]}")
+            changed_files = git_changed_files_modified_added(root, last_success, commit_sha)
             deleted_files = git_changed_files_deleted(root, last_success, commit_sha)
 
         # Initialize counters
-        files_done = chunks_indexed = chunks_skipped = vectors_written = (
-            chunks_pruned
-        ) = 0
+        files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
         graph_nodes_created = graph_edges_created = 0
 
         # Process modified/added files
@@ -496,19 +447,15 @@ class IngestionPipeline:
                         file_id = self.metadata.get_file_id(repo_id, path)
                         if file_id:
                             for model_name in ("small", "large"):
-                                pruned = (
-                                    self.metadata.prune_invalidated_content_for_file(
-                                        repo_id,
-                                        file_id,
-                                        model_name,
-                                        current_hashes=set(),
-                                    )
+                                pruned = self.metadata.prune_invalidated_content_for_file(
+                                    repo_id,
+                                    file_id,
+                                    model_name,
+                                    current_hashes=set(),
                                 )
                                 if pruned:
                                     chunks_pruned += pruned
-                                self.lancedb.prune_file_rows(
-                                    repo_name, path, model=model_name
-                                )
+                                self.lancedb.prune_file_rows(repo_name, path, model=model_name)
                     continue
                 # Skip binary files and files that don't exist
                 file_path = root / path
@@ -553,9 +500,7 @@ class IngestionPipeline:
                 # Extract and store code graph data
                 if self.graph_store and not dry_run:
                     try:
-                        nodes, edges = extract_graph_from_file(
-                            file_path, language, text, repo_config
-                        )
+                        nodes, edges = extract_graph_from_file(file_path, language, text, repo_config)
                         if nodes or edges:
                             graph_stats = store_graph_data(
                                 self.graph_store,
@@ -584,9 +529,7 @@ class IngestionPipeline:
 
                             # Track edge changes for cache invalidation
                             if graph_stats["edges_created"] > 0:
-                                graph_manager.on_edges_changed(
-                                    graph_stats["edges_created"]
-                                )
+                                graph_manager.on_edges_changed(graph_stats["edges_created"])
                     except Exception as e:
                         error_logger.log_file_error(f"graph: {path}", e)
                         # Don't fail the entire file if graph extraction fails
@@ -598,9 +541,7 @@ class IngestionPipeline:
 
                 # Deduplicate by text_hash
                 dedup = ChunkDeduplicator(self.metadata)
-                changed_chunks, unchanged_chunks = dedup.filter_unchanged_chunks(
-                    chunks, repo_id, file_id, embed_model
-                )
+                changed_chunks, unchanged_chunks = dedup.filter_unchanged_chunks(chunks, repo_id, file_id, embed_model)
                 new_hashes = {c.text_hash for c in changed_chunks}
                 skipped_occurrences = len(unchanged_chunks)
 
@@ -611,10 +552,7 @@ class IngestionPipeline:
                     batch_size = 128
                     for i in range(0, len(hashes_list), batch_size):
                         batch_hashes = hashes_list[i : i + batch_size]
-                        texts_to_embed = [
-                            representative_text_for_hash(h, chunks)
-                            for h in batch_hashes
-                        ]
+                        texts_to_embed = [representative_text_for_hash(h, chunks) for h in batch_hashes]
                         if not texts_to_embed:
                             continue
                         vectors = embed_texts_with_retry(embed_model, texts_to_embed)
@@ -631,14 +569,11 @@ class IngestionPipeline:
                         if cid:
                             self.metadata.sync_locations_for_content_row(cid, occs)
 
-                    self.metadata.prune_invalidated_content_for_file(
-                        repo_id, file_id, embed_model, set(desired.keys())
-                    )
+                    self.metadata.prune_invalidated_content_for_file(repo_id, file_id, embed_model, set(desired.keys()))
 
                     # Build a quick lookup for token_count by occurrence position
                     occ_token_counts: dict[tuple[int, int], int] = {
-                        (ch.start_line, ch.end_line): getattr(ch, "token_count", 0)
-                        for ch in chunks
+                        (ch.start_line, ch.end_line): getattr(ch, "token_count", 0) for ch in chunks
                     }
 
                     # Persist vectors to LanceDB (per occurrence)
@@ -671,12 +606,8 @@ class IngestionPipeline:
                                     "heading_h1": occ.get("heading_h1"),
                                     "heading_h2": occ.get("heading_h2"),
                                     "heading_h3": occ.get("heading_h3"),
-                                    "token_count": occ_token_counts.get(
-                                        (occ["start_line"], occ["end_line"]), 0
-                                    ),
-                                    "created_at": datetime.datetime.now(
-                                        datetime.UTC
-                                    ),
+                                    "token_count": occ_token_counts.get((occ["start_line"], occ["end_line"]), 0),
+                                    "created_at": datetime.datetime.now(datetime.UTC),
                                 }
                             )
 
@@ -691,9 +622,7 @@ class IngestionPipeline:
 
                                 if chunk_text:
                                     # Generate deterministic FTS5 content_id (independent of embed_model)
-                                    fts_content_id = generate_fts_content_id(
-                                        repo_id, file_id, h
-                                    )
+                                    fts_content_id = generate_fts_content_id(repo_id, file_id, h)
 
                                     fts_chunks.append(
                                         {
@@ -708,9 +637,7 @@ class IngestionPipeline:
                                     )
 
                     if payload:
-                        self.lancedb.upsert_chunks(
-                            repo_name, payload, model=embed_model
-                        )
+                        self.lancedb.upsert_chunks(repo_name, payload, model=embed_model)
 
                     # Index chunks in FTS5 for BM25 search
                     if fts_chunks and not dry_run:
@@ -718,9 +645,7 @@ class IngestionPipeline:
 
                     # Prune any stale vectors for this file/model
                     if desired_row_ids:
-                        self.lancedb.prune_file_rows(
-                            repo_name, path, model=embed_model, keep_ids=desired_row_ids
-                        )
+                        self.lancedb.prune_file_rows(repo_name, path, model=embed_model, keep_ids=desired_row_ids)
                     else:
                         self.lancedb.prune_file_rows(repo_name, path, model=embed_model)
 
@@ -731,9 +656,7 @@ class IngestionPipeline:
                 vectors_written += len(new_hashes)
 
                 # Log per-file summary
-                print(
-                    f"  {path}: {len(chunks)} chunks, {len(new_hashes)} new, {skipped_occurrences} skipped"
-                )
+                print(f"  {path}: {len(chunks)} chunks, {len(new_hashes)} new, {skipped_occurrences} skipped")
 
             except Exception as e:
                 error_logger.log_file_error(path, e)
@@ -761,9 +684,7 @@ class IngestionPipeline:
                     edges_deleted = 0
                     nodes_deleted = 0
                     if self.graph_store:
-                        nodes_deleted, edges_deleted = cleanup_graph_for_file(
-                            self.graph_store, file_id
-                        )
+                        nodes_deleted, edges_deleted = cleanup_graph_for_file(self.graph_store, file_id)
 
                     if self.graph_store and (edges_deleted > 0 or nodes_deleted > 0):
                         graph_manager = self.get_graph_manager(repo_id)
@@ -798,18 +719,14 @@ class IngestionPipeline:
                         )
                         if pruned_count > 0:
                             chunks_pruned += pruned_count
-                            print(
-                                f"  {file_path}: pruned {pruned_count} ignored chunks (model={model})"
-                            )
+                            print(f"  {file_path}: pruned {pruned_count} ignored chunks (model={model})")
                         self.lancedb.prune_file_rows(repo_name, file_path, model=model)
 
                     # Clean up graph data for ignored file
                     edges_deleted = 0
                     nodes_deleted = 0
                     if self.graph_store:
-                        nodes_deleted, edges_deleted = cleanup_graph_for_file(
-                            self.graph_store, file_id
-                        )
+                        nodes_deleted, edges_deleted = cleanup_graph_for_file(self.graph_store, file_id)
 
                     if self.graph_store and (edges_deleted > 0 or nodes_deleted > 0):
                         graph_manager = self.get_graph_manager(repo_id)

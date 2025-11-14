@@ -89,9 +89,7 @@ CREATE TABLE products (
         )
 
         # Commit files to git
-        subprocess.run(
-            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
-        )
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
             check=True,
@@ -104,16 +102,12 @@ CREATE TABLE products (
         metadata_store.initialize()
 
         lancedb_store = LanceDBStore("memory://test_pipeline")
-        config = KBConfig(
-            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
-        )
+        config = KBConfig(default_embed_model="small", ignore=["*.pyc", "__pycache__/*"])
 
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         # Register repository
-        metadata_store.record_repo(
-            name="test-repo", path=repo_path, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="test-repo", path=repo_path, default_embed_model="small")
 
         # Run indexing
         result = pipeline.index("test-repo", dry_run=False, force=True)
@@ -167,9 +161,7 @@ def test_function():
         )
 
         # Commit files
-        subprocess.run(
-            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
-        )
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
             check=True,
@@ -187,9 +179,7 @@ def test_function():
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         # Register and index
-        metadata_store.record_repo(
-            name="metadata-repo", path=repo_path, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="metadata-repo", path=repo_path, default_embed_model="small")
 
         pipeline.index("metadata-repo", dry_run=False, force=True)
 
@@ -221,16 +211,12 @@ def test_function():
         # Create various files
         (repo_path / "src" / "main.py").write_text("def main(): pass")
         (repo_path / "src" / "utils.py").write_text("def helper(): return True")
-        (repo_path / "docs" / "README.md").write_text(
-            "# Project\n\nDocumentation here."
-        )
+        (repo_path / "docs" / "README.md").write_text("# Project\n\nDocumentation here.")
         (repo_path / "docs" / "API.md").write_text("# API\n\n## Endpoints")
         (repo_path / "data" / "config.json").write_text('{"key": "value"}')
 
         # Commit files
-        subprocess.run(
-            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
-        )
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
             check=True,
@@ -247,9 +233,7 @@ def test_function():
 
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
-        metadata_store.record_repo(
-            name="mixed-repo", path=repo_path, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="mixed-repo", path=repo_path, default_embed_model="small")
 
         result = pipeline.index("mixed-repo", dry_run=False, force=True)
 
@@ -278,9 +262,7 @@ def test_function():
         (repo_path / "another_valid.py").write_text("def another(): return False")
 
         # Commit files
-        subprocess.run(
-            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
-        )
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
             check=True,
@@ -297,9 +279,7 @@ def test_function():
 
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
-        metadata_store.record_repo(
-            name="error-repo", path=repo_path, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="error-repo", path=repo_path, default_embed_model="small")
 
         # Should complete despite binary file
         result = pipeline.index("error-repo", dry_run=False, force=True)
@@ -322,9 +302,7 @@ def test_function():
         (pycache / "test.pyc").write_bytes(b"")
 
         # Commit files
-        subprocess.run(
-            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
-        )
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
             check=True,
@@ -337,15 +315,11 @@ def test_function():
         metadata_store.initialize()
 
         lancedb_store = LanceDBStore("memory://config_test")
-        config = KBConfig(
-            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
-        )
+        config = KBConfig(default_embed_model="small", ignore=["*.pyc", "__pycache__/*"])
 
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
-        metadata_store.record_repo(
-            name="config-repo", path=repo_path, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="config-repo", path=repo_path, default_embed_model="small")
 
         pipeline.index("config-repo", dry_run=False, force=True)
 
@@ -391,9 +365,7 @@ def function_{i}():
 
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
-        metadata_store.record_repo(
-            name="perf-repo", path=repo_path, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="perf-repo", path=repo_path, default_embed_model="small")
 
         # Measure performance
         start = time.time()
@@ -415,9 +387,7 @@ def function_{i}():
         (repo_path / "large.py").write_text(large_content)
 
         # Commit files
-        subprocess.run(
-            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
-        )
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
             check=True,
@@ -434,9 +404,7 @@ def function_{i}():
 
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
-        metadata_store.record_repo(
-            name="large-repo", path=repo_path, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="large-repo", path=repo_path, default_embed_model="small")
 
         # Should handle large file
         result = pipeline.index("large-repo", dry_run=False, force=True)

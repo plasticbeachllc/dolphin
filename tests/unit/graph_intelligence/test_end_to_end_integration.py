@@ -261,9 +261,7 @@ class TestEndToEndIntegration:
             # Verify metrics count matches node count
             assert len(db_metrics) == stats["nodes_created"]
 
-    def test_cache_invalidation_on_git_changes(
-        self, graph_store_with_data, temp_git_repo
-    ):
+    def test_cache_invalidation_on_git_changes(self, graph_store_with_data, temp_git_repo):
         """Test cache invalidation when git commit changes."""
         graph_store, repo_id, initial_commit, stats = graph_store_with_data
 
@@ -284,9 +282,7 @@ class TestEndToEndIntegration:
         # Make a git change
         new_file = temp_git_repo / "utils.py"
         new_file.write_text("def helper():\n    return 42\n")
-        subprocess.run(
-            ["git", "add", "."], cwd=temp_git_repo, check=True, capture_output=True
-        )
+        subprocess.run(["git", "add", "."], cwd=temp_git_repo, check=True, capture_output=True)
         subprocess.run(
             ["git", "commit", "-m", "Add utils"],
             cwd=temp_git_repo,

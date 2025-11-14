@@ -20,9 +20,7 @@ class TestPendingChanges:
         repo_id = repo["id"]
 
         # Record a change
-        change_id = store.record_pending_change(
-            repo_id=repo_id, file_path="src/main.py", change_type="modified"
-        )
+        change_id = store.record_pending_change(repo_id=repo_id, file_path="src/main.py", change_type="modified")
 
         assert change_id is not None
         assert change_id > 0
@@ -190,9 +188,7 @@ class TestPendingChanges:
         repo_id = repo["id"]
 
         # No changes recorded
-        processed_count = store.mark_changes_for_file_processed(
-            repo_id, "nonexistent.py"
-        )
+        processed_count = store.mark_changes_for_file_processed(repo_id, "nonexistent.py")
         assert processed_count == 0
 
     def test_cleanup_old_changes(self, temp_db_path):
