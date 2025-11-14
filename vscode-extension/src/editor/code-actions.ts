@@ -5,17 +5,17 @@ import * as vscode from "vscode";
  * Provides code actions (quick fixes) for Dolphin AI assistance
  */
 export class DolphinCodeActionProvider implements vscode.CodeActionProvider {
-  private viewProvider: any;
+  private viewProvider: unknown;
 
-  constructor(viewProvider: any) {
+  constructor(viewProvider: unknown) {
     this.viewProvider = viewProvider;
   }
 
   public provideCodeActions(
     document: vscode.TextDocument,
     range: vscode.Range | vscode.Selection,
-    context: vscode.CodeActionContext,
-    token: vscode.CancellationToken
+    _context: vscode.CodeActionContext,
+    _token: vscode.CancellationToken
   ): vscode.ProviderResult<(vscode.CodeAction | vscode.Command)[]> {
     const selection = document.getText(range);
 

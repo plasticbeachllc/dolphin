@@ -25,6 +25,8 @@ import type {
 import type { ContextBuilder } from "../context/context-builder.js";
 import type { PromptBuilder } from "../prompts/prompt-builder.js";
 import type { ClaudeProvider } from "../execution/claude-provider.js";
+import type { StateStore } from "../state/state-store.js";
+import type { PlanStore } from "../storage/plan-store.js";
 import { MODELS, CHARS_PER_TOKEN, DEFAULT_MAX_CLARIFICATION_TURNS } from "./constants.js";
 import { parsePlanFromMarkdown, parseLegacyMarkdownPlan } from "./plan-parser.js";
 
@@ -32,6 +34,9 @@ export interface ArchitectWorkflowConfig {
   claudeProvider: ClaudeProvider;
   contextBuilder: ContextBuilder;
   promptBuilder: PromptBuilder;
+  stateStore: StateStore;
+  planStore: PlanStore;
+  workspaceRoot: string;
   maxClarificationTurns?: number;
 }
 
@@ -137,7 +142,7 @@ export class ArchitectWorkflow implements IWorkflow {
     sessionId: string,
     input: TaskInput
   ): AsyncGenerator<WorkflowUpdate, ResearchResult, unknown> {
-    const startTime = Date.now();
+    const _startTime = Date.now();
     const kbSearches: KBSearch[] = [];
     const relevantFiles: string[] = [];
 
@@ -199,8 +204,10 @@ export class ArchitectWorkflow implements IWorkflow {
       context,
       thinkingMode: "normal",
     })) {
-      if (chunk.type === "text") {
-        findings += chunk.content;
+      const typedChunk = chunk as { type: string; content?: string };
+      if (typedChunk.type === "text") {
+        const content = typedChunk.content as string;
+        findings += content;
 
         yield {
           type: "chunk",
@@ -208,7 +215,7 @@ export class ArchitectWorkflow implements IWorkflow {
           timestamp: new Date().toISOString(),
           data: {
             type: "text",
-            content: chunk.content,
+            content: content,
             phase: "research",
           },
         };
@@ -297,8 +304,10 @@ export class ArchitectWorkflow implements IWorkflow {
         systemPrompt: this.getClarificationSystemPrompt(conversationTurns),
         thinkingMode: "normal",
       })) {
-        if (chunk.type === "text") {
-          llmResponse += chunk.content;
+        const typedChunk = chunk as { type: string; content?: string };
+        if (typedChunk.type === "text") {
+          const content = typedChunk.content as string;
+          llmResponse += content;
 
           yield {
             type: "chunk",
@@ -306,7 +315,7 @@ export class ArchitectWorkflow implements IWorkflow {
             timestamp: new Date().toISOString(),
             data: {
               type: "text",
-              content: chunk.content,
+              content: content,
               phase: "clarification",
             },
           };
@@ -402,7 +411,7 @@ export class ArchitectWorkflow implements IWorkflow {
     sessionId: string,
     input: TaskInput,
     research: ResearchResult,
-    clarification: ClarificationResult
+    _clarification: ClarificationResult
   ): AsyncGenerator<WorkflowUpdate, Plan, unknown> {
     yield {
       type: "progress",
@@ -441,8 +450,10 @@ export class ArchitectWorkflow implements IWorkflow {
       context,
       thinkingMode: "extended",
     })) {
-      if (chunk.type === "text") {
-        planContent += chunk.content;
+      const typedChunk = chunk as { type: string; content?: string };
+      if (typedChunk.type === "text") {
+        const content = typedChunk.content as string;
+        planContent += content;
 
         yield {
           type: "chunk",
@@ -450,7 +461,7 @@ export class ArchitectWorkflow implements IWorkflow {
           timestamp: new Date().toISOString(),
           data: {
             type: "text",
-            content: chunk.content,
+            content: content,
             phase: "planning",
           },
         };
@@ -458,14 +469,24 @@ export class ArchitectWorkflow implements IWorkflow {
     }
 
     // Parse plan from markdown with robust TOML extraction
-    let parsedPlan: any;
-    let parseSource = "toml";
+    let parsedPlan: Partial<{
+      files_to_modify?: string[];
+      filesToModify?: string[];
+      files_to_create?: string[];
+      filesToCreate?: string[];
+      steps?: Array<{ id: number; description: string; files: string[] } | string>;
+      complexity?: "low" | "medium" | "high";
+      estimated_tokens?: number;
+      estimatedTokens?: number;
+      overview?: string;
+    }>;
+    let _parseSource = "toml";
 
     try {
       // Try robust TOML parsing first
       const result = parsePlanFromMarkdown(planContent);
       parsedPlan = result.plan;
-      parseSource = result.source;
+      _parseSource = result.source;
       console.log(`[ArchitectWorkflow] Plan parsed from ${result.source}`);
     } catch (tomlError) {
       // Fallback to legacy markdown parsing
@@ -474,7 +495,7 @@ export class ArchitectWorkflow implements IWorkflow {
         tomlError
       );
       parsedPlan = parseLegacyMarkdownPlan(planContent);
-      parseSource = "legacy-markdown";
+      _parseSource = "legacy-markdown";
     }
 
     // Convert TOML snake_case to Plan camelCase
@@ -488,7 +509,7 @@ export class ArchitectWorkflow implements IWorkflow {
       content: planContent,
       filesToModify: parsedPlan.files_to_modify || parsedPlan.filesToModify || [],
       filesToCreate: parsedPlan.files_to_create || parsedPlan.filesToCreate || [],
-      steps: (parsedPlan.steps || []).map((s: any) => (typeof s === "string" ? s : s.description)),
+      steps: (parsedPlan.steps || []).map((s) => (typeof s === "string" ? s : s.description)),
       complexity: parsedPlan.complexity || "medium",
       estimatedTokens:
         parsedPlan.estimated_tokens ||

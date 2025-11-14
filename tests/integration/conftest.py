@@ -1,7 +1,6 @@
 """Additional fixtures for integration tests."""
 
 from pathlib import Path
-from typing import Generator
 
 import pytest
 
@@ -22,7 +21,7 @@ import sys
 class MainApplication:
     def __init__(self):
         self.config = {}
-    
+
     def run(self):
         print("Running application")
         return True
@@ -77,7 +76,7 @@ class TestMainApplication:
     def test_initialization(self):
         app = MainApplication()
         assert app.config == {}
-    
+
     def test_run_method(self):
         app = MainApplication()
         result = app.run()
@@ -172,9 +171,7 @@ class BrokenClass
 
 
 @pytest.fixture
-def integration_backend_config(
-    sample_repo_path: Path, temp_db_path: Path, mock_embedding_service, temp_dir: Path
-):
+def integration_backend_config(sample_repo_path: Path, temp_db_path: Path, mock_embedding_service, temp_dir: Path):
     """Provide a complete backend configuration for integration testing with isolated storage."""
     from kb.config import KBConfig
     from kb.store import LanceDBStore, SQLiteMetadataStore
@@ -187,9 +184,6 @@ def integration_backend_config(
         store_root=store_root,
         default_embed_model="small",
         ignore=["*.pyc", "__pycache__/*", "*.bin"],
-        max_file_size=1024 * 1024,  # 1MB
-        chunk_size=1000,
-        chunk_overlap=200,
     )
 
     # Use isolated database and vector store paths
@@ -212,16 +206,11 @@ def integration_backend_config(
     yield backend_config
 
     # Cleanup: Close connections
-    try:
-        metadata_store.close()
-    except Exception:
-        pass
+    # SQLiteMetadataStore doesn't have a close method - connections are managed automatically
 
 
 @pytest.fixture
-def fast_backend_config(
-    sample_repo_path: Path, temp_db_path: Path, mock_embedding_service, temp_dir: Path
-):
+def fast_backend_config(sample_repo_path: Path, temp_db_path: Path, mock_embedding_service, temp_dir: Path):
     """Fast backend config for tests that don't need full isolation.
 
     This fixture is optimized for speed by:
@@ -237,9 +226,6 @@ def fast_backend_config(
     config = KBConfig(
         default_embed_model="small",
         ignore=["*.pyc", "__pycache__/*", "*.bin"],
-        max_file_size=1024 * 1024,
-        chunk_size=1000,
-        chunk_overlap=200,
     )
 
     # Use in-memory database for faster tests
@@ -259,10 +245,7 @@ def fast_backend_config(
 
     yield backend_config
 
-    try:
-        metadata_store.close()
-    except Exception:
-        pass
+    # SQLiteMetadataStore doesn't have a close method - connections are managed automatically
 
 
 @pytest.fixture
@@ -274,9 +257,7 @@ def registered_test_repo(integration_backend_config):
     # Initialize the metadata store to ensure tables exist
     metadata_store.initialize()
 
-    metadata_store.record_repo(
-        name="integration-test-repo", path=repo_path, default_embed_model="small"
-    )
+    metadata_store.record_repo(name="integration-test-repo", path=repo_path, default_embed_model="small")
     repo = metadata_store.get_repo_by_name("integration-test-repo")
     repo_id = int(repo["id"]) if repo else 0
 
@@ -348,9 +329,7 @@ class Class{i}:
 
     # Create some larger files
     large_file = repo_path / "src/large_module.py"
-    large_content = "# Large module\n" + "\n".join(
-        [f"def large_function_{i}():\n    return {i}" for i in range(500)]
-    )
+    large_content = "# Large module\n" + "\n".join([f"def large_function_{i}():\n    return {i}" for i in range(500)])
     large_file.write_text(large_content)
 
     return repo_path
@@ -364,9 +343,7 @@ def ensure_fixture_repo_is_git(sample_repo_path: Path) -> Path:
     git_dir = sample_repo_path / ".git"
     if not git_dir.exists():
         try:
-            subprocess.run(
-                ["git", "init"], cwd=sample_repo_path, check=True, capture_output=True
-            )
+            subprocess.run(["git", "init"], cwd=sample_repo_path, check=True, capture_output=True)
             subprocess.run(
                 ["git", "config", "user.email", "test@example.com"],
                 cwd=sample_repo_path,

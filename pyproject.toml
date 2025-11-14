@@ -120,6 +120,7 @@ dev = [
     "pytest-asyncio>=1.2.0",
     "ruff>=0.1.0",
     "twine>=6.2.0",
+    "ty>=0.0.1a26",
 ]
 test = [
     "fakeredis>=2.32.0",
@@ -194,3 +195,63 @@ output = "tests/reports/coverage.xml"
 [tool.coverage.json]
 output = "tests/reports/coverage.json"
 show_contexts = true
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = false
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+check_untyped_defs = false
+# Disable strict optional checking to reduce noise
+strict_optional = false
+# Allow untyped calls
+disallow_untyped_calls = false
+# Allow untyped decorators
+disallow_untyped_decorators = false
+
+[[tool.mypy.overrides]]
+module = [
+    "kb.ingest.pipeline",
+    "kb.api.search_backend",
+    "kb.store.sqlite_meta",
+    "kb.config",
+    "kb.retrieval.graph_context",
+    "kb.search.parallel_search",
+    "kb.ingest.optimized_pipeline",
+    "kb.graph_intelligence.graph_store",
+    "kb.retrieval.rankers",
+    "kb.logging.structured_logger",
+    "kb.chunkers.ts_chunker",
+    "kb.chunkers.py_chunker",
+    "kb.ingest.graph_helpers",
+    "kb.api.app",
+    "kb.ingest.cli",
+    "kb.api.server",
+]
+ignore_errors = true
+
+[tool.pylint.main]
+fail-under = 8.0
+disable = [
+    "duplicate-code",
+]
+
+[tool.ruff]
+line-length = 120
+
+# Configure linting behavior
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort (import sorting)
+    "UP", # pyupgrade
+]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["kb"]
+combine-as-imports = true
+split-on-trailing-comma = false

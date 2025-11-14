@@ -67,11 +67,10 @@ export class DiffHandler {
         const edit = new vscode.WorkspaceEdit();
 
         // Read current file content
-        let currentContent = "";
         let fileExists = true;
         try {
           const fileContent = await vscode.workspace.fs.readFile(fileUri);
-          currentContent = Buffer.from(fileContent).toString("utf8");
+          const _currentContent = Buffer.from(fileContent).toString("utf8");
         } catch (error) {
           // File might not exist yet, that's ok
           fileExists = false;
@@ -123,7 +122,7 @@ export class DiffHandler {
       return null;
     }
 
-    const filePath = fileMatch[1].replace(/^[ab]\//, ""); // Remove a/ or b/ prefix
+    const _filePath = fileMatch[1].replace(/^[ab]\//, ""); // Remove a/ or b/ prefix
 
     // For now, we'll just return null as this requires more complex parsing
     // In practice, the agent should send structured diff data

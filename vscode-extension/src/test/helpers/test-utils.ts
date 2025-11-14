@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import * as http from "http";
-import { HttpTestResponse } from "./mock-types";
+import { HttpTestResponse, ExtensionExports } from "./mock-types";
 
 /**
  * Wait for a condition to be true with timeout
@@ -30,7 +30,7 @@ export function sleep(ms: number): Promise<void> {
 /**
  * Get the Dolphin extension
  */
-export function getDolphinExtension(): vscode.Extension<any> | undefined {
+export function getDolphinExtension(): vscode.Extension<ExtensionExports> | undefined {
   return vscode.extensions.getExtension("pb.dolphin");
 }
 
@@ -40,7 +40,7 @@ export function getDolphinExtension(): vscode.Extension<any> | undefined {
 export async function waitForExtensionActivation(
   timeout = 10000,
   waitForAgent = false
-): Promise<vscode.Extension<any>> {
+): Promise<vscode.Extension<ExtensionExports>> {
   const extension = getDolphinExtension();
 
   if (!extension) {
@@ -55,10 +55,9 @@ export async function waitForExtensionActivation(
 
   // Optionally wait for agent bridge to be ready (for E2E tests that need it)
   if (waitForAgent) {
-    const agentBridge = getAgentBridge();
-    if (agentBridge) {
-      await agentBridge.waitForReady(timeout);
-    }
+    // Note: In real implementation, you would get the actual agent bridge instance
+    // For now, we skip this as it requires accessing the extension's internal state
+    // Tests that need agent bridge should use mock-manager.ts instead
   }
 
   return extension;
@@ -67,7 +66,7 @@ export async function waitForExtensionActivation(
 /**
  * Get a webview by view ID
  */
-export async function getWebview(viewId: string, timeout = 5000): Promise<void> {
+export async function getWebview(viewId: string, _timeout = 5000): Promise<void> {
   // Execute command to focus the webview, which will cause it to load
   await vscode.commands.executeCommand(`${viewId}.focus`);
   await sleep(500); // Give it time to render
@@ -118,7 +117,7 @@ export function captureOutputChannel(name: string): {
   dispose: () => void;
 } {
   const content: string[] = [];
-  const originalAppendLine = vscode.window.createOutputChannel(name).appendLine;
+  const _originalAppendLine = vscode.window.createOutputChannel(name).appendLine;
 
   // Note: This is a simplified version. In real implementation,
   // you'd need to hook into the actual output channel.
@@ -135,7 +134,7 @@ export function captureOutputChannel(name: string): {
  * @param timeout Timeout in milliseconds (default: 2000ms)
  * @returns Promise resolving to the response with status and parsed JSON data
  */
-export async function makeHttpGetRequest<T = any>(
+export async function makeHttpGetRequest<T = unknown>(
   url: string,
   timeout: number = 2000
 ): Promise<HttpTestResponse<T>> {
@@ -186,7 +185,7 @@ export async function makeHttpGetRequest<T = any>(
  * @param timeout Timeout in milliseconds (default: 2000ms)
  * @returns Promise resolving to the response with status and parsed JSON data
  */
-export async function makeHttpPostRequest<T = any>(
+export async function makeHttpPostRequest<T = unknown>(
   options: http.RequestOptions,
   postData: string,
   timeout: number = 2000
@@ -249,7 +248,7 @@ export async function makeHttpPostRequest<T = any>(
  * @param timeout Timeout in milliseconds (default: 2000ms)
  * @returns Promise resolving to the response with status and parsed JSON data
  */
-export async function makeHttpRequest<T = any>(
+export async function makeHttpRequest<T = unknown>(
   options: http.RequestOptions,
   postData?: string,
   timeout: number = 2000
@@ -307,9 +306,9 @@ export async function makeHttpRequest<T = any>(
  */
 export async function assertCommandExecutes(
   commandId: string,
-  args?: any[],
+  args?: unknown[],
   timeout: number = 2000
-): Promise<any> {
+): Promise<unknown> {
   return Promise.race([
     vscode.commands.executeCommand(commandId, ...(args || [])),
     new Promise((_, reject) =>

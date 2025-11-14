@@ -7,13 +7,10 @@ This test module validates the implementation of the remediation plan's Phase 1:
 - Comprehensive validation mechanisms
 """
 
-import sqlite3
-import tempfile
 import threading
-import time
 from contextlib import closing
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -110,7 +107,7 @@ class TestEnhancedInitialization:
         store.initialize()
         second_state = store._initialized
 
-        assert first_state == second_state == True
+        assert first_state == second_state is True
 
         # Should not create duplicate tables
         with store._connect() as conn:
@@ -139,9 +136,7 @@ class TestSafeFTS5Creation:
         with store._connect() as conn:
             with closing(conn.cursor()) as cur:
                 # Check table exists
-                cur.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
-                )
+                cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
                 assert cur.fetchone() is not None
 
                 # Check table schema
@@ -245,9 +240,10 @@ class TestDatabaseIntegrityValidation:
         store.record_repo("test-repo", repo_path)
 
         repo = store.get_repo_by_name("test-repo")
+        assert repo is not None
         repo_id = int(repo["id"])
 
-        file_id = store.upsert_file(
+        store.upsert_file(
             repo_id,
             path="src/a.py",
             ext=".py",
@@ -303,9 +299,7 @@ class TestInitializationEdgeCases:
         store = SQLiteMetadataStore(tmp_path / "test.db")
 
         # Mock engine creation to fail
-        with patch.object(
-            store, "_engine", side_effect=Exception("Engine creation failed")
-        ):
+        with patch.object(store, "_engine", side_effect=Exception("Engine creation failed")):
             with pytest.raises(Exception, match="Engine creation failed"):
                 store.initialize()
 

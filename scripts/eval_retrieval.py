@@ -23,10 +23,9 @@ from kb.api.app import SearchRequest
 from kb.api.search_backend import KnowledgeSearchBackend
 from kb.config import KBConfig
 from kb.embeddings.provider import create_provider
+from kb.store.graph_store import GraphStore
 from kb.store.lancedb_store import LanceDBStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
-from kb.store.graph_store import GraphStore
-from kb.retrieval.ann_tuning import ANNParams
 
 
 class GoldenScenario:
@@ -62,7 +61,7 @@ class EvaluationMetrics:
         reciprocal_rank: float,
         average_precision: float,
         precision_at_k: dict[int, float],
-        recall_at_k: dict[int, float]
+        recall_at_k: dict[int, float],
     ):
         """Add metrics from a single scenario."""
         self.mrr_scores.append(reciprocal_rank)
@@ -165,11 +164,7 @@ def match_result(actual: dict, expected: dict) -> bool:
     return True
 
 
-def evaluate_scenario(
-    scenario: GoldenScenario,
-    backend: KnowledgeSearchBackend,
-    top_k: int = 10
-) -> dict[str, Any]:
+def evaluate_scenario(scenario: GoldenScenario, backend: KnowledgeSearchBackend, top_k: int = 10) -> dict[str, Any]:
     """Evaluate a single scenario."""
     # Run query
     repo = scenario.repo or ""
@@ -193,7 +188,7 @@ def evaluate_scenario(
             "difficulty": scenario.difficulty,
             "status": "error",
             "error": str(e),
-            "metrics": {}
+            "metrics": {},
         }
 
     # Extract file paths and symbols from results
@@ -202,7 +197,7 @@ def evaluate_scenario(
         result_info = {
             "file": _extract_path(r),
             "symbol": _extract_symbol(r),
-            "score": r.get("score", 0.0)
+            "score": r.get("score", 0.0),
         }
         actual_results.append(result_info)
 
@@ -237,8 +232,7 @@ def evaluate_scenario(
 
         # Precision@K
         relevant_in_top_k = sum(
-            1 for actual in actual_results[:k]
-            if any(match_result(actual, exp) for exp in expected)
+            1 for actual in actual_results[:k] if any(match_result(actual, exp) for exp in expected)
         )
         precision_at_k[k] = relevant_in_top_k / k if k > 0 else 0.0
 
@@ -249,16 +243,13 @@ def evaluate_scenario(
     thresholds = {
         "easy": {"mrr": 0.90, "p@5": 0.80},
         "medium": {"mrr": 0.80, "p@5": 0.70},
-        "hard": {"mrr": 0.70, "p@5": 0.60}
+        "hard": {"mrr": 0.70, "p@5": 0.60},
     }
 
     difficulty = scenario.difficulty
     threshold = thresholds.get(difficulty, thresholds["medium"])
 
-    passed = (
-        reciprocal_rank >= threshold["mrr"] and
-        precision_at_k.get(5, 0.0) >= threshold["p@5"]
-    )
+    passed = reciprocal_rank >= threshold["mrr"] and precision_at_k.get(5, 0.0) >= threshold["p@5"]
 
     return {
         "id": scenario.id,
@@ -271,53 +262,35 @@ def evaluate_scenario(
             "map": average_precision,
             "p@5": precision_at_k.get(5, 0.0),
             "p@10": precision_at_k.get(10, 0.0),
-            "r@10": recall_at_k.get(10, 0.0)
+            "r@10": recall_at_k.get(10, 0.0),
         },
         "expected_count": len(expected),
-        "found_count": sum(
-            1 for actual in actual_results
-            if any(match_result(actual, exp) for exp in expected)
-        ),
-        "actual_results": actual_results[:5]  # Top 5 for reporting
+        "found_count": sum(1 for actual in actual_results if any(match_result(actual, exp) for exp in expected)),
+        "actual_results": actual_results[:5],  # Top 5 for reporting
     }
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Evaluate retrieval quality using golden scenarios"
-    )
+    parser = argparse.ArgumentParser(description="Evaluate retrieval quality using golden scenarios")
     parser.add_argument(
         "--scenarios",
         type=Path,
         default=Path("golden-scenarios"),
-        help="Path to scenarios file or directory"
+        help="Path to scenarios file or directory",
     )
     parser.add_argument(
         "--scenario",
         type=Path,
-        help="Path to single scenario file (alternative to --scenarios)"
+        help="Path to single scenario file (alternative to --scenarios)",
     )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        help="Output JSON file for results"
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Show per-query results"
-    )
-    parser.add_argument(
-        "--top-k",
-        type=int,
-        default=10,
-        help="Number of results to retrieve per query"
-    )
+    parser.add_argument("--output", type=Path, help="Output JSON file for results")
+    parser.add_argument("--verbose", action="store_true", help="Show per-query results")
+    parser.add_argument("--top-k", type=int, default=10, help="Number of results to retrieve per query")
     parser.add_argument(
         "--store-path",
         type=Path,
         default=Path.home() / ".dolphin" / "knowledge_store",
-        help="Path to knowledge store"
+        help="Path to knowledge store",
     )
 
     args = parser.parse_args()
@@ -340,7 +313,7 @@ def main():
     # Initialize backend
     print(f"\nInitializing knowledge base from: {args.store_path}")
     config = KBConfig()
-    embedding_provider = create_provider(config)
+    embedding_provider = create_provider(config)  # type: ignore[arg-type]
     lance_store = LanceDBStore(root=args.store_path)
     sql_store = SQLiteMetadataStore(args.store_path / "metadata.db")
 
@@ -359,7 +332,7 @@ def main():
         sql_store=sql_store,
         graph_store=graph_store,
         hybrid_search_enabled=True,
-        config=config
+        config=config,
     )
 
     # Run evaluation
@@ -374,7 +347,7 @@ def main():
     for i, scenario in enumerate(scenarios, 1):
         if args.verbose:
             print(f"\n[{i}/{len(scenarios)}] {scenario.id}")
-            print(f"Query: \"{scenario.query}\"")
+            print(f'Query: "{scenario.query}"')
 
         result = evaluate_scenario(scenario, backend, args.top_k)
         results.append(result)
@@ -423,13 +396,7 @@ def main():
         if args.verbose:
             status_symbol = "✓" if status == "pass" else "✗"
             print(f"Status: {status_symbol} {status.upper()}")
-            print(
-                "MRR: {mrr:.3f}, P@5: {p5:.3f}, R@10: {r10:.3f}".format(
-                    mrr=reciprocal_rank,
-                    p5=precision_at_k[5],
-                    r10=recall_at_k[10],
-                )
-            )
+            print(f"MRR: {reciprocal_rank:.3f}, P@5: {precision_at_k[5]:.3f}, R@10: {recall_at_k[10]:.3f}")
 
     # Compute summary
     overall_summary = overall_metrics.compute_summary()
@@ -442,10 +409,10 @@ def main():
     print("SUMMARY")
     print("=" * 80)
     print(f"\nTotal scenarios: {len(scenarios)}")
-    print(f"Passed: {passed} ({passed/len(scenarios)*100:.1f}%)")
-    print(f"Failed: {failed} ({failed/len(scenarios)*100:.1f}%)")
+    print(f"Passed: {passed} ({passed / len(scenarios) * 100:.1f}%)")
+    print(f"Failed: {failed} ({failed / len(scenarios) * 100:.1f}%)")
     if errors:
-        print(f"Errors: {errors} ({errors/len(scenarios)*100:.1f}%)")
+        print(f"Errors: {errors} ({errors / len(scenarios) * 100:.1f}%)")
 
     print("\nOverall metrics:")
     for metric, value in overall_summary.items():
@@ -499,9 +466,7 @@ def main():
     if failed_scenarios:
         print(f"\nFailed scenarios ({len(failed_scenarios)}):")
         for r in failed_scenarios:
-            print(
-                f"  - {r['id']} (MRR: {r.get('metrics', {}).get('mrr', 0.0):.3f})"
-            )
+            print(f"  - {r['id']} (MRR: {r.get('metrics', {}).get('mrr', 0.0):.3f})")
 
     # Overall status
     print("\n" + "=" * 80)
@@ -518,7 +483,7 @@ def main():
         "config": {
             "scenarios_path": str(scenarios_path),
             "total_scenarios": len(scenarios),
-            "top_k": args.top_k
+            "top_k": args.top_k,
         },
         "summary": {
             "total_scenarios": len(scenarios),
@@ -526,17 +491,13 @@ def main():
             "failed": failed,
             "errors": errors,
             "pass_rate": passed / len(scenarios) if scenarios else 0,
-            "metrics": overall_summary
+            "metrics": overall_summary,
         },
-        "by_category": {
-            category: metrics.compute_summary()
-            for category, metrics in metrics_by_category.items()
-        },
+        "by_category": {category: metrics.compute_summary() for category, metrics in metrics_by_category.items()},
         "by_difficulty": {
-            difficulty: metrics.compute_summary()
-            for difficulty, metrics in metrics_by_difficulty.items()
+            difficulty: metrics.compute_summary() for difficulty, metrics in metrics_by_difficulty.items()
         },
-        "scenarios": results
+        "scenarios": results,
     }
 
     if args.output:

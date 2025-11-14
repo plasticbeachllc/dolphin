@@ -1,10 +1,10 @@
 // agent-core/src/workflows/editor-workflow.ts
-import type { IWorkflow, TaskInput, WorkflowUpdate, Context } from "../types/index";
+import type { IWorkflow, TaskInput, WorkflowUpdate } from "../types/index";
 import type { ClaudeProvider } from "../execution/claude-provider";
 import type { ContextBuilder } from "../context/context-builder";
 import type { PromptBuilder } from "../prompts/prompt-builder";
 import type { StateStore } from "../state/state-store";
-import type { AgentEvent } from "../../../../shared/types/events";
+import type { AgentEvent } from "../../../shared/types/events";
 
 /**
  * Configuration for EditorWorkflow
@@ -80,7 +80,7 @@ export class EditorWorkflow implements IWorkflow {
       // Step 3: Execute with Claude (using event-driven approach)
       console.error("[EditorWorkflow] Executing with Claude Sonnet...");
 
-      let textContent = "";
+      let _textContent = "";
       const startTime = Date.now();
 
       // Collect events and forward them
@@ -90,7 +90,7 @@ export class EditorWorkflow implements IWorkflow {
         onEvent: (event: AgentEvent) => {
           // Forward content_delta events
           if (event.type === "content_delta") {
-            textContent += event.delta;
+            _textContent += event.delta;
           }
 
           // Forward tool events

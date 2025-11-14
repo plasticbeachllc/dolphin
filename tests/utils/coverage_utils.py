@@ -1,15 +1,13 @@
 """Manage test coverage collection and reporting."""
 
 import subprocess
-import sys
 from pathlib import Path
-from typing import Dict, List, Optional
 
 
 class CoverageManager:
     """Manage test coverage collection and reporting."""
 
-    def __init__(self, source_dir: str = "pb_kb/src", output_dir: Path = None):
+    def __init__(self, source_dir: str = "pb_kb/src", output_dir: Path | None = None):
         self.source_dir = source_dir
         self.output_dir = output_dir or Path("tests/reports")
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -22,7 +20,7 @@ class CoverageManager:
         """
         pass
 
-    def generate_report(self, output_dir: Optional[Path] = None) -> Dict[str, float]:
+    def generate_report(self, output_dir: Path | None = None) -> dict[str, float]:
         """Generate coverage report and return metrics.
 
         Args:
@@ -59,7 +57,7 @@ class CoverageManager:
         # Get coverage summary
         return self._get_coverage_summary()
 
-    def _get_coverage_summary(self) -> Dict[str, float]:
+    def _get_coverage_summary(self) -> dict[str, float]:
         """Get coverage summary from coverage tool.
 
         Returns:
@@ -107,22 +105,18 @@ class CoverageManager:
         current_coverage = metrics.get("overall_coverage", 0.0)
 
         if current_coverage >= min_coverage:
-            print(
-                f"✅ Coverage check passed: {current_coverage:.1f}% >= {min_coverage}%"
-            )
+            print(f"✅ Coverage check passed: {current_coverage:.1f}% >= {min_coverage}%")
             return True
         else:
-            print(
-                f"❌ Coverage check failed: {current_coverage:.1f}% < {min_coverage}%"
-            )
+            print(f"❌ Coverage check failed: {current_coverage:.1f}% < {min_coverage}%")
             return False
 
 
 def run_tests_with_coverage(
-    test_paths: List[str] = None,
+    test_paths: list[str] | None = None,
     source_dir: str = "pb_kb/src",
     min_coverage: float = 0.0,
-    output_dir: Path = None,
+    output_dir: Path | None = None,
 ) -> bool:
     """Run tests with coverage and generate reports.
 

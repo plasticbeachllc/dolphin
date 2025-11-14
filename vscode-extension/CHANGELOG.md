@@ -12,14 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### 🎨 Core Extension Features
 
 - **Dual Authentication System**
-
   - Claude CLI integration for subscription-based usage (no API costs)
   - Direct Anthropic API key support as fallback
   - Automatic authentication detection and status display
   - OAuth workflow integration for Claude Code
 
 - **Modern Webview Interface**
-
   - Beautiful SvelteKit-based UI with shadcn/ui component library
   - Real-time token-by-token streaming from Claude
   - VSCode theme integration with dark/light mode support
@@ -28,7 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Interactive plan timeline visualization with animated status indicators
 
 - **Rich Editor Integration**
-
   - Context menu commands: "Ask About Selection", "Refactor Selection", "Ask About File", "Ask About Folder"
   - Keyboard shortcuts (Cmd+L/Ctrl+L to focus chat input)
   - Diff viewer with syntax highlighting and side-by-side/unified modes
@@ -45,7 +42,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### ♿ Accessibility Standards (WCAG 2.1 AA Compliance)
 
 - **Comprehensive Keyboard Navigation**
-
   - Full keyboard accessibility for all extension features
   - Logical tab order throughout the interface
   - Focus indicators with 3:1 minimum contrast ratio
@@ -53,7 +49,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - No keyboard traps in any UI components
 
 - **Screen Reader Support**
-
   - ARIA labels and landmarks for all interactive elements
   - Semantic HTML structure with proper heading hierarchy
   - Live regions for dynamic content announcements
@@ -71,7 +66,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### 🔄 Dual-Path Indexing (File Watch + Git Diff)
 
 - **Real-Time File Watch System**
-
   - Live file change detection via VSCode file system API
   - Crash-proof pending changes queue stored in SQLite
   - Four auto-sync modes:
@@ -84,7 +78,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Configurable debounce timing
 
 - **Git-Aware Incremental Indexing**
-
   - `git diff` integration for efficient change detection
   - Commit SHA and branch tracking with each indexed chunk
   - Drift detection for offline/background changes
@@ -103,7 +96,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### 📊 Plan Visualization and UI Styling
 
 - **Plan Timeline Visualization**
-
   - Interactive draggable timeline component (`PlanTimeline.svelte`)
   - Visual step indicators with dynamic status colors
   - Animated pulsing for currently running steps
@@ -112,7 +104,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Expandable/collapsible step details
 
 - **Advanced Diff Viewer**
-
   - Side-by-side and unified diff display modes (`DiffViewer.svelte`)
   - Syntax highlighting for all supported languages
   - Line-by-line change visualization with add/delete markers
@@ -120,7 +111,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Binary file and size guards
 
 - **Tool Call Visualization**
-
   - Real-time tool execution cards (`ToolCallCard.svelte`)
   - Knowledge base search visualization with result counts
   - Success/error/loading state indicators
@@ -128,7 +118,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Metadata display (latency, result count, status)
 
 - **Rich Message Components**
-
   - Markdown rendering with code syntax highlighting
   - Code blocks with one-click copy buttons
   - User/assistant/system message styling
@@ -137,7 +126,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Loading states with spinners and skeleton screens
 
 - **Component Library (shadcn/ui)**
-
   - 20+ accessible, reusable UI components:
     - Alert, Alert Dialog, Avatar, Badge
     - Button, Card, Checkbox, Collapsible
@@ -159,7 +147,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **IPC Architecture Improvements**
-
   - JSON-RPC framing alignment in AgentCore stdio communication
   - Improved error propagation between TypeScript and Python layers
   - Event-driven status updates for better responsiveness

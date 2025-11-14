@@ -30,9 +30,7 @@ class KBPipeline(IngestionPipeline):
         if config is None:
             store_root = getattr(lancedb_store, "root", None)
             config = KBConfig(store_root=Path(store_root)) if store_root else KBConfig()
-        super().__init__(
-            config=config, lancedb=lancedb_store, metadata=metadata_store, **kwargs
-        )
+        super().__init__(config=config, lancedb=lancedb_store, metadata=metadata_store, **kwargs)
 
 
 __all__ = ["KBPipeline"]

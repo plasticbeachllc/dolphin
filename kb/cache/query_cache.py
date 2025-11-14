@@ -11,7 +11,7 @@ import json
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -20,8 +20,8 @@ class CachedQuery:
 
     query_hash: str
     query_text: str
-    results: List[Dict[str, Any]]
-    params: Dict[str, Any]
+    results: list[dict[str, Any]]
+    params: dict[str, Any]
     timestamp: float
     hits: int = 0
 
@@ -55,14 +55,14 @@ class QueryResultCache:
         self.enable_similarity = enable_similarity
 
         self._cache: OrderedDict[str, CachedQuery] = OrderedDict()
-        self._repo_timestamps: Dict[str, float] = {}
+        self._repo_timestamps: dict[str, float] = {}
 
         # Statistics
         self._hits = 0
         self._misses = 0
         self._invalidations = 0
 
-    def _make_cache_key(self, query: str, params: Dict[str, Any]) -> str:
+    def _make_cache_key(self, query: str, params: dict[str, Any]) -> str:
         """Create cache key from query and parameters.
 
         Args:
@@ -80,8 +80,8 @@ class QueryResultCache:
     def get(
         self,
         query: str,
-        params: Optional[Dict[str, Any]] = None,
-    ) -> Optional[List[Dict[str, Any]]]:
+        params: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]] | None:
         """Get cached results for a query.
 
         Args:
@@ -125,8 +125,8 @@ class QueryResultCache:
     def put(
         self,
         query: str,
-        params: Optional[Dict[str, Any]],
-        results: List[Dict[str, Any]],
+        params: dict[str, Any] | None,
+        results: list[dict[str, Any]],
     ) -> None:
         """Store query results in cache.
 
@@ -157,7 +157,7 @@ class QueryResultCache:
     def _is_invalidated_by_repo_update(
         self,
         cached: CachedQuery,
-        params: Dict[str, Any],
+        params: dict[str, Any],
     ) -> bool:
         """Check if cached result is invalidated by repo update.
 
@@ -241,7 +241,7 @@ class QueryResultCache:
             return 0.0
         return (self._hits / total) * 100
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """Get cache statistics.
 
         Returns:
@@ -281,7 +281,7 @@ class QueryResultCache:
 
 
 # Global cache instance
-_query_cache: Optional[QueryResultCache] = None
+_query_cache: QueryResultCache | None = None
 
 
 def get_query_cache(

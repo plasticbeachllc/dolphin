@@ -31,40 +31,35 @@ def benchmark_configuration(
     store: LanceDBStore,
     params: ANNParams,
     queries: list[list[float]],
-    iterations: int = 100
+    iterations: int = 100,
 ) -> dict[str, Any]:
     """Benchmark a specific ANN configuration.
-    
+
     Args:
         store: LanceDB store to query
         params: ANN parameters to test
         queries: List of query vectors
         iterations: Number of iterations per query
-    
+
     Returns:
         Dictionary with benchmark results
     """
     latencies = []
-    
+
     for query in queries:
         # Run multiple iterations for statistical significance
         iter_latencies = []
         for _ in range(iterations):
             start = time.time()
-            results = store.query(
-                query,
-                model="small",
-                top_k=10,
-                ann_params=params
-            )
+            store.query(query, model="small", top_k=10, ann_params=params)
             iter_latencies.append((time.time() - start) * 1000)
-        
+
         latencies.extend(iter_latencies)
-    
+
     # Calculate statistics
     latencies.sort()
     n = len(latencies)
-    
+
     return {
         "params": {
             "metric": params.metric,
@@ -86,49 +81,45 @@ def benchmark_recall(
     store: LanceDBStore,
     params: ANNParams,
     queries: list[list[float]],
-    ground_truth_results: list[set[str]]
+    ground_truth_results: list[set[str]],
 ) -> float:
     """Benchmark recall for ANN configuration.
-    
+
     Args:
         store: LanceDB store to query
         params: ANN parameters to test
         queries: List of query vectors
         ground_truth_results: List of ground truth result sets (chunk IDs)
-    
+
     Returns:
         Average recall across all queries
     """
     recalls = []
-    
+
     for query, ground_truth in zip(queries, ground_truth_results):
-        results = store.query(
-            query,
-            model="small",
-            top_k=10,
-            ann_params=params
-        )
-        
+        results = store.query(query, model="small", top_k=10, ann_params=params)
+
         returned_ids = {r["id"] for r in results}
-        
+
         if ground_truth:
             recall = len(returned_ids & ground_truth) / len(ground_truth)
             recalls.append(recall)
-    
+
     return statistics.mean(recalls) if recalls else 0.0
 
 
 def generate_test_queries(n: int = 10, dim: int = 1536) -> list[list[float]]:
     """Generate random test query vectors.
-    
+
     Args:
         n: Number of queries to generate
         dim: Vector dimension
-    
+
     Returns:
         List of query vectors
     """
     import random
+
     queries = []
     for _ in range(n):
         # Generate random normalized vector
@@ -141,56 +132,35 @@ def generate_test_queries(n: int = 10, dim: int = 1536) -> list[list[float]]:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Benchmark ANN parameter configurations for LanceDB"
-    )
+    parser = argparse.ArgumentParser(description="Benchmark ANN parameter configurations for LanceDB")
     parser.add_argument(
         "--store-path",
         type=Path,
         default=Path.home() / ".dolphin" / "knowledge_store",
-        help="Path to LanceDB store"
+        help="Path to LanceDB store",
     )
-    parser.add_argument(
-        "--queries",
-        type=int,
-        default=10,
-        help="Number of test queries"
-    )
-    parser.add_argument(
-        "--iterations",
-        type=int,
-        default=50,
-        help="Iterations per query"
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        help="Output JSON file for results"
-    )
-    
+    parser.add_argument("--queries", type=int, default=10, help="Number of test queries")
+    parser.add_argument("--iterations", type=int, default=50, help="Iterations per query")
+    parser.add_argument("--output", type=Path, help="Output JSON file for results")
+
     args = parser.parse_args()
-    
+
     # Initialize store
     print(f"Loading LanceDB store from {args.store_path}")
     store = LanceDBStore(root=args.store_path)
-    
+
     # Generate test queries
     print(f"Generating {args.queries} test queries...")
     queries = generate_test_queries(n=args.queries, dim=1536)
-    
+
     # Get ground truth (exhaustive search)
     print("Computing ground truth with exhaustive search...")
     ground_truth_params = ANNParams.for_development()
     ground_truth_results = []
     for query in queries:
-        results = store.query(
-            query,
-            model="small",
-            top_k=10,
-            ann_params=ground_truth_params
-        )
+        results = store.query(query, model="small", top_k=10, ann_params=ground_truth_params)
         ground_truth_results.append({r["id"] for r in results})
-    
+
     # Benchmark configurations
     configs = [
         ("default", ANNParams()),
@@ -199,7 +169,7 @@ def main():
         ("custom_fast", ANNParams(nprobes=5, refine_factor=3)),
         ("custom_balanced", ANNParams(nprobes=15, refine_factor=8)),
     ]
-    
+
     results = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "config": {
@@ -207,64 +177,57 @@ def main():
             "iterations_per_query": args.iterations,
             "vector_dimension": 1536,
         },
-        "benchmarks": {}
+        "benchmarks": {},
     }
-    
+
     print("\n" + "=" * 80)
     print("ANN PARAMETER BENCHMARKING")
     print("=" * 80)
-    
+
     for name, params in configs:
         print(f"\nBenchmarking: {name}")
         print(f"  nprobes={params.nprobes}, refine_factor={params.refine_factor}")
-        
+
         # Latency benchmark
-        latency_results = benchmark_configuration(
-            store, params, queries, args.iterations
-        )
-        
+        latency_results = benchmark_configuration(store, params, queries, args.iterations)
+
         # Recall benchmark
-        recall = benchmark_recall(
-            store, params, queries, ground_truth_results
-        )
-        
+        recall = benchmark_recall(store, params, queries, ground_truth_results)
+
         # Combine results
-        benchmark_result = {
-            **latency_results,
-            "recall": recall
-        }
-        
-        results["benchmarks"][name] = benchmark_result
-        
+        benchmark_result = {**latency_results, "recall": recall}
+
+        results["benchmarks"][name] = benchmark_result  # type: ignore[index]
+
         # Print results
         print(f"  Latency p50: {latency_results['latency_p50']:.1f}ms")
         print(f"  Latency p95: {latency_results['latency_p95']:.1f}ms")
         print(f"  Latency p99: {latency_results['latency_p99']:.1f}ms")
         print(f"  Recall: {recall:.2%}")
         print(f"  Estimated speedup: {latency_results['estimated_speedup']:.2f}x")
-    
+
     # Print comparison table
     print("\n" + "=" * 80)
     print("COMPARISON TABLE")
     print("=" * 80)
     print(f"{'Config':<20} {'p50 (ms)':<12} {'p95 (ms)':<12} {'Recall':<10} {'Speedup':<10}")
     print("-" * 80)
-    
-    for name, benchmark in results["benchmarks"].items():
+
+    for name, benchmark in results["benchmarks"].items():  # type: ignore[attr-defined]
         print(
             f"{name:<20} "
-            f"{benchmark['latency_p50']:<12.1f} "
-            f"{benchmark['latency_p95']:<12.1f} "
-            f"{benchmark['recall']:<10.2%} "
-            f"{benchmark['estimated_speedup']:<10.2f}x"
+            f"{benchmark['latency_p50']:<12.1f} "  # type: ignore[index]
+            f"{benchmark['latency_p95']:<12.1f} "  # type: ignore[index]
+            f"{benchmark['recall']:<10.2%} "  # type: ignore[index]
+            f"{benchmark['estimated_speedup']:<10.2f}x"  # type: ignore[index]
         )
-    
+
     # Save results
     if args.output:
         with open(args.output, "w") as f:
             json.dump(results, f, indent=2)
         print(f"\nResults saved to: {args.output}")
-    
+
     print("\n" + "=" * 80)
     print("Benchmark complete!")
     print("=" * 80)

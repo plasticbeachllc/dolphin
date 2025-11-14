@@ -21,7 +21,6 @@ This is the first major release of pb-dolphin, marking a significant milestone i
 #### 📚 Enhanced Knowledge Base Core
 
 - **Advanced Language-Aware Chunking**
-
   - **Python** (`py_chunker.py`): Tree-sitter AST parsing for classes, functions, methods, docstrings
   - **TypeScript/JavaScript** (`ts_chunker.py`): Exports, functions, classes, interfaces, type definitions
   - **Markdown** (`md_chunker.py`): Heading-based hierarchical sectioning (H1-H6)
@@ -30,7 +29,6 @@ This is the first major release of pb-dolphin, marking a significant milestone i
   - **Fallback** (`fallback_chunker.py`): Token-windowing with configurable overlap for unsupported languages
 
 - **Hybrid Semantic Search**
-
   - OpenAI embeddings (text-embedding-3-small: 1536-dim, text-embedding-3-large: 3072-dim)
   - LanceDB vector storage with IVF (Inverted File) indexing
   - **Hybrid Search**: BM25 full-text + Vector search with Reciprocal Rank Fusion
@@ -46,7 +44,6 @@ This is the first major release of pb-dolphin, marking a significant milestone i
     - Trade-off: 2-3x slower, ~2GB additional install size
 
 - **Advanced Result Ranking**
-
   - **Maximal Marginal Relevance (MMR)**: Balances relevance and diversity
     - Prevents redundant/similar results
     - Configurable lambda parameter (default: 0.7)
@@ -57,7 +54,6 @@ This is the first major release of pb-dolphin, marking a significant milestone i
     - Robust to outliers and score scale differences
 
 - **Code Graph Store**
-
   - SQLite-based graph database for code entities and relationships
   - Node types: functions, classes, methods, modules
   - Edge types: calls, imports, inheritance, references
@@ -77,21 +73,18 @@ This is the first major release of pb-dolphin, marking a significant milestone i
 #### ⚡ Parallelized Knowledge Base
 
 - **High-Performance Batch Processing**
-
   - Configurable batch size for embedding API calls (default: 100)
   - Parallel embedding requests with concurrency control
   - Rate limit handling with exponential backoff retry logic
   - Batch processing for cross-encoder reranking (batch size: 32)
 
 - **Concurrent Search Capabilities**
-
   - 8 parallel search queries supported (for LLM multi-tool calls)
   - ~300ms p50 search latency (60% faster than target)
   - ~800ms p95 search latency (60% faster than target)
   - 10-20 sustained queries per second for single-user workloads
 
 - **Adaptive ANN (Approximate Nearest Neighbor) Tuning**
-
   - Automatic query-type detection (identifier vs. concept vs. example-based)
   - Dynamic nprobes adjustment based on dataset size and query patterns
   - Three preset optimization strategies: speed, accuracy, development
@@ -100,7 +93,6 @@ This is the first major release of pb-dolphin, marking a significant milestone i
   - Profiling and benchmarking scripts (`scripts/benchmark_ann.py`)
 
 - **Multi-Level Caching System**
-
   - Redis support for distributed caching (optional)
   - In-memory LRU caching for hot queries
   - 512 MB LanceDB cache (configurable via `LANCE_DB_CACHE_SIZE`)
@@ -131,7 +123,6 @@ This is the first major release of pb-dolphin, marking a significant milestone i
 #### 🔧 Configuration & CLI Management
 
 - **Multi-Level Configuration System**
-
   - Repository-specific: `.dolphin/config.toml`
   - User-global: `~/.dolphin/config.toml`
   - Automatic config creation with sensible defaults
@@ -139,7 +130,6 @@ This is the first major release of pb-dolphin, marking a significant milestone i
   - Config hierarchy: repo-specific overrides user-global
 
 - **Unified CLI (`dolphin` command)**
-
   - `dolphin init` - Initialize configuration files
   - `dolphin add-repo` - Register a repository for indexing
   - `dolphin index` - Index or reindex repository
@@ -160,7 +150,6 @@ This is the first major release of pb-dolphin, marking a significant milestone i
 #### 🧪 Comprehensive Testing Framework
 
 - **Extensive Test Suite (191+ Python Tests)**
-
   - **Unit tests**: `tests/unit/` - Test individual components
     - Chunkers (Python, TypeScript, Markdown, SQL, Svelte, fallback): 45+ tests
     - Embeddings (OpenAI provider, retry logic, stub implementations): 15 tests
@@ -181,7 +170,6 @@ This is the first major release of pb-dolphin, marking a significant milestone i
   - **Coverage**: `uv run pytest --cov=kb/src`
 
 - **Profiling and Benchmarking Tools**
-
   - `scripts/benchmark_ann.py` - ANN parameter profiling across datasets
   - `scripts/test_hybrid_search_performance.py` - Hybrid search quality metrics:
     - Precision@5, Precision@10 measurements
@@ -202,7 +190,6 @@ This is the first major release of pb-dolphin, marking a significant milestone i
 #### 🚀 Production-Ready Features
 
 - **Security Hardening**
-
   - Path traversal protection in file serving endpoints
   - Parameterized SQL queries to prevent injection attacks
   - Secure environment variable handling for API keys
@@ -211,7 +198,6 @@ This is the first major release of pb-dolphin, marking a significant milestone i
   - CORS configuration for webview security
 
 - **Robust Error Handling**
-
   - Comprehensive error messages with actionable guidance
   - Graceful degradation on service failures
   - Exponential backoff retry logic for transient errors
@@ -231,7 +217,6 @@ This is the first major release of pb-dolphin, marking a significant milestone i
 ### Changed
 
 - **Dependency Optimization**
-
   - Core install reduced from ~2GB to ~200MB
   - Heavy ML dependencies moved to optional extras
   - Reranking: `pip install pb-dolphin[reranking]` (~2GB)
@@ -248,14 +233,12 @@ This is the first major release of pb-dolphin, marking a significant milestone i
 ### Fixed
 
 - **Configuration Template Issues**
-
   - Fixed `[embedding]` section name (was incorrectly `[embeddings]`)
   - Added missing `default_embed_model` field
   - Added missing `per_session_spend_cap_usd` field at top level
   - Corrected TOML syntax errors for null/default values
 
 - **Database and Storage**
-
   - Foreign key validation during repository initialization
   - Proper cascade deletion order in `rm-repo` operations
   - FTS5 cleanup now uses multi-strategy approach for completeness
@@ -271,14 +254,12 @@ This is the first major release of pb-dolphin, marking a significant milestone i
 ### Performance
 
 - **Search Performance**
-
   - Semantic search latency: ~300ms p50, ~800ms p95 (targets: 600ms/2s) ✅
   - 40% faster searches with adaptive ANN tuning vs. static parameters
   - 40% better precision with hybrid search on code identifiers
   - Optional reranking: 20-30% MRR improvement (at 2-3x latency cost)
 
 - **Scalability Benchmarks**
-
   - **Small repos** (1K files, 50K chunks): ~100MB LanceDB, ~5MB SQLite
   - **Medium repos** (10K files, 500K chunks): ~1GB LanceDB, ~50MB SQLite
   - **Large repos** (100K files, 5M chunks): ~10GB LanceDB, ~500MB SQLite

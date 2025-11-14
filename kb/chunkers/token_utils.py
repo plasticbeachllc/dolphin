@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable, List, Sequence, Tuple
+from collections.abc import Sequence
 
 import tiktoken
 
@@ -23,7 +23,7 @@ def get_tokenizer(model: str = "small") -> tiktoken.Encoding:
     return tiktoken.get_encoding(enc_name)
 
 
-def encode_tokens(text: str, tokenizer: tiktoken.Encoding | None = None) -> List[int]:
+def encode_tokens(text: str, tokenizer: tiktoken.Encoding | None = None) -> list[int]:
     """Encode text into token IDs using the provided tokenizer (or default)."""
     tok = tokenizer or get_tokenizer()
     return tok.encode(text)
@@ -49,7 +49,7 @@ def window_token_ranges(
     *,
     target: int = 400,
     overlap: int = 40,
-) -> List[Tuple[int, int]]:
+) -> list[tuple[int, int]]:
     """Return a list of [start, end) token index ranges covering num_tokens with overlap.
 
     - Ensures the entire sequence [0, num_tokens) is covered.
@@ -62,7 +62,7 @@ def window_token_ranges(
     if num_tokens <= target:
         return [(0, num_tokens)]
 
-    ranges: List[Tuple[int, int]] = []
+    ranges: list[tuple[int, int]] = []
     step = target - overlap
     start = 0
     while start < num_tokens:
@@ -76,9 +76,9 @@ def window_token_ranges(
 
 def slice_text_by_token_ranges(
     text: str,
-    ranges: Sequence[Tuple[int, int]],
+    ranges: Sequence[tuple[int, int]],
     tokenizer: tiktoken.Encoding | None = None,
-) -> List[str]:
+) -> list[str]:
     """Decode text slices from token index ranges.
 
     This reconstructs slice text from the encoded tokens; tiktoken decoding is
@@ -86,7 +86,7 @@ def slice_text_by_token_ranges(
     """
     tok = tokenizer or get_tokenizer()
     tokens = tok.encode(text)
-    slices: List[str] = []
+    slices: list[str] = []
     n = len(tokens)
     for start, end in ranges:
         s = max(0, min(n, start))
@@ -103,7 +103,7 @@ def window_text_by_tokens(
     model: str = "small",
     target: int = 400,
     overlap: int = 40,
-) -> List[Tuple[str, int, int]]:
+) -> list[tuple[str, int, int]]:
     """Return a list of (chunk_text, start_char_index, end_char_index) windows.
 
     - Uses tiktoken to create windows of approximately `target` tokens with `overlap`.
@@ -115,7 +115,7 @@ def window_text_by_tokens(
     ranges = window_token_ranges(len(tokens), target=target, overlap=overlap)
 
     # Build cumulative character offsets per token index: char_offsets[i] = char index after i tokens
-    char_offsets: List[int] = [0]
+    char_offsets: list[int] = [0]
     append = char_offsets.append
     cur = 0
     for tid in tokens:
@@ -123,7 +123,7 @@ def window_text_by_tokens(
         cur += len(piece)
         append(cur)
 
-    chunks: List[Tuple[str, int, int]] = []
+    chunks: list[tuple[str, int, int]] = []
     for s, e in ranges:
         s_char = char_offsets[s]
         e_char = char_offsets[e]

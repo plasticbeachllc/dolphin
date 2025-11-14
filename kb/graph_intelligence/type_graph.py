@@ -1,11 +1,8 @@
 """Type relationship extraction for inheritance and interfaces."""
 
-import uuid
-from typing import List, Optional
-
 import tree_sitter_python as tspython
 import tree_sitter_typescript as tsts
-from tree_sitter import Language, Node, Parser
+from tree_sitter import Language, Node
 
 from .models import EdgeType, GraphEdge, GraphNode, NodeType
 
@@ -24,8 +21,8 @@ class TypeGraphExtractor:
         repo_id: int,
         file_id: int,
         commit_sha: str,
-        existing_classes: List[GraphNode],
-    ) -> List[GraphEdge]:
+        existing_classes: list[GraphNode],
+    ) -> list[GraphEdge]:
         """Extract Python inheritance relationships."""
         edges = []
 
@@ -38,7 +35,7 @@ class TypeGraphExtractor:
         """
         )
 
-        captures = inheritance_query.captures(tree_root)
+        captures = inheritance_query.captures(tree_root)  # type: ignore[attr-defined]
 
         # Process captures in pairs (class_name, bases)
         for i in range(0, len(captures), 2):
@@ -53,11 +50,7 @@ class TypeGraphExtractor:
 
                 # Find the GraphNode for this class
                 source_class = next(
-                    (
-                        cls
-                        for cls in existing_classes
-                        if cls.name == class_name and cls.file_path == file_path
-                    ),
+                    (cls for cls in existing_classes if cls.name == class_name and cls.file_path == file_path),
                     None,
                 )
 
@@ -70,11 +63,7 @@ class TypeGraphExtractor:
                 for base_class_name in base_classes:
                     # Try to find the base class in existing classes
                     target_class = next(
-                        (
-                            cls
-                            for cls in existing_classes
-                            if cls.name == base_class_name
-                        ),
+                        (cls for cls in existing_classes if cls.name == base_class_name),
                         None,
                     )
 
@@ -101,8 +90,8 @@ class TypeGraphExtractor:
         repo_id: int,
         file_id: int,
         commit_sha: str,
-        existing_classes: List[GraphNode],
-    ) -> List[GraphEdge]:
+        existing_classes: list[GraphNode],
+    ) -> list[GraphEdge]:
         """Extract TypeScript inheritance and interface implementation."""
         edges = []
 
@@ -123,7 +112,7 @@ class TypeGraphExtractor:
         """
         )
 
-        captures = class_query.captures(tree_root)
+        captures = class_query.captures(tree_root)  # type: ignore[attr-defined]
 
         # Track which class we're currently processing
         current_class_name = None
@@ -134,11 +123,7 @@ class TypeGraphExtractor:
                 current_class_name = node.text.decode("utf8")
                 # Find the GraphNode for this class
                 current_class_node = next(
-                    (
-                        cls
-                        for cls in existing_classes
-                        if cls.name == current_class_name and cls.file_path == file_path
-                    ),
+                    (cls for cls in existing_classes if cls.name == current_class_name and cls.file_path == file_path),
                     None,
                 )
 
@@ -170,12 +155,7 @@ class TypeGraphExtractor:
 
                 # Try to find the interface
                 interface_node = next(
-                    (
-                        cls
-                        for cls in existing_classes
-                        if cls.name == interface_name
-                        and cls.node_type == NodeType.CLASS
-                    ),
+                    (cls for cls in existing_classes if cls.name == interface_name and cls.node_type == NodeType.CLASS),
                     None,
                 )
 
@@ -195,7 +175,7 @@ class TypeGraphExtractor:
 
         return edges
 
-    def _extract_python_bases(self, bases_node: Node) -> List[str]:
+    def _extract_python_bases(self, bases_node: Node) -> list[str]:
         """Extract base class names from Python argument list."""
         base_classes = []
 

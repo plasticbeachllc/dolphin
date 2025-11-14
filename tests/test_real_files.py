@@ -10,9 +10,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # Test the current SQL chunker on a real file
-sql_file = Path(
-    "/Users/tdc/worktable/lighthouse/apps/web/drizzle/0000_legal_doctor_strange.sql"
-)
+sql_file = Path("/Users/tdc/worktable/lighthouse/apps/web/drizzle/0000_legal_doctor_strange.sql")
 
 print("=" * 80)
 
@@ -90,7 +88,8 @@ try:
                 print(f"Generated {len(chunks)} chunks:")
                 for i, chunk in enumerate(chunks[:5], 1):  # Show first 5
                     print(
-                        f"  {i}. {chunk.symbol_kind} (lines {chunk.start_line}-{chunk.end_line}, {chunk.token_count} tokens)"
+                        f"  {i}. {chunk.symbol_kind} "
+                        f"(lines {chunk.start_line}-{chunk.end_line}, {chunk.token_count} tokens)"
                     )
 
                 if len(chunks) > 5:

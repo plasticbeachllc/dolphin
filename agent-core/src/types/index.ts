@@ -72,7 +72,7 @@ export interface ContentBlock {
   text?: string;
   content?: string;
   tool_use_id?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 // =============================================================================
@@ -335,7 +335,7 @@ export interface AuthStatus {
 export interface Tool {
   name: string;
   description: string;
-  parameters?: Record<string, any>;
+  parameters?: Record<string, unknown>;
 }
 
 /**
@@ -362,8 +362,8 @@ export interface ClaudeChunk {
   type: ChunkType;
   content: string;
   toolName?: string;
-  toolInput?: any;
-  toolResult?: any;
+  toolInput?: unknown;
+  toolResult?: unknown;
 }
 
 // =============================================================================
@@ -382,7 +382,7 @@ export interface WorkflowUpdate {
   type: WorkflowUpdateType;
   sessionId: string;
   timestamp: string;
-  data: any;
+  data: unknown;
 }
 
 // =============================================================================
@@ -396,8 +396,8 @@ export interface JSONRPCMessage {
   jsonrpc: "2.0";
   id?: string | number;
   method?: string;
-  params?: any;
-  result?: any;
+  params?: unknown;
+  result?: unknown;
   error?: JSONRPCError;
 }
 
@@ -407,7 +407,7 @@ export interface JSONRPCMessage {
 export interface JSONRPCError {
   code: number;
   message: string;
-  data?: any;
+  data?: unknown;
 }
 
 // =============================================================================

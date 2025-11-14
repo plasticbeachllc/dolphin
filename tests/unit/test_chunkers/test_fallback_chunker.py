@@ -1,7 +1,5 @@
 """Unit tests for fallback chunker with token windowing."""
 
-import pytest
-
 from kb.chunkers.fallback_chunker import chunk_text
 from kb.chunkers.token_utils import count_tokens, get_tokenizer
 
@@ -31,9 +29,7 @@ class TestFallbackChunker:
     def test_multi_chunk_with_overlap(self):
         """Long text should be split into overlapping chunks."""
         # Create a text with enough tokens to require multiple chunks
-        lines = [
-            f"Line {i}: This is some content that will be tokenized." for i in range(50)
-        ]
+        lines = [f"Line {i}: This is some content that will be tokenized." for i in range(50)]
         text = "\n".join(lines)
 
         chunks = chunk_text(text, token_target=100, overlap_pct=0.10)
@@ -71,11 +67,7 @@ class TestFallbackChunker:
             assert chunk.start_line <= chunk.end_line <= 20
 
             # The chunk text should appear somewhere in the original text
-            assert (
-                chunk.text in text
-                or text.startswith(chunk.text)
-                or text.endswith(chunk.text)
-            )
+            assert chunk.text in text or text.startswith(chunk.text) or text.endswith(chunk.text)
 
             # Count actual newlines in chunk and verify it's consistent with line range
             newline_count = chunk.text.count("\n")
@@ -95,16 +87,14 @@ class TestFallbackChunker:
 
     def test_overlap_creates_redundancy(self):
         """Overlapping chunks should share some content."""
-        lines = [
-            f"Line {i}: Content for testing overlap functionality." for i in range(30)
-        ]
+        lines = [f"Line {i}: Content for testing overlap functionality." for i in range(30)]
         text = "\n".join(lines)
 
         # Get chunks with overlap
         chunks_with_overlap = chunk_text(text, token_target=80, overlap_pct=0.20)
 
         # Get chunks without overlap
-        chunks_no_overlap = chunk_text(text, token_target=80, overlap_pct=0.0)
+        chunk_text(text, token_target=80, overlap_pct=0.0)
 
         # With overlap should have more chunks (or same number but with shared content)
         if len(chunks_with_overlap) > 1:
@@ -163,10 +153,7 @@ class TestFallbackChunker:
     def test_target_token_size(self):
         """Test that chunks approximate the target token size."""
         # Create text that should generate multiple chunks
-        lines = [
-            f"This is line {i} with enough content to create tokens."
-            for i in range(100)
-        ]
+        lines = [f"This is line {i} with enough content to create tokens." for i in range(100)]
         text = "\n".join(lines)
 
         target_tokens = 50

@@ -1,9 +1,5 @@
 """Unit tests for Python symbol-level chunking."""
 
-from pathlib import Path
-
-import pytest
-
 from kb.chunkers.py_chunker import chunk_source
 from kb.hashing import canonicalize_text
 
@@ -76,10 +72,10 @@ class MyClass:
 class Calculator:
     def __init__(self):
         self.value = 0
-    
+
     def add(self, x, y):
         return x + y
-    
+
     def multiply(self, x, y):
         return x * y
 """
@@ -128,11 +124,7 @@ def function():
                 assert chunk.symbol_name == "function"
             elif chunk.symbol_kind is None:
                 # Module-level code chunk
-                assert (
-                    "import os" in chunk.text
-                    or "CONSTANT = 42" in chunk.text
-                    or "Module level code" in chunk.text
-                )
+                assert "import os" in chunk.text or "CONSTANT = 42" in chunk.text or "Module level code" in chunk.text
 
     def test_python_nested_classes_and_functions(self):
         """Test chunking of nested classes and functions."""
@@ -140,11 +132,11 @@ def function():
 def outer_function():
     def inner_function():
         return "nested"
-    
+
     class InnerClass:
         def method(self):
             return "method in nested class"
-    
+
     return inner_function()
 """
         chunks = chunk_source(src, model="small")

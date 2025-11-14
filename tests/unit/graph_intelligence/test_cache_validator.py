@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from kb.graph_intelligence.cache_validator import GraphCacheValidator
-from kb.store.sql_models import GraphCacheState, Repo
 
 
 @pytest.fixture
@@ -19,9 +18,7 @@ def mock_db():
 @pytest.fixture
 def validator(mock_db):
     """Create a GraphCacheValidator instance."""
-    return GraphCacheValidator(
-        db=mock_db, repo_id=1, edge_change_threshold=5, ttl_minutes=10
-    )
+    return GraphCacheValidator(db=mock_db, repo_id=1, edge_change_threshold=5, ttl_minutes=10)
 
 
 class TestCacheValidation:
@@ -52,9 +49,7 @@ class TestCacheValidation:
             mock_session_inst.exec.return_value.first.return_value = cache_state
 
             # Mock git command to return different commit
-            with patch.object(
-                validator, "_get_current_commit_sha", return_value="new_commit_456"
-            ):
+            with patch.object(validator, "_get_current_commit_sha", return_value="new_commit_456"):
                 assert not validator.is_cache_valid()
 
     def test_edge_threshold_exceeded_invalid(self, validator, mock_db):
@@ -71,9 +66,7 @@ class TestCacheValidation:
             mock_session_inst.exec.return_value.first.return_value = cache_state
 
             # Mock same commit
-            with patch.object(
-                validator, "_get_current_commit_sha", return_value="commit_123"
-            ):
+            with patch.object(validator, "_get_current_commit_sha", return_value="commit_123"):
                 assert not validator.is_cache_valid()
 
     def test_ttl_exceeded_invalid(self, validator, mock_db):
@@ -91,9 +84,7 @@ class TestCacheValidation:
             mock_session_inst.exec.return_value.first.return_value = cache_state
 
             # Mock same commit
-            with patch.object(
-                validator, "_get_current_commit_sha", return_value="commit_123"
-            ):
+            with patch.object(validator, "_get_current_commit_sha", return_value="commit_123"):
                 assert not validator.is_cache_valid()
 
     def test_valid_cache(self, validator, mock_db):
@@ -112,9 +103,7 @@ class TestCacheValidation:
             mock_session_inst.exec.return_value.first.return_value = cache_state
 
             # Mock same commit
-            with patch.object(
-                validator, "_get_current_commit_sha", return_value="commit_123"
-            ):
+            with patch.object(validator, "_get_current_commit_sha", return_value="commit_123"):
                 assert validator.is_cache_valid()
 
 
@@ -134,9 +123,7 @@ class TestGitSHATracking:
 
             # Mock git command
             with patch("subprocess.run") as mock_run:
-                mock_run.return_value = Mock(
-                    returncode=0, stdout="abc123def456\n", stderr=""
-                )
+                mock_run.return_value = Mock(returncode=0, stdout="abc123def456\n", stderr="")
 
                 # Mock Path.exists
                 with patch.object(Path, "exists", return_value=True):
@@ -172,9 +159,7 @@ class TestGitSHATracking:
 
             # Mock git command failure
             with patch("subprocess.run") as mock_run:
-                mock_run.return_value = Mock(
-                    returncode=1, stdout="", stderr="fatal: not a git repository"
-                )
+                mock_run.return_value = Mock(returncode=1, stdout="", stderr="fatal: not a git repository")
 
                 with patch.object(Path, "exists", return_value=True):
                     commit_sha = validator._get_current_commit_sha()
@@ -193,9 +178,7 @@ class TestCacheStateManagement:
             # No existing cache state
             mock_session_inst.exec.return_value.first.return_value = None
 
-            validator.update_cache_state(
-                commit_sha="abc123", node_count=100, edge_count=50
-            )
+            validator.update_cache_state(commit_sha="abc123", node_count=100, edge_count=50)
 
             # Verify session.add was called
             assert mock_session_inst.add.called
@@ -212,9 +195,7 @@ class TestCacheStateManagement:
             cache_state.edge_changes_since_rebuild = 50
             mock_session_inst.exec.return_value.first.return_value = cache_state
 
-            validator.update_cache_state(
-                commit_sha="new_commit", node_count=200, edge_count=100
-            )
+            validator.update_cache_state(commit_sha="new_commit", node_count=200, edge_count=100)
 
             # Verify cache state was updated
             assert cache_state.commit_sha == "new_commit"
@@ -256,9 +237,7 @@ class TestEdgeCases:
             mock_session_inst.exec.return_value.first.return_value = cache_state
 
             # Mock same commit
-            with patch.object(
-                validator, "_get_current_commit_sha", return_value="commit_123"
-            ):
+            with patch.object(validator, "_get_current_commit_sha", return_value="commit_123"):
                 # Should return False due to timestamp parse error
                 assert not validator.is_cache_valid()
 

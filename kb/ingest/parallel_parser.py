@@ -8,9 +8,7 @@ from __future__ import annotations
 
 import multiprocessing as mp
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List
 
 from ..chunkers.registry import get_chunker_for_file
 from ..chunkers.types import Chunk
@@ -33,7 +31,7 @@ class ParseResult:
     """Result of parsing a file."""
 
     file_path: Path
-    chunks: List[Chunk]
+    chunks: list[Chunk]
     success: bool
     error: str | None = None
 
@@ -49,6 +47,10 @@ def _parse_file_worker(job: ParseJob) -> ParseResult:
     """
     try:
         chunker = get_chunker_for_file(job.file_path)
+
+        # Type narrowing: chunker is callable if get_chunker_for_file returned successfully
+        if chunker is None:
+            raise ValueError(f"No chunker available for {job.file_path}")
 
         chunks = chunker(
             job.content,
@@ -72,9 +74,9 @@ def _parse_file_worker(job: ParseJob) -> ParseResult:
 
 
 def parse_files_parallel(
-    jobs: List[ParseJob],
+    jobs: list[ParseJob],
     num_workers: int | None = None,
-) -> List[ParseResult]:
+) -> list[ParseResult]:
     """Parse multiple files in parallel using multiprocessing.
 
     Args:
@@ -121,13 +123,12 @@ class ParallelChunkCache:
         Args:
             max_size: Maximum number of files to cache (default: 1000)
         """
-        from functools import lru_cache
 
         self.max_size = max_size
-        self._cache: Dict[tuple[str, str], List[Chunk]] = {}
-        self._access_order: List[tuple[str, str]] = []
+        self._cache: dict[tuple[str, str], list[Chunk]] = {}
+        self._access_order: list[tuple[str, str]] = []
 
-    def get(self, file_path: str, content_hash: str) -> List[Chunk] | None:
+    def get(self, file_path: str, content_hash: str) -> list[Chunk] | None:
         """Get cached chunks for a file.
 
         Args:
@@ -146,7 +147,7 @@ class ParallelChunkCache:
             return self._cache[key]
         return None
 
-    def put(self, file_path: str, content_hash: str, chunks: List[Chunk]) -> None:
+    def put(self, file_path: str, content_hash: str, chunks: list[Chunk]) -> None:
         """Store chunks in cache.
 
         Args:

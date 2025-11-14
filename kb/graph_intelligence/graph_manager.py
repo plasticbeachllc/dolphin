@@ -3,7 +3,6 @@
 import logging
 import time
 from datetime import datetime
-from typing import Optional
 
 import networkx as nx  # type: ignore[import-untyped]
 from sqlmodel import Session, select
@@ -37,8 +36,8 @@ class GraphManager:
         self.repo_id = repo_id
 
         # In-memory cache
-        self._graph: Optional[nx.DiGraph] = None
-        self._last_rebuild: Optional[datetime] = None
+        self._graph: nx.DiGraph | None = None
+        self._last_rebuild: datetime | None = None
 
         # Validator
         self.validator = GraphCacheValidator(
@@ -62,6 +61,9 @@ class GraphManager:
             logger.info(f"Rebuilding graph for repo {self.repo_id}")
             self._rebuild_graph()
 
+        # Type narrowing: _rebuild_graph always sets self._graph
+        if self._graph is None:
+            raise RuntimeError(f"Failed to build graph for repo {self.repo_id}")
         return self._graph
 
     def _rebuild_graph(self):
@@ -199,9 +201,7 @@ class GraphManager:
             "repo_id": self.repo_id,
             "is_loaded": self._graph is not None,
             "is_valid": self.validator.is_cache_valid() if self._graph else False,
-            "last_rebuild": (
-                self._last_rebuild.isoformat() if self._last_rebuild else None
-            ),
+            "last_rebuild": (self._last_rebuild.isoformat() if self._last_rebuild else None),
             "node_count": self._graph.number_of_nodes() if self._graph else 0,
             "edge_count": self._graph.number_of_edges() if self._graph else 0,
             "cache_state": cache_state,
@@ -220,9 +220,7 @@ class GraphManager:
             graph = self._graph
 
         if graph.number_of_nodes() == 0:
-            logger.warning(
-                f"Cannot compute metrics: empty graph for repo {self.repo_id}"
-            )
+            logger.warning(f"Cannot compute metrics: empty graph for repo {self.repo_id}")
             return {}
 
         logger.info(f"Computing metrics for repo {self.repo_id}")
@@ -241,9 +239,7 @@ class GraphManager:
         try:
             if graph.number_of_nodes() > 1000:
                 # Sample for performance
-                betweenness = nx.betweenness_centrality(
-                    graph, k=min(100, graph.number_of_nodes())
-                )
+                betweenness = nx.betweenness_centrality(graph, k=min(100, graph.number_of_nodes()))
             else:
                 betweenness = nx.betweenness_centrality(graph)
             metrics["betweenness_centrality"] = betweenness
@@ -294,9 +290,7 @@ class GraphManager:
             out_degree = metrics.get("out_degree", {})
             community = metrics.get("community", {})
 
-            all_nodes = (
-                set(pagerank.keys()) | set(betweenness.keys()) | set(in_degree.keys())
-            )
+            all_nodes = set(pagerank.keys()) | set(betweenness.keys()) | set(in_degree.keys())
 
             for node_id in all_nodes:
                 # Check if metrics record exists

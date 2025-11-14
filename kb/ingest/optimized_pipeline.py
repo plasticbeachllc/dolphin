@@ -13,7 +13,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from ..cache.ast_cache import get_ast_cache
 from ..chunkers.types import Chunk
@@ -23,11 +23,10 @@ from ..embeddings.provider import EmbeddingProvider
 from ..hashing import hash_text
 from ..store import LanceDBStore, SQLiteMetadataStore
 from ..store.graph_store import GraphStore
-from .incremental import IncrementalIndexer, compute_chunk_diff
-from .parallel_parser import ParseJob, get_chunk_cache, parse_files_parallel
+from .incremental import IncrementalIndexer
+from .parallel_parser import ParseJob, parse_files_parallel
 
 # Import Phase 2 optimizations
-from .parallel_scanner import scan_repo_parallel
 
 
 @dataclass
@@ -84,11 +83,7 @@ class OptimizedIngestionPipeline:
 
         # Initialize caches
         if enable_ast_cache:
-            cache_path = (
-                Path(config.data_dir) / ".ast_cache.pkl"
-                if hasattr(config, "data_dir")
-                else None
-            )
+            cache_path = Path(config.data_dir) / ".ast_cache.pkl" if hasattr(config, "data_dir") else None
             self.ast_cache = get_ast_cache(max_size=1000, persist_path=cache_path)
         else:
             self.ast_cache = None
@@ -132,11 +127,7 @@ class OptimizedIngestionPipeline:
 
             candidates = scan_repo_parallel(
                 repo_root,
-                (
-                    self.config.ignore_patterns
-                    if hasattr(self.config, "ignore_patterns")
-                    else []
-                ),
+                list(self.config.ignore_patterns if hasattr(self.config, "ignore_patterns") else []),  # type: ignore[arg-type]
                 num_workers=self.num_workers,
             )
         else:
@@ -144,17 +135,11 @@ class OptimizedIngestionPipeline:
 
             candidates = scan_repo(
                 repo_root,
-                (
-                    self.config.ignore_patterns
-                    if hasattr(self.config, "ignore_patterns")
-                    else []
-                ),
+                list(self.config.ignore_patterns if hasattr(self.config, "ignore_patterns") else []),  # type: ignore[arg-type]
             )
 
         # Map absolute paths to candidates for quick lookup
-        candidate_by_abs: Dict[Path, Any] = {
-            candidate.abs_path.resolve(): candidate for candidate in candidates
-        }
+        candidate_by_abs: dict[Path, Any] = {candidate.abs_path.resolve(): candidate for candidate in candidates}
 
         scan_time = time.time() - scan_start
         print(f"Scanned {len(candidates)} files in {scan_time:.1f}s")
@@ -163,13 +148,13 @@ class OptimizedIngestionPipeline:
         print("Parsing and chunking files...")
         parse_start = time.time()
 
-        parse_jobs: List[ParseJob] = []
+        parse_jobs: list[ParseJob] = []
         files_skipped = 0
 
         for candidate in candidates:
             # Read file content
             try:
-                with open(candidate.abs_path, "r", encoding="utf-8") as f:
+                with open(candidate.abs_path, encoding="utf-8") as f:
                     content = f.read()
             except Exception:
                 continue
@@ -186,9 +171,7 @@ class OptimizedIngestionPipeline:
                     continue
 
             # Check if file can be skipped entirely (incremental)
-            if inc_indexer and inc_indexer.should_skip_file(
-                candidate.rel_path, content_hash
-            ):
+            if inc_indexer and inc_indexer.should_skip_file(candidate.rel_path, content_hash):
                 files_skipped += 1
                 continue
 
@@ -198,11 +181,7 @@ class OptimizedIngestionPipeline:
                     file_path=candidate.abs_path,
                     content=content,
                     language=candidate.language,
-                    model=(
-                        self.config.embedding_model
-                        if hasattr(self.config, "embedding_model")
-                        else "small"
-                    ),
+                    model=str(self.config.embedding_model if hasattr(self.config, "embedding_model") else "small"),
                     token_target=400,
                     overlap_pct=0.10,
                 )
@@ -210,16 +189,14 @@ class OptimizedIngestionPipeline:
 
         # Parse files in parallel
         if self.enable_parallel and parse_jobs:
-            parse_results = parse_files_parallel(
-                parse_jobs, num_workers=self.num_workers
-            )
+            parse_results = parse_files_parallel(parse_jobs, num_workers=self.num_workers)
         else:
             from .parallel_parser import _parse_file_worker
 
             parse_results = [_parse_file_worker(job) for job in parse_jobs]
 
         # Store successful parses in AST cache
-        all_chunks: List[tuple[str, List[Chunk]]] = []
+        all_chunks: list[tuple[str, list[Chunk]]] = []
         for result in parse_results:
             if result.success and result.chunks:
                 abs_path = Path(result.file_path).resolve()
@@ -238,7 +215,7 @@ class OptimizedIngestionPipeline:
 
                 # Cache the chunks
                 if self.ast_cache:
-                    with open(result.file_path, "r", encoding="utf-8") as f:
+                    with open(result.file_path, encoding="utf-8") as f:
                         content = f.read()
                     content_hash = hash_text(content)
                     self.ast_cache.put(rel_path, content_hash, result.chunks, language)
@@ -251,7 +228,7 @@ class OptimizedIngestionPipeline:
         print("Embedding chunks...")
         embed_start = time.time()
 
-        chunks_to_embed: List[tuple[str, Chunk]] = []
+        chunks_to_embed: list[tuple[str, Chunk]] = []
         chunks_reused = 0
 
         for file_path, chunks in all_chunks:
@@ -259,9 +236,7 @@ class OptimizedIngestionPipeline:
                 diff = inc_indexer.compute_diff(file_path, chunks)
                 chunks_to_embed.extend((file_path, c) for c in diff.new_chunks)
                 chunks_reused += diff.stats["unchanged"]
-                print(
-                    f"  {file_path}: {diff.stats['to_embed']} new, {diff.stats['unchanged']} reused"
-                )
+                print(f"  {file_path}: {diff.stats['to_embed']} new, {diff.stats['unchanged']} reused")
             else:
                 chunks_to_embed.extend((file_path, c) for c in chunks)
 
@@ -274,22 +249,14 @@ class OptimizedIngestionPipeline:
                 target_tokens=8000,
                 min_batch_size=10,
                 max_batch_size=500,
-                model=(
-                    self.config.embedding_model
-                    if hasattr(self.config, "embedding_model")
-                    else "small"
-                ),
+                model=str(self.config.embedding_model if hasattr(self.config, "embedding_model") else "small"),
             )
 
-            all_embeddings: List[List[float]] = []
+            all_embeddings: list[list[float]] = []
             for batch in batcher.create_batches(texts):
                 batch_start = time.time()
                 embeddings = self.embedding_provider.embed_texts(
-                    (
-                        self.config.embedding_model
-                        if hasattr(self.config, "embedding_model")
-                        else "small"
-                    ),
+                    (self.config.embedding_model if hasattr(self.config, "embedding_model") else "small"),
                     batch,
                 )
                 all_embeddings.extend(embeddings)
@@ -310,11 +277,7 @@ class OptimizedIngestionPipeline:
         # Calculate stats
         throughput = (len(candidates) / total_time) * 60 if total_time > 0 else 0
         baseline_throughput = 500  # files/min (baseline)
-        speedup = (
-            f"{throughput / baseline_throughput:.1f}x"
-            if baseline_throughput > 0
-            else "N/A"
-        )
+        speedup = f"{throughput / baseline_throughput:.1f}x" if baseline_throughput > 0 else "N/A"
 
         stats = IndexingStats(
             total_files=len(candidates),
@@ -327,9 +290,9 @@ class OptimizedIngestionPipeline:
             speedup=speedup,
         )
 
-        print(f"\n{'='*60}")
-        print(f"Indexing Complete")
-        print(f"{'='*60}")
+        print(f"\n{'=' * 60}")
+        print("Indexing Complete")
+        print(f"{'=' * 60}")
         print(f"Total files: {stats.total_files}")
         print(f"Files processed: {stats.files_processed}")
         print(f"Files skipped: {stats.files_skipped}")
@@ -338,6 +301,6 @@ class OptimizedIngestionPipeline:
         print(f"Total time: {stats.total_time:.1f}s")
         print(f"Throughput: {stats.throughput:.0f} files/min")
         print(f"Speedup vs baseline: {stats.speedup}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         return stats

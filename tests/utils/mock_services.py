@@ -1,7 +1,7 @@
 """Mock services for predictable test results."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class MockEmbeddingService:
@@ -10,7 +10,7 @@ class MockEmbeddingService:
     def __init__(self, embedding_size: int = 1536):
         self.embedding_size = embedding_size
 
-    def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+    def get_embeddings(self, texts: list[str]) -> list[list[float]]:
         """Return deterministic embeddings for testing.
 
         Args:
@@ -22,10 +22,7 @@ class MockEmbeddingService:
         embeddings = []
         for i, text in enumerate(texts):
             # Create deterministic embedding based on text content and index
-            embedding = [
-                float((hash(text) + j + i) % 100) / 100.0
-                for j in range(self.embedding_size)
-            ]
+            embedding = [float((hash(text) + j + i) % 100) / 100.0 for j in range(self.embedding_size)]
             embeddings.append(embedding)
         return embeddings
 
@@ -37,11 +34,11 @@ class MockLanceDBBackend:
         self.db_path = db_path
         self.data = []
 
-    def search(self, query: str, **kwargs) -> List[Dict[str, Any]]:
+    def search(self, query: str, **kwargs) -> list[dict[str, Any]]:
         """Mock search that returns empty results."""
         return []
 
-    def add_documents(self, documents: List[Dict[str, Any]]) -> None:
+    def add_documents(self, documents: list[dict[str, Any]]) -> None:
         """Mock document addition."""
         self.data.extend(documents)
 
@@ -56,7 +53,7 @@ class MockOpenAIClient:
     def __init__(self):
         self.embeddings = MockEmbeddingService()
 
-    def embeddings_create(self, input: List[str], model: str) -> Dict[str, Any]:
+    def embeddings_create(self, input: list[str], model: str) -> dict[str, Any]:
         """Mock embeddings creation."""
         embedding_data = [
             {"embedding": embedding, "index": i, "object": "embedding"}
@@ -85,7 +82,7 @@ class MockGitService:
         """Return a mock commit SHA."""
         return "mock-commit-sha"
 
-    def get_file_history(self, file_path: str) -> List[Dict[str, Any]]:
+    def get_file_history(self, file_path: str) -> list[dict[str, Any]]:
         """Return mock file history."""
         return [
             {
@@ -96,7 +93,7 @@ class MockGitService:
             }
         ]
 
-    def get_changed_files(self, since_commit: Optional[str] = None) -> List[str]:
+    def get_changed_files(self, since_commit: str | None = None) -> list[str]:
         """Return mock changed files."""
         return ["src/main.py", "docs/readme.md"]
 
@@ -105,7 +102,7 @@ class MockFileSystem:
     """Mock file system for testing file operations."""
 
     def __init__(self):
-        self.files: Dict[Path, str] = {}
+        self.files: dict[Path, str] = {}
 
     def write_file(self, path: Path, content: str) -> None:
         """Write a file to the mock filesystem."""
@@ -124,10 +121,6 @@ class MockFileSystem:
         if path in self.files:
             del self.files[path]
 
-    def list_files(self, directory: Path, pattern: str = "*") -> List[Path]:
+    def list_files(self, directory: Path, pattern: str = "*") -> list[Path]:
         """List files in a directory."""
-        return [
-            path
-            for path in self.files.keys()
-            if path.parent == directory and path.match(pattern)
-        ]
+        return [path for path in self.files.keys() if path.parent == directory and path.match(pattern)]

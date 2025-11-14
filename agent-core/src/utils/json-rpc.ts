@@ -88,7 +88,7 @@ export class JSONRPCParser {
 
       if (messageBuffer.length > 0) {
         try {
-          const message: JSONRPCMessage = JSON.parse(messageBuffer.toString("utf-8"));
+          const message = JSON.parse(messageBuffer.toString("utf-8")) as JSONRPCMessage;
           await this.onMessage(message);
         } catch (error) {
           console.error("[JSON-RPC] Failed to parse message:", error);
@@ -137,10 +137,10 @@ export class JSONRPCSerializer {
    */
   async request(
     method: string,
-    params: any,
+    params: unknown,
     output: NodeJS.WritableStream,
     timeout: number = 30000
-  ): Promise<any> {
+  ): Promise<unknown> {
     const id = this.generateId();
 
     const message: JSONRPCMessage = {
@@ -155,7 +155,7 @@ export class JSONRPCSerializer {
     // Note: In production, this would need a response handler
     // For now, this is a placeholder for the request pattern
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const _timer = setTimeout(() => {
         reject(new Error(`Request timeout: ${method}`));
       }, timeout);
 
@@ -167,7 +167,7 @@ export class JSONRPCSerializer {
   /**
    * Send a notification (no response expected)
    */
-  async notify(method: string, params: any, output: NodeJS.WritableStream): Promise<void> {
+  async notify(method: string, params: unknown, output: NodeJS.WritableStream): Promise<void> {
     const message: JSONRPCMessage = {
       jsonrpc: "2.0",
       method,
@@ -180,7 +180,11 @@ export class JSONRPCSerializer {
   /**
    * Send a response to a request
    */
-  async respond(id: string | number, result: any, output: NodeJS.WritableStream): Promise<void> {
+  async respond(
+    id: string | number,
+    result: unknown,
+    output: NodeJS.WritableStream
+  ): Promise<void> {
     const message: JSONRPCMessage = {
       jsonrpc: "2.0",
       id,
@@ -197,7 +201,7 @@ export class JSONRPCSerializer {
     id: string | number,
     code: number,
     message: string,
-    data?: any,
+    data?: unknown,
     output: NodeJS.WritableStream = process.stdout
   ): Promise<void> {
     const response: JSONRPCMessage = {
@@ -227,7 +231,7 @@ export class JSONRPCSerializer {
 export class JSONRPCServer {
   private parser: JSONRPCParser;
   private serializer: JSONRPCSerializer;
-  private methods: Map<string, (params: any) => Promise<any>> = new Map();
+  private methods: Map<string, (params: unknown) => Promise<unknown>> = new Map();
   private output: NodeJS.WritableStream;
 
   constructor(input: NodeJS.ReadableStream, output: NodeJS.WritableStream) {
@@ -237,14 +241,14 @@ export class JSONRPCServer {
 
     // Set up input stream
     input.on("data", (chunk: Buffer) => {
-      this.parser.processChunk(chunk);
+      void this.parser.processChunk(chunk);
     });
   }
 
   /**
    * Register a method handler
    */
-  registerMethod(method: string, handler: (params: any) => Promise<any>): void {
+  registerMethod(method: string, handler: (params: unknown) => Promise<unknown>): void {
     this.methods.set(method, handler);
   }
 
@@ -258,7 +262,7 @@ export class JSONRPCServer {
   /**
    * Send a notification to the client
    */
-  async sendNotification(method: string, params: any): Promise<void> {
+  async sendNotification(method: string, params: unknown): Promise<void> {
     await this.serializer.notify(method, params, this.output);
   }
 

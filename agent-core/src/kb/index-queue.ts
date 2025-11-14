@@ -30,7 +30,7 @@ export class IndexQueue extends EventEmitter {
   /**
    * Queue files for indexing. Returns immediately with task ID.
    */
-  async enqueueBatch(files: string[], priority = 0): Promise<string> {
+  async enqueueBatch(files: string[], _priority = 0): Promise<string> {
     console.error(`[IndexQueue] Queueing ${files.length} files for indexing`);
 
     const response = await fetch(`${this.kbApiUrl}/v1/index`, {
@@ -48,7 +48,7 @@ export class IndexQueue extends EventEmitter {
       throw new Error(`Index queue failed (${response.status}): ${errorText}`);
     }
 
-    const result = await response.json();
+    const result = (await response.json()) as { task_id: string };
     const taskId = result.task_id;
 
     console.error(`[IndexQueue] Created task ${taskId} for ${files.length} files`);
@@ -97,7 +97,7 @@ export class IndexQueue extends EventEmitter {
           continue;
         }
 
-        const status: IndexProgress = await response.json();
+        const status = (await response.json()) as IndexProgress;
 
         // Emit progress event
         this.emit("progress", status.progress);
@@ -114,8 +114,9 @@ export class IndexQueue extends EventEmitter {
           this.emit("error", new Error(status.error || "Unknown error"));
           tasksToRemove.push(taskId);
         }
-      } catch (error: any) {
-        console.error(`[IndexQueue] Error polling task ${taskId}:`, error.message);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[IndexQueue] Error polling task ${taskId}:`, message);
       }
     }
 

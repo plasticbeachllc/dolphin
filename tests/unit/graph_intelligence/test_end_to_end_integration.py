@@ -9,22 +9,14 @@ import subprocess
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from sqlmodel import Session, create_engine, select
+from sqlmodel import Session, select
 
 from kb.graph_intelligence.graph_manager import GraphManager
 from kb.ingest.graph_helpers import extract_graph_from_file, store_graph_data
 from kb.store.graph_store import GraphStore
-from kb.store.sql_models import (
-    CodeEdge,
-    CodeNode,
-    File,
-    GraphCacheState,
-    GraphMetrics,
-    Repo,
-)
+from kb.store.sql_models import CodeEdge, CodeNode, GraphMetrics
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
@@ -106,6 +98,7 @@ def initialized_db(temp_git_repo):
     # Register test repo
     metadata_store.record_repo("test_repo", temp_git_repo)
     repo = metadata_store.get_repo_by_name("test_repo")
+    assert repo is not None
     repo_id = int(repo["id"])
 
     # Add a file
@@ -269,9 +262,7 @@ class TestEndToEndIntegration:
             # Verify metrics count matches node count
             assert len(db_metrics) == stats["nodes_created"]
 
-    def test_cache_invalidation_on_git_changes(
-        self, graph_store_with_data, temp_git_repo
-    ):
+    def test_cache_invalidation_on_git_changes(self, graph_store_with_data, temp_git_repo):
         """Test cache invalidation when git commit changes."""
         graph_store, repo_id, initial_commit, stats = graph_store_with_data
 
@@ -282,19 +273,18 @@ class TestEndToEndIntegration:
         )
 
         # Build graph (creates cache state)
-        initial_graph = graph_manager.get_graph()
+        graph_manager.get_graph()
         assert graph_manager.validator.is_cache_valid()
 
         # Get initial cache state
         initial_cache = graph_manager.validator._get_cache_state()
+        assert initial_cache is not None
         assert initial_cache["commit_sha"] == initial_commit
 
         # Make a git change
         new_file = temp_git_repo / "utils.py"
         new_file.write_text("def helper():\n    return 42\n")
-        subprocess.run(
-            ["git", "add", "."], cwd=temp_git_repo, check=True, capture_output=True
-        )
+        subprocess.run(["git", "add", "."], cwd=temp_git_repo, check=True, capture_output=True)
         subprocess.run(
             ["git", "commit", "-m", "Add utils"],
             cwd=temp_git_repo,
@@ -321,6 +311,7 @@ class TestEndToEndIntegration:
 
         # Get initial cache state
         initial_cache = graph_manager.validator._get_cache_state()
+        assert initial_cache is not None
         assert initial_cache["edge_changes_since_rebuild"] == 0
 
         # Simulate edge changes
@@ -377,7 +368,7 @@ class TestEndToEndIntegration:
         new_graph = graph_manager.get_graph(force_rebuild=True)
 
         # Rebuild time should be different
-        assert graph_manager._last_rebuild > initial_rebuild_time
+        assert graph_manager._last_rebuild > initial_rebuild_time  # type: ignore[operator]
 
         # Graph should be valid
         assert new_graph.number_of_nodes() == initial_graph.number_of_nodes()
@@ -443,10 +434,11 @@ class TestEndToEndIntegration:
 
         # Community detection should run (if python-louvain available)
         try:
-            import community as community_louvain
+            import importlib.util
 
-            assert "community" in metrics
-            assert len(metrics["community"]) > 0
+            if importlib.util.find_spec("community") is not None:
+                assert "community" in metrics
+                assert len(metrics["community"]) > 0
         except ImportError:
             # python-louvain not available, community key won't exist
             pass
@@ -587,7 +579,7 @@ def broken(
             for i in range(100):
                 edge = CodeEdge(
                     source_node_id=f"node_{i}",
-                    target_node_id=f"node_{i+1}",
+                    target_node_id=f"node_{i + 1}",
                     edge_type="calls",
                     repo_id=repo_id,
                     commit_sha="test_commit",

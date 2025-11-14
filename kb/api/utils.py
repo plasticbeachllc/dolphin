@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from fastapi import HTTPException
 
-from kb.security import PathValidator, PathValidationError
+from kb.security import PathValidationError, PathValidator
 
 
 def validate_path_within_repo(file_path: Path, repo_root: Path) -> Path:
@@ -30,15 +29,9 @@ def validate_path_within_repo(file_path: Path, repo_root: Path) -> Path:
         resolved_path = validator.validate(file_path)
         return resolved_path
     except PathValidationError as e:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Path validation failed: {e.reason} - {file_path}"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file path: {file_path}"
-        )
+        raise HTTPException(status_code=403, detail=f"Path validation failed: {e.reason} - {file_path}")
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"Invalid file path: {file_path}")
 
 
 class GitRepository:
@@ -65,15 +58,10 @@ class GitRepository:
             RuntimeError: If the git command fails
         """
         try:
-            result = subprocess.check_output(
-                ["git", "-C", str(self.root), *args], stderr=subprocess.STDOUT
-            )
+            result = subprocess.check_output(["git", "-C", str(self.root), *args], stderr=subprocess.STDOUT)
             return result.decode("utf-8").strip()
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(
-                f"Git command failed: {' '.join(args)}\n"
-                f"{e.output.decode('utf-8', errors='ignore')}"
-            )
+            raise RuntimeError(f"Git command failed: {' '.join(args)}\n{e.output.decode('utf-8', errors='ignore')}")
 
     def get_current_commit(self) -> str:
         """Get the current commit SHA.

@@ -20,15 +20,19 @@ import { ClaudeProvider } from "./execution/claude-provider";
 import { ContextBuilder } from "./context/context-builder";
 import { PromptBuilder } from "./prompts/prompt-builder";
 import { PlanStore } from "./storage/plan-store";
-import * as path from "path";
+import { join as pathJoin } from "path";
 
 interface Message {
   jsonrpc: "2.0";
   id?: number;
   method?: string;
-  params?: any;
-  result?: any;
-  error?: any;
+  params?: unknown;
+  result?: unknown;
+  error?: {
+    code: number;
+    message: string;
+    data?: unknown;
+  };
 }
 
 /**
@@ -94,7 +98,7 @@ class AgentCoreV2 {
 
     // Initialize State Store
     const stateStore = new StateStore({
-      storagePath: path.join(workspaceRoot, ".dolphin"),
+      storagePath: pathJoin(workspaceRoot, ".dolphin"),
     });
 
     // Initialize Plan Store (for architect workflow)
@@ -139,7 +143,7 @@ class AgentCoreV2 {
 
     // Start MCP Bridge
     console.error("[Agent Core V2] Starting MCP Bridge...");
-    const mcpBridgePath = path.join(__dirname, "../../mcp-bridge/src/index.ts");
+    const mcpBridgePath = pathJoin(__dirname, "../../mcp-bridge/src/index.ts");
     await this.mcpClient.start(mcpBridgePath);
 
     // Initialize Claude Provider (load tools from MCP)
@@ -148,7 +152,9 @@ class AgentCoreV2 {
 
     // List available tools
     const tools = await this.mcpClient.listTools();
-    console.error(`[Agent Core V2] Available tools: ${tools.map((t: any) => t.name).join(", ")}`);
+    console.error(
+      `[Agent Core V2] Available tools: ${tools.map((t: { name: string }) => t.name).join(", ")}`
+    );
 
     // Check Claude authentication
     const authStatus = await this.claudeProvider.getAuthStatus();
@@ -217,8 +223,8 @@ class AgentCoreV2 {
         buffer = buffer.slice(totalMessageLength);
 
         try {
-          const message: Message = JSON.parse(messageBody);
-          this.handleMessage(message);
+          const message = JSON.parse(messageBody) as Message;
+          void this.handleMessage(message);
         } catch (error) {
           console.error("[Agent Core V2] Failed to parse message:", error);
         }
@@ -247,29 +253,30 @@ class AgentCoreV2 {
       try {
         const result = await this.handleRequest(request);
         this.sendResponse(message.id!, result);
-      } catch (error: any) {
+      } catch (error: unknown) {
         this.sendError(message.id!, error);
       }
     }
   }
 
-  private async handleRequest(request: ExtensionRequest): Promise<any> {
+  private async handleRequest(request: ExtensionRequest): Promise<unknown> {
     console.error(`[Agent Core V2] Handling request: ${request.method}`);
 
     switch (request.method) {
       case "sendMessage":
       case "send_message": {
-        const { message, context, mode = "editor" } = request.params;
+        const params = request.params as { message: string; context?: unknown; mode?: string };
+        const { message, context, mode = "editor" } = params;
 
         // Start task with orchestrator
         const session = await this.orchestrator.startTask({
-          mode,
+          mode: mode as "editor" | "architect",
           message,
           context,
         });
 
         // Stream updates to extension in background
-        (async () => {
+        void (async () => {
           try {
             for await (const update of this.orchestrator.subscribeToUpdates(session.id)) {
               this.sendEvent({
@@ -298,10 +305,12 @@ class AgentCoreV2 {
         return [];
 
       case "loadConversation":
-      case "load_conversation":
-        const { conversationId } = request.params;
+      case "load_conversation": {
+        const params = request.params as { conversationId: string };
+        const { conversationId } = params;
         const session = await this.orchestrator.getSession(conversationId);
         return session;
+      }
 
       case "deleteConversation":
       case "delete_conversation":
@@ -309,31 +318,39 @@ class AgentCoreV2 {
         return { success: true };
 
       case "approveTask":
-      case "approve_task":
-        await this.orchestrator.approveTask(request.params.sessionId);
+      case "approve_task": {
+        const params = request.params as { sessionId: string };
+        await this.orchestrator.approveTask(params.sessionId);
         return { success: true };
+      }
 
       case "rejectTask":
-      case "reject_task":
-        await this.orchestrator.rejectTask(request.params.sessionId, request.params.feedback);
+      case "reject_task": {
+        const params = request.params as { sessionId: string; feedback?: string };
+        await this.orchestrator.rejectTask(params.sessionId, params.feedback);
         return { success: true };
+      }
 
       case "requestRevision":
-      case "request_revision":
-        await this.orchestrator.revisePlan(request.params.sessionId, request.params.feedback);
+      case "request_revision": {
+        const params = request.params as { sessionId: string; feedback: string };
+        await this.orchestrator.revisePlan(params.sessionId, params.feedback);
         return { success: true };
+      }
 
       case "cancelTask":
-      case "cancel_task":
-        await this.orchestrator.cancelTask(request.params.sessionId);
+      case "cancel_task": {
+        const params = request.params as { sessionId: string };
+        await this.orchestrator.cancelTask(params.sessionId);
         return { success: true };
+      }
 
       default:
         throw new Error(`Unknown method: ${request.method}`);
     }
   }
 
-  private sendResponse(id: number, result: any) {
+  private sendResponse(id: number, result: unknown) {
     const response: Message = {
       jsonrpc: "2.0",
       id,
@@ -342,14 +359,15 @@ class AgentCoreV2 {
     this.send(response);
   }
 
-  private sendError(id: number, error: any) {
+  private sendError(id: number, error: unknown) {
+    const errorObj = error as { message?: string; stack?: string };
     const response: Message = {
       jsonrpc: "2.0",
       id,
       error: {
         code: -32000,
-        message: error.message || String(error),
-        data: error.stack,
+        message: errorObj.message || String(error),
+        data: errorObj.stack,
       },
     };
     this.send(response);

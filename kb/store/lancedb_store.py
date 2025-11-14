@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any, Iterable, Sequence, Union
+from typing import Any
 
 
 class LanceDBStore:
@@ -11,12 +12,12 @@ class LanceDBStore:
     embedding dimensions and ensure the root directory exists.
     """
 
-    def __init__(self, root: Union[str, Path]) -> None:
+    def __init__(self, root: str | Path) -> None:
         # Handle both file paths and in-memory URIs
         # In-memory URIs like "memory://name" should remain as strings
         if isinstance(root, str) and root.startswith("memory://"):
             # Keep memory:// URIs as strings for LanceDB
-            self.root: Union[str, Path] = root
+            self.root: str | Path = root
         else:
             # Convert file paths to Path objects
             self.root = Path(root) if isinstance(root, str) else root
@@ -94,7 +95,6 @@ class LanceDBStore:
         - chunks_large: 3072-dim embeddings
         """
         # Import locally to avoid import cost when unused.
-        import pyarrow as pa  # type: ignore
 
         # Use cached connection
         db = self.connect()
@@ -102,7 +102,7 @@ class LanceDBStore:
         collections = [("chunks_small", "small"), ("chunks_large", "large")]
         existing = set(getattr(db, "table_names", lambda: [])())
         for name, model in collections:
-            schema = self._get_schema_for_model(model)
+            self._get_schema_for_model(model)
             dim = 1536 if model == "small" else 3072
             if name in existing:
                 # Table already exists; nothing to do.
@@ -133,7 +133,7 @@ class LanceDBStore:
                     "heading_h2": None,
                     "heading_h3": None,
                     "token_count": 0,
-                    "created_at": datetime.datetime.now(datetime.timezone.utc),
+                    "created_at": datetime.datetime.now(datetime.UTC),
                 }
                 # Create table with the dummy row
                 table = db.create_table(name, data=[dummy_row])
@@ -178,8 +178,7 @@ class LanceDBStore:
             vector = chunk.get("vector", [])
             if len(vector) != expected_dim:
                 raise ValueError(
-                    f"Vector dimension mismatch for model '{model}': "
-                    f"expected {expected_dim}, got {len(vector)}"
+                    f"Vector dimension mismatch for model '{model}': expected {expected_dim}, got {len(vector)}"
                 )
 
         # Extract IDs for deletion
@@ -249,9 +248,7 @@ class LanceDBStore:
                 db.create_table(table_name, data=pa_table, mode="create")
             except Exception as retry_error:
                 # If still failing, raise a more descriptive error
-                raise RuntimeError(
-                    f"Failed to create table {table_name}: {retry_error}"
-                ) from e
+                raise RuntimeError(f"Failed to create table {table_name}: {retry_error}") from e
 
     def prune_file_rows(
         self,
@@ -279,9 +276,7 @@ class LanceDBStore:
         path_expr = repr(path)
         if keep_ids:
             id_list = ", ".join(repr(_id) for _id in sorted(keep_ids))
-            filter_expr = (
-                f"repo = {repo_expr} AND path = {path_expr} AND id NOT IN ({id_list})"
-            )
+            filter_expr = f"repo = {repo_expr} AND path = {path_expr} AND id NOT IN ({id_list})"
         else:
             filter_expr = f"repo = {repo_expr} AND path = {path_expr}"
 
@@ -394,8 +389,7 @@ class LanceDBStore:
         # Validate query vector dimension
         if len(query_vector) != expected_dim:
             raise ValueError(
-                f"Query vector dimension mismatch for model '{model}': "
-                f"expected {expected_dim}, got {len(query_vector)}"
+                f"Query vector dimension mismatch for model '{model}': expected {expected_dim}, got {len(query_vector)}"
             )
 
         # Use cached connection
@@ -408,9 +402,7 @@ class LanceDBStore:
             return []
 
         # Build search query with ANN parameters - explicitly specify vector column name
-        search_query = table.search(
-            list(query_vector), vector_column_name="vector"
-        ).limit(top_k)
+        search_query = table.search(list(query_vector), vector_column_name="vector").limit(top_k)
 
         # Apply ANN parameters to LanceDB query
         # LanceDB API: https://lancedb.github.io/lancedb/search/
@@ -440,9 +432,7 @@ class LanceDBStore:
             # Handle empty table or other search errors
             return []
 
-    def get_chunk_by_id(
-        self, chunk_id: str, model: str = "small"
-    ) -> dict[str, Any] | None:
+    def get_chunk_by_id(self, chunk_id: str, model: str = "small") -> dict[str, Any] | None:
         """Retrieve a chunk by its ID from the vector store.
 
         Args:

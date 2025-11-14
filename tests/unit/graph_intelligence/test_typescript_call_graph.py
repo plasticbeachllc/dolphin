@@ -2,9 +2,7 @@
 
 import pytest
 
-from kb.graph_intelligence.extractors.typescript_call_graph import (
-    TypeScriptCallGraphExtractor,
-)
+from kb.graph_intelligence.extractors.typescript_call_graph import TypeScriptCallGraphExtractor
 from kb.graph_intelligence.models import EdgeType, NodeType
 
 
@@ -21,9 +19,7 @@ function hello() {
     console.log("Hello");
 }
 """
-    nodes, edges = extractor.extract(
-        "test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
-    )
+    nodes, edges = extractor.extract("test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main")
 
     assert len(nodes) == 1
     assert nodes[0].name == "hello"
@@ -38,9 +34,7 @@ const greet = (name: string) => {
     console.log(`Hello, ${name}`);
 };
 """
-    nodes, edges = extractor.extract(
-        "test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
-    )
+    nodes, edges = extractor.extract("test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main")
 
     assert len(nodes) == 1
     assert nodes[0].name == "greet"
@@ -61,9 +55,7 @@ class Calculator {
     }
 }
 """
-    nodes, edges = extractor.extract(
-        "test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
-    )
+    nodes, edges = extractor.extract("test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main")
 
     # Should have: Calculator class, add method, multiply method
     assert len(nodes) == 3
@@ -87,9 +79,7 @@ async function someApiCall() {
     return Promise.resolve();
 }
 """
-    nodes, edges = extractor.extract(
-        "test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
-    )
+    nodes, edges = extractor.extract("test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main")
 
     assert len(nodes) == 2
     fetch_node = next(n for n in nodes if n.name == "fetchData")
@@ -107,9 +97,7 @@ function callee() {
     // do nothing
 }
 """
-    nodes, edges = extractor.extract(
-        "test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
-    )
+    nodes, edges = extractor.extract("test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main")
 
     assert len(nodes) == 2
     assert len(edges) == 1
@@ -151,9 +139,7 @@ function standalone() {
 def test_empty_file(extractor):
     """Test extraction from empty file."""
     code = ""
-    nodes, edges = extractor.extract(
-        "test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
-    )
+    nodes, edges = extractor.extract("test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main")
 
     assert len(nodes) == 0
     assert len(edges) == 0
@@ -166,9 +152,7 @@ const fetchUser = async (id: string) => {
     return await api.getUser(id);
 };
 """
-    nodes, edges = extractor.extract(
-        "test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
-    )
+    nodes, edges = extractor.extract("test.ts", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main")
 
     assert len(nodes) == 1
     assert nodes[0].name == "fetchUser"

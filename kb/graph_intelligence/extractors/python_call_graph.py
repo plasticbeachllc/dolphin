@@ -1,7 +1,6 @@
 """Extract call graph from Python code using tree-sitter."""
 
 import uuid
-from typing import Dict, List, Optional, Tuple
 
 import tree_sitter_python as tspython
 from tree_sitter import Language, Node, Parser
@@ -24,7 +23,7 @@ class PythonCallGraphExtractor:
         file_id: int,
         commit_sha: str,
         branch: str,
-    ) -> Tuple[List[GraphNode], List[GraphEdge]]:
+    ) -> tuple[list[GraphNode], list[GraphEdge]]:
         """Extract call graph from Python file.
 
         Args:
@@ -43,15 +42,11 @@ class PythonCallGraphExtractor:
         edges = []
 
         # Extract function/class definitions
-        definitions = self._extract_definitions(
-            tree.root_node, file_path, repo_id, file_id, commit_sha, branch
-        )
+        definitions = self._extract_definitions(tree.root_node, file_path, repo_id, file_id, commit_sha, branch)
         nodes.extend(definitions)
 
         # Extract call edges
-        call_edges = self._extract_calls(
-            tree.root_node, definitions, repo_id, commit_sha
-        )
+        call_edges = self._extract_calls(tree.root_node, definitions, repo_id, commit_sha)
         edges.extend(call_edges)
 
         return nodes, edges
@@ -64,7 +59,7 @@ class PythonCallGraphExtractor:
         file_id: int,
         commit_sha: str,
         branch: str,
-    ) -> List[GraphNode]:
+    ) -> list[GraphNode]:
         """Extract function and class definitions by walking the tree."""
         nodes = []
         class_stack = []  # Stack to track nested classes
@@ -72,9 +67,7 @@ class PythonCallGraphExtractor:
         def visit(node: Node):
             if node.type == "class_definition":
                 # Extract class
-                class_node = self._extract_class_node(
-                    node, file_path, repo_id, file_id, commit_sha, branch
-                )
+                class_node = self._extract_class_node(node, file_path, repo_id, file_id, commit_sha, branch)
                 nodes.append(class_node)
                 class_stack.append(class_node)
 
@@ -122,9 +115,7 @@ class PythonCallGraphExtractor:
         docstring = self._extract_docstring(node)
 
         # Build qualified name
-        qualified_name = (
-            f"{file_path.replace('/', '.').replace('.py', '')}.{class_name}"
-        )
+        qualified_name = f"{file_path.replace('/', '.').replace('.py', '')}.{class_name}"
 
         return GraphNode(
             id=str(uuid.uuid4()),
@@ -136,7 +127,7 @@ class PythonCallGraphExtractor:
             start_line=node.start_point[0],
             end_line=node.end_point[0],
             language="python",
-            signature=node.text.decode("utf8")[:200],  # First 200 chars
+            signature=node.text.decode("utf8")[:200] if node.text else "",  # First 200 chars
             docstring=docstring,
             metadata={
                 "ast_type": "class_definition",
@@ -154,7 +145,7 @@ class PythonCallGraphExtractor:
         file_id: int,
         commit_sha: str,
         branch: str,
-        parent_class: Optional[GraphNode] = None,
+        parent_class: GraphNode | None = None,
     ) -> GraphNode:
         """Extract function/method definition node."""
         name_node = node.child_by_field_name("name")
@@ -166,9 +157,7 @@ class PythonCallGraphExtractor:
             qualified_name = f"{parent_class.qualified_name}.{func_name}"
         else:
             node_type = NodeType.FUNCTION
-            qualified_name = (
-                f"{file_path.replace('/', '.').replace('.py', '')}.{func_name}"
-            )
+            qualified_name = f"{file_path.replace('/', '.').replace('.py', '')}.{func_name}"
 
         # Extract parameters for signature
         params_node = node.child_by_field_name("parameters")
@@ -180,7 +169,8 @@ class PythonCallGraphExtractor:
                 is_async = True
                 break
 
-        signature = f"{'async ' if is_async else ''}def {func_name}{params_node.text.decode('utf8') if (params_node and params_node.text) else '()'}"
+        params_str = params_node.text.decode("utf8") if (params_node and params_node.text) else "()"
+        signature = f"{'async ' if is_async else ''}def {func_name}{params_str}"
 
         # Extract docstring
         docstring = self._extract_docstring(node)
@@ -208,16 +198,18 @@ class PythonCallGraphExtractor:
         )
 
     def _extract_calls(
-        self, root: Node, definitions: List[GraphNode], repo_id: int, commit_sha: str
-    ) -> List[GraphEdge]:
+        self, root: Node, definitions: list[GraphNode], repo_id: int, commit_sha: str
+    ) -> list[GraphEdge]:
         """Extract call edges by walking the tree."""
         edges = []
 
         # Create a map of function nodes by their line ranges
-        def_map: Dict[Tuple[int, int], GraphNode] = {
+        def_map: dict[tuple[int, int], GraphNode] = {
             (node.start_line or 0, node.end_line or 0): node
             for node in definitions
-            if node.node_type in (NodeType.FUNCTION, NodeType.METHOD) and node.start_line is not None and node.end_line is not None
+            if node.node_type in (NodeType.FUNCTION, NodeType.METHOD)
+            and node.start_line is not None
+            and node.end_line is not None
         }
 
         def visit(node: Node):
@@ -233,11 +225,7 @@ class PythonCallGraphExtractor:
                         # Try to resolve callee to a definition
                         callee = self._resolve_callee(callee_name, definitions)
                         if callee:
-                            call_type = (
-                                "method"
-                                if function_node.type == "attribute"
-                                else "direct"
-                            )
+                            call_type = "method" if function_node.type == "attribute" else "direct"
                             edges.append(
                                 GraphEdge(
                                     source_id=caller.id,
@@ -259,9 +247,7 @@ class PythonCallGraphExtractor:
         visit(root)
         return edges
 
-    def _find_containing_function(
-        self, node: Node, def_map: Dict[Tuple[int, int], GraphNode]
-    ) -> Optional[GraphNode]:
+    def _find_containing_function(self, node: Node, def_map: dict[tuple[int, int], GraphNode]) -> GraphNode | None:
         """Find the function/method that contains this node."""
         current = node.parent
         while current:
@@ -281,9 +267,7 @@ class PythonCallGraphExtractor:
             return attr_node.text.decode("utf8") if (attr_node and attr_node.text) else "Unknown"
         return "Unknown"
 
-    def _resolve_callee(
-        self, name: str, definitions: List[GraphNode]
-    ) -> Optional[GraphNode]:
+    def _resolve_callee(self, name: str, definitions: list[GraphNode]) -> GraphNode | None:
         """Resolve a call target name to a definition node."""
         # Simple name matching - can be enhanced with scope analysis
         for node in definitions:
@@ -291,14 +275,14 @@ class PythonCallGraphExtractor:
                 return node
         return None
 
-    def _extract_docstring(self, func_node: Node) -> Optional[str]:
+    def _extract_docstring(self, func_node: Node) -> str | None:
         """Extract docstring from function or class definition."""
         body = func_node.child_by_field_name("body")
         if body and body.child_count > 0:
             first_stmt = body.children[0]
             if first_stmt.type == "expression_statement" and first_stmt.child_count > 0:
                 expr = first_stmt.children[0]
-                if expr.type == "string":
+                if expr.type == "string" and expr.text:
                     docstring_text = expr.text.decode("utf8")
                     # Remove quotes and clean up
                     return docstring_text.strip("\"'").strip()

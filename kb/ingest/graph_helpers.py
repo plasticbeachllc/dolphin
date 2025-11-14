@@ -6,9 +6,7 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any
 
-from kb.chunkers.graph_types import GraphEdge as ChunkerGraphEdge
-from kb.chunkers.graph_types import GraphNode as ChunkerGraphNode
-from kb.chunkers.types import Chunk
+from kb.chunkers.graph_types import GraphEdge as ChunkerGraphEdge, GraphNode as ChunkerGraphNode
 from kb.store.graph_store import GraphStore
 
 
@@ -45,9 +43,7 @@ def extract_graph_from_file(
         try:
             return _extract_with_intelligence(file_path, lang_key, text)
         except Exception as e:
-            print(
-                f"  Warning: Enhanced graph extraction failed for {file_path}, falling back to basic: {e}"
-            )
+            print(f"  Warning: Enhanced graph extraction failed for {file_path}, falling back to basic: {e}")
 
     # Fall back to basic chunker extraction
     import kb.chunkers.py_chunker as py_chunker
@@ -74,7 +70,9 @@ def extract_graph_from_file(
 
     # Call the module's extract_graph_data function
     try:
-        nodes, edges = chunker_module.extract_graph_data(text)
+        # Type narrowing: we've checked hasattr for extract_graph_data
+        extract_fn = getattr(chunker_module, "extract_graph_data")
+        nodes, edges = extract_fn(text)
         return nodes, edges
     except Exception as e:
         # Log but don't fail - graph extraction is optional
@@ -97,10 +95,7 @@ def _extract_with_intelligence(
     Returns:
         Tuple of (nodes, edges) in chunker format
     """
-    from kb.graph_intelligence.extractors import (
-        PythonCallGraphExtractor,
-        TypeScriptCallGraphExtractor,
-    )
+    from kb.graph_intelligence.extractors import PythonCallGraphExtractor, TypeScriptCallGraphExtractor
 
     # Use appropriate extractor
     if language == "python":
@@ -145,8 +140,7 @@ def _extract_with_intelligence(
                     source_name=source_node.qualified_name or source_node.name,
                     target_name=target_node.qualified_name or target_node.name,
                     edge_type=edge.edge_type.value,
-                    line_number=edge.attributes.get("call_line")
-                    or edge.attributes.get("import_line"),
+                    line_number=int(edge.attributes.get("call_line") or edge.attributes.get("import_line") or 0),
                 )
             )
 
@@ -155,8 +149,8 @@ def _extract_with_intelligence(
 
 def store_graph_data(
     graph_store: GraphStore,
-    nodes: list[GraphNode],
-    edges: list[GraphEdge],
+    nodes: list[ChunkerGraphNode],
+    edges: list[ChunkerGraphEdge],
     *,
     repo_id: int,
     file_id: int,
@@ -215,17 +209,13 @@ def store_graph_data(
             # (This can happen for external references or incomplete extraction)
             if not source_id:
                 # Try to find existing node
-                source_node = graph_store.find_node_by_qualified_name(
-                    edge.source_name, repo_id=repo_id
-                )
+                source_node = graph_store.find_node_by_qualified_name(edge.source_name, repo_id=repo_id)
                 if source_node:
                     source_id = source_node["id"]
 
             if not target_id:
                 # Try to find existing node
-                target_node = graph_store.find_node_by_qualified_name(
-                    edge.target_name, repo_id=repo_id
-                )
+                target_node = graph_store.find_node_by_qualified_name(edge.target_name, repo_id=repo_id)
                 if target_node:
                     target_id = target_node["id"]
 
@@ -240,9 +230,7 @@ def store_graph_data(
                 )
                 edges_created += 1
         except Exception as e:
-            print(
-                f"  Warning: Failed to store edge {edge.source_name} -> {edge.target_name}: {e}"
-            )
+            print(f"  Warning: Failed to store edge {edge.source_name} -> {edge.target_name}: {e}")
 
     return {
         "nodes_created": nodes_created,
@@ -278,9 +266,7 @@ def cleanup_graph_for_file(graph_store: GraphStore, file_id: int) -> tuple[int, 
             if row is not None:
                 edges_deleted = int(row[0])
     except Exception as e:
-        print(
-            f"  Warning: Failed to calculate graph edge cleanup for file {file_id}: {e}"
-        )
+        print(f"  Warning: Failed to calculate graph edge cleanup for file {file_id}: {e}")
 
     try:
         nodes_deleted = graph_store.delete_nodes_for_file(file_id)

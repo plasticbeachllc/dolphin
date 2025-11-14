@@ -15,6 +15,16 @@ import type {
   Context,
 } from "../types/index.js";
 
+interface ResearchData {
+  findings: string;
+  kbSearches: Array<{ query: string; resultsCount: number }>;
+  relevantFiles: string[];
+}
+
+interface PlanData {
+  content: string;
+}
+
 /**
  * System prompt for research phase
  */
@@ -233,7 +243,7 @@ Begin now.
     return formatted || "No context provided.";
   }
 
-  private formatResearch(research: any): string {
+  private formatResearch(research: ResearchData): string {
     return `
 ## Key Findings
 
@@ -241,15 +251,15 @@ ${research.findings}
 
 ## KB Searches Performed
 
-${research.kbSearches.map((s: any) => `- ${s.query} (${s.resultsCount} results)`).join("\n")}
+${research.kbSearches.map((s) => `- ${s.query} (${s.resultsCount} results)`).join("\n")}
 
 ## Relevant Files
 
-${research.relevantFiles.map((f: string) => `- ${f}`).join("\n")}
+${research.relevantFiles.map((f) => `- ${f}`).join("\n")}
 `;
   }
 
-  private formatPlan(plan: any): string {
+  private formatPlan(plan: PlanData): string {
     return plan.content || "No plan content provided.";
   }
 }

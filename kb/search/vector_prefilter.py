@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -19,25 +19,25 @@ logger = logging.getLogger(__name__)
 class FilterCriteria:
     """Criteria for pre-filtering vector search."""
 
-    repos: Optional[List[str]] = None
+    repos: list[str] | None = None
     """List of repositories to search (OR logic)"""
 
-    file_patterns: Optional[List[str]] = None
+    file_patterns: list[str] | None = None
     """File path patterns to include (glob-style)"""
 
-    languages: Optional[List[str]] = None
+    languages: list[str] | None = None
     """Programming languages to include"""
 
-    symbol_kinds: Optional[List[str]] = None
+    symbol_kinds: list[str] | None = None
     """Symbol kinds to include (function, class, etc.)"""
 
-    exclude_paths: Optional[List[str]] = None
+    exclude_paths: list[str] | None = None
     """File paths to exclude"""
 
-    min_token_count: Optional[int] = None
+    min_token_count: int | None = None
     """Minimum token count for chunks"""
 
-    max_token_count: Optional[int] = None
+    max_token_count: int | None = None
     """Maximum token count for chunks"""
 
 
@@ -57,7 +57,7 @@ class FilterStats:
     reduction_pct: float
     """Percentage reduction in search space"""
 
-    filters_applied: List[str]
+    filters_applied: list[str]
     """List of filters that were applied"""
 
 
@@ -90,12 +90,12 @@ class VectorPreFilter:
         # Statistics tracking
         self._total_filters: int = 0
         self._total_reduction_pct: float = 0.0
-        self._filter_cache: Dict[str, str] = {}
+        self._filter_cache: dict[str, str] = {}
 
     def build_filter_expression(
         self,
         criteria: FilterCriteria,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Build LanceDB filter expression from criteria.
 
         Args:
@@ -188,7 +188,7 @@ class VectorPreFilter:
         search_query: Any,
         criteria: FilterCriteria,
         estimate_total: int = 0,
-    ) -> tuple[Any, Optional[FilterStats]]:
+    ) -> tuple[Any, FilterStats | None]:
         """Apply pre-filtering to a LanceDB search query.
 
         Args:
@@ -246,10 +246,7 @@ class VectorPreFilter:
             self._total_filters += 1
             self._total_reduction_pct += reduction_pct
 
-            logger.debug(
-                f"Pre-filter applied: {filter_expr} "
-                f"({reduction_pct:.1f}% reduction, {filter_time_ms:.2f}ms)"
-            )
+            logger.debug(f"Pre-filter applied: {filter_expr} ({reduction_pct:.1f}% reduction, {filter_time_ms:.2f}ms)")
 
         return filtered_query, stats
 
@@ -336,7 +333,7 @@ class VectorPreFilter:
 
         return "|".join(parts)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get pre-filtering statistics.
 
         Returns:
@@ -344,11 +341,7 @@ class VectorPreFilter:
         """
         return {
             "total_filters_applied": self._total_filters,
-            "avg_reduction_pct": (
-                self._total_reduction_pct / self._total_filters
-                if self._total_filters > 0
-                else 0.0
-            ),
+            "avg_reduction_pct": (self._total_reduction_pct / self._total_filters if self._total_filters > 0 else 0.0),
             "cache_size": len(self._filter_cache),
         }
 
@@ -357,7 +350,7 @@ class VectorPreFilter:
         self._filter_cache.clear()
 
 
-def create_repo_filter(repos: List[str]) -> FilterCriteria:
+def create_repo_filter(repos: list[str]) -> FilterCriteria:
     """Convenience function to create a repository filter.
 
     Args:
@@ -369,7 +362,7 @@ def create_repo_filter(repos: List[str]) -> FilterCriteria:
     return FilterCriteria(repos=repos)
 
 
-def create_language_filter(languages: List[str]) -> FilterCriteria:
+def create_language_filter(languages: list[str]) -> FilterCriteria:
     """Convenience function to create a language filter.
 
     Args:
@@ -381,7 +374,7 @@ def create_language_filter(languages: List[str]) -> FilterCriteria:
     return FilterCriteria(languages=languages)
 
 
-def create_symbol_filter(symbol_kinds: List[str]) -> FilterCriteria:
+def create_symbol_filter(symbol_kinds: list[str]) -> FilterCriteria:
     """Convenience function to create a symbol kind filter.
 
     Args:
@@ -406,7 +399,7 @@ def combine_filters(*filters: FilterCriteria) -> FilterCriteria:
     combined = FilterCriteria()
 
     # Combine repos
-    all_repos: Set[str] = set()
+    all_repos: set[str] = set()
     for f in filters:
         if f.repos:
             all_repos.update(f.repos)
@@ -414,7 +407,7 @@ def combine_filters(*filters: FilterCriteria) -> FilterCriteria:
         combined.repos = sorted(all_repos)
 
     # Combine languages
-    all_languages: Set[str] = set()
+    all_languages: set[str] = set()
     for f in filters:
         if f.languages:
             all_languages.update(f.languages)
@@ -422,7 +415,7 @@ def combine_filters(*filters: FilterCriteria) -> FilterCriteria:
         combined.languages = sorted(all_languages)
 
     # Combine symbol kinds
-    all_kinds: Set[str] = set()
+    all_kinds: set[str] = set()
     for f in filters:
         if f.symbol_kinds:
             all_kinds.update(f.symbol_kinds)
@@ -430,7 +423,7 @@ def combine_filters(*filters: FilterCriteria) -> FilterCriteria:
         combined.symbol_kinds = sorted(all_kinds)
 
     # Combine file patterns
-    all_patterns: Set[str] = set()
+    all_patterns: set[str] = set()
     for f in filters:
         if f.file_patterns:
             all_patterns.update(f.file_patterns)
@@ -438,7 +431,7 @@ def combine_filters(*filters: FilterCriteria) -> FilterCriteria:
         combined.file_patterns = sorted(all_patterns)
 
     # Combine exclusions
-    all_exclusions: Set[str] = set()
+    all_exclusions: set[str] = set()
     for f in filters:
         if f.exclude_paths:
             all_exclusions.update(f.exclude_paths)

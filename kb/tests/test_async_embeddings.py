@@ -8,9 +8,11 @@ Tests critical async scenarios:
 - Resource cleanup (AsyncOpenAI client)
 """
 
-import pytest
 import asyncio
-from kb.embeddings.provider import OpenAIEmbeddingProvider, EmbeddingProvider
+
+import pytest
+
+from kb.embeddings.provider import EmbeddingProvider, OpenAIEmbeddingProvider
 
 
 class TestAsyncEmbeddings:
@@ -34,10 +36,7 @@ class TestAsyncEmbeddings:
         provider = EmbeddingProvider()
 
         # Create 5 concurrent requests
-        tasks = [
-            provider.embed_texts_async("small", [f"text {i}"])
-            for i in range(5)
-        ]
+        tasks = [provider.embed_texts_async("small", [f"text {i}"]) for i in range(5)]
 
         results = await asyncio.gather(*tasks)
 
@@ -60,10 +59,7 @@ class TestAsyncEmbeddings:
             loop_got_control = True
 
         # Run both concurrently
-        await asyncio.gather(
-            provider.embed_texts_async("small", ["test"] * 10),
-            set_flag()
-        )
+        await asyncio.gather(provider.embed_texts_async("small", ["test"] * 10), set_flag())
 
         # Event loop should have had chance to run set_flag
         assert loop_got_control
@@ -74,10 +70,10 @@ class TestAsyncEmbeddings:
         # Create provider with dummy API key
         provider = OpenAIEmbeddingProvider(
             api_key="sk-test-dummy-key",
-            validate_key=False  # Don't validate to avoid API call
+            validate_key=False,  # Don't validate to avoid API call
         )
 
-        assert hasattr(provider, 'async_client')
+        assert hasattr(provider, "async_client")
 
         # Close the provider
         await provider.close()
@@ -147,10 +143,7 @@ class TestRateLimiting:
         start_time = asyncio.get_event_loop().time()
 
         # Fire 10 concurrent requests
-        tasks = [
-            provider.embed_texts_async("small", ["test"])
-            for _ in range(10)
-        ]
+        tasks = [provider.embed_texts_async("small", ["test"]) for _ in range(10)]
 
         await asyncio.gather(*tasks)
 

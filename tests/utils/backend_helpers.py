@@ -1,7 +1,7 @@
 """Factory for creating test backends with different configurations."""
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from tests.kb_utils import InMemoryKBBackend
 
@@ -37,7 +37,7 @@ class TestBackendFactory:
         """
         try:
             # Try to import and create actual LanceDB backend
-            from kb.api.app import LanceDBBackend
+            from kb.api.app import LanceDBBackend  # type: ignore[attr-defined]
 
             db_path = temp_dir / "test_lancedb"
             return LanceDBBackend(str(db_path), **kwargs)
@@ -48,9 +48,7 @@ class TestBackendFactory:
             return MockLanceDBBackend(**kwargs)
 
     @staticmethod
-    def create_test_config(
-        repo_path: Path, backend_type: str = "memory", **backend_kwargs
-    ) -> Dict[str, Any]:
+    def create_test_config(repo_path: Path, backend_type: str = "memory", **backend_kwargs) -> dict[str, Any]:
         """Create a complete test configuration.
 
         Args:
@@ -62,13 +60,9 @@ class TestBackendFactory:
             Dictionary with backend and configuration
         """
         if backend_type == "memory":
-            backend = TestBackendFactory.create_in_memory_backend(
-                repo_path, **backend_kwargs
-            )
+            backend = TestBackendFactory.create_in_memory_backend(repo_path, **backend_kwargs)
         elif backend_type == "lancedb":
-            backend = TestBackendFactory.create_lancedb_backend(
-                repo_path, **backend_kwargs
-            )
+            backend = TestBackendFactory.create_lancedb_backend(repo_path, **backend_kwargs)
         else:
             raise ValueError(f"Unknown backend type: {backend_type}")
 

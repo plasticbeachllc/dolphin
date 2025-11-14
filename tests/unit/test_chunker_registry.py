@@ -2,15 +2,7 @@
 
 from pathlib import Path
 
-import pytest
-
-from kb.chunkers import (
-    Chunk,
-    RepoChunkingConfig,
-    chunk_file,
-    detect_language_from_extension,
-    get_chunker,
-)
+from kb.chunkers import Chunk, RepoChunkingConfig, chunk_file, detect_language_from_extension, get_chunker
 
 
 class TestLanguageDetection:
@@ -25,17 +17,13 @@ class TestLanguageDetection:
     def test_typescript_extensions(self):
         """Test TypeScript file extension detection."""
         assert detect_language_from_extension(Path("app.ts")) == "typescript"
-        assert (
-            detect_language_from_extension(Path("component.tsx")) == "typescriptreact"
-        )
+        assert detect_language_from_extension(Path("component.tsx")) == "typescriptreact"
         assert detect_language_from_extension(Path("module.mts")) == "typescript"
 
     def test_javascript_extensions(self):
         """Test JavaScript file extension detection."""
         assert detect_language_from_extension(Path("app.js")) == "javascript"
-        assert (
-            detect_language_from_extension(Path("component.jsx")) == "javascriptreact"
-        )
+        assert detect_language_from_extension(Path("component.jsx")) == "javascriptreact"
         assert detect_language_from_extension(Path("module.mjs")) == "javascript"
 
     def test_markdown_extensions(self):
@@ -240,7 +228,7 @@ def calculate(x, y):
 class DataProcessor:
     def __init__(self):
         self.data = []
-    
+
     def process(self, item):
         self.data.append(item)
 """

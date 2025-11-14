@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Set
 
 from ..chunkers.types import Chunk
 from ..hashing import hash_text
@@ -20,15 +19,15 @@ from ..store.sqlite_meta import SQLiteMetadataStore
 class ChunkDiff:
     """Result of comparing chunks between old and new versions."""
 
-    new_chunks: List[Chunk]  # Chunks to embed and insert
-    unchanged_chunks: List[str]  # Chunk hashes that haven't changed
-    deleted_chunks: List[str]  # Chunk hashes to remove
-    stats: Dict[str, int]  # Statistics about the diff
+    new_chunks: list[Chunk]  # Chunks to embed and insert
+    unchanged_chunks: list[str]  # Chunk hashes that haven't changed
+    deleted_chunks: list[str]  # Chunk hashes to remove
+    stats: dict[str, int]  # Statistics about the diff
 
 
 def compute_chunk_diff(
-    new_chunks: List[Chunk],
-    existing_hashes: Set[str],
+    new_chunks: list[Chunk],
+    existing_hashes: set[str],
     repo_name: str,
     file_path: str,
 ) -> ChunkDiff:
@@ -43,8 +42,8 @@ def compute_chunk_diff(
     Returns:
         ChunkDiff object with categorized chunks
     """
-    new_hashes: Set[str] = set()
-    chunks_to_embed: List[Chunk] = []
+    new_hashes: set[str] = set()
+    chunks_to_embed: list[Chunk] = []
 
     # Compute hashes for new chunks and identify which need embedding
     for chunk in new_chunks:
@@ -79,7 +78,7 @@ def get_existing_chunk_hashes(
     metadata_store: SQLiteMetadataStore,
     repo_name: str,
     file_path: str | None = None,
-) -> Set[str]:
+) -> set[str]:
     """Get set of existing chunk hashes for a repository or file.
 
     Args:
@@ -90,7 +89,6 @@ def get_existing_chunk_hashes(
     Returns:
         Set of content hashes for existing chunks
     """
-    import sqlite3
 
     with metadata_store._connect() as conn:
         cur = conn.cursor()
@@ -125,7 +123,7 @@ def detect_changed_files(
     repo_root: Path,
     metadata_store: SQLiteMetadataStore,
     repo_name: str,
-) -> tuple[List[str], List[str]]:
+) -> tuple[list[str], list[str]]:
     """Detect which files have changed since last indexing.
 
     Uses git to detect modified and deleted files since last commit.
@@ -196,9 +194,9 @@ class IncrementalIndexer:
         self.metadata_store = metadata_store
         self.repo_name = repo_name
         self.repo_root = repo_root
-        self._existing_hashes: Dict[str, Set[str]] = {}
+        self._existing_hashes: dict[str, set[str]] = {}
 
-    def get_file_hashes(self, file_path: str) -> Set[str]:
+    def get_file_hashes(self, file_path: str) -> set[str]:
         """Get existing chunk hashes for a file (cached).
 
         Args:
@@ -218,7 +216,7 @@ class IncrementalIndexer:
     def compute_diff(
         self,
         file_path: str,
-        new_chunks: List[Chunk],
+        new_chunks: list[Chunk],
     ) -> ChunkDiff:
         """Compute diff for a file's chunks.
 

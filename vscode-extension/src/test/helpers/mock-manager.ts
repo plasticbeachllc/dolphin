@@ -5,6 +5,7 @@
 
 import { MockKBServer, MockAgentBridge } from "./mock-services";
 import { MOCK_KB_CONFIG } from "./test-constants";
+import { MockSearchResult, MockMetadataResponse, ToolCall } from "./mock-types";
 
 export interface MockEnvironment {
   kbServer: MockKBServer;
@@ -66,7 +67,7 @@ export async function teardownMockEnvironment(): Promise<void> {
 export function resetMocks(): void {
   if (mockEnvironment) {
     mockEnvironment.agentBridge.reset();
-    // KB server doesn't need reset as it's stateless
+    mockEnvironment.kbServer.reset();
   }
 }
 
@@ -74,8 +75,8 @@ export function resetMocks(): void {
  * Configure mock KB server responses.
  */
 export function configureMockKB(config: {
-  searchResults?: any[];
-  metadata?: any;
+  searchResults?: MockSearchResult[];
+  metadata?: MockMetadataResponse;
   health?: boolean;
 }): void {
   const env = getMockEnvironment();
@@ -98,7 +99,7 @@ export function configureMockKB(config: {
  */
 export function configureMockAgent(config: {
   response?: string;
-  toolCalls?: any[];
+  toolCalls?: ToolCall[];
   shouldError?: boolean;
   error?: Error;
 }): void {
@@ -113,8 +114,9 @@ export function configureMockAgent(config: {
   }
 
   if (config.shouldError && config.error) {
-    env.agentBridge.setError(config.error);
+    env.agentBridge.setError(true, config.error.message);
+    env.agentBridge.mockError = config.error;
   } else if (config.shouldError) {
-    env.agentBridge.setError(new Error("Mock agent error"));
+    env.agentBridge.setError(true, "Mock agent error");
   }
 }

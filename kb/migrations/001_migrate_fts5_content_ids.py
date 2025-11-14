@@ -11,11 +11,10 @@ Migration Steps:
 4. Re-insert entries with new content IDs (deduplicating as needed)
 """
 
-import sqlite3
-import logging
 import hashlib
+import logging
+import sqlite3
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +38,7 @@ def generate_fts_content_id(repo_id: int, file_id: int, text_hash: str) -> str:
     return hashlib.sha256(composite.encode()).hexdigest()[:32]
 
 
-def get_repo_and_file_ids(
-    conn: sqlite3.Connection,
-    repo_name: str,
-    file_path: str
-) -> Tuple[int | None, int | None]:
+def get_repo_and_file_ids(conn: sqlite3.Connection, repo_name: str, file_path: str) -> tuple[int | None, int | None]:
     """Get repo_id and file_id from names/paths.
 
     Args:
@@ -64,10 +59,7 @@ def get_repo_and_file_ids(
     repo_id = repo_row[0]
 
     # Get file_id
-    cursor.execute(
-        "SELECT id FROM files WHERE repo_id = ? AND path = ?",
-        (repo_id, file_path)
-    )
+    cursor.execute("SELECT id FROM files WHERE repo_id = ? AND path = ?", (repo_id, file_path))
     file_row = cursor.fetchone()
     if not file_row:
         return repo_id, None
@@ -75,7 +67,7 @@ def get_repo_and_file_ids(
     return repo_id, file_row[0]
 
 
-def migrate_fts5_content_ids(db_path: Path) -> Dict[str, int]:
+def migrate_fts5_content_ids(db_path: Path) -> dict[str, int]:
     """Migrate existing FTS5 content IDs to new deterministic format.
 
     Args:
@@ -99,18 +91,18 @@ def migrate_fts5_content_ids(db_path: Path) -> Dict[str, int]:
 
     try:
         # Step 1: Check if FTS5 table exists and has data
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
         if not cursor.fetchone():
             logger.info("[FTS5 Migration 001] No chunks_fts table found, skipping migration")
             return stats
 
         # Read all existing FTS5 entries
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT content_id, repo, path, text_hash, content, symbol_name, symbol_path
             FROM chunks_fts
-        """)
+        """
+        )
         old_entries = cursor.fetchall()
         stats["entries_read"] = len(old_entries)
 
@@ -121,7 +113,7 @@ def migrate_fts5_content_ids(db_path: Path) -> Dict[str, int]:
         logger.info(f"[FTS5 Migration 001] Read {stats['entries_read']} entries from chunks_fts")
 
         # Step 2: Transform entries to new format
-        new_entries: Dict[str, Dict] = {}  # Use dict to deduplicate by new content_id
+        new_entries: dict[str, dict] = {}  # Use dict to deduplicate by new content_id
 
         for entry in old_entries:
             repo_name = entry["repo"]
@@ -133,8 +125,7 @@ def migrate_fts5_content_ids(db_path: Path) -> Dict[str, int]:
 
             if repo_id is None or file_id is None:
                 logger.warning(
-                    f"[FTS5 Migration 001] Skipping entry: "
-                    f"repo={repo_name}, path={file_path} (not found in metadata)"
+                    f"[FTS5 Migration 001] Skipping entry: repo={repo_name}, path={file_path} (not found in metadata)"
                 )
                 stats["errors"] += 1
                 continue
@@ -145,10 +136,7 @@ def migrate_fts5_content_ids(db_path: Path) -> Dict[str, int]:
             # Check for duplicates (same content indexed with different embed_models)
             if new_content_id in new_entries:
                 stats["duplicates_merged"] += 1
-                logger.debug(
-                    f"[FTS5 Migration 001] Duplicate found: "
-                    f"{new_content_id} (keeping first occurrence)"
-                )
+                logger.debug(f"[FTS5 Migration 001] Duplicate found: {new_content_id} (keeping first occurrence)")
                 continue
 
             # Store entry with new content_id
@@ -172,7 +160,8 @@ def migrate_fts5_content_ids(db_path: Path) -> Dict[str, int]:
         cursor.execute("DROP TABLE chunks_fts")
 
         logger.info("[FTS5 Migration 001] Creating new chunks_fts table...")
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE VIRTUAL TABLE chunks_fts USING fts5(
                 content_id UNINDEXED,
                 repo UNINDEXED,
@@ -183,23 +172,27 @@ def migrate_fts5_content_ids(db_path: Path) -> Dict[str, int]:
                 symbol_path,
                 tokenize='porter unicode61'
             )
-        """)
+        """
+        )
 
         # Step 4: Insert entries with new content_ids
         logger.info("[FTS5 Migration 001] Inserting entries with new content IDs...")
         for entry in new_entries.values():
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO chunks_fts (content_id, repo, path, text_hash, content, symbol_name, symbol_path)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                entry["content_id"],
-                entry["repo"],
-                entry["path"],
-                entry["text_hash"],
-                entry["content"],
-                entry["symbol_name"],
-                entry["symbol_path"],
-            ))
+            """,
+                (
+                    entry["content_id"],
+                    entry["repo"],
+                    entry["path"],
+                    entry["text_hash"],
+                    entry["content"],
+                    entry["symbol_name"],
+                    entry["symbol_path"],
+                ),
+            )
             stats["entries_migrated"] += 1
 
         conn.commit()
@@ -231,9 +224,7 @@ def check_migration_needed(db_path: Path) -> bool:
         cursor = conn.cursor()
 
         # Check if table exists
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
-        )
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
         if not cursor.fetchone():
             return False  # No table, no migration needed
 
@@ -259,10 +250,7 @@ if __name__ == "__main__":
     """Run migration standalone for testing."""
     import sys
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="[%(levelname)s] %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
     if len(sys.argv) < 2:
         print("Usage: python 001_migrate_fts5_content_ids.py <db_path>")

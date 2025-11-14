@@ -8,6 +8,8 @@ import { AgentBridge } from "../agent/bridge";
 export class DolphinViewProvider implements vscode.WebviewViewProvider {
   private webviewView?: vscode.WebviewView;
   private workspaceChangeDisposable?: vscode.Disposable;
+  private eventListenerDisposable?: vscode.Disposable;
+  private isDisposed = false;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -16,23 +18,44 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
   ) {
     // Set up event forwarding immediately when AgentBridge is available
     if (this.agentBridge) {
-      this.agentBridge.onEvent((event) => {
+      this.eventListenerDisposable = this.agentBridge.onEvent((event) => {
+        // Check if disposed before processing events
+        if (this.isDisposed) {
+          return;
+        }
+
         // Phase 7: Extract and log correlation ID for event tracking
-        const requestId = (event as any).requestId || "unknown";
-        this.outputChannel.appendLine(
-          `[DolphinViewProvider] Received event from agent: ${event.type} (requestId: ${requestId})`
-        );
+        const requestId =
+          (event && typeof event === "object" && "requestId" in event
+            ? (event as { requestId?: string }).requestId
+            : undefined) || "unknown";
+        try {
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] Received event from agent: ${event.type} (requestId: ${requestId})`
+          );
+        } catch {
+          // Output channel may be disposed
+          return;
+        }
 
         // Forward to webview if it's available
         if (this.webviewView) {
-          this.outputChannel.appendLine(
-            `[DolphinViewProvider] Forwarding event to webview: ${event.type} (requestId: ${requestId})`
-          );
-          this.webviewView.webview.postMessage(event);
+          try {
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] Forwarding event to webview: ${event.type} (requestId: ${requestId})`
+            );
+            this.webviewView.webview.postMessage(event);
+          } catch {
+            // Webview may be disposed
+          }
         } else {
-          this.outputChannel.appendLine(
-            `[DolphinViewProvider] Webview not ready yet, event will be queued (requestId: ${requestId})`
-          );
+          try {
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] Webview not ready yet, event will be queued (requestId: ${requestId})`
+            );
+          } catch {
+            // Output channel may be disposed
+          }
         }
       });
     }
@@ -78,13 +101,26 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
   /**
    * Post a message to the webview
    */
-  public postMessage(message: any): void {
+  public postMessage(message: unknown): void {
+    // Don't post messages if disposed
+    if (this.isDisposed) {
+      return;
+    }
+
     if (this.webviewView) {
-      this.webviewView.webview.postMessage(message);
+      try {
+        this.webviewView.webview.postMessage(message);
+      } catch {
+        // Webview may be disposed
+      }
     } else {
-      this.outputChannel.appendLine(
-        `[DolphinViewProvider] Cannot post message - webview not ready`
-      );
+      try {
+        this.outputChannel.appendLine(
+          `[DolphinViewProvider] Cannot post message - webview not ready`
+        );
+      } catch {
+        // Output channel may be disposed
+      }
     }
   }
 
@@ -247,9 +283,10 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
                 type: "auth_status",
                 status: status,
               });
-            } catch (error: any) {
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
               this.outputChannel.appendLine(
-                `[DolphinViewProvider] Error getting auth status: ${error.message}`
+                `[DolphinViewProvider] Error getting auth status: ${errorMessage}`
               );
               // Send error state
               webviewView.webview.postMessage({
@@ -288,9 +325,10 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           if (message.diff) {
             try {
               await vscode.commands.executeCommand("dolphin.applyDiff", message.diff);
-            } catch (error: any) {
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
               this.outputChannel.appendLine(
-                `[DolphinViewProvider] Error applying diff: ${error.message}`
+                `[DolphinViewProvider] Error applying diff: ${errorMessage}`
               );
             }
           }
@@ -306,13 +344,14 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
                 type: "conversations_listed",
                 conversations: conversations,
               });
-            } catch (error: any) {
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
               this.outputChannel.appendLine(
-                `[DolphinViewProvider] Error listing conversations: ${error.message}`
+                `[DolphinViewProvider] Error listing conversations: ${errorMessage}`
               );
               webviewView.webview.postMessage({
                 type: "error",
-                error: { message: `Failed to list conversations: ${error.message}` },
+                error: { message: `Failed to list conversations: ${errorMessage}` },
               });
             }
           }
@@ -330,13 +369,14 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
                 conversation: result.conversation,
                 branchInfo: result.branchInfo,
               });
-            } catch (error: any) {
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
               this.outputChannel.appendLine(
-                `[DolphinViewProvider] Error loading conversation: ${error.message}`
+                `[DolphinViewProvider] Error loading conversation: ${errorMessage}`
               );
               webviewView.webview.postMessage({
                 type: "error",
-                error: { message: `Failed to load conversation: ${error.message}` },
+                error: { message: `Failed to load conversation: ${errorMessage}` },
               });
             }
           }
@@ -353,13 +393,14 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
                 type: "conversation_deleted",
                 conversationId: message.conversationId,
               });
-            } catch (error: any) {
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
               this.outputChannel.appendLine(
-                `[DolphinViewProvider] Error deleting conversation: ${error.message}`
+                `[DolphinViewProvider] Error deleting conversation: ${errorMessage}`
               );
               webviewView.webview.postMessage({
                 type: "error",
-                error: { message: `Failed to delete conversation: ${error.message}` },
+                error: { message: `Failed to delete conversation: ${errorMessage}` },
               });
             }
           }
@@ -377,13 +418,14 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
                 conversationId: message.conversationId,
                 newTitle: message.newTitle,
               });
-            } catch (error: any) {
+            } catch (error: unknown) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
               this.outputChannel.appendLine(
-                `[DolphinViewProvider] Error renaming conversation: ${error.message}`
+                `[DolphinViewProvider] Error renaming conversation: ${errorMessage}`
               );
               webviewView.webview.postMessage({
                 type: "error",
-                error: { message: `Failed to rename conversation: ${error.message}` },
+                error: { message: `Failed to rename conversation: ${errorMessage}` },
               });
             }
           }
@@ -405,14 +447,15 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               requestId: message.requestId,
               data,
             });
-          } catch (error: any) {
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.outputChannel.appendLine(
-              `[DolphinViewProvider] Error registering repo: ${error.message}`
+              `[DolphinViewProvider] Error registering repo: ${errorMessage}`
             );
             webviewView.webview.postMessage({
               type: "kb_register_repo_response",
               requestId: message.requestId,
-              error: error.message || "Failed to register repository",
+              error: errorMessage || "Failed to register repository",
             });
           }
           break;
@@ -428,14 +471,15 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               requestId: message.requestId,
               data,
             });
-          } catch (error: any) {
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.outputChannel.appendLine(
-              `[DolphinViewProvider] Error getting KB stats: ${error.message}`
+              `[DolphinViewProvider] Error getting KB stats: ${errorMessage}`
             );
             webviewView.webview.postMessage({
               type: "kb_get_stats_response",
               requestId: message.requestId,
-              error: error.message || "Failed to get KB stats",
+              error: errorMessage || "Failed to get KB stats",
             });
           }
           break;
@@ -455,14 +499,15 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               requestId: message.requestId,
               data,
             });
-          } catch (error: any) {
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.outputChannel.appendLine(
-              `[DolphinViewProvider] Error triggering reindex: ${error.message}`
+              `[DolphinViewProvider] Error triggering reindex: ${errorMessage}`
             );
             webviewView.webview.postMessage({
               type: "kb_trigger_reindex_response",
               requestId: message.requestId,
-              error: error.message || "Failed to trigger reindex",
+              error: errorMessage || "Failed to trigger reindex",
             });
           }
           break;
@@ -488,9 +533,10 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               data,
             });
             this.outputChannel.appendLine(`[DolphinViewProvider] Response sent successfully`);
-          } catch (error: any) {
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.outputChannel.appendLine(
-              `[DolphinViewProvider] Error getting index status: ${error.message}`
+              `[DolphinViewProvider] Error getting index status: ${errorMessage}`
             );
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Sending error response to webview`
@@ -498,7 +544,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             webviewView.webview.postMessage({
               type: "kb_get_status_response",
               requestId: message.requestId,
-              error: error.message || "Failed to get index status",
+              error: errorMessage || "Failed to get index status",
             });
           }
           break;
@@ -517,14 +563,15 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               requestId: message.requestId,
               data,
             });
-          } catch (error: any) {
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
             this.outputChannel.appendLine(
-              `[DolphinViewProvider] Error clearing index: ${error.message}`
+              `[DolphinViewProvider] Error clearing index: ${errorMessage}`
             );
             webviewView.webview.postMessage({
               type: "kb_clear_index_response",
               requestId: message.requestId,
-              error: error.message || "Failed to clear index",
+              error: errorMessage || "Failed to clear index",
             });
           }
           break;
@@ -666,9 +713,9 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
   private httpRequest(
     method: string,
     path: string,
-    body?: any,
+    body?: unknown,
     timeoutMs: number = 5000
-  ): Promise<any> {
+  ): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const options = {
         hostname: "127.0.0.1",
@@ -719,8 +766,9 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
       });
 
       req.on("error", (error) => {
+        const errMsg = error instanceof Error ? error.message : String(error);
         this.outputChannel.appendLine(
-          `[DolphinViewProvider] httpRequest ${method} ${path} ERROR: ${error.message}`
+          `[DolphinViewProvider] httpRequest ${method} ${path} ERROR: ${errMsg}`
         );
         reject(error);
       });
@@ -739,5 +787,27 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
   private getNonce(): string {
     const crypto = require("crypto");
     return crypto.randomBytes(16).toString("base64");
+  }
+
+  /**
+   * Dispose of all resources and cleanup
+   */
+  public dispose(): void {
+    this.isDisposed = true;
+
+    // Dispose event listener first to stop receiving events
+    if (this.eventListenerDisposable) {
+      this.eventListenerDisposable.dispose();
+      this.eventListenerDisposable = undefined;
+    }
+
+    // Dispose workspace change listener
+    if (this.workspaceChangeDisposable) {
+      this.workspaceChangeDisposable.dispose();
+      this.workspaceChangeDisposable = undefined;
+    }
+
+    // Clear webview reference (don't dispose it - VSCode manages webview lifecycle)
+    this.webviewView = undefined;
   }
 }

@@ -6,12 +6,11 @@ files, resulting in 40%+ parse time reduction on incremental indexing.
 
 from __future__ import annotations
 
-import hashlib
 import pickle
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from ..chunkers.types import Chunk
 
@@ -22,7 +21,7 @@ class CachedAST:
 
     file_path: str
     content_hash: str
-    chunks: List[Chunk]
+    chunks: list[Chunk]
     language: str
     timestamp: float
 
@@ -63,7 +62,7 @@ class ASTCache:
         self,
         file_path: str,
         content_hash: str,
-    ) -> List[Chunk] | None:
+    ) -> list[Chunk] | None:
         """Get cached chunks for a file.
 
         Args:
@@ -88,7 +87,7 @@ class ASTCache:
         self,
         file_path: str,
         content_hash: str,
-        chunks: List[Chunk],
+        chunks: list[Chunk],
         language: str,
     ) -> None:
         """Store chunks in cache.
@@ -124,9 +123,7 @@ class ASTCache:
         Args:
             file_path: Path to the file
         """
-        keys_to_remove = [
-            key for key in self._cache.keys() if key.startswith(f"{file_path}:")
-        ]
+        keys_to_remove = [key for key in self._cache.keys() if key.startswith(f"{file_path}:")]
         for key in keys_to_remove:
             del self._cache[key]
 
@@ -151,7 +148,7 @@ class ASTCache:
             return 0.0
         return (self._hits / total) * 100
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """Get cache statistics.
 
         Returns:

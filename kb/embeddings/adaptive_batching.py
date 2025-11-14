@@ -7,8 +7,8 @@ chunk token counts to optimize throughput while respecting API limits.
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Iterator, List
 
 from ..chunkers.token_utils import count_tokens, get_tokenizer
 
@@ -57,7 +57,7 @@ class AdaptiveBatcher:
         self._recent_metrics: deque[BatchMetrics] = deque(maxlen=10)
         self._current_batch_size = min_batch_size
 
-    def create_batches(self, texts: List[str]) -> Iterator[List[str]]:
+    def create_batches(self, texts: list[str]) -> Iterator[list[str]]:
         """Create optimally-sized batches from texts.
 
         Args:
@@ -93,7 +93,7 @@ class AdaptiveBatcher:
             yield batch
             i += batch_size
 
-    def _estimate_batch_size(self, sample_texts: List[str]) -> int:
+    def _estimate_batch_size(self, sample_texts: list[str]) -> int:
         """Estimate optimal batch size based on sample texts.
 
         Args:
@@ -120,15 +120,11 @@ class AdaptiveBatcher:
             estimated_size = self.max_batch_size
 
         # Apply constraints
-        estimated_size = max(
-            self.min_batch_size, min(estimated_size, self.max_batch_size)
-        )
+        estimated_size = max(self.min_batch_size, min(estimated_size, self.max_batch_size))
 
         # Adjust based on recent performance
         if self._recent_metrics:
-            recent_avg = sum(m.avg_tokens for m in self._recent_metrics) / len(
-                self._recent_metrics
-            )
+            recent_avg = sum(m.avg_tokens for m in self._recent_metrics) / len(self._recent_metrics)
             if recent_avg > 0:
                 adjusted_size = int(self.target_tokens / recent_avg)
                 # Blend estimate with adjusted size
@@ -162,12 +158,8 @@ class AdaptiveBatcher:
                 "avg_processing_time": 0,
             }
 
-        avg_batch_size = sum(m.batch_size for m in self._recent_metrics) / len(
-            self._recent_metrics
-        )
-        avg_tokens = sum(m.total_tokens for m in self._recent_metrics) / len(
-            self._recent_metrics
-        )
+        avg_batch_size = sum(m.batch_size for m in self._recent_metrics) / len(self._recent_metrics)
+        avg_tokens = sum(m.total_tokens for m in self._recent_metrics) / len(self._recent_metrics)
 
         times = [m.processing_time for m in self._recent_metrics if m.processing_time]
         avg_time = sum(times) / len(times) if times else 0
@@ -181,12 +173,12 @@ class AdaptiveBatcher:
 
 
 def create_adaptive_batches(
-    texts: List[str],
+    texts: list[str],
     model: str = "small",
     target_tokens: int = 8000,
     min_batch_size: int = 10,
     max_batch_size: int = 500,
-) -> List[List[str]]:
+) -> list[list[str]]:
     """Create adaptively-sized batches from texts (convenience function).
 
     Args:

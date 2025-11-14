@@ -1,5 +1,5 @@
 // agent-core/src/llm/claude-cli-process.ts
-import { spawn, ChildProcess } from "child_process";
+import { spawn } from "child_process";
 import * as readline from "readline";
 import type Anthropic from "@anthropic-ai/sdk";
 
@@ -68,7 +68,7 @@ export async function* runClaudeCode(
     model = "claude-sonnet-4-20250514",
     maxOutputTokens = 16000,
     cwd,
-    timeout = 600000, // 10 minutes like Kilocode
+    timeout: _timeout = 600000, // 10 minutes like Kilocode
   } = options;
 
   // Build CLI arguments (matching Kilocode's implementation)
@@ -139,7 +139,7 @@ export async function* runClaudeCode(
   try {
     // Handle stderr
     child.stderr.setEncoding("utf-8");
-    child.stderr.on("data", (data) => {
+    child.stderr.on("data", (data: Buffer | string) => {
       processState.stderrLogs += data.toString();
     });
 
@@ -197,9 +197,9 @@ export async function* runClaudeCode(
     // Check exit code
     const exitCode = processState.exitCode;
     if (exitCode !== null && exitCode !== 0) {
-      const errorOutput = (processState.error as any)?.message || processState.stderrLogs?.trim();
+      const errorMessage = processState.error?.message || processState.stderrLogs?.trim();
       throw new Error(
-        `Claude Code process exited with code ${exitCode}.${errorOutput ? ` Error output: ${errorOutput}` : ""}`
+        `Claude Code process exited with code ${exitCode}.${errorMessage ? ` Error output: ${errorMessage}` : ""}`
       );
     }
   } finally {
@@ -288,10 +288,14 @@ export async function executeClaudeCode(options: ClaudeCLIOptions): Promise<Clau
       // Update usage
       usage.input_tokens += message.usage.input_tokens;
       usage.output_tokens += message.usage.output_tokens;
+      const messageUsage = message.usage as Anthropic.Messages.Message["usage"] & {
+        cache_read_input_tokens?: number;
+        cache_creation_input_tokens?: number;
+      };
       usage.cache_read_tokens =
-        (usage.cache_read_tokens || 0) + ((message.usage as any).cache_read_input_tokens || 0);
+        (usage.cache_read_tokens || 0) + (messageUsage.cache_read_input_tokens || 0);
       usage.cache_write_tokens =
-        (usage.cache_write_tokens || 0) + ((message.usage as any).cache_creation_input_tokens || 0);
+        (usage.cache_write_tokens || 0) + (messageUsage.cache_creation_input_tokens || 0);
 
       stop_reason = message.stop_reason || undefined;
       continue;

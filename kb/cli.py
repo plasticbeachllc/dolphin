@@ -6,24 +6,22 @@ including knowledge base management, API serving, and persona management.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 
-from kb.api.server import app_with_lifespan
-
 # Import kb CLI functions for top-level commands
 # Import subcommand apps
-from kb.ingest.cli import add_repo as kb_add_repo
-from kb.ingest.cli import app as kb_app
-from kb.ingest.cli import index as kb_index
-from kb.ingest.cli import init as kb_init
-from kb.ingest.cli import list_files as kb_list_files
-from kb.ingest.cli import prune_ignored as kb_prune_ignored
-from kb.ingest.cli import rm_repo as kb_rm_repo
-from kb.ingest.cli import status as kb_status
+from kb.ingest.cli import (
+    add_repo as kb_add_repo,
+    app as kb_app,
+    index as kb_index,
+    init as kb_init,
+    list_files as kb_list_files,
+    prune_ignored as kb_prune_ignored,
+    rm_repo as kb_rm_repo,
+    status as kb_status,
+)
 
 
 def get_version() -> str:
@@ -54,7 +52,7 @@ app = typer.Typer(
 
 @app.callback(invoke_without_command=True)
 def dolphin_callback(
-    version: bool = typer.Option(False, "--version", "-v", help="Show version and exit")
+    version: bool = typer.Option(False, "--version", "-v", help="Show version and exit"),
 ):
     version_callback(version)
 
@@ -70,9 +68,7 @@ app.add_typer(kb_app, name="kb", help="Knowledge base management commands")
 
 @app.command()
 def init(
-    config_path: Optional[Path] = typer.Option(
-        None, "--config", help="Optional config path."
-    ),
+    config_path: Path | None = typer.Option(None, "--config", help="Optional config path."),
 ) -> None:
     """Initialize the knowledge store (config + SQLite + LanceDB collections)."""
     kb_init(config_path)
@@ -93,9 +89,7 @@ def add_repo(
 @app.command()
 def rm_repo(
     name: str = typer.Argument(..., help="Repository name to remove."),
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Skip confirmation prompt."
-    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt."),
 ) -> None:
     """Remove a repository and all its data from the knowledge store."""
     kb_rm_repo(name=name, force=force)
@@ -105,12 +99,8 @@ def rm_repo(
 def index(
     name: str = typer.Argument(..., help="Name of the repository to index."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Run without persisting."),
-    force: bool = typer.Option(
-        False, "--force", help="Bypass clean working tree check."
-    ),
-    full: bool = typer.Option(
-        False, "--full", help="Process all files instead of incremental diff."
-    ),
+    force: bool = typer.Option(False, "--force", help="Bypass clean working tree check."),
+    full: bool = typer.Option(False, "--full", help="Process all files instead of incremental diff."),
 ) -> None:
     """Run the full indexing pipeline for the specified repository."""
     kb_index(name=name, dry_run=dry_run, force=force, full=full)
@@ -118,7 +108,7 @@ def index(
 
 @app.command()
 def status(
-    name: Optional[str] = typer.Argument(None, help="Optional repository name."),
+    name: str | None = typer.Argument(None, help="Optional repository name."),
 ) -> None:
     """Report knowledge store status with detailed repository listing."""
     kb_status(name)
@@ -127,9 +117,7 @@ def status(
 @app.command()
 def prune_ignored(
     name: str = typer.Argument(..., help="Repository name to clean up."),
-    dry_run: bool = typer.Option(
-        False, "--dry-run", help="Show what would be removed without persisting."
-    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be removed without persisting."),
 ) -> None:
     """Remove chunks for files that match the ignore patterns."""
     kb_prune_ignored(name, dry_run)
@@ -146,25 +134,13 @@ def list_files(
 @app.command()
 def search(
     query: str = typer.Argument(..., help="Search query."),
-    repos: Optional[list[str]] = typer.Option(
-        None, "--repo", "-r", help="Repository name(s) to search."
-    ),
-    path_prefix: Optional[list[str]] = typer.Option(
-        None, "--path", "-p", help="Filter by path prefix."
-    ),
+    repos: list[str] | None = typer.Option(None, "--repo", "-r", help="Repository name(s) to search."),
+    path_prefix: list[str] | None = typer.Option(None, "--path", "-p", help="Filter by path prefix."),
     top_k: int = typer.Option(8, "--top-k", "-k", help="Number of results to return."),
-    score_cutoff: float = typer.Option(
-        0.0, "--score-cutoff", "-s", help="Minimum similarity score."
-    ),
-    embed_model: str = typer.Option(
-        "large", "--embed-model", "-m", help="Embedding model to use (small|large)."
-    ),
-    local: bool = typer.Option(
-        False, "--local", "-l", help="Use local backend (no server required)."
-    ),
-    show_content: bool = typer.Option(
-        False, "--show-content", "-c", help="Display code snippets."
-    ),
+    score_cutoff: float = typer.Option(0.0, "--score-cutoff", "-s", help="Minimum similarity score."),
+    embed_model: str = typer.Option("large", "--embed-model", "-m", help="Embedding model to use (small|large)."),
+    local: bool = typer.Option(False, "--local", "-l", help="Use local backend (no server required)."),
+    show_content: bool = typer.Option(False, "--show-content", "-c", help="Display code snippets."),
 ) -> None:
     """Search indexed code semantically.
 
@@ -174,19 +150,15 @@ def search(
         dolphin search "error handling" --local --show-content
     """
     if local:
-        _search_local(
-            query, repos, path_prefix, top_k, score_cutoff, embed_model, show_content
-        )
+        _search_local(query, repos, path_prefix, top_k, score_cutoff, embed_model, show_content)
     else:
-        _search_remote(
-            query, repos, path_prefix, top_k, score_cutoff, embed_model, show_content
-        )
+        _search_remote(query, repos, path_prefix, top_k, score_cutoff, embed_model, show_content)
 
 
 def _search_local(
     query: str,
-    repos: Optional[list[str]],
-    path_prefix: Optional[list[str]],
+    repos: list[str] | None,
+    path_prefix: list[str] | None,
     top_k: int,
     score_cutoff: float,
     embed_model: str,
@@ -229,15 +201,16 @@ def _search_local(
 
 def _search_remote(
     query: str,
-    repos: Optional[list[str]],
-    path_prefix: Optional[list[str]],
+    repos: list[str] | None,
+    path_prefix: list[str] | None,
     top_k: int,
     score_cutoff: float,
     embed_model: str,
     show_content: bool,
 ) -> None:
     """Search using remote API server."""
-    import requests  # type: ignore[import-untyped]
+    import requests
+    import requests.exceptions  # Import the exceptions module explicitly
 
     from kb.config import load_config
 
@@ -293,9 +266,7 @@ def _display_results(hits: list, show_content: bool, sql_store=None) -> None:
         end_line = hit.get("end_line", 0)
 
         # Header
-        typer.secho(
-            f"\n{i}. {repo}/{path}:{start_line}-{end_line}", fg="cyan", bold=True
-        )
+        typer.secho(f"\n{i}. {repo}/{path}:{start_line}-{end_line}", fg="cyan", bold=True)
         typer.echo(f"   Score: {score:.10f}")
 
         # Symbol info
@@ -338,9 +309,7 @@ def list_repos() -> None:
 
 @app.command()
 def reset_all(
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Skip confirmation prompt."
-    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt."),
 ) -> None:
     """Reset the entire knowledge store (delete everything).
 

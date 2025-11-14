@@ -10,6 +10,8 @@ import {
   MockKBConfig,
   AgentEvent,
   EventHandlerDisposable,
+  HttpRequestLog,
+  ToolCall,
 } from "./mock-types";
 
 /**
@@ -22,7 +24,7 @@ export class MockKBServer {
   private chunkData: MockChunkResponse | null = null;
   private server: http.Server | null = null;
   public port = 0;
-  private requestHistory: any[] = [];
+  private requestHistory: HttpRequestLog[] = [];
 
   /**
    * Start the mock server
@@ -118,7 +120,7 @@ export class MockKBServer {
   /**
    * Get request history for testing
    */
-  getRequestHistory(): any[] {
+  getRequestHistory(): HttpRequestLog[] {
     return [...this.requestHistory];
   }
 
@@ -206,7 +208,7 @@ export class MockKBServer {
   /**
    * Generate mock search response
    */
-  private generateMockSearchResponse(request: MockSearchRequest): MockSearchResponse {
+  private generateMockSearchResponse(_request: MockSearchRequest): MockSearchResponse {
     // Use configured search results if available, otherwise use defaults
     const hits: MockSearchResult[] = this.searchResults || [
       {
@@ -286,14 +288,18 @@ export class MockKBServer {
  */
 export class MockAgentBridge {
   private handlers: Map<string, (data: AgentEvent) => void> = new Map();
-  private messageHistory: any[] = [];
+  private messageHistory: string[] = [];
   private shouldThrowError: boolean = false;
   private errorMessage: string = "Mock error";
   private shouldError: Error | null = null;
-  private toolCallQueue: any[] = [];
+  private toolCallQueue: ToolCall[] = [];
   private responseQueue: string[] = [];
   private eventHandlers: Map<string, Function[]> = new Map();
   private messageHandlers: Map<string, (event: AgentEvent) => void> = new Map();
+  public mockResponse: string | null = null;
+  public mockToolCalls: ToolCall[] = [];
+  public mockError: Error | null = null;
+  public mockConnected: boolean = true;
 
   /**
    * Send a message (simulates user sending message to agent).
@@ -302,10 +308,13 @@ export class MockAgentBridge {
     this.messageHistory.push(content);
 
     if (this.shouldThrowError) {
-      this.emitEvent({
-        type: "error",
+      const errorEvent = {
+        type: "error" as const,
         error: this.errorMessage,
-      });
+      };
+      // Emit to both onEvent and on handlers
+      this.emitEvent(errorEvent);
+      this.messageHandlers.forEach((handler) => handler(errorEvent));
       throw new Error(this.errorMessage);
     }
 
@@ -316,26 +325,24 @@ export class MockAgentBridge {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     if (this.shouldError) {
-      this.emitToHandlers("error", this.shouldError);
+      this.emitToHandlers("error", { error: this.shouldError.message });
       throw this.shouldError;
     }
 
     // Emit tool calls if configured
     for (const toolCall of this.toolCallQueue) {
-      this.emitToHandlers("tool_call_started", toolCall);
+      this.emitToHandlers("tool_call_started", toolCall as unknown as Record<string, unknown>);
       await new Promise((resolve) => setTimeout(resolve, 20));
-      this.emitToHandlers("tool_call_completed", { ...toolCall, result: "mock result" });
+      this.emitToHandlers("tool_call_completed", {
+        ...(toolCall as unknown as Record<string, unknown>),
+        result: "mock result",
+      });
     }
 
     // Emit response
     const response = this.responseQueue.shift() || "Mock agent response";
     this.emitToHandlers("message_chunk", { content: response });
     this.emitToHandlers("content_delta", { delta: response }); // Legacy compatibility
-    this.messageHistory.push({
-      type: "assistant_message",
-      content: response,
-      timestamp: Date.now(),
-    });
 
     await new Promise((resolve) => setTimeout(resolve, 20));
     this.emitToHandlers("task_completed", { success: true, message: response });
@@ -374,18 +381,21 @@ export class MockAgentBridge {
   /**
    * Get message history for test verification
    */
-  getMessageHistory(): any[] {
+  getMessageHistory(): string[] {
     return [...this.messageHistory];
   }
 
   /**
    * Emit to registered event handlers
    */
-  private emitToHandlers(event: string, data: any): void {
+  private emitToHandlers(event: string, data: Record<string, unknown>): void {
     const handlers = this.eventHandlers.get(event);
     if (handlers) {
       handlers.forEach((handler) => handler(data));
     }
+    // Also emit to onEvent handlers
+    const eventData = { type: event, ...data };
+    this.messageHandlers.forEach((handler) => handler(eventData as AgentEvent));
   }
 
   /**
@@ -398,7 +408,7 @@ export class MockAgentBridge {
   /**
    * Simulate a tool call event
    */
-  simulateToolCall(toolName: string, toolArgs: any): void {
+  simulateToolCall(toolName: string, toolArgs: Record<string, unknown>): void {
     this.emitEvent({
       type: "tool_call",
       toolName,
@@ -411,6 +421,51 @@ export class MockAgentBridge {
    */
   private emitEvent(event: AgentEvent): void {
     this.handlers.forEach((handler) => handler(event));
+  }
+
+  /**
+   * Reset mock state between tests
+   */
+  reset(): void {
+    this.handlers.clear();
+    this.messageHistory = [];
+    this.shouldThrowError = false;
+    this.errorMessage = "Mock error";
+    this.shouldError = null;
+    this.toolCallQueue = [];
+    this.responseQueue = [];
+    this.eventHandlers.clear();
+    this.messageHandlers.clear();
+    this.mockResponse = null;
+    this.mockToolCalls = [];
+    this.mockError = null;
+    this.mockConnected = true;
+  }
+
+  /**
+   * Set mock response for tests
+   */
+  setResponse(response: string): void {
+    this.mockResponse = response;
+    if (typeof response === "string") {
+      this.responseQueue.push(response);
+    }
+  }
+
+  /**
+   * Set mock tool calls for tests
+   */
+  setToolCalls(toolCalls: ToolCall[]): void {
+    this.mockToolCalls = toolCalls;
+    this.toolCallQueue = [...toolCalls];
+  }
+
+  /**
+   * Wait for agent to be ready (mock implementation for tests)
+   */
+  async waitForReady(_timeout = 60000): Promise<void> {
+    // Mock always ready
+    return Promise.resolve();
   }
 
   /**

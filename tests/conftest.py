@@ -1,9 +1,8 @@
 """Pytest configuration and shared fixtures for KB pipeline tests."""
 
-import shutil
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -52,10 +51,7 @@ def mock_embedding_service():
             embeddings = []
             for i, text in enumerate(texts):
                 # Create deterministic embedding based on text content
-                embedding = [
-                    float((hash(text) + j) % 100) / 100.0
-                    for j in range(self.embedding_size)
-                ]
+                embedding = [float((hash(text) + j) % 100) / 100.0 for j in range(self.embedding_size)]
                 embeddings.append(embedding)
             return embeddings
 
@@ -70,20 +66,14 @@ def init_test_git_repo(repo_path: Path) -> None:
     """
     import subprocess
 
-    subprocess.run(
-        ["git", "-C", str(repo_path), "init"], check=True, capture_output=True
-    )
+    subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
     subprocess.run(
         ["git", "-C", str(repo_path), "config", "user.email", "test@example.com"],
         check=True,
     )
-    subprocess.run(
-        ["git", "-C", str(repo_path), "config", "user.name", "Test User"], check=True
-    )
+    subprocess.run(["git", "-C", str(repo_path), "config", "user.name", "Test User"], check=True)
     # Disable GPG signing for this repo only (not globally)
-    subprocess.run(
-        ["git", "-C", str(repo_path), "config", "commit.gpgsign", "false"], check=True
-    )
+    subprocess.run(["git", "-C", str(repo_path), "config", "commit.gpgsign", "false"], check=True)
 
 
 @pytest.fixture
@@ -223,8 +213,6 @@ def ensure_tiktoken_available(force_refresh: bool = False) -> bool:
             shutil.rmtree(cache_dir)
 
     try:
-        import tiktoken
-
         # Try to load and validate encoding
         is_valid, error_msg = validate_tiktoken_cache()
 
@@ -238,11 +226,7 @@ def ensure_tiktoken_available(force_refresh: bool = False) -> bool:
     except Exception as e:
         error_msg = str(e)
         # If it's a network error, data isn't cached
-        if (
-            "403" in error_msg
-            or "Forbidden" in error_msg
-            or "Failed to fetch" in error_msg
-        ):
+        if "403" in error_msg or "Forbidden" in error_msg or "Failed to fetch" in error_msg:
             return False
         # Other errors might be real issues
         return False
@@ -261,9 +245,7 @@ def setup_tiktoken(request):
     Integration tests require real tiktoken (production validation).
     """
     # Check if any integration tests are being run
-    has_integration_tests = any(
-        "tests/integration" in str(item.fspath) for item in request.session.items
-    )
+    has_integration_tests = any("tests/integration" in str(item.fspath) for item in request.session.items)
 
     if not has_integration_tests:
         # Only unit tests - mock tiktoken is fine
@@ -290,7 +272,7 @@ def setup_tiktoken(request):
         print("Validating downloaded data...", end=" ", flush=True)
         is_valid, error_msg = validate_tiktoken_cache()
         if not is_valid:
-            print(f"✗ Validation failed!")
+            print("✗ Validation failed!")
             print(f"Error: {error_msg}")
             raise RuntimeError(f"Downloaded tiktoken data is invalid: {error_msg}")
 
@@ -305,9 +287,7 @@ def setup_tiktoken(request):
         print("❌ ERROR: Integration tests require tiktoken encoding data")
         print()
         print("Production requires real tiktoken (OpenAI's tokenizer).")
-        print(
-            "Integration tests must use real tiktoken to validate production behavior."
-        )
+        print("Integration tests must use real tiktoken to validate production behavior.")
         print()
         print("Unit tests can run offline (use mock tiktoken):")
         print("  pytest tests/unit/")
@@ -325,12 +305,8 @@ def setup_tiktoken(request):
             print()
             print("  3. In production, ensure tiktoken data is pre-downloaded")
             print("     during deployment or included in container image")
-        elif (
-            "validation failed" in error_msg.lower() or "corrupted" in error_msg.lower()
-        ):
-            print(
-                "Cached tiktoken data failed validation (corrupted or wrong version)."
-            )
+        elif "validation failed" in error_msg.lower() or "corrupted" in error_msg.lower():
+            print("Cached tiktoken data failed validation (corrupted or wrong version).")
             print()
             print("Solutions:")
             print("  1. Force refresh (clears cache and re-downloads):")
@@ -356,9 +332,7 @@ def setup_tiktoken(request):
         print("=" * 70)
 
         # Fail the test session
-        pytest.exit(
-            "Tiktoken encoding data required for integration tests", returncode=1
-        )
+        pytest.exit("Tiktoken encoding data required for integration tests", returncode=1)
 
 
 @pytest.fixture(scope="session")
@@ -379,9 +353,7 @@ def mock_tiktoken():
 
 def pytest_configure(config):
     """Configure pytest with custom markers."""
-    config.addinivalue_line(
-        "markers", "unit: mark test as a unit test (uses mock tiktoken)"
-    )
+    config.addinivalue_line("markers", "unit: mark test as a unit test (uses mock tiktoken)")
     config.addinivalue_line(
         "markers",
         "integration: mark test as an integration test (uses real dependencies)",
@@ -400,8 +372,6 @@ def cleanup_test_repos():
     def _cleanup():
         """Perform the actual cleanup of test repositories."""
         try:
-            from pathlib import Path
-
             from kb.config import CONFIG_ROOT
             from kb.store.sqlite_meta import SQLiteMetadataStore
 
@@ -412,7 +382,7 @@ def cleanup_test_repos():
                 store.initialize()
 
                 # Get all repos
-                with store._get_connection() as conn:
+                with store._get_connection() as conn:  # type: ignore[attr-defined]
                     cursor = conn.execute("SELECT id, name FROM repos")
                     repos = cursor.fetchall()
 
@@ -427,17 +397,10 @@ def cleanup_test_repos():
                         "integration-test",
                     ]
                     for repo_id, repo_name in repos:
-                        if any(
-                            pattern in repo_name.lower()
-                            for pattern in test_repo_patterns
-                        ):
+                        if any(pattern in repo_name.lower() for pattern in test_repo_patterns):
                             # Delete all data associated with this test repo
-                            conn.execute(
-                                "DELETE FROM chunks WHERE repo_id = ?", (repo_id,)
-                            )
-                            conn.execute(
-                                "DELETE FROM files WHERE repo_id = ?", (repo_id,)
-                            )
+                            conn.execute("DELETE FROM chunks WHERE repo_id = ?", (repo_id,))
+                            conn.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
                             conn.execute(
                                 "DELETE FROM scan_sessions WHERE repo_id = ?",
                                 (repo_id,),
@@ -484,7 +447,6 @@ def pytest_collection_modifyitems(config, items):
 @pytest.fixture
 def mock_kb_stores(temp_db_path):
     """Mock KB stores (SQLite + LanceDB) for testing."""
-    from unittest.mock import MagicMock
 
     from kb.store.sqlite_meta import SQLiteMetadataStore
 
@@ -514,9 +476,7 @@ def registered_test_repo(mock_kb_stores, temp_dir):
     workspace_path.mkdir()
 
     # Register repo
-    sql_store.record_repo(
-        name="test-repo", path=workspace_path, default_embed_model="large"
-    )
+    sql_store.record_repo(name="test-repo", path=workspace_path, default_embed_model="large")
 
     # Get repo info
     repo = sql_store.get_repo_by_name("test-repo")
@@ -550,7 +510,7 @@ def kb_api_client(mock_kb_stores):
 @pytest.fixture
 def mock_pipeline():
     """Mock KB pipeline for testing indexing without real embedding calls."""
-    from unittest.mock import AsyncMock, MagicMock
+    from unittest.mock import AsyncMock
 
     pipeline = MagicMock()
 
@@ -614,15 +574,9 @@ class Calculator:
 
     # Initialize git repo
     subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True
-    )
-    subprocess.run(
-        ["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True
-    )
-    subprocess.run(
-        ["git", "config", "commit.gpgsign", "false"], cwd=repo_dir, check=True
-    )
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=repo_dir, check=True)
     subprocess.run(["git", "add", "."], cwd=repo_dir, check=True)
     subprocess.run(
         ["git", "commit", "-m", "Initial commit"],

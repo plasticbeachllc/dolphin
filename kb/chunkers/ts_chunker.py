@@ -15,7 +15,6 @@ import logging
 import re
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import List, Optional, Tuple
 
 import tree_sitter_javascript as tsjs
 import tree_sitter_typescript as tsts
@@ -53,8 +52,8 @@ def _get_parser(lang: str) -> Parser:
 @dataclass(frozen=True)
 class Symbol:
     kind: str
-    name: Optional[str]
-    path: Optional[str]
+    name: str | None
+    path: str | None
     start_byte: int
     end_byte: int
     start_row: int
@@ -80,17 +79,13 @@ def chunk_source(
     lang_key = lang.lower()
     if lang_key not in SUPPORTED_LANGUAGES:
         _log.warning("Unsupported language '%s'; falling back to token windows", lang)
-        return _fallback_token_windows(
-            source, model=model, token_target=token_target, overlap_pct=overlap_pct
-        )
+        return _fallback_token_windows(source, model=model, token_target=token_target, overlap_pct=overlap_pct)
 
     # Clamp overlap percentage
     if not (0.0 <= overlap_pct <= 1.0):
         _log.debug("Clamping overlap_pct from %s to range [0,1]", overlap_pct)
         overlap_pct = max(0.0, min(1.0, overlap_pct))
-    overlap_tokens = max(
-        0, min(int(token_target * overlap_pct), max(0, token_target - 1))
-    )
+    overlap_tokens = max(0, min(int(token_target * overlap_pct), max(0, token_target - 1)))
 
     # Prepare parser and parse tree
     try:
@@ -109,16 +104,12 @@ def chunk_source(
             lang,
             e,
         )
-        return _fallback_token_windows(
-            source, model=model, token_target=token_target, overlap_pct=overlap_pct
-        )
+        return _fallback_token_windows(source, model=model, token_target=token_target, overlap_pct=overlap_pct)
 
     # Extract symbols
     symbols = list(_extract_symbols(root, source))
     if not symbols:
-        return _fallback_token_windows(
-            source, model=model, token_target=token_target, overlap_pct=overlap_pct
-        )
+        return _fallback_token_windows(source, model=model, token_target=token_target, overlap_pct=overlap_pct)
 
     tokenizer = get_tokenizer(model)
     chunks: list[Chunk] = []
@@ -156,32 +147,26 @@ def _build_chunks_for_text(
     model: str,
     token_target: int,
     overlap_tokens: int,
-    symbol_kind: Optional[str],
-    symbol_name: Optional[str],
-    symbol_path: Optional[str],
+    symbol_kind: str | None,
+    symbol_name: str | None,
+    symbol_path: str | None,
 ) -> list[Chunk]:
     """Window text by tokens and convert to Chunk objects.
 
     - base_start_row: the 0-based starting row of the text within the source.
     - Maintains 1-based line numbers for returned Chunk.
     """
-    windows = window_text_by_tokens(
-        text, model=model, target=token_target, overlap=overlap_tokens
-    )
+    windows = window_text_by_tokens(text, model=model, target=token_target, overlap=overlap_tokens)
     line_offsets = _build_line_offsets(text)
 
     chunks: list[Chunk] = []
-    search_from = 0
-    pos = 0  # expected start position of the next window in text
     for raw_text, start_char, end_char in windows:
         if not raw_text:
             continue
         abs_start_line = _offset_to_abs_line(base_start_row, line_offsets, start_char)
         abs_end_line = abs_start_line + raw_text.count("\n")
 
-        trimmed_text, token_count, lead_newlines, trail_newlines = _trim_and_tokenize(
-            raw_text, tokenizer
-        )
+        trimmed_text, token_count, lead_newlines, trail_newlines = _trim_and_tokenize(raw_text, tokenizer)
         if not trimmed_text:
             continue
         adj_start = abs_start_line + lead_newlines
@@ -208,14 +193,12 @@ def _fallback_token_windows(
     model: str,
     token_target: int,
     overlap_pct: float,
-) -> List[Chunk]:
+) -> list[Chunk]:
     """Fallback chunking using token windows across the entire source."""
     tokenizer = get_tokenizer(model)
     if not (0.0 <= overlap_pct <= 1.0):
         overlap_pct = max(0.0, min(1.0, overlap_pct))
-    overlap_tokens = max(
-        0, min(int(token_target * overlap_pct), max(0, token_target - 1))
-    )
+    overlap_tokens = max(0, min(int(token_target * overlap_pct), max(0, token_target - 1)))
 
     return _build_chunks_for_text(
         source,
@@ -230,16 +213,16 @@ def _fallback_token_windows(
     )
 
 
-def _build_line_offsets(text: str) -> List[int]:
+def _build_line_offsets(text: str) -> list[int]:
     """Return character offsets where each line starts (0-based)."""
-    offsets: List[int] = [0]
+    offsets: list[int] = [0]
     for idx, ch in enumerate(text):
         if ch == "\n":
             offsets.append(idx + 1)
     return offsets
 
 
-def _offset_to_abs_line(start_row: int, line_offsets: List[int], offset: int) -> int:
+def _offset_to_abs_line(start_row: int, line_offsets: list[int], offset: int) -> int:
     """Convert a character offset within text to an absolute 1-based line number.
 
     start_row is 0-based row of the text's first line within the full source.
@@ -248,7 +231,7 @@ def _offset_to_abs_line(start_row: int, line_offsets: List[int], offset: int) ->
     return (start_row + LINE_NUMBER_BASE) + max(0, line_idx)
 
 
-def _trim_and_tokenize(raw_text: str, tokenizer) -> Tuple[str, int, int, int]:
+def _trim_and_tokenize(raw_text: str, tokenizer) -> tuple[str, int, int, int]:
     """Trim leading and trailing newlines and count tokens.
 
     Returns (trimmed_text, token_count, leading_newlines, trailing_newlines).
@@ -262,7 +245,7 @@ def _trim_and_tokenize(raw_text: str, tokenizer) -> Tuple[str, int, int, int]:
     return trimmed, token_count, lead_trim, trail_trim
 
 
-def _extract_symbols(root, source: str) -> List[Symbol]:
+def _extract_symbols(root, source: str) -> list[Symbol]:
     """Extract TS/TSX/JS symbols.
 
     Captures:
@@ -276,16 +259,16 @@ def _extract_symbols(root, source: str) -> List[Symbol]:
     - type_alias_declaration → kind='type_alias', name='Alias'
     - enum_declaration → kind='enum', name='Enum'
     """
-    results: List[Symbol] = []
+    results: list[Symbol] = []
 
-    class_stack: List[str] = []
+    class_stack: list[str] = []
 
     def node_text(n) -> str:
         if n is None:
             return ""
         return source[n.start_byte : n.end_byte]
 
-    def simple_name_from_path(path_text: str) -> Optional[str]:
+    def simple_name_from_path(path_text: str) -> str | None:
         # Best-effort: take last identifier in a dotted path or plain identifier
         m = re.search(r"([A-Za-z_$][A-Za-z0-9_$]*)$", path_text)
         return m.group(1) if m else None
@@ -321,19 +304,13 @@ def _extract_symbols(root, source: str) -> List[Symbol]:
             "property_declaration",
         ):
             name_node = node.child_by_field_name("name")
-            init_node = node.child_by_field_name("value") or node.child_by_field_name(
-                "initializer"
-            )
+            init_node = node.child_by_field_name("value") or node.child_by_field_name("initializer")
             if init_node is not None and init_node.type in (
                 "arrow_function",
                 "function",
             ):
                 fld_name = node_text(name_node) or None
-                symbol_path = (
-                    f"{class_stack[-1]}.{fld_name or '<field>'}"
-                    if class_stack
-                    else fld_name
-                )
+                symbol_path = f"{class_stack[-1]}.{fld_name or '<field>'}" if class_stack else fld_name
                 results.append(
                     Symbol(
                         "method",
@@ -360,11 +337,7 @@ def _extract_symbols(root, source: str) -> List[Symbol]:
                     if ch.type in ("property_identifier", "identifier"):
                         meth_name = node_text(ch) or None
                         break
-            symbol_path = (
-                f"{class_stack[-1]}.{meth_name or '<method>'}"
-                if class_stack
-                else meth_name
-            )
+            symbol_path = f"{class_stack[-1]}.{meth_name or '<method>'}" if class_stack else meth_name
             results.append(
                 Symbol(
                     "method",
@@ -460,9 +433,7 @@ def _extract_symbols(root, source: str) -> List[Symbol]:
                 if child.type in ("variable_declarator", "variable_declaration"):
                     # variable_declarator (TS/JS) → name & initializer
                     name_node = child.child_by_field_name("name")
-                    init_node = child.child_by_field_name(
-                        "value"
-                    ) or child.child_by_field_name("initializer")
+                    init_node = child.child_by_field_name("value") or child.child_by_field_name("initializer")
                     if init_node is not None and init_node.type in (
                         "arrow_function",
                         "function",
@@ -525,9 +496,7 @@ def _extract_symbols(root, source: str) -> List[Symbol]:
     return results
 
 
-def extract_graph_data(
-    source: str, *, lang: str = "typescript"
-) -> Tuple[List[GraphNode], List[GraphEdge]]:
+def extract_graph_data(source: str, *, lang: str = "typescript") -> tuple[list[GraphNode], list[GraphEdge]]:
     """Extract graph nodes and edges from TypeScript/JavaScript source for code graph.
 
     Nodes:
@@ -583,13 +552,11 @@ def extract_graph_data(
     # Extract edges (imports, calls, inheritance, type deps)
     _extract_ts_edges(root, source, edges)
 
-    _log.debug(
-        "Extracted %d graph nodes and %d edges from %s", len(nodes), len(edges), lang
-    )
+    _log.debug("Extracted %d graph nodes and %d edges from %s", len(nodes), len(edges), lang)
     return nodes, edges
 
 
-def _extract_ts_edges(root, source: str, edges: List[GraphEdge]):
+def _extract_ts_edges(root, source: str, edges: list[GraphEdge]):
     """Extract graph edges (imports, calls, inheritance, type deps) from TS/JS AST."""
 
     def node_text(n) -> str:
@@ -597,7 +564,7 @@ def _extract_ts_edges(root, source: str, edges: List[GraphEdge]):
             return ""
         return source[n.start_byte : n.end_byte]
 
-    def visit(node, current_context: Optional[str] = None):
+    def visit(node, current_context: str | None = None):
         """Visit nodes and extract edges."""
         ntype = node.type
 
@@ -655,9 +622,7 @@ def _extract_ts_edges(root, source: str, edges: List[GraphEdge]):
             func_name = node_text(name_node) if name_node else None
 
             if current_context:
-                qualified: Optional[str] = (
-                    f"{current_context}.{func_name}" if func_name else current_context
-                )
+                qualified: str | None = f"{current_context}.{func_name}" if func_name else current_context
             else:
                 qualified = func_name
 
@@ -731,7 +696,7 @@ def _extract_ts_edges(root, source: str, edges: List[GraphEdge]):
         # Interface extends
         if ntype == "interface_declaration":
             name_node = node.child_by_field_name("name")
-            interface_name: Optional[str] = node_text(name_node) if name_node else None
+            interface_name: str | None = node_text(name_node) if name_node else None
 
             # Check for extends clause
             for child in node.children:
@@ -761,9 +726,7 @@ def _extract_ts_edges(root, source: str, edges: List[GraphEdge]):
             # Extract type references
             value_node = node.child_by_field_name("value")
             if value_node and alias_name:
-                _extract_type_references(
-                    value_node, alias_name, edges, node.start_point[0] + 1
-                )
+                _extract_type_references(value_node, alias_name, edges, node.start_point[0] + 1)
 
             for child in node.children:
                 visit(child, current_context)
@@ -776,18 +739,12 @@ def _extract_ts_edges(root, source: str, edges: List[GraphEdge]):
     visit(root)
 
 
-def _extract_type_references(
-    type_node, source_name: str, edges: List[GraphEdge], line_number: int
-):
+def _extract_type_references(type_node, source_name: str, edges: list[GraphEdge], line_number: int):
     """Extract type references from a type annotation node."""
 
     def extract_from_node(node):
         if node.type == "type_identifier":
-            type_name = (
-                node.text.decode("utf-8")
-                if hasattr(node.text, "decode")
-                else str(node.text)
-            )
+            type_name = node.text.decode("utf-8") if hasattr(node.text, "decode") else str(node.text)
             if type_name:
                 edges.append(
                     GraphEdge(
