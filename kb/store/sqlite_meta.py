@@ -1176,6 +1176,7 @@ class SQLiteMetadataStore:
                         content_id,
                         repo,
                         path,
+                        text_hash,
                         -bm25(chunks_fts) as bm25_score,
                         rank
                     FROM chunks_fts
@@ -1196,8 +1197,9 @@ class SQLiteMetadataStore:
                             "chunk_id": str(row[0]),
                             "repo": str(row[1]),
                             "path": str(row[2]),
-                            "score": float(row[3]),  # Positive BM25 score
-                            "rank": int(row[4]),
+                            "text_hash": str(row[3]),  # Include text_hash for hydration
+                            "score": float(row[4]),  # Positive BM25 score
+                            "rank": int(row[5]),
                         }
                     )
 
