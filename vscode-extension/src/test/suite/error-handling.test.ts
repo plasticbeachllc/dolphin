@@ -157,8 +157,10 @@ describe("Error Handling Tests", () => {
         assert.fail("Should have thrown connection error");
       } catch (err: any) {
         assert.ok(err instanceof Error, "Should throw connection error");
+        // Node.js system errors have a code property
+        const errorCode = (err as any).code;
         assert.ok(
-          err.code === "ECONNREFUSED" ||
+          errorCode === "ECONNREFUSED" ||
             err.message.includes("ECONNREFUSED") ||
             err.message.includes("connect") ||
             err.message.includes("socket"),
