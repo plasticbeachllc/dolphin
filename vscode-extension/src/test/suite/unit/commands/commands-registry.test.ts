@@ -4,8 +4,8 @@
  */
 
 import * as assert from "assert";
-import { TEST_COMMANDS } from "../helpers/test-constants";
-import { assertCommandsExist, activateExtension } from "../helpers/shared-fixtures";
+import { TEST_COMMANDS } from "../../../helpers/test-constants";
+import { assertCommandsExist, activateExtension } from "../../../helpers/shared-fixtures";
 
 describe("Command Registration", function () {
   this.timeout(10000);

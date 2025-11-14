@@ -73,7 +73,8 @@ describe("Architect Mode E2E Tests", function () {
 
     assert.ok(completionEvent, "Should receive task_completed event");
     assert.strictEqual(completionEvent.success, true, "Task should succeed");
-    assert.strictEqual(completionEvent.result?.mode, "architect", "Should confirm architect mode");
+    const result = completionEvent.result as Record<string, unknown> | undefined;
+    assert.strictEqual(result?.mode, "architect", "Should confirm architect mode");
 
     // Check for discovery results in content_delta events
     const contentEvents = receivedEvents.filter((e) => e.type === "content_delta");

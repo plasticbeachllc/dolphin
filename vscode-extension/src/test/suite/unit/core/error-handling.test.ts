@@ -1,11 +1,11 @@
 import * as assert from "assert";
-import { MockKBServer, MockAgentBridge } from "../helpers/mock-services";
+import { MockKBServer, MockAgentBridge } from "../../../helpers/mock-services";
 import {
   makeHttpGetRequest,
   makeHttpPostRequest,
   assertCommandExecutes,
-} from "../helpers/test-utils";
-import { MockHealthResponse, MockSearchRequest, MockSearchResponse } from "../helpers/mock-types";
+} from "../../../helpers/test-utils";
+import { MockHealthResponse, MockSearchRequest, MockSearchResponse } from "../../../helpers/mock-types";
 
 /**
  * Negative test cases for error handling scenarios
@@ -53,7 +53,8 @@ describe("Error Handling Tests", () => {
       );
 
       assert.strictEqual(response.status, 404, "Should return 404 for unknown endpoint");
-      assert.ok(response.data.error, "Should include error message");
+      const data = response.data as { error?: string };
+      assert.ok(data.error, "Should include error message");
     });
 
     it("should return 400 for malformed search request", async function () {
@@ -190,7 +191,7 @@ describe("Error Handling Tests", () => {
       let errorMessage = "";
 
       // Register error handler
-      mockBridge.onEvent((event) => {
+      mockBridge.onEvent((event: { type: string; error?: string }) => {
         if (event.type === "error") {
           errorEventReceived = true;
           errorMessage = event.error || "";

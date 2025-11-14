@@ -11,9 +11,11 @@ import {
   resetMocks,
   getMockEnvironment,
   configureMockKB,
-} from "../helpers/mock-manager";
-import { activateExtension, assertCommandExists } from "../helpers/shared-fixtures";
-import { TEST_COMMANDS } from "../helpers/test-constants";
+} from "../../../helpers/mock-manager";
+import { activateExtension, assertCommandExists } from "../../../helpers/shared-fixtures";
+import { TEST_COMMANDS } from "../../../helpers/test-constants";
+import * as http from "http";
+import { MockHealthResponse, MockSearchResponse, MockMetadataResponse } from "../../../helpers/mock-types";
 
 describe("KB Lifecycle Management", function () {
   this.timeout(10000);
@@ -46,8 +48,7 @@ describe("KB Lifecycle Management", function () {
       // Configure KB as healthy
       configureMockKB({ health: true });
 
-      const http = require("http");
-      const response = await new Promise<{ status: number | undefined; data: unknown }>(
+      const response = await new Promise<{ status: number | undefined; data: MockHealthResponse }>(
         (resolve, _reject) => {
           http.get(`http://localhost:${kbServer.port}/health`, (res: http.IncomingMessage) => {
             let data = "";
@@ -71,8 +72,7 @@ describe("KB Lifecycle Management", function () {
       // Configure KB as unhealthy
       configureMockKB({ health: false });
 
-      const http = require("http");
-      const response = await new Promise<{ status: number | undefined; data: unknown }>(
+      const response = await new Promise<{ status: number | undefined; data: MockHealthResponse }>(
         (resolve, _reject) => {
           http.get(`http://localhost:${kbServer.port}/health`, (res: http.IncomingMessage) => {
             let data = "";
@@ -131,8 +131,7 @@ describe("KB Lifecycle Management", function () {
         ],
       });
 
-      const http = require("http");
-      const response = await new Promise<{ status: number | undefined; data: unknown }>(
+      const response = await new Promise<{ status: number | undefined; data: MockSearchResponse }>(
         (resolve, reject) => {
           const postData = JSON.stringify({ query: "test", top_k: 10 });
           const options = {
@@ -183,8 +182,7 @@ describe("KB Lifecycle Management", function () {
         },
       });
 
-      const http = require("http");
-      const response = await new Promise<{ status: number | undefined; data: unknown }>(
+      const response = await new Promise<{ status: number | undefined; data: MockMetadataResponse }>(
         (resolve, _reject) => {
           http.get(
             `http://localhost:${kbServer.port}/metadata/test`,
@@ -212,7 +210,6 @@ describe("KB Lifecycle Management", function () {
       const requestsBefore = kbServer.getRequestHistory().length;
 
       // Make multiple requests
-      const http = require("http");
       await new Promise((resolve) => {
         http.get(`http://localhost:${kbServer.port}/health`, (res: http.IncomingMessage) => {
           res.on("data", () => {});
@@ -232,15 +229,15 @@ describe("KB Lifecycle Management", function () {
 
       const history = kbServer.getRequestHistory();
       assert.ok(
-        history.every((r) => r.timestamp),
+        history.every((r: { timestamp: number; method: string | undefined; url: string }) => r.timestamp),
         "Each request should have timestamp"
       );
       assert.ok(
-        history.every((r) => r.method),
+        history.every((r: { timestamp: number; method: string | undefined; url: string }) => r.method),
         "Each request should have method"
       );
       assert.ok(
-        history.every((r) => r.url),
+        history.every((r: { timestamp: number; method: string | undefined; url: string }) => r.url),
         "Each request should have URL"
       );
     });
@@ -311,7 +308,6 @@ describe("KB Lifecycle Management", function () {
 
       const startTime = Date.now();
 
-      const http = require("http");
       await new Promise((resolve) => {
         http.get(`http://localhost:${kbServer.port}/health`, (res: http.IncomingMessage) => {
           res.on("data", () => {});
@@ -330,7 +326,6 @@ describe("KB Lifecycle Management", function () {
 
       const startTime = Date.now();
 
-      const http = require("http");
       await new Promise((resolve, reject) => {
         const postData = JSON.stringify({ query: "test", top_k: 10 });
         const options = {

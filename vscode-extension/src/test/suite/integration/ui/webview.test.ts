@@ -1,6 +1,6 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { waitForExtensionActivation, sleep } from "../helpers/test-utils";
+import { waitForExtensionActivation, sleep } from "../../../helpers/test-utils";
 
 describe("Webview Tests", () => {
   before(async function () {

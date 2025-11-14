@@ -1,6 +1,6 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { waitForExtensionActivation, sleep } from "../helpers/test-utils";
+import { waitForExtensionActivation, sleep } from "../../../helpers/test-utils";
 
 /**
  * E2E Tests for Conversation Persistence

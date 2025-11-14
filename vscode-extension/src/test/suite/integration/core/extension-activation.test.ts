@@ -5,7 +5,7 @@
 
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { activateExtension } from "../helpers/shared-fixtures";
+import { activateExtension } from "../../../helpers/shared-fixtures";
 
 describe("Extension Activation", function () {
   this.timeout(10000);

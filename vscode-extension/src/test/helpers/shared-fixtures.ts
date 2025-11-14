@@ -159,7 +159,7 @@ export function getExtensionExports<T = unknown>(): T | undefined {
 export async function waitForWebviewReady(timeout: number = 5000): Promise<void> {
   await waitForCondition(
     () => {
-      const exports = getExtensionExports();
+      const exports = getExtensionExports() as ExtensionExports | undefined;
       return exports?.webviewProvider !== undefined;
     },
     { timeout, timeoutMessage: "Webview provider not ready" }

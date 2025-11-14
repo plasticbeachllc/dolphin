@@ -102,8 +102,9 @@ describe("DolphinViewProvider Unit Tests", () => {
       provider.clearConversation();
 
       assert.ok(sentMessage, "Message should have been sent");
+      const messageRecord = sentMessage as Record<string, unknown>;
       assert.strictEqual(
-        sentMessage.type,
+        messageRecord.type,
         "clear_conversation",
         "Should send clear_conversation message"
       );
@@ -135,7 +136,8 @@ describe("DolphinViewProvider Unit Tests", () => {
       provider.focusInput();
 
       assert.ok(sentMessage, "Message should have been sent");
-      assert.strictEqual(sentMessage.type, "focus_input", "Should send focus_input message");
+      const messageRecord = sentMessage as Record<string, unknown>;
+      assert.strictEqual(messageRecord.type, "focus_input", "Should send focus_input message");
     });
 
     it("Should handle missing webview gracefully", () => {
@@ -164,8 +166,9 @@ describe("DolphinViewProvider Unit Tests", () => {
       provider.prefillInput(testText);
 
       assert.ok(sentMessage, "Message should have been sent");
-      assert.strictEqual(sentMessage.type, "prefill_input", "Should send prefill_input message");
-      assert.strictEqual(sentMessage.text, testText, "Should include the text in the message");
+      const messageRecord = sentMessage as Record<string, unknown>;
+      assert.strictEqual(messageRecord.type, "prefill_input", "Should send prefill_input message");
+      assert.strictEqual(messageRecord.text, testText, "Should include the text in the message");
     });
 
     it("Should handle empty string", () => {
@@ -185,7 +188,8 @@ describe("DolphinViewProvider Unit Tests", () => {
       provider.prefillInput("");
 
       assert.ok(sentMessage, "Message should have been sent");
-      assert.strictEqual(sentMessage.text, "", "Should handle empty string");
+      const messageRecord = sentMessage as Record<string, unknown>;
+      assert.strictEqual(messageRecord.text, "", "Should handle empty string");
     });
 
     it("Should handle multi-line text with code blocks", () => {
@@ -206,7 +210,8 @@ describe("DolphinViewProvider Unit Tests", () => {
       provider.prefillInput(multiLineText);
 
       assert.ok(sentMessage, "Message should have been sent");
-      assert.strictEqual(sentMessage.text, multiLineText, "Should preserve multi-line text");
+      const messageRecord = sentMessage as Record<string, unknown>;
+      assert.strictEqual(messageRecord.text, multiLineText, "Should preserve multi-line text");
     });
 
     it("Should handle special characters", () => {
@@ -227,7 +232,8 @@ describe("DolphinViewProvider Unit Tests", () => {
       provider.prefillInput(specialText);
 
       assert.ok(sentMessage, "Message should have been sent");
-      assert.strictEqual(sentMessage.text, specialText, "Should preserve special characters");
+      const messageRecord = sentMessage as Record<string, unknown>;
+      assert.strictEqual(messageRecord.text, specialText, "Should preserve special characters");
     });
 
     it("Should handle missing webview gracefully", () => {
@@ -313,8 +319,9 @@ describe("DolphinViewProvider Unit Tests", () => {
       // Give it a moment to process
       setTimeout(() => {
         assert.ok(forwardedEvent, "Event should have been forwarded");
-        assert.strictEqual(forwardedEvent.type, "content_delta", "Event type should match");
-        assert.strictEqual(forwardedEvent.delta, "Hello", "Event data should match");
+        const eventRecord = forwardedEvent as Record<string, unknown>;
+        assert.strictEqual(eventRecord.type, "content_delta", "Event type should match");
+        assert.strictEqual(eventRecord.delta, "Hello", "Event data should match");
         done();
       }, 50);
     });
@@ -356,8 +363,9 @@ describe("DolphinViewProvider Unit Tests", () => {
 
       setTimeout(() => {
         assert.ok(forwardedEvent, "Event should have been forwarded");
+        const eventRecord = forwardedEvent as Record<string, unknown>;
         assert.strictEqual(
-          forwardedEvent.requestId,
+          eventRecord.requestId,
           "req-1234567890-1",
           "RequestId should be preserved"
         );
