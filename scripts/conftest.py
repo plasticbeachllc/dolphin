@@ -1,9 +1,10 @@
 """Pytest configuration and fixtures for end-to-end tests."""
 
-import pytest
-from pathlib import Path
-import tempfile
 import socket
+import tempfile
+from pathlib import Path
+
+import pytest
 
 
 @pytest.fixture

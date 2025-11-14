@@ -2,44 +2,36 @@
 import {
   Conversation,
   ConversationSchema,
-  ConversationMetadata
-} from "../../../shared/types/state";
+  ConversationMetadata,
+} from "../../../../shared/types/state";
 import { TOMLWriter } from "./toml-writer";
 import * as path from "path";
 import * as fs from "fs/promises";
 
 export class ConversationStore {
   private stateDir: string;
+  private workspaceRoot: string;
 
   constructor(workspaceRoot: string) {
-    this.stateDir = path.join(
-      workspaceRoot,
-      ".dolphin",
-      "state",
-      "conversations"
-    );
+    this.workspaceRoot = workspaceRoot;
+    this.stateDir = path.join(workspaceRoot, ".dolphin", "state", "conversations");
   }
 
   async saveConversation(conversation: Conversation): Promise<void> {
     const validated = ConversationSchema.parse(conversation);
     validated.conversation.updated_at = new Date().toISOString();
 
-    const filepath = path.join(
-      this.stateDir,
-      `${conversation.conversation.id}.toml`
-    );
-    const writer = new TOMLWriter<Conversation>(filepath);
+    const filepath = path.join(this.stateDir, `${conversation.conversation.id}.toml`);
+    const writer = new TOMLWriter<Conversation>(filepath, this.workspaceRoot);
 
     await writer.write(validated);
 
-    console.error(
-      `[ConversationStore] Saved conversation: ${conversation.conversation.id}`
-    );
+    console.error(`[ConversationStore] Saved conversation: ${conversation.conversation.id}`);
   }
 
   async loadConversation(conversationId: string): Promise<Conversation | null> {
     const filepath = path.join(this.stateDir, `${conversationId}.toml`);
-    const writer = new TOMLWriter<Conversation>(filepath);
+    const writer = new TOMLWriter<Conversation>(filepath, this.workspaceRoot);
 
     const data = await writer.read();
     if (!data) return null;
@@ -62,7 +54,7 @@ export class ConversationStore {
 
   async deleteConversation(conversationId: string): Promise<void> {
     const filepath = path.join(this.stateDir, `${conversationId}.toml`);
-    const writer = new TOMLWriter<Conversation>(filepath);
+    const writer = new TOMLWriter<Conversation>(filepath, this.workspaceRoot);
     await writer.delete();
 
     console.error(`[ConversationStore] Deleted conversation: ${conversationId}`);
@@ -95,9 +87,7 @@ export class ConversationStore {
     };
 
     await this.saveConversation(conversation);
-    console.error(
-      `[ConversationStore] Updated metadata for: ${conversationId}`
-    );
+    console.error(`[ConversationStore] Updated metadata for: ${conversationId}`);
   }
 
   async listConversationsWithMetadata(): Promise<
@@ -113,11 +103,11 @@ export class ConversationStore {
       console.error("[ConversationStore] Listing conversations with metadata...");
       const conversationIds = await this.listConversations();
       console.error(`[ConversationStore] Found ${conversationIds.length} conversation IDs`);
-      
+
       if (conversationIds.length === 0) {
         return [];
       }
-      
+
       const conversations = await Promise.all(
         conversationIds.map((id) => this.loadConversation(id))
       );
@@ -136,7 +126,7 @@ export class ConversationStore {
           updated_at: conv.conversation.updated_at,
           message_count: conv.messages.length,
         }));
-      
+
       console.error(`[ConversationStore] Returning ${result.length} conversations`);
       return result;
     } catch (error: any) {
@@ -156,13 +146,9 @@ export class ConversationStore {
     }
 
     // Find the branch point
-    const branchIndex = parent.messages.findIndex(
-      (m) => m.id === branchPointMessageId
-    );
+    const branchIndex = parent.messages.findIndex((m) => m.id === branchPointMessageId);
     if (branchIndex === -1) {
-      throw new Error(
-        `Branch point message not found: ${branchPointMessageId}`
-      );
+      throw new Error(`Branch point message not found: ${branchPointMessageId}`);
     }
 
     // Create new conversation with messages up to branch point
@@ -186,9 +172,7 @@ export class ConversationStore {
     };
 
     await this.saveConversation(newConversation);
-    console.error(
-      `[ConversationStore] Branched conversation ${parentId} -> ${newId}`
-    );
+    console.error(`[ConversationStore] Branched conversation ${parentId} -> ${newId}`);
 
     return newConversation;
   }

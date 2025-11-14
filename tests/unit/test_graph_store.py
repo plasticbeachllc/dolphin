@@ -161,9 +161,7 @@ class TestNodeOperations:
         assert node["id"] == node_id
         assert node["node_type"] == "class"
 
-    def test_find_node_by_qualified_name_with_repo_filter(
-        self, graph_store, sample_repo_and_file
-    ):
+    def test_find_node_by_qualified_name_with_repo_filter(self, graph_store, sample_repo_and_file):
         """Test finding node by qualified name with repo filter."""
         repo_id, file_id = sample_repo_and_file
 
@@ -505,7 +503,7 @@ class TestCleanupOperations:
         )
 
         # Create edges between nodes
-        edge_id = graph_store.upsert_edge(
+        graph_store.upsert_edge(
             source_node_id=node1_id,
             target_node_id=node2_id,
             edge_type="calls",
@@ -693,7 +691,7 @@ class TestCleanupOperations:
         )
 
         # Create edge from file1 to file2
-        edge_id = graph_store.upsert_edge(
+        graph_store.upsert_edge(
             source_node_id=node1_id,
             target_node_id=node2_id,
             edge_type="calls",
@@ -741,9 +739,7 @@ class TestCleanupOperations:
         # Verify FTS entry exists
         with graph_store._connect() as conn:
             cur = conn.cursor()
-            cur.execute(
-                "SELECT COUNT(*) FROM code_nodes_fts WHERE node_id = ?", (node_id,)
-            )
+            cur.execute("SELECT COUNT(*) FROM code_nodes_fts WHERE node_id = ?", (node_id,))
             count = cur.fetchone()[0]
             assert count == 1
 
@@ -754,9 +750,7 @@ class TestCleanupOperations:
         # Verify FTS entry is gone
         with graph_store._connect() as conn:
             cur = conn.cursor()
-            cur.execute(
-                "SELECT COUNT(*) FROM code_nodes_fts WHERE node_id = ?", (node_id,)
-            )
+            cur.execute("SELECT COUNT(*) FROM code_nodes_fts WHERE node_id = ?", (node_id,))
             count = cur.fetchone()[0]
             assert count == 0
 
@@ -854,9 +848,9 @@ class TestSchemaMigration:
         schema = cur.fetchone()[0]
 
         # Verify CASCADE DELETE is in the schema for both foreign keys
-        assert (
-            "ON DELETE CASCADE" in schema or "ondelete='CASCADE'" in schema.lower()
-        ), f"Expected CASCADE DELETE in schema, got: {schema}"
+        assert "ON DELETE CASCADE" in schema or "ondelete='CASCADE'" in schema.lower(), (
+            f"Expected CASCADE DELETE in schema, got: {schema}"
+        )
 
         conn.close()
 

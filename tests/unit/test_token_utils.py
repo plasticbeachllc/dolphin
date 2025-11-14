@@ -1,6 +1,6 @@
 """Unit tests for token utilities and windowing functions."""
 
-from kb.chunkers.token_utils import window_text_by_tokens, count_tokens, get_tokenizer
+from kb.chunkers.token_utils import count_tokens, get_tokenizer, window_text_by_tokens
 
 
 class TestTokenUtilities:
@@ -146,9 +146,7 @@ Line 10"""
         count = count_tokens(unicode_text)
         assert count > 0
 
-        windows = window_text_by_tokens(
-            unicode_text, model="small", target=10, overlap=2
-        )
+        windows = window_text_by_tokens(unicode_text, model="small", target=10, overlap=2)
         assert len(windows) >= 1
 
         # Verify content preservation

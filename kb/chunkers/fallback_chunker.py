@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import bisect
-from typing import List, Tuple
 
-from .token_utils import get_tokenizer, window_text_by_tokens, count_tokens
+from .token_utils import count_tokens, get_tokenizer, window_text_by_tokens
 from .types import Chunk
 
 
@@ -33,14 +32,12 @@ def chunk_text(
 
     tok = get_tokenizer(model)
     overlap = max(0, int(token_target * overlap_pct))
-    windows = window_text_by_tokens(
-        text, model=model, target=token_target, overlap=overlap
-    )
+    windows = window_text_by_tokens(text, model=model, target=token_target, overlap=overlap)
 
     # Build line-start offsets for entire file
     line_offsets = _build_line_offsets(text)
 
-    chunks: List[Chunk] = []
+    chunks: list[Chunk] = []
     for raw_text, start_char, end_char in windows:
         if not raw_text:
             continue
@@ -75,22 +72,22 @@ def chunk_text(
     return chunks
 
 
-def _build_line_offsets(text: str) -> List[int]:
+def _build_line_offsets(text: str) -> list[int]:
     """Return character offsets where each line starts: offsets[i] = char index of line (i+1)."""
-    offsets: List[int] = [0]
+    offsets: list[int] = [0]
     for idx, ch in enumerate(text):
         if ch == "\n":
             offsets.append(idx + 1)
     return offsets
 
 
-def _offset_to_line(line_offsets: List[int], offset: int) -> int:
+def _offset_to_line(line_offsets: list[int], offset: int) -> int:
     """Convert a character offset to a 1-based line number using binary search."""
     line_idx = bisect.bisect_right(line_offsets, offset) - 1
     return line_idx + 1
 
 
-def _trim_and_tokenize(raw_text: str, tokenizer) -> Tuple[str, int, int, int]:
+def _trim_and_tokenize(raw_text: str, tokenizer) -> tuple[str, int, int, int]:
     """Trim leading/trailing newlines and compute token_count.
 
     Returns: (trimmed_text, token_count, lead_trim, trail_trim)

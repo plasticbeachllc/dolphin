@@ -3,6 +3,7 @@
 import sqlite3
 from pathlib import Path
 from typing import Any
+
 import pytest
 
 from kb.store.sqlite_meta import SQLiteMetadataStore
@@ -326,9 +327,7 @@ class TestSQLiteMetadataStore:
         assert stats["content_upserted"] == len(desired)
         assert stats["locations_inserted"] >= 1
 
-        hashes_final = store.get_existing_content_hashes_for_file(
-            repo_id, file_id, "small"
-        )
+        hashes_final = store.get_existing_content_hashes_for_file(repo_id, file_id, "small")
         assert hashes_final == set(desired.keys())
 
     def test_summarize_operations(self, temp_db_path):

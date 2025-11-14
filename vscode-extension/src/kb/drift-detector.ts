@@ -10,6 +10,17 @@ export interface DriftEvent {
 export class DriftDetector {
   private checkTimer: NodeJS.Timeout | null = null;
   private checkIntervalMs: number = 3600000; // 1 hour default
+  private isDisposed: boolean = false;
+
+  private log(message: string): void {
+    if (!this.isDisposed) {
+      try {
+        this.outputChannel.appendLine(message);
+      } catch {
+        // Silently fail if output channel is disposed
+      }
+    }
+  }
 
   constructor(
     private repoName: string,
@@ -23,9 +34,7 @@ export class DriftDetector {
   }
 
   async start() {
-    this.outputChannel.appendLine(
-      `[DriftDetector] Starting with ${this.checkIntervalMs}ms interval`
-    );
+    this.log(`[DriftDetector] Starting with ${this.checkIntervalMs}ms interval`);
 
     // Run initial drift detection
     await this.detectDrift();
@@ -40,24 +49,28 @@ export class DriftDetector {
     }
 
     this.checkTimer = setInterval(async () => {
-      await this.detectDrift();
+      if (!this.isDisposed) {
+        await this.detectDrift();
+      }
     }, this.checkIntervalMs);
   }
 
   async detectDrift(): Promise<void> {
+    if (this.isDisposed) {
+      return;
+    }
+
     try {
-      this.outputChannel.appendLine("[DriftDetector] Running drift detection...");
+      this.log("[DriftDetector] Running drift detection...");
 
       const driftEvents = await this.fetchDriftEvents();
 
       if (driftEvents.length === 0) {
-        this.outputChannel.appendLine("[DriftDetector] No drift detected");
+        this.log("[DriftDetector] No drift detected");
         return;
       }
 
-      this.outputChannel.appendLine(
-        `[DriftDetector] Found ${driftEvents.length} drifted files`
-      );
+      this.log(`[DriftDetector] Found ${driftEvents.length} drifted files`);
 
       // Record drifted files as pending changes
       await this.recordDriftedFiles(driftEvents);
@@ -65,28 +78,23 @@ export class DriftDetector {
       // Notify user
       await this.notifyUser(driftEvents);
     } catch (error: any) {
-      this.outputChannel.appendLine(
-        `[DriftDetector] Error during drift detection: ${error.message}`
-      );
+      this.log(`[DriftDetector] Error during drift detection: ${error.message}`);
     }
   }
 
   private async fetchDriftEvents(): Promise<DriftEvent[]> {
-    const response = await fetch(
-      `${this.apiBaseUrl}/v1/repos/${this.repoName}/drift`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    const response = await fetch(`${this.apiBaseUrl}/v1/repos/${this.repoName}/drift`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to fetch drift events: ${response.statusText}`);
     }
 
-    const data = await response.json() as { drift_events?: DriftEvent[] };
+    const data = (await response.json()) as { drift_events?: DriftEvent[] };
     return data.drift_events || [];
   }
 
@@ -97,37 +105,30 @@ export class DriftDetector {
       change_type: event.drift_type,
     }));
 
-    const response = await fetch(
-      `${this.apiBaseUrl}/v1/repos/${this.repoName}/changes`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          changes,
-        }),
-      }
-    );
+    const response = await fetch(`${this.apiBaseUrl}/v1/repos/${this.repoName}/changes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        changes,
+      }),
+    });
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to record drifted files: ${response.statusText}`
-      );
+      throw new Error(`Failed to record drifted files: ${response.statusText}`);
     }
 
-    this.outputChannel.appendLine(
-      `[DriftDetector] Recorded ${changes.length} drifted files as pending changes`
-    );
+    this.log(`[DriftDetector] Recorded ${changes.length} drifted files as pending changes`);
   }
 
   private async notifyUser(driftEvents: DriftEvent[]): Promise<void> {
-    const modifiedCount = driftEvents.filter(
-      (e) => e.drift_type === "modified"
-    ).length;
-    const deletedCount = driftEvents.filter(
-      (e) => e.drift_type === "deleted"
-    ).length;
+    if (this.isDisposed) {
+      return;
+    }
+
+    const modifiedCount = driftEvents.filter((e) => e.drift_type === "modified").length;
+    const deletedCount = driftEvents.filter((e) => e.drift_type === "deleted").length;
 
     let message = `Detected ${driftEvents.length} file change(s) while VSCode was closed`;
     if (modifiedCount > 0) {
@@ -138,11 +139,7 @@ export class DriftDetector {
     }
     message += ")";
 
-    const choice = await vscode.window.showInformationMessage(
-      message,
-      "Sync Now",
-      "Later"
-    );
+    const choice = await vscode.window.showInformationMessage(message, "Sync Now", "Later");
 
     if (choice === "Sync Now") {
       // Trigger auto-sync (if available) or manual reindex
@@ -153,11 +150,13 @@ export class DriftDetector {
   }
 
   dispose() {
+    this.isDisposed = true;
+
     if (this.checkTimer) {
       clearInterval(this.checkTimer);
       this.checkTimer = null;
     }
 
-    this.outputChannel.appendLine("[DriftDetector] Disposed");
+    this.log("[DriftDetector] Disposed");
   }
 }

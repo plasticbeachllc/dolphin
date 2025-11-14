@@ -1,13 +1,14 @@
-import pytest
 import subprocess
-from unittest.mock import patch
 from pathlib import Path
+from unittest.mock import patch
 
-from kb.api.search_backend import create_search_backend
+import pytest
+
 from kb.api.app import SearchRequest
-from kb.ingest.pipeline import IngestionPipeline
+from kb.api.search_backend import create_search_backend
 from kb.chunkers.types import Chunk
 from kb.config import KBConfig
+from kb.ingest.pipeline import IngestionPipeline
 from kb.store import LanceDBStore, SQLiteMetadataStore
 
 
@@ -44,7 +45,7 @@ def rerank_backend(tmp_path):
 
     pipeline = IngestionPipeline(config, lancedb, metadata)
 
-    dummy_chunks = [
+    [
         Chunk(
             text=f"dummy content {i}",
             start_line=i,
@@ -67,9 +68,7 @@ def rerank_backend(tmp_path):
         pipeline.index(repo_name="test_repo", full_reindex=True)
 
     # Now, create the search backend using the pre-populated stores
-    backend = create_search_backend(
-        store_root=store_root, reranker_config={"enabled": True, "model": "test-model"}
-    )
+    backend = create_search_backend(store_root=store_root, reranker_config={"enabled": True, "model": "test-model"})
 
     assert backend is not None, "Backend creation failed"
     assert backend.reranker is not None, "Reranker was not initialized"
@@ -97,4 +96,4 @@ class TestRerankerIntegration:
             assert isinstance(results, list)
 
         # The test passes if reranking is properly initialized and search works
-        assert rerank_backend.reranker.enabled == True
+        assert rerank_backend.reranker.enabled

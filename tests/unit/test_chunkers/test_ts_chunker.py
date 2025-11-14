@@ -1,6 +1,7 @@
 """Unit tests for TypeScript/JavaScript symbol-level chunking."""
 
 import textwrap
+
 from kb.chunkers.ts_chunker import chunk_source as ts_chunk_source
 
 
@@ -9,7 +10,8 @@ class TestTypeScriptChunker:
 
     def test_typescript_function_chunking(self):
         """Test TypeScript/JavaScript function extraction."""
-        src = textwrap.dedent("""
+        src = textwrap.dedent(
+            """
         export default class Foo {
           bar() {
             return 1
@@ -23,7 +25,8 @@ class TestTypeScriptChunker:
         function qux() {
           return 3
         }
-        """)
+        """
+        )
         chunks = ts_chunk_source(src, lang="typescript", model="small", token_target=50)
 
         assert isinstance(chunks, list)
@@ -36,12 +39,8 @@ class TestTypeScriptChunker:
         }
         if kinds:
             # at least one method and one function must be present
-            assert any(k[0] == "method" for k in kinds), (
-                "Expected at least one method symbol"
-            )
-            assert any(k[0] == "function" for k in kinds), (
-                "Expected at least one function symbol"
-            )
+            assert any(k[0] == "method" for k in kinds), "Expected at least one method symbol"
+            assert any(k[0] == "function" for k in kinds), "Expected at least one function symbol"
 
         # validate that start/end lines are within file
         # Note: canonicalize_text may change line count, so use original source
@@ -56,7 +55,8 @@ class TestTypeScriptChunker:
 
     def test_react_component_chunking(self):
         """Test React component extraction."""
-        src = textwrap.dedent("""
+        src = textwrap.dedent(
+            """
         import React from 'react';
 
         const FunctionalComponent: React.FC = () => {
@@ -70,10 +70,9 @@ class TestTypeScriptChunker:
         }
 
         export default FunctionalComponent;
-        """)
-        chunks = ts_chunk_source(
-            src, lang="typescript", model="small", token_target=100
+        """
         )
+        chunks = ts_chunk_source(src, lang="typescript", model="small", token_target=100)
 
         assert isinstance(chunks, list)
 
@@ -99,7 +98,8 @@ class TestTypeScriptChunker:
 
     def test_arrow_functions(self):
         """Test arrow function extraction."""
-        src = textwrap.dedent("""
+        src = textwrap.dedent(
+            """
         const arrowFunc = () => {
           return "arrow function";
         };
@@ -112,7 +112,8 @@ class TestTypeScriptChunker:
         ) => {
           return param1 + param2;
         };
-        """)
+        """
+        )
         chunks = ts_chunk_source(src, lang="typescript", model="small", token_target=50)
 
         if any(c.symbol_kind for c in chunks):  # If Tree-sitter is available
@@ -121,7 +122,8 @@ class TestTypeScriptChunker:
 
     def test_interface_and_type_definitions(self):
         """Test TypeScript interface and type definition handling."""
-        src = textwrap.dedent("""
+        src = textwrap.dedent(
+            """
         interface User {
           id: number;
           name: string;
@@ -135,7 +137,8 @@ class TestTypeScriptChunker:
         };
 
         type Status = 'active' | 'inactive' | 'pending';
-        """)
+        """
+        )
         chunks = ts_chunk_source(src, lang="typescript", model="small", token_target=50)
 
         # Should handle type definitions without crashing
@@ -157,12 +160,8 @@ class TestTypeScriptChunker:
         """
 
         # Both should work without errors
-        js_chunks = ts_chunk_source(
-            js_src, lang="javascript", model="small", token_target=50
-        )
-        ts_chunks = ts_chunk_source(
-            ts_src, lang="typescript", model="small", token_target=50
-        )
+        js_chunks = ts_chunk_source(js_src, lang="javascript", model="small", token_target=50)
+        ts_chunks = ts_chunk_source(ts_src, lang="typescript", model="small", token_target=50)
 
         assert isinstance(js_chunks, list)
         assert isinstance(ts_chunks, list)
@@ -177,9 +176,7 @@ class TestTypeScriptChunker:
         """
 
         # Should not raise an exception
-        chunks = ts_chunk_source(
-            malformed_src, lang="typescript", model="small", token_target=50
-        )
+        chunks = ts_chunk_source(malformed_src, lang="typescript", model="small", token_target=50)
 
         # Should still return chunks (may fall back to token windowing)
         assert isinstance(chunks, list)
@@ -187,7 +184,8 @@ class TestTypeScriptChunker:
 
     def test_jsx_tsx_handling(self):
         """Test JSX/TSX syntax handling."""
-        tsx_src = textwrap.dedent("""
+        tsx_src = textwrap.dedent(
+            """
         const Component: React.FC<{ title: string }> = ({ title }) => {
           return (
             <div className="container">
@@ -198,10 +196,9 @@ class TestTypeScriptChunker:
             </div>
           );
         };
-        """)
-        chunks = ts_chunk_source(
-            tsx_src, lang="typescript", model="small", token_target=100
+        """
         )
+        chunks = ts_chunk_source(tsx_src, lang="typescript", model="small", token_target=100)
 
         assert isinstance(chunks, list)
 
@@ -228,7 +225,8 @@ class TestTypeScriptChunker:
 
     def test_symbol_path_enrichment(self):
         """Test symbol path enrichment for nested TypeScript structures."""
-        src = textwrap.dedent("""
+        src = textwrap.dedent(
+            """
         namespace Outer {
           namespace Inner {
             function nestedFunction() {
@@ -242,7 +240,8 @@ class TestTypeScriptChunker:
             return "method";
           }
         }
-        """)
+        """
+        )
         chunks = ts_chunk_source(src, lang="typescript", model="small", token_target=50)
 
         if any(c.symbol_kind for c in chunks):  # If Tree-sitter is available

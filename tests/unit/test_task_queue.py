@@ -1,8 +1,10 @@
 """Unit tests for TaskQueue functionality."""
 
-import pytest
 import asyncio
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
 from kb.api.task_queue import TaskStatus
 
 
@@ -106,9 +108,9 @@ class TestTaskQueueRetrieval:
         """Test getting tasks filtered by repository."""
         queue = task_queue_instance
 
-        task1 = queue.create_task(repo="repo-a", files=["a.py"])
-        task2 = queue.create_task(repo="repo-b", files=["b.py"])
-        task3 = queue.create_task(repo="repo-a", files=["c.py"])
+        queue.create_task(repo="repo-a", files=["a.py"])
+        queue.create_task(repo="repo-b", files=["b.py"])
+        queue.create_task(repo="repo-a", files=["c.py"])
 
         repo_a_tasks = queue.get_all_tasks(repo="repo-a")
 
@@ -160,9 +162,7 @@ class TestTaskQueueUpdate:
         queue = task_queue_instance
         task = queue.create_task(repo="test-repo", files=["file.py"])
 
-        await queue.update_task(
-            task.task_id, status=TaskStatus.FAILED, error="Test error message"
-        )
+        await queue.update_task(task.task_id, status=TaskStatus.FAILED, error="Test error message")
 
         updated = queue.get_task(task.task_id)
         assert updated.status == TaskStatus.FAILED

@@ -1,0 +1,30 @@
+name: Publish MCP Bridge
+
+on:
+  push:
+    tags:
+      - "mcp-v*.*.*" # Triggers on tags like mcp-v0.1.2
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies
+        working-directory: ./mcp-bridge
+        run: bun install
+
+      - name: Build package
+        working-directory: ./mcp-bridge
+        run: bun run build
+
+      - name: Publish to npm
+        working-directory: ./mcp-bridge
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish

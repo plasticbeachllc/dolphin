@@ -1,16 +1,16 @@
 # from __future__ import annotations
-from pathlib import Path
 import os
+from pathlib import Path
 from typing import cast
 
 import typer
+from pathspec import PathSpec
 
 from ..config import DEFAULT_CONFIG_PATH, KBConfig, load_config
-from ..store import LanceDBStore, SQLiteMetadataStore
-from .pipeline import IngestionPipeline
 from ..embeddings.provider import create_provider, set_default_provider
 from ..ignores import build_ignore_set, load_repo_ignores
-from pathspec import PathSpec
+from ..store import LanceDBStore, SQLiteMetadataStore
+from .pipeline import IngestionPipeline
 
 app = typer.Typer(help="Unified knowledge store ingestion CLI.")
 
@@ -32,9 +32,7 @@ def _build_pipeline(config: KBConfig) -> IngestionPipeline:
     if provider_type == "openai":
         api_key = os.environ.get(config.openai_api_key_env)
         if not api_key:
-            raise RuntimeError(
-                f"{config.openai_api_key_env} environment variable is required for OpenAI embeddings."
-            )
+            raise RuntimeError(f"{config.openai_api_key_env} environment variable is required for OpenAI embeddings.")
         provider_kwargs["api_key"] = api_key
         provider_kwargs["batch_size"] = config.embedding_batch_size
 
@@ -109,9 +107,7 @@ def add_repo(
     metadata.initialize()
     metadata.record_repo(name=name, path=repo_path, default_embed_model=model)
 
-    typer.echo(
-        f"Repository registered: name='{name}', path='{repo_path}', default_embed_model='{model}'"
-    )
+    typer.echo(f"Repository registered: name='{name}', path='{repo_path}', default_embed_model='{model}'")
 
 
 @app.command()
@@ -354,9 +350,7 @@ def rm_repo(
     active_sessions = metadata.get_active_sessions(repo_id)
     if active_sessions and not force:
         typer.echo(f"Error: Cannot remove repository '{name}':", err=True)
-        typer.echo(
-            f"  Found {len(active_sessions)} active indexing session(s).", err=True
-        )
+        typer.echo(f"  Found {len(active_sessions)} active indexing session(s).", err=True)
         typer.echo("  Use --force to override and abort active sessions.", err=True)
         raise typer.Exit(code=1)
 
@@ -468,9 +462,7 @@ def reset_repo(
 
             # Show warnings if any
             if "lancedb_warnings" in result and result["lancedb_warnings"]:
-                typer.echo(
-                    f"⚠️  Cleanup warnings: {len(result['lancedb_warnings'])}", err=True
-                )
+                typer.echo(f"⚠️  Cleanup warnings: {len(result['lancedb_warnings'])}", err=True)
 
         except Exception as e:
             typer.echo(
@@ -479,17 +471,13 @@ def reset_repo(
 
     # Re-register repo
     metadata.record_repo(name=name, path=repo_path, default_embed_model=model)
-    typer.echo(
-        f"✓ Repository '{name}' re-registered: path='{repo_path}', default_embed_model='{model}'"
-    )
+    typer.echo(f"✓ Repository '{name}' re-registered: path='{repo_path}', default_embed_model='{model}'")
 
 
 @app.command()
 def prune(
     name: str = typer.Argument(..., help="Repository name to prune."),
-    older_than: str = typer.Option(
-        "30d", "--older-than", help="Age cutoff for pruning sessions."
-    ),
+    older_than: str = typer.Option("30d", "--older-than", help="Age cutoff for pruning sessions."),
 ) -> None:
     """Remove older data for the specified repository (stub)."""
     _ = (name, older_than)
@@ -555,8 +543,8 @@ def search(
         dolphin kb search "database migration" --path src/db --top-k 5
         dolphin kb search "error handling" --show-content
     """
-    from ..api.search_backend import create_search_backend
     from ..api.app import SearchRequest
+    from ..api.search_backend import create_search_backend
 
     config = load_config()
 
@@ -749,10 +737,7 @@ def repair_repo(
 
         stats = report["statistics"]
         total_repairs = (
-            stats["orphaned_locations"]
-            + stats["orphaned_fts"]
-            + stats["orphaned_content"]
-            + stats["orphaned_files"]
+            stats["orphaned_locations"] + stats["orphaned_fts"] + stats["orphaned_content"] + stats["orphaned_files"]
         )
         typer.echo(f"\nTotal items that would be repaired: {total_repairs}")
         return
@@ -874,8 +859,7 @@ def reset_all(
             total_stats["locations_deleted"] += stats["locations_deleted"]
             total_stats["sessions_deleted"] += stats["sessions_deleted"]
             total_stats["vectors_deleted"] += (
-                stats["lancedb_vectors"]["small_deleted"]
-                + stats["lancedb_vectors"]["large_deleted"]
+                stats["lancedb_vectors"]["small_deleted"] + stats["lancedb_vectors"]["large_deleted"]
             )
 
             typer.echo(f"  ✓ Removed {repo['name']}")

@@ -1,6 +1,7 @@
 """Unit tests for file sync metadata store methods."""
 
 from pathlib import Path
+
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
@@ -19,9 +20,7 @@ class TestPendingChanges:
         repo_id = repo["id"]
 
         # Record a change
-        change_id = store.record_pending_change(
-            repo_id=repo_id, file_path="src/main.py", change_type="modified"
-        )
+        change_id = store.record_pending_change(repo_id=repo_id, file_path="src/main.py", change_type="modified")
 
         assert change_id is not None
         assert change_id > 0
@@ -165,9 +164,9 @@ class TestPendingChanges:
         repo_id = repo["id"]
 
         # Record multiple changes for same file
-        id1 = store.record_pending_change(repo_id, "important.py", "modified")
-        id2 = store.record_pending_change(repo_id, "important.py", "modified")
-        id3 = store.record_pending_change(repo_id, "other.py", "created")
+        store.record_pending_change(repo_id, "important.py", "modified")
+        store.record_pending_change(repo_id, "important.py", "modified")
+        store.record_pending_change(repo_id, "other.py", "created")
 
         # Mark all changes for specific file as processed
         processed_count = store.mark_changes_for_file_processed(repo_id, "important.py")

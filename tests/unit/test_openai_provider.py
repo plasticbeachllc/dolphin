@@ -1,15 +1,16 @@
 """Tests for OpenAI embedding provider."""
 
 import os
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 
 from kb.embeddings.provider import (
     EmbeddingProvider,
     OpenAIEmbeddingProvider,
     create_provider,
-    set_default_provider,
     embed_texts,
+    set_default_provider,
 )
 
 
@@ -102,9 +103,7 @@ class TestOpenAIEmbeddingProvider:
         # Mock OpenAI responses for each batch
         def create_mock_response(batch_size):
             mock_response = Mock()
-            mock_response.data = [
-                Mock(embedding=[float(i)] * 1536) for i in range(batch_size)
-            ]
+            mock_response.data = [Mock(embedding=[float(i)] * 1536) for i in range(batch_size)]
             return mock_response
 
         with patch("openai.OpenAI") as mock_openai_class:
@@ -138,9 +137,7 @@ class TestOpenAIEmbeddingProvider:
             result = provider.embed_texts("large", ["test"])
 
             assert len(result[0]) == 3072
-            mock_client.embeddings.create.assert_called_once_with(
-                input=["test"], model="text-embedding-3-large"
-            )
+            mock_client.embeddings.create.assert_called_once_with(input=["test"], model="text-embedding-3-large")
 
     def test_embed_texts_empty_list(self):
         """Test embedding empty list returns empty list."""
@@ -215,9 +212,7 @@ class TestProviderFactory:
 class TestIntegration:
     """Integration tests (can be skipped if no API key available)."""
 
-    @pytest.mark.skipif(
-        not os.environ.get("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set"
-    )
+    @pytest.mark.skipif(not os.environ.get("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set")
     def test_real_openai_api(self):
         """Test real OpenAI API call (requires valid API key)."""
         provider = OpenAIEmbeddingProvider()

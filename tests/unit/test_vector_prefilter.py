@@ -1,14 +1,16 @@
 """Unit tests for vector search pre-filtering."""
 
-import pytest
 from unittest.mock import Mock
+
+import pytest
+
 from kb.search.vector_prefilter import (
-    VectorPreFilter,
     FilterCriteria,
-    create_repo_filter,
-    create_language_filter,
-    create_symbol_filter,
+    VectorPreFilter,
     combine_filters,
+    create_language_filter,
+    create_repo_filter,
+    create_symbol_filter,
 )
 
 

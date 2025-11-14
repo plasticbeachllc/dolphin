@@ -66,9 +66,7 @@ class TestRecordPendingChangesEndpoint:
 
     def test_record_changes_empty_list(self, kb_api_client, registered_test_repo):
         """Test recording empty changes list."""
-        response = kb_api_client.post(
-            f"/v1/repos/{registered_test_repo['name']}/changes", json={"changes": []}
-        )
+        response = kb_api_client.post(f"/v1/repos/{registered_test_repo['name']}/changes", json={"changes": []})
 
         assert response.status_code == 200
         data = response.json()
@@ -80,11 +78,7 @@ class TestRecordPendingChangesEndpoint:
         """Test recording change without file_path fails validation."""
         response = kb_api_client.post(
             f"/v1/repos/{registered_test_repo['name']}/changes",
-            json={
-                "changes": [
-                    {"change_type": "modified"}  # Missing file_path
-                ]
-            },
+            json={"changes": [{"change_type": "modified"}]},  # Missing file_path
         )
 
         assert response.status_code == 422  # Validation error
@@ -95,11 +89,7 @@ class TestRecordPendingChangesEndpoint:
         """Test recording change without change_type fails validation."""
         response = kb_api_client.post(
             f"/v1/repos/{registered_test_repo['name']}/changes",
-            json={
-                "changes": [
-                    {"file_path": "file.py"}  # Missing change_type
-                ]
-            },
+            json={"changes": [{"file_path": "file.py"}]},  # Missing change_type
         )
 
         assert response.status_code == 422  # Validation error
@@ -123,9 +113,7 @@ class TestGetPendingChangesEndpoint:
 
     def test_get_pending_changes_empty(self, kb_api_client, registered_test_repo):
         """Test getting pending changes when none exist."""
-        response = kb_api_client.get(
-            f"/v1/repos/{registered_test_repo['name']}/pending-changes"
-        )
+        response = kb_api_client.get(f"/v1/repos/{registered_test_repo['name']}/pending-changes")
 
         assert response.status_code == 200
         data = response.json()
@@ -148,9 +136,7 @@ class TestGetPendingChangesEndpoint:
         )
 
         # Get pending changes
-        response = kb_api_client.get(
-            f"/v1/repos/{registered_test_repo['name']}/pending-changes"
-        )
+        response = kb_api_client.get(f"/v1/repos/{registered_test_repo['name']}/pending-changes")
 
         assert response.status_code == 200
         data = response.json()
@@ -170,18 +156,11 @@ class TestGetPendingChangesEndpoint:
         # Record many changes
         kb_api_client.post(
             f"/v1/repos/{registered_test_repo['name']}/changes",
-            json={
-                "changes": [
-                    {"file_path": f"file{i}.py", "change_type": "modified"}
-                    for i in range(20)
-                ]
-            },
+            json={"changes": [{"file_path": f"file{i}.py", "change_type": "modified"} for i in range(20)]},
         )
 
         # Get with limit
-        response = kb_api_client.get(
-            f"/v1/repos/{registered_test_repo['name']}/pending-changes?limit=5"
-        )
+        response = kb_api_client.get(f"/v1/repos/{registered_test_repo['name']}/pending-changes?limit=5")
 
         assert response.status_code == 200
         data = response.json()
@@ -217,9 +196,7 @@ class TestGetPendingChangesEndpoint:
         )
 
         # Get pending changes
-        response = kb_api_client.get(
-            f"/v1/repos/{registered_test_repo['name']}/pending-changes"
-        )
+        response = kb_api_client.get(f"/v1/repos/{registered_test_repo['name']}/pending-changes")
 
         assert response.status_code == 200
         data = response.json()
@@ -295,9 +272,7 @@ class TestMarkChangesProcessedEndpoint:
         self, kb_api_client, registered_test_repo
     ):
         """Test marking without change_ids parameter fails validation."""
-        response = kb_api_client.post(
-            f"/v1/repos/{registered_test_repo['name']}/changes/mark-processed", json={}
-        )
+        response = kb_api_client.post(f"/v1/repos/{registered_test_repo['name']}/changes/mark-processed", json={})
 
         assert response.status_code == 422  # Validation error
 
@@ -319,9 +294,7 @@ class TestMarkChangesProcessedEndpoint:
         )
 
         # Verify not in pending list
-        pending_response = kb_api_client.get(
-            f"/v1/repos/{registered_test_repo['name']}/pending-changes"
-        )
+        pending_response = kb_api_client.get(f"/v1/repos/{registered_test_repo['name']}/pending-changes")
         assert len(pending_response.json()["changes"]) == 0
 
 
@@ -351,6 +324,7 @@ class TestDetectDriftEndpoint:
         test_file.write_text("def test(): pass")
 
         # Record file and create snapshot with old state
+
         file_id = sql_store.upsert_file(
             repo_id=repo["id"],
             path="test.py",

@@ -75,33 +75,63 @@ show-mcp-bridge:
 	lsof -i :7777
 
 # ==============================================================================
+# Code Quality & Linting
+# ==============================================================================
+
+# Run all linting and type checking
+check:
+	@echo "🔍 Running code quality checks..."
+	@echo ""
+	@just check-python
+	@just check-typescript
+	@echo ""
+	@echo "✅ All checks passed!"
+
+# Check Python code quality
+check-python:
+	@echo "🐍 Checking Python code quality..."
+	@uv run black --check kb/ tests/ || (echo "   ❌ black formatting failed"; exit 1)
+	@echo "   ✅ black formatting passed"
+	@uv run mypy kb/ || (echo "   ❌ mypy type checking failed"; exit 1)
+	@echo "   ✅ mypy type checking passed"
+	@uv run pylint kb/ || (echo "   ❌ pylint linting failed"; exit 1)
+	@echo "   ✅ pylint linting passed"
+
+# Check TypeScript code quality
+check-typescript:
+	@echo "📘 Checking TypeScript code quality..."
+	@cd mcp-bridge && bun x eslint . || (echo "   ❌ MCP bridge linting failed"; exit 1)
+	@echo "   ✅ MCP bridge linting passed"
+	@cd mcp-bridge && bun x tsc --noEmit || (echo "   ❌ MCP bridge type checking failed"; exit 1)
+	@echo "   ✅ MCP bridge type checking passed"
+	@cd agent-core && bun x tsc --noEmit || (echo "   ❌ Agent core type checking failed"; exit 1)
+	@echo "   ✅ Agent core type checking passed"
+
+# Auto-fix Python formatting issues
+fix-python:
+	@echo "🔧 Auto-fixing Python code..."
+	@uv run black kb/ tests/
+	@uv run isort kb/ tests/
+	@echo "✅ Python code formatted"
+
+# Auto-fix TypeScript linting issues
+fix-typescript:
+	@echo "🔧 Auto-fixing TypeScript code..."
+	@cd mcp-bridge && bun x eslint . --fix
+	@echo "✅ TypeScript code fixed"
+
+# Auto-fix all code quality issues
+fix: fix-python fix-typescript
+	@echo "✅ All code formatting fixed"
+
+# ==============================================================================
 # Testing
 # ==============================================================================
 
-# Test all components using pytest (parallel execution enabled by default in pytest.ini)
+# Test all Python components using pytest (parallel execution enabled by default in pytest.ini)
 test: setup-python
-	@echo "🧪 Running all tests with pytest (parallel)..."
+	@echo "🧪 Running all Python tests with pytest (parallel)..."
 	@uv run pytest -q
-
-# Run unit tests only
-test-unit: setup-python
-	@echo "🧪 Running unit tests (parallel)..."
-	@uv run pytest tests/unit/ -q
-
-# Run integration tests only
-test-integration: setup-python
-	@echo "🧪 Running integration tests (parallel)..."
-	@uv run pytest tests/integration/ -q
-
-# Run tests sequentially (for debugging)
-test-sequential: setup-python
-	@echo "🧪 Running all tests sequentially..."
-	@uv run pytest -q -n0
-
-# Run tests with coverage reporting (note: coverage disables parallelization for accuracy)
-test-coverage: setup-python
-	@echo "🧪 Running tests with coverage..."
-	@uv run pytest -n0 --cov=kb --cov-report=html --cov-report=term-missing
 
 # Run specific test file
 test-file: setup-python
@@ -113,6 +143,20 @@ test-verbose: setup-python
 	@echo "🧪 Running tests with verbose output (parallel)..."
 	@uv run pytest -v
 
+# Run tests sequentially (for debugging)
+test-sequential: setup-python
+	@echo "🧪 Running all tests sequentially..."
+	@uv run pytest -q -n0
+
+# Run tests with coverage reporting (note: coverage disables parallelization for accuracy)
+test-coverage: setup-python
+	@echo "🧪 Running tests with coverage..."
+	@uv run pytest -n0 --cov=kb --cov-report=html --cov-report=term-missing
+
+# Legacy aliases for backwards compatibility
+test-unit: test-unit-python
+test-integration: test-integration-python
+
 # ==============================================================================
 # Unit Tests - Fast, isolated tests with no external dependencies
 # ==============================================================================
@@ -123,15 +167,14 @@ test-unit-all:
 	@echo ""
 	@just test-unit-python
 	@just test-unit-agent-core
-	@just test-unit-agent-core-v2
 	@just test-unit-extension
 	@just test-unit-webview
 	@echo ""
 	@echo "✅ All unit tests passed!"
 
-# Run Python unit tests
+# Run Python unit tests (with parallel execution)
 test-unit-python: setup-python
-	@echo "🐍 Testing Python unit tests..."
+	@echo "🐍 Testing Python unit tests (parallel)..."
 	@uv run pytest tests/unit/ -q --tb=short || (echo "   ❌ Python unit tests failed"; exit 1)
 	@echo "   ✅ Python unit tests passed"
 
@@ -140,12 +183,6 @@ test-unit-agent-core:
 	@echo "🤖 Testing Agent Core unit tests..."
 	@cd agent-core && bun test tests/conversation-store.test.ts tests/plan-store.test.ts tests/storage.test.ts tests/toml-writer.test.ts tests/llm/diff-generator.test.ts tests/llm/claude-tool-executor-diff.test.ts tests/llm/claude-cli-detector.test.ts tests/planner/basic-planner.test.ts --bail || (echo "   ❌ Agent Core unit tests failed"; exit 1)
 	@echo "   ✅ Agent Core unit tests passed"
-
-# Run Agent Core V2 unit tests
-test-unit-agent-core-v2:
-	@echo "🤖 Testing Agent Core V2 unit tests..."
-	@cd agent-core-v2 && bun test tests/unit/ --bail || (echo "   ❌ Agent Core V2 unit tests failed"; exit 1)
-	@echo "   ✅ Agent Core V2 unit tests passed"
 
 # Run VSCode Extension unit tests
 test-unit-extension:
@@ -169,15 +206,14 @@ test-integration-all:
 	@echo ""
 	@just test-integration-python
 	@just test-integration-agent-core
-	@just test-integration-agent-core-v2
 	@just test-integration-extension
 	@just test-integration-mcp-bridge
 	@echo ""
 	@echo "✅ All integration tests passed!"
 
-# Run Python integration tests
+# Run Python integration tests (with parallel execution)
 test-integration-python: setup-python
-	@echo "🐍 Testing Python integration tests..."
+	@echo "🐍 Testing Python integration tests (parallel)..."
 	@uv run pytest tests/integration/ -q --tb=short || (echo "   ❌ Python integration tests failed"; exit 1)
 	@echo "   ✅ Python integration tests passed"
 
@@ -186,12 +222,6 @@ test-integration-agent-core:
 	@echo "🤖 Testing Agent Core integration tests..."
 	@cd agent-core && bun test tests/llm/claude-client.test.ts tests/mcp-client.integration.test.ts tests/kb/manager.test.ts tests/main.test.ts --bail || (echo "   ❌ Agent Core integration tests failed"; exit 1)
 	@echo "   ✅ Agent Core integration tests passed"
-
-# Run Agent Core V2 integration tests
-test-integration-agent-core-v2:
-	@echo "🤖 Testing Agent Core V2 integration tests..."
-	@cd agent-core-v2 && bun test tests/integration/claude-auth.test.ts tests/integration/kb-integration.test.ts --bail || (echo "   ❌ Agent Core V2 integration tests failed"; exit 1)
-	@echo "   ✅ Agent Core V2 integration tests passed"
 
 # Run VSCode Extension integration tests
 test-integration-extension:
@@ -214,7 +244,7 @@ test-e2e-all:
 	@echo "🚀 Running all end-to-end tests..."
 	@echo ""
 	@just test-e2e-extension-full
-	@just test-e2e-agent-core-v2
+	@just test-e2e-agent-core
 	@echo ""
 	@echo "✅ All end-to-end tests passed!"
 
@@ -225,9 +255,9 @@ test-e2e-extension-full:
 	@echo "   ✅ Extension E2E tests passed"
 
 # Run Agent Core V2 e2e tests
-test-e2e-agent-core-v2:
+test-e2e-agent-core:
 	@echo "🤖 Testing Agent Core V2 E2E tests..."
-	@cd agent-core-v2 && bun test tests/integration/orchestrator-e2e.test.ts tests/integration/editor-workflow.test.ts --bail || (echo "   ❌ Agent Core V2 E2E tests failed"; exit 1)
+	@cd agent-core && bun test tests/integration/orchestrator-e2e.test.ts tests/integration/editor-workflow.test.ts --bail || (echo "   ❌ Agent Core V2 E2E tests failed"; exit 1)
 	@echo "   ✅ Agent Core V2 E2E tests passed"
 
 # ==============================================================================
@@ -282,11 +312,6 @@ test-e2e-python:
 	@uv run pytest tests/ -q --tb=short || (echo "   ❌ Python backend tests failed"; exit 1)
 	@echo "   ✅ Python backend tests passed"
 
-# Test Agent Core (TypeScript) - ALL Agent Core tests
-test-e2e-agent-core:
-	@echo "🤖 Testing Agent Core (all tests)..."
-	@cd agent-core && bun test --bail || (echo "   ❌ Agent core tests failed"; exit 1)
-	@echo "   ✅ Agent core tests passed"
 
 # Test Agent Core excluding flaky integration tests
 test-e2e-agent-core-unit:

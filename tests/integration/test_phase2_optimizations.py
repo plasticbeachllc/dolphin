@@ -4,17 +4,18 @@ Tests parallel scanning, parallel parsing, incremental embedding,
 adaptive batching, and AST caching.
 """
 
-import pytest
 import time
 from pathlib import Path
 
-from kb.ingest.parallel_scanner import scan_repo_parallel
-from kb.ingest.parallel_parser import ParseJob, parse_files_parallel, ParallelChunkCache
-from kb.ingest.incremental import compute_chunk_diff
-from kb.embeddings.adaptive_batching import AdaptiveBatcher, create_adaptive_batches
+import pytest
+
 from kb.cache.ast_cache import ASTCache
 from kb.chunkers.types import Chunk
+from kb.embeddings.adaptive_batching import AdaptiveBatcher, create_adaptive_batches
 from kb.hashing import hash_text
+from kb.ingest.incremental import compute_chunk_diff
+from kb.ingest.parallel_parser import ParallelChunkCache, ParseJob, parse_files_parallel
+from kb.ingest.parallel_scanner import scan_repo_parallel
 
 
 class TestParallelScanning:
@@ -61,6 +62,7 @@ class TestParallelScanning:
     def test_parallel_vs_sequential_performance(self, tmp_path):
         """Compare parallel vs sequential scanning performance."""
         import subprocess
+
         from kb.ingest.scanner import scan_repo
 
         # Create larger test repo
@@ -369,9 +371,7 @@ class TestPhase2Integration:
 
         # Create test files
         for i in range(20):
-            (repo_dir / f"module_{i}.py").write_text(
-                f"# Module {i}\ndef function_{i}():\n    return {i}\n"
-            )
+            (repo_dir / f"module_{i}.py").write_text(f"# Module {i}\ndef function_{i}():\n    return {i}\n")
 
         # Add files to git
         subprocess.run(
@@ -385,7 +385,7 @@ class TestPhase2Integration:
         # Test 2: Parallel parsing
         parse_jobs = []
         for candidate in candidates[:10]:  # Test subset
-            with open(candidate.abs_path, "r") as f:
+            with open(candidate.abs_path) as f:
                 content = f.read()
 
             parse_jobs.append(
@@ -406,7 +406,7 @@ class TestPhase2Integration:
         ast_cache = ASTCache(max_size=100)
         for result in results:
             if result.success:
-                with open(result.file_path, "r") as f:
+                with open(result.file_path) as f:
                     content = f.read()
                 content_hash = hash_text(content)
                 ast_cache.put(
@@ -415,7 +415,7 @@ class TestPhase2Integration:
 
         # Verify cache works
         first_result = results[0]
-        with open(first_result.file_path, "r") as f:
+        with open(first_result.file_path) as f:
             content = f.read()
         content_hash = hash_text(content)
         cached = ast_cache.get(str(first_result.file_path), content_hash)

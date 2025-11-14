@@ -72,10 +72,10 @@ class MyClass:
 class Calculator:
     def __init__(self):
         self.value = 0
-    
+
     def add(self, x, y):
         return x + y
-    
+
     def multiply(self, x, y):
         return x * y
 """
@@ -136,11 +136,11 @@ def function():
 def outer_function():
     def inner_function():
         return "nested"
-    
+
     class InnerClass:
         def method(self):
             return "method in nested class"
-    
+
     return inner_function()
 """
         chunks = chunk_source(src, model="small")

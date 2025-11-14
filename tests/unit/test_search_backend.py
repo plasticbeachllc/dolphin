@@ -1,9 +1,10 @@
-import pytest
-from unittest.mock import MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock
 
-from kb.api.search_backend import KnowledgeSearchBackend, create_search_backend
+import pytest
+
 from kb.api.app import SearchRequest
+from kb.api.search_backend import KnowledgeSearchBackend, create_search_backend
 
 
 @pytest.fixture
@@ -16,6 +17,9 @@ def mock_providers():
             "bm25_search",
             "get_chunk_contents",
             "get_chunk_by_id",
+            "get_chunk_by_content_identity",
+            "get_repo_by_name",
+            "get_file_id",
             "index_chunk_for_fts",
         ]
     )
@@ -26,9 +30,8 @@ def mock_providers():
 def basic_backend(mock_providers):
     """A basic backend with hybrid search enabled."""
     embedding_provider, lance_store, sql_store = mock_providers
-    return KnowledgeSearchBackend(
-        embedding_provider, lance_store, sql_store, hybrid_search_enabled=True
-    )
+    return KnowledgeSearchBackend(embedding_provider, lance_store, sql_store, hybrid_search_enabled=True)
+
 
 
 class TestKnowledgeSearchBackend:
@@ -46,10 +49,23 @@ class TestKnowledgeSearchBackend:
         ]
         # `reciprocal_rank_fusion` expects the `id_field` to be 'chunk_id'
         sql_store.bm25_search.return_value = [
-            {"chunk_id": "chunk2", "score": 25.0, "repo": "test", "path": "p2.py"}
+            {
+                "chunk_id": "chunk2",
+                "score": 25.0,
+                "repo": "test",
+                "path": "p2.py",
+                "text_hash": "hash2",
+            }
         ]
-        # Mock the hydration call for the BM25 result
-        sql_store.get_chunk_by_id.return_value = {"path": "p2.py", "chunk_id": "chunk2"}
+        # Mock the hydration methods for the BM25 result
+        sql_store.get_repo_by_name.return_value = {"id": 1}
+        sql_store.get_file_id.return_value = 2
+        sql_store.get_chunk_by_content_identity.return_value = {
+            "path": "p2.py",
+            "chunk_id": "chunk2",
+            "start_line": 1,
+            "end_line": 10,
+        }
 
         request = SearchRequest(query="test", top_k=10)
         results = basic_backend.search(request)
@@ -74,11 +90,22 @@ class TestKnowledgeSearchBackend:
         ]
         # BM25 result will rank at position 2, giving RRF score ~0.016 (similar rank)
         sql_store.bm25_search.return_value = [
-            {"chunk_id": "chunk2", "score": 5.0, "repo": "repo", "path": "test.py"}
+            {
+                "chunk_id": "chunk2",
+                "score": 5.0,
+                "repo": "repo",
+                "path": "test.py",
+                "text_hash": "hash2",
+            }
         ]
-        sql_store.get_chunk_by_id.return_value = {
+        # Mock the hydration methods for the BM25 result
+        sql_store.get_repo_by_name.return_value = {"id": 1}
+        sql_store.get_file_id.return_value = 2
+        sql_store.get_chunk_by_content_identity.return_value = {
             "path": "test.py",
             "chunk_id": "chunk2",
+            "start_line": 1,
+            "end_line": 10,
         }
 
         # Use low cutoff (0.0) to accept RRF scores (~0.016)
@@ -93,6 +120,52 @@ class TestKnowledgeSearchBackend:
 
         # RRF scores (~0.016) should be below 0.5 cutoff, so no results
         assert len(results_high) == 0
+
+    def test_hydrate_bm25_results_with_deterministic_ids(self, basic_backend):
+        _embedding_provider, _lance_store, sql_store = (
+            basic_backend.embedding_provider,
+            basic_backend.lance_store,
+            basic_backend.sql_store,
+        )
+
+        # Mock the new lookup methods
+        sql_store.get_repo_by_name = MagicMock(return_value={"id": 1})
+        sql_store.get_file_id = MagicMock(return_value=2)
+
+        deterministic_id = "32char_deterministic_hash_id"
+        sql_store.get_chunk_by_content_identity.return_value = {
+            "chunk_id": "uuid-123",
+            "text_hash": "abcdef",
+            "embed_model": "small",
+            "path": "repo/file.py",
+            "language": "python",
+            "start_line": 10,
+            "end_line": 20,
+            "symbol_name": "func",
+            "symbol_path": "module.func",
+        }
+        sql_store.get_chunk_by_id.return_value = None
+
+        hydrated = basic_backend._hydrate_bm25_results(
+            [
+                {
+                    "chunk_id": deterministic_id,
+                    "repo": "repo",
+                    "path": "repo/file.py",
+                    "text_hash": "abcdef",  # Now includes text_hash from BM25 search
+                    "score": 5.0,
+                }
+            ],
+            sql_store,
+        )
+
+        # Verify the new lookup flow was used
+        sql_store.get_repo_by_name.assert_called_once_with("repo")
+        sql_store.get_file_id.assert_called_once_with(1, "repo/file.py")
+        sql_store.get_chunk_by_content_identity.assert_called_once_with(1, 2, "abcdef")
+        sql_store.get_chunk_by_id.assert_not_called()
+        assert hydrated[0]["start_line"] == 10
+        assert hydrated[0]["chunk_id"] == deterministic_id
 
 
 @pytest.fixture
@@ -164,11 +237,13 @@ class TestSearchBackendIntegration:
                 "path": "test.py",
             }
         ]
-        real_backend.lance_store.upsert_chunks(
-            "test-repo", chunks_to_upsert, model="small"
-        )
+        real_backend.lance_store.upsert_chunks("test-repo", chunks_to_upsert, model="small")
         real_backend.sql_store.index_chunk_for_fts(
-            content_id=chunk_id, repo="test-repo", path="test.py", content=test_content
+            content_id=chunk_id,
+            repo="test-repo",
+            path="test.py",
+            content=test_content,
+            text_hash=text_hash,
         )
 
         # Verify FTS indexing worked
@@ -188,12 +263,11 @@ class TestSearchBackendIntegration:
         logging.info(f"Test: Search returned {len(results)} results")
         for i, result in enumerate(results):
             logging.info(
-                f"  Result {i}: chunk_id={result.get('chunk_id')}, score={result.get('score')}, repo={result.get('repo')}, path={result.get('path')}"
+                f"  Result {i}: chunk_id={result.get('chunk_id')}, "
+                f"score={result.get('score')}, repo={result.get('repo')}, path={result.get('path')}"
             )
 
         assert len(results) >= 1, f"Expected at least 1 result, got {len(results)}"
         assert "score" in results[0], f"Result missing 'score' field: {results[0]}"
         # Expect the production-format chunk ID
-        assert results[0]["chunk_id"] == chunk_id, (
-            f"Expected chunk_id {chunk_id}, got {results[0]['chunk_id']}"
-        )
+        assert results[0]["chunk_id"] == chunk_id, f"Expected chunk_id {chunk_id}, got {results[0]['chunk_id']}"

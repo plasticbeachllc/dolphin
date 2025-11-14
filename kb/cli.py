@@ -7,23 +7,20 @@ including knowledge base management, API serving, and persona management.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import typer
 
-# Import subcommand apps
-from kb.ingest.cli import app as kb_app
-from personas.src.personas import app as personas_app
-
 # Import kb CLI functions for top-level commands
+# Import subcommand apps
 from kb.ingest.cli import (
-    init as kb_init,
     add_repo as kb_add_repo,
-    rm_repo as kb_rm_repo,
+    app as kb_app,
     index as kb_index,
-    status as kb_status,
-    prune_ignored as kb_prune_ignored,
+    init as kb_init,
     list_files as kb_list_files,
+    prune_ignored as kb_prune_ignored,
+    rm_repo as kb_rm_repo,
+    status as kb_status,
 )
 
 
@@ -55,18 +52,13 @@ app = typer.Typer(
 
 @app.callback(invoke_without_command=True)
 def dolphin_callback(
-    version: bool = typer.Option(
-        False, "--version", "-v", help="Show version and exit"
-    ),
+    version: bool = typer.Option(False, "--version", "-v", help="Show version and exit"),
 ):
     version_callback(version)
 
 
 # Add subcommand apps
 app.add_typer(kb_app, name="kb", help="Knowledge base management commands")
-app.add_typer(
-    personas_app, name="personas", help="Persona management and generation commands"
-)
 
 
 # ==============================================================================
@@ -76,9 +68,7 @@ app.add_typer(
 
 @app.command()
 def init(
-    config_path: Optional[Path] = typer.Option(
-        None, "--config", help="Optional config path."
-    ),
+    config_path: Path | None = typer.Option(None, "--config", help="Optional config path."),
 ) -> None:
     """Initialize the knowledge store (config + SQLite + LanceDB collections)."""
     kb_init(config_path)
@@ -124,7 +114,7 @@ def index(
 
 @app.command()
 def status(
-    name: Optional[str] = typer.Argument(None, help="Optional repository name."),
+    name: str | None = typer.Argument(None, help="Optional repository name."),
 ) -> None:
     """Report knowledge store status with detailed repository listing."""
     kb_status(name)
@@ -152,12 +142,8 @@ def list_files(
 @app.command()
 def search(
     query: str = typer.Argument(..., help="Search query."),
-    repos: Optional[list[str]] = typer.Option(
-        None, "--repo", "-r", help="Repository name(s) to search."
-    ),
-    path_prefix: Optional[list[str]] = typer.Option(
-        None, "--path", "-p", help="Filter by path prefix."
-    ),
+    repos: list[str] | None = typer.Option(None, "--repo", "-r", help="Repository name(s) to search."),
+    path_prefix: list[str] | None = typer.Option(None, "--path", "-p", help="Filter by path prefix."),
     top_k: int = typer.Option(8, "--top-k", "-k", help="Number of results to return."),
     score_cutoff: float = typer.Option(
         0.0, "--score-cutoff", "-s", help="Minimum similarity score."
@@ -191,17 +177,17 @@ def search(
 
 def _search_local(
     query: str,
-    repos: Optional[list[str]],
-    path_prefix: Optional[list[str]],
+    repos: list[str] | None,
+    path_prefix: list[str] | None,
     top_k: int,
     score_cutoff: float,
     embed_model: str,
     show_content: bool,
 ) -> None:
     """Search using local backend without API server."""
-    from kb.config import load_config
-    from kb.api.search_backend import create_search_backend
     from kb.api.app import SearchRequest
+    from kb.api.search_backend import create_search_backend
+    from kb.config import load_config
 
     config = load_config()
 
@@ -235,8 +221,8 @@ def _search_local(
 
 def _search_remote(
     query: str,
-    repos: Optional[list[str]],
-    path_prefix: Optional[list[str]],
+    repos: list[str] | None,
+    path_prefix: list[str] | None,
     top_k: int,
     score_cutoff: float,
     embed_model: str,
@@ -244,6 +230,8 @@ def _search_remote(
 ) -> None:
     """Search using remote API server."""
     import requests
+    import requests.exceptions  # Import the exceptions module explicitly
+
     from kb.config import load_config
 
     config = load_config()

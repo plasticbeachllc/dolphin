@@ -22,19 +22,28 @@ def check_dependencies() -> tuple[bool, list[str]]:
 
     # Check for pytest-cov if coverage is needed
     try:
-        import pytest_cov
+        import importlib.util
+
+        if importlib.util.find_spec("pytest_cov") is None:
+            missing.append("pytest-cov")
     except ImportError:
         missing.append("pytest-cov")
 
     # Check for pytest-xdist for parallel execution
     try:
-        import xdist
+        import importlib.util
+
+        if importlib.util.find_spec("xdist") is None:
+            missing.append("pytest-xdist")
     except ImportError:
         missing.append("pytest-xdist")
 
     # Check for pytest-asyncio for async tests
     try:
-        import pytest_asyncio
+        import importlib.util
+
+        if importlib.util.find_spec("pytest_asyncio") is None:
+            missing.append("pytest-asyncio")
     except ImportError:
         missing.append("pytest-asyncio")
 

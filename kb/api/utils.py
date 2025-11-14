@@ -7,6 +7,8 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
+from kb.security import PathValidationError, PathValidator
+
 
 def validate_path_within_repo(file_path: Path, repo_root: Path) -> Path:
     """Validate that file_path is within repo_root, return resolved path.
@@ -22,18 +24,13 @@ def validate_path_within_repo(file_path: Path, repo_root: Path) -> Path:
         HTTPException: If path is outside repository or invalid
     """
     try:
-        resolved_path = file_path.resolve()
-        resolved_root = repo_root.resolve()
-
-        if not str(resolved_path).startswith(str(resolved_root)):
-            raise HTTPException(
-                status_code=403, detail=f"Path outside repository: {file_path}"
-            )
-
+        # Use PathValidator for secure path validation
+        validator = PathValidator(base_dir=repo_root)
+        resolved_path = validator.validate(file_path)
         return resolved_path
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise
+    except PathValidationError as e:
+        raise HTTPException(status_code=403, detail=f"Path validation failed: {e.reason} - {file_path}")
+    except Exception:
         raise HTTPException(status_code=400, detail=f"Invalid file path: {file_path}")
 
 
@@ -61,15 +58,10 @@ class GitRepository:
             RuntimeError: If the git command fails
         """
         try:
-            result = subprocess.check_output(
-                ["git", "-C", str(self.root), *args], stderr=subprocess.STDOUT
-            )
+            result = subprocess.check_output(["git", "-C", str(self.root), *args], stderr=subprocess.STDOUT)
             return result.decode("utf-8").strip()
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(
-                f"Git command failed: {' '.join(args)}\n"
-                f"{e.output.decode('utf-8', errors='ignore')}"
-            )
+            raise RuntimeError(f"Git command failed: {' '.join(args)}\n{e.output.decode('utf-8', errors='ignore')}")
 
     def get_current_commit(self) -> str:
         """Get the current commit SHA.

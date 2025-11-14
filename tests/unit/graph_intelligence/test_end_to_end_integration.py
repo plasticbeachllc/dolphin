@@ -4,19 +4,20 @@ Tests the full integration flow without requiring real tiktoken/embeddings.
 Uses mocked components for embedding while testing real graph intelligence.
 """
 
-import pytest
-import tempfile
 import shutil
-from pathlib import Path
-from datetime import datetime
-from sqlmodel import Session, select
 import subprocess
+import tempfile
+from datetime import datetime
+from pathlib import Path
 
-from kb.store.sql_models import CodeNode, CodeEdge, GraphMetrics
-from kb.store.graph_store import GraphStore
-from kb.store.sqlite_meta import SQLiteMetadataStore
+import pytest
+from sqlmodel import Session, select
+
 from kb.graph_intelligence.graph_manager import GraphManager
 from kb.ingest.graph_helpers import extract_graph_from_file, store_graph_data
+from kb.store.graph_store import GraphStore
+from kb.store.sql_models import CodeEdge, CodeNode, GraphMetrics
+from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
 @pytest.fixture
@@ -50,7 +51,8 @@ def temp_git_repo():
 
     # Create Python files
     main_py = repo_path / "main.py"
-    main_py.write_text("""
+    main_py.write_text(
+        """
 def main():
     result = process()
     display(result)
@@ -66,7 +68,8 @@ def transform(data):
 
 def display(result):
     print(result)
-""")
+"""
+    )
 
     # Commit
     subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
@@ -271,7 +274,7 @@ class TestEndToEndIntegration:
         )
 
         # Build graph (creates cache state)
-        initial_graph = graph_manager.get_graph()
+        graph_manager.get_graph()
         assert graph_manager.validator.is_cache_valid()
 
         # Get initial cache state
@@ -432,10 +435,11 @@ class TestEndToEndIntegration:
 
         # Community detection should run (if python-louvain available)
         try:
-            import community as community_louvain
+            import importlib.util
 
-            assert "community" in metrics
-            assert len(metrics["community"]) > 0
+            if importlib.util.find_spec("community") is not None:
+                assert "community" in metrics
+                assert len(metrics["community"]) > 0
         except ImportError:
             # python-louvain not available, community key won't exist
             pass
@@ -501,7 +505,8 @@ class TestEdgeCases:
         """Test extraction from non-Python files."""
         # Create TypeScript file
         ts_file = temp_git_repo / "app.ts"
-        ts_file.write_text("""
+        ts_file.write_text(
+            """
 function hello() {
     console.log("Hello");
 }
@@ -509,7 +514,8 @@ function hello() {
 function world() {
     hello();
 }
-""")
+"""
+        )
 
         # Extract graph
         text = ts_file.read_text()
@@ -525,11 +531,13 @@ function world() {
         """Test handling of malformed code."""
         # Create file with syntax errors
         bad_py = temp_git_repo / "bad.py"
-        bad_py.write_text("""
+        bad_py.write_text(
+            """
 def broken(
     missing_paren:
     pass
-""")
+"""
+        )
 
         # Extract should handle gracefully
         text = bad_py.read_text()

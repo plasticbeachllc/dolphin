@@ -1,10 +1,12 @@
 """Unit tests for pipeline git operations."""
 
-import pytest
 import subprocess
-from kb.ingest.pipeline import IngestionPipeline
+
+import pytest
+
 from kb.config import KBConfig
-from kb.store import SQLiteMetadataStore, LanceDBStore
+from kb.ingest.pipeline import IngestionPipeline
+from kb.store import LanceDBStore, SQLiteMetadataStore
 
 
 class TestPipelineGitOperations:
@@ -144,9 +146,7 @@ class TestPipelineIgnorePatterns:
     @pytest.fixture
     def pipeline(self, tmp_path):
         """Create a pipeline instance for testing."""
-        config = KBConfig(
-            store_root=tmp_path, embedding_provider="stub", ignore=["*.log", "tmp"]
-        )
+        config = KBConfig(store_root=tmp_path, embedding_provider="stub", ignore=["*.log", "tmp"])
         metadata = SQLiteMetadataStore(tmp_path / "test.db")
         metadata.initialize()
         lancedb = LanceDBStore(tmp_path / "lancedb")

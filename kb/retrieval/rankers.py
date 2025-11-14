@@ -11,13 +11,16 @@ Mathematical Background:
 
 from __future__ import annotations
 
-from typing import Sequence, Any, Callable
 import math
+from collections.abc import Callable, Sequence
+from typing import Any
+
+from ..constants.retrieval_config import RETRIEVAL_PARAMS
 
 
 def reciprocal_rank_fusion(
     result_lists: Sequence[Sequence[dict[str, Any]]],
-    k: int = 60,
+    k: int | None = None,
     id_field: str = "chunk_id",
     score_field: str = "score",
 ) -> list[dict[str, Any]]:
@@ -30,11 +33,11 @@ def reciprocal_rank_fusion(
     - d: document
     - r: ranking (e.g., vector search, BM25)
     - rank_r(d): position of document d in ranking r (1-indexed)
-    - k: constant to prevent high scores for top-ranked items (default: 60)
+    - k: constant to prevent high scores for top-ranked items
 
     Args:
         result_lists: List of result lists to combine
-        k: RRF constant (higher = more conservative, default: 60)
+        k: RRF constant (higher = more conservative). If None, uses RETRIEVAL_PARAMS.RRF_K
         id_field: Field name containing unique document identifier
         score_field: Field name containing original scores
 
@@ -50,6 +53,10 @@ def reciprocal_rank_fusion(
     """
     if not result_lists:
         return []
+
+    # Use configured RRF_K if not explicitly provided
+    if k is None:
+        k = RETRIEVAL_PARAMS.RRF_K
 
     # Collect all unique documents across all rankings
     all_documents = {}
@@ -76,9 +83,7 @@ def reciprocal_rank_fusion(
 
             # Keep original scores for reference
             original_score = result.get(score_field, 0.0)
-            all_documents[doc_id].setdefault("original_scores", []).append(
-                original_score
-            )
+            all_documents[doc_id].setdefault("original_scores", []).append(original_score)
 
             # Copy other metadata from first occurrence
             if len(all_documents[doc_id]["rankings"]) == 1:
@@ -87,9 +92,7 @@ def reciprocal_rank_fusion(
                         all_documents[doc_id][key] = value
 
     # Sort by RRF score (descending) and return
-    fused_results = sorted(
-        all_documents.values(), key=lambda x: x["rrf_score"], reverse=True
-    )
+    fused_results = sorted(all_documents.values(), key=lambda x: x["rrf_score"], reverse=True)
 
     return fused_results
 
@@ -131,8 +134,7 @@ def weighted_fusion(
                 normalized = [
                     {
                         **r,
-                        "normalized_score": (r.get(score_field, 0.0) - min_score)
-                        / (max_score - min_score),
+                        "normalized_score": (r.get(score_field, 0.0) - min_score) / (max_score - min_score),
                     }
                     for r in result_list
                 ]
@@ -140,12 +142,7 @@ def weighted_fusion(
                 normalized = [{**r, "normalized_score": 1.0} for r in result_list]
             normalized_lists.append(normalized)
         else:
-            normalized_lists.append(
-                [
-                    {**r, "normalized_score": r.get(score_field, 0.0)}
-                    for r in result_list
-                ]
-            )
+            normalized_lists.append([{**r, "normalized_score": r.get(score_field, 0.0)} for r in result_list])
 
     # Combine scores
     all_documents = {}
@@ -174,9 +171,7 @@ def weighted_fusion(
                         all_documents[doc_id][key] = value
 
     # Sort by fused score (descending)
-    fused_results = sorted(
-        all_documents.values(), key=lambda x: x["fused_score"], reverse=True
-    )
+    fused_results = sorted(all_documents.values(), key=lambda x: x["fused_score"], reverse=True)
 
     return fused_results
 
@@ -242,10 +237,7 @@ def maximal_marginal_relevance(
                 candidate_query_vector = candidate.get("query_vector", query_vector)
 
                 max_similarity = max(
-                    cosine_similarity(
-                        candidate_query_vector, s.get("query_vector", query_vector)
-                    )
-                    for s in selected
+                    cosine_similarity(candidate_query_vector, s.get("query_vector", query_vector)) for s in selected
                 )
                 diversity_penalty = max_similarity
 
@@ -269,11 +261,7 @@ def maximal_marginal_relevance(
 
         selected.append(best_candidate)
         # Remove the original candidate (not the copy) from the list
-        original_index = next(
-            i
-            for i, c in enumerate(candidates)
-            if c.get(id_field) == best_candidate.get(id_field)
-        )
+        original_index = next(i for i, c in enumerate(candidates) if c.get(id_field) == best_candidate.get(id_field))
         candidates.pop(original_index)
 
     return selected

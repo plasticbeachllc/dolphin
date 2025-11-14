@@ -1,6 +1,7 @@
 """Unit tests for Markdown chunking with heading detection."""
 
 import textwrap
+
 from kb.chunkers.md_chunker import chunk_markdown
 from kb.hashing import canonicalize_text
 
@@ -10,7 +11,8 @@ class TestMarkdownChunker:
 
     def test_markdown_heading_detection(self):
         """Test heading level detection and extraction."""
-        md = textwrap.dedent("""
+        md = textwrap.dedent(
+            """
         # Title
 
         Some intro text.
@@ -23,7 +25,8 @@ class TestMarkdownChunker:
         ## Section 2
 
         More content
-        """)
+        """
+        )
         chunks = chunk_markdown(md, model="small", token_target=20)
 
         assert isinstance(chunks, list)
@@ -42,7 +45,8 @@ class TestMarkdownChunker:
 
     def test_markdown_h1_h2_h3_extraction(self):
         """Test extraction of H1-H3 heading metadata."""
-        md = textwrap.dedent("""
+        md = textwrap.dedent(
+            """
         # Main Title
 
         Introduction paragraph.
@@ -58,7 +62,8 @@ class TestMarkdownChunker:
         ## Second Section
 
         More content.
-        """)
+        """
+        )
         chunks = chunk_markdown(md, model="small", token_target=30)
 
         # Should have chunks with heading metadata
@@ -74,7 +79,8 @@ class TestMarkdownChunker:
 
     def test_markdown_heading_context_preservation(self):
         """Test heading context preservation in chunk metadata."""
-        md = textwrap.dedent("""
+        md = textwrap.dedent(
+            """
         # Document Title
 
         This is the introduction.
@@ -90,7 +96,8 @@ class TestMarkdownChunker:
         ## Chapter 2
 
         Chapter 2 content.
-        """)
+        """
+        )
         chunks = chunk_markdown(md, model="small", token_target=25)
 
         # Find a chunk in Section 1.1
@@ -105,7 +112,8 @@ class TestMarkdownChunker:
 
     def test_markdown_heading_stripping_from_embedded_content(self):
         """Test that headings are stripped from embedded content but preserved as metadata."""
-        md = textwrap.dedent("""
+        md = textwrap.dedent(
+            """
         # Main Heading
 
         Content under main heading.
@@ -113,7 +121,8 @@ class TestMarkdownChunker:
         ## Subheading
 
         Content under subheading.
-        """)
+        """
+        )
         chunks = chunk_markdown(md, model="small", token_target=50)
 
         for chunk in chunks:
@@ -128,7 +137,8 @@ class TestMarkdownChunker:
 
     def test_markdown_section_chunking_logical_boundaries(self):
         """Test logical section boundaries in Markdown."""
-        md = textwrap.dedent("""
+        md = textwrap.dedent(
+            """
         # Title
 
         First paragraph.
@@ -140,7 +150,8 @@ class TestMarkdownChunker:
         Content in new section.
 
         Another paragraph in the same section.
-        """)
+        """
+        )
         chunks = chunk_markdown(md, model="small", token_target=30)
 
         # Should create chunks that respect section boundaries
@@ -154,7 +165,8 @@ class TestMarkdownChunker:
 
     def test_markdown_code_block_preservation(self):
         """Test code block preservation in Markdown chunks."""
-        md = textwrap.dedent("""
+        md = textwrap.dedent(
+            """
         # Code Example
 
         Here is some code:
@@ -165,7 +177,8 @@ class TestMarkdownChunker:
         ```
 
         And here is inline `code`.
-        """)
+        """
+        )
         chunks = chunk_markdown(md, model="small", token_target=40)
 
         # Should preserve code blocks
@@ -178,7 +191,8 @@ class TestMarkdownChunker:
 
     def test_markdown_list_item_handling(self):
         """Test list item handling in Markdown."""
-        md = textwrap.dedent("""
+        md = textwrap.dedent(
+            """
         # List Examples
 
         - First item
@@ -188,7 +202,8 @@ class TestMarkdownChunker:
 
         1. Numbered item
         2. Another numbered item
-        """)
+        """
+        )
         chunks = chunk_markdown(md, model="small", token_target=30)
 
         # Should handle lists without crashing
@@ -205,7 +220,8 @@ class TestMarkdownChunker:
 
     def test_markdown_yaml_front_matter(self):
         """Test YAML front matter handling in Markdown."""
-        md = textwrap.dedent("""
+        md = textwrap.dedent(
+            """
         ---
         title: "Document Title"
         author: "John Doe"
@@ -215,7 +231,8 @@ class TestMarkdownChunker:
         # Actual Content
 
         This is the main content after front matter.
-        """)
+        """
+        )
         chunks = chunk_markdown(md, model="small", token_target=50)
 
         # Should handle front matter without crashing
@@ -233,7 +250,8 @@ class TestMarkdownChunker:
 
     def test_markdown_mixed_content_types(self):
         """Test Markdown with mixed content types."""
-        md = textwrap.dedent("""
+        md = textwrap.dedent(
+            """
         # Mixed Content
 
         **Bold text** and *italic text*.
@@ -247,7 +265,8 @@ class TestMarkdownChunker:
         | Table | Header |
         |-------|--------|
         | Cell  | Data   |
-        """)
+        """
+        )
         chunks = chunk_markdown(md, model="small", token_target=40)
 
         # Should handle all Markdown elements without crashing
@@ -299,7 +318,8 @@ class TestMarkdownChunker:
 
     def test_markdown_paragraph_grouping(self):
         """Test paragraph grouping in logical chunks."""
-        md = textwrap.dedent("""
+        md = textwrap.dedent(
+            """
         # Multiple Paragraphs
 
         First paragraph with some text.
@@ -311,7 +331,8 @@ class TestMarkdownChunker:
         ## New Section
 
         Paragraph in new section.
-        """)
+        """
+        )
         chunks = chunk_markdown(md, model="small", token_target=50)
 
         # Should group related paragraphs together

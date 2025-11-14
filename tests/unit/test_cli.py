@@ -1,10 +1,12 @@
 """Comprehensive unit tests for CLI commands."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 from typer.testing import CliRunner
-from kb.ingest.cli import app, _read_config_template, _build_pipeline
+
 from kb.config import KBConfig
+from kb.ingest.cli import _build_pipeline, _read_config_template, app
 
 runner = CliRunner()
 
@@ -341,6 +343,7 @@ class TestBuildPipeline:
     def test_build_pipeline_with_openai_and_api_key(self, tmp_path, monkeypatch):
         """Test building pipeline with OpenAI provider and API key."""
         from unittest.mock import patch
+
         from kb.embeddings.provider import OpenAIEmbeddingProvider
 
         config = KBConfig(
@@ -353,9 +356,7 @@ class TestBuildPipeline:
 
         # Mock create_provider to avoid real API validation
         with patch("kb.ingest.cli.create_provider") as mock_create:
-            mock_provider = OpenAIEmbeddingProvider(
-                api_key="test-key-12345", validate_key=False
-            )
+            mock_provider = OpenAIEmbeddingProvider(api_key="test-key-12345", validate_key=False)
             mock_create.return_value = mock_provider
 
             pipeline = _build_pipeline(config)

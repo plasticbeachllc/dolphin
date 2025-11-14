@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Iterable
+from collections.abc import Iterable
 from pathlib import Path
 
 try:
     import tomllib  # Python 3.11+
 except ImportError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore[import-not-found]
+    import tomli as tomllib  # type: ignore[import-not-found,no-redef]
 
 _log = logging.getLogger(__name__)
 
@@ -125,9 +125,7 @@ def load_repo_ignores(repo_root: Path) -> tuple[set[str], set[str]]:
             if isinstance(ignore_section.get("patterns"), list):
                 patterns.extend([str(x) for x in ignore_section.get("patterns", [])])
             if isinstance(ignore_section.get("exceptions"), list):
-                exceptions.extend(
-                    [str(x) for x in ignore_section.get("exceptions", [])]
-                )
+                exceptions.extend([str(x) for x in ignore_section.get("exceptions", [])])
 
         # Check indexing section
         indexing = data.get("indexing") or {}

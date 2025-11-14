@@ -7,7 +7,7 @@ search result chunks.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from kb.store.graph_store import GraphStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
@@ -38,11 +38,11 @@ class GraphContextEnricher:
 
     def enrich_search_results(
         self,
-        results: List[Dict[str, Any]],
+        results: list[dict[str, Any]],
         include_callsites: bool = True,
         include_implementations: bool = True,
         include_dependencies: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Enrich search results with graph context.
 
         Args:
@@ -74,11 +74,11 @@ class GraphContextEnricher:
 
     def _get_graph_context_for_result(
         self,
-        result: Dict[str, Any],
+        result: dict[str, Any],
         include_callsites: bool = True,
         include_implementations: bool = True,
         include_dependencies: bool = True,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Get graph context for a single search result.
 
         Args:
@@ -90,33 +90,51 @@ class GraphContextEnricher:
         Returns:
             Graph context dict or None if no graph data available
         """
-        repo = result.get("repo")
-        path = result.get("path")
-        start_line = result.get("start_line")
-        end_line = result.get("end_line")
+        try:
+            repo = result.get("repo")
+            path = result.get("path")
+            start_line = result.get("start_line")
+            end_line = result.get("end_line")
 
-        if not all([repo, path, start_line is not None, end_line is not None]):
-            return None
+            if not all([repo, path, start_line is not None, end_line is not None]):
+                return None
 
-        # Get file_id from SQL store
-        repo_info = self.sql_store.get_repo_by_name(repo)
-        if not repo_info:
-            return None
+            # Get file_id from SQL store
+            # Type narrowing: repo.get() returns Any | None, cast to str after validation
+            repo_str = str(repo) if repo else None
+            if not repo_str:
+                return None
+            repo_info = self.sql_store.get_repo_by_name(repo_str)
+            if not repo_info:
+                return None
 
-        repo_id = repo_info["id"]
-        file_id = self.sql_store.get_file_id(repo_id, path)
-        if not file_id:
+            repo_id = repo_info["id"]
+            # Type narrowing: path.get() returns Any | None, cast to str after validation
+            path_str = str(path) if path else None
+            if not path_str:
+                return None
+            file_id = self.sql_store.get_file_id(repo_id, path_str)
+            if not file_id:
+                return None
+        except Exception:
+            # Handle any errors gracefully by returning None
             return None
 
         # Get all nodes for this file
         all_nodes = self.graph_store.get_nodes_for_file(file_id)
 
         # Filter nodes that overlap with the result's line range
+        # Type narrowing: start_line and end_line are validated as not None above
+        start_line_int = int(start_line) if start_line is not None else 0
+        end_line_int = int(end_line) if end_line is not None else 0
         overlapping_nodes = [
             node
             for node in all_nodes
             if self._ranges_overlap(
-                node["start_line"], node["end_line"], start_line, end_line
+                int(node["start_line"]) if node.get("start_line") is not None else 0,
+                int(node["end_line"]) if node.get("end_line") is not None else 0,
+                start_line_int,
+                end_line_int,
             )
         ]
 
@@ -149,9 +167,7 @@ class GraphContextEnricher:
             context["relationships"].extend(relationships)
 
         # Remove duplicate relationships
-        context["relationships"] = self._deduplicate_relationships(
-            context["relationships"]
-        )
+        context["relationships"] = self._deduplicate_relationships(context["relationships"])
 
         return context if context["nodes"] else None
 
@@ -161,7 +177,7 @@ class GraphContextEnricher:
         include_callsites: bool = True,
         include_implementations: bool = True,
         include_dependencies: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get relationships for a node.
 
         Args:
@@ -176,9 +192,7 @@ class GraphContextEnricher:
         relationships = []
 
         # Get outgoing edges (what this node calls/uses/extends)
-        outgoing_edges = self.graph_store.get_outgoing_edges(
-            node_id, limit=self.max_edges_per_node
-        )
+        outgoing_edges = self.graph_store.get_outgoing_edges(node_id, limit=self.max_edges_per_node)
 
         for edge in outgoing_edges:
             edge_type = edge["edge_type"]
@@ -275,9 +289,7 @@ class GraphContextEnricher:
         """
         return start1 <= end2 and start2 <= end1
 
-    def _deduplicate_relationships(
-        self, relationships: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    def _deduplicate_relationships(self, relationships: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Remove duplicate relationships.
 
         Args:
@@ -313,7 +325,7 @@ class GraphContextEnricher:
         return deduped
 
 
-def format_graph_context_for_llm(graph_context: Dict[str, Any]) -> str:
+def format_graph_context_for_llm(graph_context: dict[str, Any]) -> str:
     """Format graph context into human-readable text for LLM consumption.
 
     Args:
@@ -360,11 +372,7 @@ def format_graph_context_for_llm(graph_context: Dict[str, Any]) -> str:
             if r["type"] == "inherits" and r["direction"] == "outgoing"
         ]
         implements = [r for r in relationships if r["type"] == "implements"]
-        imports = [
-            r
-            for r in relationships
-            if r["type"] == "imports" and r["direction"] == "outgoing"
-        ]
+        imports = [r for r in relationships if r["type"] == "imports" and r["direction"] == "outgoing"]
 
         if calls_to:
             lines.append("### Calls:")

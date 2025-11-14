@@ -1,310 +1,352 @@
 /**
- * Integration tests for KB lifecycle management in VSCode extension.
- * Tests KB server startup, shutdown, restart, and health monitoring.
+ * KB lifecycle management tests using mock infrastructure.
+ * Tests KB server startup, health checks, and status monitoring with mocks.
  */
 
-import * as assert from 'assert';
-import * as vscode from 'vscode';
-import * as path from 'path';
+import * as assert from "assert";
+import * as vscode from "vscode";
+import {
+  setupMockEnvironment,
+  teardownMockEnvironment,
+  resetMocks,
+  getMockEnvironment,
+  configureMockKB,
+} from "../helpers/mock-manager";
+import { activateExtension, assertCommandExists } from "../helpers/shared-fixtures";
+import { TEST_COMMANDS } from "../helpers/test-constants";
 
-describe('KB Lifecycle Management', () => {
-    let extension: vscode.Extension<any> | undefined;
+describe("KB Lifecycle Management", function () {
+  this.timeout(10000);
 
-    suiteSetup(async function () {
-        this.timeout(15000); // 15 second timeout for extension activation (reduced from 30s)
+  before(async () => {
+    await setupMockEnvironment();
+    await activateExtension();
+  });
 
-        // Get the extension
-        extension = vscode.extensions.getExtension('pb.dolphin');
-        assert.ok(extension, 'Extension should be installed');
+  after(async () => {
+    await teardownMockEnvironment();
+  });
 
-        // Ensure extension is activated
-        if (!extension.isActive) {
-            await extension.activate();
-        }
+  beforeEach(() => {
+    resetMocks();
+  });
+
+  describe("KB Server Health", () => {
+    it("Mock KB server should be running", async () => {
+      const { kbServer } = getMockEnvironment();
+
+      assert.ok(kbServer, "KB server mock should be initialized");
+      assert.ok(kbServer.port > 0, "KB server should have valid port");
+      assert.strictEqual(kbServer.port, 7778, "Should use configured test port");
     });
 
-    suite('KB Auto-Start', () => {
-        test('KB server starts automatically on extension activation', async function () {
-            this.timeout(8000);
+    it("KB server should respond to health checks", async () => {
+      const { kbServer } = getMockEnvironment();
 
-            assert.ok(extension, 'Extension should be available');
-            assert.ok(extension.isActive, 'Extension should be activated');
+      // Configure KB as healthy
+      configureMockKB({ health: true });
 
-            // Give KB time to start
-            await new Promise(resolve => setTimeout(resolve, 5000));
-
-            // Extension should have KB-related exports or status
-            const exports = extension.exports;
-
-            // Check if KB manager or related services are available
-            // This depends on what the extension exports
-            if (exports && exports.kbManager) {
-                const status = await exports.kbManager.getStatus();
-                assert.ok(status, 'KB status should be available');
-            }
+      const http = require("http");
+      const response = await new Promise<any>((resolve, _reject) => {
+        http.get(`http://localhost:${kbServer.port}/health`, (res: any) => {
+          let data = "";
+          res.on("data", (chunk: any) => {
+            data += chunk;
+          });
+          res.on("end", () => {
+            resolve({ status: res.statusCode, data: JSON.parse(data) });
+          });
         });
+      });
 
-        test('KB server responds to health checks', async function () {
-            this.timeout(5000);
-
-            if (!extension || !extension.exports || !extension.exports.kbManager) {
-                this.skip();
-                return;
-            }
-
-            const kbManager = extension.exports.kbManager;
-            const status = await kbManager.getStatus();
-
-            // Verify KB is running or at least accessible
-            assert.ok(
-                status.running !== undefined,
-                'KB status should indicate running state'
-            );
-        });
-
-        test('KB server port is assigned correctly', async function () {
-            this.timeout(5000);
-
-            if (!extension || !extension.exports || !extension.exports.kbManager) {
-                this.skip();
-                return;
-            }
-
-            const kbManager = extension.exports.kbManager;
-            const status = await kbManager.getStatus();
-
-            // Should have a valid port
-            if (status.port !== undefined) {
-                assert.ok(
-                    status.port >= 1024 && status.port <= 65535,
-                    'KB port should be in valid range'
-                );
-            }
-        });
+      assert.strictEqual(response.status, 200, "Health check should return 200");
+      assert.strictEqual(response.data.status, "ok", "Should return ok status");
     });
 
-    suite('KB Restart Functionality', () => {
-        test('KB can be manually restarted via command', async function () {
-            this.timeout(20000);
+    it("KB server should report unhealthy state when configured", async () => {
+      const { kbServer } = getMockEnvironment();
 
-            // Execute restart command
-            try {
-                await vscode.commands.executeCommand('dolphin.kb.restart');
+      // Configure KB as unhealthy
+      configureMockKB({ health: false });
 
-                // Give time for restart
-                await new Promise(resolve => setTimeout(resolve, 3000));
-
-                // KB should be running again
-                if (extension && extension.exports && extension.exports.kbManager) {
-                    const status = await extension.exports.kbManager.getStatus();
-                    assert.ok(status, 'KB status should be available after restart');
-                }
-            } catch (error) {
-                // Command might not be available in test environment
-                this.skip();
-            }
+      const http = require("http");
+      const response = await new Promise<any>((resolve, _reject) => {
+        http.get(`http://localhost:${kbServer.port}/health`, (res: any) => {
+          let data = "";
+          res.on("data", (chunk: any) => {
+            data += chunk;
+          });
+          res.on("end", () => {
+            resolve({ status: res.statusCode, data: JSON.parse(data) });
+          });
         });
+      });
 
-        test('KB restarts after unexpected crash', async function () {
-            this.timeout(30000);
-            this.skip(); // Skip as simulating crashes is complex
+      assert.strictEqual(response.status, 503, "Unhealthy check should return 503");
+      assert.strictEqual(response.data.status, "error", "Should return error status");
+    });
+  });
 
-            // This test would:
-            // 1. Kill KB process
-            // 2. Wait for auto-restart mechanism
-            // 3. Verify KB is running again
-        });
-
-        test('KB maintains state across restarts', async function () {
-            this.timeout(20000);
-            this.skip(); // Skip as this requires actual KB operations
-
-            // This test would:
-            // 1. Index some content
-            // 2. Restart KB
-            // 3. Verify indexed content is still accessible
-        });
+  describe("KB Commands", () => {
+    it("KB status command should be registered", async () => {
+      await assertCommandExists(TEST_COMMANDS.KB_SHOW_STATUS);
     });
 
-    suite('KB Status Monitoring', () => {
-        test('KB status can be queried via command', async function () {
-            this.timeout(5000);
-
-            // Check if command exists first
-            const commands = await vscode.commands.getCommands(true);
-            if (!commands.includes('dolphin.kb.showStatus')) {
-                this.skip();
-                return;
-            }
-
-            try {
-                // Add a race condition with timeout to prevent hanging
-                await Promise.race([
-                    vscode.commands.executeCommand('dolphin.kb.showStatus'),
-                    new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('Command timeout')), 3000)
-                    )
-                ]);
-                // Command should execute without error
-                assert.ok(true, 'Status command executed');
-            } catch (error) {
-                // Command might not be available or timed out
-                this.skip();
-            }
-        });
-
-        test('KB status updates are emitted', async function () {
-            this.timeout(8000);
-
-            if (!extension || !extension.exports || !extension.exports.kbManager) {
-                this.skip();
-                return;
-            }
-
-            const kbManager = extension.exports.kbManager;
-
-            // Listen for status updates
-            let statusReceived = false;
-
-            if (kbManager.onStatusChange) {
-                const disposable = kbManager.onStatusChange(() => {
-                    statusReceived = true;
-                });
-
-                // Trigger a status check
-                await kbManager.getStatus();
-
-                // Clean up
-                disposable?.dispose();
-            }
-
-            // This test is informational - status updates may not always fire
-        });
-
-        test('KB error states are reported', async function () {
-            this.timeout(5000);
-            this.skip(); // Skip as simulating errors is complex
-
-            // This test would verify that KB errors are properly reported
-        });
+    it("KB restart command should be registered", async () => {
+      await assertCommandExists(TEST_COMMANDS.KB_RESTART);
     });
 
-    suite('KB Process Management', () => {
-        test('KB process is cleaned up on extension deactivation', async function () {
-            this.timeout(5000);
-            this.skip(); // Skip as we cannot safely deactivate extension in tests
-
-            // This test would verify KB process terminates when extension deactivates
-        });
-
-        test('KB handles multiple restart requests gracefully', async function () {
-            this.timeout(20000);
-
-            if (!extension || !extension.exports || !extension.exports.kbManager) {
-                this.skip();
-                return;
-            }
-
-            const kbManager = extension.exports.kbManager;
-
-            // Send multiple restart requests
-            const restarts = [];
-            for (let i = 0; i < 3; i++) {
-                restarts.push(
-                    kbManager.restart?.() || Promise.resolve()
-                );
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-
-            // Wait for all to complete
-            await Promise.all(restarts);
-
-            // KB should still be running
-            const status = await kbManager.getStatus();
-            assert.ok(status, 'KB should be operational after multiple restarts');
-        });
-
-        test('KB respects workspace folder changes', async function () {
-            this.timeout(5000);
-            this.skip(); // Skip as changing workspace folders in tests is complex
-
-            // This test would verify KB adjusts to workspace changes
-        });
+    it("KB status command should execute", async () => {
+      // Command should execute without throwing
+      await vscode.commands.executeCommand(TEST_COMMANDS.KB_SHOW_STATUS);
+      // If we get here, command executed (may or may not show UI in headless mode)
     });
 
-    suite('KB Configuration', () => {
-        test('KB uses correct configuration from settings', async function () {
-            this.timeout(5000);
+    it("KB restart command should execute", async () => {
+      // Command should execute without throwing
+      await vscode.commands.executeCommand(TEST_COMMANDS.KB_RESTART);
+      // If we get here, command executed
+    });
+  });
 
-            const config = vscode.workspace.getConfiguration('dolphin');
+  describe("KB API Operations", () => {
+    it("KB should handle search requests", async () => {
+      const { kbServer } = getMockEnvironment();
 
-            // Verify KB-related configuration is available
-            const kbPort = config.get<number>('kb.port');
-            const kbAutoStart = config.get<boolean>('kb.autoStart');
+      configureMockKB({
+        searchResults: [
+          {
+            chunk_id: "test-1",
+            repo: "test-repo",
+            path: "file.ts",
+            content: "test content",
+            score: 0.9,
+            line_start: 1,
+            line_end: 3,
+          },
+        ],
+      });
 
-            // These might be undefined if not set
-            assert.ok(
-                kbPort === undefined || typeof kbPort === 'number',
-                'KB port should be a number if set'
-            );
-            assert.ok(
-                kbAutoStart === undefined || typeof kbAutoStart === 'boolean',
-                'KB autoStart should be a boolean if set'
-            );
+      const http = require("http");
+      const response = await new Promise<any>((resolve, reject) => {
+        const postData = JSON.stringify({ query: "test", top_k: 10 });
+        const options = {
+          hostname: "localhost",
+          port: kbServer.port,
+          path: "/search",
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(postData),
+          },
+        };
+
+        const req = http.request(options, (res: any) => {
+          let data = "";
+          res.on("data", (chunk: any) => {
+            data += chunk;
+          });
+          res.on("end", () => {
+            resolve({ status: res.statusCode, data: JSON.parse(data) });
+          });
         });
 
-        test('KB configuration changes trigger restart', async function () {
-            this.timeout(8000);
-            this.skip(); // Skip as modifying configuration in tests is complex
+        req.on("error", reject);
+        req.write(postData);
+        req.end();
+      });
 
-            // This test would:
-            // 1. Change KB configuration
-            // 2. Verify KB restarts with new config
-        });
+      assert.strictEqual(response.status, 200, "Search should return 200");
+      assert.ok(response.data.hits, "Should return hits");
+      assert.strictEqual(response.data.hits.length, 1, "Should return configured result");
+      assert.strictEqual(
+        response.data.hits[0].chunk_id,
+        "test-1",
+        "Should return configured chunk"
+      );
     });
 
-    suite('KB Performance', () => {
-        test('KB starts within reasonable time', async function () {
-            this.timeout(8000);
+    it("KB should return metadata", async () => {
+      const { kbServer } = getMockEnvironment();
 
-            if (!extension || !extension.exports || !extension.exports.kbManager) {
-                this.skip();
-                return;
-            }
+      configureMockKB({
+        metadata: {
+          repos: [{ name: "custom-repo", path: "/custom/path", files: 5, chunks: 25 }],
+          total_chunks: 25,
+          total_files: 5,
+        },
+      });
 
-            const startTime = Date.now();
-
-            // Trigger a restart to measure startup time
-            const kbManager = extension.exports.kbManager;
-            if (kbManager.restart) {
-                await kbManager.restart();
-            }
-
-            // Check status
-            await kbManager.getStatus();
-
-            const elapsed = Date.now() - startTime;
-
-            // KB should start within 10 seconds
-            assert.ok(elapsed < 10000, `KB startup took ${elapsed}ms, should be < 10000ms`);
+      const http = require("http");
+      const response = await new Promise<any>((resolve, _reject) => {
+        http.get(`http://localhost:${kbServer.port}/metadata/test`, (res: any) => {
+          let data = "";
+          res.on("data", (chunk: any) => {
+            data += chunk;
+          });
+          res.on("end", () => {
+            resolve({ status: res.statusCode, data: JSON.parse(data) });
+          });
         });
+      });
 
-        test('KB status checks are fast', async function () {
-            this.timeout(5000);
-
-            if (!extension || !extension.exports || !extension.exports.kbManager) {
-                this.skip();
-                return;
-            }
-
-            const kbManager = extension.exports.kbManager;
-
-            const startTime = Date.now();
-            await kbManager.getStatus();
-            const elapsed = Date.now() - startTime;
-
-            // Status check should be fast (< 1 second)
-            assert.ok(elapsed < 1000, `Status check took ${elapsed}ms, should be < 1000ms`);
-        });
+      assert.strictEqual(response.status, 200, "Metadata should return 200");
+      assert.ok(response.data.repos, "Should have repos");
+      assert.strictEqual(response.data.total_chunks, 25, "Should return configured total");
     });
+
+    it("KB should log request history", async () => {
+      const { kbServer } = getMockEnvironment();
+
+      const requestsBefore = kbServer.getRequestHistory().length;
+
+      // Make multiple requests
+      const http = require("http");
+      await new Promise((resolve) => {
+        http.get(`http://localhost:${kbServer.port}/health`, (res: any) => {
+          res.on("data", () => {});
+          res.on("end", resolve);
+        });
+      });
+
+      await new Promise((resolve) => {
+        http.get(`http://localhost:${kbServer.port}/metadata/test`, (res: any) => {
+          res.on("data", () => {});
+          res.on("end", resolve);
+        });
+      });
+
+      const requestsAfter = kbServer.getRequestHistory().length;
+      assert.strictEqual(requestsAfter - requestsBefore, 2, "Should have logged 2 requests");
+
+      const history = kbServer.getRequestHistory();
+      assert.ok(
+        history.every((r) => r.timestamp),
+        "Each request should have timestamp"
+      );
+      assert.ok(
+        history.every((r) => r.method),
+        "Each request should have method"
+      );
+      assert.ok(
+        history.every((r) => r.url),
+        "Each request should have URL"
+      );
+    });
+  });
+
+  describe("KB Configuration", () => {
+    it("KB configuration keys should be readable via get()", () => {
+      // Use inspect() to verify default values exist in package.json
+      const config = vscode.workspace.getConfiguration("dolphin");
+
+      // Use inspect() which returns defaultValue, globalValue, workspaceValue, etc.
+      const kbDebounceInspect = config.inspect("kb.debounceMs");
+      const kbBatchIntervalInspect = config.inspect("kb.batchIntervalMs");
+      const autoSyncEnabledInspect = config.inspect("kb.autoSync.enabled");
+
+      // Check that default values are defined in package.json
+      assert.ok(
+        kbDebounceInspect?.defaultValue !== undefined,
+        "kb.debounceMs should have a default value"
+      );
+      assert.ok(
+        kbBatchIntervalInspect?.defaultValue !== undefined,
+        "kb.batchIntervalMs should have a default value"
+      );
+      assert.ok(
+        autoSyncEnabledInspect?.defaultValue !== undefined,
+        "kb.autoSync.enabled should have a default value"
+      );
+    });
+
+    it("KB configuration should have valid default types from package.json", () => {
+      const config = vscode.workspace.getConfiguration("dolphin");
+
+      // Use inspect() to get default values and verify types
+      const kbDebounceInspect = config.inspect<number>("kb.debounceMs");
+      const excludePatternsInspect = config.inspect<string[]>("kb.excludePatterns");
+      const autoSyncEnabledInspect = config.inspect<boolean>("kb.autoSync.enabled");
+
+      // Verify types match package.json definitions using default values
+      if (kbDebounceInspect?.defaultValue !== undefined) {
+        assert.strictEqual(
+          typeof kbDebounceInspect.defaultValue,
+          "number",
+          `kb.debounceMs default should be number, got ${typeof kbDebounceInspect.defaultValue}`
+        );
+      }
+
+      if (excludePatternsInspect?.defaultValue !== undefined) {
+        assert.ok(
+          Array.isArray(excludePatternsInspect.defaultValue),
+          "kb.excludePatterns default should be array"
+        );
+      }
+
+      if (autoSyncEnabledInspect?.defaultValue !== undefined) {
+        assert.strictEqual(
+          typeof autoSyncEnabledInspect.defaultValue,
+          "boolean",
+          "kb.autoSync.enabled default should be boolean"
+        );
+      }
+    });
+  });
+
+  describe("KB Performance", () => {
+    it("KB status checks should be fast", async () => {
+      const { kbServer } = getMockEnvironment();
+
+      const startTime = Date.now();
+
+      const http = require("http");
+      await new Promise((resolve) => {
+        http.get(`http://localhost:${kbServer.port}/health`, (res: any) => {
+          res.on("data", () => {});
+          res.on("end", resolve);
+        });
+      });
+
+      const elapsed = Date.now() - startTime;
+
+      // Mock KB should respond very quickly
+      assert.ok(elapsed < 1000, `Health check took ${elapsed}ms, should be < 1000ms`);
+    });
+
+    it("KB search should be reasonably fast", async () => {
+      const { kbServer } = getMockEnvironment();
+
+      const startTime = Date.now();
+
+      const http = require("http");
+      await new Promise((resolve, reject) => {
+        const postData = JSON.stringify({ query: "test", top_k: 10 });
+        const options = {
+          hostname: "localhost",
+          port: kbServer.port,
+          path: "/search",
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(postData),
+          },
+        };
+
+        const req = http.request(options, (res: any) => {
+          res.on("data", () => {});
+          res.on("end", resolve);
+        });
+
+        req.on("error", reject);
+        req.write(postData);
+        req.end();
+      });
+
+      const elapsed = Date.now() - startTime;
+
+      // Mock KB should respond very quickly
+      assert.ok(elapsed < 1000, `Search took ${elapsed}ms, should be < 1000ms`);
+    });
+  });
 });

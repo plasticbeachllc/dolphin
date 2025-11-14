@@ -2,21 +2,22 @@ from __future__ import annotations
 
 import bisect
 import logging
-from typing import List, Optional, Tuple, NamedTuple
+from typing import NamedTuple
 
 import tree_sitter_python as tspython
 from tree_sitter import Language, Parser
 
-from .token_utils import get_tokenizer, window_text_by_tokens, count_tokens
+from .graph_types import GraphEdge, GraphNode
+from .token_utils import count_tokens, get_tokenizer, window_text_by_tokens
 from .types import Chunk
-from .graph_types import GraphNode, GraphEdge
 
 _log = logging.getLogger(__name__)
 
 __all__ = ["chunk_source", "extract_graph_data"]
 
 # Cache the Python parser so we don't reinitialize it per call
-_PY_PARSER: Optional[Parser] = None
+_PY_PARSER: Parser | None = None
+
 
 
 def _get_python_parser() -> Parser:
@@ -33,8 +34,8 @@ def _get_python_parser() -> Parser:
 
 class Symbol(NamedTuple):
     kind: str
-    name: Optional[str]
-    path: Optional[str]
+    name: str | None
+    path: str | None
     start_byte: int
     end_byte: int
     start_row: int
@@ -80,7 +81,7 @@ def chunk_source(
             source, model=model, token_target=token_target, overlap_pct=overlap_pct
         )
 
-    chunks: List[Chunk] = []
+    chunks: list[Chunk] = []
     tok = get_tokenizer(model)
     overlap = max(0, int(token_target * overlap_pct))
 
@@ -138,7 +139,7 @@ def _fallback_token_windows(
     model: str,
     token_target: int,
     overlap_pct: float,
-) -> List[Chunk]:
+) -> list[Chunk]:
     """Fallback: simple token-windowing across the entire file."""
     tok = get_tokenizer(model)
     overlap = max(0, int(token_target * overlap_pct))
@@ -148,7 +149,7 @@ def _fallback_token_windows(
     # Build line-start offsets for entire file
     line_offsets = _build_line_offsets(source)
 
-    chunks: List[Chunk] = []
+    chunks: list[Chunk] = []
     for raw_text, start_char, end_char in windows:
         if not raw_text:
             continue
@@ -178,22 +179,22 @@ def _fallback_token_windows(
     return chunks
 
 
-def _build_line_offsets(text: str) -> List[int]:
+def _build_line_offsets(text: str) -> list[int]:
     """Return character offsets where each line starts: offsets[i] = char index of line (i+1)."""
-    offsets: List[int] = [0]
+    offsets: list[int] = [0]
     for idx, ch in enumerate(text):
         if ch == "\n":
             offsets.append(idx + 1)
     return offsets
 
 
-def _offset_to_abs_line(start_row: int, line_offsets: List[int], offset: int) -> int:
+def _offset_to_abs_line(start_row: int, line_offsets: list[int], offset: int) -> int:
     """Convert a local character offset within a symbol to absolute 1-based line number."""
     line_idx = bisect.bisect_right(line_offsets, offset) - 1
     return (start_row + 1) + max(0, line_idx)
 
 
-def _trim_and_tokenize(raw_text: str, tokenizer) -> Tuple[str, int, int, int]:
+def _trim_and_tokenize(raw_text: str, tokenizer) -> tuple[str, int, int, int]:
     """Trim leading/trailing newlines and compute token_count.
 
     Returns: (trimmed_text, token_count, lead_trim, trail_trim)
@@ -207,16 +208,16 @@ def _trim_and_tokenize(raw_text: str, tokenizer) -> Tuple[str, int, int, int]:
     return trimmed, token_count, lead_trim, trail_trim
 
 
-def _extract_symbols(root, source: str) -> List[Symbol]:
+def _extract_symbols(root, source: str) -> list[Symbol]:
     """Return list of symbols detected in the Python AST.
 
     - class_definition → kind='class', name='ClassName'
     - function_definition → kind='function'
     - function_definition inside class → kind='method', path='Class.method'
     """
-    results: List[Symbol] = []
+    results: list[Symbol] = []
 
-    class_stack: List[str] = []
+    class_stack: list[str] = []
 
     def visit(node):
         ntype = node.type
@@ -281,7 +282,7 @@ def _extract_symbols(root, source: str) -> List[Symbol]:
     return results
 
 
-def extract_graph_data(source: str) -> Tuple[List[GraphNode], List[GraphEdge]]:
+def extract_graph_data(source: str) -> tuple[list[GraphNode], list[GraphEdge]]:
     """Extract graph nodes and edges from Python source for code graph.
 
     Nodes:
@@ -299,8 +300,8 @@ def extract_graph_data(source: str) -> Tuple[List[GraphNode], List[GraphEdge]]:
     Returns:
         Tuple of (nodes, edges) for graph database insertion
     """
-    nodes = []
-    edges = []
+    nodes: list[GraphNode] = []
+    edges: list[GraphEdge] = []
 
     try:
         source_bytes = source.encode("utf-8")
@@ -331,13 +332,11 @@ def extract_graph_data(source: str) -> Tuple[List[GraphNode], List[GraphEdge]]:
     # Extract edges (imports, calls, inheritance)
     _extract_edges(root, source, edges)
 
-    _log.debug(
-        "Extracted %d graph nodes and %d edges from Python", len(nodes), len(edges)
-    )
+    _log.debug("Extracted %d graph nodes and %d edges from Python", len(nodes), len(edges))
     return nodes, edges
 
 
-def _extract_edges(root, source: str, edges: List[GraphEdge]):
+def _extract_edges(root, source: str, edges: list[GraphEdge]):
     """Extract graph edges (imports, calls, inheritance) from Python AST."""
 
     def node_text(n) -> str:
@@ -345,7 +344,7 @@ def _extract_edges(root, source: str, edges: List[GraphEdge]):
             return ""
         return source[n.start_byte : n.end_byte]
 
-    def visit(node, current_context: Optional[str] = None):
+    def visit(node, current_context: str | None = None):
         """Visit nodes and extract edges."""
         ntype = node.type
 
@@ -383,7 +382,7 @@ def _extract_edges(root, source: str, edges: List[GraphEdge]):
                     f"{current_context}.{func_name}" if func_name else current_context
                 )
             else:
-                qualified = func_name
+                qualified: str | None = func_name
 
             # Extract decorators
             for child in node.children:
@@ -428,7 +427,7 @@ def _extract_edges(root, source: str, edges: List[GraphEdge]):
         if ntype == "import_from_statement":
             # from X import Y, Z
             module_node = node.child_by_field_name("module_name")
-            module_name = node_text(module_node) if module_node else None
+            module_name: str | None = node_text(module_node) if module_node else None
 
             # Extract imported names
             for child in node.children:

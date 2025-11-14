@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 _log = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class QueryCache:
 
     def __init__(
         self,
-        redis_client: Optional[Any] = None,
+        redis_client: Any | None = None,
         embedding_ttl: int = 3600,
         result_ttl: int = 900,
         enabled: bool = True,
@@ -69,7 +69,7 @@ class QueryCache:
         combined = "|".join(parts)
         return hashlib.sha256(combined.encode()).hexdigest()[:16]
 
-    def get_embedding(self, query: str, model: str) -> Optional[list[float]]:
+    def get_embedding(self, query: str, model: str) -> list[float] | None:
         """Get cached embedding for a query.
 
         Args:
@@ -132,7 +132,7 @@ class QueryCache:
         except Exception as e:
             _log.warning("Cache write error for embedding: %s", e)
 
-    def get_results(self, query: str, **params: Any) -> Optional[list[dict[str, Any]]]:
+    def get_results(self, query: str, **params: Any) -> list[dict[str, Any]] | None:
         """Get cached search results.
 
         Args:
@@ -169,9 +169,7 @@ class QueryCache:
             _log.warning("Cache read error for results: %s", e)
             return None
 
-    def set_results(
-        self, query: str, results: list[dict[str, Any]], **params: Any
-    ) -> None:
+    def set_results(self, query: str, results: list[dict[str, Any]], **params: Any) -> None:
         """Cache search results.
 
         Args:
@@ -263,22 +261,14 @@ class QueryCache:
         Returns:
             Dictionary with cache hit/miss statistics and rates
         """
-        total_embedding_requests = (
-            self.stats["embedding_hits"] + self.stats["embedding_misses"]
-        )
+        total_embedding_requests = self.stats["embedding_hits"] + self.stats["embedding_misses"]
         total_result_requests = self.stats["result_hits"] + self.stats["result_misses"]
 
         embedding_hit_rate = (
-            self.stats["embedding_hits"] / total_embedding_requests
-            if total_embedding_requests > 0
-            else 0.0
+            self.stats["embedding_hits"] / total_embedding_requests if total_embedding_requests > 0 else 0.0
         )
 
-        result_hit_rate = (
-            self.stats["result_hits"] / total_result_requests
-            if total_result_requests > 0
-            else 0.0
-        )
+        result_hit_rate = self.stats["result_hits"] / total_result_requests if total_result_requests > 0 else 0.0
 
         return {
             "embedding_hits": self.stats["embedding_hits"],
@@ -292,7 +282,7 @@ class QueryCache:
 
 
 def create_cache(
-    redis_url: Optional[str] = None,
+    redis_url: str | None = None,
     embedding_ttl: int = 3600,
     result_ttl: int = 900,
     enabled: bool = True,
@@ -313,7 +303,7 @@ def create_cache(
 
     if redis_url and enabled:
         try:
-            import redis
+            import redis  # type: ignore[import-not-found]
 
             redis_client = redis.from_url(redis_url)
             # Test connection
@@ -321,13 +311,11 @@ def create_cache(
             _log.info("Connected to Redis cache at %s", redis_url)
         except ImportError:
             _log.warning(
-                "Redis package not available. Install with: pip install redis. "
-                "Using in-memory cache as fallback."
+                "Redis package not available. Install with: pip install redis. Using in-memory cache as fallback."
             )
         except Exception as e:
             _log.warning(
-                "Failed to connect to Redis at %s: %s. "
-                "Using in-memory cache as fallback.",
+                "Failed to connect to Redis at %s: %s. Using in-memory cache as fallback.",
                 redis_url,
                 e,
             )

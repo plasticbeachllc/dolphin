@@ -64,7 +64,8 @@ def test_custom_config_file():
         config_dir.mkdir()
 
         config_file = config_dir / "chunking_config.toml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 default_window_size = 512
 
 [per_language]
@@ -76,7 +77,8 @@ model = "text-embedding-3-large"
 
 [tokenizer]
 encoding = "cl100k_base"
-""")
+"""
+        )
 
         custom_config = load_repo_chunking_config(tmp_path)
         assert custom_config.default_window_size == 512

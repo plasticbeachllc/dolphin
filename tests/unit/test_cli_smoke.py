@@ -1,6 +1,7 @@
 """Basic smoke tests for CLI functionality."""
 
 from typer.testing import CliRunner
+
 from kb.ingest.cli import app
 
 runner = CliRunner()

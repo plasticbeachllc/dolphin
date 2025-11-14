@@ -5,8 +5,9 @@ Test the indexing process to see where vector data goes.
 
 import tempfile
 from pathlib import Path
-from kb.store.sqlite_meta import SQLiteMetadataStore
+
 from kb.store.lancedb_store import LanceDBStore
+from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
 def test_indexing_workflow():

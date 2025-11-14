@@ -1,6 +1,7 @@
 """Unit tests for FTS5/BM25 functionality in SQLiteMetadataStore."""
 
 import pytest
+
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
@@ -15,9 +16,7 @@ class TestFTS5IndexCreation:
         # Verify FTS5 table exists
         with store._connect() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'"
-            )
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks_fts'")
             result = cursor.fetchone()
             assert result is not None
             assert result[0] == "chunks_fts"
@@ -60,6 +59,7 @@ class TestBM25Search:
                 "content_id": "chunk1",
                 "repo": "test-repo",
                 "path": "src/user_controller.py",
+                "text_hash": "hash1",
                 "content": "class UserController handles authentication login logout",
                 "symbol_name": "UserController",
                 "symbol_path": "controllers.UserController",
@@ -68,6 +68,7 @@ class TestBM25Search:
                 "content_id": "chunk2",
                 "repo": "test-repo",
                 "path": "src/auth_middleware.py",
+                "text_hash": "hash2",
                 "content": "middleware for authentication JWT token validation",
                 "symbol_name": "AuthMiddleware",
                 "symbol_path": "middleware.AuthMiddleware",
@@ -76,6 +77,7 @@ class TestBM25Search:
                 "content_id": "chunk3",
                 "repo": "test-repo",
                 "path": "tests/test_auth.py",
+                "text_hash": "hash3",
                 "content": "test cases for authentication flow UserController",
                 "symbol_name": None,
                 "symbol_path": None,
@@ -104,9 +106,7 @@ class TestBM25Search:
         first_result = results[0]
         assert first_result["chunk_id"] == "chunk1"  # Most relevant for exact match
         # Verify that the result contains UserController in the path or is from correct chunk
-        assert (
-            first_result["chunk_id"] == "chunk1"
-        )  # Should be the chunk containing UserController
+        assert first_result["chunk_id"] == "chunk1"  # Should be the chunk containing UserController
 
     def test_bm25_search_no_results(self, store_with_data):
         """Test BM25 search with no matching results."""
@@ -117,9 +117,7 @@ class TestBM25Search:
     def test_bm25_search_with_filters(self, store_with_data):
         """Test BM25 search with repository filter."""
         # Search only in test-repo
-        results = store_with_data.bm25_search(
-            "authentication", repo="test-repo", top_k=10
-        )
+        results = store_with_data.bm25_search("authentication", repo="test-repo", top_k=10)
 
         assert len(results) >= 1
         for result in results:
@@ -128,9 +126,7 @@ class TestBM25Search:
     def test_bm25_search_path_prefix_filter(self, store_with_data):
         """Test BM25 search with path prefix filters."""
         # Search only in src/ directory
-        results = store_with_data.bm25_search(
-            "authentication", path_prefix=["src/"], top_k=10
-        )
+        results = store_with_data.bm25_search("authentication", path_prefix=["src/"], top_k=10)
 
         assert len(results) >= 1
         for result in results:
@@ -175,6 +171,7 @@ class TestFTS5Indexing:
             content_id="test_chunk_1",
             repo="test_repo",
             path="src/test.py",
+            text_hash="hash_test1",
             content="def test_function(): pass",
             symbol_name="test_function",
             symbol_path="module.test_function",
@@ -195,6 +192,7 @@ class TestFTS5Indexing:
                 "content_id": "bulk1",
                 "repo": "repo1",
                 "path": "file1.py",
+                "text_hash": "hashbulk1",
                 "content": "first chunk content",
                 "symbol_name": "func1",
                 "symbol_path": "module.func1",
@@ -203,6 +201,7 @@ class TestFTS5Indexing:
                 "content_id": "bulk2",
                 "repo": "repo1",
                 "path": "file2.py",
+                "text_hash": "hashbulk2",
                 "content": "second chunk content",
                 "symbol_name": "func2",
                 "symbol_path": "module.func2",
@@ -239,6 +238,7 @@ class TestFTS5Indexing:
             content_id="upsert_test",
             repo="test_repo",
             path="test.py",
+            text_hash="hash_upsert",
             content="original content",
             symbol_name="test",
             symbol_path="test",
@@ -253,6 +253,7 @@ class TestFTS5Indexing:
             content_id="upsert_test",
             repo="test_repo",
             path="test.py",
+            text_hash="hash_upsert_updated",
             content="updated content new text",
             symbol_name="test",
             symbol_path="test",

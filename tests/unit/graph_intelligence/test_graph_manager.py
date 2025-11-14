@@ -1,9 +1,10 @@
 """Tests for GraphManager."""
 
-import pytest
-import networkx as nx
-from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
+from unittest.mock import MagicMock, Mock, patch
+
+import networkx as nx
+import pytest
 
 from kb.graph_intelligence.graph_manager import GraphManager
 
@@ -17,9 +18,7 @@ def mock_db():
 @pytest.fixture
 def manager(mock_db):
     """Create a GraphManager instance."""
-    return GraphManager(
-        db=mock_db, repo_id=1, edge_change_threshold=5, cache_ttl_minutes=10
-    )
+    return GraphManager(db=mock_db, repo_id=1, edge_change_threshold=5, cache_ttl_minutes=10)
 
 
 class TestLazyLoading:
@@ -90,12 +89,8 @@ class TestGraphRebuild:
 
         with patch.object(manager, "_fetch_nodes_from_db", return_value=[]):
             with patch.object(manager, "_fetch_edges_from_db", return_value=mock_edges):
-                with patch.object(
-                    manager.validator, "_get_current_commit_sha", return_value="abc123"
-                ):
-                    with patch.object(
-                        manager.validator, "update_cache_state"
-                    ) as mock_update:
+                with patch.object(manager.validator, "_get_current_commit_sha", return_value="abc123"):
+                    with patch.object(manager.validator, "update_cache_state") as mock_update:
                         manager._rebuild_graph()
 
                         # Verify graph was created
@@ -114,9 +109,7 @@ class TestGraphRebuild:
         """Test rebuild with no edges in database."""
         with patch.object(manager, "_fetch_nodes_from_db", return_value=[]):
             with patch.object(manager, "_fetch_edges_from_db", return_value=[]):
-                with patch.object(
-                    manager.validator, "_get_current_commit_sha", return_value="abc123"
-                ):
+                with patch.object(manager.validator, "_get_current_commit_sha", return_value="abc123"):
                     with patch.object(manager.validator, "update_cache_state"):
                         manager._rebuild_graph()
 
@@ -131,17 +124,13 @@ class TestEdgeChangeTracking:
 
     def test_on_edges_changed_increments_counter(self, manager):
         """Test that edge changes are tracked."""
-        with patch.object(
-            manager.validator, "increment_edge_changes"
-        ) as mock_increment:
+        with patch.object(manager.validator, "increment_edge_changes") as mock_increment:
             manager.on_edges_changed(5)
             mock_increment.assert_called_once_with(5)
 
     def test_multiple_edge_changes_accumulate(self, manager):
         """Test that multiple edge changes accumulate."""
-        with patch.object(
-            manager.validator, "increment_edge_changes"
-        ) as mock_increment:
+        with patch.object(manager.validator, "increment_edge_changes") as mock_increment:
             manager.on_edges_changed(3)
             manager.on_edges_changed(7)
             manager.on_edges_changed(2)
@@ -186,9 +175,7 @@ class TestCacheStats:
             "edge_changes_since_rebuild": 0,
         }
 
-        with patch.object(
-            manager.validator, "_get_cache_state", return_value=mock_cache_state
-        ):
+        with patch.object(manager.validator, "_get_cache_state", return_value=mock_cache_state):
             with patch.object(manager.validator, "is_cache_valid", return_value=True):
                 stats = manager.get_cache_stats()
 
@@ -260,13 +247,17 @@ class TestMetricsComputation:
         manager._graph.add_edge("A3", "B1")
 
         try:
-            import community as community_louvain
+            import importlib.util
 
-            metrics = manager.compute_metrics()
+            if importlib.util.find_spec("community") is not None:
+                metrics = manager.compute_metrics()
 
-            # Verify community detection ran
-            assert "community" in metrics
-            assert len(metrics["community"]) > 0
+                # Verify community detection ran
+                assert "community" in metrics
+                assert len(metrics["community"]) > 0
+            else:
+                # Skip if python-louvain not available
+                pytest.skip("python-louvain not installed")
         except ImportError:
             # Skip if python-louvain not available
             pytest.skip("python-louvain not installed")
@@ -344,13 +335,9 @@ class TestIntegration:
 
         with patch.object(manager, "_fetch_nodes_from_db", return_value=[]):
             with patch.object(manager, "_fetch_edges_from_db", return_value=mock_edges):
-                with patch.object(
-                    manager.validator, "_get_current_commit_sha", return_value="abc123"
-                ):
+                with patch.object(manager.validator, "_get_current_commit_sha", return_value="abc123"):
                     with patch.object(manager.validator, "update_cache_state"):
-                        with patch(
-                            "kb.graph_intelligence.graph_manager.Session"
-                        ) as mock_session:
+                        with patch("kb.graph_intelligence.graph_manager.Session") as mock_session:
                             mock_session_inst = MagicMock()
                             mock_session.return_value.__enter__.return_value = (
                                 mock_session_inst

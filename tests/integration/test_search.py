@@ -1,10 +1,11 @@
 """Integration tests for search functionality."""
 
-import pytest
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Any
 
-from kb.api.app import SearchRequest, set_search_backend, reset_search_backend
+import pytest
+
+from kb.api.app import SearchRequest, reset_search_backend, set_search_backend
 from kb.store import LanceDBStore, SQLiteMetadataStore
 from tests.utils.mock_services import MockEmbeddingService
 
@@ -12,14 +13,12 @@ from tests.utils.mock_services import MockEmbeddingService
 class MockSearchBackend:
     """Mock search backend for integration testing."""
 
-    def __init__(
-        self, metadata_store: SQLiteMetadataStore, lancedb_store: LanceDBStore
-    ):
+    def __init__(self, metadata_store: SQLiteMetadataStore, lancedb_store: LanceDBStore):
         self.metadata_store = metadata_store
         self.lancedb_store = lancedb_store
         self.search_calls = []
 
-    def search(self, request: SearchRequest) -> List[Dict[str, Any]]:
+    def search(self, request: SearchRequest) -> list[dict[str, Any]]:
         """Mock search implementation that returns predictable results."""
         self.search_calls.append(request)
 
@@ -81,9 +80,7 @@ class TestSearchIntegration:
         set_search_backend(mock_backend)
 
         # Test search with widget query
-        request = SearchRequest(
-            query="widget class", repos=["test-repo"], top_k=5, embed_model="small"
-        )
+        request = SearchRequest(query="widget class", repos=["test-repo"], top_k=5, embed_model="small")
 
         from kb.api.app import search
 
@@ -154,9 +151,7 @@ class TestSearchIntegration:
         set_search_backend(mock_backend)
 
         # Test search with no matches
-        request = SearchRequest(
-            query="nonexistent term", repos=["test-repo"], top_k=5, embed_model="small"
-        )
+        request = SearchRequest(query="nonexistent term", repos=["test-repo"], top_k=5, embed_model="small")
 
         from kb.api.app import search
 
@@ -183,9 +178,7 @@ class TestSearchIntegration:
         set_search_backend(mock_backend)
 
         # Test search
-        request = SearchRequest(
-            query="widget", repos=["test-repo"], top_k=5, embed_model="small"
-        )
+        request = SearchRequest(query="widget", repos=["test-repo"], top_k=5, embed_model="small")
 
         from kb.api.app import search
 
@@ -204,11 +197,7 @@ class TestSearchIntegration:
         mock_embedding_service: MockEmbeddingService,
     ):
         """Test search backend configuration and lifecycle."""
-        from kb.api.app import (
-            get_search_backend,
-            set_search_backend,
-            reset_search_backend,
-        )
+        from kb.api.app import get_search_backend, reset_search_backend, set_search_backend
 
         # Get default backend
         default_backend = get_search_backend()
@@ -251,7 +240,7 @@ class TestSearchIntegration:
 
         from kb.api.app import search
 
-        response = await search(request)
+        await search(request)
 
         # Verify backend received correct repositories
         assert len(mock_backend.search_calls) == 1
@@ -282,9 +271,7 @@ class TestSearchPerformance:
         set_search_backend(mock_backend)
 
         # Measure search performance
-        request = SearchRequest(
-            query="test query", repos=["test-repo"], top_k=5, embed_model="small"
-        )
+        request = SearchRequest(query="test query", repos=["test-repo"], top_k=5, embed_model="small")
 
         from kb.api.app import search
 

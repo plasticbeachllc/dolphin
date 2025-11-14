@@ -1,5 +1,8 @@
 # Testing Guide
 
+**Version**: 1.0.0
+**Last Updated**: 2025-11-12
+
 This document describes the test structure and available test commands for the Dolphin project. Tests are extensive and can take a while to complete; default to running only the tests about which you are concerned.
 
 ## Test Organization

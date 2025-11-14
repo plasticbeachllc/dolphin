@@ -1,15 +1,17 @@
 """Cross-encoder reranking for search results."""
 
 from __future__ import annotations
+
 import logging
-from typing import Optional, Sequence
+from collections.abc import Sequence
+
 import numpy as np
 
 _log = logging.getLogger(__name__)
 
 # Try to import sentence_transformers at module level for easier mocking
 try:
-    from sentence_transformers import CrossEncoder as _CrossEncoder
+    from sentence_transformers import CrossEncoder as _CrossEncoder  # type: ignore[import-not-found]
 
     _SENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
@@ -23,7 +25,7 @@ class CrossEncoderReranker:
     def __init__(
         self,
         model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
-        device: Optional[str] = None,
+        device: str | None = None,
         batch_size: int = 32,
     ):
         self.model_name = model_name
@@ -50,6 +52,9 @@ class CrossEncoderReranker:
         try:
             _log.info(f"Loading cross-encoder model: {model_name}")
             # Only pass device parameter if explicitly set (avoid empty string error)
+            # Type narrowing: _CrossEncoder is available when _SENTENCE_TRANSFORMERS_AVAILABLE is True
+            if _CrossEncoder is None:
+                raise RuntimeError("CrossEncoder is not available")
             if device:
                 self.model = _CrossEncoder(model_name, device=device)
             else:
@@ -77,7 +82,7 @@ class CrossEncoderReranker:
         results: Sequence[dict],
         top_k: int = 5,
         text_field: str = "text",
-        score_threshold: Optional[float] = None,
+        score_threshold: float | None = None,
     ) -> list[dict]:
         """Reranks results using the cross-encoder model."""
         if not self.enabled or not self.model:
@@ -92,9 +97,7 @@ class CrossEncoderReranker:
         pairs = [[query, r.get(text_field, "")] for r in results]
 
         try:
-            scores = self.model.predict(
-                pairs, batch_size=self.batch_size, show_progress_bar=False
-            )
+            scores = self.model.predict(pairs, batch_size=self.batch_size, show_progress_bar=False)
 
             if isinstance(scores, np.ndarray):
                 scores = scores.tolist()

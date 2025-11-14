@@ -1,11 +1,13 @@
-import pytest
-from pathlib import Path
 import tempfile
+from pathlib import Path
 from unittest.mock import patch
-from kb.api.search_backend import create_search_backend
+
+import pytest
+
 from kb.api.app import SearchRequest
-from kb.store.sqlite_meta import SQLiteMetadataStore
+from kb.api.search_backend import create_search_backend
 from kb.store.lancedb_store import LanceDBStore
+from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
 @pytest.fixture
@@ -47,6 +49,7 @@ def populated_backend():
                 "content_id": "vec1",
                 "repo": "test-repo",
                 "path": "src/user_controller.py",
+                "text_hash": "hashvec1",
                 "content": "class UserController handles authentication and login functionality",
                 "symbol_name": "UserController",
                 "symbol_path": "controllers.UserController",
@@ -55,6 +58,7 @@ def populated_backend():
                 "content_id": "bm251",
                 "repo": "test-repo",
                 "path": "src/auth_middleware.py",
+                "text_hash": "hashbm251",
                 "content": "middleware for JWT token validation and authentication flow",
                 "symbol_name": "AuthMiddleware",
                 "symbol_path": "middleware.AuthMiddleware",
@@ -63,6 +67,7 @@ def populated_backend():
                 "content_id": "both1",
                 "repo": "test-repo",
                 "path": "src/auth_service.py",
+                "text_hash": "hashboth1",
                 "content": "UserController service for authentication and JWT validation",
                 "symbol_name": "AuthService",
                 "symbol_path": "services.AuthService",
@@ -72,9 +77,7 @@ def populated_backend():
         sql_store.bulk_index_chunks_for_fts(test_chunks)
 
         # Create backend
-        backend = create_search_backend(
-            store_root=store_root, hybrid_search_enabled=True
-        )
+        backend = create_search_backend(store_root=store_root, hybrid_search_enabled=True)
 
         # Mock the stores to use our test data
         backend.sql_store = sql_store
@@ -125,9 +128,7 @@ class TestHybridSearchExecution:
             },
         ]
 
-        with patch.object(
-            populated_backend.lance_store, "query", return_value=mock_vector_results
-        ):
+        with patch.object(populated_backend.lance_store, "query", return_value=mock_vector_results):
             results = populated_backend.search(request)
 
         assert isinstance(results, list)
@@ -148,9 +149,7 @@ class TestHybridSearchExecution:
             },
         ]
 
-        with patch.object(
-            populated_backend.lance_store, "query", return_value=mock_vector_results
-        ):
+        with patch.object(populated_backend.lance_store, "query", return_value=mock_vector_results):
             results = populated_backend.search(request)
 
         assert isinstance(results, list)
@@ -190,9 +189,7 @@ class TestHybridSearchExecution:
             },
         ]
 
-        with patch.object(
-            populated_backend.lance_store, "query", return_value=mock_vector_results
-        ):
+        with patch.object(populated_backend.lance_store, "query", return_value=mock_vector_results):
             results = populated_backend.search(request)
 
         assert isinstance(results, list)
@@ -226,9 +223,7 @@ class TestBM25Integration:
             {"id": "test1", "_distance": 0.3, "repo": "test-repo", "path": "test.py"},
         ]
 
-        with patch.object(
-            populated_backend.lance_store, "query", return_value=mock_vector_results
-        ):
+        with patch.object(populated_backend.lance_store, "query", return_value=mock_vector_results):
             results = populated_backend.search(request)
 
         assert isinstance(results, list)
@@ -267,9 +262,7 @@ class TestErrorHandling:
         """Test fallback to BM25-only when vector search fails."""
         request = SearchRequest(query="test")
 
-        mock_bm25_results = [
-            {"chunk_id": "bm251", "repo": "test-repo", "path": "test.py", "score": 0.8}
-        ]
+        mock_bm25_results = [{"chunk_id": "bm251", "repo": "test-repo", "path": "test.py", "score": 0.8}]
 
         # Simulate vector search failure
         with (
@@ -278,12 +271,8 @@ class TestErrorHandling:
                 "query",
                 side_effect=Exception("Vector Error"),
             ),
-            patch.object(
-                hybrid_backend.sql_store, "bm25_search", return_value=mock_bm25_results
-            ),
-            patch.object(
-                hybrid_backend, "_hydrate_bm25_results", return_value=mock_bm25_results
-            ),
+            patch.object(hybrid_backend.sql_store, "bm25_search", return_value=mock_bm25_results),
+            patch.object(hybrid_backend, "_hydrate_bm25_results", return_value=mock_bm25_results),
         ):
             results = hybrid_backend.search(request)
             # Should return BM25 results
@@ -330,9 +319,7 @@ class TestSearchRequestHandling:
             ]
 
             with (
-                patch.object(
-                    hybrid_backend.lance_store, "query", return_value=mock_results
-                ),
+                patch.object(hybrid_backend.lance_store, "query", return_value=mock_results),
                 patch.object(hybrid_backend.sql_store, "bm25_search", return_value=[]),
             ):
                 results = hybrid_backend.search(request)
@@ -346,14 +333,10 @@ class TestSearchRequestHandling:
         for model in ["small", "large"]:
             request = SearchRequest(query="test", embed_model=model)
 
-            mock_results = [
-                {"id": "test1", "_distance": 0.5, "repo": "test", "path": "test.py"}
-            ]
+            mock_results = [{"id": "test1", "_distance": 0.5, "repo": "test", "path": "test.py"}]
 
             with (
-                patch.object(
-                    hybrid_backend.lance_store, "query", return_value=mock_results
-                ),
+                patch.object(hybrid_backend.lance_store, "query", return_value=mock_results),
                 patch.object(hybrid_backend.sql_store, "bm25_search", return_value=[]),
             ):
                 results = hybrid_backend.search(request)
@@ -380,15 +363,9 @@ class TestPerformanceCharacteristics:
         ]
 
         with (
-            patch.object(
-                hybrid_backend.lance_store, "query", return_value=mock_vector_results
-            ),
-            patch.object(
-                hybrid_backend.sql_store, "bm25_search", return_value=mock_bm25_results
-            ),
-            patch.object(
-                hybrid_backend, "_hydrate_bm25_results", return_value=mock_bm25_results
-            ),
+            patch.object(hybrid_backend.lance_store, "query", return_value=mock_vector_results),
+            patch.object(hybrid_backend.sql_store, "bm25_search", return_value=mock_bm25_results),
+            patch.object(hybrid_backend, "_hydrate_bm25_results", return_value=mock_bm25_results),
         ):
             results = hybrid_backend.search(request)
 

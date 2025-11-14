@@ -1,8 +1,9 @@
 """Integration tests for ANN parameter tuning with LanceDB."""
 
-import pytest
-import time
 import statistics
+import time
+
+import pytest
 
 from kb.retrieval.ann_tuning import ANNParams
 from kb.store.lancedb_store import LanceDBStore
@@ -63,9 +64,7 @@ class TestANNParamsIntegration:
         """Test query works with speed-optimized parameters."""
         query_vec = [0.5] * 1536
 
-        results = lance_store.query(
-            query_vec, model="small", top_k=10, ann_params=ANNParams.for_speed()
-        )
+        results = lance_store.query(query_vec, model="small", top_k=10, ann_params=ANNParams.for_speed())
 
         assert len(results) <= 10
         assert all("id" in r for r in results)
@@ -74,9 +73,7 @@ class TestANNParamsIntegration:
         """Test query works with accuracy-optimized parameters."""
         query_vec = [0.5] * 1536
 
-        results = lance_store.query(
-            query_vec, model="small", top_k=10, ann_params=ANNParams.for_accuracy()
-        )
+        results = lance_store.query(query_vec, model="small", top_k=10, ann_params=ANNParams.for_accuracy())
 
         assert len(results) <= 10
         assert all("id" in r for r in results)
@@ -85,13 +82,9 @@ class TestANNParamsIntegration:
         """Test query works with custom ANN parameters."""
         query_vec = [0.5] * 1536
 
-        custom_params = ANNParams(
-            metric="cosine", nprobes=15, refine_factor=8, use_index=True
-        )
+        custom_params = ANNParams(metric="cosine", nprobes=15, refine_factor=8, use_index=True)
 
-        results = lance_store.query(
-            query_vec, model="small", top_k=10, ann_params=custom_params
-        )
+        results = lance_store.query(query_vec, model="small", top_k=10, ann_params=custom_params)
 
         assert len(results) <= 10
         assert all("id" in r for r in results)
@@ -116,9 +109,7 @@ class TestANNParamsPerformance:
         speed_times = []
         for _ in range(iterations):
             start = time.time()
-            lance_store.query(
-                query_vec, model="small", top_k=10, ann_params=ANNParams.for_speed()
-            )
+            lance_store.query(query_vec, model="small", top_k=10, ann_params=ANNParams.for_speed())
             speed_times.append((time.time() - start) * 1000)
 
         baseline_median = statistics.median(baseline_times)
@@ -127,8 +118,7 @@ class TestANNParamsPerformance:
         # Speed params should be faster or similar
         # Note: With small dataset (100 items), difference may be minimal
         assert speed_median <= baseline_median * 1.5, (
-            f"Speed params should not be significantly slower: "
-            f"{speed_median:.1f}ms vs baseline {baseline_median:.1f}ms"
+            f"Speed params should not be significantly slower: {speed_median:.1f}ms vs baseline {baseline_median:.1f}ms"
         )
 
     def test_different_params_affect_performance(self, lance_store):
@@ -143,15 +133,11 @@ class TestANNParamsPerformance:
 
         # Measure both (single iteration to avoid test slowness)
         start = time.time()
-        fast_results = lance_store.query(
-            query_vec, model="small", top_k=10, ann_params=fast_params
-        )
+        fast_results = lance_store.query(query_vec, model="small", top_k=10, ann_params=fast_params)
         fast_time = (time.time() - start) * 1000
 
         start = time.time()
-        slow_results = lance_store.query(
-            query_vec, model="small", top_k=10, ann_params=slow_params
-        )
+        slow_results = lance_store.query(query_vec, model="small", top_k=10, ann_params=slow_params)
         slow_time = (time.time() - start) * 1000
 
         # Both should return results
@@ -182,9 +168,7 @@ class TestANNParamsRecall:
         ground_truth_ids = {r["id"] for r in ground_truth}
 
         # Get results with speed params
-        speed_results = lance_store.query(
-            query_vec, model="small", top_k=top_k, ann_params=ANNParams.for_speed()
-        )
+        speed_results = lance_store.query(query_vec, model="small", top_k=top_k, ann_params=ANNParams.for_speed())
         speed_ids = {r["id"] for r in speed_results}
 
         # Calculate recall
@@ -192,9 +176,7 @@ class TestANNParamsRecall:
             recall = len(speed_ids & ground_truth_ids) / len(ground_truth_ids)
 
             # Speed params should maintain >90% recall
-            assert recall >= 0.90, (
-                f"Speed params recall too low: {recall:.2%} (expected >= 90%)"
-            )
+            assert recall >= 0.90, f"Speed params recall too low: {recall:.2%} (expected >= 90%)"
 
     def test_accuracy_params_maximize_recall(self, lance_store):
         """Verify accuracy params achieve high recall."""
@@ -211,9 +193,7 @@ class TestANNParamsRecall:
         ground_truth_ids = {r["id"] for r in ground_truth}
 
         # Get results with accuracy params
-        accuracy_results = lance_store.query(
-            query_vec, model="small", top_k=top_k, ann_params=ANNParams.for_accuracy()
-        )
+        accuracy_results = lance_store.query(query_vec, model="small", top_k=top_k, ann_params=ANNParams.for_accuracy())
         accuracy_ids = {r["id"] for r in accuracy_results}
 
         # Calculate recall
@@ -221,9 +201,7 @@ class TestANNParamsRecall:
             recall = len(accuracy_ids & ground_truth_ids) / len(ground_truth_ids)
 
             # Accuracy params should achieve >95% recall
-            assert recall >= 0.95, (
-                f"Accuracy params recall too low: {recall:.2%} (expected >= 95%)"
-            )
+            assert recall >= 0.95, f"Accuracy params recall too low: {recall:.2%} (expected >= 95%)"
 
 
 class TestANNParamsAdaptiveIntegration:
@@ -235,9 +213,7 @@ class TestANNParamsAdaptiveIntegration:
 
         params = ANNParams.adaptive(query_type="identifier", top_k=5, dataset_size=100)
 
-        results = lance_store.query(
-            query_vec, model="small", top_k=5, ann_params=params
-        )
+        results = lance_store.query(query_vec, model="small", top_k=5, ann_params=params)
 
         assert len(results) <= 5
         # Identifier queries should use high precision settings
@@ -251,9 +227,7 @@ class TestANNParamsAdaptiveIntegration:
 
         params = ANNParams.adaptive(query_type="concept", top_k=10, dataset_size=100)
 
-        results = lance_store.query(
-            query_vec, model="small", top_k=10, ann_params=params
-        )
+        results = lance_store.query(query_vec, model="small", top_k=10, ann_params=params)
 
         assert len(results) <= 10
         # Concept queries balance speed and accuracy
@@ -271,9 +245,7 @@ class TestANNParamsErrorHandling:
         params = ANNParams(metric="dot")
 
         try:
-            results = lance_store.query(
-                query_vec, model="small", top_k=10, ann_params=params
-            )
+            results = lance_store.query(query_vec, model="small", top_k=10, ann_params=params)
             # If successful, verify results
             assert isinstance(results, list)
         except Exception as e:

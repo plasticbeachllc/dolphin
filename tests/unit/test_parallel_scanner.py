@@ -1,11 +1,10 @@
 """Unit tests for parallel file scanner."""
 
-import pytest
 from unittest.mock import patch
-from kb.ingest.parallel_scanner import (
-    _process_file_batch,
-    scan_repo_parallel,
-)
+
+import pytest
+
+from kb.ingest.parallel_scanner import _process_file_batch, scan_repo_parallel
 
 
 class TestProcessFileBatch:

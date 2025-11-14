@@ -1,15 +1,16 @@
 """Unit tests for adaptive nprobes tuning."""
 
 import pytest
+
+from kb.retrieval.ann_tuning import ANNParams
 from kb.search.adaptive_nprobes import (
     AdaptiveNProbes,
-    SearchMetrics,
     AdaptiveState,
     GlobalAdaptiveNProbes,
+    SearchMetrics,
     get_adaptive_params,
     record_search_performance,
 )
-from kb.retrieval.ann_tuning import ANNParams
 
 
 class TestSearchMetrics:
@@ -342,11 +343,7 @@ class TestAdaptiveNProbes:
         stats = tuner.get_stats()
 
         # EMA should be somewhere between min and max
-        assert (
-            stats["min_latency_ms"]
-            <= stats["ema_latency_ms"]
-            <= stats["max_latency_ms"]
-        )
+        assert stats["min_latency_ms"] <= stats["ema_latency_ms"] <= stats["max_latency_ms"]
 
 
 class TestGlobalAdaptiveNProbes:

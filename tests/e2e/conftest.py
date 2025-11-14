@@ -1,13 +1,14 @@
 """Pytest configuration for end-to-end tests."""
 
-import pytest
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
-from kb.store import LanceDBStore, SQLiteMetadataStore
+import pytest
+
 from kb.config import KBConfig
 from kb.ingest.pipeline import IngestionPipeline
+from kb.store import LanceDBStore, SQLiteMetadataStore
 
 
 @pytest.fixture
@@ -40,7 +41,8 @@ def e2e_test_repo() -> Generator[Path, None, None]:
         )
 
         # Create sample Python files
-        (repo_dir / "main.py").write_text("""
+        (repo_dir / "main.py").write_text(
+            """
 def authenticate_user(username, password):
     '''Authenticate user with credentials.'''
     if not username or not password:
@@ -50,9 +52,11 @@ def authenticate_user(username, password):
 def validate_email(email):
     '''Validate email address format.'''
     return '@' in email and '.' in email
-""")
+"""
+        )
 
-        (repo_dir / "api.py").write_text("""
+        (repo_dir / "api.py").write_text(
+            """
 def create_api_endpoint(route, handler):
     '''Create REST API endpoint.'''
     return {'route': route, 'handler': handler}
@@ -60,9 +64,11 @@ def create_api_endpoint(route, handler):
 def handle_request(request):
     '''Handle incoming HTTP request.'''
     return {'status': 200, 'body': 'OK'}
-""")
+"""
+        )
 
-        (repo_dir / "utils.py").write_text("""
+        (repo_dir / "utils.py").write_text(
+            """
 def hash_password(password):
     '''Hash password for storage.'''
     import hashlib
@@ -72,10 +78,12 @@ def generate_token():
     '''Generate authentication token.'''
     import secrets
     return secrets.token_hex(32)
-""")
+"""
+        )
 
         # Create markdown documentation
-        (repo_dir / "README.md").write_text("""
+        (repo_dir / "README.md").write_text(
+            """
 # Sample Project
 
 This is a sample authentication project.
@@ -86,12 +94,11 @@ This is a sample authentication project.
 - Email validation
 - Password hashing
 - Token generation
-""")
+"""
+        )
 
         # Commit all files
-        subprocess.run(
-            ["git", "add", "."], cwd=repo_dir, check=True, capture_output=True
-        )
+        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
         subprocess.run(
             ["git", "commit", "--no-verify", "-m", "Initial commit"],
             cwd=repo_dir,
@@ -119,17 +126,13 @@ def e2e_kb_setup(e2e_test_repo: Path) -> Generator[dict, None, None]:
         lancedb_store.initialize_collections()
 
         # Create config
-        config = KBConfig(
-            default_embed_model="small", ignore=["*.pyc", "__pycache__/*", ".git/*"]
-        )
+        config = KBConfig(default_embed_model="small", ignore=["*.pyc", "__pycache__/*", ".git/*"])
 
         # Create pipeline
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         # Register repository
-        metadata_store.record_repo(
-            name="test-repo", path=e2e_test_repo, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="test-repo", path=e2e_test_repo, default_embed_model="small")
 
         yield {
             "pipeline": pipeline,

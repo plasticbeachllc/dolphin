@@ -1,12 +1,10 @@
 """Unit tests for query result caching."""
 
-import pytest
 import time
-from kb.cache.query_cache import (
-    QueryResultCache,
-    get_query_cache,
-    clear_query_cache,
-)
+
+import pytest
+
+from kb.cache.query_cache import QueryResultCache, clear_query_cache, get_query_cache
 
 
 class TestQueryResultCache:

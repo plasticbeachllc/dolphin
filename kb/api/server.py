@@ -1,18 +1,20 @@
 """Server startup module that initializes the search backend."""
 
 from __future__ import annotations
+
+import logging
 import os
 import sys
-import logging
-from pathlib import Path
-from datetime import datetime
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from pathlib import Path
+
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from .app import app, set_search_backend, reset_search_backend, set_stores, set_pipeline
+
+from ..config import KBConfig, load_config
+from .app import app, reset_search_backend, set_pipeline, set_search_backend, set_stores
+from .middleware.metrics import metrics_endpoint, prometheus_middleware
 from .search_backend import create_search_backend
-from ..config import load_config, KBConfig
-from .middleware.metrics import prometheus_middleware, metrics_endpoint
 
 # Configure logging to output to stderr at INFO level
 logging.basicConfig(
@@ -83,6 +85,11 @@ def initialize_search_backend() -> None:
     )
     set_search_backend(backend)
     set_stores(backend.sql_store, backend.lance_store)
+
+    # Store embedding provider reference for cleanup
+    global _embedding_provider
+    _embedding_provider = backend.embedding_provider
+
     print(f"✅ Search backend ready (store: {store_root})", file=sys.stderr)
 
     # Initialize ingestion pipeline for full reindex operations
@@ -101,57 +108,71 @@ def initialize_search_backend() -> None:
     print("✅ Ingestion pipeline ready", file=sys.stderr)
 
 
-@asynccontextmanager
-async def lifespan(app_instance: FastAPI):
-    """Manage application lifespan - startup and shutdown."""
-    initialize_search_backend()
-    yield
-    reset_search_backend()
+# Initialize search backend when module loads (before uvicorn starts)
+print("🚀 Initializing KB server...", file=sys.stderr)
+initialize_search_backend()
+
+# Add Prometheus metrics middleware to the app
+app.middleware("http")(prometheus_middleware)
+
+# Add metrics endpoint to the app
+app.get("/metrics")(metrics_endpoint)
 
 
-# Recreate the app instance to use the lifespan manager
-app_with_lifespan = FastAPI(
-    title="Dolphin Knowledge Store", version="0.1.0", lifespan=lifespan
-)
-
-# Add CORS middleware to allow requests from VSCode webviews
-app_with_lifespan.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins (webview origins are dynamic)
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Mount the original app's routes onto the new app
-app_with_lifespan.router.routes.extend(app.routes)
-
-# Add Prometheus metrics middleware
-app_with_lifespan.middleware("http")(prometheus_middleware)
-
-# Add metrics endpoint
-app_with_lifespan.get("/metrics")(metrics_endpoint)
-
-
-# Add health check endpoint
-@app_with_lifespan.get("/health")
+# Add health check endpoint to the app
+@app.get("/health")
 async def health_check():
     """Enhanced health check with component status."""
     return {
         "status": "healthy",
         "version": "1.0.0",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "components": {"api": "healthy"},
     }
+
+
+# Store embedding provider reference for cleanup
+_embedding_provider = None
+
+
+# Define lifespan context manager for startup/shutdown
+@asynccontextmanager
+async def lifespan_handler(app_instance: FastAPI):
+    """Manage application lifespan (startup and shutdown)."""
+    global _embedding_provider
+
+    # Startup is handled by module-level initialization (line 95-96)
+    # This keeps existing behavior where backend is ready before uvicorn starts
+    yield  # Application is running
+
+    # Shutdown: Clean up resources
+    print("🛑 Shutting down KB server...", file=sys.stderr)
+
+    # Close embedding provider if it has async client
+    if _embedding_provider and hasattr(_embedding_provider, "close"):
+        try:
+            await _embedding_provider.close()
+            print("✅ Closed embedding provider", file=sys.stderr)
+        except Exception as e:
+            print(f"⚠️  Failed to close embedding provider: {e}", file=sys.stderr)
+
+    reset_search_backend()
+    print("✅ KB server shutdown complete", file=sys.stderr)
+
+
+# Assign lifespan to the app
+app.router.lifespan_context = lifespan_handler
+
+# Export the app for uvicorn
+app_with_lifespan = app
 
 
 def main():
     """Entry point for kb-api command."""
     import uvicorn
 
-    uvicorn.run(
-        "kb.api.server:app_with_lifespan", host="0.0.0.0", port=8000, reload=True
-    )
+    uvicorn.run("kb.api.server:app_with_lifespan", host="0.0.0.0", port=8000, reload=True)
+
 
 
 if __name__ == "__main__":

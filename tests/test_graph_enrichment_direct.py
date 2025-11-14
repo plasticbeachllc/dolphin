@@ -4,15 +4,16 @@
 import sys
 from pathlib import Path
 
+from kb.config import load_config
+from kb.retrieval.graph_context import GraphContextEnricher
+from kb.store.graph_store import GraphStore
+from kb.store.sqlite_meta import SQLiteMetadataStore
+
 # Ensure repository root is on sys.path so local kb package resolves
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from kb.config import load_config
-from kb.store.sqlite_meta import SQLiteMetadataStore
-from kb.store.graph_store import GraphStore
-from kb.retrieval.graph_context import GraphContextEnricher
 
 
 def main():
@@ -78,15 +79,14 @@ def main():
                 if gc.get("nodes"):
                     print("\n   Sample nodes:")
                     for node in gc["nodes"][:3]:
-                        print(
-                            f"      - {node.get('qualified_name')} ({node.get('kind')})"
-                        )
+                        print(f"      - {node.get('qualified_name')} ({node.get('kind')})")
 
                 if gc.get("edges"):
                     print("\n   Sample edges:")
                     for edge in gc["edges"][:3]:
                         print(
-                            f"      - {edge.get('relationship_type')}: {edge.get('source_name')} → {edge.get('target_name')}"
+                            f"      - {edge.get('relationship_type')}: "
+                            f"{edge.get('source_name')} → {edge.get('target_name')}"
                         )
             else:
                 print("\n❌ No graph_context in result")

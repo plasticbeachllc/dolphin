@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 # Coarse language tags used by chunkers and storage
-# Keep names stable: python | typescript | typescriptreact | javascript | javascriptreact | markdown | json | yaml | toml | shell | just | svelte | text
+# Keep names stable: python | typescript | typescriptreact | javascript |
+# javascriptreact | markdown | json | yaml | toml | shell | just | svelte | text
 
 _EXT_TO_LANG: dict[str, str] = {
     ".py": "python",

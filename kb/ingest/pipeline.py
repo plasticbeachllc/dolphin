@@ -1,40 +1,38 @@
 from __future__ import annotations
 
-import subprocess
 import datetime
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
 
 from pathspec import PathSpec
 
+from ..chunkers.registry import chunk_file as chunk_file_with_config, detect_language_from_extension
 from ..config import KBConfig
-from ..store import LanceDBStore, SQLiteMetadataStore
-from ..store.graph_store import GraphStore
+from ..embeddings.provider import embed_texts_with_retry
 from ..graph_intelligence.graph_manager import GraphManager
-from ..ingest.scanner import FileCandidate, scan_repo
+from ..hashing import hash_text
 from ..ignores import build_ignore_set, load_repo_ignores
-from ..ingest.dedup import ChunkDeduplicator
 from ..ingest._helpers import (
     build_desired_map,
-    git_changed_files_modified_added,
-    git_changed_files_deleted,
     get_all_tracked_files,
+    git_changed_files_deleted,
+    git_changed_files_modified_added,
     representative_text_for_hash,
 )
+from ..ingest.dedup import ChunkDeduplicator
 from ..ingest.error_logging import ErrorLogger
 from ..ingest.graph_helpers import (
-    extract_graph_from_file,
-    store_graph_data,
     cleanup_graph_for_file,
     cleanup_graph_for_repo,
+    extract_graph_from_file,
+    store_graph_data,
 )
-from ..embeddings.provider import embed_texts_with_retry
-from ..chunkers.registry import (
-    detect_language_from_extension,
-    chunk_file as chunk_file_with_config,
-)
-from ..hashing import hash_text
+from ..ingest.scanner import FileCandidate, scan_repo
+from ..store import LanceDBStore, SQLiteMetadataStore
+from ..store.graph_store import GraphStore
+from ..store.sqlite_meta import generate_fts_content_id
 
 
 @dataclass
@@ -45,7 +43,7 @@ class IngestionPipeline:
     lancedb: LanceDBStore
     metadata: SQLiteMetadataStore
     graph_store: GraphStore | None = None
-    graph_managers: Dict[int, GraphManager] | None = None  # repo_id -> GraphManager
+    graph_managers: dict[int, GraphManager] | None = None  # repo_id -> GraphManager
 
     def __post_init__(self):
         """Initialize graph store if not provided."""
@@ -80,7 +78,7 @@ class IngestionPipeline:
             )
         return self.graph_managers[repo_id]
 
-    def compute_graph_metrics(self, repo_id: int) -> Dict[str, Any]:
+    def compute_graph_metrics(self, repo_id: int) -> dict[str, Any]:
         """Compute and store graph metrics for a repository.
 
         This method should be called after indexing to compute PageRank,
@@ -118,9 +116,7 @@ class IngestionPipeline:
             "metrics_computed": True,
             "pagerank_nodes": len(metrics.get("pagerank", {})),
             "betweenness_nodes": len(metrics.get("betweenness_centrality", {})),
-            "communities": len(set(metrics.get("community", {}).values()))
-            if "community" in metrics
-            else 0,
+            "communities": (len(set(metrics.get("community", {}).values())) if "community" in metrics else 0),
         }
 
     def _git(self, root: Path, *args: str) -> str:
@@ -181,12 +177,49 @@ class IngestionPipeline:
         with self.metadata._connect() as conn:
             cur = conn.cursor()
 
+            # Helper to check if table exists
+            def table_exists(table_name: str) -> bool:
+                cur.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                    (table_name,),
+                )
+                return cur.fetchone() is not None
+
             try:
                 # Get all file IDs for this repo
                 cur.execute("SELECT id FROM files WHERE repo_id = ?", (repo_id,))
                 file_ids = [row[0] for row in cur.fetchall()]
 
-                # Delete chunk locations for these files
+                # Delete in correct order respecting foreign key constraints:
+
+                # 1. Delete code graph data (references code_nodes and files)
+                # Check table existence first to avoid swallowing real FK errors
+                if table_exists("code_node_aliases"):
+                    cur.execute(
+                        "DELETE FROM code_node_aliases WHERE file_id IN (SELECT id FROM files WHERE repo_id = ?)",
+                        (repo_id,),
+                    )
+
+                if table_exists("cross_repo_references"):
+                    cur.execute(
+                        "DELETE FROM cross_repo_references WHERE file_id IN (SELECT id FROM files WHERE repo_id = ?)",
+                        (repo_id,),
+                    )
+
+                if table_exists("code_edges"):
+                    cur.execute(
+                        "DELETE FROM code_edges WHERE source_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)",
+                        (repo_id,),
+                    )
+                    cur.execute(
+                        "DELETE FROM code_edges WHERE target_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)",
+                        (repo_id,),
+                    )
+
+                if table_exists("code_nodes"):
+                    cur.execute("DELETE FROM code_nodes WHERE repo_id = ?", (repo_id,))
+
+                # 2. Delete chunk locations (references chunk_content)
                 for file_id in file_ids:
                     cur.execute(
                         """
@@ -198,17 +231,25 @@ class IngestionPipeline:
                         (file_id,),
                     )
 
-                # Delete chunk content
+                # 3. Delete chunk content (references files)
                 cur.execute("DELETE FROM chunk_content WHERE repo_id = ?", (repo_id,))
 
-                # Delete from FTS5
+                # 4. Delete from FTS5
                 cur.execute("DELETE FROM chunks_fts WHERE repo = ?", (repo_name,))
 
-                # Delete files
+                # 5. Delete file snapshots (references files)
+                if table_exists("file_snapshots"):
+                    cur.execute("DELETE FROM file_snapshots WHERE repo_id = ?", (repo_id,))
+
+                # 6. Delete files
                 cur.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
 
-                # Delete sessions
+                # 7. Delete sessions
                 cur.execute("DELETE FROM sessions WHERE repo_id = ?", (repo_id,))
+
+                # 8. Delete pending changes
+                if table_exists("pending_changes"):
+                    cur.execute("DELETE FROM pending_changes WHERE repo_id = ?", (repo_id,))
 
                 conn.commit()
                 print("  Metadata cleared successfully")
@@ -230,7 +271,7 @@ class IngestionPipeline:
 
         repo_id = int(repo["id"])
         root = Path(repo["root_path"])
-        embed_model = repo.get("default_embed_model", self.config.default_embed_model)
+        embed_model = str(repo.get("default_embed_model", self.config.default_embed_model))
         # Validate embed model early
         from ..embeddings.provider import SUPPORTED_MODELS
 
@@ -278,7 +319,7 @@ class IngestionPipeline:
         ignore_patterns.update(extra_security)
 
         # Scan
-        candidates: List[FileCandidate] = scan_repo(root, ignore_patterns)
+        candidates: list[FileCandidate] = scan_repo(root, ignore_patterns)
 
         summary = {
             "repo": repo_name,
@@ -330,7 +371,7 @@ class IngestionPipeline:
         dry_run: bool = False,
         force: bool = False,
         full_reindex: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Perform full indexing pipeline for the named repository.
 
         This method implements the Phase 6 indexing pipeline:
@@ -356,7 +397,7 @@ class IngestionPipeline:
 
         repo_id = int(repo["id"])
         root = Path(repo["root_path"])
-        embed_model = repo.get("default_embed_model", self.config.default_embed_model)
+        embed_model = str(repo.get("default_embed_model", self.config.default_embed_model))
         # Validate embed model early
         from ..embeddings.provider import SUPPORTED_MODELS
 
@@ -369,9 +410,7 @@ class IngestionPipeline:
         if not force:
             self._ensure_clean_working_tree(root)
         else:
-            print(
-                f"Warning: force=True, skipping clean working tree check for {repo_name}"
-            )
+            print(f"Warning: force=True, skipping clean working tree check for {repo_name}")
 
         commit_sha = self._git(root, "rev-parse", "HEAD").strip()
         branch = self._git(root, "rev-parse", "--abbrev-ref", "HEAD").strip()
@@ -385,9 +424,7 @@ class IngestionPipeline:
         last_success = self.metadata.get_last_successful_commit(repo_id)
 
         # Start session
-        session_id = self.metadata.begin_session(
-            repo_id, commit_sha, branch, embed_model
-        )
+        session_id = self.metadata.begin_session(repo_id, commit_sha, branch, embed_model)
 
         # Initialize error logger (lazy file creation on first error)
         error_logger = ErrorLogger(root, str(session_id))
@@ -444,13 +481,11 @@ class IngestionPipeline:
                         file_id = self.metadata.get_file_id(repo_id, path)
                         if file_id:
                             for model_name in ("small", "large"):
-                                pruned = (
-                                    self.metadata.prune_invalidated_content_for_file(
-                                        repo_id,
-                                        file_id,
-                                        model_name,
-                                        current_hashes=set(),
-                                    )
+                                pruned = self.metadata.prune_invalidated_content_for_file(
+                                    repo_id,
+                                    file_id,
+                                    model_name,
+                                    current_hashes=set(),
                                 )
                                 if pruned:
                                     chunks_pruned += pruned
@@ -501,9 +536,7 @@ class IngestionPipeline:
                 # Extract and store code graph data
                 if self.graph_store and not dry_run:
                     try:
-                        nodes, edges = extract_graph_from_file(
-                            file_path, language, text, repo_config
-                        )
+                        nodes, edges = extract_graph_from_file(file_path, language, text, repo_config)
                         if nodes or edges:
                             graph_stats = store_graph_data(
                                 self.graph_store,
@@ -546,23 +579,18 @@ class IngestionPipeline:
 
                 # Deduplicate by text_hash
                 dedup = ChunkDeduplicator(self.metadata)
-                changed_chunks, unchanged_chunks = dedup.filter_unchanged_chunks(
-                    chunks, repo_id, file_id, embed_model
-                )
+                changed_chunks, unchanged_chunks = dedup.filter_unchanged_chunks(chunks, repo_id, file_id, embed_model)
                 new_hashes = {c.text_hash for c in changed_chunks}
                 skipped_occurrences = len(unchanged_chunks)
 
                 # Embed only new hashes (batched)
-                hash_to_vec: Dict[str, Any] = {}
+                hash_to_vec: dict[str, Any] = {}
                 if new_hashes and not dry_run:
                     hashes_list = sorted(new_hashes)
                     batch_size = 128
                     for i in range(0, len(hashes_list), batch_size):
                         batch_hashes = hashes_list[i : i + batch_size]
-                        texts_to_embed = [
-                            representative_text_for_hash(h, chunks)
-                            for h in batch_hashes
-                        ]
+                        texts_to_embed = [representative_text_for_hash(h, chunks) for h in batch_hashes]
                         if not texts_to_embed:
                             continue
                         vectors = embed_texts_with_retry(embed_model, texts_to_embed)
@@ -579,14 +607,11 @@ class IngestionPipeline:
                         if cid:
                             self.metadata.sync_locations_for_content_row(cid, occs)
 
-                    self.metadata.prune_invalidated_content_for_file(
-                        repo_id, file_id, embed_model, set(desired.keys())
-                    )
+                    self.metadata.prune_invalidated_content_for_file(repo_id, file_id, embed_model, set(desired.keys()))
 
                     # Build a quick lookup for token_count by occurrence position
-                    occ_token_counts: Dict[tuple[int, int], int] = {
-                        (ch.start_line, ch.end_line): getattr(ch, "token_count", 0)
-                        for ch in chunks
+                    occ_token_counts: dict[tuple[int, int], int] = {
+                        (ch.start_line, ch.end_line): getattr(ch, "token_count", 0) for ch in chunks
                     }
 
                     # Persist vectors to LanceDB (per occurrence)
@@ -619,12 +644,8 @@ class IngestionPipeline:
                                     "heading_h1": occ.get("heading_h1"),
                                     "heading_h2": occ.get("heading_h2"),
                                     "heading_h3": occ.get("heading_h3"),
-                                    "token_count": occ_token_counts.get(
-                                        (occ["start_line"], occ["end_line"]), 0
-                                    ),
-                                    "created_at": datetime.datetime.now(
-                                        datetime.timezone.utc
-                                    ),
+                                    "token_count": occ_token_counts.get((occ["start_line"], occ["end_line"]), 0),
+                                    "created_at": datetime.datetime.now(datetime.UTC),
                                 }
                             )
 
@@ -638,11 +659,15 @@ class IngestionPipeline:
                                         break
 
                                 if chunk_text:
+                                    # Generate deterministic FTS5 content_id (independent of embed_model)
+                                    fts_content_id = generate_fts_content_id(repo_id, file_id, h)
+
                                     fts_chunks.append(
                                         {
-                                            "content_id": content_id,
+                                            "content_id": fts_content_id,
                                             "repo": repo_name,
                                             "path": path,
+                                            "text_hash": h,
                                             "content": chunk_text,
                                             "symbol_name": occ.get("symbol_name"),
                                             "symbol_path": occ.get("symbol_path"),
@@ -650,9 +675,7 @@ class IngestionPipeline:
                                     )
 
                     if payload:
-                        self.lancedb.upsert_chunks(
-                            repo_name, payload, model=embed_model
-                        )
+                        self.lancedb.upsert_chunks(repo_name, payload, model=embed_model)
 
                     # Index chunks in FTS5 for BM25 search
                     if fts_chunks and not dry_run:
@@ -779,7 +802,7 @@ class IngestionPipeline:
             graph_manager = self.get_graph_manager(repo_id)
             # Force rebuild to get accurate total counts from database
             # This ensures cache state reflects TOTAL graph size, not just incremental changes
-            graph = graph_manager.get_graph(force_rebuild=True)
+            graph_manager.get_graph(force_rebuild=True)
             # Cache state is automatically updated in _rebuild_graph() with total counts
 
         # Print summary

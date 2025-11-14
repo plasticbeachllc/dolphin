@@ -168,15 +168,16 @@ Location: `shared/observability/`
 ### Logger (Structured Logging)
 
 ```typescript
-import { createLogger } from '@dolphin/shared/observability';
+import { createLogger } from "@dolphin/shared/observability";
 
-const logger = createLogger('my-component');
+const logger = createLogger("my-component");
 
-logger.info('Processing request', { request_id: '123' });
-logger.error('Failed to connect', error, { host: 'localhost' });
+logger.info("Processing request", { request_id: "123" });
+logger.error("Failed to connect", error, { host: "localhost" });
 ```
 
 Features:
+
 - JSONL format
 - Automatic trace context injection
 - PII sanitization (API keys, file paths)
@@ -184,15 +185,15 @@ Features:
 ### Tracing (OpenTelemetry)
 
 ```typescript
-import { initTracing, traced, SpanNames } from '@dolphin/shared/observability';
+import { initTracing, traced, SpanNames } from "@dolphin/shared/observability";
 
 // Initialize once at startup
-initTracing('my-service', '1.0.0');
+initTracing("my-service", "1.0.0");
 
 // Trace operations
 await traced(SpanNames.CLAUDE_REQUEST, async (span) => {
-  span.setAttribute('model', 'claude-sonnet-4.5');
-  span.setAttribute('tokens', 1000);
+  span.setAttribute("model", "claude-sonnet-4.5");
+  span.setAttribute("tokens", 1000);
   return await callClaude();
 });
 ```
@@ -200,13 +201,13 @@ await traced(SpanNames.CLAUDE_REQUEST, async (span) => {
 ### Metrics (Prometheus)
 
 ```typescript
-import { createMetricsServer, metricsCounters } from '@dolphin/shared/observability';
+import { createMetricsServer, metricsCounters } from "@dolphin/shared/observability";
 
 // Start metrics server (Bun runtime only)
 createMetricsServer(9091);
 
 // Metrics auto-increment on tool calls
-metricsCounters.toolInvocations.inc({ tool: 'file_read' });
+metricsCounters.toolInvocations.inc({ tool: "file_read" });
 ```
 
 ## Debugging Workflow
@@ -237,6 +238,7 @@ metricsCounters.toolInvocations.inc({ tool: 'file_read' });
 ### 4. Search Logs
 
 In Grafana:
+
 1. Go to "Explore"
 2. Select "Loki" datasource
 3. Query: `{job="dolphin"} |~ "search"`
@@ -307,7 +309,7 @@ Edit `prometheus/prometheus.yml`:
 
 ```yaml
 global:
-  scrape_interval: 15s  # Adjust as needed
+  scrape_interval: 15s # Adjust as needed
 ```
 
 ### Log Retention
@@ -316,7 +318,7 @@ Edit `loki/loki-config.yml`:
 
 ```yaml
 limits_config:
-  retention_period: 720h  # 30 days
+  retention_period: 720h # 30 days
 ```
 
 ### Environment Variables
@@ -361,6 +363,7 @@ curl http://localhost:16686/api/services
 ## Performance Impact
 
 Minimal overhead:
+
 - **Latency**: +1-2ms per request (~4%)
 - **Memory**: +15MB per service (~12%)
 - **Disk**: ~2GB/week (logs + metrics)

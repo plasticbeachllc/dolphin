@@ -1,6 +1,7 @@
 """Unit tests for query caching functionality."""
 
 from unittest.mock import MagicMock, patch
+
 from kb.cache import QueryCache, create_cache
 
 
@@ -305,10 +306,11 @@ class TestCacheIntegration:
 
     def test_search_backend_with_cache(self):
         """Test search backend uses cache."""
+        import tempfile
+        from pathlib import Path
+
         from kb.api.search_backend import create_search_backend
         from kb.config import KBConfig
-        from pathlib import Path
-        import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config = KBConfig(store_root=Path(tmpdir), cache_enabled=True)

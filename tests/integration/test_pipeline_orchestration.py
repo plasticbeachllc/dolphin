@@ -1,13 +1,14 @@
 """Integration tests for complete KB pipeline orchestration."""
 
-import pytest
 import subprocess
 from pathlib import Path
 
+import pytest
+
+from kb.chunkers.registry import get_chunker_for_file
+from kb.config import KBConfig
 from kb.ingest.pipeline import IngestionPipeline
 from kb.store import LanceDBStore, SQLiteMetadataStore
-from kb.config import KBConfig
-from kb.chunkers.registry import get_chunker_for_file
 from tests.conftest import init_test_git_repo
 
 
@@ -22,7 +23,8 @@ class TestPipelineOrchestration:
         init_test_git_repo(repo_path)
 
         # Create files of different types
-        (repo_path / "code.py").write_text("""
+        (repo_path / "code.py").write_text(
+            """
 def hello_world():
     '''Python function.'''
     return "Hello, World!"
@@ -30,9 +32,11 @@ def hello_world():
 class MyClass:
     '''A test class.'''
     pass
-""")
+"""
+        )
 
-        (repo_path / "docs.md").write_text("""
+        (repo_path / "docs.md").write_text(
+            """
 # Documentation
 
 This is a markdown document.
@@ -41,9 +45,11 @@ This is a markdown document.
 
 - Feature 1
 - Feature 2
-""")
+"""
+        )
 
-        (repo_path / "app.ts").write_text("""
+        (repo_path / "app.ts").write_text(
+            """
 function greet(name: string): string {
     return `Hello, ${name}!`;
 }
@@ -51,9 +57,11 @@ function greet(name: string): string {
 class Application {
     constructor() {}
 }
-""")
+"""
+        )
 
-        (repo_path / "query.sql").write_text("""
+        (repo_path / "query.sql").write_text(
+            """
 SELECT id, name, email
 FROM users
 WHERE active = true
@@ -63,9 +71,11 @@ CREATE TABLE products (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL
 );
-""")
+"""
+        )
 
-        (repo_path / "styles.css").write_text("""
+        (repo_path / "styles.css").write_text(
+            """
 .container {
     display: flex;
     justify-content: center;
@@ -75,12 +85,11 @@ CREATE TABLE products (
     background-color: blue;
     color: white;
 }
-""")
+"""
+        )
 
         # Commit files to git
-        subprocess.run(
-            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
-        )
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
             check=True,
@@ -93,16 +102,12 @@ CREATE TABLE products (
         metadata_store.initialize()
 
         lancedb_store = LanceDBStore("memory://test_pipeline")
-        config = KBConfig(
-            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
-        )
+        config = KBConfig(default_embed_model="small", ignore=["*.pyc", "__pycache__/*"])
 
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         # Register repository
-        metadata_store.record_repo(
-            name="test-repo", path=repo_path, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="test-repo", path=repo_path, default_embed_model="small")
 
         # Run indexing
         result = pipeline.index("test-repo", dry_run=False, force=True)
@@ -147,16 +152,16 @@ CREATE TABLE products (
 
         # Create test file
         test_file = repo_path / "test.py"
-        test_file.write_text("""
+        test_file.write_text(
+            """
 def test_function():
     '''Test docstring.'''
     return True
-""")
+"""
+        )
 
         # Commit files
-        subprocess.run(
-            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
-        )
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
             check=True,
@@ -174,11 +179,9 @@ def test_function():
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         # Register and index
-        metadata_store.record_repo(
-            name="metadata-repo", path=repo_path, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="metadata-repo", path=repo_path, default_embed_model="small")
 
-        result = pipeline.index("metadata-repo", dry_run=False, force=True)
+        pipeline.index("metadata-repo", dry_run=False, force=True)
 
         # Verify metadata was preserved
         repo = metadata_store.get_repo_by_name("metadata-repo")
@@ -215,9 +218,7 @@ def test_function():
         (repo_path / "data" / "config.json").write_text('{"key": "value"}')
 
         # Commit files
-        subprocess.run(
-            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
-        )
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
             check=True,
@@ -234,9 +235,7 @@ def test_function():
 
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
-        metadata_store.record_repo(
-            name="mixed-repo", path=repo_path, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="mixed-repo", path=repo_path, default_embed_model="small")
 
         result = pipeline.index("mixed-repo", dry_run=False, force=True)
 
@@ -265,9 +264,7 @@ def test_function():
         (repo_path / "another_valid.py").write_text("def another(): return False")
 
         # Commit files
-        subprocess.run(
-            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
-        )
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
             check=True,
@@ -284,9 +281,7 @@ def test_function():
 
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
-        metadata_store.record_repo(
-            name="error-repo", path=repo_path, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="error-repo", path=repo_path, default_embed_model="small")
 
         # Should complete despite binary file
         result = pipeline.index("error-repo", dry_run=False, force=True)
@@ -309,9 +304,7 @@ def test_function():
         (pycache / "test.pyc").write_bytes(b"")
 
         # Commit files
-        subprocess.run(
-            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
-        )
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
             check=True,
@@ -324,17 +317,13 @@ def test_function():
         metadata_store.initialize()
 
         lancedb_store = LanceDBStore("memory://config_test")
-        config = KBConfig(
-            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
-        )
+        config = KBConfig(default_embed_model="small", ignore=["*.pyc", "__pycache__/*"])
 
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
-        metadata_store.record_repo(
-            name="config-repo", path=repo_path, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="config-repo", path=repo_path, default_embed_model="small")
 
-        result = pipeline.index("config-repo", dry_run=False, force=True)
+        pipeline.index("config-repo", dry_run=False, force=True)
 
         # Verify ignored files were not indexed
         repo = metadata_store.get_repo_by_name("config-repo")
@@ -360,11 +349,13 @@ class TestPipelineParallelization:
 
         # Create many files
         for i in range(50):
-            (repo_path / f"file_{i}.py").write_text(f"""
+            (repo_path / f"file_{i}.py").write_text(
+                f"""
 def function_{i}():
     '''Function {i}'''
     return {i}
-""")
+"""
+            )
 
         # Setup pipeline
         db_path = temp_dir / "perf.db"
@@ -376,9 +367,7 @@ def function_{i}():
 
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
-        metadata_store.record_repo(
-            name="perf-repo", path=repo_path, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="perf-repo", path=repo_path, default_embed_model="small")
 
         # Measure performance
         start = time.time()
@@ -400,9 +389,7 @@ def function_{i}():
         (repo_path / "large.py").write_text(large_content)
 
         # Commit files
-        subprocess.run(
-            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
-        )
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
             check=True,
@@ -419,9 +406,7 @@ def function_{i}():
 
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
-        metadata_store.record_repo(
-            name="large-repo", path=repo_path, default_embed_model="small"
-        )
+        metadata_store.record_repo(name="large-repo", path=repo_path, default_embed_model="small")
 
         # Should handle large file
         result = pipeline.index("large-repo", dry_run=False, force=True)

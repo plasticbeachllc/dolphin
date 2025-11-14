@@ -8,9 +8,10 @@ This test module validates the implementation of the remediation plan's Phase 1:
 """
 
 import threading
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
-from contextlib import closing
+
 import pytest
 
 from kb.store.sqlite_meta import SQLiteMetadataStore
@@ -106,7 +107,7 @@ class TestEnhancedInitialization:
         store.initialize()
         second_state = store._initialized
 
-        assert first_state == second_state == True
+        assert first_state == second_state is True
 
         # Should not create duplicate tables
         with store._connect() as conn:
@@ -243,7 +244,7 @@ class TestDatabaseIntegrityValidation:
         repo = store.get_repo_by_name("test-repo")
         repo_id = int(repo["id"])
 
-        file_id = store.upsert_file(
+        store.upsert_file(
             repo_id,
             path="src/a.py",
             ext=".py",
@@ -277,10 +278,12 @@ class TestDatabaseIntegrityValidation:
                 # Temporarily disable foreign keys to insert orphaned data
                 cur.execute("PRAGMA foreign_keys = OFF")
                 # Insert orphaned chunk_location (referencing non-existent content)
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO chunk_locations (id, content_id, start_line, end_line)
                     VALUES ('orphan1', 'nonexistent_content', 1, 10)
-                """)
+                """
+                )
                 # Re-enable foreign keys
                 cur.execute("PRAGMA foreign_keys = ON")
                 conn.commit()
@@ -297,9 +300,7 @@ class TestInitializationEdgeCases:
         store = SQLiteMetadataStore(tmp_path / "test.db")
 
         # Mock engine creation to fail
-        with patch.object(
-            store, "_engine", side_effect=Exception("Engine creation failed")
-        ):
+        with patch.object(store, "_engine", side_effect=Exception("Engine creation failed")):
             with pytest.raises(Exception, match="Engine creation failed"):
                 store.initialize()
 
@@ -355,6 +356,7 @@ class TestPhase1Integration:
             content_id="test1",
             repo="test-repo",
             path="test.py",
+            text_hash="hash_test1",
             content="test content",
             symbol_name="test",
             symbol_path="test",

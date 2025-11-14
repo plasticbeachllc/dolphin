@@ -1,6 +1,7 @@
 """Unit tests for ANN parameter tuning module."""
 
 import pytest
+
 from kb.retrieval.ann_tuning import ANNParams
 
 
@@ -81,9 +82,7 @@ class TestANNParamsAdaptive:
 
     def test_identifier_query_high_precision(self):
         """Test identifier query needs high precision."""
-        params = ANNParams.adaptive(
-            query_type="identifier", top_k=5, dataset_size=100000
-        )
+        params = ANNParams.adaptive(query_type="identifier", top_k=5, dataset_size=100000)
         assert params.nprobes >= 20, "Identifier queries need high precision"
         assert params.refine_factor >= 15, "Identifier queries need refinement"
 
@@ -104,14 +103,10 @@ class TestANNParamsAdaptive:
     def test_adaptive_scales_with_dataset_size(self):
         """Test adaptive parameters scale with dataset size."""
         # Small dataset
-        params_small = ANNParams.adaptive(
-            query_type="concept", top_k=10, dataset_size=10000
-        )
+        params_small = ANNParams.adaptive(query_type="concept", top_k=10, dataset_size=10000)
 
         # Large dataset
-        params_large = ANNParams.adaptive(
-            query_type="concept", top_k=10, dataset_size=1000000
-        )
+        params_large = ANNParams.adaptive(query_type="concept", top_k=10, dataset_size=1000000)
 
         # Larger datasets should use more nprobes (more clusters)
         assert params_large.nprobes >= params_small.nprobes

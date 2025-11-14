@@ -1,10 +1,6 @@
 """Unit tests for ignore pattern handling."""
 
-from kb.ignores import (
-    DEFAULT_IGNORE_PATTERNS,
-    build_ignore_set,
-    load_repo_ignores,
-)
+from kb.ignores import DEFAULT_IGNORE_PATTERNS, build_ignore_set, load_repo_ignores
 
 
 class TestDefaultIgnorePatterns:
@@ -117,9 +113,11 @@ class TestLoadRepoIgnores:
         config_dir = tmp_path / ".dolphin"
         config_dir.mkdir()
         config_file = config_dir / "config.toml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 ignore_patterns = ["*.log", "temp_files"]
-""")
+"""
+        )
 
         patterns, exceptions = load_repo_ignores(tmp_path)
 
@@ -132,10 +130,12 @@ ignore_patterns = ["*.log", "temp_files"]
         config_dir = tmp_path / ".dolphin"
         config_dir.mkdir()
         config_file = config_dir / "config.toml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 [indexing]
 ignore_patterns = ["*.tmp", "cache"]
-""")
+"""
+        )
 
         patterns, exceptions = load_repo_ignores(tmp_path)
 
@@ -148,12 +148,14 @@ ignore_patterns = ["*.tmp", "cache"]
         config_dir = tmp_path / ".dolphin"
         config_dir.mkdir()
         config_file = config_dir / "config.toml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 ignore_patterns = ["*.log"]
 
 [indexing]
 ignore_patterns = ["*.tmp"]
-""")
+"""
+        )
 
         patterns, exceptions = load_repo_ignores(tmp_path)
 
@@ -166,10 +168,12 @@ ignore_patterns = ["*.tmp"]
         config_dir = tmp_path / ".dolphin"
         config_dir.mkdir()
         config_file = config_dir / "config.toml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 [invalid toml syntax
 ignore_patterns = ["*.log"]
-""")
+"""
+        )
 
         # Should return empty set and not raise
         patterns, exceptions = load_repo_ignores(tmp_path)
@@ -183,9 +187,11 @@ ignore_patterns = ["*.log"]
         config_dir = tmp_path / ".dolphin"
         config_dir.mkdir()
         config_file = config_dir / "config.toml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 ignore_patterns = "not a list"
-""")
+"""
+        )
 
         patterns, exceptions = load_repo_ignores(tmp_path)
 
@@ -201,9 +207,11 @@ ignore_patterns = "not a list"
         config_dir = tmp_path / ".dolphin"
         config_dir.mkdir()
         config_file = config_dir / "config.toml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 ignore_patterns = []
-""")
+"""
+        )
 
         patterns, exceptions = load_repo_ignores(tmp_path)
 
@@ -220,9 +228,11 @@ ignore_patterns = []
         config_dir = repo / ".dolphin"
         config_dir.mkdir(parents=True)
         config_file = config_dir / "config.toml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 ignore_patterns = ["*.log"]
-""")
+"""
+        )
 
         # Use relative path that needs expansion
         patterns, exceptions = load_repo_ignores(repo)
@@ -234,9 +244,11 @@ ignore_patterns = ["*.log"]
         config_dir = tmp_path / ".dolphin"
         config_dir.mkdir()
         config_file = config_dir / "config.toml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 ignore_patterns = [123, 456]
-""")
+"""
+        )
 
         patterns, exceptions = load_repo_ignores(tmp_path)
 
@@ -249,9 +261,11 @@ ignore_patterns = [123, 456]
         config_dir = tmp_path / ".dolphin"
         config_dir.mkdir()
         config_file = config_dir / "config.toml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 ignore_patterns = ["*.log"]
-""")
+"""
+        )
 
         # Make file unreadable
         config_file.chmod(0o000)
@@ -303,10 +317,12 @@ class TestIgnoreExceptions:
         config_dir = tmp_path / ".dolphin"
         config_dir.mkdir()
         config_file = config_dir / "config.toml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 ignore_patterns = ["*.log"]
 ignore_exceptions = [".env.example"]
-""")
+"""
+        )
 
         patterns, exceptions = load_repo_ignores(tmp_path)
 
@@ -318,11 +334,13 @@ ignore_exceptions = [".env.example"]
         config_dir = tmp_path / ".dolphin"
         config_dir.mkdir()
         config_file = config_dir / "config.toml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 [ignore]
 patterns = ["*.log"]
 exceptions = [".env.example"]
-""")
+"""
+        )
 
         patterns, exceptions = load_repo_ignores(tmp_path)
 

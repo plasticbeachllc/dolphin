@@ -16,15 +16,14 @@ Architecture:
 
 from __future__ import annotations
 
-import re
 import logging
+import re
 from html.parser import HTMLParser
-from typing import List, Tuple
 
-from .token_utils import get_tokenizer, count_tokens
-from .types import Chunk
+from .graph_types import GraphEdge, GraphNode
+from .token_utils import count_tokens, get_tokenizer
 from .ts_chunker import chunk_source as chunk_typescript
-from .graph_types import GraphNode, GraphEdge
+from .types import Chunk
 
 _log = logging.getLogger(__name__)
 
@@ -85,7 +84,7 @@ def chunk_source(
     model: str = "small",
     token_target: int = 400,
     overlap_pct: float = 0.10,
-) -> List[Chunk]:
+) -> list[Chunk]:
     """Chunk Svelte component into logical units.
 
     Strategy:
@@ -164,9 +163,7 @@ def chunk_source(
                     start_line=script_start + chunk.start_line - 1,
                     end_line=script_start + chunk.end_line - 1,
                     token_count=chunk.token_count,
-                    symbol_kind=f"{kind_prefix}{chunk.symbol_kind}"
-                    if chunk.symbol_kind
-                    else f"{kind_prefix}code",
+                    symbol_kind=(f"{kind_prefix}{chunk.symbol_kind}" if chunk.symbol_kind else f"{kind_prefix}code"),
                     symbol_name=chunk.symbol_name,
                     symbol_path=chunk.symbol_path,
                 )
@@ -214,9 +211,7 @@ def chunk_source(
     return chunks
 
 
-def _chunk_template(
-    template: str, start_line: int, tokenizer, token_target: int
-) -> List[Chunk]:
+def _chunk_template(template: str, start_line: int, tokenizer, token_target: int) -> list[Chunk]:
     """Chunk Svelte template by component usage and control flow.
 
     Identifies:
@@ -228,7 +223,7 @@ def _chunk_template(
 
     # Extract component usages for metadata
     component_pattern = r"<([A-Z][A-Za-z0-9]*)[^>]*>"
-    components = re.findall(component_pattern, template)
+    re.findall(component_pattern, template)
 
     # If template is small, keep as single chunk
     token_count = count_tokens(template, tokenizer)
@@ -289,16 +284,14 @@ def _chunk_template(
     return chunks
 
 
-def _fallback_chunking(source: str, model: str, token_target: int) -> List[Chunk]:
+def _fallback_chunking(source: str, model: str, token_target: int) -> list[Chunk]:
     """Fallback: simple token-based chunking."""
     from .fallback_chunker import chunk_text
 
     return chunk_text(source, model=model, token_target=token_target)
 
 
-def extract_graph_data(
-    source: str, component_name: str
-) -> Tuple[List[GraphNode], List[GraphEdge]]:
+def extract_graph_data(source: str, component_name: str) -> tuple[list[GraphNode], list[GraphEdge]]:
     """Extract graph nodes and edges from Svelte component.
 
     Nodes:
@@ -321,7 +314,7 @@ def extract_graph_data(
         Tuple of (nodes, edges) for graph database insertion
     """
     nodes = []
-    edges = []
+    edges: list[GraphEdge] = []
 
     # Create node for the component itself
     nodes.append(

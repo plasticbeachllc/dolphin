@@ -1,26 +1,28 @@
 """Search backend implementation connecting embeddings, vector search, and metadata."""
 
 from __future__ import annotations
-import math
-from pathlib import Path
-from typing import Optional, Sequence, List, Dict, Any
 
+import math
+import time
+import uuid
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any
+
+from ..cache import QueryCache, create_cache
 from ..config import KBConfig
-from ..embeddings.provider import EmbeddingProvider, create_provider
+from ..constants.retrieval_config import RETRIEVAL_PARAMS
+from ..embeddings.provider import EmbeddingProvider, create_provider, set_default_provider
+from ..logging.structured_logger import StructuredLogger
+from ..retrieval.ann_tuning import ANNParams
+from ..retrieval.cross_encoder_rerank import CrossEncoderReranker
+from ..retrieval.graph_context import GraphContextEnricher
+from ..retrieval.rankers import maximal_marginal_relevance, reciprocal_rank_fusion
+from ..store.graph_store import GraphStore
 from ..store.lancedb_store import LanceDBStore
 from ..store.sqlite_meta import SQLiteMetadataStore
-from ..store.graph_store import GraphStore
-from ..cache import QueryCache, create_cache
-from ..retrieval.rankers import reciprocal_rank_fusion, maximal_marginal_relevance
-from ..retrieval.cross_encoder_rerank import CrossEncoderReranker
-from ..retrieval.ann_tuning import ANNParams
-from ..retrieval.graph_context import GraphContextEnricher
 from .app import SearchRequest
 
-# Constants
-CANDIDATE_MULTIPLIER = 4
-CONFIG_FILE_SCORE_PENALTY = 0.5
-BM25_SCORE_NORMALIZATION_FACTOR = 10
 
 
 class KnowledgeSearchBackend:
@@ -29,11 +31,11 @@ class KnowledgeSearchBackend:
         embedding_provider: EmbeddingProvider,
         lance_store: LanceDBStore,
         sql_store: SQLiteMetadataStore,
-        cache: Optional[QueryCache] = None,
+        cache: QueryCache | None = None,
         hybrid_search_enabled: bool = True,
-        reranker: Optional[CrossEncoderReranker] = None,
-        config: Optional[KBConfig] = None,
-        graph_store: Optional[GraphStore] = None,
+        reranker: CrossEncoderReranker | None = None,
+        config: KBConfig | None = None,
+        graph_store: GraphStore | None = None,
     ):
         self.embedding_provider = embedding_provider
         self.lance_store = lance_store
@@ -44,6 +46,9 @@ class KnowledgeSearchBackend:
         self.config = config
         self.graph_store = graph_store
         self._request_ann_config = None  # Per-request ANN configuration overrides
+
+        # Initialize structured logger
+        self.logger = StructuredLogger("kb.api.search_backend", {"component": "KnowledgeSearchBackend"})
 
         # Initialize graph enricher if graph store is available
         self.graph_enricher = None
@@ -56,6 +61,27 @@ class KnowledgeSearchBackend:
             )
 
     def search(self, request: SearchRequest) -> Sequence[dict[str, object]]:
+        # Generate correlation ID for this search request
+        correlation_id = f"search_{uuid.uuid4().hex[:8]}"
+        start_time = time.time()
+
+        # Create child logger with request-specific context
+        request_logger = self.logger.create_child({"correlation_id": correlation_id, "method": "search"})
+
+        # Log incoming search request at INFO level for production observability
+        request_logger.info(
+            "Search request received",
+            {
+                "query_length": len(request.query),
+                "query_preview": request.query[:100],
+                "repos": request.repos,
+                "path_prefix": request.path_prefix,
+                "top_k": request.top_k,
+                "score_cutoff": request.score_cutoff,
+                "embed_model": request.embed_model,
+            },
+        )
+
         # Check cache first if available
         if self.cache:
             # Create cache key from request parameters
@@ -68,14 +94,17 @@ class KnowledgeSearchBackend:
             }
             cached_results = self.cache.get_results(request.query, **cache_params)
             if cached_results is not None:
+                request_logger.info(
+                    "Search completed (cache hit)",
+                    {
+                        "results_count": len(cached_results),
+                        "cache_hit": True,
+                    },
+                )
                 return cached_results
 
-        query_embedding = self.embedding_provider.embed_texts(
-            request.embed_model, [request.query]
-        )[0]
-        num_candidates = (
-            request.top_k * CANDIDATE_MULTIPLIER
-        )  # Fetch more candidates for reranking
+        query_embedding = self.embedding_provider.embed_texts(request.embed_model, [request.query])[0]
+        num_candidates = request.top_k * RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER  # Fetch more candidates for reranking
 
         # Get ANN parameters from config or use defaults
         ann_params = self._get_ann_params(request)
@@ -90,49 +119,86 @@ class KnowledgeSearchBackend:
                 ann_params=ann_params,
             )
             vector_formatted = self._format_vector_results(vector_results)
+            request_logger.debug("Vector search completed", {"results_count": len(vector_formatted)})
         except Exception as e:
             # Log error but continue with empty vector results
-            import logging
-
-            logging.warning(f"Vector search failed: {e}", exc_info=True)
+            request_logger.warning("Vector search failed", error=e)
 
         # BM25 search with error handling
         bm25_hydrated = []
         if self.hybrid_search_enabled and hasattr(self.sql_store, "bm25_search"):
             try:
+                repo_filter = request.repos[0] if request.repos else None
+                request_logger.debug(
+                    "BM25 search started",
+                    {
+                        "repo": repo_filter,
+                        "path_prefix": request.path_prefix,
+                    },
+                )
                 bm25_results = self.sql_store.bm25_search(
                     request.query,
-                    repo=request.repos[0] if request.repos else None,
+                    repo=repo_filter,
                     path_prefix=request.path_prefix,
                     top_k=num_candidates,
                 )
+                request_logger.debug(
+                    "BM25 search completed",
+                    {
+                        "raw_results_count": len(bm25_results),
+                        "sample_chunk_id": (bm25_results[0].get("chunk_id") if bm25_results else None),
+                        "sample_score": (bm25_results[0].get("score") if bm25_results else None),
+                    },
+                )
                 bm25_hydrated = self._hydrate_bm25_results(bm25_results, self.sql_store)
+                request_logger.debug("BM25 results hydrated", {"hydrated_count": len(bm25_hydrated)})
             except Exception as e:
                 # Log error but continue with empty BM25 results
-                import logging
-
-                logging.warning(f"BM25 search failed: {e}")
+                request_logger.warning("BM25 search failed", error=e)
 
         # Apply request filters to both vector and BM25 results
         vector_filtered = self._apply_request_filters(vector_formatted, request)
         bm25_filtered = self._apply_request_filters(bm25_hydrated, request)
 
+        request_logger.debug(
+            "Applied request filters",
+            {
+                "vector_filtered_count": len(vector_filtered),
+                "bm25_filtered_count": len(bm25_filtered),
+            },
+        )
+
         # Apply file type scoring adjustments to deprioritize config files
         vector_filtered = self._apply_file_type_scoring(vector_filtered)
         bm25_filtered = self._apply_file_type_scoring(bm25_filtered)
 
-        import logging
-
-        logging.debug(f"Vector results before RRF: {len(vector_filtered)}")
-        logging.debug(f"BM25 results before RRF: {len(bm25_filtered)}")
+        request_logger.debug(
+            "Applied file type scoring",
+            {"vector_count": len(vector_filtered), "bm25_count": len(bm25_filtered)},
+        )
 
         hits = reciprocal_rank_fusion([vector_filtered, bm25_filtered])
 
-        logging.debug(f"RRF results: {len(hits)}")
+        request_logger.debug("Reciprocal rank fusion completed", {"hits_count": len(hits)})
+
+        # Convert rrf_score to score for all hits
         for hit in hits:
-            rrf_score = hit.get("rrf_score", 0.0)
-            logging.debug(f"Hit {hit.get('chunk_id')}: rrf_score={rrf_score}")
             hit["score"] = hit.pop("rrf_score", 0.0)
+
+        # Log top 3 hits at DEBUG level
+        if hits:
+            request_logger.debug(
+                "Top hits",
+                {
+                    "top_hits": [
+                        {
+                            "chunk_id": hit.get("chunk_id"),
+                            "score": hit.get("score", 0.0),
+                        }
+                        for hit in hits[:3]
+                    ]
+                },
+            )
 
         # UNCOMMENTED AND CORRECTED RERANKING LOGIC
         if self.reranker and hits:
@@ -143,21 +209,17 @@ class KnowledgeSearchBackend:
             # The reranked_docs now have the final score. We need to merge them back
             # while preserving the order and original hits.
             reranked_ids = {doc["chunk_id"] for doc in reranked_docs}
-            final_hits = reranked_docs + [
-                h for h in hits if h["chunk_id"] not in reranked_ids
-            ]
+            final_hits = reranked_docs + [h for h in hits if h["chunk_id"] not in reranked_ids]
             hits = final_hits
 
         # Optional MMR diversification (applied after fusion/reranking, before cutoff/limit)
         # Use request overrides when provided, otherwise fall back to global config.
         try:
-            cfg_mmr_enabled = bool(
-                self.config and getattr(self.config.retrieval, "mmr_enabled", False)
-            )
-            cfg_mmr_lambda = self.config.retrieval.mmr_lambda if self.config else 0.7
+            cfg_mmr_enabled = bool(self.config and getattr(self.config.retrieval, "mmr_enabled", False))
+            cfg_mmr_lambda = self.config.retrieval.mmr_lambda if self.config else RETRIEVAL_PARAMS.MMR_LAMBDA_DEFAULT
         except Exception:
             cfg_mmr_enabled = False
-            cfg_mmr_lambda = 0.7
+            cfg_mmr_lambda = RETRIEVAL_PARAMS.MMR_LAMBDA_DEFAULT
 
         mmr_enabled = (
             request.mmr_enabled if request.mmr_enabled is not None else cfg_mmr_enabled
@@ -192,18 +254,39 @@ class KnowledgeSearchBackend:
                             pass
             except Exception as e:
                 # Fall back gracefully if MMR fails for any reason
-                import logging
+                request_logger.warning("MMR diversification failed", error=e)
 
-                logging.warning(f"MMR diversification failed: {e}", exc_info=True)
+        request_logger.debug(
+            "Applying score cutoff",
+            {
+                "before_cutoff_count": len(hits),
+                "score_cutoff": request.score_cutoff,
+            },
+        )
 
-        final_results = [
-            h for h in hits if h.get("score", 0.0) >= (request.score_cutoff or 0.0)
-        ][: request.top_k]
+        final_results = [h for h in hits if h.get("score", 0.0) >= (request.score_cutoff or 0.0)][: request.top_k]
+
+        if not final_results:
+            request_logger.warning(
+                "No results after score cutoff",
+                {
+                    "cutoff_threshold": request.score_cutoff,
+                    "hits_before_cutoff": len(hits),
+                },
+            )
+        else:
+            request_logger.debug(
+                "Results after score cutoff",
+                {
+                    "results_count": len(final_results),
+                    "first_result_score": final_results[0].get("score"),
+                },
+            )
 
         # Hydrate content for all final results
         if final_results:
             chunk_ids_needing_content = [
-                r["chunk_id"] for r in final_results if "content" not in r
+                r["chunk_id"] for r in final_results if "content" not in r or not r.get("content")
             ]
             if chunk_ids_needing_content:
                 try:
@@ -217,16 +300,20 @@ class KnowledgeSearchBackend:
                         chunk_id = result["chunk_id"]
                         if chunk_id in hydrated_content:
                             result["content"] = hydrated_content[chunk_id]
-                            # Also add file_path for compatibility
-                            if "path" in result and "file_path" not in result:
-                                result["file_path"] = result["path"]
+                        elif "content" not in result:
+                            # Initialize empty content if not present
+                            result["content"] = ""
+                        # Also add file_path for compatibility
+                        if "path" in result and "file_path" not in result:
+                            result["file_path"] = result["path"]
                 except Exception as e:
                     # Log error but don't fail the search
-                    import logging
-
-                    logging.warning(
-                        f"Failed to hydrate content for results: {e}", exc_info=True
-                    )
+                    request_logger.warning("Failed to hydrate content for results", error=e)
+            else:
+                # Ensure all results have file_path even if no hydration needed
+                for result in final_results:
+                    if "path" in result and "file_path" not in result:
+                        result["file_path"] = result["path"]
 
         # Enrich with graph context if requested and available
         include_graph = getattr(request, "include_graph_context", False)
@@ -240,27 +327,37 @@ class KnowledgeSearchBackend:
                 )
             except Exception as e:
                 # Log error but don't fail the search
-                import logging
-
-                logging.warning(f"Graph enrichment failed: {e}")
+                request_logger.warning("Graph enrichment failed", error=e)
 
         # Cache results if cache is available
         if self.cache:
             self.cache.set_results(request.query, list(final_results), **cache_params)
 
+        # Log search completion with summary at INFO level
+        duration_ms = (time.time() - start_time) * 1000
+        request_logger.info(
+            "Search completed",
+            {
+                "results_count": len(final_results),
+                "cache_hit": False,
+                "duration_ms": round(duration_ms, 2),
+            },
+        )
+
         return final_results
 
-    def _format_vector_results(
-        self, vector_results: list[dict]
-    ) -> list[dict[str, object]]:
-        import logging
-
+    def _format_vector_results(self, vector_results: list[dict]) -> list[dict[str, object]]:
         formatted = []
         for r in vector_results:
             distance = r.get("_distance", 1.0)
             score = 1 / (1 + distance)
-            logging.debug(
-                f"Vector result: id={r.get('id')}, _distance={distance}, score={score}"
+            self.logger.debug(
+                "Formatted vector result",
+                {
+                    "id": r.get("id"),
+                    "distance": distance,
+                    "score": score,
+                },
             )
             formatted.append({**r, "chunk_id": r.get("id"), "score": score})
         return formatted
@@ -289,6 +386,8 @@ class KnowledgeSearchBackend:
 
             def matches_prefix(path_str: str) -> bool:
                 path = normalize_path(path_str)
+                # Type check: path_prefix is already checked to be non-None above
+                assert request.path_prefix is not None
                 for prefix_str in request.path_prefix:
                     prefix = normalize_path(prefix_str)
                     try:
@@ -300,13 +399,16 @@ class KnowledgeSearchBackend:
                         continue
                 return False
 
-            filtered = [r for r in filtered if matches_prefix(r.get("path", ""))]
+            # Cast to str since we know r is a dict with string path
+            filtered = [r for r in filtered if matches_prefix(str(r.get("path", "")))]
 
         # Negative filtering: exclude_paths (exact path prefix exclusions)
         if request.exclude_paths:
 
             def matches_excluded_path(path_str: str) -> bool:
                 path = normalize_path(path_str)
+                # Type check: exclude_paths is already checked to be non-None above
+                assert request.exclude_paths is not None
                 for excl_str in request.exclude_paths:
                     excl = normalize_path(excl_str)
                     try:
@@ -318,9 +420,8 @@ class KnowledgeSearchBackend:
                         continue
                 return False
 
-            filtered = [
-                r for r in filtered if not matches_excluded_path(r.get("path", ""))
-            ]
+            # Cast to str since we know r is a dict with string path
+            filtered = [r for r in filtered if not matches_excluded_path(str(r.get("path", "")))]
 
         # Negative filtering: exclude_patterns (glob/fnmatch pattern exclusions)
         if request.exclude_patterns:
@@ -328,7 +429,8 @@ class KnowledgeSearchBackend:
 
             def matches_excluded_pattern(path_str: str) -> bool:
                 path = normalize_path(path_str)
-
+                # Type check: exclude_patterns is already checked to be non-None above
+                assert request.exclude_patterns is not None
                 for pattern in request.exclude_patterns:
                     # Match against both full path and basename
                     if fnmatch.fnmatch(str(path), pattern) or fnmatch.fnmatch(
@@ -337,15 +439,12 @@ class KnowledgeSearchBackend:
                         return True
                 return False
 
-            filtered = [
-                r for r in filtered if not matches_excluded_pattern(r.get("path", ""))
-            ]
+            # Cast to str since we know r is a dict with string path
+            filtered = [r for r in filtered if not matches_excluded_pattern(str(r.get("path", "")))]
 
         return filtered
 
-    def _apply_file_type_scoring(
-        self, results: list[dict[str, object]]
-    ) -> list[dict[str, object]]:
+    def _apply_file_type_scoring(self, results: list[dict[str, object]]) -> list[dict[str, object]]:
         """Apply scoring adjustments based on file type to deprioritize config files.
 
         Config files (TOML, JSON, YAML) are penalized to prevent them from
@@ -353,8 +452,12 @@ class KnowledgeSearchBackend:
         """
         adjusted = []
         for result in results:
-            path = result.get("path", "")
-            score = result.get("score", 0.0)
+            path_obj = result.get("path", "")
+            # Cast to string for type safety
+            path = str(path_obj) if path_obj else ""
+            score_obj = result.get("score", 0.0)
+            # Cast to float for type safety
+            score = float(score_obj) if isinstance(score_obj, (int, float)) else 0.0
 
             # Check if this is a config file
             is_config = (
@@ -368,7 +471,10 @@ class KnowledgeSearchBackend:
             )
 
             if is_config:
-                result = {**result, "score": score * CONFIG_FILE_SCORE_PENALTY}
+                result = {
+                    **result,
+                    "score": score * RETRIEVAL_PARAMS.CONFIG_FILE_SCORE_PENALTY,
+                }
 
             adjusted.append(result)
 
@@ -377,37 +483,52 @@ class KnowledgeSearchBackend:
     def _hydrate_bm25_results(
         self, bm25_results: list[dict], sql_store: SQLiteMetadataStore
     ) -> list[dict[str, object]]:
-        """Hydrate BM25 results with full chunk metadata from LanceDB.
+        """Hydrate BM25 results with full chunk metadata.
 
-        BM25 search returns minimal metadata (content_id, repo, path, score).
-        We need to fetch full chunk data including embeddings, line numbers,
-        symbol info, etc. from LanceDB for proper result formatting.
+        BM25 search returns minimal metadata (content_id, repo, path, score, text_hash).
+        We need to fetch full chunk data including line numbers, symbol info, etc.
+        from the metadata store for proper result formatting.
 
-        If chunk data is not available (e.g., test data only in FTS),
-        use the minimal data from BM25 results with normalized scores.
+        The content_id from BM25 is a deterministic hash generated by generate_fts_content_id(),
+        which is a 32-character SHA256 hash of 'repo_id:file_id:text_hash'.
+        We use the text_hash field (also stored in FTS5) to look up chunk metadata.
         """
         if not bm25_results:
             return []
 
         hydrated = []
         for result in bm25_results:
-            # Fetch full chunk metadata from SQLiteMetadataStore
-            chunk_data = sql_store.get_chunk_by_id(result["chunk_id"])
+            chunk_id = result["chunk_id"]
+            text_hash = result.get("text_hash")
+
+            # Look up chunk metadata using text_hash and repo/path
+            chunk_data = None
+            if text_hash:
+                # Get repo_id and file_id from repo name and path
+                repo_info = sql_store.get_repo_by_name(result["repo"])
+                if repo_info:
+                    repo_id = repo_info["id"]
+                    file_id = sql_store.get_file_id(repo_id, result["path"])
+                    if file_id:
+                        # Look up chunk by content identity (repo_id, file_id, text_hash)
+                        chunk_data = sql_store.get_chunk_by_content_identity(repo_id, file_id, text_hash)
+
+            # Fallback: try direct lookup by chunk_id (for legacy UUID-based IDs)
+            if not chunk_data:
+                chunk_data = sql_store.get_chunk_by_id(chunk_id)
 
             # Normalize BM25 score to [0, 1] range for fusion
             # BM25 scores are unbounded, use sigmoid normalization
             bm25_score = result["score"]
-            normalized_score = 1 / (
-                1 + math.exp(-bm25_score / BM25_SCORE_NORMALIZATION_FACTOR)
-            )
+            normalized_score = 1 / (1 + math.exp(-bm25_score / RETRIEVAL_PARAMS.BM25_SCORE_NORMALIZATION_FACTOR))
 
             # Create result dict with available data
             hydrated_result = {
-                "chunk_id": result["chunk_id"],
+                "chunk_id": chunk_id,
                 "repo": result["repo"],
                 "path": result["path"],
                 "score": normalized_score,
-                "id": result["chunk_id"],  # For compatibility with vector results
+                "id": chunk_id,  # For compatibility with vector results
             }
 
             # Add metadata from chunk_data if available
@@ -424,10 +545,34 @@ class KnowledgeSearchBackend:
                         "symbol_path": chunk_data.get("symbol_path"),
                     }
                 )
+            else:
+                # Log warning if we couldn't hydrate metadata
+                self.logger.warning(
+                    "Failed to hydrate BM25 result",
+                    {
+                        "chunk_id": chunk_id,
+                        "repo": result["repo"],
+                        "path": result["path"],
+                        "text_hash": text_hash,
+                    },
+                )
 
             hydrated.append(hydrated_result)
 
         return hydrated
+
+    @staticmethod
+    def _parse_fts_content_id(content_id: str) -> tuple[int, int, str] | None:
+        """Parse deterministic FTS content IDs (repo_id:file_id:text_hash)."""
+
+        if content_id.count(":") < 2:
+            return None
+
+        try:
+            repo_id_str, file_id_str, text_hash = content_id.split(":", 2)
+            return int(repo_id_str), int(file_id_str), text_hash
+        except (ValueError, TypeError):
+            return None
 
     def _resolve_content_ids(self, row_ids: list[str]) -> dict[str, str]:
         """Convert LanceDB row IDs to metadata content_ids.
@@ -473,50 +618,80 @@ class KnowledgeSearchBackend:
 
             except (ValueError, IndexError) as e:
                 # Skip malformed row IDs
-                import logging
-
-                logging.warning(f"Failed to parse row_id {row_id}: {e}")
+                self.logger.warning("Failed to parse row_id", {"row_id": row_id, "error": str(e)})
                 continue
 
         return row_id_to_content_id
 
-    def _hydrate_chunk_content(
-        self, chunk_ids: list[str], sql_store: SQLiteMetadataStore
-    ) -> dict[str, str]:
+    def _hydrate_chunk_content(self, chunk_ids: list[str], sql_store: SQLiteMetadataStore) -> dict[str, str]:
         """Hydrate content for chunk IDs.
 
         Args:
-            chunk_ids: List of chunk row IDs from LanceDB
+            chunk_ids: List of chunk IDs (can be LanceDB row IDs or FTS content IDs)
             sql_store: Metadata store for content lookup
 
         Returns:
             Dictionary mapping chunk_id -> content
         """
+        from kb.store.sqlite_meta import generate_fts_content_id
+
         if not chunk_ids:
             return {}
 
-        # Convert LanceDB row IDs to content_ids
-        content_id_map = self._resolve_content_ids(chunk_ids)
-        content_ids = list(content_id_map.values())
+        # Separate LanceDB row IDs from FTS content IDs
+        # LanceDB row IDs have format: repo_id:file_id:embed_model:text_hash:start_line:end_line
+        # FTS content IDs are 32-character hex strings
+        lancedb_row_ids = []
+        fts_content_ids = []
 
-        if not content_ids:
-            return {}
-
-        # Fetch content from metadata store
-        contents = sql_store.get_chunk_contents(content_ids)
-
-        # Map content back to original chunk_ids
-        result = {}
         for chunk_id in chunk_ids:
-            content_id = content_id_map.get(chunk_id)
-            if content_id and content_id in contents:
-                result[chunk_id] = contents[content_id]
+            # Check if this looks like a LanceDB row ID (has multiple colons)
+            if chunk_id.count(":") >= 5:
+                lancedb_row_ids.append(chunk_id)
+            else:
+                # Treat as FTS content ID
+                fts_content_ids.append(chunk_id)
+
+        result = {}
+
+        # Handle LanceDB row IDs - convert to FTS content_ids for lookup
+        if lancedb_row_ids:
+            # Parse LanceDB row IDs and generate corresponding FTS content_ids
+            lancedb_to_fts = {}
+            for row_id in lancedb_row_ids:
+                try:
+                    parts = row_id.split(":")
+                    if len(parts) >= 4:
+                        repo_id = int(parts[0])
+                        file_id = int(parts[1])
+                        # embed_model = parts[2]  # Not needed for FTS lookup
+                        text_hash = parts[3]
+                        # Generate deterministic FTS content_id
+                        fts_content_id = generate_fts_content_id(repo_id, file_id, text_hash)
+                        lancedb_to_fts[row_id] = fts_content_id
+                except (ValueError, IndexError):
+                    # Skip malformed row IDs
+                    continue
+
+            if lancedb_to_fts:
+                # Fetch content using FTS content_ids
+                fts_ids = list(lancedb_to_fts.values())
+                contents = sql_store.get_chunk_contents(fts_ids)
+
+                # Map content back to original LanceDB row IDs
+                for row_id, fts_id in lancedb_to_fts.items():
+                    if fts_id in contents:
+                        result[row_id] = contents[fts_id]
+
+        # Handle FTS content IDs (can be used directly)
+        if fts_content_ids:
+            # These can be used directly with get_chunk_contents
+            fts_contents = sql_store.get_chunk_contents(fts_content_ids)
+            result.update(fts_contents)
 
         return result
 
-    def _hydrate_docs_for_reranking(
-        self, hits: List[Dict], sql_store: SQLiteMetadataStore
-    ) -> List[Dict]:
+    def _hydrate_docs_for_reranking(self, hits: list[dict], sql_store: SQLiteMetadataStore) -> list[dict]:
         ids_to_fetch = [h["chunk_id"] for h in hits if "content" not in h]
         if not ids_to_fetch:
             return hits
@@ -532,7 +707,7 @@ class KnowledgeSearchBackend:
 
         return hits
 
-    def set_request_ann_config(self, config: Dict[str, Any]) -> None:
+    def set_request_ann_config(self, config: dict[str, Any]) -> None:
         """Set per-request ANN configuration overrides.
 
         Args:
@@ -589,10 +764,7 @@ class KnowledgeSearchBackend:
         ann_params = ANNParams.from_config(self.config)
 
         # If adaptive strategy, adjust based on request characteristics
-        if (
-            hasattr(self.config.retrieval.ann, "strategy")
-            and self.config.retrieval.ann.strategy == "adaptive"
-        ):
+        if hasattr(self.config.retrieval.ann, "strategy") and self.config.retrieval.ann.strategy == "adaptive":
             # Determine query type based on query characteristics
             query_type = self._classify_query_type(request.query)
 
@@ -603,9 +775,9 @@ class KnowledgeSearchBackend:
                 if hasattr(adaptive_config, "estimated_dataset_size"):
                     estimated_size = adaptive_config.estimated_dataset_size
 
-            return ANNParams.adaptive(
-                query_type=query_type, top_k=request.top_k, dataset_size=estimated_size
-            )
+            # Cast estimated_size to int with fallback
+            dataset_size = int(estimated_size) if isinstance(estimated_size, (int, float)) else 100000
+            return ANNParams.adaptive(query_type=query_type, top_k=request.top_k, dataset_size=dataset_size)
 
         # For non-adaptive strategies, return the configured params
         return ann_params
@@ -734,6 +906,7 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
 
     # Create stores
     sql_store = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    sql_store.initialize()  # Ensure DB is initialized with proper schema
     lance_store = LanceDBStore(config.resolved_store_root() / "lancedb")
 
     # Create embedding provider
@@ -751,6 +924,9 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
         provider_kwargs["cache"] = cache_instance
 
     provider = create_provider(config.embedding_provider, **provider_kwargs)
+
+    # Set as global default provider for async convenience functions
+    set_default_provider(provider)
 
     # Create cache (always create but may be disabled)
     cache = create_cache(
@@ -772,10 +948,8 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     try:
         graph_store = GraphStore(config.resolved_store_root() / "metadata.db")
     except Exception:
-        # Graph store is optional
-        import logging
-
-        logging.debug("Graph store not available")
+        # Graph store is optional - no logging needed for expected absence
+        pass
 
     # Create and return the search backend
     return KnowledgeSearchBackend(

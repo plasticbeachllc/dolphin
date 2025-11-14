@@ -13,15 +13,16 @@ Architecture Note:
 - The mark-processed endpoint exists for manual/admin intervention only
 """
 
-import pytest
-import time
 import hashlib
+import time
+
+import pytest
 from fastapi.testclient import TestClient
 
-from kb.api.app import app, set_stores, reset_stores, set_pipeline, reset_pipeline
-from kb.store.sqlite_meta import SQLiteMetadataStore
-from kb.store.lancedb_vector import LanceDBVectorStore
+from kb.api.app import app, reset_pipeline, reset_stores, set_pipeline, set_stores
 from kb.pipeline import KBPipeline
+from kb.store.lancedb_vector import LanceDBVectorStore
+from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
 @pytest.mark.integration
@@ -48,9 +49,7 @@ class TestSnapshotTracking:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(
-            name="test-repo", path=workspace, default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = sql_store.get_repo_by_name("test-repo")
 
         # Create test file
@@ -69,15 +68,29 @@ class TestSnapshotTracking:
 
         # Poll for completion
         max_polls = 30
+        task_completed = False
+        final_status = None
         for _ in range(max_polls):
             status_response = client.get(f"/v1/index/status/{task_id}")
-            if status_response.json()["status"] == "completed":
+            status_data = status_response.json()
+            final_status = status_data["status"]
+            if final_status in ["completed", "failed"]:
+                task_completed = True
                 break
             time.sleep(1)
 
+        # Check if task completed successfully
+        assert task_completed, f"Task did not complete within timeout. Final status: {final_status}"
+        assert final_status == "completed", (
+            f"Task failed with status: {final_status}, error: {status_data.get('error')}"
+        )
+
+        # Add small delay to ensure database commits are visible
+        time.sleep(0.5)
+
         # Verify snapshot was created
         file_record = sql_store.get_file_by_path(repo["id"], "sample.py")
-        assert file_record is not None
+        assert file_record is not None, f"File record not found after successful indexing. Task status: {status_data}"
 
         snapshot = sql_store.get_file_snapshot(file_record["id"])
         assert snapshot is not None
@@ -141,6 +154,9 @@ class TestSnapshotTracking:
                 break
             time.sleep(1)
 
+        # Add small delay to ensure database commits are visible
+        time.sleep(0.2)
+
         # Get first snapshot
         file_record = sql_store.get_file_by_path(repo["id"], "evolving.py")
         snapshot1 = sql_store.get_file_snapshot(file_record["id"])
@@ -164,6 +180,9 @@ class TestSnapshotTracking:
             ):
                 break
             time.sleep(1)
+
+        # Add small delay to ensure database commits are visible
+        time.sleep(0.2)
 
         # Get updated snapshot
         snapshot2 = sql_store.get_file_snapshot(file_record["id"])
@@ -213,9 +232,7 @@ class TestSnapshotTracking:
 
         # Index all files
         client = TestClient(app)
-        response = client.post(
-            "/v1/index", json={"repo": "test-repo", "files": files, "incremental": True}
-        )
+        response = client.post("/v1/index", json={"repo": "test-repo", "files": files, "incremental": True})
         task_id = response.json()["task_id"]
 
         # Wait for completion
@@ -226,6 +243,9 @@ class TestSnapshotTracking:
             ):
                 break
             time.sleep(1)
+
+        # Add small delay to ensure database commits are visible
+        time.sleep(0.2)
 
         # Verify all files have snapshots
         for filename in files:
@@ -280,9 +300,7 @@ class TestPostIndexValidation:
 
         # Start indexing
         client = TestClient(app)
-        response = client.post(
-            "/v1/index", json={"repo": "test-repo", "files": files, "incremental": True}
-        )
+        response = client.post("/v1/index", json={"repo": "test-repo", "files": files, "incremental": True})
         task_id = response.json()["task_id"]
 
         # Modify a file while indexing is in progress
@@ -302,7 +320,7 @@ class TestPostIndexValidation:
         pending_changes = pending_response.json()["changes"]
 
         # Should have at least one pending change for the modified file
-        modified_changes = [c for c in pending_changes if c["file_path"] == files[0]]
+        [c for c in pending_changes if c["file_path"] == files[0]]
         # Note: This may not always detect mid-index changes due to timing
         # The test validates the mechanism works when timing allows
 
@@ -335,10 +353,8 @@ class TestDriftDetection:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(
-            name="test-repo", path=workspace, default_embed_model="large"
-        )
-        repo = sql_store.get_repo_by_name("test-repo")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.get_repo_by_name("test-repo")
 
         # Create and index file
         test_file = workspace / "tracked.py"
@@ -359,6 +375,9 @@ class TestDriftDetection:
             ):
                 break
             time.sleep(1)
+
+        # Add small delay to ensure database commits are visible
+        time.sleep(0.2)
 
         # Verify no drift initially
         drift_response1 = client.get("/v1/repos/test-repo/drift")
@@ -429,6 +448,9 @@ class TestDriftDetection:
             ):
                 break
             time.sleep(1)
+
+        # Add small delay to ensure database commits are visible
+        time.sleep(0.2)
 
         # Delete file (simulating offline deletion)
         test_file.unlink()
@@ -546,9 +568,7 @@ class TestAutomaticChangeProcessing:
         # 1. Record pending change (simulating file watcher)
         changes_response = client.post(
             "/v1/repos/test-repo/changes",
-            json={
-                "changes": [{"file_path": "auto_process.py", "change_type": "created"}]
-            },
+            json={"changes": [{"file_path": "auto_process.py", "change_type": "created"}]},
         )
         assert changes_response.status_code == 200
         change_ids = changes_response.json()["change_ids"]
@@ -577,6 +597,9 @@ class TestAutomaticChangeProcessing:
             ):
                 break
             time.sleep(1)
+
+        # Add small delay to ensure database commits are visible
+        time.sleep(0.2)
 
         # 4. Verify change was AUTOMATICALLY marked as processed (no manual API call!)
         pending_after = client.get("/v1/repos/test-repo/pending-changes")
@@ -699,7 +722,7 @@ class TestPendingChangesWorkflow:
             },
         )
         assert changes_response.status_code == 200
-        change_ids = changes_response.json()["change_ids"]
+        changes_response.json()["change_ids"]
 
         # 2. Get pending changes
         pending_response = client.get("/v1/repos/test-repo/pending-changes")
@@ -725,6 +748,9 @@ class TestPendingChangesWorkflow:
             ):
                 break
             time.sleep(1)
+
+        # Add small delay to ensure database commits are visible
+        time.sleep(0.2)
 
         # 4. Verify Python automatically marked changes as processed
         # (No manual mark-processed call needed!)

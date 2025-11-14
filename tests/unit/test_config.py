@@ -202,7 +202,8 @@ class TestLoadConfig:
     def test_load_config_from_valid_file(self, tmp_path):
         """Test loading config from valid TOML file."""
         config_file = tmp_path / "config.toml"
-        config_file.write_text("""
+        config_file.write_text(
+            """
 [storage]
 store_root = "/tmp/test"
 
@@ -238,7 +239,8 @@ strategy = "adaptive"
 metric = "cosine"
 estimated_dataset_size = 100000
 default_query_type = "concept"
-""")
+"""
+        )
         config = load_config(config_file)
         assert config.concurrency == 8
         assert config.retrieval.score_cutoff == 0.3

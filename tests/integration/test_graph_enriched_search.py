@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
 
+import pytest
+
+from kb.retrieval.graph_context import GraphContextEnricher, format_graph_context_for_llm
 from kb.store.graph_store import GraphStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
-from kb.retrieval.graph_context import (
-    GraphContextEnricher,
-    format_graph_context_for_llm,
-)
 
 
 @pytest.fixture
@@ -20,7 +18,8 @@ def sample_python_file(tmp_path: Path) -> Path:
     repo_dir.mkdir()
 
     sample_file = repo_dir / "calculator.py"
-    sample_file.write_text("""
+    sample_file.write_text(
+        """
 def add(a, b):
     \"\"\"Add two numbers.\"\"\"
     return a + b
@@ -46,7 +45,8 @@ def process_data(values):
     result = subtract(result, values[2])
     result = multiply(result, 2)
     return result
-""")
+"""
+    )
 
     return repo_dir
 
@@ -70,8 +70,8 @@ def indexed_repo(sample_python_file: Path, tmp_path: Path):
 
     # Process the file to extract graph data
     file_path = sample_python_file / "calculator.py"
-    from kb.ingest.graph_helpers import extract_graph_from_file, store_graph_data
     from kb.chunkers.repo_config import RepoChunkingConfig
+    from kb.ingest.graph_helpers import extract_graph_from_file, store_graph_data
 
     file_info_id = sql_store.upsert_file(
         repo_id=repo_info["id"],
@@ -290,7 +290,7 @@ def test_graph_context_no_graph_data(tmp_path: Path):
     # Create repo without graph data
     sql_store.record_repo("empty_repo", tmp_path)
     repo_info = sql_store.get_repo_by_name("empty_repo")
-    file_info_id = sql_store.upsert_file(
+    sql_store.upsert_file(
         repo_id=repo_info["id"],
         path="test.py",
         ext=".py",
@@ -298,7 +298,6 @@ def test_graph_context_no_graph_data(tmp_path: Path):
         is_binary=False,
         size_bytes=0,
     )
-    file_info = {"id": file_info_id}
 
     enricher = GraphContextEnricher(graph_store=graph_store, sql_store=sql_store)
 

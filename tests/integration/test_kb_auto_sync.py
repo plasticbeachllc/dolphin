@@ -4,15 +4,16 @@ These tests validate the full end-to-end flow:
 - VSCode Extension → Agent Core → KB API → Pipeline → Storage
 """
 
-import pytest
 import time
 from pathlib import Path
+
+import pytest
 from fastapi.testclient import TestClient
 
-from kb.api.app import app, set_stores, reset_stores, set_pipeline, reset_pipeline
-from kb.store.sqlite_meta import SQLiteMetadataStore
-from kb.store.lancedb_vector import LanceDBVectorStore
+from kb.api.app import app, reset_pipeline, reset_stores, set_pipeline, set_stores
 from kb.pipeline import KBPipeline
+from kb.store.lancedb_vector import LanceDBVectorStore
+from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
 @pytest.mark.integration
@@ -44,9 +45,7 @@ class TestRepositoryRegistration:
             cwd=workspace,
             check=True,
         )
-        subprocess.run(
-            ["git", "config", "user.name", "Test User"], cwd=workspace, check=True
-        )
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=workspace, check=True)
         subprocess.run(
             ["git", "remote", "add", "origin", "https://github.com/test/my-repo.git"],
             cwd=workspace,
@@ -107,7 +106,7 @@ class TestRepositoryRegistration:
             },
         )
         assert response1.status_code == 200
-        repo_id_1 = response1.json()["repo_id"]
+        response1.json()["repo_id"]
 
         # Register second time - should not fail
         response2 = client.post(
@@ -151,14 +150,13 @@ class TestAsyncIndexingFlow:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(
-            name="test-repo", path=workspace, default_embed_model="large"
-        )
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = sql_store.get_repo_by_name("test-repo")
 
         # Create test file
         test_file = workspace / "hello.py"
-        test_file.write_text("""
+        test_file.write_text(
+            """
 def hello_world():
     '''A simple greeting function.'''
     return "Hello, World!"
@@ -166,7 +164,8 @@ def hello_world():
 def goodbye():
     '''Say goodbye.'''
     return "Goodbye!"
-""")
+"""
+        )
 
         # Queue indexing
         client = TestClient(app)
@@ -240,18 +239,18 @@ def goodbye():
         for i in range(5):
             filename = f"file{i}.py"
             filepath = workspace / filename
-            filepath.write_text(f"""
+            filepath.write_text(
+                f"""
 def function_{i}():
     '''Function number {i}.'''
     return {i}
-""")
+"""
+            )
             files.append(filename)
 
         # Queue all files for indexing
         client = TestClient(app)
-        response = client.post(
-            "/v1/index", json={"repo": "test-repo", "files": files, "incremental": True}
-        )
+        response = client.post("/v1/index", json={"repo": "test-repo", "files": files, "incremental": True})
 
         assert response.status_code == 200
         task_id = response.json()["task_id"]
@@ -384,10 +383,8 @@ class TestTaskStatusTracking:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(
-            name="test-repo", path=workspace, default_embed_model="large"
-        )
-        repo = sql_store.get_repo_by_name("test-repo")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.get_repo_by_name("test-repo")
 
         # Create test file
         (workspace / "test.py").write_text("def test(): pass")
@@ -395,9 +392,7 @@ class TestTaskStatusTracking:
         client = TestClient(app)
 
         # Queue task
-        response = client.post(
-            "/v1/index", json={"repo": "test-repo", "files": ["test.py"]}
-        )
+        response = client.post("/v1/index", json={"repo": "test-repo", "files": ["test.py"]})
         task_id = response.json()["task_id"]
 
         # Track status changes
@@ -444,16 +439,12 @@ class TestTaskStatusTracking:
         workspace2 = temp_dir / "workspace2"
         workspace2.mkdir()
 
-        sql_store.record_repo(
-            name="repo1", path=workspace1, default_embed_model="large"
-        )
+        sql_store.record_repo(name="repo1", path=workspace1, default_embed_model="large")
 
-        repo1 = sql_store.get_repo_by_name("repo1")
-        sql_store.record_repo(
-            name="repo2", path=workspace2, default_embed_model="large"
-        )
+        sql_store.get_repo_by_name("repo1")
+        sql_store.record_repo(name="repo2", path=workspace2, default_embed_model="large")
 
-        repo2 = sql_store.get_repo_by_name("repo2")
+        sql_store.get_repo_by_name("repo2")
 
         # Create test files
         (workspace1 / "test1.py").write_text("def test1(): pass")
@@ -510,17 +501,13 @@ class TestErrorHandling:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(
-            name="test-repo", path=workspace, default_embed_model="large"
-        )
-        repo = sql_store.get_repo_by_name("test-repo")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.get_repo_by_name("test-repo")
 
         client = TestClient(app)
 
         # Try to index non-existent file
-        response = client.post(
-            "/v1/index", json={"repo": "test-repo", "files": ["nonexistent.py"]}
-        )
+        response = client.post("/v1/index", json={"repo": "test-repo", "files": ["nonexistent.py"]})
 
         # Should queue the task
         assert response.status_code == 200
@@ -555,9 +542,7 @@ class TestErrorHandling:
         client = TestClient(app)
 
         # Try to index for non-existent repo
-        response = client.post(
-            "/v1/index", json={"repo": "nonexistent-repo", "files": ["test.py"]}
-        )
+        response = client.post("/v1/index", json={"repo": "nonexistent-repo", "files": ["test.py"]})
 
         # Should return 404
         assert response.status_code == 404
@@ -606,7 +591,8 @@ class TestEndToEndWorkflow:
 
         # Step 2: Create code files
         auth_file = workspace / "auth.py"
-        auth_file.write_text("""
+        auth_file.write_text(
+            """
 class AuthenticationService:
     '''Handles user authentication and authorization.'''
 
@@ -618,17 +604,20 @@ class AuthenticationService:
     def logout(self, user_id: int) -> None:
         '''Log out user session.'''
         pass
-""")
+"""
+        )
 
         api_file = workspace / "api.py"
-        api_file.write_text("""
+        api_file.write_text(
+            """
 class APIEndpoint:
     '''REST API endpoint handler.'''
 
     def handle_request(self, method: str, path: str) -> dict:
         '''Handle incoming API request.'''
         return {"status": "ok"}
-""")
+"""
+        )
 
         # Step 3: Index files
         index_response = client.post(

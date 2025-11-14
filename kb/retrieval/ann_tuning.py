@@ -60,7 +60,7 @@ class ANNParams:
             raise ValueError(f"refine_factor must be >= 1, got {self.refine_factor}")
 
     @classmethod
-    def for_speed(cls) -> "ANNParams":
+    def for_speed(cls) -> ANNParams:
         """Optimized for speed (95% recall, 2x faster).
 
         Use when:
@@ -81,7 +81,7 @@ class ANNParams:
         )
 
     @classmethod
-    def for_accuracy(cls) -> "ANNParams":
+    def for_accuracy(cls) -> ANNParams:
         """Optimized for accuracy (99% recall, same speed as default).
 
         Use when:
@@ -102,7 +102,7 @@ class ANNParams:
         )
 
     @classmethod
-    def for_development(cls) -> "ANNParams":
+    def for_development(cls) -> ANNParams:
         """Exact search for development/debugging.
 
         Use when:
@@ -120,9 +120,7 @@ class ANNParams:
         )
 
     @classmethod
-    def adaptive(
-        cls, query_type: str = "concept", top_k: int = 10, dataset_size: int = 100000
-    ) -> "ANNParams":
+    def adaptive(cls, query_type: str = "concept", top_k: int = 10, dataset_size: int = 100000) -> ANNParams:
         """Adaptive parameters based on query characteristics.
 
         Args:
@@ -187,7 +185,7 @@ class ANNParams:
         }
 
     @classmethod
-    def from_config(cls, config) -> "ANNParams":
+    def from_config(cls, config) -> ANNParams:
         """Create ANNParams from configuration.
 
         Args:
@@ -208,12 +206,7 @@ class ANNParams:
             return cls.for_accuracy()
         elif strategy == "development":
             return cls.for_development()
-        elif (
-            strategy == "custom"
-            and custom_metric
-            and custom_nprobes
-            and custom_refine_factor
-        ):
+        elif strategy == "custom" and custom_metric and custom_nprobes and custom_refine_factor:
             return cls(
                 metric=custom_metric,
                 nprobes=custom_nprobes,
@@ -224,12 +217,8 @@ class ANNParams:
             # Default to adaptive with config values if available
             adaptive_config = getattr(config.retrieval.ann, "adaptive", None)
             if adaptive_config:
-                estimated_size = getattr(
-                    adaptive_config, "estimated_dataset_size", 100000
-                )
-                default_query_type = getattr(
-                    adaptive_config, "default_query_type", "concept"
-                )
+                estimated_size = getattr(adaptive_config, "estimated_dataset_size", 100000)
+                default_query_type = getattr(adaptive_config, "default_query_type", "concept")
                 return cls.adaptive(
                     query_type=default_query_type,
                     top_k=10,  # Default, will be overridden in actual queries

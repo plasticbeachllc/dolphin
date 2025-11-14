@@ -1,11 +1,12 @@
 """Unit tests for ranking algorithms (RRF, Weighted Fusion, MMR)."""
 
 import pytest
+
 from kb.retrieval.rankers import (
+    create_fusion_function,
+    maximal_marginal_relevance,
     reciprocal_rank_fusion,
     weighted_fusion,
-    maximal_marginal_relevance,
-    create_fusion_function,
 )
 
 
@@ -138,9 +139,7 @@ class TestWeightedFusion:
         list2 = [{"chunk_id": "A", "score": 0.01}]
 
         fused_normalized = weighted_fusion([list1, list2], [0.5, 0.5], normalize=True)
-        fused_unnormalized = weighted_fusion(
-            [list1, list2], [0.5, 0.5], normalize=False
-        )
+        fused_unnormalized = weighted_fusion([list1, list2], [0.5, 0.5], normalize=False)
 
         # Should have different results due to normalization
         assert (
@@ -199,9 +198,7 @@ class TestMaximalMarginalRelevance:
             },  # Different
         ]
 
-        result = maximal_marginal_relevance(
-            query_vector, candidates, top_k=2, lambda_param=0.7
-        )
+        result = maximal_marginal_relevance(query_vector, candidates, top_k=2, lambda_param=0.7)
 
         assert len(result) == 2
 
@@ -233,14 +230,10 @@ class TestMaximalMarginalRelevance:
         ]
 
         # High lambda = prioritize relevance
-        result_relevance = maximal_marginal_relevance(
-            query_vector, candidates, lambda_param=0.9
-        )
+        result_relevance = maximal_marginal_relevance(query_vector, candidates, lambda_param=0.9)
 
         # Low lambda = prioritize diversity
-        result_diversity = maximal_marginal_relevance(
-            query_vector, candidates, lambda_param=0.1
-        )
+        result_diversity = maximal_marginal_relevance(query_vector, candidates, lambda_param=0.1)
 
         # Results should be different with different lambda values
         assert len(result_relevance) >= 2
@@ -270,10 +263,7 @@ class TestMaximalMarginalRelevance:
     def test_top_k_limit(self):
         """Test top_k parameter limits results."""
         query_vector = [0.1, 0.2, 0.3]
-        candidates = [
-            {"chunk_id": str(i), "score": 0.9 - i * 0.1, "query_vector": query_vector}
-            for i in range(10)
-        ]
+        candidates = [{"chunk_id": str(i), "score": 0.9 - i * 0.1, "query_vector": query_vector} for i in range(10)]
 
         result = maximal_marginal_relevance(query_vector, candidates, top_k=3)
 
@@ -368,9 +358,7 @@ class TestEdgeCases:
         """Test with large result sets."""
         # Create large result sets
         list1 = [{"chunk_id": str(i), "score": 0.9 - i * 0.001} for i in range(100)]
-        list2 = [
-            {"chunk_id": str(i + 50), "score": 0.9 - i * 0.001} for i in range(100)
-        ]
+        list2 = [{"chunk_id": str(i + 50), "score": 0.9 - i * 0.001} for i in range(100)]
 
         fused = reciprocal_rank_fusion([list1, list2])
 

@@ -1,8 +1,9 @@
 """Tests for Python call graph extraction."""
 
 import pytest
+
 from kb.graph_intelligence.extractors.python_call_graph import PythonCallGraphExtractor
-from kb.graph_intelligence.models import NodeType, EdgeType
+from kb.graph_intelligence.models import EdgeType, NodeType
 
 
 @pytest.fixture
@@ -18,9 +19,7 @@ def hello():
     """Say hello."""
     print("Hello")
 '''
-    nodes, edges = extractor.extract(
-        "test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
-    )
+    nodes, edges = extractor.extract("test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main")
 
     assert len(nodes) == 1
     assert nodes[0].name == "hello"
@@ -38,9 +37,7 @@ def caller():
 def callee():
     pass
 """
-    nodes, edges = extractor.extract(
-        "test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
-    )
+    nodes, edges = extractor.extract("test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main")
 
     assert len(nodes) == 2
     assert len(edges) == 1
@@ -62,9 +59,7 @@ class Calculator:
         """Multiply two numbers."""
         return self.add(a, 0) * b
 '''
-    nodes, edges = extractor.extract(
-        "test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
-    )
+    nodes, edges = extractor.extract("test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main")
 
     # Should have: Calculator class, add method, multiply method
     assert len(nodes) == 3
@@ -92,9 +87,7 @@ async def fetch_data():
 async def some_api_call():
     pass
 '''
-    nodes, edges = extractor.extract(
-        "test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
-    )
+    nodes, edges = extractor.extract("test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main")
 
     assert len(nodes) == 2
     fetch_node = next(n for n in nodes if n.name == "fetch_data")
@@ -112,9 +105,7 @@ def outer():
 def helper():
     pass
 """
-    nodes, edges = extractor.extract(
-        "test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
-    )
+    nodes, edges = extractor.extract("test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main")
 
     # Should detect: outer, inner, helper
     assert len(nodes) == 3
@@ -133,9 +124,7 @@ class MyClass:
     def method_b(self):
         pass
 """
-    nodes, edges = extractor.extract(
-        "test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
-    )
+    nodes, edges = extractor.extract("test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main")
 
     # Should have class + 2 methods
     assert len(nodes) == 3
@@ -177,9 +166,7 @@ def standalone():
 def test_empty_file(extractor):
     """Test extraction from empty file."""
     code = ""
-    nodes, edges = extractor.extract(
-        "test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
-    )
+    nodes, edges = extractor.extract("test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main")
 
     assert len(nodes) == 0
     assert len(edges) == 0
@@ -196,9 +183,7 @@ class ClassB:
     def method_b(self):
         pass
 """
-    nodes, edges = extractor.extract(
-        "test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
-    )
+    nodes, edges = extractor.extract("test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main")
 
     # Should have 2 classes and 2 methods
     assert len(nodes) == 4

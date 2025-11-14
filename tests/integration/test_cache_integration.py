@@ -1,10 +1,12 @@
 """Integration tests for cache with search backend and embedding provider."""
 
-import pytest
 import tempfile
 from pathlib import Path
-from kb.cache import create_cache
+
+import pytest
+
 from kb.api.search_backend import create_search_backend
+from kb.cache import create_cache
 from kb.config import KBConfig
 
 

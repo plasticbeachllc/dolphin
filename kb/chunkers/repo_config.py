@@ -8,14 +8,14 @@ embedding model settings for semantic retrieval.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Mapping
 
 try:
     import tomllib  # Python 3.11+
 except ImportError:
-    import tomli as tomllib  # type: ignore[import-not-found]
+    import tomli as tomllib  # type: ignore[import-not-found,no-redef]
 
 __all__ = ["RepoChunkingConfig", "load_repo_chunking_config"]
 
@@ -137,9 +137,7 @@ def load_repo_chunking_config(repo_path: Path) -> RepoChunkingConfig:
     # Extract configuration values with validation
     default_window = data.get("default_window_size", DEFAULT_WINDOW_SIZE)
     if not isinstance(default_window, int) or default_window <= 0:
-        raise ValueError(
-            f"default_window_size must be a positive integer, got: {default_window}"
-        )
+        raise ValueError(f"default_window_size must be a positive integer, got: {default_window}")
 
     # Per-language overrides
     per_language = DEFAULT_PER_LANGUAGE.copy()
@@ -149,9 +147,7 @@ def load_repo_chunking_config(repo_path: Path) -> RepoChunkingConfig:
             raise ValueError("per_language must be a mapping/table")
         for lang, size in lang_overrides.items():
             if not isinstance(size, int) or size <= 0:
-                _log.warning(
-                    "Ignoring invalid window size for language %s: %s", lang, size
-                )
+                _log.warning("Ignoring invalid window size for language %s: %s", lang, size)
                 continue
             per_language[str(lang)] = size
 
@@ -170,9 +166,7 @@ def load_repo_chunking_config(repo_path: Path) -> RepoChunkingConfig:
     # Overlap percentage (optional, not in TOML spec but useful)
     overlap_pct = data.get("overlap_pct", DEFAULT_OVERLAP_PCT)
     if not isinstance(overlap_pct, (int, float)) or not (0.0 <= overlap_pct <= 1.0):
-        _log.warning(
-            "Invalid overlap_pct %s, using default %f", overlap_pct, DEFAULT_OVERLAP_PCT
-        )
+        _log.warning("Invalid overlap_pct %s, using default %f", overlap_pct, DEFAULT_OVERLAP_PCT)
         overlap_pct = DEFAULT_OVERLAP_PCT
 
     _log.info(

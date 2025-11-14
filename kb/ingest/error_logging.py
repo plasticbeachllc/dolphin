@@ -5,16 +5,15 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict
 
 # Track initialized loggers to avoid duplicate handlers across instances
-_initialized_loggers: Dict[str, bool] = {}
+_initialized_loggers: dict[str, bool] = {}
 
 
 class ErrorLogger:
     """Centralized error logging for ingestion pipeline operations."""
 
-    def __init__(self, repo_root: Path, session_id: Optional[str] = None):
+    def __init__(self, repo_root: Path, session_id: str | None = None):
         """Initialize error logger for a repository.
 
         Args:
@@ -36,7 +35,7 @@ class ErrorLogger:
 
         # Lazy logger/file creation
         self._logger_name = f"pb_kb_ingest_{self.session_id or 'unknown'}"
-        self.logger: Optional[logging.Logger] = None
+        self.logger: logging.Logger | None = None
         self._initialized = False
         self._had_errors = False
 
@@ -52,9 +51,7 @@ class ErrorLogger:
             # File handler
             file_handler = logging.FileHandler(self.log_file)
             file_handler.setLevel(logging.ERROR)
-            file_formatter = logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-            )
+            file_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
             file_handler.setFormatter(file_formatter)
             logger.addHandler(file_handler)
 
@@ -114,9 +111,7 @@ class ErrorLogger:
 # Convenience function for quick error logging without full setup
 
 
-def log_error_to_file(
-    repo_root: Path, message: str, session_id: Optional[str] = None
-) -> None:
+def log_error_to_file(repo_root: Path, message: str, session_id: str | None = None) -> None:
     """Quick convenience function to log an error without full ErrorLogger setup.
 
     Args:
@@ -149,7 +144,7 @@ def with_retry(max_attempts: int = 3, delays: tuple[float, ...] = (1.0, 2.0, 4.0
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            last_exception = None
+            last_exception: Exception | None = None
             for attempt in range(max_attempts):
                 try:
                     return func(*args, **kwargs)
@@ -162,7 +157,11 @@ def with_retry(max_attempts: int = 3, delays: tuple[float, ...] = (1.0, 2.0, 4.0
                         # Last attempt failed, re-raise the exception
                         raise last_exception
             # This should never be reached, but just in case
-            raise last_exception
+            # Type checker requires explicit check before raising
+            if last_exception is not None:
+                raise last_exception
+            # Fallback error if no exception was set (should never happen)
+            raise RuntimeError("Retry logic error: no exception was raised")
 
         return wrapper
 

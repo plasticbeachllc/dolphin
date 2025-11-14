@@ -1,7 +1,8 @@
 """End-to-end tests for complete indexing workflow."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 
 class TestIndexingWorkflow:
@@ -47,10 +48,11 @@ class TestIndexingWorkflow:
 
         # Step 1: Initial index
         result1 = pipeline.index(repo_name, dry_run=False, force=True)
-        initial_chunks = result1["chunks_indexed"]
+        result1["chunks_indexed"]
 
         # Step 2: Add new file and commit it
-        (repo_path / "auth.py").write_text("""
+        (repo_path / "auth.py").write_text(
+            """
 def authenticate_with_token(token):
     '''Authenticate using JWT token.'''
     if not token or len(token) < 32:
@@ -61,7 +63,8 @@ def refresh_token(old_token):
     '''Refresh authentication token.'''
     import secrets
     return secrets.token_hex(32)
-""")
+"""
+        )
 
         # Commit the new file so incremental mode can detect it
         import subprocess
@@ -127,7 +130,7 @@ def refresh_token(old_token):
         (pycache_dir / "test.pyc").write_bytes(b"")
 
         # Index
-        result = pipeline.index(repo_name, dry_run=False, force=True)
+        pipeline.index(repo_name, dry_run=False, force=True)
 
         # Verify ignored files were not indexed
         repo = metadata_store.get_repo_by_name(repo_name)
@@ -205,22 +208,28 @@ class TestIndexingEdgeCases:
         repo_path = setup["repo_path"]
 
         # Add various file types
-        (repo_path / "script.ts").write_text("""
+        (repo_path / "script.ts").write_text(
+            """
 function greet(name: string): string {
     return `Hello, ${name}!`;
 }
-""")
+"""
+        )
 
-        (repo_path / "styles.css").write_text("""
+        (repo_path / "styles.css").write_text(
+            """
 .button {
     background-color: blue;
     color: white;
 }
-""")
+"""
+        )
 
-        (repo_path / "query.sql").write_text("""
+        (repo_path / "query.sql").write_text(
+            """
 SELECT * FROM users WHERE active = true;
-""")
+"""
+        )
 
         # Index
         result = pipeline.index("test-repo", dry_run=False, force=True)
@@ -229,7 +238,7 @@ SELECT * FROM users WHERE active = true;
         repo = metadata_store.get_repo_by_name("test-repo")
         assert repo is not None
         files = metadata_store.get_all_files_for_repo(repo["id"])
-        extensions = [Path(f["path"]).suffix for f in files]
+        [Path(f["path"]).suffix for f in files]
 
         assert result["files_indexed"] > 0
         # At least some files should have been processed

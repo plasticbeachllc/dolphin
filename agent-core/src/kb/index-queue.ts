@@ -30,7 +30,7 @@ export class IndexQueue extends EventEmitter {
   /**
    * Queue files for indexing. Returns immediately with task ID.
    */
-  async enqueueBatch(files: string[], priority = 0): Promise<string> {
+  async enqueueBatch(files: string[], _priority = 0): Promise<string> {
     console.error(`[IndexQueue] Queueing ${files.length} files for indexing`);
 
     const response = await fetch(`${this.kbApiUrl}/v1/index`, {

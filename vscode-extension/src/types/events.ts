@@ -2,7 +2,13 @@
 
 // Extension → Agent Core
 export type ExtensionRequest =
-  | { type: "send_message"; messageId: string; content: string; context?: any }
+  | {
+      type: "send_message";
+      messageId: string;
+      content: string;
+      context?: any;
+      mode?: "code" | "architect";
+    }
   | { type: "abort_generation" }
   | { type: "approve_plan"; planId: string }
   | { type: "reject_plan"; planId: string; feedback?: string }
@@ -52,7 +58,11 @@ export type AgentEvent =
   | { type: "focus_input" }
   | { type: "clear_conversation" }
   | { type: "prefill_input"; text: string }
-  | { type: "conversation_loaded"; conversation: any; branchInfo?: { originalId: string; originalTitle: string } }
+  | {
+      type: "conversation_loaded";
+      conversation: any;
+      branchInfo?: { originalId: string; originalTitle: string };
+    }
   | { type: "conversations_listed"; conversations: ConversationListItem[] }
   | { type: "conversation_deleted"; conversationId: string }
   | { type: "conversation_renamed"; conversationId: string; newTitle: string };

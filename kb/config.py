@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any
 
 try:
     import tomllib
 except ImportError:
-    import tomli as tomllib
+    import tomli as tomllib  # type: ignore[import-not-found,no-redef]
 
 from .ignores import DEFAULT_IGNORE_PATTERNS
 
@@ -60,7 +61,7 @@ def _ensure_user_config() -> Path:
 class RerankingConfig:
     enabled: bool = False
     model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-    device: Optional[str] = None
+    device: str | None = None
     batch_size: int = 32
     candidate_multiplier: int = 4
     score_threshold: float = 0.3
@@ -220,7 +221,7 @@ class KBConfig:
         return config
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any]) -> "KBConfig":
+    def from_mapping(cls, data: Mapping[str, Any]) -> KBConfig:
         """Create a configuration object from a mapping, handling nested sections."""
 
         # Extract nested sections
@@ -238,7 +239,9 @@ class KBConfig:
 
         # Handle storage settings
         if storage_data and storage_data.get("store_root"):
-            config_kwargs["store_root"] = _to_path(storage_data.get("store_root"))
+            store_root_value = storage_data.get("store_root")
+            if store_root_value is not None:
+                config_kwargs["store_root"] = _to_path(store_root_value)
 
         # Handle server settings
         if server_data and server_data.get("endpoint"):
@@ -247,19 +250,13 @@ class KBConfig:
         # Handle embedding settings
         if embedding_data:
             if embedding_data.get("default_embed_model"):
-                config_kwargs["default_embed_model"] = embedding_data.get(
-                    "default_embed_model"
-                )
+                config_kwargs["default_embed_model"] = embedding_data.get("default_embed_model")
             if embedding_data.get("concurrency") is not None:
-                config_kwargs["concurrency"] = cls._coerce_optional(
-                    embedding_data.get("concurrency"), int
-                )
+                config_kwargs["concurrency"] = cls._coerce_optional(embedding_data.get("concurrency"), int)
             if embedding_data.get("provider"):
                 config_kwargs["embedding_provider"] = embedding_data.get("provider")
             if embedding_data.get("batch_size") is not None:
-                config_kwargs["embedding_batch_size"] = cls._coerce_optional(
-                    embedding_data.get("batch_size"), int
-                )
+                config_kwargs["embedding_batch_size"] = cls._coerce_optional(embedding_data.get("batch_size"), int)
             if embedding_data.get("api_key_env"):
                 config_kwargs["openai_api_key_env"] = embedding_data.get("api_key_env")
 
@@ -269,11 +266,11 @@ class KBConfig:
                 data.get("per_session_spend_cap_usd"), float
             )
         if data.get("ignore"):
-            config_kwargs["ignore"] = data.get("ignore")
+            ignore_value = data.get("ignore")
+            if isinstance(ignore_value, list):
+                config_kwargs["ignore"] = ignore_value
         if data.get("exceptions") or data.get("ignore_exceptions"):
-            config_kwargs["ignore_exceptions"] = data.get(
-                "exceptions", data.get("ignore_exceptions", [])
-            )
+            config_kwargs["ignore_exceptions"] = data.get("exceptions", data.get("ignore_exceptions", []))
 
         # Always override retrieval config with our constructed one
         config_kwargs["retrieval"] = retrieval_config
@@ -281,27 +278,21 @@ class KBConfig:
         # Handle cache settings (support both nested and top-level)
         if cache_data:
             if cache_data.get("enabled") is not None:
-                config_kwargs["cache_enabled"] = cls._coerce_optional(
-                    cache_data.get("enabled"), bool
-                )
+                config_kwargs["cache_enabled"] = cls._coerce_optional(cache_data.get("enabled"), bool)
             if cache_data.get("redis_url"):
                 config_kwargs["redis_url"] = cache_data.get("redis_url")
             if cache_data.get("embedding_ttl") is not None:
-                config_kwargs["embedding_cache_ttl"] = cls._coerce_optional(
-                    cache_data.get("embedding_ttl"), int
-                )
+                config_kwargs["embedding_cache_ttl"] = cls._coerce_optional(cache_data.get("embedding_ttl"), int)
             if cache_data.get("result_ttl") is not None:
-                config_kwargs["result_cache_ttl"] = _coerce_optional(
-                    cache_data.get("result_ttl"), int
-                )
+                config_kwargs["result_cache_ttl"] = cls._coerce_optional(cache_data.get("result_ttl"), int)
 
         # Also support top-level cache_enabled parameter (for backward compatibility)
         if "cache_enabled" in data:
-            config_kwargs["cache_enabled"] = _coerce_optional(
-                data.get("cache_enabled"), bool
-            )
+            config_kwargs["cache_enabled"] = cls._coerce_optional(data.get("cache_enabled"), bool)
         if "redis_url" in data:
-            config_kwargs["redis_url"] = data.get("redis_url")
+            redis_url_value = data.get("redis_url")
+            if redis_url_value is not None:
+                config_kwargs["redis_url"] = redis_url_value
 
         return cls(**config_kwargs)
 

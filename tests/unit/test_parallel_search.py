@@ -1,12 +1,10 @@
 """Unit tests for parallel hybrid search."""
 
+from unittest.mock import AsyncMock, Mock
+
 import pytest
-from unittest.mock import Mock, AsyncMock
-from kb.search.parallel_search import (
-    ParallelHybridSearch,
-    SearchResult,
-    reciprocal_rank_fusion,
-)
+
+from kb.search.parallel_search import ParallelHybridSearch, SearchResult, reciprocal_rank_fusion
 
 
 class TestReciprocalRankFusion:

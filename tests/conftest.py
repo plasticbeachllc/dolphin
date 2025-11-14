@@ -1,12 +1,13 @@
 """Pytest configuration and shared fixtures for KB pipeline tests."""
 
-import pytest
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from tests.kb_utils import InMemoryKBBackend, FIXTURE_REPO_ROOT
+import pytest
+
+from tests.kb_utils import FIXTURE_REPO_ROOT, InMemoryKBBackend
 
 
 @pytest.fixture(scope="session")
@@ -68,16 +69,12 @@ def init_test_git_repo(repo_path: Path) -> None:
     """
     import subprocess
 
-    subprocess.run(
-        ["git", "-C", str(repo_path), "init"], check=True, capture_output=True
-    )
+    subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
     subprocess.run(
         ["git", "-C", str(repo_path), "config", "user.email", "test@example.com"],
         check=True,
     )
-    subprocess.run(
-        ["git", "-C", str(repo_path), "config", "user.name", "Test User"], check=True
-    )
+    subprocess.run(["git", "-C", str(repo_path), "config", "user.name", "Test User"], check=True)
     # Disable GPG signing for this repo only (not globally)
     subprocess.run(
         ["git", "-C", str(repo_path), "config", "commit.gpgsign", "false"], check=True
@@ -257,9 +254,7 @@ def setup_tiktoken(request):
     Integration tests require real tiktoken (production validation).
     """
     # Check if any integration tests are being run
-    has_integration_tests = any(
-        "tests/integration" in str(item.fspath) for item in request.session.items
-    )
+    has_integration_tests = any("tests/integration" in str(item.fspath) for item in request.session.items)
 
     if not has_integration_tests:
         # Only unit tests - mock tiktoken is fine
@@ -375,9 +370,7 @@ def mock_tiktoken():
 
 def pytest_configure(config):
     """Configure pytest with custom markers."""
-    config.addinivalue_line(
-        "markers", "unit: mark test as a unit test (uses mock tiktoken)"
-    )
+    config.addinivalue_line("markers", "unit: mark test as a unit test (uses mock tiktoken)")
     config.addinivalue_line(
         "markers",
         "integration: mark test as an integration test (uses real dependencies)",
@@ -426,12 +419,8 @@ def cleanup_test_repos():
                             for pattern in test_repo_patterns
                         ):
                             # Delete all data associated with this test repo
-                            conn.execute(
-                                "DELETE FROM chunks WHERE repo_id = ?", (repo_id,)
-                            )
-                            conn.execute(
-                                "DELETE FROM files WHERE repo_id = ?", (repo_id,)
-                            )
+                            conn.execute("DELETE FROM chunks WHERE repo_id = ?", (repo_id,))
+                            conn.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
                             conn.execute(
                                 "DELETE FROM scan_sessions WHERE repo_id = ?",
                                 (repo_id,),
@@ -478,6 +467,7 @@ def pytest_collection_modifyitems(config, items):
 @pytest.fixture
 def mock_kb_stores(temp_db_path):
     """Mock KB stores (SQLite + LanceDB) for testing."""
+
     from kb.store.sqlite_meta import SQLiteMetadataStore
 
     # Create real SQLite store for metadata
@@ -506,9 +496,7 @@ def registered_test_repo(mock_kb_stores, temp_dir):
     workspace_path.mkdir()
 
     # Register repo
-    sql_store.record_repo(
-        name="test-repo", path=workspace_path, default_embed_model="large"
-    )
+    sql_store.record_repo(name="test-repo", path=workspace_path, default_embed_model="large")
 
     # Get repo info
     repo = sql_store.get_repo_by_name("test-repo")
@@ -527,7 +515,8 @@ def registered_test_repo(mock_kb_stores, temp_dir):
 def kb_api_client(mock_kb_stores):
     """FastAPI TestClient with mocked stores."""
     from fastapi.testclient import TestClient
-    from kb.api.app import app, set_stores, reset_stores
+
+    from kb.api.app import app, reset_stores, set_stores
 
     sql_store, lance_store = mock_kb_stores
     set_stores(sql_store, lance_store)
@@ -592,14 +581,16 @@ def repo_path(temp_dir: Path) -> Path:
     repo_dir.mkdir()
 
     # Create simple Python file
-    (repo_dir / "main.py").write_text("""
+    (repo_dir / "main.py").write_text(
+        """
 def calculate_sum(numbers):
     return sum(numbers)
 
 class Calculator:
     def add(self, a, b):
         return a + b
-""")
+"""
+    )
 
     # Initialize git repo
     subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)

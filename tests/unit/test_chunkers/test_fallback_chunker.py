@@ -69,11 +69,7 @@ class TestFallbackChunker:
             assert chunk.start_line <= chunk.end_line <= 20
 
             # The chunk text should appear somewhere in the original text
-            assert (
-                chunk.text in text
-                or text.startswith(chunk.text)
-                or text.endswith(chunk.text)
-            )
+            assert chunk.text in text or text.startswith(chunk.text) or text.endswith(chunk.text)
 
             # Count actual newlines in chunk and verify it's consistent with line range
             newline_count = chunk.text.count("\n")
@@ -102,7 +98,7 @@ class TestFallbackChunker:
         chunks_with_overlap = chunk_text(text, token_target=80, overlap_pct=0.20)
 
         # Get chunks without overlap
-        chunks_no_overlap = chunk_text(text, token_target=80, overlap_pct=0.0)
+        chunk_text(text, token_target=80, overlap_pct=0.0)
 
         # With overlap should have more chunks (or same number but with shared content)
         if len(chunks_with_overlap) > 1:

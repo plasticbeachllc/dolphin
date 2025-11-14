@@ -1,10 +1,10 @@
 """Type relationship extraction for inheritance and interfaces."""
 
-from typing import List
-from tree_sitter import Node, Language
 import tree_sitter_python as tspython
 import tree_sitter_typescript as tsts
-from .models import GraphNode, GraphEdge, EdgeType, NodeType
+from tree_sitter import Language, Node
+
+from .models import EdgeType, GraphEdge, GraphNode, NodeType
 
 
 class TypeGraphExtractor:
@@ -21,17 +21,19 @@ class TypeGraphExtractor:
         repo_id: int,
         file_id: int,
         commit_sha: str,
-        existing_classes: List[GraphNode],
-    ) -> List[GraphEdge]:
+        existing_classes: list[GraphNode],
+    ) -> list[GraphEdge]:
         """Extract Python inheritance relationships."""
         edges = []
 
         # Query for class definitions with inheritance
-        inheritance_query = self.python_language.query("""
+        inheritance_query = self.python_language.query(
+            """
             (class_definition
                 name: (identifier) @class_name
                 superclasses: (argument_list) @bases)
-        """)
+        """
+        )
 
         captures = inheritance_query.captures(tree_root)
 
@@ -48,11 +50,7 @@ class TypeGraphExtractor:
 
                 # Find the GraphNode for this class
                 source_class = next(
-                    (
-                        cls
-                        for cls in existing_classes
-                        if cls.name == class_name and cls.file_path == file_path
-                    ),
+                    (cls for cls in existing_classes if cls.name == class_name and cls.file_path == file_path),
                     None,
                 )
 
@@ -65,11 +63,7 @@ class TypeGraphExtractor:
                 for base_class_name in base_classes:
                     # Try to find the base class in existing classes
                     target_class = next(
-                        (
-                            cls
-                            for cls in existing_classes
-                            if cls.name == base_class_name
-                        ),
+                        (cls for cls in existing_classes if cls.name == base_class_name),
                         None,
                     )
 
@@ -96,13 +90,14 @@ class TypeGraphExtractor:
         repo_id: int,
         file_id: int,
         commit_sha: str,
-        existing_classes: List[GraphNode],
-    ) -> List[GraphEdge]:
+        existing_classes: list[GraphNode],
+    ) -> list[GraphEdge]:
         """Extract TypeScript inheritance and interface implementation."""
         edges = []
 
         # Query for class inheritance
-        class_query = self.typescript_language.query("""
+        class_query = self.typescript_language.query(
+            """
             (class_declaration
                 name: (type_identifier) @class_name
                 (class_heritage
@@ -114,7 +109,8 @@ class TypeGraphExtractor:
                 (class_heritage
                     (implements_clause
                         (type_identifier) @implements_interface)))
-        """)
+        """
+        )
 
         captures = class_query.captures(tree_root)
 
@@ -127,11 +123,7 @@ class TypeGraphExtractor:
                 current_class_name = node.text.decode("utf8")
                 # Find the GraphNode for this class
                 current_class_node = next(
-                    (
-                        cls
-                        for cls in existing_classes
-                        if cls.name == current_class_name and cls.file_path == file_path
-                    ),
+                    (cls for cls in existing_classes if cls.name == current_class_name and cls.file_path == file_path),
                     None,
                 )
 
@@ -163,12 +155,7 @@ class TypeGraphExtractor:
 
                 # Try to find the interface
                 interface_node = next(
-                    (
-                        cls
-                        for cls in existing_classes
-                        if cls.name == interface_name
-                        and cls.node_type == NodeType.CLASS
-                    ),
+                    (cls for cls in existing_classes if cls.name == interface_name and cls.node_type == NodeType.CLASS),
                     None,
                 )
 
@@ -188,15 +175,19 @@ class TypeGraphExtractor:
 
         return edges
 
-    def _extract_python_bases(self, bases_node: Node) -> List[str]:
+    def _extract_python_bases(self, bases_node: Node) -> list[str]:
         """Extract base class names from Python argument list."""
         base_classes = []
 
         for child in bases_node.children:
             if child.type == "identifier":
-                base_classes.append(child.text.decode("utf8"))
+                text = child.text
+                if text:
+                    base_classes.append(text.decode("utf8"))
             elif child.type == "attribute":
                 # Handle qualified names like module.ClassName
-                base_classes.append(child.text.decode("utf8"))
+                text = child.text
+                if text:
+                    base_classes.append(text.decode("utf8"))
 
         return base_classes

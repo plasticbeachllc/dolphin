@@ -1,15 +1,13 @@
 """Unit tests for SQLite connection pool."""
 
-import pytest
 import tempfile
 import threading
 import time
 from pathlib import Path
-from kb.store.connection_pool import (
-    SQLiteConnectionPool,
-    get_connection_pool,
-    close_connection_pool,
-)
+
+import pytest
+
+from kb.store.connection_pool import SQLiteConnectionPool, close_connection_pool, get_connection_pool
 
 
 class TestSQLiteConnectionPool:
@@ -26,7 +24,7 @@ class TestSQLiteConnectionPool:
         # Cleanup
         try:
             Path(db_path).unlink()
-        except:
+        except Exception:
             pass
 
     def test_pool_initialization(self, temp_db):
@@ -295,7 +293,7 @@ class TestGlobalPoolHelpers:
             # Cleanup
             try:
                 Path(db_path).unlink()
-            except:
+            except Exception:
                 pass
 
     def test_close_connection_pool(self):
@@ -321,7 +319,7 @@ class TestGlobalPoolHelpers:
         finally:
             try:
                 Path(db_path).unlink()
-            except:
+            except Exception:
                 pass
 
 

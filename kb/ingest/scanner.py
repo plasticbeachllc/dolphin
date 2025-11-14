@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Iterable, List
 
 from pathspec import PathSpec
 
@@ -86,7 +86,7 @@ def _is_binary(path: Path, sniff_bytes: int = 65536) -> bool:
         return True
 
 
-def scan_repo(root: Path, ignores: Iterable[str]) -> List[FileCandidate]:
+def scan_repo(root: Path, ignores: Iterable[str]) -> list[FileCandidate]:
     """Scan a git repo for candidate files with language tagging.
 
     - Uses `git ls-files` to respect .gitignore implicitly.
@@ -101,7 +101,7 @@ def scan_repo(root: Path, ignores: Iterable[str]) -> List[FileCandidate]:
     submods = _submodule_roots(root)
     spec = _build_pathspec(ignores)
 
-    candidates: List[FileCandidate] = []
+    candidates: list[FileCandidate] = []
     for rel in rel_paths:
         # Skip submodules
         if any(rel.startswith(prefix) for prefix in submods):

@@ -9,11 +9,7 @@ They verify:
 Tiktoken is required for all tests (enforced by setup_tiktoken fixture).
 """
 
-from kb.chunkers.token_utils import (
-    count_tokens,
-    window_text_by_tokens,
-    get_tokenizer,
-)
+from kb.chunkers.token_utils import count_tokens, get_tokenizer, window_text_by_tokens
 
 
 class TestRealTiktokenBehavior:
@@ -111,9 +107,7 @@ def example_function():
         for text in test_texts:
             tokens = tokenizer.encode(text)
             decoded = tokenizer.decode(tokens)
-            assert decoded == text, (
-                f"Encode/decode roundtrip failed for: {text!r}\nGot: {decoded!r}"
-            )
+            assert decoded == text, f"Encode/decode roundtrip failed for: {text!r}\nGot: {decoded!r}"
 
 
 class TestTiktokenAvailabilityHandling:

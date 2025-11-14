@@ -1,8 +1,9 @@
 """Unit tests for LanceDBStore operations with mocks."""
 
 import types
-import pytest
 from pathlib import Path
+
+import pytest
 
 from kb.store.lancedb_store import LanceDBStore
 

@@ -1,13 +1,8 @@
 """Unit tests for chunker registry and routing system."""
 
 from pathlib import Path
-from kb.chunkers import (
-    Chunk,
-    RepoChunkingConfig,
-    chunk_file,
-    detect_language_from_extension,
-    get_chunker,
-)
+
+from kb.chunkers import Chunk, RepoChunkingConfig, chunk_file, detect_language_from_extension, get_chunker
 
 
 class TestLanguageDetection:
@@ -237,7 +232,7 @@ def calculate(x, y):
 class DataProcessor:
     def __init__(self):
         self.data = []
-    
+
     def process(self, item):
         self.data.append(item)
 """

@@ -1,13 +1,15 @@
 """Unit tests for ingestion helper functions."""
 
-import pytest
 import subprocess
 from dataclasses import dataclass
+
+import pytest
+
 from kb.ingest._helpers import (
     build_desired_map,
-    git_changed_files_modified_added,
-    git_changed_files_deleted,
     get_all_tracked_files,
+    git_changed_files_deleted,
+    git_changed_files_modified_added,
     representative_text_for_hash,
 )
 
@@ -86,12 +88,8 @@ class TestBuildDesiredMap:
 
     def test_build_desired_map_multiple_different_hashes(self):
         """Test multiple chunks with different hashes."""
-        chunk1 = ChunkTestData(
-            text="code1", text_hash="hash1", start_line=1, end_line=2
-        )
-        chunk2 = ChunkTestData(
-            text="code2", text_hash="hash2", start_line=5, end_line=6
-        )
+        chunk1 = ChunkTestData(text="code1", text_hash="hash1", start_line=1, end_line=2)
+        chunk2 = ChunkTestData(text="code2", text_hash="hash2", start_line=5, end_line=6)
         result = build_desired_map([chunk1, chunk2])
 
         assert "hash1" in result

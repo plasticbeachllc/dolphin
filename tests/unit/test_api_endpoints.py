@@ -1,15 +1,10 @@
 """Unit tests for FastAPI endpoints."""
 
 from pathlib import Path
+
 from fastapi.testclient import TestClient
-from kb.api.app import (
-    app,
-    SearchRequest,
-    set_search_backend,
-    reset_search_backend,
-    set_stores,
-    reset_stores,
-)
+
+from kb.api.app import SearchRequest, app, reset_search_backend, reset_stores, set_search_backend, set_stores
 
 
 class MockSearchBackend:
@@ -90,9 +85,7 @@ class TestSearchEndpoint:
     def test_search_with_repos_filter(self):
         """Test search with repos filter."""
         client = TestClient(app)
-        response = client.post(
-            "/search", json={"query": "test", "repos": ["repo1", "repo2"]}
-        )
+        response = client.post("/search", json={"query": "test", "repos": ["repo1", "repo2"]})
 
         assert response.status_code == 200
 
@@ -106,9 +99,7 @@ class TestSearchEndpoint:
     def test_search_with_path_prefix(self):
         """Test search with path_prefix filter."""
         client = TestClient(app)
-        response = client.post(
-            "/search", json={"query": "test", "path_prefix": ["src/", "lib/"]}
-        )
+        response = client.post("/search", json={"query": "test", "path_prefix": ["src/", "lib/"]})
 
         assert response.status_code == 200
 
@@ -243,17 +234,13 @@ class TestRegisterRepoEndpoint:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        response = kb_api_client.post(
-            "/v1/repos", json={"path": str(workspace), "default_embed_model": "large"}
-        )
+        response = kb_api_client.post("/v1/repos", json={"path": str(workspace), "default_embed_model": "large"})
 
         assert response.status_code == 422  # Validation error
 
     def test_register_repo_missing_path(self, kb_api_client):
         """Test registration fails without path."""
-        response = kb_api_client.post(
-            "/v1/repos", json={"name": "test-repo", "default_embed_model": "large"}
-        )
+        response = kb_api_client.post("/v1/repos", json={"name": "test-repo", "default_embed_model": "large"})
 
         assert response.status_code == 422  # Validation error
 
@@ -262,9 +249,7 @@ class TestRegisterRepoEndpoint:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        response = kb_api_client.post(
-            "/v1/repos", json={"name": "test-repo", "path": str(workspace)}
-        )
+        response = kb_api_client.post("/v1/repos", json={"name": "test-repo", "path": str(workspace)})
 
         assert response.status_code == 200
         data = response.json()
@@ -321,18 +306,14 @@ class TestIndexEndpoint:
 
     def test_index_files_nonexistent_repo(self, kb_api_client):
         """Test indexing files for non-existent repository."""
-        response = kb_api_client.post(
-            "/v1/index", json={"repo": "nonexistent-repo", "files": ["file.py"]}
-        )
+        response = kb_api_client.post("/v1/index", json={"repo": "nonexistent-repo", "files": ["file.py"]})
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
 
     def test_index_files_empty_list(self, kb_api_client, registered_test_repo):
         """Test indexing with empty file list."""
-        response = kb_api_client.post(
-            "/v1/index", json={"repo": registered_test_repo["name"], "files": []}
-        )
+        response = kb_api_client.post("/v1/index", json={"repo": registered_test_repo["name"], "files": []})
 
         # Should still create task
         assert response.status_code == 200
@@ -347,9 +328,7 @@ class TestIndexEndpoint:
 
     def test_index_files_missing_files_param(self, kb_api_client, registered_test_repo):
         """Test indexing without files parameter."""
-        response = kb_api_client.post(
-            "/v1/index", json={"repo": registered_test_repo["name"]}
-        )
+        response = kb_api_client.post("/v1/index", json={"repo": registered_test_repo["name"]})
 
         assert response.status_code == 422  # Validation error
 
@@ -463,12 +442,8 @@ class TestIndexTasksEndpoint:
         set_pipeline(mock_pipeline)
 
         # Queue multiple tasks
-        kb_api_client.post(
-            "/v1/index", json={"repo": registered_test_repo["name"], "files": ["a.py"]}
-        )
-        kb_api_client.post(
-            "/v1/index", json={"repo": registered_test_repo["name"], "files": ["b.py"]}
-        )
+        kb_api_client.post("/v1/index", json={"repo": registered_test_repo["name"], "files": ["a.py"]})
+        kb_api_client.post("/v1/index", json={"repo": registered_test_repo["name"], "files": ["b.py"]})
 
         # List tasks
         response = kb_api_client.get("/v1/index/tasks")

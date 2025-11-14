@@ -1,6 +1,7 @@
 """Integration tests for CLI workflows."""
 
 from typer.testing import CliRunner
+
 from kb.ingest.cli import app
 
 runner = CliRunner()
