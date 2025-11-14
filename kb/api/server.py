@@ -114,8 +114,7 @@ try:
     initialize_search_backend()
 except FileNotFoundError:
     print(
-        "⚠️  No KB configuration found at import time. "
-        "Call initialize_search_backend() after creating a config.",
+        "⚠️  No KB configuration found at import time. Call initialize_search_backend() after creating a config.",
         file=sys.stderr,
     )
 
