@@ -236,3 +236,20 @@ fail-under = 8.0
 disable = [
     "duplicate-code",
 ]
+
+[tool.ruff]
+# Configure linting behavior
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort (import sorting)
+    "UP", # pyupgrade
+]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["kb"]
+combine-as-imports = true
+split-on-trailing-comma = false

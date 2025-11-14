@@ -12,9 +12,12 @@ import logging
 import json
 import traceback
 import re
+import unicodedata
 from typing import Any, Dict, Optional
 from datetime import datetime, timezone
 from enum import IntEnum
+from urllib.parse import unquote
+from contextvars import ContextVar
 
 try:
     from opentelemetry import trace, context
@@ -22,6 +25,10 @@ try:
     OTEL_AVAILABLE = True
 except ImportError:
     OTEL_AVAILABLE = False
+
+
+# Global context variable for async request context
+_request_context: ContextVar[Dict[str, Any]] = ContextVar("request_context", default={})
 
 
 class LogLevel(IntEnum):
@@ -53,8 +60,15 @@ class StructuredLogger:
     )
     _ANTHROPIC_KEY_PATTERN = re.compile(r"sk-ant-[a-zA-Z0-9-]{95,}")
     _OPENAI_KEY_PATTERN = re.compile(r"sk-[a-zA-Z0-9]{48,}")
-    _FILE_PATH_PATTERN = re.compile(r"/(Users|home|root)/[^/\s]+")
-    _WINDOWS_PATH_PATTERN = re.compile(r"C:\\Users\\[^\\]+")
+
+    # Enhanced file path patterns - more comprehensive coverage
+    _UNIX_HOME_PATTERN = re.compile(r"/(Users|home|root)/[^/\s]+")
+    _UNIX_PATH_PATTERN = re.compile(r"/(usr/local|opt|var|tmp)/[^/\s]*")
+    _WINDOWS_PATH_PATTERN = re.compile(r"C:\\(Users|Program Files|Windows)\\[^\\]+")
+    _WINDOWS_GENERIC_PATTERN = re.compile(r"[A-Z]:\\[^\\]+")
+
+    # JWT/Bearer tokens
+    _JWT_PATTERN = re.compile(r"eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+")
 
     def __init__(self, name: str, default_context: Optional[Dict[str, Any]] = None):
         """Initialize structured logger.
@@ -97,6 +111,18 @@ class StructuredLogger:
 
         return {}
 
+    def _extract_async_context(self) -> Dict[str, Any]:
+        """Extract async context from contextvars.
+
+        Returns:
+            Dictionary with request context (e.g., request_id, user_id, etc.)
+        """
+        try:
+            ctx = _request_context.get()
+            return dict(ctx) if ctx else {}
+        except Exception:
+            return {}
+
     def _sanitize_value(self, value: Any) -> Any:
         """Sanitize a single value for PII.
 
@@ -113,15 +139,29 @@ class StructuredLogger:
             Sanitized value with PII redacted
         """
         if isinstance(value, str):
-            # Apply specific patterns FIRST to preserve key prefixes, then generic pattern
+            # Normalize unicode to prevent homoglyph bypasses
+            value = unicodedata.normalize("NFKC", value)
+
+            # Decode URL encoding (single pass to avoid overhead)
+            try:
+                decoded = unquote(value)
+                if decoded != value:
+                    value = decoded
+            except Exception:
+                pass  # If decoding fails, use original value
+
+            # Apply specific API key patterns FIRST to preserve key prefixes
             value = self._ANTHROPIC_KEY_PATTERN.sub("sk-ant-***", value)
             value = self._OPENAI_KEY_PATTERN.sub("sk-***", value)
+            value = self._JWT_PATTERN.sub("eyJ***.eyJ***.***", value)
             # Apply generic pattern last (won't re-match already sanitized keys)
             value = self._API_KEY_PATTERN.sub(r"\1-***", value)
 
-            # Redact file paths (remove username)
-            value = self._FILE_PATH_PATTERN.sub(r"/\1/***", value)
-            value = self._WINDOWS_PATH_PATTERN.sub(r"C:\\Users\\***", value)
+            # Redact file paths (remove username/sensitive portions)
+            value = self._UNIX_HOME_PATTERN.sub(r"/\1/***", value)
+            value = self._UNIX_PATH_PATTERN.sub(r"/***", value)
+            value = self._WINDOWS_PATH_PATTERN.sub(r"C:\\\1\***", value)
+            value = self._WINDOWS_GENERIC_PATTERN.sub(r"*:\***", value)
 
             return value
         elif isinstance(value, dict):
@@ -202,8 +242,9 @@ class StructuredLogger:
         if trace_context:
             entry.update(trace_context)
 
-        # Merge and sanitize context
-        merged_context = {**self.default_context, **(context or {})}
+        # Merge and sanitize context (async context + default + provided)
+        async_context = self._extract_async_context()
+        merged_context = {**async_context, **self.default_context, **(context or {})}
         entry["context"] = self._sanitize_dict(merged_context)
 
         # Add error information if provided
@@ -298,3 +339,41 @@ class StructuredLogger:
             level: Minimum log level to output
         """
         self.logger.setLevel(level)
+
+
+# Helper functions for async context management
+
+
+def set_request_context(**context: Any) -> None:
+    """Set async request context that will be included in all log entries.
+
+    This uses Python's contextvars to propagate context across async boundaries.
+
+    Example:
+        >>> set_request_context(request_id="req-123", user_id="user-456")
+        >>> logger.info("Processing request")  # Will include request_id and user_id
+
+    Args:
+        **context: Key-value pairs to set in the request context
+    """
+    current = _request_context.get()
+    updated = {**current, **context}
+    _request_context.set(updated)
+
+
+def clear_request_context() -> None:
+    """Clear all async request context.
+
+    Example:
+        >>> clear_request_context()
+    """
+    _request_context.set({})
+
+
+def get_request_context() -> Dict[str, Any]:
+    """Get the current async request context.
+
+    Returns:
+        Dictionary of current request context
+    """
+    return dict(_request_context.get())

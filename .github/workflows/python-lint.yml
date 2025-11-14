@@ -2,13 +2,14 @@ name: Python Lint
 on: [pull_request]
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     if: |
-      github.actor != 'python-linter[bot]' &&
-      github.actor != 'typescript-linter[bot]'
+      github.actor != 'pb-python-linter[bot]' &&
+      github.actor != 'pb-typescript-linter[bot]'
     strategy:
       matrix:
         python-version: ["3.13"]
@@ -17,6 +18,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
       - name: Install uv
         uses: astral-sh/setup-uv@v6
         with:
@@ -39,12 +41,20 @@ jobs:
         run: uv run ty check
         continue-on-error: true
 
+      - name: Verify no remaining errors
+        run: |
+          echo "Verifying all linting errors are fixed..."
+          uv run ruff check
+          uv run ty check
+
       - name: Configure Git
         run: |
           git config user.name "pb-python-linter[bot]"
           git config user.email "pb-python-linter[bot]@users.noreply.github.com"
 
       - name: Commit and push changes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git add .
           if git diff --staged --quiet; then
@@ -53,4 +63,5 @@ jobs:
           fi
           git commit -m "Python linting bot makes changes"
           git pull --rebase origin ${{ github.event.pull_request.head.ref }} || true
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
           git push origin ${{ github.event.pull_request.head.ref }}

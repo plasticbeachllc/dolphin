@@ -4,6 +4,9 @@
 
 import { describe, test, expect, beforeEach } from "bun:test";
 import { ArchitectWorkflow } from "../../src/workflows/architect-workflow";
+import type { ClaudeProvider } from "../../src/execution/claude-provider";
+import type { ContextBuilder } from "../../src/context/context-builder";
+import type { PromptBuilder } from "../../src/prompts/prompt-builder";
 import type {
   TaskInput,
   WorkflowUpdate,
@@ -80,9 +83,9 @@ describe("ArchitectWorkflow", () => {
     mockPromptBuilder = new MockPromptBuilder();
 
     workflow = new ArchitectWorkflow({
-      claudeProvider: mockClaudeProvider as any,
-      contextBuilder: mockContextBuilder as any,
-      promptBuilder: mockPromptBuilder as any,
+      claudeProvider: mockClaudeProvider as unknown as ClaudeProvider,
+      contextBuilder: mockContextBuilder as unknown as ContextBuilder,
+      promptBuilder: mockPromptBuilder as unknown as PromptBuilder,
       maxClarificationTurns: 2,
     });
 
