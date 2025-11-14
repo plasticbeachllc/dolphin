@@ -4,7 +4,6 @@ import pytest
 import time
 from kb.cache.query_cache import (
     QueryResultCache,
-    CachedQuery,
     get_query_cache,
     clear_query_cache,
 )
@@ -101,7 +100,7 @@ class TestQueryResultCache:
         cache.put("query4", {}, [{"id": "4"}])
 
         assert cache.get("query1", {}) is not None  # Still present
-        assert cache.get("query2", {}) is None       # Evicted
+        assert cache.get("query2", {}) is None  # Evicted
         assert cache.get("query3", {}) is not None
         assert cache.get("query4", {}) is not None
 
@@ -165,12 +164,12 @@ class TestQueryResultCache:
 
         stats = cache.stats()
 
-        assert stats['size'] == 1
-        assert stats['max_size'] == 10
-        assert stats['hits'] == 1
-        assert stats['misses'] == 1
-        assert stats['hit_rate'] == 50.0
-        assert stats['total_requests'] == 2
+        assert stats["size"] == 1
+        assert stats["max_size"] == 10
+        assert stats["hits"] == 1
+        assert stats["misses"] == 1
+        assert stats["hit_rate"] == 50.0
+        assert stats["total_requests"] == 2
 
     def test_param_normalization(self):
         """Test that parameter order doesn't affect caching."""

@@ -38,11 +38,11 @@ def _read_template() -> str:
 
 def _ensure_user_config() -> Path:
     """Ensure user config exists, creating it from template if needed.
-    
+
     Returns the path to the user config file.
     """
     config_path = USER_CONFIG_PATH
-    
+
     if not config_path.exists():
         _log.info("Creating user config at %s", config_path)
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -52,7 +52,7 @@ def _ensure_user_config() -> Path:
             _log.info("User config created successfully")
         else:
             _log.warning("Could not create user config: template not available")
-    
+
     return config_path
 
 
@@ -65,11 +65,13 @@ class RerankingConfig:
     candidate_multiplier: int = 4
     score_threshold: float = 0.3
 
+
 @dataclass
 class HybridSearchConfig:
     enabled: bool = True
     fusion_method: str = "rrf"
     fusion_k: int = 60
+
 
 @dataclass
 class ANNConfig:
@@ -77,6 +79,7 @@ class ANNConfig:
     metric: str = "cosine"
     estimated_dataset_size: int = 100000
     default_query_type: str = "concept"
+
 
 @dataclass
 class RetrievalConfig:
@@ -89,6 +92,7 @@ class RetrievalConfig:
     mmr_enabled: bool = True
     mmr_lambda: float = 0.7
 
+
 @dataclass
 class KBConfig:
     """Runtime configuration for the knowledge store components."""
@@ -100,9 +104,9 @@ class KBConfig:
     per_session_spend_cap_usd: float = 10.0
     ignore: list[str] = field(default_factory=lambda: list(DEFAULT_IGNORE_PATTERNS))
     ignore_exceptions: list[str] = field(default_factory=list)
-    
+
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
-    
+
     embedding_provider: str = "stub"
     embedding_batch_size: int = 100
     openai_api_key_env: str = "OPENAI_API_KEY"
@@ -139,9 +143,13 @@ class KBConfig:
         if "batch_size" in data:
             config.batch_size = cls._coerce_optional(data["batch_size"], int)
         if "candidate_multiplier" in data:
-            config.candidate_multiplier = cls._coerce_optional(data["candidate_multiplier"], int)
+            config.candidate_multiplier = cls._coerce_optional(
+                data["candidate_multiplier"], int
+            )
         if "score_threshold" in data:
-            config.score_threshold = cls._coerce_optional(data["score_threshold"], float)
+            config.score_threshold = cls._coerce_optional(
+                data["score_threshold"], float
+            )
 
         return config
 
@@ -173,7 +181,9 @@ class KBConfig:
         if "metric" in data:
             config.metric = data["metric"]
         if "estimated_dataset_size" in data:
-            config.estimated_dataset_size = cls._coerce_optional(data["estimated_dataset_size"], int)
+            config.estimated_dataset_size = cls._coerce_optional(
+                data["estimated_dataset_size"], int
+            )
         if "default_query_type" in data:
             config.default_query_type = data["default_query_type"]
 
@@ -183,13 +193,15 @@ class KBConfig:
     def _build_retrieval_config(cls, data: dict) -> RetrievalConfig:
         """Build retrieval configuration from mapping."""
         reranking_data = data.get("reranking", {}) if isinstance(data, dict) else {}
-        hybrid_search_data = data.get("hybrid_search", {}) if isinstance(data, dict) else {}
+        hybrid_search_data = (
+            data.get("hybrid_search", {}) if isinstance(data, dict) else {}
+        )
         ann_data = data.get("ann", {}) if isinstance(data, dict) else {}
 
         config = RetrievalConfig(
             reranking=cls._build_reranking_config(reranking_data),
             hybrid_search=cls._build_hybrid_search_config(hybrid_search_data),
-            ann=cls._build_ann_config(ann_data)
+            ann=cls._build_ann_config(ann_data),
         )
 
         if "score_cutoff" in data:
@@ -197,7 +209,9 @@ class KBConfig:
         if "top_k" in data:
             config.top_k = cls._coerce_optional(data["top_k"], int)
         if "max_snippet_tokens" in data:
-            config.max_snippet_tokens = cls._coerce_optional(data["max_snippet_tokens"], int)
+            config.max_snippet_tokens = cls._coerce_optional(
+                data["max_snippet_tokens"], int
+            )
         if "mmr_enabled" in data:
             config.mmr_enabled = cls._coerce_optional(data["mmr_enabled"], bool)
         if "mmr_lambda" in data:
@@ -220,56 +234,74 @@ class KBConfig:
         retrieval_config = cls._build_retrieval_config(retrieval_data)
 
         # Build top-level config
-        config_kwargs = {'retrieval': retrieval_config}
+        config_kwargs = {"retrieval": retrieval_config}
 
         # Handle storage settings
         if storage_data and storage_data.get("store_root"):
-            config_kwargs['store_root'] = _to_path(storage_data.get("store_root"))
+            config_kwargs["store_root"] = _to_path(storage_data.get("store_root"))
 
         # Handle server settings
         if server_data and server_data.get("endpoint"):
-            config_kwargs['endpoint'] = server_data.get("endpoint")
+            config_kwargs["endpoint"] = server_data.get("endpoint")
 
         # Handle embedding settings
         if embedding_data:
             if embedding_data.get("default_embed_model"):
-                config_kwargs['default_embed_model'] = embedding_data.get("default_embed_model")
+                config_kwargs["default_embed_model"] = embedding_data.get(
+                    "default_embed_model"
+                )
             if embedding_data.get("concurrency") is not None:
-                config_kwargs['concurrency'] = cls._coerce_optional(embedding_data.get("concurrency"), int)
+                config_kwargs["concurrency"] = cls._coerce_optional(
+                    embedding_data.get("concurrency"), int
+                )
             if embedding_data.get("provider"):
-                config_kwargs['embedding_provider'] = embedding_data.get("provider")
+                config_kwargs["embedding_provider"] = embedding_data.get("provider")
             if embedding_data.get("batch_size") is not None:
-                config_kwargs['embedding_batch_size'] = cls._coerce_optional(embedding_data.get("batch_size"), int)
+                config_kwargs["embedding_batch_size"] = cls._coerce_optional(
+                    embedding_data.get("batch_size"), int
+                )
             if embedding_data.get("api_key_env"):
-                config_kwargs['openai_api_key_env'] = embedding_data.get("api_key_env")
+                config_kwargs["openai_api_key_env"] = embedding_data.get("api_key_env")
 
         # Handle top-level settings
         if data.get("per_session_spend_cap_usd") is not None:
-            config_kwargs['per_session_spend_cap_usd'] = cls._coerce_optional(data.get("per_session_spend_cap_usd"), float)
+            config_kwargs["per_session_spend_cap_usd"] = cls._coerce_optional(
+                data.get("per_session_spend_cap_usd"), float
+            )
         if data.get("ignore"):
-            config_kwargs['ignore'] = data.get("ignore")
+            config_kwargs["ignore"] = data.get("ignore")
         if data.get("exceptions") or data.get("ignore_exceptions"):
-            config_kwargs['ignore_exceptions'] = data.get("exceptions", data.get("ignore_exceptions", []))
-            
+            config_kwargs["ignore_exceptions"] = data.get(
+                "exceptions", data.get("ignore_exceptions", [])
+            )
+
         # Always override retrieval config with our constructed one
-        config_kwargs['retrieval'] = retrieval_config
-        
+        config_kwargs["retrieval"] = retrieval_config
+
         # Handle cache settings (support both nested and top-level)
         if cache_data:
             if cache_data.get("enabled") is not None:
-                config_kwargs['cache_enabled'] = cls._coerce_optional(cache_data.get("enabled"), bool)
+                config_kwargs["cache_enabled"] = cls._coerce_optional(
+                    cache_data.get("enabled"), bool
+                )
             if cache_data.get("redis_url"):
-                config_kwargs['redis_url'] = cache_data.get("redis_url")
+                config_kwargs["redis_url"] = cache_data.get("redis_url")
             if cache_data.get("embedding_ttl") is not None:
-                config_kwargs['embedding_cache_ttl'] = cls._coerce_optional(cache_data.get("embedding_ttl"), int)
+                config_kwargs["embedding_cache_ttl"] = cls._coerce_optional(
+                    cache_data.get("embedding_ttl"), int
+                )
             if cache_data.get("result_ttl") is not None:
-                config_kwargs['result_cache_ttl'] = _coerce_optional(cache_data.get("result_ttl"), int)
-        
+                config_kwargs["result_cache_ttl"] = _coerce_optional(
+                    cache_data.get("result_ttl"), int
+                )
+
         # Also support top-level cache_enabled parameter (for backward compatibility)
         if "cache_enabled" in data:
-            config_kwargs['cache_enabled'] = _coerce_optional(data.get("cache_enabled"), bool)
+            config_kwargs["cache_enabled"] = _coerce_optional(
+                data.get("cache_enabled"), bool
+            )
         if "redis_url" in data:
-            config_kwargs['redis_url'] = data.get("redis_url")
+            config_kwargs["redis_url"] = data.get("redis_url")
 
         return cls(**config_kwargs)
 
@@ -295,7 +327,9 @@ def load_config(path: Path | None = None, repo_path: Path | None = None) -> KBCo
     # 1) Explicit path
     if path is not None:
         if not path.exists():
-            raise FileNotFoundError(f"Config not found at {path}. Run 'dolphin init' to create one.")
+            raise FileNotFoundError(
+                f"Config not found at {path}. Run 'dolphin init' to create one."
+            )
         _log.debug("Loading config from explicit path: %s", path)
         with path.open("rb") as f:
             config_data = tomllib.load(f) or {}
@@ -312,7 +346,9 @@ def load_config(path: Path | None = None, repo_path: Path | None = None) -> KBCo
     if not config_data and path is None:
         user_config = USER_CONFIG_PATH
         if not user_config.exists():
-            raise FileNotFoundError("No configuration found. Create one with 'dolphin init' or provide --config path.")
+            raise FileNotFoundError(
+                "No configuration found. Create one with 'dolphin init' or provide --config path."
+            )
         _log.debug("Loading user config: %s", user_config)
         with user_config.open("rb") as f:
             config_data = tomllib.load(f) or {}

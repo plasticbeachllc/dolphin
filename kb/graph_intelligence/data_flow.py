@@ -1,14 +1,21 @@
 """Data flow analysis for tracking variable dependencies."""
 
-from typing import List, Dict, Set, Optional, Tuple
+from typing import List, Dict, Optional, Tuple
 from tree_sitter import Node
 from .models import GraphNode, GraphEdge, EdgeType, NodeType
 
 
 class VariableReference:
     """Represents a variable reference in the code."""
-    def __init__(self, var_name: str, line: int, func_id: Optional[str] = None,
-                 is_definition: bool = False, is_mutation: bool = False):
+
+    def __init__(
+        self,
+        var_name: str,
+        line: int,
+        func_id: Optional[str] = None,
+        is_definition: bool = False,
+        is_mutation: bool = False,
+    ):
         self.var_name = var_name
         self.line = line
         self.func_id = func_id
@@ -36,23 +43,29 @@ class DataFlowAnalyzer:
             if not ref.is_definition and ref.func_id:
                 # Find the definition of this variable
                 for def_ref in var_refs:
-                    if (def_ref.var_name == ref.var_name and
-                        def_ref.is_definition and
-                        def_ref.func_id and
-                        def_ref.line < ref.line):
+                    if (
+                        def_ref.var_name == ref.var_name
+                        and def_ref.is_definition
+                        and def_ref.func_id
+                        and def_ref.line < ref.line
+                    ):
                         # Create an edge from the using function to the defining function
-                        edge_type = EdgeType.MODIFIES if ref.is_mutation else EdgeType.USES
-                        edges.append(GraphEdge(
-                            source_id=ref.func_id,
-                            target_id=def_ref.func_id,
-                            edge_type=edge_type,
-                            repo_id=repo_id,
-                            attributes={
-                                "variable": ref.var_name,
-                                "use_line": ref.line,
-                                "def_line": def_ref.line,
-                            }
-                        ))
+                        edge_type = (
+                            EdgeType.MODIFIES if ref.is_mutation else EdgeType.USES
+                        )
+                        edges.append(
+                            GraphEdge(
+                                source_id=ref.func_id,
+                                target_id=def_ref.func_id,
+                                edge_type=edge_type,
+                                repo_id=repo_id,
+                                attributes={
+                                    "variable": ref.var_name,
+                                    "use_line": ref.line,
+                                    "def_line": def_ref.line,
+                                },
+                            )
+                        )
                         break
 
         return edges
@@ -71,22 +84,28 @@ class DataFlowAnalyzer:
             if not ref.is_definition and ref.func_id:
                 # Find the definition of this variable
                 for def_ref in var_refs:
-                    if (def_ref.var_name == ref.var_name and
-                        def_ref.is_definition and
-                        def_ref.func_id and
-                        def_ref.line < ref.line):
-                        edge_type = EdgeType.MODIFIES if ref.is_mutation else EdgeType.USES
-                        edges.append(GraphEdge(
-                            source_id=ref.func_id,
-                            target_id=def_ref.func_id,
-                            edge_type=edge_type,
-                            repo_id=repo_id,
-                            attributes={
-                                "variable": ref.var_name,
-                                "use_line": ref.line,
-                                "def_line": def_ref.line,
-                            }
-                        ))
+                    if (
+                        def_ref.var_name == ref.var_name
+                        and def_ref.is_definition
+                        and def_ref.func_id
+                        and def_ref.line < ref.line
+                    ):
+                        edge_type = (
+                            EdgeType.MODIFIES if ref.is_mutation else EdgeType.USES
+                        )
+                        edges.append(
+                            GraphEdge(
+                                source_id=ref.func_id,
+                                target_id=def_ref.func_id,
+                                edge_type=edge_type,
+                                repo_id=repo_id,
+                                attributes={
+                                    "variable": ref.var_name,
+                                    "use_line": ref.line,
+                                    "def_line": def_ref.line,
+                                },
+                            )
+                        )
                         break
 
         return edges
@@ -110,25 +129,30 @@ class DataFlowAnalyzer:
         return refs
 
     def _walk_python_tree(
-        self, node: Node, refs: List[VariableReference], def_map: Dict[Tuple[int, int], GraphNode]
+        self,
+        node: Node,
+        refs: List[VariableReference],
+        def_map: Dict[Tuple[int, int], GraphNode],
     ) -> None:
         """Recursively walk the Python AST to find variable references."""
         # Check for assignments (variable definitions)
         if node.type == "assignment":
             left = node.child_by_field_name("left")
             if left and left.type == "identifier":
-                var_name = left.text.decode('utf8')
+                var_name = left.text.decode("utf8")
                 containing_func = self._find_containing_func(node, def_map)
-                refs.append(VariableReference(
-                    var_name=var_name,
-                    line=left.start_point[0],
-                    func_id=containing_func.id if containing_func else None,
-                    is_definition=True
-                ))
+                refs.append(
+                    VariableReference(
+                        var_name=var_name,
+                        line=left.start_point[0],
+                        func_id=containing_func.id if containing_func else None,
+                        is_definition=True,
+                    )
+                )
 
         # Check for identifiers (variable uses)
         elif node.type == "identifier":
-            var_name = node.text.decode('utf8')
+            var_name = node.text.decode("utf8")
             containing_func = self._find_containing_func(node, def_map)
 
             # Check if this is a mutation (left side of assignment)
@@ -139,13 +163,15 @@ class DataFlowAnalyzer:
                     is_mutation = True
 
             if containing_func and not is_mutation:
-                refs.append(VariableReference(
-                    var_name=var_name,
-                    line=node.start_point[0],
-                    func_id=containing_func.id,
-                    is_definition=False,
-                    is_mutation=is_mutation
-                ))
+                refs.append(
+                    VariableReference(
+                        var_name=var_name,
+                        line=node.start_point[0],
+                        func_id=containing_func.id,
+                        is_definition=False,
+                        is_mutation=is_mutation,
+                    )
+                )
 
         # Recurse on children
         for child in node.children:
@@ -170,25 +196,30 @@ class DataFlowAnalyzer:
         return refs
 
     def _walk_typescript_tree(
-        self, node: Node, refs: List[VariableReference], def_map: Dict[Tuple[int, int], GraphNode]
+        self,
+        node: Node,
+        refs: List[VariableReference],
+        def_map: Dict[Tuple[int, int], GraphNode],
     ) -> None:
         """Recursively walk the TypeScript AST to find variable references."""
         # Check for variable declarations
         if node.type == "variable_declarator":
             name_node = node.child_by_field_name("name")
             if name_node and name_node.type == "identifier":
-                var_name = name_node.text.decode('utf8')
+                var_name = name_node.text.decode("utf8")
                 containing_func = self._find_containing_func(node, def_map)
-                refs.append(VariableReference(
-                    var_name=var_name,
-                    line=name_node.start_point[0],
-                    func_id=containing_func.id if containing_func else None,
-                    is_definition=True
-                ))
+                refs.append(
+                    VariableReference(
+                        var_name=var_name,
+                        line=name_node.start_point[0],
+                        func_id=containing_func.id if containing_func else None,
+                        is_definition=True,
+                    )
+                )
 
         # Check for identifiers (variable uses)
         elif node.type == "identifier":
-            var_name = node.text.decode('utf8')
+            var_name = node.text.decode("utf8")
             containing_func = self._find_containing_func(node, def_map)
 
             # Check if this is an assignment
@@ -199,13 +230,15 @@ class DataFlowAnalyzer:
                     is_mutation = True
 
             if containing_func:
-                refs.append(VariableReference(
-                    var_name=var_name,
-                    line=node.start_point[0],
-                    func_id=containing_func.id,
-                    is_definition=False,
-                    is_mutation=is_mutation
-                ))
+                refs.append(
+                    VariableReference(
+                        var_name=var_name,
+                        line=node.start_point[0],
+                        func_id=containing_func.id,
+                        is_definition=False,
+                        is_mutation=is_mutation,
+                    )
+                )
 
         # Recurse on children
         for child in node.children:

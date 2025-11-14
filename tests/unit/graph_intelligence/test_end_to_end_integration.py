@@ -9,11 +9,10 @@ import tempfile
 import shutil
 from pathlib import Path
 from datetime import datetime
-from sqlmodel import create_engine, Session, select
+from sqlmodel import Session, select
 import subprocess
-from unittest.mock import Mock, MagicMock, patch
 
-from kb.store.sql_models import CodeNode, CodeEdge, GraphMetrics, GraphCacheState, Repo, File
+from kb.store.sql_models import CodeNode, CodeEdge, GraphMetrics
 from kb.store.graph_store import GraphStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
 from kb.graph_intelligence.graph_manager import GraphManager
@@ -259,7 +258,9 @@ class TestEndToEndIntegration:
             # Verify metrics count matches node count
             assert len(db_metrics) == stats["nodes_created"]
 
-    def test_cache_invalidation_on_git_changes(self, graph_store_with_data, temp_git_repo):
+    def test_cache_invalidation_on_git_changes(
+        self, graph_store_with_data, temp_git_repo
+    ):
         """Test cache invalidation when git commit changes."""
         graph_store, repo_id, initial_commit, stats = graph_store_with_data
 
@@ -280,7 +281,9 @@ class TestEndToEndIntegration:
         # Make a git change
         new_file = temp_git_repo / "utils.py"
         new_file.write_text("def helper():\n    return 42\n")
-        subprocess.run(["git", "add", "."], cwd=temp_git_repo, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "add", "."], cwd=temp_git_repo, check=True, capture_output=True
+        )
         subprocess.run(
             ["git", "commit", "-m", "Add utils"],
             cwd=temp_git_repo,
@@ -569,7 +572,7 @@ def broken(
             for i in range(100):
                 edge = CodeEdge(
                     source_node_id=f"node_{i}",
-                    target_node_id=f"node_{i+1}",
+                    target_node_id=f"node_{i + 1}",
                     edge_type="calls",
                     repo_id=repo_id,
                     commit_sha="test_commit",

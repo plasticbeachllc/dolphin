@@ -15,47 +15,51 @@ def chunk_text(
     overlap_pct: float = 0.10,
 ) -> list[Chunk]:
     """Fallback chunker for generic content using token windowing.
-    
+
     Uses tiktoken to create overlapping windows of approximately `token_target` tokens.
     Maps each window to 1-based line ranges in the original file.
-    
+
     Args:
         text: The file content to chunk
         model: Tokenizer model ("small" or "large")
         token_target: Target tokens per chunk (default 400)
         overlap_pct: Overlap percentage between chunks (default 0.10 = 10%)
-    
+
     Returns:
         List of Chunk objects with accurate line numbers and token counts
     """
     if not text:
         return []
-    
+
     tok = get_tokenizer(model)
     overlap = max(0, int(token_target * overlap_pct))
-    windows = window_text_by_tokens(text, model=model, target=token_target, overlap=overlap)
-    
+    windows = window_text_by_tokens(
+        text, model=model, target=token_target, overlap=overlap
+    )
+
     # Build line-start offsets for entire file
     line_offsets = _build_line_offsets(text)
-    
+
     chunks: List[Chunk] = []
     for raw_text, start_char, end_char in windows:
         if not raw_text:
             continue
-        
+
         # Map character offsets to line numbers
         abs_start_line = _offset_to_line(line_offsets, start_char)
         abs_end_line = abs_start_line + raw_text.count("\n")
-        
+
         # Trim leading/trailing newlines and recompute token count
-        trimmed_text, token_count, lead_trim, trail_trim = _trim_and_tokenize(raw_text, tok)
+        trimmed_text, token_count, lead_trim, trail_trim = _trim_and_tokenize(
+            raw_text, tok
+        )
         if not trimmed_text:
             continue
-        
+
         # Adjust line numbers for trimmed newlines
         adj_start = abs_start_line + lead_trim
         adj_end = max(adj_start, abs_end_line - trail_trim)
-        
+
         chunks.append(
             Chunk(
                 text=trimmed_text,
@@ -67,7 +71,7 @@ def chunk_text(
                 symbol_path=None,
             )
         )
-    
+
     return chunks
 
 
@@ -88,7 +92,7 @@ def _offset_to_line(line_offsets: List[int], offset: int) -> int:
 
 def _trim_and_tokenize(raw_text: str, tokenizer) -> Tuple[str, int, int, int]:
     """Trim leading/trailing newlines and compute token_count.
-    
+
     Returns: (trimmed_text, token_count, lead_trim, trail_trim)
     where lead_trim and trail_trim are the number of newlines removed.
     """

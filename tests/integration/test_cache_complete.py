@@ -1,6 +1,5 @@
 """Integration tests for cache layer functionality."""
 
-import pytest
 import subprocess
 import time
 from pathlib import Path
@@ -77,8 +76,14 @@ def create_endpoint(route):
 """)
 
         # Commit files to git
-        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
+            check=True,
+            capture_output=True,
+        )
 
         # Setup and index
         db_path = temp_dir / "cache.db"
@@ -91,9 +96,7 @@ def create_endpoint(route):
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         metadata_store.record_repo(
-            name="cache-repo",
-            path=repo_path,
-            default_embed_model="small"
+            name="cache-repo", path=repo_path, default_embed_model="small"
         )
 
         pipeline.index("cache-repo", dry_run=False, force=True)
@@ -142,10 +145,16 @@ def create_endpoint(route):
         init_test_git_repo(repo_path)
 
         (repo_path / "code.py").write_text("def original(): return 'original'")
-        
+
         # Commit initial file
-        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
+            check=True,
+            capture_output=True,
+        )
 
         # Setup and initial index
         db_path = temp_dir / "invalidate.db"
@@ -158,9 +167,7 @@ def create_endpoint(route):
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         metadata_store.record_repo(
-            name="invalidate-repo",
-            path=repo_path,
-            default_embed_model="small"
+            name="invalidate-repo", path=repo_path, default_embed_model="small"
         )
 
         pipeline.index("invalidate-repo", dry_run=False, force=True)
@@ -188,10 +195,16 @@ def original(): return 'original'
 def new_function(): return 'new'
 def another_function(): return 'another'
 """)
-        
+
         # Commit changes
-        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Add new functions"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "Add new functions"],
+            check=True,
+            capture_output=True,
+        )
 
         # Re-index
         pipeline.index("invalidate-repo", dry_run=False, force=True)
@@ -228,10 +241,16 @@ def transform(data):
     '''Transform data.'''
     return data.upper()
 """)
-        
+
         # Commit files
-        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
+            check=True,
+            capture_output=True,
+        )
 
         # Setup
         db_path = temp_dir / "consistent.db"
@@ -244,9 +263,7 @@ def transform(data):
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         metadata_store.record_repo(
-            name="consistent-repo",
-            path=repo_path,
-            default_embed_model="small"
+            name="consistent-repo", path=repo_path, default_embed_model="small"
         )
 
         pipeline.index("consistent-repo", dry_run=False, force=True)
@@ -278,8 +295,8 @@ def transform(data):
 
             # Check that chunk IDs are the same
             if len(results_list[0]) > 0:
-                ids_0 = [r['chunk_id'] for r in results_list[0]]
-                ids_i = [r['chunk_id'] for r in results_list[i]]
+                ids_0 = [r["chunk_id"] for r in results_list[0]]
+                ids_i = [r["chunk_id"] for r in results_list[i]]
                 assert ids_0 == ids_i
 
     def test_cache_handles_different_top_k(self, temp_dir: Path):
@@ -289,15 +306,23 @@ def transform(data):
         init_test_git_repo(repo_path)
 
         # Create file with enough content for multiple results
-        content = "\n\n".join([
-            f"def function_{i}():\n    '''Function {i} for testing.'''\n    return {i}"
-            for i in range(10)
-        ])
+        content = "\n\n".join(
+            [
+                f"def function_{i}():\n    '''Function {i} for testing.'''\n    return {i}"
+                for i in range(10)
+            ]
+        )
         (repo_path / "functions.py").write_text(content)
-        
+
         # Commit files
-        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
+            check=True,
+            capture_output=True,
+        )
 
         # Setup
         db_path = temp_dir / "topk.db"
@@ -310,9 +335,7 @@ def transform(data):
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         metadata_store.record_repo(
-            name="topk-repo",
-            path=repo_path,
-            default_embed_model="small"
+            name="topk-repo", path=repo_path, default_embed_model="small"
         )
 
         pipeline.index("topk-repo", dry_run=False, force=True)
@@ -354,10 +377,10 @@ def transform(data):
 
         # Larger top_k should include all results from smaller top_k
         if len(results_3) > 0 and len(results_5) > 0:
-            ids_3 = [r['chunk_id'] for r in results_3]
-            ids_5 = [r['chunk_id'] for r in results_5]
+            ids_3 = [r["chunk_id"] for r in results_3]
+            ids_5 = [r["chunk_id"] for r in results_5]
             # First 3 IDs from top_k=5 should match top_k=3
-            assert ids_5[:len(ids_3)] == ids_3
+            assert ids_5[: len(ids_3)] == ids_3
 
 
 class TestCacheEdgeCases:
@@ -370,10 +393,16 @@ class TestCacheEdgeCases:
         init_test_git_repo(repo_path)
 
         (repo_path / "simple.py").write_text("def simple(): pass")
-        
+
         # Commit files
-        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
+            check=True,
+            capture_output=True,
+        )
 
         # Setup
         db_path = temp_dir / "empty.db"
@@ -386,9 +415,7 @@ class TestCacheEdgeCases:
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         metadata_store.record_repo(
-            name="empty-repo",
-            path=repo_path,
-            default_embed_model="small"
+            name="empty-repo", path=repo_path, default_embed_model="small"
         )
 
         pipeline.index("empty-repo", dry_run=False, force=True)
@@ -430,10 +457,16 @@ def handle_special_chars():
     '''Handle special characters: @#$%^&*()'''
     return "special"
 """)
-        
+
         # Commit files
-        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
+            check=True,
+            capture_output=True,
+        )
 
         # Setup
         db_path = temp_dir / "special.db"
@@ -446,9 +479,7 @@ def handle_special_chars():
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         metadata_store.record_repo(
-            name="special-repo",
-            path=repo_path,
-            default_embed_model="small"
+            name="special-repo", path=repo_path, default_embed_model="small"
         )
 
         pipeline.index("special-repo", dry_run=False, force=True)
@@ -491,10 +522,16 @@ def concurrent_test():
     '''Test concurrent access.'''
     return True
 """)
-        
+
         # Commit files
-        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
+            check=True,
+            capture_output=True,
+        )
 
         # Setup
         db_path = temp_dir / "concurrent.db"
@@ -507,9 +544,7 @@ def concurrent_test():
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         metadata_store.record_repo(
-            name="concurrent-repo",
-            path=repo_path,
-            default_embed_model="small"
+            name="concurrent-repo", path=repo_path, default_embed_model="small"
         )
 
         pipeline.index("concurrent-repo", dry_run=False, force=True)

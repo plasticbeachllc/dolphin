@@ -2,13 +2,10 @@
 
 import pytest
 from pathlib import Path
-from typing import Dict, Any, List
 
 from kb.ingest.pipeline import IngestionPipeline
 from kb.store import LanceDBStore, SQLiteMetadataStore
 from kb.config import KBConfig
-from kb.ingest.scanner import scan_repo
-from kb.chunkers.registry import get_chunker_for_file
 from tests.utils.mock_services import MockEmbeddingService
 
 
@@ -19,35 +16,32 @@ class TestIndexingIntegration:
         self,
         sample_repo_path: Path,
         temp_db_path: Path,
-        mock_embedding_service: MockEmbeddingService
+        mock_embedding_service: MockEmbeddingService,
     ):
         """Test that indexing workflow processes all repository files."""
         # Setup
         config = KBConfig(
-            default_embed_model="small",
-            ignore=["*.pyc", "__pycache__/*"]
+            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
         )
-        
+
         metadata_store = SQLiteMetadataStore(temp_db_path)
         metadata_store.initialize()  # Initialize database tables
         lancedb_store = LanceDBStore("memory://test_db")
-        
+
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
-        
+
         # Register repository
         metadata_store.record_repo(
-            name="test-repo",
-            path=sample_repo_path,
-            default_embed_model="small"
+            name="test-repo", path=sample_repo_path, default_embed_model="small"
         )
-        
+
         # Run indexing
         result = pipeline.index("test-repo", dry_run=True, force=True)
-        
+
         # Verify indexing completed successfully
         assert result["session_id"] is not None
         assert result["files_indexed"] >= 0
-        
+
         # Verify metadata was recorded
         session = metadata_store.get_session(result["session_id"])
         assert session is not None
@@ -58,67 +52,62 @@ class TestIndexingIntegration:
         self,
         sample_repo_path: Path,
         temp_db_path: Path,
-        mock_embedding_service: MockEmbeddingService
+        mock_embedding_service: MockEmbeddingService,
     ):
         """Test that indexing properly deduplicates content."""
         # Setup
         config = KBConfig(
-            default_embed_model="small",
-            ignore=["*.pyc", "__pycache__/*"]
+            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
         )
-        
+
         metadata_store = SQLiteMetadataStore(temp_db_path)
         metadata_store.initialize()  # Initialize database tables
         lancedb_store = LanceDBStore("memory://test_db")
-        
+
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
-        
+
         # Register repository
         metadata_store.record_repo(
-            name="test-repo",
-            path=sample_repo_path,
-            default_embed_model="small"
+            name="test-repo", path=sample_repo_path, default_embed_model="small"
         )
-        
+
         # First indexing run
         result1 = pipeline.index("test-repo", dry_run=True, force=True)
-        
+
         # Second indexing run (should have deduplication)
         result2 = pipeline.index("test-repo", dry_run=True, force=True)
-        
+
         # Verify deduplication occurred
         # In second run, chunks_skipped should be higher due to deduplication
         assert result2["chunks_skipped"] >= result1["chunks_skipped"]
         # Total chunks processed should be similar or less
-        assert (result2["chunks_indexed"] + result2["chunks_skipped"]) <= \
-               (result1["chunks_indexed"] + result1["chunks_skipped"])
+        assert (result2["chunks_indexed"] + result2["chunks_skipped"]) <= (
+            result1["chunks_indexed"] + result1["chunks_skipped"]
+        )
 
     def test_indexing_error_recovery(
         self,
         sample_repo_path: Path,
         temp_db_path: Path,
-        mock_embedding_service: MockEmbeddingService
+        mock_embedding_service: MockEmbeddingService,
     ):
         """Test that indexing recovers from errors gracefully."""
         # Setup
         config = KBConfig(
-            default_embed_model="small",
-            ignore=["*.pyc", "__pycache__/*"]
+            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
         )
-        
+
         metadata_store = SQLiteMetadataStore(temp_db_path)
         metadata_store.initialize()  # Initialize database tables
         lancedb_store = LanceDBStore("memory://test_db")
-        
+
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
-        
+
         # Register repository
         metadata_store.record_repo(
-            name="test-repo",
-            path=sample_repo_path,
-            default_embed_model="small"
+            name="test-repo", path=sample_repo_path, default_embed_model="small"
         )
-        
+
         # Create a problematic file that might cause chunking errors
         problematic_file = sample_repo_path / "problematic.py"
         problematic_file.write_text("""
@@ -127,15 +116,15 @@ class TestIndexingIntegration:
             missing_paren:
             pass
         """)
-        
+
         try:
             # Indexing should handle the problematic file gracefully
             result = pipeline.index("test-repo", dry_run=True, force=True)
-            
+
             # Should complete with some files processed
             assert result["files_indexed"] > 0
             assert result["session_id"] is not None
-            
+
         finally:
             # Clean up
             if problematic_file.exists():
@@ -145,46 +134,43 @@ class TestIndexingIntegration:
         self,
         sample_repo_path: Path,
         temp_db_path: Path,
-        mock_embedding_service: MockEmbeddingService
+        mock_embedding_service: MockEmbeddingService,
     ):
         """Test indexing behavior with large files."""
         # Setup
         config = KBConfig(
-            default_embed_model="small",
-            ignore=["*.pyc", "__pycache__/*"]
+            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
         )
-        
+
         metadata_store = SQLiteMetadataStore(temp_db_path)
         metadata_store.initialize()  # Initialize database tables
         lancedb_store = LanceDBStore("memory://test_db")
-        
+
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
-        
+
         # Register repository
         metadata_store.record_repo(
-            name="test-repo",
-            path=sample_repo_path,
-            default_embed_model="small"
+            name="test-repo", path=sample_repo_path, default_embed_model="small"
         )
-        
+
         # Create a large file
         large_file = sample_repo_path / "large_file.py"
         large_content = "# Large file\n" + "print('line')\n" * 1000
         large_file.write_text(large_content)
-        
+
         try:
             # Index the repository
             result = pipeline.index("test-repo", dry_run=True, force=True)
-            
+
             # Verify large file was processed
             assert result["files_indexed"] > 0
             assert result["chunks_indexed"] > 0
-            
+
             # Large files should be chunked appropriately
             # (not too many chunks, not too few)
             chunks_per_large_file = result["chunks_indexed"] / result["files_indexed"]
             assert 1 <= chunks_per_large_file <= 50  # Reasonable range
-            
+
         finally:
             # Clean up
             if large_file.exists():
@@ -194,28 +180,25 @@ class TestIndexingIntegration:
         self,
         sample_repo_path: Path,
         temp_db_path: Path,
-        mock_embedding_service: MockEmbeddingService
+        mock_embedding_service: MockEmbeddingService,
     ):
         """Test indexing with various file types and languages."""
         # Setup
         config = KBConfig(
-            default_embed_model="small",
-            ignore=["*.pyc", "__pycache__/*"]
+            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
         )
-        
+
         metadata_store = SQLiteMetadataStore(temp_db_path)
         metadata_store.initialize()  # Initialize database tables
         lancedb_store = LanceDBStore("memory://test_db")
-        
+
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
-        
+
         # Register repository
         metadata_store.record_repo(
-            name="test-repo",
-            path=sample_repo_path,
-            default_embed_model="small"
+            name="test-repo", path=sample_repo_path, default_embed_model="small"
         )
-        
+
         # Create various file types
         files_to_create = [
             ("test.py", "def hello(): pass"),
@@ -224,24 +207,24 @@ class TestIndexingIntegration:
             ("test.txt", "Plain text file"),
             ("test.json", '{"key": "value"}'),
         ]
-        
+
         created_files = []
         try:
             for filename, content in files_to_create:
                 file_path = sample_repo_path / filename
                 file_path.write_text(content)
                 created_files.append(file_path)
-            
+
             # Index the repository
             result = pipeline.index("test-repo", dry_run=True, force=True)
-            
+
             # Verify files were processed (at least existing tracked ones)
             assert result["files_indexed"] >= 0
             assert result["chunks_indexed"] >= 0
-            
+
             # Different file types should use appropriate chunkers
             # (this is verified by the fact that indexing completes)
-            
+
         finally:
             # Clean up
             for file_path in created_files:
@@ -256,45 +239,42 @@ class TestIndexingPerformance:
         self,
         sample_repo_path: Path,
         temp_db_path: Path,
-        mock_embedding_service: MockEmbeddingService
+        mock_embedding_service: MockEmbeddingService,
     ):
         """Test that indexing maintains reasonable memory usage."""
         import psutil
         import os
-        
+
         # Setup
         config = KBConfig(
-            default_embed_model="small",
-            ignore=["*.pyc", "__pycache__/*"]
+            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
         )
-        
+
         metadata_store = SQLiteMetadataStore(temp_db_path)
         metadata_store.initialize()  # Initialize database tables
         lancedb_store = LanceDBStore("memory://test_db")
-        
+
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
-        
+
         # Register repository
         metadata_store.record_repo(
-            name="test-repo",
-            path=sample_repo_path,
-            default_embed_model="small"
+            name="test-repo", path=sample_repo_path, default_embed_model="small"
         )
-        
+
         # Measure memory before indexing
         process = psutil.Process(os.getpid())
         memory_before = process.memory_info().rss / 1024 / 1024  # MB
-        
+
         # Run indexing
         result = pipeline.index("test-repo", dry_run=True, force=True)
-        
+
         # Measure memory after indexing
         memory_after = process.memory_info().rss / 1024 / 1024  # MB
         memory_used = memory_after - memory_before
-        
+
         # Verify reasonable memory usage (under 500MB as per spec)
         assert memory_used < 500, f"Memory usage too high: {memory_used:.2f}MB"
-        
+
         # Verify indexing completed successfully
         assert result["files_indexed"] > 0
 
@@ -302,40 +282,37 @@ class TestIndexingPerformance:
         self,
         sample_repo_path: Path,
         temp_db_path: Path,
-        mock_embedding_service: MockEmbeddingService
+        mock_embedding_service: MockEmbeddingService,
     ):
         """Test that indexing completes within reasonable time."""
         import time
-        
+
         # Setup
         config = KBConfig(
-            default_embed_model="small",
-            ignore=["*.pyc", "__pycache__/*"]
+            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
         )
-        
+
         metadata_store = SQLiteMetadataStore(temp_db_path)
         metadata_store.initialize()  # Initialize database tables
         lancedb_store = LanceDBStore("memory://test_db")
-        
+
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
-        
+
         # Register repository
         metadata_store.record_repo(
-            name="test-repo",
-            path=sample_repo_path,
-            default_embed_model="small"
+            name="test-repo", path=sample_repo_path, default_embed_model="small"
         )
-        
+
         # Measure execution time
         start_time = time.time()
         result = pipeline.index("test-repo", dry_run=True, force=True)
         end_time = time.time()
-        
+
         execution_time = end_time - start_time
-        
+
         # Verify reasonable execution time (under 30s for integration tests)
         assert execution_time < 30, f"Indexing took too long: {execution_time:.2f}s"
-        
+
         # Verify indexing completed successfully
         assert result["files_indexed"] > 0
 
@@ -343,34 +320,30 @@ class TestIndexingPerformance:
         self,
         sample_repo_path: Path,
         temp_db_path: Path,
-        mock_embedding_service: MockEmbeddingService
+        mock_embedding_service: MockEmbeddingService,
     ):
         """Test indexing behavior under concurrent operations."""
         import threading
-        import time
-        
+
         # Setup
         config = KBConfig(
-            default_embed_model="small",
-            ignore=["*.pyc", "__pycache__/*"]
+            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
         )
-        
+
         metadata_store = SQLiteMetadataStore(temp_db_path)
         metadata_store.initialize()  # Initialize database tables
         lancedb_store = LanceDBStore("memory://test_db")
-        
+
         # Register multiple repositories
         repo_names = ["repo1", "repo2", "repo3"]
         for repo_name in repo_names:
             metadata_store.record_repo(
-                name=repo_name,
-                path=sample_repo_path,
-                default_embed_model="small"
+                name=repo_name, path=sample_repo_path, default_embed_model="small"
             )
-        
+
         results = {}
         errors = {}
-        
+
         def run_indexing(repo_name):
             """Run indexing for a specific repository."""
             try:
@@ -379,22 +352,22 @@ class TestIndexingPerformance:
                 results[repo_name] = result
             except Exception as e:
                 errors[repo_name] = str(e)
-        
+
         # Start concurrent indexing operations
         threads = []
         for repo_name in repo_names:
             thread = threading.Thread(target=run_indexing, args=(repo_name,))
             threads.append(thread)
             thread.start()
-        
+
         # Wait for all threads to complete
         for thread in threads:
             thread.join()
-        
+
         # Verify all indexing operations completed
         assert len(results) == len(repo_names)
         assert len(errors) == 0
-        
+
         for repo_name, result in results.items():
             assert result["files_indexed"] > 0
             assert result["session_id"] is not None
@@ -405,9 +378,7 @@ class TestIndexingWithExternalServices:
     """Integration tests that require external services (marked as skip by default)."""
 
     def test_indexing_with_real_embeddings(
-        self,
-        sample_repo_path: Path,
-        temp_db_path: Path
+        self, sample_repo_path: Path, temp_db_path: Path
     ):
         """Test indexing with real embedding service (requires API access)."""
         # This test would use real embedding service instead of mock
@@ -418,7 +389,7 @@ class TestIndexingWithExternalServices:
         self,
         sample_repo_path: Path,
         temp_db_path: Path,
-        mock_embedding_service: MockEmbeddingService
+        mock_embedding_service: MockEmbeddingService,
     ):
         """Test indexing with real LanceDB storage (requires LanceDB)."""
         # This test would use real LanceDB instead of in-memory

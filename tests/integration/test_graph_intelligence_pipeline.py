@@ -12,14 +12,13 @@ import pytest
 import tempfile
 import shutil
 from pathlib import Path
-from sqlmodel import create_engine, Session
+from sqlmodel import Session
 import subprocess
 
 from kb.config import KBConfig
 from kb.store import LanceDBStore, SQLiteMetadataStore
 from kb.store.graph_store import GraphStore
 from kb.ingest.pipeline import IngestionPipeline
-from kb.graph_intelligence.graph_manager import GraphManager
 
 
 @pytest.fixture
@@ -200,11 +199,11 @@ class TestEndToEndFlow:
         # process_data() calls load_data(), transform()
         edges = list(graph.edges())
         assert len(edges) > 0
-        
+
         # Test that invalidating cache works
         graph_manager.invalidate_cache()
         assert graph_manager._graph is None
-        
+
         # Re-accessing rebuilds
         graph2 = graph_manager.get_graph()
         assert graph2 is not None
@@ -259,7 +258,10 @@ def new_function():
     return 42
 """)
         subprocess.run(
-            ["git", "add", "new_module.py"], cwd=temp_repo, check=True, capture_output=True
+            ["git", "add", "new_module.py"],
+            cwd=temp_repo,
+            check=True,
+            capture_output=True,
         )
         subprocess.run(
             ["git", "commit", "-m", "Add new function"],
@@ -339,7 +341,7 @@ def helper_b():
 
         # Force graph rebuild to update cache with new commit
         graph_manager.get_graph(force_rebuild=True)
-        
+
         # Get new cache state
         new_cache = graph_manager.validator._get_cache_state()
 
@@ -374,7 +376,9 @@ class TestEdgeCases:
         # Create initial commit
         readme = empty_repo / "README.md"
         readme.write_text("# Empty Repo")
-        subprocess.run(["git", "add", "."], cwd=empty_repo, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "add", "."], cwd=empty_repo, check=True, capture_output=True
+        )
         subprocess.run(
             ["git", "commit", "-m", "Initial"],
             cwd=empty_repo,
@@ -484,16 +488,16 @@ class TestPerformance:
         # Both cached accesses should be fast (< 20ms to account for test overhead)
         assert first_access_time < 0.02
         assert second_access_time < 0.02
-        
+
         # Test invalidation and rebuild
         graph_manager.invalidate_cache()
         start = time.time()
         graph3 = graph_manager.get_graph()
         rebuild_time = time.time() - start
-        
+
         # Rebuild might be slower but still reasonable for small graph
         assert rebuild_time < 0.5  # 500ms should be plenty for a small graph
-        
+
         # After rebuild, cache should work again
         start = time.time()
         graph4 = graph_manager.get_graph()

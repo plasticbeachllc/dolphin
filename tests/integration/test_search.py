@@ -6,22 +6,23 @@ from typing import Dict, Any, List
 
 from kb.api.app import SearchRequest, set_search_backend, reset_search_backend
 from kb.store import LanceDBStore, SQLiteMetadataStore
-from kb.config import KBConfig
 from tests.utils.mock_services import MockEmbeddingService
 
 
 class MockSearchBackend:
     """Mock search backend for integration testing."""
-    
-    def __init__(self, metadata_store: SQLiteMetadataStore, lancedb_store: LanceDBStore):
+
+    def __init__(
+        self, metadata_store: SQLiteMetadataStore, lancedb_store: LanceDBStore
+    ):
         self.metadata_store = metadata_store
         self.lancedb_store = lancedb_store
         self.search_calls = []
-    
+
     def search(self, request: SearchRequest) -> List[Dict[str, Any]]:
         """Mock search implementation that returns predictable results."""
         self.search_calls.append(request)
-        
+
         # Return mock search results based on query
         if "widget" in request.query.lower():
             return [
@@ -33,7 +34,7 @@ class MockSearchBackend:
                     "score": 0.95,
                     "language": "python",
                     "symbol_name": "Widget",
-                    "symbol_kind": "class"
+                    "symbol_kind": "class",
                 }
             ]
         elif "overview" in request.query.lower():
@@ -45,7 +46,7 @@ class MockSearchBackend:
                     "text": "# Overview\n\nThis is the project overview.",
                     "score": 0.88,
                     "language": "markdown",
-                    "heading_h1": "Overview"
+                    "heading_h1": "Overview",
                 }
             ]
         else:
@@ -68,34 +69,32 @@ class TestSearchIntegration:
         self,
         sample_repo_path: Path,
         temp_db_path: Path,
-        mock_embedding_service: MockEmbeddingService
+        mock_embedding_service: MockEmbeddingService,
     ):
         """Test basic search functionality with mock backend."""
         # Setup
         metadata_store = SQLiteMetadataStore(str(temp_db_path))
         lancedb_store = LanceDBStore("memory://test_db")
-        
+
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
-        
+
         # Test search with widget query
         request = SearchRequest(
-            query="widget class",
-            repos=["test-repo"],
-            top_k=5,
-            embed_model="small"
+            query="widget class", repos=["test-repo"], top_k=5, embed_model="small"
         )
-        
+
         from kb.api.app import search
+
         response = await search(request)
-        
+
         # Verify response structure
         assert "hits" in response
         assert "meta" in response
         assert response["meta"]["top_k"] == 5
         assert response["meta"]["model"] == "small"
-        
+
         # Verify search results
         hits = response["hits"]
         assert len(hits) == 1
@@ -108,29 +107,30 @@ class TestSearchIntegration:
         self,
         sample_repo_path: Path,
         temp_db_path: Path,
-        mock_embedding_service: MockEmbeddingService
+        mock_embedding_service: MockEmbeddingService,
     ):
         """Test search with repository and path filters."""
         # Setup
         metadata_store = SQLiteMetadataStore(str(temp_db_path))
         lancedb_store = LanceDBStore("memory://test_db")
-        
+
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
-        
+
         # Test search with repository filter
         request = SearchRequest(
             query="overview",
             repos=["specific-repo"],
             path_prefix=["docs/"],
             top_k=3,
-            embed_model="small"
+            embed_model="small",
         )
-        
+
         from kb.api.app import search
+
         response = await search(request)
-        
+
         # Verify response
         hits = response["hits"]
         assert len(hits) == 1
@@ -142,28 +142,26 @@ class TestSearchIntegration:
         self,
         sample_repo_path: Path,
         temp_db_path: Path,
-        mock_embedding_service: MockEmbeddingService
+        mock_embedding_service: MockEmbeddingService,
     ):
         """Test search with no matching results."""
         # Setup
         metadata_store = SQLiteMetadataStore(str(temp_db_path))
         lancedb_store = LanceDBStore("memory://test_db")
-        
+
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
-        
+
         # Test search with no matches
         request = SearchRequest(
-            query="nonexistent term",
-            repos=["test-repo"],
-            top_k=5,
-            embed_model="small"
+            query="nonexistent term", repos=["test-repo"], top_k=5, embed_model="small"
         )
-        
+
         from kb.api.app import search
+
         response = await search(request)
-        
+
         # Verify empty results
         assert len(response["hits"]) == 0
         assert response["meta"]["top_k"] == 5
@@ -173,28 +171,26 @@ class TestSearchIntegration:
         self,
         sample_repo_path: Path,
         temp_db_path: Path,
-        mock_embedding_service: MockEmbeddingService
+        mock_embedding_service: MockEmbeddingService,
     ):
         """Test that search latency is properly measured."""
         # Setup
         metadata_store = SQLiteMetadataStore(str(temp_db_path))
         lancedb_store = LanceDBStore("memory://test_db")
-        
+
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
-        
+
         # Test search
         request = SearchRequest(
-            query="widget",
-            repos=["test-repo"],
-            top_k=5,
-            embed_model="small"
+            query="widget", repos=["test-repo"], top_k=5, embed_model="small"
         )
-        
+
         from kb.api.app import search
+
         response = await search(request)
-        
+
         # Verify latency measurement
         assert "latency_ms" in response["meta"]
         latency = response["meta"]["latency_ms"]
@@ -205,22 +201,26 @@ class TestSearchIntegration:
         self,
         sample_repo_path: Path,
         temp_db_path: Path,
-        mock_embedding_service: MockEmbeddingService
+        mock_embedding_service: MockEmbeddingService,
     ):
         """Test search backend configuration and lifecycle."""
-        from kb.api.app import get_search_backend, set_search_backend, reset_search_backend
-        
+        from kb.api.app import (
+            get_search_backend,
+            set_search_backend,
+            reset_search_backend,
+        )
+
         # Get default backend
         default_backend = get_search_backend()
-        
+
         # Create and set custom backend
         metadata_store = SQLiteMetadataStore(str(temp_db_path))
         lancedb_store = LanceDBStore("memory://test_db")
         custom_backend = MockSearchBackend(metadata_store, lancedb_store)
-        
+
         set_search_backend(custom_backend)
         assert get_search_backend() == custom_backend
-        
+
         # Reset to default
         reset_search_backend()
         assert get_search_backend() == default_backend
@@ -230,28 +230,29 @@ class TestSearchIntegration:
         self,
         sample_repo_path: Path,
         temp_db_path: Path,
-        mock_embedding_service: MockEmbeddingService
+        mock_embedding_service: MockEmbeddingService,
     ):
         """Test search across multiple repositories."""
         # Setup
         metadata_store = SQLiteMetadataStore(str(temp_db_path))
         lancedb_store = LanceDBStore("memory://test_db")
-        
+
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
-        
+
         # Test search with multiple repositories
         request = SearchRequest(
             query="widget",
             repos=["repo1", "repo2", "repo3"],
             top_k=10,
-            embed_model="small"
+            embed_model="small",
         )
-        
+
         from kb.api.app import search
+
         response = await search(request)
-        
+
         # Verify backend received correct repositories
         assert len(mock_backend.search_calls) == 1
         search_call = mock_backend.search_calls[0]
@@ -267,35 +268,32 @@ class TestSearchPerformance:
         self,
         sample_repo_path: Path,
         temp_db_path: Path,
-        mock_embedding_service: MockEmbeddingService
+        mock_embedding_service: MockEmbeddingService,
     ):
         """Test that search responses meet performance targets."""
         import time
-        
+
         # Setup
         metadata_store = SQLiteMetadataStore(str(temp_db_path))
         lancedb_store = LanceDBStore("memory://test_db")
-        
+
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
-        
+
         # Measure search performance
         request = SearchRequest(
-            query="test query",
-            repos=["test-repo"],
-            top_k=5,
-            embed_model="small"
+            query="test query", repos=["test-repo"], top_k=5, embed_model="small"
         )
-        
+
         from kb.api.app import search
-        
+
         start_time = time.time()
         response = await search(request)
         end_time = time.time()
-        
+
         response_time_ms = (end_time - start_time) * 1000
-        
+
         # Verify response time is reasonable (under 100ms for mock)
         assert response_time_ms < 100
         assert response["meta"]["latency_ms"] < 100
@@ -305,47 +303,47 @@ class TestSearchPerformance:
         self,
         sample_repo_path: Path,
         temp_db_path: Path,
-        mock_embedding_service: MockEmbeddingService
+        mock_embedding_service: MockEmbeddingService,
     ):
         """Test search performance under concurrent load."""
         import asyncio
         import time
-        
+
         # Setup
         metadata_store = SQLiteMetadataStore(str(temp_db_path))
         lancedb_store = LanceDBStore("memory://test_db")
-        
+
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
-        
+
         from kb.api.app import search
-        
+
         # Create multiple search requests
         requests = [
             SearchRequest(
                 query=f"query {i}",
                 repos=[f"repo-{i % 3}"],
                 top_k=5,
-                embed_model="small"
+                embed_model="small",
             )
             for i in range(10)
         ]
-        
+
         # Run concurrent searches
         start_time = time.time()
         tasks = [search(request) for request in requests]
         results = await asyncio.gather(*tasks)
         end_time = time.time()
-        
+
         total_time_ms = (end_time - start_time) * 1000
-        
+
         # Verify all searches completed
         assert len(results) == 10
         for result in results:
             assert "hits" in result
             assert "meta" in result
-        
+
         # Verify reasonable performance for concurrent requests
         # (should be much faster than sequential execution)
         assert total_time_ms < 500  # All 10 requests should complete in under 500ms

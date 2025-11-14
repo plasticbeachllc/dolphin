@@ -14,7 +14,7 @@ def compare_metric(
     baseline: float,
     current: float,
     threshold: float,
-    direction: str = "higher_is_better"
+    direction: str = "higher_is_better",
 ) -> dict[str, Any]:
     """Compare a single metric."""
     diff = current - baseline
@@ -34,7 +34,9 @@ def compare_metric(
         "pct_change": pct_change,
         "regression": regression,
         "improvement": improvement,
-        "status": "regression" if regression else ("improvement" if improvement else "stable")
+        "status": "regression"
+        if regression
+        else ("improvement" if improvement else "stable"),
     }
 
 
@@ -53,11 +55,7 @@ def compare_evaluations(baseline_path: Path, current_path: Path, threshold: floa
         "current_timestamp": current.get("timestamp"),
         "threshold": threshold,
         "metrics": {},
-        "summary": {
-            "regressions": [],
-            "improvements": [],
-            "status": "pass"
-        }
+        "summary": {"regressions": [], "improvements": [], "status": "pass"},
     }
 
     # Compare overall metrics
@@ -70,7 +68,7 @@ def compare_evaluations(baseline_path: Path, current_path: Path, threshold: floa
                 baseline_metrics[metric],
                 current_metrics[metric],
                 threshold,
-                "higher_is_better"
+                "higher_is_better",
             )
             comparison["metrics"][metric] = result
 
@@ -84,10 +82,7 @@ def compare_evaluations(baseline_path: Path, current_path: Path, threshold: floa
     current_pass_rate = current["summary"].get("pass_rate", 0)
 
     comparison["pass_rate"] = compare_metric(
-        baseline_pass_rate,
-        current_pass_rate,
-        threshold,
-        "higher_is_better"
+        baseline_pass_rate, current_pass_rate, threshold, "higher_is_better"
     )
 
     # Find newly failing and newly passing scenarios
@@ -109,7 +104,7 @@ def compare_evaluations(baseline_path: Path, current_path: Path, threshold: floa
 
     comparison["scenario_changes"] = {
         "newly_failing": newly_failing,
-        "newly_passing": newly_passing
+        "newly_passing": newly_passing,
     }
 
     # Determine overall status
@@ -138,19 +133,27 @@ def print_comparison(comparison: dict):
     # Metrics comparison
     print("\nOverall metrics:")
     for metric, data in comparison["metrics"].items():
-        arrow = "📈" if data["pct_change"] > 0 else "📉" if data["pct_change"] < 0 else "➡️"
-        status_icon = "❌" if data["regression"] else "✅" if data["improvement"] else "➡️"
+        arrow = (
+            "📈" if data["pct_change"] > 0 else "📉" if data["pct_change"] < 0 else "➡️"
+        )
+        status_icon = (
+            "❌" if data["regression"] else "✅" if data["improvement"] else "➡️"
+        )
 
-        print(f"  {metric.upper()}: {data['baseline']:.3f} → {data['current']:.3f} "
-              f"({arrow} {abs(data['pct_change']):.1f}%) {status_icon}")
+        print(
+            f"  {metric.upper()}: {data['baseline']:.3f} → {data['current']:.3f} "
+            f"({arrow} {abs(data['pct_change']):.1f}%) {status_icon}"
+        )
 
     # Pass rate
     if "pass_rate" in comparison:
         pr = comparison["pass_rate"]
         arrow = "📈" if pr["pct_change"] > 0 else "📉" if pr["pct_change"] < 0 else "➡️"
         status_icon = "❌" if pr["regression"] else "✅" if pr["improvement"] else "➡️"
-        print(f"  Pass rate: {pr['baseline']:.1%} → {pr['current']:.1%} "
-              f"({arrow} {abs(pr['pct_change']):.1f}%) {status_icon}")
+        print(
+            f"  Pass rate: {pr['baseline']:.1%} → {pr['current']:.1%} "
+            f"({arrow} {abs(pr['pct_change']):.1f}%) {status_icon}"
+        )
 
     # Scenario changes
     changes = comparison["scenario_changes"]
@@ -185,30 +188,22 @@ def main():
         description="Compare two retrieval evaluation results"
     )
     parser.add_argument(
-        "baseline",
-        type=Path,
-        help="Baseline evaluation results (JSON)"
+        "baseline", type=Path, help="Baseline evaluation results (JSON)"
     )
-    parser.add_argument(
-        "current",
-        type=Path,
-        help="Current evaluation results (JSON)"
-    )
+    parser.add_argument("current", type=Path, help="Current evaluation results (JSON)")
     parser.add_argument(
         "--threshold",
         type=float,
         default=5.0,
-        help="Regression threshold percentage (default: 5%%)"
+        help="Regression threshold percentage (default: 5%%)",
     )
     parser.add_argument(
-        "--output",
-        type=Path,
-        help="Output JSON file for comparison results"
+        "--output", type=Path, help="Output JSON file for comparison results"
     )
     parser.add_argument(
         "--fail-on-regression",
         action="store_true",
-        help="Exit with error code if regressions detected"
+        help="Exit with error code if regressions detected",
     )
 
     args = parser.parse_args()

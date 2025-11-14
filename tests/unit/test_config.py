@@ -1,7 +1,7 @@
 """Tests for knowledge base configuration."""
-import pytest
-from pathlib import Path
-from kb.config import KBConfig, RetrievalConfig, RerankingConfig, load_config
+
+from kb.config import KBConfig, RetrievalConfig, load_config
+
 
 class TestKBConfig:
     """Test cases for KBConfig."""
@@ -32,20 +32,20 @@ class TestKBConfig:
                     "model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
                     "batch_size": 32,
                     "candidate_multiplier": 4,
-                    "score_threshold": 0.3
+                    "score_threshold": 0.3,
                 },
                 "hybrid_search": {
                     "enabled": True,
                     "fusion_method": "rrf",
-                    "fusion_k": 60
+                    "fusion_k": 60,
                 },
                 "ann": {
                     "strategy": "adaptive",
                     "metric": "cosine",
                     "estimated_dataset_size": 100000,
-                    "default_query_type": "concept"
-                }
-            }
+                    "default_query_type": "concept",
+                },
+            },
         }
         config = KBConfig.from_mapping(minimal_data)
         assert config.retrieval.top_k == 8
@@ -67,25 +67,25 @@ class TestKBConfig:
                     "model": "bge-reranker-large",
                     "batch_size": 32,
                     "candidate_multiplier": 4,
-                    "score_threshold": 0.3
+                    "score_threshold": 0.3,
                 },
                 "hybrid_search": {
                     "enabled": True,
                     "fusion_method": "rrf",
-                    "fusion_k": 60
+                    "fusion_k": 60,
                 },
                 "ann": {
                     "strategy": "adaptive",
                     "metric": "cosine",
                     "estimated_dataset_size": 100000,
-                    "default_query_type": "concept"
-                }
+                    "default_query_type": "concept",
+                },
             },
             "embedding": {
                 "provider": "openai",
                 "default_embed_model": "large",
                 "concurrency": 5,
-            }
+            },
         }
         config = KBConfig.from_mapping(data)
         assert config.retrieval.score_cutoff == 0.2
@@ -95,13 +95,17 @@ class TestKBConfig:
         assert config.embedding_provider == "openai"
         assert config.default_embed_model == "large"
         assert config.concurrency == 5
-        
+
     def test_from_mapping_type_coercion(self):
         """Test that from_mapping coerces types correctly."""
         data = {
             "storage": {"store_root": "/tmp/test"},
             "server": {"endpoint": "127.0.0.1:7777"},
-            "embedding": {"provider": "stub", "default_embed_model": "large", "concurrency": "7"},
+            "embedding": {
+                "provider": "stub",
+                "default_embed_model": "large",
+                "concurrency": "7",
+            },
             "retrieval": {
                 "score_cutoff": "0.5",
                 "top_k": 12.5,
@@ -113,24 +117,27 @@ class TestKBConfig:
                     "model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
                     "batch_size": 32,
                     "candidate_multiplier": 4,
-                    "score_threshold": 0.3
+                    "score_threshold": 0.3,
                 },
                 "hybrid_search": {
                     "enabled": True,
                     "fusion_method": "rrf",
-                    "fusion_k": 60
+                    "fusion_k": 60,
                 },
                 "ann": {
                     "strategy": "adaptive",
                     "metric": "cosine",
                     "estimated_dataset_size": 100000,
-                    "default_query_type": "concept"
-                }
+                    "default_query_type": "concept",
+                },
             },
         }
         config = KBConfig.from_mapping(data)
         assert isinstance(config.concurrency, int) and config.concurrency == 7
-        assert isinstance(config.retrieval.score_cutoff, float) and config.retrieval.score_cutoff == 0.5
+        assert (
+            isinstance(config.retrieval.score_cutoff, float)
+            and config.retrieval.score_cutoff == 0.5
+        )
         assert isinstance(config.retrieval.top_k, int) and config.retrieval.top_k == 12
 
     def test_config_ignore_exceptions_field(self):
@@ -150,22 +157,22 @@ class TestKBConfig:
                     "model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
                     "batch_size": 32,
                     "candidate_multiplier": 4,
-                    "score_threshold": 0.3
+                    "score_threshold": 0.3,
                 },
                 "hybrid_search": {
                     "enabled": True,
                     "fusion_method": "rrf",
-                    "fusion_k": 60
+                    "fusion_k": 60,
                 },
                 "ann": {
                     "strategy": "adaptive",
                     "metric": "cosine",
                     "estimated_dataset_size": 100000,
-                    "default_query_type": "concept"
-                }
+                    "default_query_type": "concept",
+                },
             },
             "ignore": [".env", "*.log"],
-            "ignore_exceptions": [".env.example", "config.log"]
+            "ignore_exceptions": [".env.example", "config.log"],
         }
 
         config = KBConfig.from_mapping(config_data)
@@ -187,6 +194,7 @@ class TestKBConfig:
         # Exceptions should be excluded
         assert ".env.example" not in result
         assert "config.log" not in result
+
 
 class TestLoadConfig:
     """Test cases for loading configuration from files."""

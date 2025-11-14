@@ -27,20 +27,22 @@ class ScannerError(RuntimeError):
 
 def _git(root: Path, *args: str) -> bytes:
     try:
-        return subprocess.check_output(["git", "-C", str(root), *args], stderr=subprocess.STDOUT)
+        return subprocess.check_output(
+            ["git", "-C", str(root), *args], stderr=subprocess.STDOUT
+        )
     except subprocess.CalledProcessError as e:
         raise ScannerError(e.output.decode("utf-8", errors="ignore"))
 
 
 def _list_tracked(root: Path) -> list[str]:
     """List files respecting .gitignore patterns.
-    
+
     Uses git ls-files with:
     - --cached: Include tracked files
     - --others: Include untracked files
     - --exclude-standard: Respect .gitignore, .git/info/exclude, and global excludes
     - -z: NUL-separated output for safe parsing
-    
+
     This ensures we respect .gitignore even for files that were previously committed
     but are now in .gitignore.
     """

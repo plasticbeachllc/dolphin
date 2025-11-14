@@ -20,7 +20,9 @@ def download_tiktoken_encodings():
     try:
         import tiktoken
     except ImportError:
-        print("ERROR: tiktoken not installed. Run: uv sync --group test", file=sys.stderr)
+        print(
+            "ERROR: tiktoken not installed. Run: uv sync --group test", file=sys.stderr
+        )
         return False
 
     print("Downloading tiktoken encoding data...")
@@ -37,7 +39,7 @@ def download_tiktoken_encodings():
             enc = tiktoken.get_encoding(encoding_name)
             print(f"✓ (vocab size: {enc.n_vocab})")
         except Exception as e:
-            print(f"✗ Failed")
+            print("✗ Failed")
             failed.append((encoding_name, str(e)))
 
     print("=" * 70)
@@ -49,7 +51,9 @@ def download_tiktoken_encodings():
         print("Reason:")
         for name, error in failed:
             if "403" in error or "Forbidden" in error:
-                print(f"  Network access to OpenAI's blob storage is blocked (403 Forbidden)")
+                print(
+                    "  Network access to OpenAI's blob storage is blocked (403 Forbidden)"
+                )
                 break
             print(f"  {name}: {error}")
 
@@ -62,8 +66,12 @@ def download_tiktoken_encodings():
         print("  • Production code uses real tiktoken when embedding data is available")
         print()
         print("To use real tiktoken in production:")
-        print("  1. Ensure network access to https://openaipublic.blob.core.windows.net")
-        print("  2. OR pre-download tiktoken data in an environment with network access")
+        print(
+            "  1. Ensure network access to https://openaipublic.blob.core.windows.net"
+        )
+        print(
+            "  2. OR pre-download tiktoken data in an environment with network access"
+        )
         print("  3. OR copy cached data to ~/.cache/tiktoken/")
         print()
         return False
@@ -74,6 +82,7 @@ def download_tiktoken_encodings():
         # Try to get cache location
         try:
             import os
+
             cache_dir = os.path.expanduser("~/.cache/tiktoken")
             if os.path.exists(cache_dir):
                 print(f"  {cache_dir}")

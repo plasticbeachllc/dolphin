@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import math
 import re
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -25,6 +24,7 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for <3.11
 
         def toml_loads(data: str) -> Dict[str, Any]:  # type: ignore[misc]
             return _minimal_toml_loads(data)
+
 
 try:
     import tiktoken  # type: ignore
@@ -144,7 +144,9 @@ def _minimal_toml_loads(text: str) -> Dict[str, Any]:
             lines_buffer: List[str] = []
             terminator = '"""'
 
-            if multiline.endswith(terminator) and not multiline.endswith("\\" + terminator):
+            if multiline.endswith(terminator) and not multiline.endswith(
+                "\\" + terminator
+            ):
                 multiline = multiline[:-3]
                 if multiline:
                     lines_buffer.append(multiline)
@@ -155,7 +157,9 @@ def _minimal_toml_loads(text: str) -> Dict[str, Any]:
                 while idx < total:
                     next_line = lines[idx]
                     idx += 1
-                    if next_line.endswith(terminator) and not next_line.endswith("\\" + terminator):
+                    if next_line.endswith(terminator) and not next_line.endswith(
+                        "\\" + terminator
+                    ):
                         lines_buffer.append(next_line[:-3])
                         finished = True
                         break
@@ -307,7 +311,9 @@ def compile_system_message(
 
         if current_overlay:
             current_overlay = ""
-            compiled = _join_sections(current_system, current_guardrails, current_overlay)
+            compiled = _join_sections(
+                current_system, current_guardrails, current_overlay
+            )
             current_tokens = count_tokens(compiled, model)
             info["steps"].append({"action": "drop_overlay", "tokens": current_tokens})
             info["sections"]["overlay"] = "dropped"
@@ -316,9 +322,13 @@ def compile_system_message(
             skeleton = _guardrails_skeleton(current_guardrails)
             if skeleton != current_guardrails:
                 current_guardrails = skeleton
-                compiled = _join_sections(current_system, current_guardrails, current_overlay)
+                compiled = _join_sections(
+                    current_system, current_guardrails, current_overlay
+                )
                 current_tokens = count_tokens(compiled, model)
-                info["steps"].append({"action": "guardrails_skeleton", "tokens": current_tokens})
+                info["steps"].append(
+                    {"action": "guardrails_skeleton", "tokens": current_tokens}
+                )
                 info["sections"]["guardrails"] = "skeleton"
 
         if current_tokens > budget:
@@ -330,9 +340,13 @@ def compile_system_message(
                 budget,
             )
             current_system = truncated_system
-            compiled = _join_sections(current_system, current_guardrails, current_overlay)
+            compiled = _join_sections(
+                current_system, current_guardrails, current_overlay
+            )
             current_tokens = truncated_tokens
-            info["steps"].append({"action": "truncate_system", "tokens": current_tokens})
+            info["steps"].append(
+                {"action": "truncate_system", "tokens": current_tokens}
+            )
 
     info["final_tokens"] = current_tokens
     return compiled, info
@@ -361,7 +375,9 @@ def load_persona(persona_dir: Path) -> Persona:
     if not persona_id:
         raise PersonaError(f"[persona] id is required in {persona_path}")
     if not SLUG_RE.fullmatch(persona_id):
-        raise PersonaError(f"[persona] id '{persona_id}' must match slug pattern {SLUG_RE.pattern}")
+        raise PersonaError(
+            f"[persona] id '{persona_id}' must match slug pattern {SLUG_RE.pattern}"
+        )
     if persona_dir.name != persona_id:
         raise PersonaError(
             f"Persona directory '{persona_dir.name}' must match persona id '{persona_id}'"
@@ -409,7 +425,7 @@ def load_persona(persona_dir: Path) -> Persona:
         system_text = str(system_inline)
     else:
         system_file = files.get("system")
-        
+
         # If no specific system file specified, check for common variants
         if not system_file:
             # Try system.md first, then prompt.md
@@ -425,15 +441,15 @@ def load_persona(persona_dir: Path) -> Persona:
                         f"Persona '{persona_id}' system file not found in {persona_dir}. "
                         f"Expected 'system.md' or 'prompt.md'"
                     )
-        
+
     system_path = persona_dir / system_file
-    
+
     # If the explicitly specified file doesn't exist, raise error
     if not system_path.exists():
         raise PersonaError(
             f"Persona '{persona_id}' system file '{system_file}' not found in {persona_dir}"
         )
-    
+
     system_text = system_path.read_text(encoding="utf-8")
 
     continue_table = data.get("continue") or {}
@@ -470,6 +486,7 @@ def iter_persona_dirs(personas_root: Path) -> Iterable[Path]:
         if candidate.name.startswith(".") or candidate.name.startswith("_"):
             continue
         yield candidate
+
 
 def ensure_unique_models(personas: Iterable[Persona]) -> None:
     seen: Dict[Tuple[str, str, str], Persona] = {}

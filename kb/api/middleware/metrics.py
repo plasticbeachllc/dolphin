@@ -10,9 +10,9 @@ from prometheus_client import (
     Info,
     generate_latest,
     CONTENT_TYPE_LATEST,
-    REGISTRY
+    REGISTRY,
 )
-from fastapi import Request, Response
+from fastapi import Request
 from fastapi.responses import Response as FastAPIResponse
 from typing import Callable
 import time
@@ -23,94 +23,83 @@ import time
 
 # Request metrics
 http_requests_total = Counter(
-    'kb_http_requests_total',
-    'Total HTTP requests',
-    ['method', 'endpoint', 'status_code', 'repo_name']
+    "kb_http_requests_total",
+    "Total HTTP requests",
+    ["method", "endpoint", "status_code", "repo_name"],
 )
 
 http_request_duration_seconds = Histogram(
-    'kb_http_request_duration_seconds',
-    'HTTP request latency',
-    ['method', 'endpoint', 'repo_name'],
-    buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0]
+    "kb_http_request_duration_seconds",
+    "HTTP request latency",
+    ["method", "endpoint", "repo_name"],
+    buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0],
 )
 
 # Search-specific metrics
 search_queries_total = Counter(
-    'kb_search_queries_total',
-    'Total search queries',
-    ['repo_name', 'search_type']  # search_type: semantic, hybrid, keyword
+    "kb_search_queries_total",
+    "Total search queries",
+    ["repo_name", "search_type"],  # search_type: semantic, hybrid, keyword
 )
 
 search_result_count = Histogram(
-    'kb_search_result_count',
-    'Number of results returned per search',
-    ['repo_name', 'search_type'],
-    buckets=[0, 1, 5, 10, 20, 50, 100]
+    "kb_search_result_count",
+    "Number of results returned per search",
+    ["repo_name", "search_type"],
+    buckets=[0, 1, 5, 10, 20, 50, 100],
 )
 
 search_query_tokens = Histogram(
-    'kb_search_query_tokens',
-    'Query token count',
-    ['repo_name'],
-    buckets=[10, 25, 50, 100, 200, 500]
+    "kb_search_query_tokens",
+    "Query token count",
+    ["repo_name"],
+    buckets=[10, 25, 50, 100, 200, 500],
 )
 
 # Embedding metrics
 embedding_tokens_total = Counter(
-    'kb_embedding_tokens_total',
-    'Total tokens embedded',
-    ['repo_name']
+    "kb_embedding_tokens_total", "Total tokens embedded", ["repo_name"]
 )
 
 embedding_api_latency_seconds = Histogram(
-    'kb_embedding_api_latency_seconds',
-    'OpenAI embedding API latency',
-    ['repo_name'],
-    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0]
+    "kb_embedding_api_latency_seconds",
+    "OpenAI embedding API latency",
+    ["repo_name"],
+    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0],
 )
 
 # Database metrics
 db_query_duration_seconds = Histogram(
-    'kb_db_query_duration_seconds',
-    'Database query duration',
-    ['operation', 'table'],  # operation: select, insert, update, delete
-    buckets=[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0]
+    "kb_db_query_duration_seconds",
+    "Database query duration",
+    ["operation", "table"],  # operation: select, insert, update, delete
+    buckets=[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0],
 )
 
 vector_search_duration_seconds = Histogram(
-    'kb_vector_search_duration_seconds',
-    'LanceDB vector search duration',
-    ['repo_name'],
-    buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 2.0]
+    "kb_vector_search_duration_seconds",
+    "LanceDB vector search duration",
+    ["repo_name"],
+    buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 2.0],
 )
 
 # Index metrics
 index_size_bytes = Gauge(
-    'kb_index_size_bytes',
-    'Total index size in bytes',
-    ['repo_name']
+    "kb_index_size_bytes", "Total index size in bytes", ["repo_name"]
 )
 
 indexed_chunks_total = Gauge(
-    'kb_indexed_chunks_total',
-    'Total number of indexed chunks',
-    ['repo_name']
+    "kb_indexed_chunks_total", "Total number of indexed chunks", ["repo_name"]
 )
 
 # System info
-kb_info = Info(
-    'kb_api',
-    'Knowledge Bank API information'
-)
-kb_info.info({
-    'version': '1.0.0',
-    'python_version': '3.12'
-})
+kb_info = Info("kb_api", "Knowledge Bank API information")
+kb_info.info({"version": "1.0.0", "python_version": "3.12"})
 
 # ============================================================================
 # Middleware
 # ============================================================================
+
 
 async def prometheus_middleware(request: Request, call_next: Callable):
     """
@@ -127,9 +116,9 @@ async def prometheus_middleware(request: Request, call_next: Callable):
     path = request.url.path
 
     # Extract repo_name from query params or path
-    repo_name = request.query_params.get('repo_name', 'unknown')
-    if 'repos' in request.query_params:
-        repo_name = 'multiple'
+    repo_name = request.query_params.get("repo_name", "unknown")
+    if "repos" in request.query_params:
+        repo_name = "multiple"
 
     # Start timer
     start_time = time.perf_counter()
@@ -139,7 +128,7 @@ async def prometheus_middleware(request: Request, call_next: Callable):
         response = await call_next(request)
         status_code = response.status_code
         return response
-    except Exception as e:
+    except Exception:
         status_code = 500
         raise
     finally:
@@ -154,16 +143,11 @@ async def prometheus_middleware(request: Request, call_next: Callable):
         duration = time.perf_counter() - start_time
 
         http_requests_total.labels(
-            method=method,
-            endpoint=path,
-            status_code=status_code,
-            repo_name=repo_name
+            method=method, endpoint=path, status_code=status_code, repo_name=repo_name
         ).inc()
 
         http_request_duration_seconds.labels(
-            method=method,
-            endpoint=path,
-            repo_name=repo_name
+            method=method, endpoint=path, repo_name=repo_name
         ).observe(duration)
 
 
@@ -171,13 +155,13 @@ async def prometheus_middleware(request: Request, call_next: Callable):
 # Metrics Endpoint
 # ============================================================================
 
+
 async def metrics_endpoint(request: Request) -> FastAPIResponse:
     """
     Expose Prometheus metrics at /metrics endpoint.
     """
     return FastAPIResponse(
-        content=generate_latest(REGISTRY),
-        media_type=CONTENT_TYPE_LATEST
+        content=generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST
     )
 
 
@@ -185,47 +169,37 @@ async def metrics_endpoint(request: Request) -> FastAPIResponse:
 # Helper Functions for Instrumenting Code
 # ============================================================================
 
-def record_search_query(repo_name: str, search_type: str, result_count: int, query_tokens: int):
+
+def record_search_query(
+    repo_name: str, search_type: str, result_count: int, query_tokens: int
+):
     """Record metrics for a search query."""
-    search_queries_total.labels(
-        repo_name=repo_name,
-        search_type=search_type
-    ).inc()
+    search_queries_total.labels(repo_name=repo_name, search_type=search_type).inc()
 
-    search_result_count.labels(
-        repo_name=repo_name,
-        search_type=search_type
-    ).observe(result_count)
+    search_result_count.labels(repo_name=repo_name, search_type=search_type).observe(
+        result_count
+    )
 
-    search_query_tokens.labels(
-        repo_name=repo_name
-    ).observe(query_tokens)
+    search_query_tokens.labels(repo_name=repo_name).observe(query_tokens)
 
 
 def record_vector_search(repo_name: str, duration_seconds: float):
     """Record metrics for vector search operation."""
-    vector_search_duration_seconds.labels(
-        repo_name=repo_name
-    ).observe(duration_seconds)
+    vector_search_duration_seconds.labels(repo_name=repo_name).observe(duration_seconds)
 
 
 def record_embedding_call(repo_name: str, tokens: int, latency_seconds: float):
     """Record metrics for embedding API call."""
-    embedding_tokens_total.labels(
-        repo_name=repo_name
-    ).inc(tokens)
+    embedding_tokens_total.labels(repo_name=repo_name).inc(tokens)
 
-    embedding_api_latency_seconds.labels(
-        repo_name=repo_name
-    ).observe(latency_seconds)
+    embedding_api_latency_seconds.labels(repo_name=repo_name).observe(latency_seconds)
 
 
 def record_db_query(operation: str, table: str, duration_seconds: float):
     """Record metrics for database query."""
-    db_query_duration_seconds.labels(
-        operation=operation,
-        table=table
-    ).observe(duration_seconds)
+    db_query_duration_seconds.labels(operation=operation, table=table).observe(
+        duration_seconds
+    )
 
 
 def update_index_metrics(repo_name: str, size_bytes: int, chunk_count: int):

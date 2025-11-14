@@ -1,6 +1,5 @@
 """Tests for centralized error logging and retry decorator."""
 
-import io
 import logging
 from pathlib import Path
 

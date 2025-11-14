@@ -1,7 +1,6 @@
 """Unit tests for adaptive nprobes tuning."""
 
 import pytest
-import time
 from kb.search.adaptive_nprobes import (
     AdaptiveNProbes,
     SearchMetrics,
@@ -114,8 +113,8 @@ class TestAdaptiveNProbes:
         )
 
         stats = tuner.get_stats()
-        assert stats['total_queries'] == 1
-        assert stats['avg_latency_ms'] == 100.0
+        assert stats["total_queries"] == 1
+        assert stats["avg_latency_ms"] == 100.0
 
     def test_record_multiple_searches(self):
         """Test recording multiple searches."""
@@ -129,8 +128,8 @@ class TestAdaptiveNProbes:
             )
 
         stats = tuner.get_stats()
-        assert stats['total_queries'] == 5
-        assert stats['avg_latency_ms'] > 100.0
+        assert stats["total_queries"] == 5
+        assert stats["avg_latency_ms"] > 100.0
 
     def test_adjustment_high_latency(self):
         """Test automatic adjustment when latency is too high."""
@@ -267,14 +266,14 @@ class TestAdaptiveNProbes:
 
         stats = tuner.get_stats()
 
-        assert stats['total_queries'] == 10
-        assert stats['current_nprobes'] > 0
-        assert stats['avg_latency_ms'] > 0
-        assert stats['min_latency_ms'] > 0
-        assert stats['max_latency_ms'] > 0
-        assert stats['p50_latency_ms'] > 0
-        assert stats['p95_latency_ms'] > 0
-        assert 'ema_latency_ms' in stats
+        assert stats["total_queries"] == 10
+        assert stats["current_nprobes"] > 0
+        assert stats["avg_latency_ms"] > 0
+        assert stats["min_latency_ms"] > 0
+        assert stats["max_latency_ms"] > 0
+        assert stats["p50_latency_ms"] > 0
+        assert stats["p95_latency_ms"] > 0
+        assert "ema_latency_ms" in stats
 
     def test_reset(self):
         """Test resetting tuner state."""
@@ -288,13 +287,13 @@ class TestAdaptiveNProbes:
         tuner.current_nprobes = 30
 
         stats_before = tuner.get_stats()
-        assert stats_before['total_queries'] > 0
+        assert stats_before["total_queries"] > 0
 
         # Reset
         tuner.reset()
 
         stats_after = tuner.get_stats()
-        assert stats_after['total_queries'] == 0
+        assert stats_after["total_queries"] == 0
         assert tuner.current_nprobes == 20
 
     def test_estimate_optimal_nprobes(self):
@@ -343,7 +342,11 @@ class TestAdaptiveNProbes:
         stats = tuner.get_stats()
 
         # EMA should be somewhere between min and max
-        assert stats['min_latency_ms'] <= stats['ema_latency_ms'] <= stats['max_latency_ms']
+        assert (
+            stats["min_latency_ms"]
+            <= stats["ema_latency_ms"]
+            <= stats["max_latency_ms"]
+        )
 
 
 class TestGlobalAdaptiveNProbes:
@@ -392,7 +395,7 @@ class TestGlobalAdaptiveNProbes:
         tuner = GlobalAdaptiveNProbes.get_instance()
         stats = tuner.get_stats()
 
-        assert stats['total_queries'] > 0
+        assert stats["total_queries"] > 0
 
 
 if __name__ == "__main__":

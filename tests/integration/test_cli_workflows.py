@@ -1,11 +1,7 @@
 """Integration tests for CLI workflows."""
 
-import pytest
-import subprocess
-from pathlib import Path
 from typer.testing import CliRunner
 from kb.ingest.cli import app
-from kb.store import SQLiteMetadataStore
 
 runner = CliRunner()
 
@@ -44,7 +40,7 @@ class TestAddRepoWorkflow:
         # Add repository
         add_result = runner.invoke(
             app,
-            ["add-repo", "test-repo", str(git_repo), "--default-embed-model", "small"]
+            ["add-repo", "test-repo", str(git_repo), "--default-embed-model", "small"],
         )
 
         assert add_result.exit_code == 0

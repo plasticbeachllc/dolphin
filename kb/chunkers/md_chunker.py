@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Iterator, List, Optional, Sequence, Tuple
+from typing import Iterator, List, Optional, Sequence, Tuple
 import logging
 import re
 import bisect
@@ -126,6 +126,7 @@ def chunk_markdown(
 
 # Helpers
 
+
 def _consume_front_matter_if_any(lines: Sequence[str]) -> Tuple[int, Optional[str]]:
     """If YAML front matter exists at the top, return (offset_after_fm, title or None).
 
@@ -167,7 +168,9 @@ def _consume_front_matter_if_any(lines: Sequence[str]) -> Tuple[int, Optional[st
     return end + 1, title
 
 
-def _scan_sections(lines: Sequence[str], *, initial_h1: Optional[str] = None) -> Iterator[_Section]:
+def _scan_sections(
+    lines: Sequence[str], *, initial_h1: Optional[str] = None
+) -> Iterator[_Section]:
     """Yield _Section objects from a sequence of Markdown lines using markdown-it.
 
     Uses markdown-it-py to parse headings and obtain source line maps. We carve
@@ -186,7 +189,11 @@ def _scan_sections(lines: Sequence[str], *, initial_h1: Optional[str] = None) ->
     while i < len(tokens):
         tok = tokens[i]
         if tok.type == "heading_open" and tok.map:
-            level = int(tok.tag[1]) if tok.tag.startswith("h") and tok.tag[1:].isdigit() else 0
+            level = (
+                int(tok.tag[1])
+                if tok.tag.startswith("h") and tok.tag[1:].isdigit()
+                else 0
+            )
             title = ""
             if i + 1 < len(tokens) and tokens[i + 1].type == "inline":
                 title = tokens[i + 1].content.strip()
@@ -198,7 +205,14 @@ def _scan_sections(lines: Sequence[str], *, initial_h1: Optional[str] = None) ->
 
     N = len(lines)
 
-    def emit_section(h1: Optional[str], h2: Optional[str], h3: Optional[str], start0: int, end0: int, heading_end0: Optional[int] = None) -> Optional[_Section]:
+    def emit_section(
+        h1: Optional[str],
+        h2: Optional[str],
+        h3: Optional[str],
+        start0: int,
+        end0: int,
+        heading_end0: Optional[int] = None,
+    ) -> Optional[_Section]:
         if start0 >= end0:
             return None
         content_start0 = heading_end0 if heading_end0 is not None else start0
@@ -206,7 +220,15 @@ def _scan_sections(lines: Sequence[str], *, initial_h1: Optional[str] = None) ->
         start_line1 = start0 + 1
         end_line1 = end0
         content_start_line1 = content_start0 + 1
-        return _Section(h1=h1, h2=h2, h3=h3, start_line=start_line1, end_line=end_line1, content_text=content_text, content_start_line=content_start_line1)
+        return _Section(
+            h1=h1,
+            h2=h2,
+            h3=h3,
+            start_line=start_line1,
+            end_line=end_line1,
+            content_text=content_text,
+            content_start_line=content_start_line1,
+        )
 
     current_h1 = initial_h1
     current_h2: Optional[str] = None
@@ -226,7 +248,14 @@ def _scan_sections(lines: Sequence[str], *, initial_h1: Optional[str] = None) ->
             current_h3 = title
         # H4–H6 are boundaries only
         next_start0 = headings[idx + 1][2] if idx + 1 < len(headings) else N
-        sec = emit_section(current_h1, current_h2, current_h3, h_start0, next_start0, heading_end0=h_end0)
+        sec = emit_section(
+            current_h1,
+            current_h2,
+            current_h3,
+            h_start0,
+            next_start0,
+            heading_end0=h_end0,
+        )
         if sec:
             yield sec
 
@@ -290,7 +319,9 @@ def _is_setext_underline(line: str) -> Optional[int]:
     return None
 
 
-def _toggle_fence_if_any(line: str, in_fence: bool, fence_marker: str) -> Tuple[bool, str]:
+def _toggle_fence_if_any(
+    line: str, in_fence: bool, fence_marker: str
+) -> Tuple[bool, str]:
     """Detect fence start/stop and return updated (in_fence, fence_marker)."""
     stripped = line.lstrip()
     if not in_fence:

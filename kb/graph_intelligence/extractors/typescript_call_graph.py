@@ -14,8 +14,15 @@ class TypeScriptCallGraphExtractor:
         self.language = Language(tsts.language_typescript())
         self.parser = Parser(self.language)
 
-    def extract(self, file_path: str, content: str, repo_id: int, file_id: int,
-                commit_sha: str, branch: str) -> Tuple[List[GraphNode], List[GraphEdge]]:
+    def extract(
+        self,
+        file_path: str,
+        content: str,
+        repo_id: int,
+        file_id: int,
+        commit_sha: str,
+        branch: str,
+    ) -> Tuple[List[GraphNode], List[GraphEdge]]:
         """Extract call graph from TypeScript file.
 
         Args:
@@ -54,8 +61,13 @@ class TypeScriptCallGraphExtractor:
         return nodes, edges
 
     def _extract_definitions(
-        self, root: Node, file_path: str, repo_id: int, file_id: int,
-        commit_sha: str, branch: str
+        self,
+        root: Node,
+        file_path: str,
+        repo_id: int,
+        file_id: int,
+        commit_sha: str,
+        branch: str,
     ) -> List[GraphNode]:
         """Extract function, method, and class definitions by walking the tree."""
         nodes = []
@@ -132,12 +144,17 @@ class TypeScriptCallGraphExtractor:
         return nodes
 
     def _extract_class_node(
-        self, node: Node, file_path: str, repo_id: int, file_id: int,
-        commit_sha: str, branch: str
+        self,
+        node: Node,
+        file_path: str,
+        repo_id: int,
+        file_id: int,
+        commit_sha: str,
+        branch: str,
     ) -> GraphNode:
         """Extract class definition node."""
         name_node = node.child_by_field_name("name")
-        class_name = name_node.text.decode('utf8') if name_node else "Unknown"
+        class_name = name_node.text.decode("utf8") if name_node else "Unknown"
 
         # Extract docstring/comment
         docstring = self._extract_comment(node)
@@ -155,30 +172,35 @@ class TypeScriptCallGraphExtractor:
             start_line=node.start_point[0],
             end_line=node.end_point[0],
             language="typescript",
-            signature=node.text.decode('utf8')[:200],
+            signature=node.text.decode("utf8")[:200],
             docstring=docstring,
             metadata={
                 "ast_type": "class_declaration",
                 "file_id": file_id,
                 "commit_sha": commit_sha,
                 "branch": branch,
-            }
+            },
         )
 
     def _extract_function_node(
-        self, node: Node, file_path: str, repo_id: int, file_id: int,
-        commit_sha: str, branch: str
+        self,
+        node: Node,
+        file_path: str,
+        repo_id: int,
+        file_id: int,
+        commit_sha: str,
+        branch: str,
     ) -> GraphNode:
         """Extract function declaration node."""
         name_node = node.child_by_field_name("name")
-        func_name = name_node.text.decode('utf8') if name_node else "Unknown"
+        func_name = name_node.text.decode("utf8") if name_node else "Unknown"
 
         # Build qualified name
         qualified_name = f"{file_path.replace('/', '.').replace('.ts', '').replace('.tsx', '')}.{func_name}"
 
         # Extract parameters for signature
         params_node = node.child_by_field_name("parameters")
-        params_text = params_node.text.decode('utf8') if params_node else "()"
+        params_text = params_node.text.decode("utf8") if params_node else "()"
 
         # Check if async
         is_async = self._is_async(node)
@@ -205,16 +227,22 @@ class TypeScriptCallGraphExtractor:
                 "file_id": file_id,
                 "commit_sha": commit_sha,
                 "branch": branch,
-            }
+            },
         )
 
     def _extract_method_node(
-        self, node: Node, file_path: str, repo_id: int, file_id: int,
-        commit_sha: str, branch: str, parent_class: Optional[GraphNode] = None
+        self,
+        node: Node,
+        file_path: str,
+        repo_id: int,
+        file_id: int,
+        commit_sha: str,
+        branch: str,
+        parent_class: Optional[GraphNode] = None,
     ) -> GraphNode:
         """Extract method definition node."""
         name_node = node.child_by_field_name("name")
-        method_name = name_node.text.decode('utf8') if name_node else "Unknown"
+        method_name = name_node.text.decode("utf8") if name_node else "Unknown"
 
         # Build qualified name
         if parent_class:
@@ -224,7 +252,7 @@ class TypeScriptCallGraphExtractor:
 
         # Extract parameters for signature
         params_node = node.child_by_field_name("parameters")
-        params_text = params_node.text.decode('utf8') if params_node else "()"
+        params_text = params_node.text.decode("utf8") if params_node else "()"
 
         # Check if async
         is_async = self._is_async(node)
@@ -252,12 +280,17 @@ class TypeScriptCallGraphExtractor:
                 "file_id": file_id,
                 "commit_sha": commit_sha,
                 "branch": branch,
-            }
+            },
         )
 
     def _extract_arrow_function_node(
-        self, node: Node, file_path: str, repo_id: int, file_id: int,
-        commit_sha: str, branch: str
+        self,
+        node: Node,
+        file_path: str,
+        repo_id: int,
+        file_id: int,
+        commit_sha: str,
+        branch: str,
     ) -> Optional[GraphNode]:
         """Extract arrow function assigned to a variable."""
         # Get the variable declarator
@@ -265,7 +298,7 @@ class TypeScriptCallGraphExtractor:
         if not name_node:
             return None
 
-        func_name = name_node.text.decode('utf8')
+        func_name = name_node.text.decode("utf8")
 
         # Build qualified name
         qualified_name = f"{file_path.replace('/', '.').replace('.ts', '').replace('.tsx', '')}.{func_name}"
@@ -277,11 +310,13 @@ class TypeScriptCallGraphExtractor:
 
         # Extract parameters
         params_node = arrow_func_node.child_by_field_name("parameters")
-        params_text = params_node.text.decode('utf8') if params_node else "()"
+        params_text = params_node.text.decode("utf8") if params_node else "()"
 
         # Check if async
         is_async = self._is_async(arrow_func_node)
-        signature = f"const {func_name} = {'async ' if is_async else ''}{params_text} => ..."
+        signature = (
+            f"const {func_name} = {'async ' if is_async else ''}{params_text} => ..."
+        )
 
         # Extract docstring/comment
         docstring = self._extract_comment(node.parent) if node.parent else None
@@ -304,16 +339,21 @@ class TypeScriptCallGraphExtractor:
                 "file_id": file_id,
                 "commit_sha": commit_sha,
                 "branch": branch,
-            }
+            },
         )
 
     def _extract_interface_node(
-        self, node: Node, file_path: str, repo_id: int, file_id: int,
-        commit_sha: str, branch: str
+        self,
+        node: Node,
+        file_path: str,
+        repo_id: int,
+        file_id: int,
+        commit_sha: str,
+        branch: str,
     ) -> GraphNode:
         """Extract interface declaration node (TypeScript)."""
         name_node = node.child_by_field_name("name")
-        interface_name = name_node.text.decode('utf8') if name_node else "Unknown"
+        interface_name = name_node.text.decode("utf8") if name_node else "Unknown"
 
         # Build qualified name
         qualified_name = f"{file_path.replace('/', '.').replace('.ts', '').replace('.tsx', '')}.{interface_name}"
@@ -331,14 +371,14 @@ class TypeScriptCallGraphExtractor:
             start_line=node.start_point[0],
             end_line=node.end_point[0],
             language="typescript",
-            signature=node.text.decode('utf8')[:200],
+            signature=node.text.decode("utf8")[:200],
             docstring=docstring,
             metadata={
                 "ast_type": "interface_declaration",
                 "file_id": file_id,
                 "commit_sha": commit_sha,
                 "branch": branch,
-            }
+            },
         )
 
     def _extract_relationships(
@@ -356,9 +396,16 @@ class TypeScriptCallGraphExtractor:
                         visit(child)
                     return
 
-                class_name = name_node.text.decode('utf8')
-                class_node = next((n for n in definitions if n.name == class_name and n.node_type == NodeType.CLASS), None)
-                
+                class_name = name_node.text.decode("utf8")
+                class_node = next(
+                    (
+                        n
+                        for n in definitions
+                        if n.name == class_name and n.node_type == NodeType.CLASS
+                    ),
+                    None,
+                )
+
                 if not class_node:
                     for child in node.children:
                         visit(child)
@@ -371,45 +418,69 @@ class TypeScriptCallGraphExtractor:
                             if heritage_child.type == "implements_clause":
                                 # Extract implemented interfaces
                                 for impl_child in heritage_child.children:
-                                    if impl_child.type in ("type_identifier", "identifier"):
-                                        interface_name = impl_child.text.decode('utf8')
+                                    if impl_child.type in (
+                                        "type_identifier",
+                                        "identifier",
+                                    ):
+                                        interface_name = impl_child.text.decode("utf8")
                                         # Find the interface node
                                         interface_node = next(
-                                            (n for n in definitions if n.name == interface_name and n.node_type == NodeType.INTERFACE),
-                                            None
+                                            (
+                                                n
+                                                for n in definitions
+                                                if n.name == interface_name
+                                                and n.node_type == NodeType.INTERFACE
+                                            ),
+                                            None,
                                         )
                                         if interface_node:
-                                            edges.append(GraphEdge(
-                                                source_id=class_node.id,
-                                                target_id=interface_node.id,
-                                                edge_type=EdgeType.IMPLEMENTS,
-                                                repo_id=repo_id,
-                                                attributes={
-                                                    "line_number": heritage_child.start_point[0],
-                                                    "commit_sha": commit_sha,
-                                                }
-                                            ))
+                                            edges.append(
+                                                GraphEdge(
+                                                    source_id=class_node.id,
+                                                    target_id=interface_node.id,
+                                                    edge_type=EdgeType.IMPLEMENTS,
+                                                    repo_id=repo_id,
+                                                    attributes={
+                                                        "line_number": heritage_child.start_point[
+                                                            0
+                                                        ],
+                                                        "commit_sha": commit_sha,
+                                                    },
+                                                )
+                                            )
                             elif heritage_child.type == "extends_clause":
                                 # Extract extended class
                                 for ext_child in heritage_child.children:
-                                    if ext_child.type in ("identifier", "member_expression"):
-                                        base_class_name = ext_child.text.decode('utf8')
+                                    if ext_child.type in (
+                                        "identifier",
+                                        "member_expression",
+                                    ):
+                                        base_class_name = ext_child.text.decode("utf8")
                                         # Find the base class node
                                         base_node = next(
-                                            (n for n in definitions if n.name == base_class_name and n.node_type == NodeType.CLASS),
-                                            None
+                                            (
+                                                n
+                                                for n in definitions
+                                                if n.name == base_class_name
+                                                and n.node_type == NodeType.CLASS
+                                            ),
+                                            None,
                                         )
                                         if base_node:
-                                            edges.append(GraphEdge(
-                                                source_id=class_node.id,
-                                                target_id=base_node.id,
-                                                edge_type=EdgeType.INHERITS,
-                                                repo_id=repo_id,
-                                                attributes={
-                                                    "line_number": heritage_child.start_point[0],
-                                                    "commit_sha": commit_sha,
-                                                }
-                                            ))
+                                            edges.append(
+                                                GraphEdge(
+                                                    source_id=class_node.id,
+                                                    target_id=base_node.id,
+                                                    edge_type=EdgeType.INHERITS,
+                                                    repo_id=repo_id,
+                                                    attributes={
+                                                        "line_number": heritage_child.start_point[
+                                                            0
+                                                        ],
+                                                        "commit_sha": commit_sha,
+                                                    },
+                                                )
+                                            )
 
             # Recurse for other nodes
             for child in node.children:
@@ -444,18 +515,24 @@ class TypeScriptCallGraphExtractor:
                         # Try to resolve callee to a definition
                         callee = self._resolve_callee(callee_name, definitions)
                         if callee:
-                            call_type = "method" if function_node.type == "member_expression" else "direct"
-                            edges.append(GraphEdge(
-                                source_id=caller.id,
-                                target_id=callee.id,
-                                edge_type=EdgeType.CALLS,
-                                repo_id=repo_id,
-                                attributes={
-                                    "call_line": node.start_point[0],
-                                    "call_type": call_type,
-                                    "commit_sha": commit_sha,
-                                }
-                            ))
+                            call_type = (
+                                "method"
+                                if function_node.type == "member_expression"
+                                else "direct"
+                            )
+                            edges.append(
+                                GraphEdge(
+                                    source_id=caller.id,
+                                    target_id=callee.id,
+                                    edge_type=EdgeType.CALLS,
+                                    repo_id=repo_id,
+                                    attributes={
+                                        "call_line": node.start_point[0],
+                                        "call_type": call_type,
+                                        "commit_sha": commit_sha,
+                                    },
+                                )
+                            )
 
             # Recurse
             for child in node.children:
@@ -479,14 +556,16 @@ class TypeScriptCallGraphExtractor:
     def _extract_call_target(self, node: Node) -> str:
         """Extract the name of the called function/method."""
         if node.type == "identifier":
-            return node.text.decode('utf8')
+            return node.text.decode("utf8")
         elif node.type == "member_expression":
             # For method calls like obj.method()
             prop_node = node.child_by_field_name("property")
-            return prop_node.text.decode('utf8') if prop_node else "Unknown"
+            return prop_node.text.decode("utf8") if prop_node else "Unknown"
         return "Unknown"
 
-    def _resolve_callee(self, name: str, definitions: List[GraphNode]) -> Optional[GraphNode]:
+    def _resolve_callee(
+        self, name: str, definitions: List[GraphNode]
+    ) -> Optional[GraphNode]:
         """Resolve a call target name to a definition node."""
         # Simple name matching - can be enhanced with scope analysis
         for node in definitions:
@@ -522,8 +601,8 @@ class TypeScriptCallGraphExtractor:
         # Check previous sibling for comment
         prev_sibling = siblings[node_index - 1]
         if prev_sibling.type == "comment":
-            comment_text = prev_sibling.text.decode('utf8')
+            comment_text = prev_sibling.text.decode("utf8")
             # Clean up JSDoc or line comments
-            return comment_text.strip('/*').strip('*/').strip('//').strip()
+            return comment_text.strip("/*").strip("*/").strip("//").strip()
 
         return None

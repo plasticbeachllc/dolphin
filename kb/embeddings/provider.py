@@ -13,14 +13,14 @@ from ..ingest.error_logging import with_retry
 from ..cache import QueryCache
 
 SUPPORTED_MODELS = {
-    'small': 1536,
-    'large': 3072,
+    "small": 1536,
+    "large": 3072,
 }
 
 # Map internal model names to OpenAI model names
 OPENAI_MODEL_MAP = {
-    'small': 'text-embedding-3-small',  # 1536 dimensions
-    'large': 'text-embedding-3-large',  # 3072 dimensions
+    "small": "text-embedding-3-small",  # 1536 dimensions
+    "large": "text-embedding-3-large",  # 3072 dimensions
 }
 
 
@@ -77,13 +77,14 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             ValueError: If no API key is provided or found in environment.
         """
         super().__init__()
-        
+
         # Cache instance
         self.cache = cache
 
         # Lazy import to avoid requiring openai if using stub provider
         try:
             from openai import OpenAI
+
             self._openai_module = OpenAI
         except ImportError:
             raise ImportError(
@@ -92,7 +93,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             )
 
         # Get API key from parameter or environment
-        self.api_key = api_key or os.environ.get('OPENAI_API_KEY')
+        self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError(
                 "OpenAI API key is required. Provide via api_key parameter "
@@ -101,39 +102,42 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
         self.batch_size = batch_size
         self.client = self._openai_module(api_key=self.api_key)
-        
+
         # Validate API key immediately with a minimal test request (unless disabled for testing)
         if validate_key:
             self._validate_api_key()
 
     def _validate_api_key(self) -> None:
         """Validate API key by making a minimal test request.
-        
+
         Raises:
             RuntimeError: If API key is invalid or authentication fails
         """
         try:
             # Make a minimal test request with a tiny payload
             self.client.embeddings.create(
-                input=["test"],
-                model="text-embedding-3-small"
+                input=["test"], model="text-embedding-3-small"
             )
             # If we get here, the API key is valid
         except Exception as e:
             error_msg = str(e)
-            if "401" in error_msg or "invalid" in error_msg.lower() or "incorrect" in error_msg.lower():
+            if (
+                "401" in error_msg
+                or "invalid" in error_msg.lower()
+                or "incorrect" in error_msg.lower()
+            ):
                 raise RuntimeError(
-                    f"\n{'='*70}\n"
+                    f"\n{'=' * 70}\n"
                     f"OPENAI API KEY VALIDATION FAILED\n"
-                    f"{'='*70}\n"
+                    f"{'=' * 70}\n"
                     f"The OpenAI API key is invalid or has expired.\n\n"
                     f"To fix this:\n"
                     f"  1. Get a valid API key from: https://platform.openai.com/account/api-keys\n"
                     f"  2. Set it in your environment:\n"
-                    f"     export OPENAI_API_KEY=\"sk-your-actual-key-here\"\n"
+                    f'     export OPENAI_API_KEY="sk-your-actual-key-here"\n'
                     f"  3. Or add to your shell profile (~/.zshrc or ~/.bashrc)\n\n"
                     f"Original error: {error_msg}\n"
-                    f"{'='*70}\n"
+                    f"{'=' * 70}\n"
                 )
             # For other errors, raise the original exception
             raise
@@ -165,7 +169,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         all_embeddings: List[Optional[List[float]]] = [None] * len(texts)
         uncached_indices: List[int] = []
         uncached_texts: List[str] = []
-        
+
         for i, text in enumerate(texts):
             if self.cache:
                 cached = self.cache.get_embedding(text, model)
@@ -177,17 +181,18 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             else:
                 uncached_indices.append(i)
                 uncached_texts.append(text)
-        
+
         # Process uncached texts in batches
         if uncached_texts:
             for batch_start in range(0, len(uncached_texts), self.batch_size):
-                batch = uncached_texts[batch_start:batch_start + self.batch_size]
-                batch_indices = uncached_indices[batch_start:batch_start + self.batch_size]
+                batch = uncached_texts[batch_start : batch_start + self.batch_size]
+                batch_indices = uncached_indices[
+                    batch_start : batch_start + self.batch_size
+                ]
 
                 # Call OpenAI API
                 response = self.client.embeddings.create(
-                    input=batch,
-                    model=openai_model
+                    input=batch, model=openai_model
                 )
 
                 # Extract embeddings and cache them
@@ -195,13 +200,11 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                     embedding = item.embedding
                     original_idx = batch_indices[j]
                     all_embeddings[original_idx] = embedding
-                    
+
                     # Cache the embedding
                     if self.cache:
                         self.cache.set_embedding(
-                            uncached_texts[batch_start + j],
-                            model,
-                            embedding
+                            uncached_texts[batch_start + j], model, embedding
                         )
 
         return all_embeddings  # type: ignore
@@ -213,11 +216,11 @@ _default_provider: EmbeddingProvider = EmbeddingProvider()
 
 def embed_texts(model: str, texts: List[str]) -> List[List[float]]:
     """Convenience function to embed texts using the default provider.
-    
+
     Args:
         model: The embedding model to use ('small' or 'large')
         texts: List of text strings to embed
-        
+
     Returns:
         List of embedding vectors
     """
@@ -251,8 +254,7 @@ def create_provider(provider_type: str = "stub", **kwargs) -> EmbeddingProvider:
         return OpenAIEmbeddingProvider(**kwargs)
     else:
         raise ValueError(
-            f"Unsupported provider type: {provider_type}. "
-            "Must be 'stub' or 'openai'."
+            f"Unsupported provider type: {provider_type}. Must be 'stub' or 'openai'."
         )
 
 

@@ -18,8 +18,9 @@ def hello():
     """Say hello."""
     print("Hello")
 '''
-    nodes, edges = extractor.extract("test.py", code, repo_id=1, file_id=1,
-                                     commit_sha="abc123", branch="main")
+    nodes, edges = extractor.extract(
+        "test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
+    )
 
     assert len(nodes) == 1
     assert nodes[0].name == "hello"
@@ -30,15 +31,16 @@ def hello():
 
 def test_extract_function_call(extractor):
     """Test extraction of function call edge."""
-    code = '''
+    code = """
 def caller():
     callee()
 
 def callee():
     pass
-'''
-    nodes, edges = extractor.extract("test.py", code, repo_id=1, file_id=1,
-                                     commit_sha="abc123", branch="main")
+"""
+    nodes, edges = extractor.extract(
+        "test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
+    )
 
     assert len(nodes) == 2
     assert len(edges) == 1
@@ -60,8 +62,9 @@ class Calculator:
         """Multiply two numbers."""
         return self.add(a, 0) * b
 '''
-    nodes, edges = extractor.extract("test.py", code, repo_id=1, file_id=1,
-                                     commit_sha="abc123", branch="main")
+    nodes, edges = extractor.extract(
+        "test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
+    )
 
     # Should have: Calculator class, add method, multiply method
     assert len(nodes) == 3
@@ -89,8 +92,9 @@ async def fetch_data():
 async def some_api_call():
     pass
 '''
-    nodes, edges = extractor.extract("test.py", code, repo_id=1, file_id=1,
-                                     commit_sha="abc123", branch="main")
+    nodes, edges = extractor.extract(
+        "test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
+    )
 
     assert len(nodes) == 2
     fetch_node = next(n for n in nodes if n.name == "fetch_data")
@@ -99,7 +103,7 @@ async def some_api_call():
 
 def test_nested_function_calls(extractor):
     """Test extraction of nested function calls."""
-    code = '''
+    code = """
 def outer():
     def inner():
         helper()
@@ -107,9 +111,10 @@ def outer():
 
 def helper():
     pass
-'''
-    nodes, edges = extractor.extract("test.py", code, repo_id=1, file_id=1,
-                                     commit_sha="abc123", branch="main")
+"""
+    nodes, edges = extractor.extract(
+        "test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
+    )
 
     # Should detect: outer, inner, helper
     assert len(nodes) == 3
@@ -120,16 +125,17 @@ def helper():
 
 def test_method_call_in_class(extractor):
     """Test method calls within a class."""
-    code = '''
+    code = """
 class MyClass:
     def method_a(self):
         self.method_b()
 
     def method_b(self):
         pass
-'''
-    nodes, edges = extractor.extract("test.py", code, repo_id=1, file_id=1,
-                                     commit_sha="abc123", branch="main")
+"""
+    nodes, edges = extractor.extract(
+        "test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
+    )
 
     # Should have class + 2 methods
     assert len(nodes) == 3
@@ -141,16 +147,22 @@ class MyClass:
 
 def test_qualified_names(extractor):
     """Test that qualified names are generated correctly."""
-    code = '''
+    code = """
 class Outer:
     def method(self):
         pass
 
 def standalone():
     pass
-'''
-    nodes, edges = extractor.extract("path/to/module.py", code, repo_id=1, file_id=1,
-                                     commit_sha="abc123", branch="main")
+"""
+    nodes, edges = extractor.extract(
+        "path/to/module.py",
+        code,
+        repo_id=1,
+        file_id=1,
+        commit_sha="abc123",
+        branch="main",
+    )
 
     class_node = next(n for n in nodes if n.node_type == NodeType.CLASS)
     assert class_node.qualified_name == "path.to.module.Outer"
@@ -165,8 +177,9 @@ def standalone():
 def test_empty_file(extractor):
     """Test extraction from empty file."""
     code = ""
-    nodes, edges = extractor.extract("test.py", code, repo_id=1, file_id=1,
-                                     commit_sha="abc123", branch="main")
+    nodes, edges = extractor.extract(
+        "test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
+    )
 
     assert len(nodes) == 0
     assert len(edges) == 0
@@ -174,7 +187,7 @@ def test_empty_file(extractor):
 
 def test_multiple_classes(extractor):
     """Test extraction of multiple classes."""
-    code = '''
+    code = """
 class ClassA:
     def method_a(self):
         pass
@@ -182,9 +195,10 @@ class ClassA:
 class ClassB:
     def method_b(self):
         pass
-'''
-    nodes, edges = extractor.extract("test.py", code, repo_id=1, file_id=1,
-                                     commit_sha="abc123", branch="main")
+"""
+    nodes, edges = extractor.extract(
+        "test.py", code, repo_id=1, file_id=1, commit_sha="abc123", branch="main"
+    )
 
     # Should have 2 classes and 2 methods
     assert len(nodes) == 4

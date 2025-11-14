@@ -1,8 +1,7 @@
 """Unit tests for parallel hybrid search."""
 
 import pytest
-import asyncio
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock, AsyncMock
 from kb.search.parallel_search import (
     ParallelHybridSearch,
     SearchResult,
@@ -113,16 +112,34 @@ class TestParallelHybridSearch:
         embedding_provider.embed_query = AsyncMock(return_value=[0.1] * 1536)
 
         # Mock vector search results
-        vector_store.query = Mock(return_value=[
-            {"id": "1", "text": "result1", "repo": "repo1", "path": "file1.py",
-             "start_line": 1, "end_line": 10, "_distance": 0.1}
-        ])
+        vector_store.query = Mock(
+            return_value=[
+                {
+                    "id": "1",
+                    "text": "result1",
+                    "repo": "repo1",
+                    "path": "file1.py",
+                    "start_line": 1,
+                    "end_line": 10,
+                    "_distance": 0.1,
+                }
+            ]
+        )
 
         # Mock BM25 search results
-        bm25_store.search = Mock(return_value=[
-            {"chunk_id": "2", "content": "result2", "repo": "repo1", "file_path": "file2.py",
-             "start_line": 1, "end_line": 10, "score": 5.0}
-        ])
+        bm25_store.search = Mock(
+            return_value=[
+                {
+                    "chunk_id": "2",
+                    "content": "result2",
+                    "repo": "repo1",
+                    "file_path": "file2.py",
+                    "start_line": 1,
+                    "end_line": 10,
+                    "score": 5.0,
+                }
+            ]
+        )
 
         # Execute search
         results = await search_engine.search_async(
@@ -135,7 +152,9 @@ class TestParallelHybridSearch:
         assert embedding_provider.embed_query.called
 
     @pytest.mark.asyncio
-    async def test_search_async_with_existing_embedding(self, search_engine, mock_stores):
+    async def test_search_async_with_existing_embedding(
+        self, search_engine, mock_stores
+    ):
         """Test search with pre-computed embedding."""
         vector_store, bm25_store, _ = mock_stores
 
@@ -220,10 +239,19 @@ class TestParallelHybridSearch:
         )
 
         embedding_provider.embed_query = AsyncMock(return_value=[0.1] * 1536)
-        vector_store.query = Mock(return_value=[
-            {"id": "1", "text": "test", "repo": "r", "path": "f",
-             "start_line": 1, "end_line": 1, "_distance": 0.1}
-        ])
+        vector_store.query = Mock(
+            return_value=[
+                {
+                    "id": "1",
+                    "text": "test",
+                    "repo": "r",
+                    "path": "f",
+                    "start_line": 1,
+                    "end_line": 1,
+                    "_distance": 0.1,
+                }
+            ]
+        )
         bm25_store.search = Mock(return_value=[])
 
         results = await custom_engine.search_async(query="test", top_k=10)
@@ -247,11 +275,11 @@ class TestParallelHybridSearch:
         """Test statistics retrieval."""
         stats = search_engine.get_stats()
 
-        assert 'total_searches' in stats
-        assert 'avg_vector_time_ms' in stats
-        assert 'avg_bm25_time_ms' in stats
-        assert 'avg_total_time_ms' in stats
-        assert 'parallel_speedup' in stats
+        assert "total_searches" in stats
+        assert "avg_vector_time_ms" in stats
+        assert "avg_bm25_time_ms" in stats
+        assert "avg_total_time_ms" in stats
+        assert "parallel_speedup" in stats
 
     @pytest.mark.asyncio
     async def test_result_deduplication(self, search_engine, mock_stores):
@@ -261,15 +289,33 @@ class TestParallelHybridSearch:
         embedding_provider.embed_query = AsyncMock(return_value=[0.1] * 1536)
 
         # Return same ID from both searches
-        vector_store.query = Mock(return_value=[
-            {"id": "1", "text": "test", "repo": "r", "path": "f",
-             "start_line": 1, "end_line": 10, "_distance": 0.1}
-        ])
+        vector_store.query = Mock(
+            return_value=[
+                {
+                    "id": "1",
+                    "text": "test",
+                    "repo": "r",
+                    "path": "f",
+                    "start_line": 1,
+                    "end_line": 10,
+                    "_distance": 0.1,
+                }
+            ]
+        )
 
-        bm25_store.search = Mock(return_value=[
-            {"chunk_id": "1", "content": "test", "repo": "r", "file_path": "f",
-             "start_line": 1, "end_line": 10, "score": 5.0}
-        ])
+        bm25_store.search = Mock(
+            return_value=[
+                {
+                    "chunk_id": "1",
+                    "content": "test",
+                    "repo": "r",
+                    "file_path": "f",
+                    "start_line": 1,
+                    "end_line": 10,
+                    "score": 5.0,
+                }
+            ]
+        )
 
         results = await search_engine.search_async(query="test", top_k=10)
 

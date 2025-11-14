@@ -1,6 +1,5 @@
 """Unit tests for file sync metadata store methods."""
 
-import pytest
 from pathlib import Path
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
@@ -21,9 +20,7 @@ class TestPendingChanges:
 
         # Record a change
         change_id = store.record_pending_change(
-            repo_id=repo_id,
-            file_path="src/main.py",
-            change_type="modified"
+            repo_id=repo_id, file_path="src/main.py", change_type="modified"
         )
 
         assert change_id is not None
@@ -44,7 +41,7 @@ class TestPendingChanges:
             repo_id=repo_id,
             file_path="src/new_name.py",
             change_type="renamed",
-            old_path="src/old_name.py"
+            old_path="src/old_name.py",
         )
 
         assert change_id is not None
@@ -192,7 +189,9 @@ class TestPendingChanges:
         repo_id = repo["id"]
 
         # No changes recorded
-        processed_count = store.mark_changes_for_file_processed(repo_id, "nonexistent.py")
+        processed_count = store.mark_changes_for_file_processed(
+            repo_id, "nonexistent.py"
+        )
         assert processed_count == 0
 
     def test_cleanup_old_changes(self, temp_db_path):
@@ -237,7 +236,7 @@ class TestFileSnapshots:
             ext=".py",
             language="python",
             is_binary=False,
-            size_bytes=100
+            size_bytes=100,
         )
 
         # Upsert snapshot
@@ -247,7 +246,7 @@ class TestFileSnapshots:
             path="test.py",
             mtime_ns=1234567890,
             size_bytes=100,
-            content_hash="abc123"
+            content_hash="abc123",
         )
 
         # Verify snapshot was created
@@ -275,7 +274,7 @@ class TestFileSnapshots:
             ext=".py",
             language="python",
             is_binary=False,
-            size_bytes=100
+            size_bytes=100,
         )
 
         # First snapshot
@@ -285,7 +284,7 @@ class TestFileSnapshots:
             path="test.py",
             mtime_ns=111,
             size_bytes=100,
-            content_hash="hash1"
+            content_hash="hash1",
         )
 
         # Update snapshot
@@ -295,7 +294,7 @@ class TestFileSnapshots:
             path="test.py",
             mtime_ns=222,
             size_bytes=200,
-            content_hash="hash2"
+            content_hash="hash2",
         )
 
         # Should have updated values
@@ -332,11 +331,12 @@ class TestFileSnapshots:
             ext=".py",
             language="python",
             is_binary=False,
-            size_bytes=test_file.stat().st_size
+            size_bytes=test_file.stat().st_size,
         )
 
         # Create snapshot matching current state
         import hashlib
+
         stat = test_file.stat()
         content_hash = hashlib.sha256(test_file.read_bytes()).hexdigest()
 
@@ -346,7 +346,7 @@ class TestFileSnapshots:
             path="test.py",
             mtime_ns=stat.st_mtime_ns,
             size_bytes=stat.st_size,
-            content_hash=content_hash
+            content_hash=content_hash,
         )
 
         # Detect drift
@@ -373,7 +373,7 @@ class TestFileSnapshots:
             ext=".py",
             language="python",
             is_binary=False,
-            size_bytes=test_file.stat().st_size
+            size_bytes=test_file.stat().st_size,
         )
 
         # Create snapshot with old state
@@ -383,11 +383,12 @@ class TestFileSnapshots:
             path="test.py",
             mtime_ns=123,  # Old timestamp
             size_bytes=50,  # Old size
-            content_hash="old_hash"
+            content_hash="old_hash",
         )
 
         # Modify file
         import time
+
         time.sleep(0.1)
         test_file.write_text("def test(): return 42")
 
@@ -417,11 +418,12 @@ class TestFileSnapshots:
             ext=".py",
             language="python",
             is_binary=False,
-            size_bytes=test_file.stat().st_size
+            size_bytes=test_file.stat().st_size,
         )
 
         # Create snapshot
         import hashlib
+
         stat = test_file.stat()
         content_hash = hashlib.sha256(test_file.read_bytes()).hexdigest()
 
@@ -431,7 +433,7 @@ class TestFileSnapshots:
             path="test.py",
             mtime_ns=stat.st_mtime_ns,
             size_bytes=stat.st_size,
-            content_hash=content_hash
+            content_hash=content_hash,
         )
 
         # Delete file
@@ -462,6 +464,7 @@ class TestFileSnapshots:
         repo = store.get_repo_by_name("test-repo")
 
         import hashlib
+
         # Create snapshots for all files
         for i, f in enumerate(files):
             file_id = store.upsert_file(
@@ -470,7 +473,7 @@ class TestFileSnapshots:
                 ext=".py",
                 language="python",
                 is_binary=False,
-                size_bytes=f.stat().st_size
+                size_bytes=f.stat().st_size,
             )
 
             stat = f.stat()
@@ -482,7 +485,7 @@ class TestFileSnapshots:
                 path=f"file{i}.py",
                 mtime_ns=stat.st_mtime_ns,
                 size_bytes=stat.st_size,
-                content_hash=content_hash
+                content_hash=content_hash,
             )
 
         # Modify one file, delete another

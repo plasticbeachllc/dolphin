@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 class NodeType(str, Enum):
     """Types of nodes in the code graph."""
+
     FUNCTION = "function"
     METHOD = "method"
     CLASS = "class"
@@ -18,6 +19,7 @@ class NodeType(str, Enum):
 
 class EdgeType(str, Enum):
     """Types of edges in the code graph."""
+
     CALLS = "calls"
     IMPORTS = "imports"
     INHERITS = "inherits"
@@ -30,6 +32,7 @@ class EdgeType(str, Enum):
 
 class GraphNode(BaseModel):
     """Represents a node in the code graph."""
+
     id: str
     repo_id: int
     node_type: NodeType
@@ -46,6 +49,7 @@ class GraphNode(BaseModel):
 
 class GraphEdge(BaseModel):
     """Represents an edge in the code graph."""
+
     source_id: str
     target_id: str
     edge_type: EdgeType
@@ -56,6 +60,7 @@ class GraphEdge(BaseModel):
 
 class GraphMetrics(BaseModel):
     """Computed metrics for a graph node."""
+
     node_id: str
     pagerank: Optional[float] = None
     betweenness_centrality: Optional[float] = None

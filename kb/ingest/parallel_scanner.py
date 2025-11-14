@@ -8,7 +8,6 @@ sequential scanning.
 from __future__ import annotations
 
 import multiprocessing as mp
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List
 from functools import partial
@@ -131,12 +130,13 @@ def scan_repo_parallel(
     # For small repos, use sequential processing
     if len(rel_paths) < batch_size * 2:
         from .scanner import scan_repo
+
         return scan_repo(root, ignores)
 
     # Split files into batches
     batches = []
     for i in range(0, len(rel_paths), batch_size):
-        batch = rel_paths[i:i + batch_size]
+        batch = rel_paths[i : i + batch_size]
         batches.append(batch)
 
     # Process batches in parallel
@@ -157,8 +157,10 @@ def scan_repo_parallel(
     except Exception as e:
         # Fall back to sequential processing on error
         import logging
+
         logging.warning(f"Parallel scanning failed: {e}. Falling back to sequential.")
         from .scanner import scan_repo
+
         return scan_repo(root, ignores)
 
     return all_candidates

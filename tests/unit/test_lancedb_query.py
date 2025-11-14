@@ -108,9 +108,7 @@ class TestLanceDBQuery:
 
         # Query filtering for repo1 only
         query_vector = [0.1] * 1536
-        results = temp_store.query(
-            query_vector, model="small", repo="repo1", top_k=10
-        )
+        results = temp_store.query(query_vector, model="small", repo="repo1", top_k=10)
 
         assert len(results) == 1
         assert results[0]["repo"] == "repo1"

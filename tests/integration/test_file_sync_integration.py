@@ -16,7 +16,6 @@ Architecture Note:
 import pytest
 import time
 import hashlib
-from pathlib import Path
 from fastapi.testclient import TestClient
 
 from kb.api.app import app, set_stores, reset_stores, set_pipeline, reset_pipeline
@@ -50,9 +49,7 @@ class TestSnapshotTracking:
         workspace.mkdir()
 
         sql_store.record_repo(
-            name="test-repo",
-            path=workspace,
-            default_embed_model="large"
+            name="test-repo", path=workspace, default_embed_model="large"
         )
         repo = sql_store.get_repo_by_name("test-repo")
 
@@ -64,11 +61,7 @@ class TestSnapshotTracking:
         client = TestClient(app)
         response = client.post(
             "/v1/index",
-            json={
-                "repo": "test-repo",
-                "files": ["sample.py"],
-                "incremental": True
-            }
+            json={"repo": "test-repo", "files": ["sample.py"], "incremental": True},
         )
 
         assert response.status_code == 200
@@ -123,7 +116,9 @@ class TestSnapshotTracking:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(
+            name="test-repo", path=workspace, default_embed_model="large"
+        )
         repo = sql_store.get_repo_by_name("test-repo")
 
         # Create and index file (version 1)
@@ -133,13 +128,16 @@ class TestSnapshotTracking:
         client = TestClient(app)
         response1 = client.post(
             "/v1/index",
-            json={"repo": "test-repo", "files": ["evolving.py"], "incremental": True}
+            json={"repo": "test-repo", "files": ["evolving.py"], "incremental": True},
         )
         task_id1 = response1.json()["task_id"]
 
         # Wait for completion
         for _ in range(30):
-            if client.get(f"/v1/index/status/{task_id1}").json()["status"] == "completed":
+            if (
+                client.get(f"/v1/index/status/{task_id1}").json()["status"]
+                == "completed"
+            ):
                 break
             time.sleep(1)
 
@@ -154,13 +152,16 @@ class TestSnapshotTracking:
 
         response2 = client.post(
             "/v1/index",
-            json={"repo": "test-repo", "files": ["evolving.py"], "incremental": True}
+            json={"repo": "test-repo", "files": ["evolving.py"], "incremental": True},
         )
         task_id2 = response2.json()["task_id"]
 
         # Wait for completion
         for _ in range(30):
-            if client.get(f"/v1/index/status/{task_id2}").json()["status"] == "completed":
+            if (
+                client.get(f"/v1/index/status/{task_id2}").json()["status"]
+                == "completed"
+            ):
                 break
             time.sleep(1)
 
@@ -197,7 +198,9 @@ class TestSnapshotTracking:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(
+            name="test-repo", path=workspace, default_embed_model="large"
+        )
         repo = sql_store.get_repo_by_name("test-repo")
 
         # Create multiple files
@@ -211,14 +214,16 @@ class TestSnapshotTracking:
         # Index all files
         client = TestClient(app)
         response = client.post(
-            "/v1/index",
-            json={"repo": "test-repo", "files": files, "incremental": True}
+            "/v1/index", json={"repo": "test-repo", "files": files, "incremental": True}
         )
         task_id = response.json()["task_id"]
 
         # Wait for completion
         for _ in range(60):
-            if client.get(f"/v1/index/status/{task_id}").json()["status"] == "completed":
+            if (
+                client.get(f"/v1/index/status/{task_id}").json()["status"]
+                == "completed"
+            ):
                 break
             time.sleep(1)
 
@@ -261,7 +266,9 @@ class TestPostIndexValidation:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(
+            name="test-repo", path=workspace, default_embed_model="large"
+        )
 
         # Create multiple files to increase indexing time
         files = []
@@ -274,8 +281,7 @@ class TestPostIndexValidation:
         # Start indexing
         client = TestClient(app)
         response = client.post(
-            "/v1/index",
-            json={"repo": "test-repo", "files": files, "incremental": True}
+            "/v1/index", json={"repo": "test-repo", "files": files, "incremental": True}
         )
         task_id = response.json()["task_id"]
 
@@ -329,7 +335,9 @@ class TestDriftDetection:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(
+            name="test-repo", path=workspace, default_embed_model="large"
+        )
         repo = sql_store.get_repo_by_name("test-repo")
 
         # Create and index file
@@ -339,13 +347,16 @@ class TestDriftDetection:
         client = TestClient(app)
         response = client.post(
             "/v1/index",
-            json={"repo": "test-repo", "files": ["tracked.py"], "incremental": True}
+            json={"repo": "test-repo", "files": ["tracked.py"], "incremental": True},
         )
         task_id = response.json()["task_id"]
 
         # Wait for indexing to complete
         for _ in range(30):
-            if client.get(f"/v1/index/status/{task_id}").json()["status"] == "completed":
+            if (
+                client.get(f"/v1/index/status/{task_id}").json()["status"]
+                == "completed"
+            ):
                 break
             time.sleep(1)
 
@@ -364,7 +375,11 @@ class TestDriftDetection:
         drift_events = drift_response2.json()["drift_events"]
 
         # Should detect modification
-        modified_events = [d for d in drift_events if d["path"] == "tracked.py" and d["drift_type"] == "modified"]
+        modified_events = [
+            d
+            for d in drift_events
+            if d["path"] == "tracked.py" and d["drift_type"] == "modified"
+        ]
         assert len(modified_events) == 1
 
         # Cleanup
@@ -391,7 +406,9 @@ class TestDriftDetection:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(
+            name="test-repo", path=workspace, default_embed_model="large"
+        )
 
         # Create and index file
         test_file = workspace / "to_delete.py"
@@ -400,13 +417,16 @@ class TestDriftDetection:
         client = TestClient(app)
         response = client.post(
             "/v1/index",
-            json={"repo": "test-repo", "files": ["to_delete.py"], "incremental": True}
+            json={"repo": "test-repo", "files": ["to_delete.py"], "incremental": True},
         )
         task_id = response.json()["task_id"]
 
         # Wait for completion
         for _ in range(30):
-            if client.get(f"/v1/index/status/{task_id}").json()["status"] == "completed":
+            if (
+                client.get(f"/v1/index/status/{task_id}").json()["status"]
+                == "completed"
+            ):
                 break
             time.sleep(1)
 
@@ -418,7 +438,11 @@ class TestDriftDetection:
         drift_events = drift_response.json()["drift_events"]
 
         # Should detect deletion
-        deleted_events = [d for d in drift_events if d["path"] == "to_delete.py" and d["drift_type"] == "deleted"]
+        deleted_events = [
+            d
+            for d in drift_events
+            if d["path"] == "to_delete.py" and d["drift_type"] == "deleted"
+        ]
         assert len(deleted_events) == 1
 
         # Cleanup
@@ -445,7 +469,9 @@ class TestDriftDetection:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(
+            name="test-repo", path=workspace, default_embed_model="large"
+        )
 
         # Create and index file
         test_file = workspace / "stable.py"
@@ -454,13 +480,16 @@ class TestDriftDetection:
         client = TestClient(app)
         response = client.post(
             "/v1/index",
-            json={"repo": "test-repo", "files": ["stable.py"], "incremental": True}
+            json={"repo": "test-repo", "files": ["stable.py"], "incremental": True},
         )
         task_id = response.json()["task_id"]
 
         # Wait for completion
         for _ in range(30):
-            if client.get(f"/v1/index/status/{task_id}").json()["status"] == "completed":
+            if (
+                client.get(f"/v1/index/status/{task_id}").json()["status"]
+                == "completed"
+            ):
                 break
             time.sleep(1)
 
@@ -503,7 +532,9 @@ class TestAutomaticChangeProcessing:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(
+            name="test-repo", path=workspace, default_embed_model="large"
+        )
         repo = sql_store.get_repo_by_name("test-repo")
 
         # Create test file
@@ -515,7 +546,9 @@ class TestAutomaticChangeProcessing:
         # 1. Record pending change (simulating file watcher)
         changes_response = client.post(
             "/v1/repos/test-repo/changes",
-            json={"changes": [{"file_path": "auto_process.py", "change_type": "created"}]}
+            json={
+                "changes": [{"file_path": "auto_process.py", "change_type": "created"}]
+            },
         )
         assert changes_response.status_code == 200
         change_ids = changes_response.json()["change_ids"]
@@ -528,20 +561,28 @@ class TestAutomaticChangeProcessing:
         # 3. Index the file
         index_response = client.post(
             "/v1/index",
-            json={"repo": "test-repo", "files": ["auto_process.py"], "incremental": True}
+            json={
+                "repo": "test-repo",
+                "files": ["auto_process.py"],
+                "incremental": True,
+            },
         )
         task_id = index_response.json()["task_id"]
 
         # Wait for completion
         for _ in range(30):
-            if client.get(f"/v1/index/status/{task_id}").json()["status"] == "completed":
+            if (
+                client.get(f"/v1/index/status/{task_id}").json()["status"]
+                == "completed"
+            ):
                 break
             time.sleep(1)
 
         # 4. Verify change was AUTOMATICALLY marked as processed (no manual API call!)
         pending_after = client.get("/v1/repos/test-repo/pending-changes")
-        assert len(pending_after.json()["changes"]) == 0, \
+        assert len(pending_after.json()["changes"]) == 0, (
             "Python should have automatically marked the change as processed during indexing"
+        )
 
         # 5. Verify by checking directly in database
         processed_changes = sql_store.get_pending_changes(repo_id=repo["id"], limit=100)
@@ -576,7 +617,9 @@ class TestPendingChangesWorkflow:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(
+            name="test-repo", path=workspace, default_embed_model="large"
+        )
 
         # Record pending changes
         client = TestClient(app)
@@ -585,9 +628,9 @@ class TestPendingChangesWorkflow:
             json={
                 "changes": [
                     {"file_path": "file1.py", "change_type": "modified"},
-                    {"file_path": "file2.py", "change_type": "created"}
+                    {"file_path": "file2.py", "change_type": "created"},
                 ]
-            }
+            },
         )
         assert response.status_code == 200
 
@@ -633,7 +676,9 @@ class TestPendingChangesWorkflow:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(
+            name="test-repo", path=workspace, default_embed_model="large"
+        )
 
         # Create test files
         file1 = workspace / "file1.py"
@@ -649,9 +694,9 @@ class TestPendingChangesWorkflow:
             json={
                 "changes": [
                     {"file_path": "file1.py", "change_type": "created"},
-                    {"file_path": "file2.py", "change_type": "created"}
+                    {"file_path": "file2.py", "change_type": "created"},
                 ]
-            }
+            },
         )
         assert changes_response.status_code == 200
         change_ids = changes_response.json()["change_ids"]
@@ -664,21 +709,29 @@ class TestPendingChangesWorkflow:
         # 3. Index the files
         index_response = client.post(
             "/v1/index",
-            json={"repo": "test-repo", "files": ["file1.py", "file2.py"], "incremental": True}
+            json={
+                "repo": "test-repo",
+                "files": ["file1.py", "file2.py"],
+                "incremental": True,
+            },
         )
         task_id = index_response.json()["task_id"]
 
         # Wait for completion
         for _ in range(30):
-            if client.get(f"/v1/index/status/{task_id}").json()["status"] == "completed":
+            if (
+                client.get(f"/v1/index/status/{task_id}").json()["status"]
+                == "completed"
+            ):
                 break
             time.sleep(1)
 
         # 4. Verify Python automatically marked changes as processed
         # (No manual mark-processed call needed!)
         final_pending = client.get("/v1/repos/test-repo/pending-changes")
-        assert len(final_pending.json()["changes"]) == 0, \
+        assert len(final_pending.json()["changes"]) == 0, (
             "Python should automatically mark changes as processed after successful indexing"
+        )
 
         # 6. Verify snapshots were created
         repo = sql_store.get_repo_by_name("test-repo")

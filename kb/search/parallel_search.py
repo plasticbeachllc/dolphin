@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SearchResult:
     """Search result with score and metadata."""
+
     id: str
     score: float
     text: str
@@ -128,15 +129,21 @@ class ParallelHybridSearch:
         """
         # Create wrapper functions from stores if provided
         if vector_search_fn is None and vector_store is not None:
-            self.vector_search_fn = lambda query_embedding, top_k, **kwargs: vector_store.query(query_embedding, top_k, **kwargs)
+            self.vector_search_fn = (
+                lambda query_embedding, top_k, **kwargs: vector_store.query(
+                    query_embedding, top_k, **kwargs
+                )
+            )
         else:
             self.vector_search_fn = vector_search_fn
-            
+
         if bm25_search_fn is None and bm25_store is not None:
-            self.bm25_search_fn = lambda query, top_k, **kwargs: bm25_store.search(query, top_k, **kwargs)
+            self.bm25_search_fn = lambda query, top_k, **kwargs: bm25_store.search(
+                query, top_k, **kwargs
+            )
         else:
             self.bm25_search_fn = bm25_search_fn
-            
+
         self.enable_parallel = enable_parallel
         self.vector_store = vector_store
         self.bm25_store = bm25_store
@@ -169,12 +176,12 @@ class ParallelHybridSearch:
         """
         # Generate embedding if not provided
         if query_embedding is None and self.embedding_provider is not None:
-            if hasattr(self.embedding_provider, 'embed_query'):
+            if hasattr(self.embedding_provider, "embed_query"):
                 if asyncio.iscoroutinefunction(self.embedding_provider.embed_query):
                     query_embedding = await self.embedding_provider.embed_query(query)
                 else:
                     query_embedding = self.embedding_provider.embed_query(query)
-        
+
         if not self.enable_parallel or not self.bm25_search_fn:
             # Fall back to sequential
             return await self._search_sequential(
@@ -186,9 +193,7 @@ class ParallelHybridSearch:
             self._vector_search_async(query_embedding, top_k, **kwargs)
         )
 
-        bm25_task = asyncio.create_task(
-            self._bm25_search_async(query, top_k, **kwargs)
-        )
+        bm25_task = asyncio.create_task(self._bm25_search_async(query, top_k, **kwargs))
 
         # Wait for both to complete
         try:
@@ -248,15 +253,15 @@ class ParallelHybridSearch:
 
         return [
             SearchResult(
-                id=r.get('id', r.get('chunk_id', '')),
-                score=r.get('score', 0.0),
-                text=r.get('text', ''),
-                repo=r.get('repo'),
-                path=r.get('path'),
-                start_line=r.get('start_line'),
-                end_line=r.get('end_line'),
-                metadata=r.get('metadata'),
-                search_type='vector',
+                id=r.get("id", r.get("chunk_id", "")),
+                score=r.get("score", 0.0),
+                text=r.get("text", ""),
+                repo=r.get("repo"),
+                path=r.get("path"),
+                start_line=r.get("start_line"),
+                end_line=r.get("end_line"),
+                metadata=r.get("metadata"),
+                search_type="vector",
             )
             for r in results
         ]
@@ -289,15 +294,15 @@ class ParallelHybridSearch:
 
         return [
             SearchResult(
-                id=r.get('id', r.get('chunk_id', '')),
-                score=r.get('score', 0.0),
-                text=r.get('text', r.get('content', '')),
-                repo=r.get('repo'),
-                path=r.get('path', r.get('file_path')),
-                start_line=r.get('start_line'),
-                end_line=r.get('end_line'),
-                metadata=r.get('metadata'),
-                search_type='bm25',
+                id=r.get("id", r.get("chunk_id", "")),
+                score=r.get("score", 0.0),
+                text=r.get("text", r.get("content", "")),
+                repo=r.get("repo"),
+                path=r.get("path", r.get("file_path")),
+                start_line=r.get("start_line"),
+                end_line=r.get("end_line"),
+                metadata=r.get("metadata"),
+                search_type="bm25",
             )
             for r in results
         ]
@@ -322,12 +327,12 @@ class ParallelHybridSearch:
         """
         # Generate embedding if not provided
         if query_embedding is None and self.embedding_provider is not None:
-            if hasattr(self.embedding_provider, 'embed_query'):
+            if hasattr(self.embedding_provider, "embed_query"):
                 if asyncio.iscoroutinefunction(self.embedding_provider.embed_query):
                     query_embedding = await self.embedding_provider.embed_query(query)
                 else:
                     query_embedding = self.embedding_provider.embed_query(query)
-        
+
         # Vector search
         vector_results = await self._vector_search_async(
             query_embedding, top_k, **kwargs
@@ -336,9 +341,7 @@ class ParallelHybridSearch:
         # BM25 search
         bm25_results = []
         if self.bm25_search_fn:
-            bm25_results = await self._bm25_search_async(
-                query, top_k, **kwargs
-            )
+            bm25_results = await self._bm25_search_async(query, top_k, **kwargs)
 
         # Merge
         return self._merge_results(vector_results, bm25_results, top_k=top_k)
@@ -388,6 +391,7 @@ class ParallelHybridSearch:
         """
         # Create event loop and run async search
         import asyncio
+
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
@@ -411,11 +415,11 @@ class ParallelHybridSearch:
         """
         if self._total_searches == 0:
             return {
-                'total_searches': 0,
-                'avg_vector_time_ms': 0.0,
-                'avg_bm25_time_ms': 0.0,
-                'avg_total_time_ms': 0.0,
-                'parallel_speedup': 0.0,
+                "total_searches": 0,
+                "avg_vector_time_ms": 0.0,
+                "avg_bm25_time_ms": 0.0,
+                "avg_total_time_ms": 0.0,
+                "parallel_speedup": 0.0,
             }
 
         avg_vector = self._total_vector_time_ms / self._total_searches
@@ -427,11 +431,11 @@ class ParallelHybridSearch:
         speedup = sequential_time / avg_total if avg_total > 0 else 1.0
 
         return {
-            'total_searches': self._total_searches,
-            'avg_vector_time_ms': avg_vector,
-            'avg_bm25_time_ms': avg_bm25,
-            'avg_total_time_ms': avg_total,
-            'parallel_speedup': speedup,
+            "total_searches": self._total_searches,
+            "avg_vector_time_ms": avg_vector,
+            "avg_bm25_time_ms": avg_bm25,
+            "avg_total_time_ms": avg_total,
+            "parallel_speedup": speedup,
         }
 
 

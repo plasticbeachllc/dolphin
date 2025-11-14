@@ -17,6 +17,7 @@ import json
 @dataclass
 class CachedQuery:
     """Cached query result with metadata."""
+
     query_hash: str
     query_text: str
     results: List[Dict[str, Any]]
@@ -169,12 +170,12 @@ class QueryResultCache:
         """
         # Check if any of the queried repos were updated after cache timestamp
         # Support both 'repo' (singular) and 'repos' (plural) params
-        repos = params.get('repos', [])
-        single_repo = params.get('repo')
-        
+        repos = params.get("repos", [])
+        single_repo = params.get("repo")
+
         if single_repo:
             repos = [single_repo]
-        
+
         if not repos:
             return False
 
@@ -202,12 +203,12 @@ class QueryResultCache:
         # Support both 'repo' (singular) and 'repos' (plural) params
         to_remove = []
         for key, cached in self._cache.items():
-            repos = cached.params.get('repos', [])
-            single_repo = cached.params.get('repo')
-            
+            repos = cached.params.get("repos", [])
+            single_repo = cached.params.get("repo")
+
             if single_repo:
                 repos = [single_repo]
-            
+
             if repo_name in repos:
                 to_remove.append(key)
 
@@ -249,14 +250,14 @@ class QueryResultCache:
         total_requests = self._hits + self._misses
 
         return {
-            'size': len(self._cache),
-            'max_size': self.max_size,
-            'hits': self._hits,
-            'misses': self._misses,
-            'invalidations': self._invalidations,
-            'hit_rate': self.hit_rate(),
-            'total_requests': total_requests,
-            'ttl_seconds': self.ttl_seconds,
+            "size": len(self._cache),
+            "max_size": self.max_size,
+            "hits": self._hits,
+            "misses": self._misses,
+            "invalidations": self._invalidations,
+            "hit_rate": self.hit_rate(),
+            "total_requests": total_requests,
+            "ttl_seconds": self.ttl_seconds,
         }
 
     def evict_expired(self) -> int:

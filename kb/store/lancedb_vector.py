@@ -1,4 +1,5 @@
 """Backward compatible alias for the LanceDB vector store implementation."""
+
 from __future__ import annotations
 
 from pathlib import Path

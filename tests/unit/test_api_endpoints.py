@@ -1,9 +1,15 @@
 """Unit tests for FastAPI endpoints."""
 
-import pytest
 from pathlib import Path
 from fastapi.testclient import TestClient
-from kb.api.app import app, SearchRequest, set_search_backend, reset_search_backend, set_stores, reset_stores
+from kb.api.app import (
+    app,
+    SearchRequest,
+    set_search_backend,
+    reset_search_backend,
+    set_stores,
+    reset_stores,
+)
 
 
 class MockSearchBackend:
@@ -19,7 +25,7 @@ class MockSearchBackend:
                 "end_line": 10,
                 "score": 0.95,
                 "snippet": "def test(): pass",
-                "provenance": {"commit": "abc123", "text_hash": "hash123"}
+                "provenance": {"commit": "abc123", "text_hash": "hash123"},
             }
         ]
 
@@ -85,8 +91,7 @@ class TestSearchEndpoint:
         """Test search with repos filter."""
         client = TestClient(app)
         response = client.post(
-            "/search",
-            json={"query": "test", "repos": ["repo1", "repo2"]}
+            "/search", json={"query": "test", "repos": ["repo1", "repo2"]}
         )
 
         assert response.status_code == 200
@@ -94,10 +99,7 @@ class TestSearchEndpoint:
     def test_search_with_top_k(self):
         """Test search with custom top_k."""
         client = TestClient(app)
-        response = client.post(
-            "/search",
-            json={"query": "test", "top_k": 20}
-        )
+        response = client.post("/search", json={"query": "test", "top_k": 20})
 
         assert response.status_code == 200
 
@@ -105,8 +107,7 @@ class TestSearchEndpoint:
         """Test search with path_prefix filter."""
         client = TestClient(app)
         response = client.post(
-            "/search",
-            json={"query": "test", "path_prefix": ["src/", "lib/"]}
+            "/search", json={"query": "test", "path_prefix": ["src/", "lib/"]}
         )
 
         assert response.status_code == 200
@@ -154,7 +155,7 @@ class TestFileEndpoint:
         """Test /v1/file endpoint requires parameters."""
         client = TestClient(app)
         response = client.get("/file")
-    
+
         # Should require repo and path params
         assert response.status_code == 422
 
@@ -201,7 +202,7 @@ class TestAPIModels:
             top_k=20,
             max_snippet_tokens=500,
             embed_model="small",
-            score_cutoff=0.5
+            score_cutoff=0.5,
         )
 
         assert req.query == "test query"
@@ -226,8 +227,8 @@ class TestRegisterRepoEndpoint:
             json={
                 "name": "test-repo",
                 "path": str(workspace),
-                "default_embed_model": "large"
-            }
+                "default_embed_model": "large",
+            },
         )
 
         assert response.status_code == 200
@@ -243,11 +244,7 @@ class TestRegisterRepoEndpoint:
         workspace.mkdir()
 
         response = kb_api_client.post(
-            "/v1/repos",
-            json={
-                "path": str(workspace),
-                "default_embed_model": "large"
-            }
+            "/v1/repos", json={"path": str(workspace), "default_embed_model": "large"}
         )
 
         assert response.status_code == 422  # Validation error
@@ -255,11 +252,7 @@ class TestRegisterRepoEndpoint:
     def test_register_repo_missing_path(self, kb_api_client):
         """Test registration fails without path."""
         response = kb_api_client.post(
-            "/v1/repos",
-            json={
-                "name": "test-repo",
-                "default_embed_model": "large"
-            }
+            "/v1/repos", json={"name": "test-repo", "default_embed_model": "large"}
         )
 
         assert response.status_code == 422  # Validation error
@@ -270,11 +263,7 @@ class TestRegisterRepoEndpoint:
         workspace.mkdir()
 
         response = kb_api_client.post(
-            "/v1/repos",
-            json={
-                "name": "test-repo",
-                "path": str(workspace)
-            }
+            "/v1/repos", json={"name": "test-repo", "path": str(workspace)}
         )
 
         assert response.status_code == 200
@@ -291,8 +280,8 @@ class TestRegisterRepoEndpoint:
             json={
                 "name": registered_test_repo["name"],
                 "path": registered_test_repo["path"],
-                "default_embed_model": "large"
-            }
+                "default_embed_model": "large",
+            },
         )
 
         # Should either succeed (idempotent) or return error
@@ -302,7 +291,9 @@ class TestRegisterRepoEndpoint:
 class TestIndexEndpoint:
     """Test POST /v1/index endpoint for queueing file indexing."""
 
-    def test_index_files_success(self, kb_api_client, registered_test_repo, mock_pipeline):
+    def test_index_files_success(
+        self, kb_api_client, registered_test_repo, mock_pipeline
+    ):
         """Test successfully queueing files for indexing."""
         from kb.api.app import set_pipeline
 
@@ -318,8 +309,8 @@ class TestIndexEndpoint:
             json={
                 "repo": registered_test_repo["name"],
                 "files": ["file1.py", "file2.py"],
-                "incremental": True
-            }
+                "incremental": True,
+            },
         )
 
         assert response.status_code == 200
@@ -331,11 +322,7 @@ class TestIndexEndpoint:
     def test_index_files_nonexistent_repo(self, kb_api_client):
         """Test indexing files for non-existent repository."""
         response = kb_api_client.post(
-            "/v1/index",
-            json={
-                "repo": "nonexistent-repo",
-                "files": ["file.py"]
-            }
+            "/v1/index", json={"repo": "nonexistent-repo", "files": ["file.py"]}
         )
 
         assert response.status_code == 404
@@ -344,11 +331,7 @@ class TestIndexEndpoint:
     def test_index_files_empty_list(self, kb_api_client, registered_test_repo):
         """Test indexing with empty file list."""
         response = kb_api_client.post(
-            "/v1/index",
-            json={
-                "repo": registered_test_repo["name"],
-                "files": []
-            }
+            "/v1/index", json={"repo": registered_test_repo["name"], "files": []}
         )
 
         # Should still create task
@@ -358,27 +341,21 @@ class TestIndexEndpoint:
 
     def test_index_files_missing_repo_param(self, kb_api_client):
         """Test indexing without repo parameter."""
-        response = kb_api_client.post(
-            "/v1/index",
-            json={
-                "files": ["file.py"]
-            }
-        )
+        response = kb_api_client.post("/v1/index", json={"files": ["file.py"]})
 
         assert response.status_code == 422  # Validation error
 
     def test_index_files_missing_files_param(self, kb_api_client, registered_test_repo):
         """Test indexing without files parameter."""
         response = kb_api_client.post(
-            "/v1/index",
-            json={
-                "repo": registered_test_repo["name"]
-            }
+            "/v1/index", json={"repo": registered_test_repo["name"]}
         )
 
         assert response.status_code == 422  # Validation error
 
-    def test_index_files_incremental_flag(self, kb_api_client, registered_test_repo, mock_pipeline):
+    def test_index_files_incremental_flag(
+        self, kb_api_client, registered_test_repo, mock_pipeline
+    ):
         """Test incremental flag is passed correctly."""
         from kb.api.app import set_pipeline
 
@@ -392,8 +369,8 @@ class TestIndexEndpoint:
             json={
                 "repo": registered_test_repo["name"],
                 "files": ["file.py"],
-                "incremental": False
-            }
+                "incremental": False,
+            },
         )
 
         assert response.status_code == 200
@@ -402,7 +379,9 @@ class TestIndexEndpoint:
 class TestIndexStatusEndpoint:
     """Test GET /v1/index/status/{task_id} endpoint."""
 
-    def test_get_task_status_queued(self, kb_api_client, registered_test_repo, mock_pipeline):
+    def test_get_task_status_queued(
+        self, kb_api_client, registered_test_repo, mock_pipeline
+    ):
         """Test getting status of queued task."""
         from kb.api.app import set_pipeline
 
@@ -411,10 +390,7 @@ class TestIndexStatusEndpoint:
         # Queue a task
         queue_response = kb_api_client.post(
             "/v1/index",
-            json={
-                "repo": registered_test_repo["name"],
-                "files": ["file.py"]
-            }
+            json={"repo": registered_test_repo["name"], "files": ["file.py"]},
         )
         task_id = queue_response.json()["task_id"]
 
@@ -434,7 +410,9 @@ class TestIndexStatusEndpoint:
 
         assert response.status_code == 404
 
-    def test_get_task_status_structure(self, kb_api_client, registered_test_repo, mock_pipeline):
+    def test_get_task_status_structure(
+        self, kb_api_client, registered_test_repo, mock_pipeline
+    ):
         """Test status response structure."""
         from kb.api.app import set_pipeline
 
@@ -445,8 +423,8 @@ class TestIndexStatusEndpoint:
             "/v1/index",
             json={
                 "repo": registered_test_repo["name"],
-                "files": ["a.py", "b.py", "c.py"]
-            }
+                "files": ["a.py", "b.py", "c.py"],
+            },
         )
         task_id = queue_response.json()["task_id"]
 
@@ -476,7 +454,9 @@ class TestIndexTasksEndpoint:
         assert "tasks" in data
         assert isinstance(data["tasks"], list)
 
-    def test_list_tasks_with_tasks(self, kb_api_client, registered_test_repo, mock_pipeline):
+    def test_list_tasks_with_tasks(
+        self, kb_api_client, registered_test_repo, mock_pipeline
+    ):
         """Test listing tasks."""
         from kb.api.app import set_pipeline
 
@@ -484,12 +464,10 @@ class TestIndexTasksEndpoint:
 
         # Queue multiple tasks
         kb_api_client.post(
-            "/v1/index",
-            json={"repo": registered_test_repo["name"], "files": ["a.py"]}
+            "/v1/index", json={"repo": registered_test_repo["name"], "files": ["a.py"]}
         )
         kb_api_client.post(
-            "/v1/index",
-            json={"repo": registered_test_repo["name"], "files": ["b.py"]}
+            "/v1/index", json={"repo": registered_test_repo["name"], "files": ["b.py"]}
         )
 
         # List tasks
@@ -500,9 +478,11 @@ class TestIndexTasksEndpoint:
         assert "tasks" in data
         assert len(data["tasks"]) >= 2
 
-    def test_list_tasks_filtered_by_repo(self, kb_api_client, mock_kb_stores, mock_pipeline, temp_dir):
+    def test_list_tasks_filtered_by_repo(
+        self, kb_api_client, mock_kb_stores, mock_pipeline, temp_dir
+    ):
         """Test listing tasks filtered by repository."""
-        from kb.api.app import set_pipeline, set_stores
+        from kb.api.app import set_pipeline
 
         sql_store, lance_store = mock_kb_stores
         set_stores(sql_store, lance_store)
@@ -514,8 +494,12 @@ class TestIndexTasksEndpoint:
         workspace2 = temp_dir / "workspace2"
         workspace2.mkdir()
 
-        sql_store.record_repo(name="repo1", path=workspace1, default_embed_model="large")
-        sql_store.record_repo(name="repo2", path=workspace2, default_embed_model="large")
+        sql_store.record_repo(
+            name="repo1", path=workspace1, default_embed_model="large"
+        )
+        sql_store.record_repo(
+            name="repo2", path=workspace2, default_embed_model="large"
+        )
 
         # Queue tasks for each repo
         kb_api_client.post("/v1/index", json={"repo": "repo1", "files": ["a.py"]})
@@ -532,7 +516,9 @@ class TestIndexTasksEndpoint:
         for task in data["tasks"]:
             assert task["repo"] == "repo1"
 
-    def test_list_tasks_response_structure(self, kb_api_client, registered_test_repo, mock_pipeline):
+    def test_list_tasks_response_structure(
+        self, kb_api_client, registered_test_repo, mock_pipeline
+    ):
         """Test task list response structure."""
         from kb.api.app import set_pipeline
 
@@ -541,7 +527,7 @@ class TestIndexTasksEndpoint:
         # Queue a task
         kb_api_client.post(
             "/v1/index",
-            json={"repo": registered_test_repo["name"], "files": ["file.py"]}
+            json={"repo": registered_test_repo["name"], "files": ["file.py"]},
         )
 
         # List tasks

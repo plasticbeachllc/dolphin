@@ -16,11 +16,7 @@ class GraphCacheValidator:
     """Validates whether cached NetworkX graph is still current."""
 
     def __init__(
-        self,
-        db,
-        repo_id: int,
-        edge_change_threshold: int = 5,
-        ttl_minutes: int = 10
+        self, db, repo_id: int, edge_change_threshold: int = 5, ttl_minutes: int = 10
     ):
         """Initialize cache validator.
 
@@ -152,7 +148,7 @@ class GraphCacheValidator:
         commit_sha: str,
         node_count: int,
         edge_count: int,
-        reset_changes: bool = True
+        reset_changes: bool = True,
     ):
         """Update cache state after rebuild.
 

@@ -1,13 +1,11 @@
 """Unit tests for parallel file scanner."""
 
 import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
 from kb.ingest.parallel_scanner import (
     _process_file_batch,
     scan_repo_parallel,
 )
-from kb.ingest.scanner import FileCandidate
 
 
 class TestProcessFileBatch:
@@ -139,7 +137,9 @@ class TestScanRepoParallel:
 
             with patch("multiprocessing.Pool") as mock_pool:
                 # Simulate error in parallel processing
-                mock_pool.return_value.__enter__.return_value.imap_unordered.side_effect = RuntimeError("Test error")
+                mock_pool.return_value.__enter__.return_value.imap_unordered.side_effect = RuntimeError(
+                    "Test error"
+                )
 
                 with patch("kb.ingest.scanner.scan_repo") as mock_sequential:
                     mock_sequential.return_value = []

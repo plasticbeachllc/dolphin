@@ -1,9 +1,7 @@
 """Graph store wrapper for graph intelligence operations."""
 
 from typing import List, Optional
-import sqlite3
 from contextlib import closing
-from datetime import datetime
 
 from kb.store.graph_store import GraphStore as BaseGraphStore
 from .models import GraphNode, GraphEdge, GraphMetrics
@@ -173,27 +171,30 @@ class GraphStore:
 
         # Convert to GraphNode objects
         from .models import NodeType
+
         result = []
         for node_data in nodes:
             try:
-                result.append(GraphNode(
-                    id=node_data["id"],
-                    repo_id=node_data["repo_id"],
-                    node_type=NodeType(node_data["node_type"]),
-                    name=node_data["name"],
-                    qualified_name=node_data["qualified_name"],
-                    file_path=file_path,
-                    start_line=node_data["start_line"],
-                    end_line=node_data["end_line"],
-                    language=node_data["language"],
-                    signature=node_data.get("signature"),
-                    docstring=node_data.get("docstring"),
-                    metadata={
-                        "file_id": node_data["file_id"],
-                        "commit_sha": node_data["commit_sha"],
-                        "branch": node_data["branch"],
-                    }
-                ))
+                result.append(
+                    GraphNode(
+                        id=node_data["id"],
+                        repo_id=node_data["repo_id"],
+                        node_type=NodeType(node_data["node_type"]),
+                        name=node_data["name"],
+                        qualified_name=node_data["qualified_name"],
+                        file_path=file_path,
+                        start_line=node_data["start_line"],
+                        end_line=node_data["end_line"],
+                        language=node_data["language"],
+                        signature=node_data.get("signature"),
+                        docstring=node_data.get("docstring"),
+                        metadata={
+                            "file_id": node_data["file_id"],
+                            "commit_sha": node_data["commit_sha"],
+                            "branch": node_data["branch"],
+                        },
+                    )
+                )
             except (KeyError, ValueError):
                 # Skip malformed nodes
                 continue
@@ -213,19 +214,22 @@ class GraphStore:
 
         # Convert to GraphEdge objects
         from .models import EdgeType
+
         result = []
         for edge_data in edges_data:
             try:
-                result.append(GraphEdge(
-                    source_id=edge_data["source_node_id"],
-                    target_id=edge_data["target_node_id"],
-                    edge_type=EdgeType(edge_data["edge_type"]),
-                    weight=1.0,
-                    attributes={
-                        "line_number": edge_data.get("line_number"),
-                        "is_direct": edge_data.get("is_direct"),
-                    }
-                ))
+                result.append(
+                    GraphEdge(
+                        source_id=edge_data["source_node_id"],
+                        target_id=edge_data["target_node_id"],
+                        edge_type=EdgeType(edge_data["edge_type"]),
+                        weight=1.0,
+                        attributes={
+                            "line_number": edge_data.get("line_number"),
+                            "is_direct": edge_data.get("is_direct"),
+                        },
+                    )
+                )
             except (KeyError, ValueError):
                 # Skip malformed edges
                 continue
@@ -246,7 +250,7 @@ class GraphStore:
         with self.base_store._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 "SELECT id FROM files WHERE path = ? AND repo_id = ?",
-                (file_path, repo_id)
+                (file_path, repo_id),
             )
             row = cur.fetchone()
             if not row:
@@ -258,7 +262,7 @@ class GraphStore:
                 # Delete nodes (edges will be cascaded)
                 cur.execute(
                     "DELETE FROM code_nodes WHERE file_id = ? AND repo_id = ?",
-                    (file_id, repo_id)
+                    (file_id, repo_id),
                 )
                 deleted_count = cur.rowcount
                 conn.commit()

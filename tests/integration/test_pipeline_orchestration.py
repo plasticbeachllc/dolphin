@@ -3,7 +3,6 @@
 import pytest
 import subprocess
 from pathlib import Path
-import tempfile
 
 from kb.ingest.pipeline import IngestionPipeline
 from kb.store import LanceDBStore, SQLiteMetadataStore
@@ -79,8 +78,14 @@ CREATE TABLE products (
 """)
 
         # Commit files to git
-        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
+            check=True,
+            capture_output=True,
+        )
 
         # Setup pipeline
         db_path = temp_dir / "test.db"
@@ -89,36 +94,33 @@ CREATE TABLE products (
 
         lancedb_store = LanceDBStore("memory://test_pipeline")
         config = KBConfig(
-            default_embed_model="small",
-            ignore=["*.pyc", "__pycache__/*"]
+            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
         )
 
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         # Register repository
         metadata_store.record_repo(
-            name="test-repo",
-            path=repo_path,
-            default_embed_model="small"
+            name="test-repo", path=repo_path, default_embed_model="small"
         )
 
         # Run indexing
         result = pipeline.index("test-repo", dry_run=False, force=True)
 
         # Verify all file types were processed
-        assert result['files_indexed'] >= 5
-        assert result['chunks_indexed'] > 0
+        assert result["files_indexed"] >= 5
+        assert result["chunks_indexed"] > 0
 
         # Verify files were tracked
         repo = metadata_store.get_repo_by_name("test-repo")
         assert repo is not None
-        files = metadata_store.get_all_files_for_repo(repo['id'])
-        file_extensions = {Path(f['path']).suffix for f in files}
+        files = metadata_store.get_all_files_for_repo(repo["id"])
+        file_extensions = {Path(f["path"]).suffix for f in files}
 
         # Should have processed multiple file types
         assert len(file_extensions) >= 4
-        assert '.py' in file_extensions
-        assert '.md' in file_extensions
+        assert ".py" in file_extensions
+        assert ".md" in file_extensions
 
     def test_pipeline_chunker_selection(self, temp_dir: Path):
         """Test that pipeline selects correct chunker for each file type."""
@@ -152,8 +154,14 @@ def test_function():
 """)
 
         # Commit files
-        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
+            check=True,
+            capture_output=True,
+        )
 
         # Setup pipeline
         db_path = temp_dir / "metadata.db"
@@ -167,9 +175,7 @@ def test_function():
 
         # Register and index
         metadata_store.record_repo(
-            name="metadata-repo",
-            path=repo_path,
-            default_embed_model="small"
+            name="metadata-repo", path=repo_path, default_embed_model="small"
         )
 
         result = pipeline.index("metadata-repo", dry_run=False, force=True)
@@ -177,16 +183,16 @@ def test_function():
         # Verify metadata was preserved
         repo = metadata_store.get_repo_by_name("metadata-repo")
         assert repo is not None
-        files = metadata_store.get_all_files_for_repo(repo['id'])
+        files = metadata_store.get_all_files_for_repo(repo["id"])
         assert len(files) > 0
 
-        test_file_metadata = [f for f in files if 'test.py' in f['path']]
+        test_file_metadata = [f for f in files if "test.py" in f["path"]]
         assert len(test_file_metadata) > 0
 
         # Check metadata fields - get_all_files_for_repo only returns id and path
         file_meta = test_file_metadata[0]
-        assert 'path' in file_meta
-        assert 'id' in file_meta
+        assert "path" in file_meta
+        assert "id" in file_meta
 
     def test_pipeline_handles_mixed_content(self, temp_dir: Path):
         """Test pipeline handles repository with mixed content (code, docs, data)."""
@@ -202,13 +208,21 @@ def test_function():
         # Create various files
         (repo_path / "src" / "main.py").write_text("def main(): pass")
         (repo_path / "src" / "utils.py").write_text("def helper(): return True")
-        (repo_path / "docs" / "README.md").write_text("# Project\n\nDocumentation here.")
+        (repo_path / "docs" / "README.md").write_text(
+            "# Project\n\nDocumentation here."
+        )
         (repo_path / "docs" / "API.md").write_text("# API\n\n## Endpoints")
         (repo_path / "data" / "config.json").write_text('{"key": "value"}')
 
         # Commit files
-        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
+            check=True,
+            capture_output=True,
+        )
 
         # Setup and run pipeline
         db_path = temp_dir / "mixed.db"
@@ -221,25 +235,23 @@ def test_function():
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         metadata_store.record_repo(
-            name="mixed-repo",
-            path=repo_path,
-            default_embed_model="small"
+            name="mixed-repo", path=repo_path, default_embed_model="small"
         )
 
         result = pipeline.index("mixed-repo", dry_run=False, force=True)
 
         # Should have indexed files from multiple directories
-        assert result['files_indexed'] >= 4
+        assert result["files_indexed"] >= 4
 
         repo = metadata_store.get_repo_by_name("mixed-repo")
         assert repo is not None
-        files = metadata_store.get_all_files_for_repo(repo['id'])
+        files = metadata_store.get_all_files_for_repo(repo["id"])
         assert len(files) >= 4
 
         # Verify files from different directories
-        paths = [f['path'] for f in files]
-        assert any('src' in p for p in paths)
-        assert any('docs' in p for p in paths)
+        paths = [f["path"] for f in files]
+        assert any("src" in p for p in paths)
+        assert any("docs" in p for p in paths)
 
     def test_pipeline_error_recovery(self, temp_dir: Path):
         """Test pipeline continues processing after encountering errors."""
@@ -249,12 +261,18 @@ def test_function():
 
         # Create mix of valid and problematic files
         (repo_path / "valid.py").write_text("def valid(): return True")
-        (repo_path / "binary.dat").write_bytes(b'\x00\x01\x02\x03\xff\xfe')
+        (repo_path / "binary.dat").write_bytes(b"\x00\x01\x02\x03\xff\xfe")
         (repo_path / "another_valid.py").write_text("def another(): return False")
 
         # Commit files
-        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
+            check=True,
+            capture_output=True,
+        )
 
         # Setup pipeline
         db_path = temp_dir / "error.db"
@@ -267,16 +285,14 @@ def test_function():
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         metadata_store.record_repo(
-            name="error-repo",
-            path=repo_path,
-            default_embed_model="small"
+            name="error-repo", path=repo_path, default_embed_model="small"
         )
 
         # Should complete despite binary file
         result = pipeline.index("error-repo", dry_run=False, force=True)
 
         # Should have indexed the valid files
-        assert result['files_indexed'] >= 2
+        assert result["files_indexed"] >= 2
 
     def test_pipeline_respects_config_options(self, temp_dir: Path):
         """Test pipeline respects configuration options."""
@@ -290,11 +306,17 @@ def test_function():
         # Create ignored file
         pycache = repo_path / "__pycache__"
         pycache.mkdir()
-        (pycache / "test.pyc").write_bytes(b'')
+        (pycache / "test.pyc").write_bytes(b"")
 
         # Commit files
-        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
+            check=True,
+            capture_output=True,
+        )
 
         # Setup pipeline with ignore patterns
         db_path = temp_dir / "config.db"
@@ -303,16 +325,13 @@ def test_function():
 
         lancedb_store = LanceDBStore("memory://config_test")
         config = KBConfig(
-            default_embed_model="small",
-            ignore=["*.pyc", "__pycache__/*"]
+            default_embed_model="small", ignore=["*.pyc", "__pycache__/*"]
         )
 
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         metadata_store.record_repo(
-            name="config-repo",
-            path=repo_path,
-            default_embed_model="small"
+            name="config-repo", path=repo_path, default_embed_model="small"
         )
 
         result = pipeline.index("config-repo", dry_run=False, force=True)
@@ -320,12 +339,12 @@ def test_function():
         # Verify ignored files were not indexed
         repo = metadata_store.get_repo_by_name("config-repo")
         assert repo is not None
-        files = metadata_store.get_all_files_for_repo(repo['id'])
-        paths = [f['path'] for f in files]
+        files = metadata_store.get_all_files_for_repo(repo["id"])
+        paths = [f["path"] for f in files]
 
-        assert not any('__pycache__' in p for p in paths)
-        assert not any('.pyc' in p for p in paths)
-        assert any('included.py' in p for p in paths)
+        assert not any("__pycache__" in p for p in paths)
+        assert not any(".pyc" in p for p in paths)
+        assert any("included.py" in p for p in paths)
 
 
 class TestPipelineParallelization:
@@ -358,9 +377,7 @@ def function_{i}():
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         metadata_store.record_repo(
-            name="perf-repo",
-            path=repo_path,
-            default_embed_model="small"
+            name="perf-repo", path=repo_path, default_embed_model="small"
         )
 
         # Measure performance
@@ -369,7 +386,7 @@ def function_{i}():
         elapsed = time.time() - start
 
         # Should process files at reasonable rate
-        files_per_second = result['files_indexed'] / elapsed
+        files_per_second = result["files_indexed"] / elapsed
         assert files_per_second > 5  # At least 5 files/second
 
     def test_pipeline_handles_large_files(self, temp_dir: Path):
@@ -383,8 +400,14 @@ def function_{i}():
         (repo_path / "large.py").write_text(large_content)
 
         # Commit files
-        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"],
+            check=True,
+            capture_output=True,
+        )
 
         # Setup pipeline
         db_path = temp_dir / "large.db"
@@ -397,15 +420,13 @@ def function_{i}():
         pipeline = IngestionPipeline(config, lancedb_store, metadata_store)
 
         metadata_store.record_repo(
-            name="large-repo",
-            path=repo_path,
-            default_embed_model="small"
+            name="large-repo", path=repo_path, default_embed_model="small"
         )
 
         # Should handle large file
         result = pipeline.index("large-repo", dry_run=False, force=True)
 
-        assert result['files_indexed'] >= 1
+        assert result["files_indexed"] >= 1
         # chunks_indexed counts unique hashes, not total occurrences
         # The file has 500 functions which create many chunks, but they may deduplicate
-        assert result['chunks_indexed'] >= 1
+        assert result["chunks_indexed"] >= 1

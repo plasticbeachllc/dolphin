@@ -2,7 +2,7 @@
 
 import os
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 from kb.embeddings.provider import (
     EmbeddingProvider,
@@ -45,7 +45,7 @@ class TestOpenAIEmbeddingProvider:
 
     def test_init_with_api_key(self):
         """Test initialization with explicit API key."""
-        with patch('openai.OpenAI') as mock_openai_class:
+        with patch("openai.OpenAI") as mock_openai_class:
             provider = OpenAIEmbeddingProvider(api_key="test-key-123")
 
             assert provider.api_key == "test-key-123"
@@ -55,7 +55,7 @@ class TestOpenAIEmbeddingProvider:
     def test_init_with_env_var(self):
         """Test initialization reading API key from environment."""
         with patch.dict(os.environ, {"OPENAI_API_KEY": "env-key-456"}):
-            with patch('openai.OpenAI') as mock_openai_class:
+            with patch("openai.OpenAI") as mock_openai_class:
                 provider = OpenAIEmbeddingProvider()
 
                 assert provider.api_key == "env-key-456"
@@ -76,7 +76,7 @@ class TestOpenAIEmbeddingProvider:
             Mock(embedding=[0.2] * 1536),
         ]
 
-        with patch('openai.OpenAI') as mock_openai_class:
+        with patch("openai.OpenAI") as mock_openai_class:
             mock_client = Mock()
             mock_client.embeddings.create.return_value = mock_response
             mock_openai_class.return_value = mock_client
@@ -91,8 +91,7 @@ class TestOpenAIEmbeddingProvider:
 
             # Verify API call
             mock_client.embeddings.create.assert_called_once_with(
-                input=["text1", "text2"],
-                model="text-embedding-3-small"
+                input=["text1", "text2"], model="text-embedding-3-small"
             )
 
     def test_embed_texts_multiple_batches(self):
@@ -104,21 +103,22 @@ class TestOpenAIEmbeddingProvider:
         def create_mock_response(batch_size):
             mock_response = Mock()
             mock_response.data = [
-                Mock(embedding=[float(i)] * 1536)
-                for i in range(batch_size)
+                Mock(embedding=[float(i)] * 1536) for i in range(batch_size)
             ]
             return mock_response
 
-        with patch('openai.OpenAI') as mock_openai_class:
+        with patch("openai.OpenAI") as mock_openai_class:
             mock_client = Mock()
             mock_client.embeddings.create.side_effect = [
                 create_mock_response(100),  # First batch
                 create_mock_response(100),  # Second batch
-                create_mock_response(50),   # Third batch
+                create_mock_response(50),  # Third batch
             ]
             mock_openai_class.return_value = mock_client
 
-            provider = OpenAIEmbeddingProvider(api_key="test-key", batch_size=100, validate_key=False)
+            provider = OpenAIEmbeddingProvider(
+                api_key="test-key", batch_size=100, validate_key=False
+            )
             result = provider.embed_texts("small", texts)
 
             assert len(result) == 250
@@ -129,7 +129,7 @@ class TestOpenAIEmbeddingProvider:
         mock_response = Mock()
         mock_response.data = [Mock(embedding=[0.5] * 3072)]
 
-        with patch('openai.OpenAI') as mock_openai_class:
+        with patch("openai.OpenAI") as mock_openai_class:
             mock_client = Mock()
             mock_client.embeddings.create.return_value = mock_response
             mock_openai_class.return_value = mock_client
@@ -139,13 +139,12 @@ class TestOpenAIEmbeddingProvider:
 
             assert len(result[0]) == 3072
             mock_client.embeddings.create.assert_called_once_with(
-                input=["test"],
-                model="text-embedding-3-large"
+                input=["test"], model="text-embedding-3-large"
             )
 
     def test_embed_texts_empty_list(self):
         """Test embedding empty list returns empty list."""
-        with patch('openai.OpenAI') as mock_openai_class:
+        with patch("openai.OpenAI") as mock_openai_class:
             mock_client = Mock()
             mock_openai_class.return_value = mock_client
 
@@ -160,7 +159,7 @@ class TestOpenAIEmbeddingProvider:
         mock_response = Mock()
         mock_response.data = [Mock(embedding=[0.1] * 1536)]
 
-        with patch('openai.OpenAI') as mock_openai_class:
+        with patch("openai.OpenAI") as mock_openai_class:
             mock_client = Mock()
             # Fail twice, then succeed
             mock_client.embeddings.create.side_effect = [
@@ -188,7 +187,7 @@ class TestProviderFactory:
 
     def test_create_openai_provider(self):
         """Test creating OpenAI provider."""
-        with patch('openai.OpenAI'):
+        with patch("openai.OpenAI"):
             provider = create_provider("openai", api_key="test-key")
             assert isinstance(provider, OpenAIEmbeddingProvider)
 
@@ -200,7 +199,7 @@ class TestProviderFactory:
     def test_set_default_provider(self):
         """Test setting global default provider."""
         # Create a custom provider
-        with patch('openai.OpenAI'):
+        with patch("openai.OpenAI"):
             custom_provider = OpenAIEmbeddingProvider(api_key="test-key")
             set_default_provider(custom_provider)
 
@@ -217,8 +216,7 @@ class TestIntegration:
     """Integration tests (can be skipped if no API key available)."""
 
     @pytest.mark.skipif(
-        not os.environ.get("OPENAI_API_KEY"),
-        reason="OPENAI_API_KEY not set"
+        not os.environ.get("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set"
     )
     def test_real_openai_api(self):
         """Test real OpenAI API call (requires valid API key)."""
@@ -231,5 +229,6 @@ class TestIntegration:
         assert not all(val == 0.0 for val in result[0])
         # Check that embeddings are normalized (roughly)
         import math
-        magnitude = math.sqrt(sum(val ** 2 for val in result[0]))
+
+        magnitude = math.sqrt(sum(val**2 for val in result[0]))
         assert 0.9 < magnitude < 1.1  # OpenAI embeddings are normalized

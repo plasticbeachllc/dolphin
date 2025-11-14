@@ -2,7 +2,6 @@
 
 import pytest
 import subprocess
-from pathlib import Path
 from dataclasses import dataclass
 from kb.ingest._helpers import (
     build_desired_map,
@@ -17,6 +16,7 @@ from kb.ingest._helpers import (
 @dataclass
 class ChunkTestData:
     """Test chunk for testing."""
+
     text: str
     text_hash: str
     start_line: int
@@ -119,6 +119,7 @@ class TestBuildDesiredMap:
 
     def test_build_desired_map_missing_text_hash(self):
         """Test chunk without text_hash is skipped."""
+
         @dataclass
         class ChunkNoHash:
             text: str
@@ -132,9 +133,7 @@ class TestBuildDesiredMap:
 
     def test_build_desired_map_none_text_hash(self):
         """Test chunk with None text_hash is skipped."""
-        chunk = ChunkTestData(
-            text="code", text_hash=None, start_line=1, end_line=2
-        )
+        chunk = ChunkTestData(text="code", text_hash=None, start_line=1, end_line=2)
         result = build_desired_map([chunk])
 
         assert result == {}
@@ -189,9 +188,7 @@ class TestGitHelpers:
         )
 
         # Get changed files
-        changed = git_changed_files_modified_added(
-            git_repo, initial_commit, "HEAD"
-        )
+        changed = git_changed_files_modified_added(git_repo, initial_commit, "HEAD")
 
         assert "file1.txt" in changed
         assert "file2.txt" in changed
@@ -286,9 +283,7 @@ class TestGitHelpers:
     def test_git_helpers_invalid_commit(self, git_repo):
         """Test that invalid commit raises error."""
         with pytest.raises(RuntimeError, match="Failed to get git diff"):
-            git_changed_files_modified_added(
-                git_repo, "invalid_commit", "HEAD"
-            )
+            git_changed_files_modified_added(git_repo, "invalid_commit", "HEAD")
 
     def test_git_helpers_nonexistent_repo(self, tmp_path):
         """Test that non-git directory raises error."""
@@ -340,6 +335,7 @@ class TestRepresentativeTextForHash:
 
     def test_representative_text_chunk_without_hash(self):
         """Test chunk without text_hash attribute is skipped."""
+
         @dataclass
         class ChunkNoHash:
             text: str

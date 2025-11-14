@@ -20,9 +20,24 @@ def e2e_test_repo() -> Generator[Path, None, None]:
 
         # Initialize as git repository
         subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True, capture_output=True)
-        subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"],
+            cwd=repo_dir,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test User"],
+            cwd=repo_dir,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "commit.gpgsign", "false"],
+            cwd=repo_dir,
+            check=True,
+            capture_output=True,
+        )
 
         # Create sample Python files
         (repo_dir / "main.py").write_text("""
@@ -74,8 +89,15 @@ This is a sample authentication project.
 """)
 
         # Commit all files
-        subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
-        subprocess.run(["git", "commit", "--no-verify", "-m", "Initial commit"], cwd=repo_dir, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "add", "."], cwd=repo_dir, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "commit", "--no-verify", "-m", "Initial commit"],
+            cwd=repo_dir,
+            check=True,
+            capture_output=True,
+        )
 
         yield repo_dir
 
@@ -98,8 +120,7 @@ def e2e_kb_setup(e2e_test_repo: Path) -> Generator[dict, None, None]:
 
         # Create config
         config = KBConfig(
-            default_embed_model="small",
-            ignore=["*.pyc", "__pycache__/*", ".git/*"]
+            default_embed_model="small", ignore=["*.pyc", "__pycache__/*", ".git/*"]
         )
 
         # Create pipeline
@@ -107,16 +128,14 @@ def e2e_kb_setup(e2e_test_repo: Path) -> Generator[dict, None, None]:
 
         # Register repository
         metadata_store.record_repo(
-            name="test-repo",
-            path=e2e_test_repo,
-            default_embed_model="small"
+            name="test-repo", path=e2e_test_repo, default_embed_model="small"
         )
 
         yield {
-            'pipeline': pipeline,
-            'metadata_store': metadata_store,
-            'lancedb_store': lancedb_store,
-            'config': config,
-            'repo_path': e2e_test_repo,
-            'repo_name': 'test-repo'
+            "pipeline": pipeline,
+            "metadata_store": metadata_store,
+            "lancedb_store": lancedb_store,
+            "config": config,
+            "repo_path": e2e_test_repo,
+            "repo_name": "test-repo",
         }

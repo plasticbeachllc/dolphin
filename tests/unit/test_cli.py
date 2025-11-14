@@ -1,7 +1,6 @@
 """Comprehensive unit tests for CLI commands."""
 
 import pytest
-import subprocess
 from pathlib import Path
 from typer.testing import CliRunner
 from kb.ingest.cli import app, _read_config_template, _build_pipeline
@@ -165,7 +164,13 @@ class TestAddRepoCommand:
 
         result = runner.invoke(
             app,
-            ["add-repo", "test-repo", str(git_repo), "--default-embed-model", "invalid"],
+            [
+                "add-repo",
+                "test-repo",
+                str(git_repo),
+                "--default-embed-model",
+                "invalid",
+            ],
         )
 
         assert result.exit_code == 2
@@ -218,7 +223,9 @@ class TestIndexCommand:
 
     def test_index_flags_combination(self, tmp_path):
         """Test index with multiple flags combined."""
-        result = runner.invoke(app, ["index", "test-repo", "--dry-run", "--force", "--full"])
+        result = runner.invoke(
+            app, ["index", "test-repo", "--dry-run", "--force", "--full"]
+        )
         # Should accept all flags
         assert result.exit_code in [0, 1, 2]  # Various failure modes are ok
 
@@ -335,7 +342,7 @@ class TestBuildPipeline:
         """Test building pipeline with OpenAI provider and API key."""
         from unittest.mock import patch
         from kb.embeddings.provider import OpenAIEmbeddingProvider
-        
+
         config = KBConfig(
             store_root=tmp_path,
             embedding_provider="openai",
@@ -345,14 +352,18 @@ class TestBuildPipeline:
         monkeypatch.setenv("TEST_API_KEY", "test-key-12345")
 
         # Mock create_provider to avoid real API validation
-        with patch('kb.ingest.cli.create_provider') as mock_create:
-            mock_provider = OpenAIEmbeddingProvider(api_key="test-key-12345", validate_key=False)
+        with patch("kb.ingest.cli.create_provider") as mock_create:
+            mock_provider = OpenAIEmbeddingProvider(
+                api_key="test-key-12345", validate_key=False
+            )
             mock_create.return_value = mock_provider
-            
+
             pipeline = _build_pipeline(config)
 
             assert pipeline is not None
-            mock_create.assert_called_once_with("openai", api_key="test-key-12345", batch_size=100)
+            mock_create.assert_called_once_with(
+                "openai", api_key="test-key-12345", batch_size=100
+            )
 
 
 class TestConfigTemplate:

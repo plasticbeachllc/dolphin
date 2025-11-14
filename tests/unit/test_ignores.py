@@ -1,7 +1,5 @@
 """Unit tests for ignore pattern handling."""
 
-import pytest
-from pathlib import Path
 from kb.ignores import (
     DEFAULT_IGNORE_PATTERNS,
     build_ignore_set,
@@ -268,9 +266,9 @@ class TestIgnoreExceptions:
         """Test that build_ignore_set properly handles exceptions."""
         patterns = {".env", "*.log"}
         exceptions = {".env.example"}
-        
+
         result = build_ignore_set(patterns, exceptions)
-        
+
         # Should include the basic patterns
         assert ".env" in result
         assert "*.log" in result
@@ -282,18 +280,20 @@ class TestIgnoreExceptions:
         """Test that exceptions are properly handled with simple patterns."""
         patterns = {"temp", "logs"}
         exceptions = {"logs/important.txt"}
-        
+
         result = build_ignore_set(patterns, exceptions)
-        
+
         # Patterns should be expanded
         assert "temp" in result
         assert "**/temp" in result
         assert "logs" in result
         assert "**/logs" in result
-        
+
         # Exception should remove pattern parts but logs/important.txt is an exception
         assert "logs/important.txt" not in result  # Exception NOT in ignore patterns
-        assert "**/logs/important.txt" not in result  # Exception expansion also NOT in patterns
+        assert (
+            "**/logs/important.txt" not in result
+        )  # Exception expansion also NOT in patterns
         # But the base "logs" pattern should still be there (to ignore other log files)
         assert "logs" in result
         assert "**/logs" in result
@@ -332,20 +332,20 @@ exceptions = [".env.example"]
     def test_config_ignore_exceptions_integration(self):
         """Test that config-level ignore exceptions work."""
         from kb.config import KBConfig
-        
+
         config_data = {
             "ignore": [".env", "*.log"],
-            "ignore_exceptions": [".env.example"]
+            "ignore_exceptions": [".env.example"],
         }
-        
+
         config = KBConfig.from_mapping(config_data)
-        
+
         assert ".env" in config.ignore
         assert ".env.example" in config.ignore_exceptions
-        
+
         # Build ignore set with config exceptions
         result = build_ignore_set(config.ignore, config.ignore_exceptions)
-        
+
         # Should include default patterns
         assert ".env" in result
         # But exception should be excluded
@@ -356,19 +356,19 @@ exceptions = [".env.example"]
         """Test handling multiple exceptions."""
         patterns = {".env", "*.conf", "secrets"}
         exceptions = {".env.example", "*.conf.template", "secrets/README"}
-        
+
         result = build_ignore_set(patterns, exceptions)
-        
+
         # All patterns should be present
         assert ".env" in result
         assert "*.conf" in result
         assert "secrets" in result
-        
+
         # All exceptions should be excluded
         assert ".env.example" not in result
         assert "*.conf.template" not in result
         assert "secrets/README" not in result
-        
+
         # Exception expansions should also be excluded
         assert "**/.env.example" not in result
         assert "**/*.conf.template" not in result

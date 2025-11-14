@@ -8,7 +8,9 @@ import typer
 try:
     import yaml
 except ModuleNotFoundError as exc:  # pragma: no cover - should be in deps
-    raise RuntimeError("PyYAML is required. Install with `uv pip install pyyaml`." ) from exc
+    raise RuntimeError(
+        "PyYAML is required. Install with `uv pip install pyyaml`."
+    ) from exc
 
 from .persona_utils import (
     Persona,
@@ -35,8 +37,8 @@ app = typer.Typer(
     help="Persona toolkit for previewing and generating Continue or KiloCode configs.",
 )
 
-PERSONAS_SUBDIR = 'cast'
-SRC_SUBDIR = 'src'
+PERSONAS_SUBDIR = "cast"
+SRC_SUBDIR = "src"
 
 
 def _read_overlay(overlay: Optional[Path], overlay_text: Optional[str]) -> str:
@@ -80,7 +82,7 @@ def _list_personas(personas_root: Path) -> List[Persona]:
 
     typer.echo(f"Personas in {personas_root}:")
     for directory in directories:
-        if directory.name.startswith(".") or directory.name.startswith('_'):
+        if directory.name.startswith(".") or directory.name.startswith("_"):
             continue
         try:
             persona = load_persona(directory)
@@ -145,7 +147,11 @@ def preview(
         raise typer.Exit()
 
     if not persona_id:
-        typer.secho("error: --id is required unless --list is used", fg=typer.colors.RED, err=True)
+        typer.secho(
+            "error: --id is required unless --list is used",
+            fg=typer.colors.RED,
+            err=True,
+        )
         raise typer.Exit(code=2)
 
     persona_dir = personas_root / PERSONAS_SUBDIR / persona_id
@@ -261,13 +267,21 @@ def generate(
     if target_format is not None:
         # New --target-format option used
         if kilocode or continue_compat:
-            typer.secho("error: --target-format cannot be used with --kilocode or --continue", fg=typer.colors.RED, err=True)
+            typer.secho(
+                "error: --target-format cannot be used with --kilocode or --continue",
+                fg=typer.colors.RED,
+                err=True,
+            )
             raise typer.Exit(code=2)
-        
+
         if target_format not in ["kilocode", "continue"]:
-            typer.secho("error: --target-format must be 'kilocode' or 'continue'", fg=typer.colors.RED, err=True)
+            typer.secho(
+                "error: --target-format must be 'kilocode' or 'continue'",
+                fg=typer.colors.RED,
+                err=True,
+            )
             raise typer.Exit(code=2)
-        
+
         # Set the corresponding flags for backward compatibility with existing logic
         if target_format == "kilocode":
             kilocode = True
@@ -276,16 +290,24 @@ def generate(
     else:
         # Legacy flags used
         if not (kilocode or continue_compat):
-            typer.secho("error: must specify either --kilocode, --continue, or --target-format", fg=typer.colors.RED, err=True)
+            typer.secho(
+                "error: must specify either --kilocode, --continue, or --target-format",
+                fg=typer.colors.RED,
+                err=True,
+            )
             raise typer.Exit(code=2)
-        
+
         if kilocode and continue_compat:
-            typer.secho("error: --kilocode and --continue are mutually exclusive", fg=typer.colors.RED, err=True)
+            typer.secho(
+                "error: --kilocode and --continue are mutually exclusive",
+                fg=typer.colors.RED,
+                err=True,
+            )
             raise typer.Exit(code=2)
-        
+
         # Set target_format based on flags
         target_format = "kilocode" if kilocode else "continue"
-    
+
     # Determine output paths - Both formats output to private directories
     if out is None:
         if target_format == "kilocode":
@@ -303,7 +325,11 @@ def generate(
         raise typer.Exit(code=2) from exc
 
     if not directories:
-        typer.secho(f"error: no personas found in {personas_root}", fg=typer.colors.RED, err=True)
+        typer.secho(
+            f"error: no personas found in {personas_root}",
+            fg=typer.colors.RED,
+            err=True,
+        )
         raise typer.Exit(code=2)
 
     # Load the shared guardrails file once
@@ -348,7 +374,7 @@ def generate(
             model=persona.provider_model,
             budget=persona.token_budget,
         )
-        
+
         # Store compiled message for both generators
         compiled_messages[persona.id] = compiled
 
@@ -375,69 +401,84 @@ def generate(
                 compiled_messages,
                 shared_guardrails,
                 out.parent if out.parent != Path(".") else Path("."),
-                dry_run=dry_run
+                dry_run=dry_run,
             )
-            
+
             if dry_run:
-                typer.echo(f"(dry-run) Would generate KiloCode config with {result['modes_count']} modes")
+                typer.echo(
+                    f"(dry-run) Would generate KiloCode config with {result['modes_count']} modes"
+                )
                 typer.echo(f"(dry-run) Would write to: {result['output_directory']}")
-                for file_path in result['generated_files']:
+                for file_path in result["generated_files"]:
                     typer.echo(f"  - {file_path}")
             else:
-                typer.echo(f"Generated KiloCode config with {result['modes_count']} modes")
+                typer.echo(
+                    f"Generated KiloCode config with {result['modes_count']} modes"
+                )
                 typer.echo(f"Configuration written to: {result['output_directory']}")
-                
+
                 # Validate generated configurations
                 validation_errors = []
                 for persona in personas_list:
-                    config_file = Path(result['output_directory']) / "modes" / f"{persona.id}.json"
+                    config_file = (
+                        Path(result["output_directory"])
+                        / "modes"
+                        / f"{persona.id}.json"
+                    )
                     errors = validate_kilocode_config(config_file)
                     validation_errors.extend(errors)
-                
+
                 if validation_errors:
                     typer.secho("Validation warnings:", fg=typer.colors.YELLOW)
                     for error in validation_errors:
                         typer.secho(f"  - {error}", fg=typer.colors.YELLOW)
                 else:
-                    typer.secho("✓ All generated configurations validated successfully", fg=typer.colors.GREEN)
-            
+                    typer.secho(
+                        "✓ All generated configurations validated successfully",
+                        fg=typer.colors.GREEN,
+                    )
+
             if manifest:
                 # Create manifest entries with KiloCode-specific data
                 manifest_entries = []
                 for persona in personas_list:
-                    manifest_entries.append({
-                        "id": persona.id,
-                        "name": persona.name,
-                        "version": persona.version,
-                        "provider": persona.provider_kind,
-                        "model": persona.provider_model,
-                        "token_budget": persona.token_budget,
-                        "path": str(persona.path),
-                        "target_format": "kilocode",
-                        "config_file": f"modes/{persona.id}.json",
-                        "instructions_file": f"instructions/{persona.id}-instructions.md"
-                    })
-                
+                    manifest_entries.append(
+                        {
+                            "id": persona.id,
+                            "name": persona.name,
+                            "version": persona.version,
+                            "provider": persona.provider_kind,
+                            "model": persona.provider_model,
+                            "token_budget": persona.token_budget,
+                            "path": str(persona.path),
+                            "target_format": "kilocode",
+                            "config_file": f"modes/{persona.id}.json",
+                            "instructions_file": f"instructions/{persona.id}-instructions.md",
+                        }
+                    )
+
                 write_json(manifest, manifest_entries, dry_run=dry_run)
-                
+
         except KiloCodeError as exc:
-            typer.secho(f"error: KiloCode generation failed: {exc}", fg=typer.colors.RED, err=True)
+            typer.secho(
+                f"error: KiloCode generation failed: {exc}",
+                fg=typer.colors.RED,
+                err=True,
+            )
             raise typer.Exit(code=2) from exc
-    
+
     elif target_format == "continue":
         # Generate Continue configuration
         try:
             target_dir = out.parent if out.parent != Path(".") else Path(".")
             if dry_run:
                 result = write_continue_config(
-                    personas_list,
-                    compiled_messages,
-                    target_dir,
-                    manifest,
-                    dry_run=True
+                    personas_list, compiled_messages, target_dir, manifest, dry_run=True
                 )
-                typer.echo(yaml.safe_dump(result['config_payload'], sort_keys=False))
-                typer.echo(f"(dry-run) Would write {result['models_count']} models to {result['output_file']}")
+                typer.echo(yaml.safe_dump(result["config_payload"], sort_keys=False))
+                typer.echo(
+                    f"(dry-run) Would write {result['models_count']} models to {result['output_file']}"
+                )
                 if manifest:
                     typer.echo(f"(dry-run) Would write manifest to {manifest}")
             else:
@@ -446,24 +487,32 @@ def generate(
                     compiled_messages,
                     target_dir,
                     manifest,
-                    dry_run=False
+                    dry_run=False,
                 )
-                typer.echo(f"Wrote {result['models_count']} models to {result['output_file']}")
-                if manifest and result['manifest_file']:
+                typer.echo(
+                    f"Wrote {result['models_count']} models to {result['output_file']}"
+                )
+                if manifest and result["manifest_file"]:
                     typer.echo(f"Wrote manifest to {result['manifest_file']}")
-                
+
                 # Validate generated configuration
-                output_file = Path(result['output_file'])
+                output_file = Path(result["output_file"])
                 validation_errors = validate_continue_config(output_file)
                 if validation_errors:
                     typer.secho("Validation warnings:", fg=typer.colors.YELLOW)
                     for error in validation_errors:
                         typer.secho(f"  - {error}", fg=typer.colors.YELLOW)
                 else:
-                    typer.secho("✓ Configuration validated successfully", fg=typer.colors.GREEN)
-                    
+                    typer.secho(
+                        "✓ Configuration validated successfully", fg=typer.colors.GREEN
+                    )
+
         except ContinueError as exc:
-            typer.secho(f"error: Continue generation failed: {exc}", fg=typer.colors.RED, err=True)
+            typer.secho(
+                f"error: Continue generation failed: {exc}",
+                fg=typer.colors.RED,
+                err=True,
+            )
             raise typer.Exit(code=2) from exc
 
 

@@ -77,7 +77,7 @@ def evaluate_instance(
     repo_root: Path,
     embed_model: str = "small",
     top_k: int = 5,
-    verbose: bool = False
+    verbose: bool = False,
 ) -> dict[str, Any]:
     """Evaluate a single SWE-Bench instance.
 
@@ -94,7 +94,7 @@ def evaluate_instance(
     gold_files = set(instance.get("changed_files", []))
 
     if verbose:
-        print(f"\n{'='*80}")
+        print(f"\n{'=' * 80}")
         print(f"Instance: {instance_id}")
         print(f"Problem: {problem_statement[:200]}...")
         print(f"Gold files: {', '.join(gold_files)}")
@@ -105,7 +105,7 @@ def evaluate_instance(
             query=problem_statement,
             repos=[instance["repo"]],
             top_k=top_k * 3,  # Get more results, then collapse to files
-            embed_model=embed_model  # Use model from repo config
+            embed_model=embed_model,  # Use model from repo config
         )
 
         results = backend.search(request)
@@ -147,8 +147,8 @@ def evaluate_instance(
             "metrics": {
                 f"precision@{top_k}": precision,
                 f"recall@{top_k}": recall,
-                "mrr": reciprocal_rank
-            }
+                "mrr": reciprocal_rank,
+            },
         }
 
     except Exception as e:
@@ -159,32 +159,33 @@ def evaluate_instance(
             "instance_id": instance_id,
             "status": "error",
             "error": str(e),
-            "metrics": {
-                f"precision@{top_k}": 0.0,
-                f"recall@{top_k}": 0.0,
-                "mrr": 0.0
-            }
+            "metrics": {f"precision@{top_k}": 0.0, f"recall@{top_k}": 0.0, "mrr": 0.0},
         }
 
 
-def load_swe_bench_instances(dataset_path: Path, repo_filter: list[str] = None) -> list[dict]:
+def load_swe_bench_instances(
+    dataset_path: Path, repo_filter: list[str] = None
+) -> list[dict]:
     """Load SWE-Bench Lite instances, optionally filtered by repo."""
     # Try loading from HuggingFace datasets
     try:
         from datasets import load_dataset
+
         dataset = load_dataset("princeton-nlp/SWE-bench_Lite", split="test")
 
         instances = []
         for item in dataset:
             if repo_filter and item["repo"] not in repo_filter:
                 continue
-            instances.append({
-                "instance_id": item["instance_id"],
-                "repo": item["repo"],
-                "base_commit": item["base_commit"],
-                "problem_statement": item["problem_statement"],
-                "changed_files": item.get("changed_files", [])
-            })
+            instances.append(
+                {
+                    "instance_id": item["instance_id"],
+                    "repo": item["repo"],
+                    "base_commit": item["base_commit"],
+                    "problem_statement": item["problem_statement"],
+                    "changed_files": item.get("changed_files", []),
+                }
+            )
 
         return instances
 
@@ -196,10 +197,7 @@ def load_swe_bench_instances(dataset_path: Path, repo_filter: list[str] = None) 
         with open(dataset_path) as f:
             data = json.load(f)
             if repo_filter:
-                return [
-                    inst for inst in data
-                    if inst["repo"] in repo_filter
-                ]
+                return [inst for inst in data if inst["repo"] in repo_filter]
             return data
 
     raise FileNotFoundError(
@@ -217,39 +215,26 @@ def main():
         "--dataset",
         type=Path,
         default=Path("test-data/swe_bench_instances.json"),
-        help="Path to SWE-Bench instances"
+        help="Path to SWE-Bench instances",
     )
     parser.add_argument(
-        "--repos",
-        nargs="+",
-        help="Filter to specific repos (e.g., django/django)"
+        "--repos", nargs="+", help="Filter to specific repos (e.g., django/django)"
     )
     parser.add_argument(
         "--repos-dir",
         type=Path,
         default=Path("test-repos/swe-bench"),
-        help="Directory containing cloned repos"
+        help="Directory containing cloned repos",
     )
     parser.add_argument(
-        "--top-k",
-        type=int,
-        default=5,
-        help="Number of files to predict (default: 5)"
+        "--top-k", type=int, default=5, help="Number of files to predict (default: 5)"
+    )
+    parser.add_argument("--output", type=Path, help="Output JSON file for results")
+    parser.add_argument(
+        "--verbose", action="store_true", help="Show detailed per-instance output"
     )
     parser.add_argument(
-        "--output",
-        type=Path,
-        help="Output JSON file for results"
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Show detailed per-instance output"
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        help="Limit number of instances to evaluate"
+        "--limit", type=int, help="Limit number of instances to evaluate"
     )
 
     args = parser.parse_args()
@@ -263,7 +248,7 @@ def main():
         return 1
 
     if args.limit:
-        instances = instances[:args.limit]
+        instances = instances[: args.limit]
 
     print(f"Loaded {len(instances)} instances")
 
@@ -283,7 +268,7 @@ def main():
         sql_store=sql_store,
         graph_store=graph_store,
         provider=provider,
-        config=config
+        config=config,
     )
 
     # Load repo configuration to get embed models
@@ -298,9 +283,9 @@ def main():
             }
 
     # Evaluate each instance
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print(f"EVALUATING {len(instances)} INSTANCES")
-    print(f"{'='*80}")
+    print(f"{'=' * 80}")
 
     results = []
     metrics_by_repo = defaultdict(lambda: {"precision": [], "recall": [], "mrr": []})
@@ -313,7 +298,11 @@ def main():
         embed_model = repo_models.get(repo, "small")
 
         if not args.verbose:
-            print(f"[{i}/{len(instances)}] {instance['instance_id']}...", end="", flush=True)
+            print(
+                f"[{i}/{len(instances)}] {instance['instance_id']}...",
+                end="",
+                flush=True,
+            )
 
         result = evaluate_instance(
             instance,
@@ -321,7 +310,7 @@ def main():
             repo_root,
             embed_model=embed_model,
             top_k=args.top_k,
-            verbose=args.verbose
+            verbose=args.verbose,
         )
 
         results.append(result)
@@ -329,7 +318,9 @@ def main():
         # Track metrics by repo
         if result["status"] == "success":
             metrics = result["metrics"]
-            metrics_by_repo[repo]["precision"].append(metrics[f"precision@{args.top_k}"])
+            metrics_by_repo[repo]["precision"].append(
+                metrics[f"precision@{args.top_k}"]
+            )
             metrics_by_repo[repo]["recall"].append(metrics[f"recall@{args.top_k}"])
             metrics_by_repo[repo]["mrr"].append(metrics["mrr"])
 
@@ -339,28 +330,38 @@ def main():
             print(f" {status} MRR: {mrr:.3f}")
 
     # Compute aggregate metrics
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("RESULTS")
-    print(f"{'='*80}\n")
+    print(f"{'=' * 80}\n")
 
-    all_precision = [r["metrics"][f"precision@{args.top_k}"] for r in results if r["status"] == "success"]
-    all_recall = [r["metrics"][f"recall@{args.top_k}"] for r in results if r["status"] == "success"]
+    all_precision = [
+        r["metrics"][f"precision@{args.top_k}"]
+        for r in results
+        if r["status"] == "success"
+    ]
+    all_recall = [
+        r["metrics"][f"recall@{args.top_k}"]
+        for r in results
+        if r["status"] == "success"
+    ]
     all_mrr = [r["metrics"]["mrr"] for r in results if r["status"] == "success"]
 
     avg_precision = statistics.mean(all_precision) if all_precision else 0.0
     avg_recall = statistics.mean(all_recall) if all_recall else 0.0
     avg_mrr = statistics.mean(all_mrr) if all_mrr else 0.0
 
-    print(f"Overall Metrics:")
+    print("Overall Metrics:")
     print(f"  Precision@{args.top_k}: {avg_precision:.3f}")
     print(f"  Recall@{args.top_k}: {avg_recall:.3f}")
     print(f"  MRR: {avg_mrr:.3f}")
-    print(f"  Success rate: {len(all_precision)}/{len(results)} ({len(all_precision)/len(results)*100:.1f}%)")
+    print(
+        f"  Success rate: {len(all_precision)}/{len(results)} ({len(all_precision) / len(results) * 100:.1f}%)"
+    )
 
     # Aider baseline comparison
-    print(f"\nComparison to Aider Baseline:")
-    print(f"  Aider P@5: 0.703 (70.3%)")
-    print(f"  Dolphin P@{args.top_k}: {avg_precision:.3f} ({avg_precision*100:.1f}%)")
+    print("\nComparison to Aider Baseline:")
+    print("  Aider P@5: 0.703 (70.3%)")
+    print(f"  Dolphin P@{args.top_k}: {avg_precision:.3f} ({avg_precision * 100:.1f}%)")
 
     if avg_precision > 0.703:
         diff = (avg_precision - 0.703) * 100
@@ -369,17 +370,19 @@ def main():
         diff = (0.703 - avg_precision) * 100
         print(f"  ❌ Dolphin is {diff:.1f}% worse than Aider")
     else:
-        print(f"  ➡️  Dolphin matches Aider baseline")
+        print("  ➡️  Dolphin matches Aider baseline")
 
     # Per-repo breakdown
     if len(metrics_by_repo) > 1:
-        print(f"\nPer-Repo Breakdown:")
+        print("\nPer-Repo Breakdown:")
         for repo in sorted(metrics_by_repo.keys()):
             metrics = metrics_by_repo[repo]
             repo_precision = statistics.mean(metrics["precision"])
             repo_recall = statistics.mean(metrics["recall"])
             repo_mrr = statistics.mean(metrics["mrr"])
-            print(f"  {repo:40} P@{args.top_k}: {repo_precision:.3f}, R@{args.top_k}: {repo_recall:.3f}, MRR: {repo_mrr:.3f}")
+            print(
+                f"  {repo:40} P@{args.top_k}: {repo_precision:.3f}, R@{args.top_k}: {repo_recall:.3f}, MRR: {repo_mrr:.3f}"
+            )
 
     # Save results
     if args.output:
@@ -388,7 +391,7 @@ def main():
             "config": {
                 "top_k": args.top_k,
                 "total_instances": len(instances),
-                "repos_evaluated": list(metrics_by_repo.keys())
+                "repos_evaluated": list(metrics_by_repo.keys()),
             },
             "summary": {
                 f"precision@{args.top_k}": avg_precision,
@@ -396,18 +399,18 @@ def main():
                 "mrr": avg_mrr,
                 "success_rate": len(all_precision) / len(results) if results else 0.0,
                 "aider_baseline": 0.703,
-                "vs_aider": avg_precision - 0.703
+                "vs_aider": avg_precision - 0.703,
             },
             "by_repo": {
                 repo: {
                     f"precision@{args.top_k}": statistics.mean(metrics["precision"]),
                     f"recall@{args.top_k}": statistics.mean(metrics["recall"]),
                     "mrr": statistics.mean(metrics["mrr"]),
-                    "count": len(metrics["precision"])
+                    "count": len(metrics["precision"]),
                 }
                 for repo, metrics in metrics_by_repo.items()
             },
-            "instances": results
+            "instances": results,
         }
 
         args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -416,7 +419,7 @@ def main():
 
         print(f"\n✅ Results saved to: {args.output}")
 
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     return 0 if avg_precision >= 0.703 else 1
 
 

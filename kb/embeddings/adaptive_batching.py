@@ -16,6 +16,7 @@ from ..chunkers.token_utils import count_tokens, get_tokenizer
 @dataclass
 class BatchMetrics:
     """Metrics for a batch of texts."""
+
     batch_size: int
     total_tokens: int
     avg_tokens: float
@@ -71,14 +72,14 @@ class AdaptiveBatcher:
         i = 0
         while i < len(texts):
             # Determine batch size for this batch
-            batch_size = self._estimate_batch_size(texts[i:min(i + 100, len(texts))])
+            batch_size = self._estimate_batch_size(texts[i : min(i + 100, len(texts))])
             batch_size = max(self.min_batch_size, min(batch_size, self.max_batch_size))
 
             # Don't exceed remaining texts
             batch_size = min(batch_size, len(texts) - i)
 
             # Extract batch
-            batch = texts[i:i + batch_size]
+            batch = texts[i : i + batch_size]
 
             # Calculate metrics
             total_tokens = sum(count_tokens(text, self.tokenizer) for text in batch)
@@ -119,11 +120,15 @@ class AdaptiveBatcher:
             estimated_size = self.max_batch_size
 
         # Apply constraints
-        estimated_size = max(self.min_batch_size, min(estimated_size, self.max_batch_size))
+        estimated_size = max(
+            self.min_batch_size, min(estimated_size, self.max_batch_size)
+        )
 
         # Adjust based on recent performance
         if self._recent_metrics:
-            recent_avg = sum(m.avg_tokens for m in self._recent_metrics) / len(self._recent_metrics)
+            recent_avg = sum(m.avg_tokens for m in self._recent_metrics) / len(
+                self._recent_metrics
+            )
             if recent_avg > 0:
                 adjusted_size = int(self.target_tokens / recent_avg)
                 # Blend estimate with adjusted size
@@ -151,23 +156,27 @@ class AdaptiveBatcher:
         """
         if not self._recent_metrics:
             return {
-                'batches_processed': 0,
-                'avg_batch_size': 0,
-                'avg_tokens_per_batch': 0,
-                'avg_processing_time': 0,
+                "batches_processed": 0,
+                "avg_batch_size": 0,
+                "avg_tokens_per_batch": 0,
+                "avg_processing_time": 0,
             }
 
-        avg_batch_size = sum(m.batch_size for m in self._recent_metrics) / len(self._recent_metrics)
-        avg_tokens = sum(m.total_tokens for m in self._recent_metrics) / len(self._recent_metrics)
+        avg_batch_size = sum(m.batch_size for m in self._recent_metrics) / len(
+            self._recent_metrics
+        )
+        avg_tokens = sum(m.total_tokens for m in self._recent_metrics) / len(
+            self._recent_metrics
+        )
 
         times = [m.processing_time for m in self._recent_metrics if m.processing_time]
         avg_time = sum(times) / len(times) if times else 0
 
         return {
-            'batches_processed': len(self._recent_metrics),
-            'avg_batch_size': avg_batch_size,
-            'avg_tokens_per_batch': avg_tokens,
-            'avg_processing_time': avg_time,
+            "batches_processed": len(self._recent_metrics),
+            "avg_batch_size": avg_batch_size,
+            "avg_tokens_per_batch": avg_tokens,
+            "avg_processing_time": avg_time,
         }
 
 

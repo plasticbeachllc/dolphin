@@ -8,7 +8,7 @@ incremental re-indexing.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Set, Dict, Any
+from typing import List, Set, Dict
 from pathlib import Path
 
 from ..hashing import hash_text
@@ -19,6 +19,7 @@ from ..chunkers.types import Chunk
 @dataclass
 class ChunkDiff:
     """Result of comparing chunks between old and new versions."""
+
     new_chunks: List[Chunk]  # Chunks to embed and insert
     unchanged_chunks: List[str]  # Chunk hashes that haven't changed
     deleted_chunks: List[str]  # Chunk hashes to remove
@@ -59,11 +60,11 @@ def compute_chunk_diff(
     deleted = existing_hashes - new_hashes
 
     stats = {
-        'total_new': len(new_chunks),
-        'to_embed': len(chunks_to_embed),
-        'unchanged': len(unchanged),
-        'deleted': len(deleted),
-        'reuse_pct': int((len(unchanged) / len(new_chunks) * 100) if new_chunks else 0),
+        "total_new": len(new_chunks),
+        "to_embed": len(chunks_to_embed),
+        "unchanged": len(unchanged),
+        "deleted": len(deleted),
+        "reuse_pct": int((len(unchanged) / len(new_chunks) * 100) if new_chunks else 0),
     }
 
     return ChunkDiff(
@@ -89,7 +90,6 @@ def get_existing_chunk_hashes(
     Returns:
         Set of content hashes for existing chunks
     """
-    import sqlite3
 
     with metadata_store._connect() as conn:
         cur = conn.cursor()
@@ -147,7 +147,7 @@ def detect_changed_files(
             text=True,
             check=True,
         )
-        modified_files = [f for f in result.stdout.strip().split('\n') if f]
+        modified_files = [f for f in result.stdout.strip().split("\n") if f]
 
         # Get untracked files
         result = subprocess.run(
@@ -156,7 +156,7 @@ def detect_changed_files(
             text=True,
             check=True,
         )
-        untracked_files = [f for f in result.stdout.strip().split('\n') if f]
+        untracked_files = [f for f in result.stdout.strip().split("\n") if f]
 
         # Get deleted files (in index but not in working tree)
         result = subprocess.run(
@@ -165,7 +165,7 @@ def detect_changed_files(
             text=True,
             check=True,
         )
-        deleted_files = [f for f in result.stdout.strip().split('\n') if f]
+        deleted_files = [f for f in result.stdout.strip().split("\n") if f]
 
         all_modified = list(set(modified_files + untracked_files))
 

@@ -29,4 +29,6 @@ def wait_for_endpoint(endpoint_url, timeout=30, interval=1):
         print(".", end="", flush=True)
         time.sleep(interval)
 
-    raise TimeoutError(f"Timed out after {timeout}s waiting for endpoint {endpoint_url}")
+    raise TimeoutError(
+        f"Timed out after {timeout}s waiting for endpoint {endpoint_url}"
+    )
