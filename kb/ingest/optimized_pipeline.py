@@ -127,7 +127,7 @@ class OptimizedIngestionPipeline:
 
             candidates = scan_repo_parallel(
                 repo_root,
-                (self.config.ignore_patterns if hasattr(self.config, "ignore_patterns") else []),
+                list(self.config.ignore_patterns if hasattr(self.config, "ignore_patterns") else []),
                 num_workers=self.num_workers,
             )
         else:
@@ -135,7 +135,7 @@ class OptimizedIngestionPipeline:
 
             candidates = scan_repo(
                 repo_root,
-                (self.config.ignore_patterns if hasattr(self.config, "ignore_patterns") else []),
+                list(self.config.ignore_patterns if hasattr(self.config, "ignore_patterns") else []),
             )
 
         # Map absolute paths to candidates for quick lookup
@@ -181,7 +181,7 @@ class OptimizedIngestionPipeline:
                     file_path=candidate.abs_path,
                     content=content,
                     language=candidate.language,
-                    model=(self.config.embedding_model if hasattr(self.config, "embedding_model") else "small"),
+                    model=str(self.config.embedding_model if hasattr(self.config, "embedding_model") else "small"),
                     token_target=400,
                     overlap_pct=0.10,
                 )
@@ -249,7 +249,7 @@ class OptimizedIngestionPipeline:
                 target_tokens=8000,
                 min_batch_size=10,
                 max_batch_size=500,
-                model=(self.config.embedding_model if hasattr(self.config, "embedding_model") else "small"),
+                model=str(self.config.embedding_model if hasattr(self.config, "embedding_model") else "small"),
             )
 
             all_embeddings: list[list[float]] = []

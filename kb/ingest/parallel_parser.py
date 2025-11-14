@@ -48,6 +48,10 @@ def _parse_file_worker(job: ParseJob) -> ParseResult:
     try:
         chunker = get_chunker_for_file(job.file_path)
 
+        # Type narrowing: chunker is callable if get_chunker_for_file returned successfully
+        if chunker is None:
+            raise ValueError(f"No chunker available for {job.file_path}")
+
         chunks = chunker(
             job.content,
             model=job.model,

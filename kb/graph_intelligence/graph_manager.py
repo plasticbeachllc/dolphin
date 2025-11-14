@@ -61,6 +61,9 @@ class GraphManager:
             logger.info(f"Rebuilding graph for repo {self.repo_id}")
             self._rebuild_graph()
 
+        # Type narrowing: _rebuild_graph always sets self._graph
+        if self._graph is None:
+            raise RuntimeError(f"Failed to build graph for repo {self.repo_id}")
         return self._graph
 
     def _rebuild_graph(self):

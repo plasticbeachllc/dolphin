@@ -4,7 +4,7 @@
 
 The e2e tests were showing DisposableStore warnings because of improper disposal order and async operations:
 
-1. **Root Cause**: 
+1. **Root Cause**:
    - `beforeEach()` creates `AgentBridge` and `DolphinViewProvider`
    - These objects register event listeners and disposables with VSCode's internal systems
    - `afterEach()` called `shutdown()` but disposal happened AFTER VSCode's test framework disposed its internal DisposableStore
@@ -21,11 +21,13 @@ The e2e tests were showing DisposableStore warnings because of improper disposal
 ### 1. Fixed Disposal Order in Tests
 
 **File**: `vscode-extension/src/test/suite/agent-bridge.test.ts`
+
 - **Before**: Output channel disposed first, then AgentBridge shutdown
 - **After**: AgentBridge shutdown first, THEN output channel disposal
 - This prevents async operations from trying to log to a disposed channel
 
 **File**: `vscode-extension/src/test/suite/provider.test.ts`
+
 - **Before**: AgentBridge shutdown, then output channel disposal
 - **After**: Provider disposal → AgentBridge shutdown → output channel disposal
 - This stops event forwarding before shutting down the event source
@@ -65,12 +67,12 @@ afterEach(() => {
   if (provider) {
     provider.dispose();
   }
-  
+
   // 2. Shutdown agent and cancel async operations
   if (agentBridge) {
     agentBridge.shutdown();
   }
-  
+
   // 3. Finally dispose output channel
   if (outputChannel) {
     outputChannel.dispose();

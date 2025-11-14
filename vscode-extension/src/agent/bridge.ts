@@ -212,13 +212,13 @@ export class AgentBridge {
       if (index > -1) {
         this.restartTimers.splice(index, 1);
       }
-      
+
       // Only restart if not shutting down
       if (!this.isShuttingDown) {
         this.start(agentCorePath, extensionPath, apiKey);
       }
     }, backoff);
-    
+
     this.restartTimers.push(timer);
   }
 

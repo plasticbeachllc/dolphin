@@ -52,6 +52,9 @@ class CrossEncoderReranker:
         try:
             _log.info(f"Loading cross-encoder model: {model_name}")
             # Only pass device parameter if explicitly set (avoid empty string error)
+            # Type narrowing: _CrossEncoder is available when _SENTENCE_TRANSFORMERS_AVAILABLE is True
+            if _CrossEncoder is None:
+                raise RuntimeError("CrossEncoder is not available")
             if device:
                 self.model = _CrossEncoder(model_name, device=device)
             else:

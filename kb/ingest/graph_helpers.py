@@ -70,7 +70,9 @@ def extract_graph_from_file(
 
     # Call the module's extract_graph_data function
     try:
-        nodes, edges = chunker_module.extract_graph_data(text)
+        # Type narrowing: we've checked hasattr for extract_graph_data
+        extract_fn = getattr(chunker_module, "extract_graph_data")
+        nodes, edges = extract_fn(text)
         return nodes, edges
     except Exception as e:
         # Log but don't fail - graph extraction is optional
@@ -138,7 +140,7 @@ def _extract_with_intelligence(
                     source_name=source_node.qualified_name or source_node.name,
                     target_name=target_node.qualified_name or target_node.name,
                     edge_type=edge.edge_type.value,
-                    line_number=edge.attributes.get("call_line") or edge.attributes.get("import_line"),
+                    line_number=int(edge.attributes.get("call_line") or edge.attributes.get("import_line") or 0),
                 )
             )
 

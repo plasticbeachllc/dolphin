@@ -22,8 +22,11 @@ ESTIMATED_TOKENS_PER_CHUNK = 200
 app = FastAPI(title="Unified Knowledge Store", version="0.1.0")
 
 # Add CORS middleware to allow requests from VSCode webviews
+# Note: CORSMiddleware is a class, not a factory function, but FastAPI's add_middleware
+# accepts both. We need to help the type checker by explicitly typing this.
+from typing import cast
 app.add_middleware(
-    CORSMiddleware,
+    cast(type, CORSMiddleware),  # type: ignore[arg-type]
     allow_origins=["*"],  # Allow all origins (webview origins are dynamic)
     allow_credentials=True,
     allow_methods=["*"],

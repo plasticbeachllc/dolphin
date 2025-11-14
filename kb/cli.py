@@ -209,7 +209,8 @@ def _search_remote(
     show_content: bool,
 ) -> None:
     """Search using remote API server."""
-    import requests  # type: ignore[import-untyped]
+    import requests
+    import requests.exceptions  # Import the exceptions module explicitly
 
     from kb.config import load_config
 

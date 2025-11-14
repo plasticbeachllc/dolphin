@@ -142,7 +142,7 @@ def with_retry(max_attempts: int = 3, delays: tuple[float, ...] = (1.0, 2.0, 4.0
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            last_exception = None
+            last_exception: Exception | None = None
             for attempt in range(max_attempts):
                 try:
                     return func(*args, **kwargs)
@@ -155,7 +155,11 @@ def with_retry(max_attempts: int = 3, delays: tuple[float, ...] = (1.0, 2.0, 4.0
                         # Last attempt failed, re-raise the exception
                         raise last_exception
             # This should never be reached, but just in case
-            raise last_exception
+            # Type checker requires explicit check before raising
+            if last_exception is not None:
+                raise last_exception
+            # Fallback error if no exception was set (should never happen)
+            raise RuntimeError("Retry logic error: no exception was raised")
 
         return wrapper
 

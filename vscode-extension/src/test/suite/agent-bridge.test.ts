@@ -22,7 +22,7 @@ describe("AgentBridge Unit Tests", () => {
       }
       agentBridge.shutdown();
     }
-    
+
     // Dispose output channel AFTER shutdown completes
     if (outputChannel) {
       outputChannel.dispose();

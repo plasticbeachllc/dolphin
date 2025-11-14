@@ -100,12 +100,20 @@ class GraphContextEnricher:
                 return None
 
             # Get file_id from SQL store
-            repo_info = self.sql_store.get_repo_by_name(repo)
+            # Type narrowing: repo.get() returns Any | None, cast to str after validation
+            repo_str = str(repo) if repo else None
+            if not repo_str:
+                return None
+            repo_info = self.sql_store.get_repo_by_name(repo_str)
             if not repo_info:
                 return None
 
             repo_id = repo_info["id"]
-            file_id = self.sql_store.get_file_id(repo_id, path)
+            # Type narrowing: path.get() returns Any | None, cast to str after validation
+            path_str = str(path) if path else None
+            if not path_str:
+                return None
+            file_id = self.sql_store.get_file_id(repo_id, path_str)
             if not file_id:
                 return None
         except Exception:
@@ -116,10 +124,18 @@ class GraphContextEnricher:
         all_nodes = self.graph_store.get_nodes_for_file(file_id)
 
         # Filter nodes that overlap with the result's line range
+        # Type narrowing: start_line and end_line are validated as not None above
+        start_line_int = int(start_line) if start_line is not None else 0
+        end_line_int = int(end_line) if end_line is not None else 0
         overlapping_nodes = [
             node
             for node in all_nodes
-            if self._ranges_overlap(node["start_line"], node["end_line"], start_line, end_line)
+            if self._ranges_overlap(
+                int(node["start_line"]) if node.get("start_line") is not None else 0,
+                int(node["end_line"]) if node.get("end_line") is not None else 0,
+                start_line_int,
+                end_line_int
+            )
         ]
 
         if not overlapping_nodes:

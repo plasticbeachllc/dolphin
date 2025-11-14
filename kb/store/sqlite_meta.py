@@ -2120,7 +2120,10 @@ class SQLiteMetadataStore:
             )
             change_id = cur.lastrowid
             conn.commit()
-            return change_id
+            # Type narrowing: lastrowid should always be set after INSERT, but handle None case
+            if change_id is None:
+                raise RuntimeError("Failed to get change_id from INSERT")
+            return int(change_id)
 
     def get_pending_changes(self, repo_id: int | None = None, limit: int = 1000) -> list[dict]:
         """Get unprocessed pending changes."""

@@ -246,9 +246,18 @@ describe("KB Lifecycle Management", function () {
       const autoSyncEnabledInspect = config.inspect("kb.autoSync.enabled");
 
       // Check that default values are defined in package.json
-      assert.ok(kbDebounceInspect?.defaultValue !== undefined, "kb.debounceMs should have a default value");
-      assert.ok(kbBatchIntervalInspect?.defaultValue !== undefined, "kb.batchIntervalMs should have a default value");
-      assert.ok(autoSyncEnabledInspect?.defaultValue !== undefined, "kb.autoSync.enabled should have a default value");
+      assert.ok(
+        kbDebounceInspect?.defaultValue !== undefined,
+        "kb.debounceMs should have a default value"
+      );
+      assert.ok(
+        kbBatchIntervalInspect?.defaultValue !== undefined,
+        "kb.batchIntervalMs should have a default value"
+      );
+      assert.ok(
+        autoSyncEnabledInspect?.defaultValue !== undefined,
+        "kb.autoSync.enabled should have a default value"
+      );
     });
 
     it("KB configuration should have valid default types from package.json", () => {
@@ -269,7 +278,10 @@ describe("KB Lifecycle Management", function () {
       }
 
       if (excludePatternsInspect?.defaultValue !== undefined) {
-        assert.ok(Array.isArray(excludePatternsInspect.defaultValue), "kb.excludePatterns default should be array");
+        assert.ok(
+          Array.isArray(excludePatternsInspect.defaultValue),
+          "kb.excludePatterns default should be array"
+        );
       }
 
       if (autoSyncEnabledInspect?.defaultValue !== undefined) {

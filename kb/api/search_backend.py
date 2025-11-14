@@ -377,6 +377,8 @@ class KnowledgeSearchBackend:
 
             def matches_prefix(path_str: str) -> bool:
                 path = normalize_path(path_str)
+                # Type check: path_prefix is already checked to be non-None above
+                assert request.path_prefix is not None
                 for prefix_str in request.path_prefix:
                     prefix = normalize_path(prefix_str)
                     try:
@@ -388,13 +390,16 @@ class KnowledgeSearchBackend:
                         continue
                 return False
 
-            filtered = [r for r in filtered if matches_prefix(r.get("path", ""))]
+            # Cast to str since we know r is a dict with string path
+            filtered = [r for r in filtered if matches_prefix(str(r.get("path", "")))]
 
         # Negative filtering: exclude_paths (exact path prefix exclusions)
         if request.exclude_paths:
 
             def matches_excluded_path(path_str: str) -> bool:
                 path = normalize_path(path_str)
+                # Type check: exclude_paths is already checked to be non-None above
+                assert request.exclude_paths is not None
                 for excl_str in request.exclude_paths:
                     excl = normalize_path(excl_str)
                     try:
@@ -406,7 +411,8 @@ class KnowledgeSearchBackend:
                         continue
                 return False
 
-            filtered = [r for r in filtered if not matches_excluded_path(r.get("path", ""))]
+            # Cast to str since we know r is a dict with string path
+            filtered = [r for r in filtered if not matches_excluded_path(str(r.get("path", "")))]
 
         # Negative filtering: exclude_patterns (glob/fnmatch pattern exclusions)
         if request.exclude_patterns:
@@ -414,14 +420,16 @@ class KnowledgeSearchBackend:
 
             def matches_excluded_pattern(path_str: str) -> bool:
                 path = normalize_path(path_str)
-
+                # Type check: exclude_patterns is already checked to be non-None above
+                assert request.exclude_patterns is not None
                 for pattern in request.exclude_patterns:
                     # Match against both full path and basename
                     if fnmatch.fnmatch(str(path), pattern) or fnmatch.fnmatch(path.name, pattern):
                         return True
                 return False
 
-            filtered = [r for r in filtered if not matches_excluded_pattern(r.get("path", ""))]
+            # Cast to str since we know r is a dict with string path
+            filtered = [r for r in filtered if not matches_excluded_pattern(str(r.get("path", "")))]
 
         return filtered
 
@@ -433,8 +441,12 @@ class KnowledgeSearchBackend:
         """
         adjusted = []
         for result in results:
-            path = result.get("path", "")
-            score = result.get("score", 0.0)
+            path_obj = result.get("path", "")
+            # Cast to string for type safety
+            path = str(path_obj) if path_obj else ""
+            score_obj = result.get("score", 0.0)
+            # Cast to float for type safety
+            score = float(score_obj) if isinstance(score_obj, (int, float)) else 0.0
 
             # Check if this is a config file
             is_config = (
@@ -752,7 +764,9 @@ class KnowledgeSearchBackend:
                 if hasattr(adaptive_config, "estimated_dataset_size"):
                     estimated_size = adaptive_config.estimated_dataset_size
 
-            return ANNParams.adaptive(query_type=query_type, top_k=request.top_k, dataset_size=estimated_size)
+            # Cast estimated_size to int with fallback
+            dataset_size = int(estimated_size) if isinstance(estimated_size, (int, float)) else 100000
+            return ANNParams.adaptive(query_type=query_type, top_k=request.top_k, dataset_size=dataset_size)
 
         # For non-adaptive strategies, return the configured params
         return ann_params

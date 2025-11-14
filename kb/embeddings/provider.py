@@ -37,7 +37,7 @@ def with_async_retry(max_attempts: int = 3, delays: tuple[float, ...] = (1.0, 2.
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            last_exception = None
+            last_exception: Exception | None = None
             for attempt in range(max_attempts):
                 try:
                     return await func(*args, **kwargs)
@@ -48,7 +48,12 @@ def with_async_retry(max_attempts: int = 3, delays: tuple[float, ...] = (1.0, 2.
                         await asyncio.sleep(delay)
                     else:
                         raise
-            raise last_exception  # Should never reach here, but for type safety
+            # This should never be reached due to the raise in the else block above
+            # Type checker requires explicit check before raising
+            if last_exception is not None:
+                raise last_exception
+            # Fallback error if no exception was set (should never happen)
+            raise RuntimeError("Retry logic error: no exception was raised")
 
         return wrapper
 

@@ -261,7 +261,7 @@ class IngestionPipeline:
 
         repo_id = int(repo["id"])
         root = Path(repo["root_path"])
-        embed_model = repo.get("default_embed_model", self.config.default_embed_model)
+        embed_model = str(repo.get("default_embed_model", self.config.default_embed_model))
         # Validate embed model early
         from ..embeddings.provider import SUPPORTED_MODELS
 
@@ -373,7 +373,7 @@ class IngestionPipeline:
 
         repo_id = int(repo["id"])
         root = Path(repo["root_path"])
-        embed_model = repo.get("default_embed_model", self.config.default_embed_model)
+        embed_model = str(repo.get("default_embed_model", self.config.default_embed_model))
         # Validate embed model early
         from ..embeddings.provider import SUPPORTED_MODELS
 
