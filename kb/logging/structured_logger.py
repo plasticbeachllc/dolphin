@@ -65,7 +65,8 @@ class StructuredLogger:
     _UNIX_HOME_PATTERN = re.compile(r"/(Users|home|root)/[^/\s]+")
     _UNIX_PATH_PATTERN = re.compile(r"/(usr/local|opt|var|tmp)/[^/\s]*")
     _WINDOWS_PATH_PATTERN = re.compile(r"C:\\(Users|Program Files|Windows)\\[^\\]+")
-    _WINDOWS_GENERIC_PATTERN = re.compile(r"[A-Z]:\\[^\\]+")
+    # Generic Windows pattern - excludes known directories to prevent double-sanitization
+    _WINDOWS_GENERIC_PATTERN = re.compile(r"[A-Z]:\\(?!Users\\|Program Files\\|Windows\\)[^\\]+")
 
     # JWT/Bearer tokens
     _JWT_PATTERN = re.compile(r"eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+")
