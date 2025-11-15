@@ -492,16 +492,23 @@ def registered_test_repo(mock_kb_stores, temp_dir):
 
 
 @pytest.fixture
-def kb_api_client(mock_kb_stores):
-    """FastAPI TestClient with mocked stores."""
+def kb_api_client(mock_kb_stores, monkeypatch):
+    """FastAPI TestClient with mocked stores and API key authentication."""
     from fastapi.testclient import TestClient
 
     from kb.api.app import app, reset_stores, set_stores
 
+    # Set test API key for authentication
+    test_api_key = "test-api-key-12345"
+    monkeypatch.setenv("DOLPHIN_API_KEY", test_api_key)
+
     sql_store, lance_store = mock_kb_stores
     set_stores(sql_store, lance_store)
 
+    # Create client with default API key header for all requests
     client = TestClient(app)
+    client.headers = {"X-API-Key": test_api_key}
+
     yield client
 
     reset_stores()

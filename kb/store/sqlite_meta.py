@@ -225,6 +225,26 @@ class SQLiteMetadataStore:
 
     def _validate_table_schema(self, cur, table_name: str) -> None:
         """Validate table schema integrity."""
+        # S3 Fix: Whitelist table names to prevent SQL injection
+        ALLOWED_TABLES = {
+            "repos",
+            "sessions",
+            "files",
+            "chunk_content",
+            "chunk_locations",
+            "code_nodes",
+            "code_edges",
+            "node_aliases",
+            "cross_repo_references",
+            "pending_changes",
+            "file_snapshots",
+            "graph_metrics",
+            "graph_snapshots",
+            "graph_cache_state",
+        }
+        if table_name not in ALLOWED_TABLES:
+            raise ValueError(f"Invalid table name: {table_name}")
+
         # Get table schema
         cur.execute(f"PRAGMA table_info({table_name})")
         columns = cur.fetchall()

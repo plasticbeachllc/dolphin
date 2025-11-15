@@ -1,11 +1,12 @@
 <script lang="ts">
   import { marked } from "marked";
+  import DOMPurify from "dompurify";
   import CodeBlock from "./CodeBlock.svelte";
-  
+
   interface Props {
     content: string;
   }
-  
+
   let { content }: Props = $props();
   
   // Use derived state instead of effect to prevent infinite loops
@@ -76,7 +77,7 @@
         <CodeBlock code={block.code} language={block.language} />
       {/if}
     {:else if segment}
-      {@html segment}
+      {@html DOMPurify.sanitize(segment)}
     {/if}
   {/each}
 </div>
