@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import datetime
+import os
+import re
 from collections.abc import Awaitable, Iterable, Sequence
 from inspect import isawaitable
 from pathlib import Path
 from time import perf_counter
 from typing import Protocol, cast
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from ..store.sqlite_meta import generate_fts_content_id
@@ -18,6 +21,7 @@ from .utils import GitRepository, validate_path_within_repo
 # Constants
 EMBEDDING_BATCH_SIZE = 128
 ESTIMATED_TOKENS_PER_CHUNK = 200
+CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 app = FastAPI(title="Unified Knowledge Store", version="0.1.0")
 
@@ -26,11 +30,35 @@ app = FastAPI(title="Unified Knowledge Store", version="0.1.0")
 # accepts both. We need to help the type checker by explicitly typing this.
 app.add_middleware(
     cast(type, CORSMiddleware),  # type: ignore[arg-type]
-    allow_origins=["*"],  # Allow all origins (webview origins are dynamic)
+    allow_origins=[
+        "vscode-webview://*",
+        "http://localhost:3000",  # Development only
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# API Key Authentication Middleware
+@app.middleware("http")
+async def validate_api_key(request: Request, call_next):
+    """Validate API key for protected endpoints.
+
+    All /v1/ endpoints require authentication via X-API-Key header.
+    The API key must match the DOLPHIN_API_KEY environment variable.
+    Health check endpoint (/health) remains public for monitoring.
+    """
+    # Protect all /v1/ endpoints with API key authentication
+    if request.url.path.startswith("/v1/"):
+        api_key = request.headers.get("X-API-Key")
+        expected_key = os.environ.get("DOLPHIN_API_KEY")
+
+        if not api_key or api_key != expected_key:
+            return JSONResponse({"error": "Unauthorized", "detail": "Valid API key required"}, status_code=401)
+
+    return await call_next(request)
+
 
 # Will be set by server startup
 _sql_store = None
@@ -259,6 +287,10 @@ async def fetch_chunk(chunk_id: str) -> dict[str, object]:
     """Fetch a specific chunk by ID."""
     if _sql_store is None or _lance_store is None:
         raise HTTPException(status_code=503, detail="Stores not initialized")
+
+    # Validate chunk_id to prevent injection and traversal attacks
+    if not CHUNK_ID_PATTERN.match(chunk_id):
+        raise HTTPException(status_code=400, detail="Invalid chunk_id format")
 
     try:
         import lancedb
@@ -637,7 +669,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
         # Process files
         from ..chunkers.registry import chunk_file as chunk_file_with_config, detect_language_from_extension
         from ..chunkers.repo_config import load_repo_chunking_config
-        from ..embeddings.provider import embed_texts_async
+        from ..embeddings.provider import embed_texts_with_retry
         from ..hashing import hash_text
         from ..ingest._helpers import build_desired_map, representative_text_for_hash
         from ..ingest.dedup import ChunkDeduplicator
@@ -727,7 +759,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                 f"{len(unchanged_chunks)} unchanged, {len(new_hashes)} new hashes"
             )
 
-            # Embed only new hashes (batched, async to avoid blocking status requests)
+            # Embed only new hashes (batched to avoid redundant requests)
             text_hash_to_embedding: dict = {}
             if new_hashes:
                 hashes_list = sorted(new_hashes)
@@ -736,8 +768,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                     texts_to_embed = [representative_text_for_hash(h, chunks) for h in batch_hashes]
                     if not texts_to_embed:
                         continue
-                    # Use async embedding to keep event loop responsive
-                    vectors = await embed_texts_async(embed_model, texts_to_embed)
+                    vectors = embed_texts_with_retry(embed_model, texts_to_embed)
                     text_hash_to_embedding.update(dict(zip(batch_hashes, vectors)))
                     # Yield to event loop after each batch to handle status requests
                     await asyncio.sleep(0)

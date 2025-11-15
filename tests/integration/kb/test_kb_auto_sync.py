@@ -4,6 +4,7 @@ These tests validate the full end-to-end flow:
 - VSCode Extension → Agent Core → KB API → Pipeline → Storage
 """
 
+import os
 import time
 from pathlib import Path
 
@@ -14,6 +15,16 @@ from kb.api.app import app, reset_pipeline, reset_stores, set_pipeline, set_stor
 from kb.pipeline import KBPipeline
 from kb.store.lancedb_vector import LanceDBVectorStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
+
+TEST_API_KEY = "test-api-key"
+os.environ.setdefault("DOLPHIN_API_KEY", TEST_API_KEY)
+
+
+def create_api_client() -> TestClient:
+    """FastAPI TestClient preconfigured with the test API key."""
+    client = TestClient(app)
+    client.headers = {"X-API-Key": TEST_API_KEY}
+    return client
 
 
 @pytest.mark.integration
@@ -53,7 +64,7 @@ class TestRepositoryRegistration:
         )
 
         # Register workspace
-        client = TestClient(app)
+        client = create_api_client()
         response = client.post(
             "/v1/repos",
             json={
@@ -94,7 +105,7 @@ class TestRepositoryRegistration:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        client = TestClient(app)
+        client = create_api_client()
 
         # Register first time
         response1 = client.post(
@@ -169,7 +180,7 @@ def goodbye():
         )
 
         # Queue indexing
-        client = TestClient(app)
+        client = create_api_client()
         response = client.post(
             "/v1/index",
             json={"repo": "test-repo", "files": ["hello.py"], "incremental": True},
@@ -248,7 +259,7 @@ def function_{i}():
             files.append(filename)
 
         # Queue all files for indexing
-        client = TestClient(app)
+        client = create_api_client()
         response = client.post("/v1/index", json={"repo": "test-repo", "files": files, "incremental": True})
 
         assert response.status_code == 200
@@ -313,7 +324,7 @@ def function_{i}():
         test_content = "def test(): return 42"
         test_file.write_text(test_content)
 
-        client = TestClient(app)
+        client = create_api_client()
 
         # Index first time
         response1 = client.post(
@@ -392,7 +403,7 @@ class TestTaskStatusTracking:
         # Create test file
         (workspace / "test.py").write_text("def test(): pass")
 
-        client = TestClient(app)
+        client = create_api_client()
 
         # Queue task
         response = client.post("/v1/index", json={"repo": "test-repo", "files": ["test.py"]})
@@ -453,7 +464,7 @@ class TestTaskStatusTracking:
         (workspace1 / "test1.py").write_text("def test1(): pass")
         (workspace2 / "test2.py").write_text("def test2(): pass")
 
-        client = TestClient(app)
+        client = create_api_client()
 
         # Queue tasks for both repos
         client.post("/v1/index", json={"repo": "repo1", "files": ["test1.py"]})
@@ -507,7 +518,7 @@ class TestErrorHandling:
         sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         sql_store.get_repo_by_name("test-repo")
 
-        client = TestClient(app)
+        client = create_api_client()
 
         # Try to index non-existent file
         response = client.post("/v1/index", json={"repo": "test-repo", "files": ["nonexistent.py"]})
@@ -542,7 +553,7 @@ class TestErrorHandling:
 
         set_stores(sql_store, lance_store)
 
-        client = TestClient(app)
+        client = create_api_client()
 
         # Try to index for non-existent repo
         response = client.post("/v1/index", json={"repo": "nonexistent-repo", "files": ["test.py"]})
@@ -579,7 +590,7 @@ class TestEndToEndWorkflow:
         workspace = temp_dir / "my_project"
         workspace.mkdir()
 
-        client = TestClient(app)
+        client = create_api_client()
 
         # Step 1: Register repository
         register_response = client.post(
