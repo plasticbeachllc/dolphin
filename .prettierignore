@@ -1,40 +1,12 @@
-# Dependencies
-node_modules/
-**/node_modules/
+# Prettier-specific ignores
+# (Base ignores inherited from .gitignore via "ignorePath" in .prettierrc)
 
-# Build outputs
-dist/
-out/
-build/
-**/dist/
-**/out/
-**/build/
-
-# Bun
+# Lock files - should not be formatted but may be committed
 bun.lock
 **/bun.lock
-
-# Python
-*.pyc
-__pycache__/
-*.egg-info/
-.pytest_cache/
-
-# Lock files
 package-lock.json
 uv.lock
 
-# Git
-.git/
-
-# IDE
-.vscode/
-.idea/
-
-# Logs
-*.log
-
-# Data
-test-data/
-golden-scenarios/
-golden-scenarios-flask/
+# Generated/compiled outputs that might occasionally be committed
+*.pyc
+*.tsbuildinfo
