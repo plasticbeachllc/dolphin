@@ -67,7 +67,26 @@ export type AgentEvent =
     }
   | { type: "conversations_listed"; conversations: ConversationListItem[] }
   | { type: "conversation_deleted"; conversationId: string }
-  | { type: "conversation_renamed"; conversationId: string; newTitle: string };
+  | { type: "conversation_renamed"; conversationId: string; newTitle: string }
+  | {
+      type: "workspace_changed";
+      hasWorkspace: boolean;
+      capabilities: string[];
+      workspaceName?: string | null;
+      workspacePath?: string | null;
+    }
+  | {
+      type: "dolphin_config_status";
+      exists: boolean;
+      path?: string;
+      error?: string;
+    }
+  | {
+      type: "dolphin_init_response";
+      success: boolean;
+      path?: string;
+      error?: string;
+    };
 
 export interface Plan {
   id: string;

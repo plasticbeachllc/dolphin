@@ -20,6 +20,12 @@ continue-config/
 kilocode-config/
 
 
+# cache artifacts
+.mypy_cache
+.ruff_cache
+.uv-cache
+.venv
+
 # Python cache
 __pycache__/
 

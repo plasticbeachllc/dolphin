@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import hljs from "highlight.js";
   import { Copy, Check } from "lucide-svelte";
   
@@ -11,18 +12,8 @@
   
   let copied = $state(false);
   let announceMessage = $state('');
+  let codeElement: HTMLElement;
 
-  onMount(() => {
-    if (codeElement) {
-      hljs.highlightElement(codeElement);
-    }
-  });
-
-  $effect(() => {
-    // Re-highlight when code changes (streaming updates)
-    if (codeElement && code) {
-      hljs.highlightElement(codeElement);
-  
   // Generate highlighted HTML without DOM mutation
   // This prevents the infinite loop caused by hljs.highlightElement()
   let highlightedCode = $derived.by(() => {
@@ -87,7 +78,7 @@
       {/if}
     </button>
   </div>
-  <pre class="code-content"><code bind:this={codeElement} class="language-{language} hljs">{code}</code></pre>
+  <pre class="code-content"><code bind:this={codeElement} class="language-{language} hljs">{@html highlightedCode}</code></pre>
 
   <!-- Live region for copy announcements -->
   <div role="status" aria-live="polite" aria-atomic="true" class="sr-only">
@@ -154,6 +145,18 @@
     white-space: pre;
     word-break: normal;
     overflow-wrap: normal;
+  }
+  
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
   }
   
   /* VSCode theme compatibility */

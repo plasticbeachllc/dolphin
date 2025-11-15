@@ -24,7 +24,7 @@ jobs:
         run: bun install
 
       - name: Run Prettier
-        run: bun prettier --write "**/*.{ts,tsx,js,jsx,json,md}"
+        run: bun prettier --write "**/*.{ts,tsx,js,jsx,json,md}" --ignore-path .gitignore --ignore-unknown
 
       - name: Run ESLint
         run: bun run lint:all

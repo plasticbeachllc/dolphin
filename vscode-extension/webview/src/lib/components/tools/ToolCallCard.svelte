@@ -69,7 +69,7 @@
 		onclick={toggleExpanded}
 		onkeypress={handleKeypress}
 		role="button"
-		tabindex="0"
+			tabindex={0}
 		aria-expanded={expanded}
 		data-status={status}
 	>

@@ -18,7 +18,6 @@
   }: Props = $props();
 
   let dialogRef: HTMLDivElement;
-  let firstButton: HTMLElement;
   let previouslyFocusedElement: HTMLElement | null = null;
 
   onMount(() => {
@@ -27,6 +26,7 @@
 
     // Focus first button
     setTimeout(() => {
+      const firstButton = dialogRef?.querySelector('button');
       firstButton?.focus();
     }, 0);
 
@@ -81,15 +81,10 @@
     </div>
 
     <div class="flex gap-2 justify-end">
-      {#each options as opt, index}
+      {#each options as opt}
         <Button
-          bind:ref={(el) => {
-            if (index === 0) {
-              firstButton = el;
-            }
-          }}
           size="sm"
-          variant={opt.toLowerCase().includes('deny') ? 'destructive' : 'default'}
+          variant={opt.toLowerCase().includes('no') || opt.toLowerCase().includes('deny') ? 'secondary' : 'default'}
           onclick={() => onSelect(opt)}
         >
           {opt}

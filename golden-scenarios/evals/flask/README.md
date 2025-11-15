@@ -35,19 +35,20 @@ just eval-golden --scenarios golden-scenarios-flask/ --verbose
 
 ## Scenario Distribution
 
-| Category | Count | Difficulty | Description |
-|----------|-------|-----------|-------------|
-| Exact Match | 5 | Easy | Class/function name lookups |
-| Description-Based | 4 | Medium | Natural language queries |
-| Semantic | 3 | Medium/Hard | Architectural concepts |
-| Framework-Specific | 2 | Medium | Flask/Werkzeug patterns |
-| Navigation | 1 | Hard | Cross-file relationships |
+| Category           | Count | Difficulty  | Description                 |
+| ------------------ | ----- | ----------- | --------------------------- |
+| Exact Match        | 5     | Easy        | Class/function name lookups |
+| Description-Based  | 4     | Medium      | Natural language queries    |
+| Semantic           | 3     | Medium/Hard | Architectural concepts      |
+| Framework-Specific | 2     | Medium      | Flask/Werkzeug patterns     |
+| Navigation         | 1     | Hard        | Cross-file relationships    |
 
 **Total**: 15 scenarios
 
 ## Coverage
 
 Tests the following Flask components:
+
 - Core Flask class and decorators
 - Request/Response handling
 - Blueprint architecture

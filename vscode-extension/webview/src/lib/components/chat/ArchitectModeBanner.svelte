@@ -39,7 +39,7 @@
     justify-content: center;
   }
 
-  .sparkle {
+  :global(.sparkle) {
     position: absolute;
     top: -2px;
     right: -2px;

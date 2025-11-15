@@ -13,29 +13,8 @@ list:
 # High-Level Commands
 # ==============================================================================
 
-# Clean generated files
-clean: stop
-
-# Start all services
-run: start
-
-# Start all services and wait for readiness
-start:
-	@echo "Starting all services..."
-	@just --quiet start-mcp-bridge
-	@echo "Waiting for MCP Bridge to listen on port 7777..."
-	@TIMEOUT=30; while ! just --quiet mcp-bridge-check >/dev/null 2>&1; do \
-		sleep 1; TIMEOUT=$((TIMEOUT-1)); \
-		if [ $TIMEOUT -le 0 ]; then echo "❌ Timed out waiting for MCP Bridge"; exit 1; fi; \
-	done
-	@echo "✅ All services are up:"
-	@echo " - Dolphin API:      http://localhost:7777"
-
 # Set up the entire project
 setup: setup-env setup-python
-
-# Stop all services
-stop: mcp-bridge-stop
 
 # ==============================================================================
 # Environment Management
@@ -44,7 +23,7 @@ stop: mcp-bridge-stop
 # Check for .env file and required variables
 setup-env:
 	@# Check if .env file exists, if not, create it from the template
-	@[ -f .env ] || (echo "Creating .env from .env.template..."; cp .env.template .env)
+	@[ -f .env ] || (echo "Creating .env from .env.template..."; cp .env.example .env)
 	@# Check if OPENAI_API_KEY is set and not empty
 	@test -n "${OPENAI_API_KEY}" || (echo "❌ Error: OPENAI_API_KEY is not set in .env file. Please add it and try again."; exit 1)
 	@echo "✅ Environment is configured."
@@ -52,27 +31,6 @@ setup-env:
 # Install Python dependencies from pyproject.toml
 setup-python:
 	uv sync --group test
-
-# ==============================================================================
-# MCP Bridge Management
-# ==============================================================================
-
-# MCP Bridge readiness check
-mcp-bridge-check:
-	@lsof -nP -iTCP:7777 -sTCP:LISTEN >/dev/null 2>&1
-
-# Start the MCP bridge
-start-mcp-bridge:
-	@echo "Starting MCP Bridge..."
-	cd mcp-bridge && bun run src/index.ts &
-
-# Stop the MCP bridge
-mcp-bridge-stop:
-	@pkill -f "bun run src/index.ts" || true
-
-# Show MCP bridge status
-show-mcp-bridge:
-	lsof -i :7777
 
 # ==============================================================================
 # Code Quality & Linting
@@ -90,39 +48,19 @@ check:
 # Check Python code quality
 check-python:
 	@echo "🐍 Checking Python code quality..."
-	@uv run black --check kb/ tests/ || (echo "   ❌ black formatting failed"; exit 1)
-	@echo "   ✅ black formatting passed"
-	@uv run mypy kb/ || (echo "   ❌ mypy type checking failed"; exit 1)
-	@echo "   ✅ mypy type checking passed"
-	@uv run pylint kb/ || (echo "   ❌ pylint linting failed"; exit 1)
-	@echo "   ✅ pylint linting passed"
+	@uv run ruff check --fix --unsafe-fixes || (echo "   ❌ ruff check failed"; exit 1)
+	@uv run ruff format
+	@echo "   ✅ ruff formatting passed"
+	@uv run ty check || (echo "   ❌ ty check failed"; exit 1)
+	@echo "   ✅ ty check passed"
 
 # Check TypeScript code quality
 check-typescript:
 	@echo "📘 Checking TypeScript code quality..."
-	@cd mcp-bridge && bun x eslint . || (echo "   ❌ MCP bridge linting failed"; exit 1)
-	@echo "   ✅ MCP bridge linting passed"
-	@cd mcp-bridge && bun x tsc --noEmit || (echo "   ❌ MCP bridge type checking failed"; exit 1)
-	@echo "   ✅ MCP bridge type checking passed"
-	@cd agent-core && bun x tsc --noEmit || (echo "   ❌ Agent core type checking failed"; exit 1)
-	@echo "   ✅ Agent core type checking passed"
-
-# Auto-fix Python formatting issues
-fix-python:
-	@echo "🔧 Auto-fixing Python code..."
-	@uv run black kb/ tests/
-	@uv run isort kb/ tests/
-	@echo "✅ Python code formatted"
-
-# Auto-fix TypeScript linting issues
-fix-typescript:
-	@echo "🔧 Auto-fixing TypeScript code..."
-	@cd mcp-bridge && bun x eslint . --fix
-	@echo "✅ TypeScript code fixed"
-
-# Auto-fix all code quality issues
-fix: fix-python fix-typescript
-	@echo "✅ All code formatting fixed"
+	@bun prettier --write "**/*.{ts,tsx,js,jsx,json,md}" --ignore-path .gitignore --ignore-unknown || (echo "   ❌ prettier failed"; exit 1)
+	@echo "   ✅ prettier passed"
+	@bun run lint:all || (echo "   ❌ linting failed"; exit 1)
+	@echo "   ✅ linting  passed"
 
 # ==============================================================================
 # Testing - Main Commands
@@ -687,9 +625,6 @@ clean-build:
 	@rm -rf *.egg-info/
 	@find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete
-
-# Complete clean including build artifacts
-clean-all: clean clean-build
 
 # ==============================================================================
 # Defaults and Variables

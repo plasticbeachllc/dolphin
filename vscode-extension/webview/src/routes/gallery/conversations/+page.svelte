@@ -125,6 +125,32 @@
 		// Navigation to chat will happen in App.svelte when conversation_loaded event fires
 	}
 
+	const isConversationDisabled = (convId: string) => deletingId === convId;
+
+	function handleConversationCardClick(event: MouseEvent, convId: string) {
+		if (isConversationDisabled(convId)) {
+			event.preventDefault();
+			return;
+		}
+		handleConversationClick(convId);
+	}
+
+	function handleConversationCardKeydown(event: KeyboardEvent, convId: string) {
+		if (event.target !== event.currentTarget) {
+			return;
+		}
+
+		if (isConversationDisabled(convId)) {
+			event.preventDefault();
+			return;
+		}
+
+		if (event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			handleConversationClick(convId);
+		}
+	}
+
 	// Handle delete
 	function handleDelete(convId: string, title: string) {
 		if (confirm(`Delete conversation "${title}"?\n\nThis action cannot be undone.`)) {
@@ -264,40 +290,56 @@
 							Pinned
 						</h3>
 						<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-							{#each pinnedConversations as conv (conv.id)}
-								<div class="relative group">
-									<button
-										class="w-full text-left"
-										onclick={() => handleConversationClick(conv.id)}
-										disabled={deletingId === conv.id}
-									>
-										<Card class="hover:bg-accent transition-colors cursor-pointer h-full">
+								{#each pinnedConversations as conv (conv.id)}
+									<div class="relative group">
+										<div
+											class="w-full text-left h-full cursor-pointer rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/60 focus-visible:outline-offset-2"
+											role="button"
+											tabindex={isConversationDisabled(conv.id) ? -1 : 0}
+											aria-disabled={isConversationDisabled(conv.id)}
+											onclick={(event) => handleConversationCardClick(event, conv.id)}
+											onkeydown={(event) => handleConversationCardKeydown(event, conv.id)}
+										>
+											<Card class="hover:bg-accent transition-colors cursor-pointer h-full">
 											<CardHeader class="pb-3">
 												<div class="flex items-start justify-between gap-2">
 													<div class="flex-1 min-w-0">
-														{#if renamingId === conv.id}
-															<div
-																class="space-y-2"
-																role="form"
-																onclick={(e) => e.stopPropagation()}
-																onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
-															>
-																<Input
-																	type="text"
-																	bind:value={renameText}
-																	class="h-8 text-sm"
-																	placeholder="Conversation title"
-																	autofocus
-																/>
-																<div class="flex gap-1">
-																	<Button size="sm" variant="default" onclick={() => saveRename(conv.id)}>
-																		Save
-																	</Button>
-																	<Button size="sm" variant="outline" onclick={cancelRename}>
-																		Cancel
-																	</Button>
-																</div>
+													{#if renamingId === conv.id}
+														<div
+															class="space-y-2"
+															role="form"
+														>
+															<Input
+																type="text"
+																bind:value={renameText}
+																class="h-8 text-sm"
+																placeholder="Conversation title"
+																autofocus
+																onclick={(event) => event.stopPropagation()}
+															/>
+															<div class="flex gap-1">
+																<Button
+																	size="sm"
+																	variant="default"
+																	onclick={(event) => {
+																		event.stopPropagation();
+																		saveRename(conv.id);
+																	}}
+																>
+																	Save
+																</Button>
+																<Button
+																	size="sm"
+																	variant="outline"
+																	onclick={(event) => {
+																		event.stopPropagation();
+																		cancelRename();
+																	}}
+																>
+																	Cancel
+																</Button>
 															</div>
+														</div>
 														{:else}
 															<CardTitle class="text-base line-clamp-2 mb-1">
 																{conv.metadata.title}
@@ -315,16 +357,18 @@
 														<div
 															class="flex gap-1 opacity-0 group-hover:opacity-100"
 															role="toolbar"
+															tabindex={0}
 															aria-label="Conversation actions"
-															onclick={(e) => e.stopPropagation()}
-															onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
 														>
 															<Button
 																variant="ghost"
 																size="sm"
 																class="h-7 w-7 p-0"
 																aria-label="Rename conversation"
-																onclick={() => startRename(conv.id, conv.metadata.title)}
+																onclick={(event) => {
+																	event.stopPropagation();
+																	startRename(conv.id, conv.metadata.title);
+																}}
 															>
 																<Edit3 class="h-3 w-3" aria-hidden="true" />
 															</Button>
@@ -334,7 +378,10 @@
 																class="h-7 w-7 p-0"
 																aria-label={deletingId === conv.id ? "Deleting conversation" : "Delete conversation"}
 																disabled={deletingId === conv.id}
-																onclick={() => handleDelete(conv.id, conv.metadata.title)}
+																onclick={(event) => {
+																	event.stopPropagation();
+																	handleDelete(conv.id, conv.metadata.title);
+																}}
 															>
 																{#if deletingId === conv.id}
 																	<Loader2 class="h-3 w-3 animate-spin" aria-hidden="true" />
@@ -355,8 +402,8 @@
 													<span>{conv.metadata.token_count.toLocaleString()} tokens</span>
 												</div>
 											</CardContent>
-										</Card>
-									</button>
+											</Card>
+										</div>
 									<div class="absolute top-2 right-2 pointer-events-none">
 										<Pin class="h-3 w-3 text-primary fill-current" />
 									</div>
@@ -372,14 +419,17 @@
 						{pinnedConversations.length > 0 ? 'All Conversations' : 'Recent'}
 					</h3>
 					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-						{#each unpinnedConversations as conv (conv.id)}
-							<div class="relative group">
-								<button
-									class="w-full text-left"
-									onclick={() => handleConversationClick(conv.id)}
-									disabled={deletingId === conv.id}
-								>
-									<Card class="hover:bg-accent transition-colors cursor-pointer h-full">
+							{#each unpinnedConversations as conv (conv.id)}
+								<div class="relative group">
+									<div
+										class="w-full text-left h-full cursor-pointer rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/60 focus-visible:outline-offset-2"
+										role="button"
+										tabindex={isConversationDisabled(conv.id) ? -1 : 0}
+										aria-disabled={isConversationDisabled(conv.id)}
+										onclick={(event) => handleConversationCardClick(event, conv.id)}
+										onkeydown={(event) => handleConversationCardKeydown(event, conv.id)}
+									>
+										<Card class="hover:bg-accent transition-colors cursor-pointer h-full">
 										<CardHeader class="pb-3">
 											<div class="flex items-start justify-between gap-2">
 												<div class="flex-1 min-w-0">
@@ -387,8 +437,6 @@
 														<div
 															class="space-y-2"
 															role="form"
-															onclick={(e) => e.stopPropagation()}
-															onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
 														>
 															<Input
 																type="text"
@@ -396,12 +444,27 @@
 																class="h-8 text-sm"
 																placeholder="Conversation title"
 																autofocus
+																onclick={(event) => event.stopPropagation()}
 															/>
 															<div class="flex gap-1">
-																<Button size="sm" variant="default" onclick={() => saveRename(conv.id)}>
+																<Button
+																	size="sm"
+																	variant="default"
+																	onclick={(event) => {
+																		event.stopPropagation();
+																		saveRename(conv.id);
+																	}}
+																>
 																	Save
 																</Button>
-																<Button size="sm" variant="outline" onclick={cancelRename}>
+																<Button
+																	size="sm"
+																	variant="outline"
+																	onclick={(event) => {
+																		event.stopPropagation();
+																		cancelRename();
+																	}}
+																>
 																	Cancel
 																</Button>
 															</div>
@@ -419,31 +482,36 @@
 														</div>
 													{/if}
 												</div>
-												{#if renamingId !== conv.id}
-													<div
-														class="flex gap-1 opacity-0 group-hover:opacity-100"
-														role="toolbar"
-														aria-label="Conversation actions"
-														onclick={(e) => e.stopPropagation()}
-														onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
-													>
-														<Button
-															variant="ghost"
-															size="sm"
-															class="h-7 w-7 p-0"
-															aria-label="Rename conversation"
-															onclick={() => startRename(conv.id, conv.metadata.title)}
+													{#if renamingId !== conv.id}
+														<div
+															class="flex gap-1 opacity-0 group-hover:opacity-100"
+															role="toolbar"
+															tabindex={0}
+															aria-label="Conversation actions"
 														>
-															<Edit3 class="h-3 w-3" aria-hidden="true" />
-														</Button>
-														<Button
-															variant="ghost"
+															<Button
+																variant="ghost"
+																size="sm"
+																class="h-7 w-7 p-0"
+																aria-label="Rename conversation"
+																onclick={(event) => {
+																	event.stopPropagation();
+																	startRename(conv.id, conv.metadata.title);
+																}}
+															>
+																<Edit3 class="h-3 w-3" aria-hidden="true" />
+															</Button>
+															<Button
+																variant="ghost"
 															size="sm"
-															class="h-7 w-7 p-0"
-															aria-label={deletingId === conv.id ? "Deleting conversation" : "Delete conversation"}
-															disabled={deletingId === conv.id}
-															onclick={() => handleDelete(conv.id, conv.metadata.title)}
-														>
+																class="h-7 w-7 p-0"
+																aria-label={deletingId === conv.id ? "Deleting conversation" : "Delete conversation"}
+																disabled={deletingId === conv.id}
+																onclick={(event) => {
+																	event.stopPropagation();
+																	handleDelete(conv.id, conv.metadata.title);
+																}}
+															>
 															{#if deletingId === conv.id}
 																<Loader2 class="h-3 w-3 animate-spin" aria-hidden="true" />
 															{:else}
@@ -463,8 +531,8 @@
 												<span>{conv.metadata.token_count.toLocaleString()} tokens</span>
 											</div>
 										</CardContent>
-									</Card>
-								</button>
+										</Card>
+									</div>
 							</div>
 						{/each}
 					</div>

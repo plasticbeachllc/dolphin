@@ -23,7 +23,7 @@
 
 <div class="flex h-screen flex-col bg-background text-foreground">
 	<AppNavigation currentPath={$page.url.pathname} onNavigate={handleNavigate} hasWorkspace={true} />
-	<div class="flex-1 overflow-hidden bg-background">
+	<main class="flex-1 overflow-hidden bg-background">
 		{@render children()}
 	</main>
 	<!-- Live region for screen reader announcements - WCAG 2.1 AA compliance -->
@@ -35,3 +35,17 @@
 		class="sr-only"
 	></div>
 </div>
+
+<style>
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border-width: 0;
+	}
+</style>

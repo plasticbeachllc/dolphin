@@ -89,7 +89,7 @@
   let selectedMode = $state<'code' | 'architect'>('code');
 
   // Reference to ChatInput component to programmatically focus it
-  let chatInputRef: any = null;
+  let chatInputRef = $state<any>(null);
 
   // Live region for screen reader announcements
   let liveRegionMessage = $state<string>('');
@@ -265,23 +265,22 @@
           }
           break;
         
-        case 'workspace_changed':
+        case 'workspace_changed': {
           // Handle workspace changes (open/close folder)
-          const newWorkspaceStatus = (event as any).hasWorkspace;
-          const newWorkspaceName = (event as any).workspaceName;
+          const { hasWorkspace: workspaceOpen, workspaceName } = event;
           console.log('[App] Workspace changed event:', event);
-          console.log('[App] New workspace status:', newWorkspaceStatus ? 'Open' : 'Closed');
-          console.log('[App] New workspace name:', newWorkspaceName);
+          console.log('[App] New workspace status:', workspaceOpen ? 'Open' : 'Closed');
+          console.log('[App] New workspace name:', workspaceName);
           console.log('[App] Current workspace status before change:', hasWorkspace ? 'Open' : 'Closed');
           
           // Only update if the status actually changed
-          if (newWorkspaceStatus !== undefined && newWorkspaceStatus !== hasWorkspace) {
-            hasWorkspace = newWorkspaceStatus;
+          if (workspaceOpen !== undefined && workspaceOpen !== hasWorkspace) {
+            hasWorkspace = workspaceOpen;
             console.log('[App] Workspace status updated to:', hasWorkspace ? 'Open' : 'Closed');
             
             // Update KB store with new workspace name
-            if (newWorkspaceName) {
-              kbActions.initialize(newWorkspaceName, {});
+            if (workspaceName) {
+              kbActions.initialize(workspaceName, {});
             } else {
               kbActions.reset();
             }
@@ -295,18 +294,19 @@
             console.log('[App] Workspace status unchanged, ignoring event');
           }
           break;
+        }
         
         case 'dolphin_config_status':
           // Response from config existence check
           console.log('[App] Config status received:', event);
-          configExists = (event as any).exists ?? true;
+          configExists = event.exists ?? true;
           checkingConfig = false;
           break;
         
         case 'dolphin_init_response':
           // Response from initialization
           console.log('[App] Init response received:', event);
-          if (!(event as any).error) {
+          if (event.success && !event.error) {
             // Success - config now exists
             configExists = true;
           }
@@ -361,7 +361,11 @@
   }
   
   function checkConfigExists() {
-    const vscode = window.acquireVsCodeApi();
+    const vscode = window.acquireVsCodeApi?.();
+    if (!vscode) {
+      checkingConfig = false;
+      return;
+    }
     vscode.postMessage({ type: 'check_dolphin_config' });
   }
 </script>

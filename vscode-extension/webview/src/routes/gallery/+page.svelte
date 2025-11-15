@@ -740,7 +740,7 @@
 
 					<Card>
 						<CardHeader>
-							<CardTitle>ConfirmDialog</CardTitle>
+							<CardTitle>ConfirmDialog - Destructive Operation</CardTitle>
 							<CardDescription>Modal dialog for confirming destructive operations</CardDescription>
 						</CardHeader>
 						<CardContent>
@@ -756,6 +756,25 @@
 							{/if}
 						</CardContent>
 					</Card>
+		
+					<GalleryShowcase
+						title="ConfirmDialog - Initialize Dolphin"
+						description="First-time user setup dialog for workspace initialization"
+					>
+						{#snippet children()}
+							<div class="space-y-4">
+								<p class="text-sm text-muted-foreground mb-4">
+									This dialog appears when users open the extension without a .dolphin configuration file.
+								</p>
+								<ConfirmDialog
+									title="Initialize Dolphin"
+									message="Welcome to Dolphin! Would you like to initialize this workspace for semantic code search? This will create a .dolphin configuration file and start indexing your codebase."
+									options={['Initialize Now', 'No Thanks']}
+									onSelect={(choice) => console.log('User chose:', choice)}
+								/>
+							</div>
+						{/snippet}
+					</GalleryShowcase>
 				</div>
 			</section>
 

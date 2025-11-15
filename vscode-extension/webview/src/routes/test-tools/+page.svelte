@@ -3,17 +3,28 @@
   import { Button } from '$lib/components/ui/button';
   import { Separator } from '$lib/components/ui/separator';
 
+  type ToolStatus = 'running' | 'success' | 'error';
+
+  type ToolCallState = {
+    tool: string;
+    input: Record<string, unknown>;
+    status: ToolStatus;
+    result?: Record<string, unknown>;
+    error?: string;
+    executionTime?: number;
+  };
+
   // Test data for different tool scenarios
-  let runningTool = $state({
+  let runningTool = $state<ToolCallState>({
     tool: 'search_knowledge',
     input: { query: 'authentication patterns', top_k: 10 },
-    status: 'running' as const
+    status: 'running'
   });
 
-  let successTool = $state({
+  let successTool = $state<ToolCallState>({
     tool: 'read_files',
     input: { paths: ['src/auth.ts', 'src/user.ts'], max_size_bytes: 1048576 },
-    status: 'success' as const,
+    status: 'success',
     result: {
       files: [
         { path: 'src/auth.ts', size_bytes: 2048, line_count: 87 },
@@ -24,47 +35,47 @@
     executionTime: 247
   });
 
-  let errorTool = $state({
+  let errorTool = $state<ToolCallState>({
     tool: 'file_write',
     input: { path: '/etc/protected.txt', content: 'test' },
-    status: 'error' as const,
+    status: 'error',
     error: 'Access denied: /etc/protected.txt is outside workspace',
     executionTime: 12
   });
 
-  let allToolTypes = $state([
+  let allToolTypes = $state<ToolCallState[]>([
     {
       tool: 'search_knowledge',
       input: { query: 'user authentication' },
-      status: 'success' as const,
+      status: 'success',
       result: { hits: 5, total_time_ms: 156 },
       executionTime: 156
     },
     {
       tool: 'kb_search',
       input: { query: 'database schema' },
-      status: 'success' as const,
+      status: 'success',
       result: { hits: 3 },
       executionTime: 89
     },
     {
       tool: 'fetch_chunk',
       input: { chunk_id: 'chunk-abc123' },
-      status: 'success' as const,
+      status: 'success',
       result: { content: 'function authenticate(user) { ... }' },
       executionTime: 45
     },
     {
       tool: 'fetch_lines',
       input: { repo: 'main', path: 'src/app.ts', start: 1, end: 50 },
-      status: 'success' as const,
+      status: 'success',
       result: { lines: 50 },
       executionTime: 67
     },
     {
       tool: 'apply_diff',
       input: { path: 'src/auth.ts', diff: '...' },
-      status: 'running' as const
+      status: 'running'
     }
   ]);
 
@@ -72,7 +83,6 @@
   function simulateCompletion() {
     runningTool.status = 'success';
     runningTool.result = { hits: 10, files: ['auth.ts', 'user.ts', 'db.ts'] };
-    // @ts-ignore
     runningTool.executionTime = 1247;
   }
 

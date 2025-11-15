@@ -135,11 +135,7 @@
         "sphinx",
         "xarray"
       ],
-      "large_model_repos": [
-        "requests",
-        "flask",
-        "seaborn"
-      ],
+      "large_model_repos": ["requests", "flask", "seaborn"],
       "reasoning": "Use small model for largest repos (cost/storage), use large model for smaller repos to test quality differences"
     }
   }

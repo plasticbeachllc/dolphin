@@ -244,7 +244,7 @@
     "pretest": "npm run compile",
     "test": "vscode-test",
     "package": "vsce package",
-    "lint": "bun x eslint ."
+    "lint": "eslint . --config eslint.config.mjs"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
