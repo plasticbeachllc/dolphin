@@ -2,6 +2,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 import Mocha from "mocha";
 import { glob } from "glob";
+import "./setup";
 
 /**
  * Wait for VSCode's configuration system to be ready
@@ -57,8 +58,8 @@ export async function run(): Promise<void> {
   console.log("Tests root:", testsRoot);
   console.log("Looking for test files...");
 
-  // Find all test files
-  const files = await glob("**/**.test.js", { cwd: testsRoot });
+  // Find all test files (ignore stale JS directly under testsRoot)
+  const files = await glob("{unit,integration,e2e}/**/*.test.js", { cwd: testsRoot });
 
   console.log("Found test files:", files);
 
