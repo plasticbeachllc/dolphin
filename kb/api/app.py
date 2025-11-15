@@ -55,10 +55,7 @@ async def validate_api_key(request: Request, call_next):
         expected_key = os.environ.get("DOLPHIN_API_KEY")
 
         if not api_key or api_key != expected_key:
-            return JSONResponse(
-                {"error": "Unauthorized", "detail": "Valid API key required"},
-                status_code=401
-            )
+            return JSONResponse({"error": "Unauthorized", "detail": "Valid API key required"}, status_code=401)
 
     return await call_next(request)
 
