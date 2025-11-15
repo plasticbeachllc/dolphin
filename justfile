@@ -57,7 +57,7 @@ check-python:
 # Check TypeScript code quality
 check-typescript:
 	@echo "📘 Checking TypeScript code quality..."
-	@bun prettier --write "**/*.{ts,tsx,js,jsx,json,md}" --ignore-path .gitignore --ignore-unknown || (echo "   ❌ prettier failed"; exit 1)
+	@bun prettier --write "**/*.{ts,tsx,js,jsx,json,md}" --ignore-unknown || (echo "   ❌ prettier failed"; exit 1)
 	@echo "   ✅ prettier passed"
 	@bun run lint:all || (echo "   ❌ linting failed"; exit 1)
 	@echo "   ✅ linting  passed"

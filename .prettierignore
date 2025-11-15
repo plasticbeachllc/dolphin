@@ -1,5 +1,5 @@
 # Prettier-specific ignores
-# (Base ignores inherited from .gitignore via "ignorePath" in .prettierrc)
+# (Base ignores inherited from .gitignore via the "ignorePath" list in .prettierrc)
 
 # Lock files - should not be formatted but may be committed
 bun.lock

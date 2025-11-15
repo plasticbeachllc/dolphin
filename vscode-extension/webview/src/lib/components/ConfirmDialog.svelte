@@ -80,7 +80,7 @@
       </div>
     </div>
 
-    <div class="flex gap-2 justify-end">
+    <div class="flex gap-2 justify-center">
       {#each options as opt}
         <Button
           size="sm"
