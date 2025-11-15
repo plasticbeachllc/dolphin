@@ -111,13 +111,18 @@ class SQLiteMetadataStore:
     
     def _validate_table_schema(self, cur, table_name: str) -> None:
         """Validate table schema integrity."""
+        # S3 Fix: Whitelist table names to prevent SQL injection
+        ALLOWED_TABLES = {"repos", "files", "chunk_content", "chunk_locations", "sessions"}
+        if table_name not in ALLOWED_TABLES:
+            raise ValueError(f"Invalid table name: {table_name}")
+
         # Get table schema
         cur.execute(f"PRAGMA table_info({table_name})")
         columns = cur.fetchall()
-        
+
         if not columns:
             raise RuntimeError(f"Table {table_name} exists but has no columns")
-        
+
         # Validate expected columns based on table type
         if table_name == "repos":
             required_cols = {"id", "name", "root_path", "default_embed_model"}

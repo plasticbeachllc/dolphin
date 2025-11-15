@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import re
 from inspect import isawaitable
 from pathlib import Path
 from time import perf_counter
@@ -254,6 +255,10 @@ async def fetch_chunk(chunk_id: str) -> dict[str, object]:
     """Fetch a specific chunk by ID."""
     if _sql_store is None or _lance_store is None:
         raise HTTPException(status_code=503, detail="Stores not initialized")
+
+    # S2 Fix: Validate chunk_id is alphanumeric to prevent SQL injection
+    if not re.match(r'^[a-zA-Z0-9_-]+$', chunk_id):
+        raise HTTPException(status_code=400, detail="Invalid chunk_id format")
 
     try:
         import lancedb
