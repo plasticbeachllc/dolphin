@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import sqlite3
 import threading
-import re
 from contextlib import closing
 from datetime import UTC
 from pathlib import Path
