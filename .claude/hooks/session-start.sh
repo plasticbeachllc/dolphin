@@ -36,7 +36,7 @@ fi
 # ============================================================================
 echo "🐍 Installing Python dependencies with uv..."
 cd "$CLAUDE_PROJECT_DIR"
-uv sync --group test
+uv sync --group test --group dev
 
 # ============================================================================
 # Install TypeScript/Bun dependencies
