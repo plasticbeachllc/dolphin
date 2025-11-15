@@ -5,7 +5,7 @@ import { cn } from "./utils";
 describe("cn", () => {
   it("combines arbitrary class values", () => {
     expect(cn("btn", "btn-primary", ["rounded"], { hidden: false, block: true })).toBe(
-      "btn btn-primary rounded block",
+      "btn btn-primary rounded block"
     );
   });
 

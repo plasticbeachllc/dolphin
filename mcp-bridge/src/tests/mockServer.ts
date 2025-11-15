@@ -1,7 +1,13 @@
 const JSON_HEADERS = { "Content-Type": "application/json" } as const;
 
 interface RepoCache {
-  repos: Array<{ name: string; path: string; default_embed_model: string; files: number; chunks: number }>;
+  repos: Array<{
+    name: string;
+    path: string;
+    default_embed_model: string;
+    files: number;
+    chunks: number;
+  }>;
 }
 
 function toRequest(input: RequestInfo | URL, init?: RequestInit): Request {
@@ -16,7 +22,11 @@ function toRequest(input: RequestInfo | URL, init?: RequestInit): Request {
   return new Request(String(input ?? ""), init);
 }
 
-function jsonResponse(payload: unknown, status = 200, headers: HeadersInit = JSON_HEADERS): Response {
+function jsonResponse(
+  payload: unknown,
+  status = 200,
+  headers: HeadersInit = JSON_HEADERS
+): Response {
   return new Response(JSON.stringify(payload), { status, headers });
 }
 
@@ -41,7 +51,8 @@ export function startMockRest(port = 7777): Promise<() => Promise<void>> {
     const pathname = url.pathname;
     const method = req.method.toUpperCase();
 
-    const sendNotFound = () => jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
+    const sendNotFound = () =>
+      jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
 
     const readJsonBody = async () => {
       const raw = await req.text();
@@ -54,11 +65,17 @@ export function startMockRest(port = 7777): Promise<() => Promise<void>> {
     }
 
     // GET /chunks/{id}
-    if (method === "GET" && (pathname.startsWith("/v1/chunks/") || pathname.startsWith("/chunks/"))) {
+    if (
+      method === "GET" &&
+      (pathname.startsWith("/v1/chunks/") || pathname.startsWith("/chunks/"))
+    ) {
       const id = decodeURIComponent(pathname.split("/").pop() ?? "");
 
       if (id === "not-found") {
-        return jsonResponse({ error: { code: "chunk_not_found", message: "Chunk not found" } }, 404);
+        return jsonResponse(
+          { error: { code: "chunk_not_found", message: "Chunk not found" } },
+          404
+        );
       }
 
       return jsonResponse({
@@ -85,7 +102,10 @@ export function startMockRest(port = 7777): Promise<() => Promise<void>> {
       }
 
       if (start > end) {
-        return jsonResponse({ error: { code: "invalid_range", message: "Invalid line range" } }, 400);
+        return jsonResponse(
+          { error: { code: "invalid_range", message: "Invalid line range" } },
+          400
+        );
       }
 
       const lang = path.endsWith(".ts") ? "typescript" : path.endsWith(".py") ? "python" : "plain";
@@ -107,7 +127,10 @@ export function startMockRest(port = 7777): Promise<() => Promise<void>> {
       const { query, repos, path_prefix, top_k, cursor, deadline_ms } = body;
 
       if (query === "trigger-500") {
-        return jsonResponse({ error: { code: "internal_error", message: "Internal server error" } }, 500);
+        return jsonResponse(
+          { error: { code: "internal_error", message: "Internal server error" } },
+          500
+        );
       }
 
       if (query === "trigger-invalid-json") {
@@ -115,7 +138,10 @@ export function startMockRest(port = 7777): Promise<() => Promise<void>> {
       }
 
       if (repos && repos.some((r: string) => r.trim() === "nonexistent-repo")) {
-        return jsonResponse({ error: { code: "repo_not_found", message: "Repository not found" } }, 404);
+        return jsonResponse(
+          { error: { code: "repo_not_found", message: "Repository not found" } },
+          404
+        );
       }
 
       if (deadline_ms === 1) {
