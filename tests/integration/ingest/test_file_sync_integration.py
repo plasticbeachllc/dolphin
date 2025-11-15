@@ -14,6 +14,7 @@ Architecture Note:
 """
 
 import hashlib
+import os
 import time
 
 import pytest
@@ -23,6 +24,17 @@ from kb.api.app import app, reset_pipeline, reset_stores, set_pipeline, set_stor
 from kb.pipeline import KBPipeline
 from kb.store.lancedb_vector import LanceDBVectorStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
+
+
+TEST_API_KEY = "test-api-key"
+os.environ.setdefault("DOLPHIN_API_KEY", TEST_API_KEY)
+
+
+def create_api_client() -> TestClient:
+    """FastAPI TestClient preconfigured with the test API key."""
+    client = TestClient(app)
+    client.headers = {"X-API-Key": TEST_API_KEY}
+    return client
 
 
 @pytest.mark.integration
@@ -58,7 +70,7 @@ class TestSnapshotTracking:
         test_file.write_text("def hello(): return 'world'")
 
         # Index the file
-        client = TestClient(app)
+        client = create_api_client()
         response = client.post(
             "/v1/index",
             json={"repo": "test-repo", "files": ["sample.py"], "incremental": True},
@@ -138,7 +150,7 @@ class TestSnapshotTracking:
         test_file = workspace / "evolving.py"
         test_file.write_text("def version1(): pass")
 
-        client = TestClient(app)
+        client = create_api_client()
         response1 = client.post(
             "/v1/index",
             json={"repo": "test-repo", "files": ["evolving.py"], "incremental": True},
@@ -227,7 +239,7 @@ class TestSnapshotTracking:
             files.append(filename)
 
         # Index all files
-        client = TestClient(app)
+        client = create_api_client()
         response = client.post("/v1/index", json={"repo": "test-repo", "files": files, "incremental": True})
         task_id = response.json()["task_id"]
 
@@ -290,7 +302,7 @@ class TestPostIndexValidation:
             files.append(filename)
 
         # Start indexing
-        client = TestClient(app)
+        client = create_api_client()
         response = client.post("/v1/index", json={"repo": "test-repo", "files": files, "incremental": True})
         task_id = response.json()["task_id"]
 
@@ -351,7 +363,7 @@ class TestDriftDetection:
         test_file = workspace / "tracked.py"
         test_file.write_text("def original(): return 'original'")
 
-        client = TestClient(app)
+        client = create_api_client()
         response = client.post(
             "/v1/index",
             json={"repo": "test-repo", "files": ["tracked.py"], "incremental": True},
@@ -415,7 +427,7 @@ class TestDriftDetection:
         test_file = workspace / "to_delete.py"
         test_file.write_text("def to_be_deleted(): pass")
 
-        client = TestClient(app)
+        client = create_api_client()
         response = client.post(
             "/v1/index",
             json={"repo": "test-repo", "files": ["to_delete.py"], "incremental": True},
@@ -472,7 +484,7 @@ class TestDriftDetection:
         test_file = workspace / "stable.py"
         test_file.write_text("def stable(): return 'unchanged'")
 
-        client = TestClient(app)
+        client = create_api_client()
         response = client.post(
             "/v1/index",
             json={"repo": "test-repo", "files": ["stable.py"], "incremental": True},
@@ -532,7 +544,7 @@ class TestAutomaticChangeProcessing:
         test_file = workspace / "auto_process.py"
         test_file.write_text("def auto_test(): pass")
 
-        client = TestClient(app)
+        client = create_api_client()
 
         # 1. Record pending change (simulating file watcher)
         changes_response = client.post(
@@ -609,7 +621,7 @@ class TestPendingChangesWorkflow:
         sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
 
         # Record pending changes
-        client = TestClient(app)
+        client = create_api_client()
         response = client.post(
             "/v1/repos/test-repo/changes",
             json={
@@ -631,7 +643,7 @@ class TestPendingChangesWorkflow:
         set_stores(sql_store2, lance_store2)
 
         # Verify pending changes still exist
-        client2 = TestClient(app)
+        client2 = create_api_client()
         pending_response = client2.get("/v1/repos/test-repo/pending-changes")
         pending_changes = pending_response.json()["changes"]
 
@@ -671,7 +683,7 @@ class TestPendingChangesWorkflow:
         file1.write_text("def func1(): pass")
         file2.write_text("def func2(): pass")
 
-        client = TestClient(app)
+        client = create_api_client()
 
         # 1. Record pending changes (simulating file watcher)
         changes_response = client.post(

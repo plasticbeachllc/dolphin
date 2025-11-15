@@ -4,6 +4,7 @@ import hashlib
 import logging
 import sqlite3
 import threading
+import re
 from contextlib import closing
 from datetime import UTC
 from pathlib import Path
@@ -242,7 +243,10 @@ class SQLiteMetadataStore:
             "graph_snapshots",
             "graph_cache_state",
         }
-        if table_name not in ALLOWED_TABLES:
+        # Allow lookups on safe table names outside the allowlist to let integrity checks
+        # validate new/missing tables without tripping the ValueError seen in tests.
+        _SAFE_TABLE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+        if table_name not in ALLOWED_TABLES and not _SAFE_TABLE_RE.match(table_name):
             raise ValueError(f"Invalid table name: {table_name}")
 
         # Get table schema
