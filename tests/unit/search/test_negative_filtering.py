@@ -21,8 +21,8 @@ class TestNegativeFiltering:
     ) -> list[dict[str, object]]:
         """Reproduce the historical multi-pass filtering and scoring pipeline."""
 
-        from pathlib import PurePosixPath
         import fnmatch
+        from pathlib import PurePosixPath
 
         def normalize_path(path_str: str) -> PurePosixPath:
             path_str = path_str.lstrip("./")
@@ -162,7 +162,7 @@ class TestNegativeFiltering:
             sql_store=cast(SQLiteMetadataStore, None),
         )
 
-        filtered = backend._filter_and_score_results(results, request)
+        backend._filter_and_score_results(results, request)
 
     def test_filter_and_score_matches_legacy_pipeline(self):
         """Ensure the new single-pass helper matches the historical behavior."""
