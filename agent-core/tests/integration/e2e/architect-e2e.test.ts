@@ -256,8 +256,7 @@ class TestContextBuilder {
           ]
         : [];
 
-    const totalTokens =
-      files.reduce((sum, file) => sum + file.tokens, 0) + kbResults.length * 200;
+    const totalTokens = files.reduce((sum, file) => sum + file.tokens, 0) + kbResults.length * 200;
 
     return {
       kbResults,

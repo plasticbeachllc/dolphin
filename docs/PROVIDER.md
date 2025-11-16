@@ -12,24 +12,24 @@ This document is the canonical specification for expanding Dolphin's inference l
 
 ## 2. Provider Matrix
 
-| Provider ID | Models (Initial)                                      | Authentication                       | Modalities                           | Notes |
-| ----------- | ------------------------------------------------------ | ------------------------------------ | ------------------------------------ | ----- |
-| `openai`    | `gpt-5.1`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `text-embedding-3-large`, `text-embedding-3-small` | API key only (`OPENAI_API_KEY`)      | Chat, tool calling, JSON, vision, audio, embeddings | Default OpenAI cloud endpoint; GPT models serve chat/tool flows while the `text-embedding-3-*` family remains available for the existing KB pipeline but is **not** modified as part of this effort. |
-| `openai-compatible` | User-provided model IDs (OpenAI spec-compliant) | API key in header plus custom base URL | Mirrors OpenAI compatibility surface | Covers Azure OpenAI, self-hosted servers, etc.; embeddings supported when the endpoint exposes `text-embedding-3-large`, `text-embedding-3-small`, or future embedding IDs declared in the manifest. |
-| `anthropic` | `claude-4.5-sonnet`, `claude-4.5-haiku`               | Subscription token **or** API key    | Chat, tool use, JSON (beta)          | Requires dual-auth support toggled per deployment; no embedding surface yet. |
+| Provider ID         | Models (Initial)                                                                                     | Authentication                         | Modalities                                          | Notes                                                                                                                                                                                                |
+| ------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `openai`            | `gpt-5.1`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `text-embedding-3-large`, `text-embedding-3-small` | API key only (`OPENAI_API_KEY`)        | Chat, tool calling, JSON, vision, audio, embeddings | Default OpenAI cloud endpoint; GPT models serve chat/tool flows while the `text-embedding-3-*` family remains available for the existing KB pipeline but is **not** modified as part of this effort. |
+| `openai-compatible` | User-provided model IDs (OpenAI spec-compliant)                                                      | API key in header plus custom base URL | Mirrors OpenAI compatibility surface                | Covers Azure OpenAI, self-hosted servers, etc.; embeddings supported when the endpoint exposes `text-embedding-3-large`, `text-embedding-3-small`, or future embedding IDs declared in the manifest. |
+| `anthropic`         | `claude-4.5-sonnet`, `claude-4.5-haiku`                                                              | Subscription token **or** API key      | Chat, tool use, JSON (beta)                         | Requires dual-auth support toggled per deployment; no embedding surface yet.                                                                                                                         |
 
 ### Capability Snapshot
 
-| Capability          | gpt-5.1 | gpt-5.1-codex | gpt-5.1-codex-mini | claude-4.5-sonnet | claude-4.5-haiku |
-| ------------------- | ------- | ------------- | ------------------ | ----------------- | ---------------- |
-| Context tokens      | 200K    | 200K          | 100K               | 200K              | 100K             |
-| Tool/function calls | ✅      | ✅            | ✅                 | ✅ (Claude tools)  | ✅               |
-| Streaming           | ✅      | ✅            | ✅                 | ✅                 | ✅               |
-| JSON strict mode    | ✅      | ✅            | ✅                 | ⚠️ (beta)         | ⚠️              |
-| Code interpreter    | ❌      | ⚠️ (beta)     | ❌                 | ❌                 | ❌               |
-| Audio input/output  | ✅      | ✅            | ✅                 | ❌                 | ❌               |
-| Vision              | ✅      | ✅            | ✅                 | ✅                 | ✅               |
-| Embeddings (`text-embedding-3-large` / `text-embedding-3-small`) | ✅ (via dedicated endpoint) | ✅ (via dedicated endpoint) | ✅ (via dedicated endpoint) | ❌                 | ❌               |
+| Capability                                                       | gpt-5.1                     | gpt-5.1-codex               | gpt-5.1-codex-mini          | claude-4.5-sonnet | claude-4.5-haiku |
+| ---------------------------------------------------------------- | --------------------------- | --------------------------- | --------------------------- | ----------------- | ---------------- |
+| Context tokens                                                   | 200K                        | 200K                        | 100K                        | 200K              | 100K             |
+| Tool/function calls                                              | ✅                          | ✅                          | ✅                          | ✅ (Claude tools) | ✅               |
+| Streaming                                                        | ✅                          | ✅                          | ✅                          | ✅                | ✅               |
+| JSON strict mode                                                 | ✅                          | ✅                          | ✅                          | ⚠️ (beta)         | ⚠️               |
+| Code interpreter                                                 | ❌                          | ⚠️ (beta)                   | ❌                          | ❌                | ❌               |
+| Audio input/output                                               | ✅                          | ✅                          | ✅                          | ❌                | ❌               |
+| Vision                                                           | ✅                          | ✅                          | ✅                          | ✅                | ✅               |
+| Embeddings (`text-embedding-3-large` / `text-embedding-3-small`) | ✅ (via dedicated endpoint) | ✅ (via dedicated endpoint) | ✅ (via dedicated endpoint) | ❌                | ❌               |
 
 ## 3. Architecture Overview
 
@@ -55,25 +55,25 @@ This document is the canonical specification for expanding Dolphin's inference l
    └────────────────────┘
 ```
 
-* **Provider Registry** – Source of truth for provider metadata, auth schema, default models, throttling, and capability tags.
-* **Client Factory** – Produces typed HTTP clients with shared middleware (retry, logging, PII scrubbing).
-* **Invocation Layer** – Normalizes request/response payloads and surfaces streaming callbacks. Auto-failover between providers is explicitly **not** supported in the first release; callers must pick a provider per request.
+- **Provider Registry** – Source of truth for provider metadata, auth schema, default models, throttling, and capability tags.
+- **Client Factory** – Produces typed HTTP clients with shared middleware (retry, logging, PII scrubbing).
+- **Invocation Layer** – Normalizes request/response payloads and surfaces streaming callbacks. Auto-failover between providers is explicitly **not** supported in the first release; callers must pick a provider per request.
 
 ## 4. Configuration Specification
 
 ### Environment Variables
 
-| Variable | Description | Applies To |
-| -------- | ----------- | ---------- |
-| `DOLPHIN_PROVIDER` | Default provider (`openai`, `anthropic`, `openai-compatible`). | All surfaces. |
-| `OPENAI_API_KEY` | API key for OpenAI models. | `openai`, `openai-compatible`. |
-| `OPENAI_BASE_URL` | Override base URL (e.g., `https://oai-proxy.company.com/v1`). | `openai-compatible`; optional for `openai`. |
-| `OPENAI_COMPAT_MODELS` | Comma list of custom model IDs if discovery is manual. | `openai-compatible`. |
-| `ANTHROPIC_API_KEY` | Claude API key auth. | `anthropic`. |
-| `ANTHROPIC_SUBSCRIPTION_TOKEN` | Subscription auth token. | `anthropic`. |
-| `ANTHROPIC_AUTH_MODE` | `subscription` or `api-key`; default `api-key`. | `anthropic`. |
-| `PROVIDER_TIMEOUT_SECONDS` | Default timeout per request. | All. |
-| `PROVIDER_MAX_RETRIES` | Default retry attempts. | All. |
+| Variable                       | Description                                                    | Applies To                                  |
+| ------------------------------ | -------------------------------------------------------------- | ------------------------------------------- |
+| `DOLPHIN_PROVIDER`             | Default provider (`openai`, `anthropic`, `openai-compatible`). | All surfaces.                               |
+| `OPENAI_API_KEY`               | API key for OpenAI models.                                     | `openai`, `openai-compatible`.              |
+| `OPENAI_BASE_URL`              | Override base URL (e.g., `https://oai-proxy.company.com/v1`).  | `openai-compatible`; optional for `openai`. |
+| `OPENAI_COMPAT_MODELS`         | Comma list of custom model IDs if discovery is manual.         | `openai-compatible`.                        |
+| `ANTHROPIC_API_KEY`            | Claude API key auth.                                           | `anthropic`.                                |
+| `ANTHROPIC_SUBSCRIPTION_TOKEN` | Subscription auth token.                                       | `anthropic`.                                |
+| `ANTHROPIC_AUTH_MODE`          | `subscription` or `api-key`; default `api-key`.                | `anthropic`.                                |
+| `PROVIDER_TIMEOUT_SECONDS`     | Default timeout per request.                                   | All.                                        |
+| `PROVIDER_MAX_RETRIES`         | Default retry attempts.                                        | All.                                        |
 
 ### Configuration Rules
 
@@ -179,7 +179,7 @@ export async function loadProviderConfig(id: ProviderId): Promise<ProviderConfig
 
 export function createProviderClient(options: {
   providerId: ProviderId;
-  surface: 'agent-core' | 'mcp' | 'cli';
+  surface: "agent-core" | "mcp" | "cli";
   authContext?: AuthOverride;
 }): ProviderClient;
 
@@ -230,7 +230,7 @@ interface InvokeModelRequest {
   provider?: ProviderId;
   messages: Message[];
   tools?: ToolDefinition[];
-  response_format?: 'json' | 'text';
+  response_format?: "json" | "text";
   max_output_tokens?: number;
   temperature?: number;
   stream?: boolean;
@@ -255,10 +255,10 @@ async function invoke_model(request):
 
 ### OpenAI-Compatible Endpoint Support
 
-* Users specify `DOLPHIN_PROVIDER=openai-compatible`.
-* Required env vars: `OPENAI_API_KEY`, `OPENAI_BASE_URL` (e.g., Azure, LM Studio, llama.cpp server following OpenAI schema).
-* Optional per-endpoint config file (`~/.dolphin/providers.d/custom.json`) extends registry with custom throttling, model aliases, or TLS settings.
-* Client implementation reuses OpenAI JSON wire format; only base URL / headers differ.
+- Users specify `DOLPHIN_PROVIDER=openai-compatible`.
+- Required env vars: `OPENAI_API_KEY`, `OPENAI_BASE_URL` (e.g., Azure, LM Studio, llama.cpp server following OpenAI schema).
+- Optional per-endpoint config file (`~/.dolphin/providers.d/custom.json`) extends registry with custom throttling, model aliases, or TLS settings.
+- Client implementation reuses OpenAI JSON wire format; only base URL / headers differ.
 
 ## 9. Authentication Workflows
 
@@ -276,12 +276,12 @@ async function invoke_model(request):
 
 ## 10. Error Handling & Retries
 
-| Error Type | Strategy |
-| ---------- | -------- |
-| 429 / Rate limit | Exponential backoff with jitter, respect provider `Retry-After`. |
-| 5xx | Retry up to `PROVIDER_MAX_RETRIES` with capped backoff. |
-| Auth failures | Fail fast with actionable error message (mention env var). |
-| Schema mismatch | Log provider response + request metadata (excluding PII) and surface structured error. |
+| Error Type       | Strategy                                                                               |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| 429 / Rate limit | Exponential backoff with jitter, respect provider `Retry-After`.                       |
+| 5xx              | Retry up to `PROVIDER_MAX_RETRIES` with capped backoff.                                |
+| Auth failures    | Fail fast with actionable error message (mention env var).                             |
+| Schema mismatch  | Log provider response + request metadata (excluding PII) and surface structured error. |
 
 ## 11. Testing Requirements
 
@@ -301,4 +301,3 @@ async function invoke_model(request):
 1. Do we expose provider selection per tool type once additional embedding vendors are added?
 2. What heuristics should gate the dynamic pricing feed refresh interval in offline environments?
 3. When Anthropic ships embeddings, do we split the registry or extend the existing manifest schema?
-

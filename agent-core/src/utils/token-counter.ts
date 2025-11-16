@@ -269,8 +269,7 @@ export class TokenCounter implements TokenCounterLike {
     }
 
     const errorSum = this.estimationErrorSamples.reduce((sum, sample) => sum + sample, 0);
-    this.metrics.averageEstimationError =
-      errorSum / (this.estimationErrorSamples.length || 1);
+    this.metrics.averageEstimationError = errorSum / (this.estimationErrorSamples.length || 1);
     this.metrics.estimationSamples = this.estimationErrorSamples.length;
 
     const charsPerToken = text.length / exactTokens;
@@ -280,8 +279,7 @@ export class TokenCounter implements TokenCounterLike {
     }
 
     const calibrationSum = this.calibrationSamples.reduce((sum, sample) => sum + sample, 0);
-    this.estimationCharsPerToken =
-      calibrationSum / (this.calibrationSamples.length || 1);
+    this.estimationCharsPerToken = calibrationSum / (this.calibrationSamples.length || 1);
     this.metrics.estimationCharsPerToken = this.estimationCharsPerToken;
     this.metrics.calibrationSamples = this.calibrationSamples.length;
   }

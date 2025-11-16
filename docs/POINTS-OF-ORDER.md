@@ -1316,18 +1316,18 @@ All retrieval hyperparameters are tuned via A/B testing with statistical signifi
 #### Implementation phases and deliverables
 
 1. **WP4.1 – BM25 score normalization overhaul**
-   1. *Statistics collection module*
+   1. _Statistics collection module_
       - Create `kb/retrieval/bm25_stats.py` housing `BM25Statistics` (dataclass with percentile helpers), a `BM25StatisticsCollector`, JSON (de)serialization helpers, and validation logic for ensuring the sample count ≥ 100 before emitting a stats file.
       - Thread the collector through the SQLite indexing path: extend `SQLiteMetadataStore` (and any writer utilities invoked by `kb/store/sqlite_meta.py`) so that every persisted BM25 score calls `collector.record(score)`. Expose a `flush_statistics()` helper that writes `<kb_root>/bm25_stats.json` after indexing completes, and register it with existing CLI/ingestion flows (e.g., wherever `SQLiteMetadataStore.initialize()` or index rebuild tasks run).
       - Instrument logging to emit sample counts and percentile snapshots at INFO so we can verify coverage without opening files manually.
-   2. *Normalizer strategies and configuration*
+   2. _Normalizer strategies and configuration_
       - Implement `kb/retrieval/bm25_normalizer.py` with: `ScoreNormalizer` protocol, `SigmoidNormalizer`, `MinMaxNormalizer` (using persisted stats with safety clamps when `max == min`), and `QuantileNormalizer` that maps percentiles to `[0, 1]` buckets while handling outliers. Each normalizer should accept dependency-free configuration dataclasses for reproducible tests.
       - Extend `kb/constants/retrieval_config.py` with a `BM25NormalizationConfig` describing `strategy`, optional `stats_path`, `fallback_strategy`, and experiment toggles (e.g., `ab_variant_probability`). Default to `sigmoid` until stats ship.
-   3. *Backend wiring and rollout control*
+   3. _Backend wiring and rollout control_
       - Update `KnowledgeSearchBackend._hydrate_bm25_results` so it loads the configured normalizer once at init (or lazy-loads/caches) and exposes a context-aware helper `_normalize_bm25_score(score, metadata)`.
       - Implement fallback logic: if stats cannot be loaded, log a warning, increment a counter/metric, and revert to the legacy sigmoid path so production results remain stable.
       - Surface experiment toggles (e.g., environment variable or config) to force-enable min-max or quantile normalization for QA alongside runtime metadata (normalizer name, stats sample size) in debug logs.
-   4. *Observability and tests*
+   4. _Observability and tests_
       - Add unit tests covering: stats serialization/deserialization round trips, min–max degenerate cases, quantile bucketing, and `_hydrate_bm25_results` behavior when stats exist vs missing.
       - Add integration/regression tests under `tests/` that index a synthetic repo, produce deterministic BM25 scores, and assert normalized scores stay monotonic and reflect configured strategy.
       - Document operational steps (reindex command, stats path) in `docs/POINTS-OF-ORDER.md` and `docs/ARCHITECTURE.md` once the modules exist so operators know how to roll out.
@@ -1335,17 +1335,17 @@ All retrieval hyperparameters are tuned via A/B testing with statistical signifi
    **Implementation update:** `kb/retrieval/bm25_stats.py` now owns a thread-safe collector plus JSON serializer for BM25 score distributions, while `kb/retrieval/bm25_normalizer.py` provides sigmoid, min–max, and quantile strategies behind a shared `ScoreNormalizer` protocol.【F:kb/retrieval/bm25_stats.py†L1-L119】【F:kb/retrieval/bm25_normalizer.py†L1-L55】 The ingestion pipeline resolves `<store_root>/bm25_stats.json`, enables collection on the SQLite metadata store, and flushes the stats file whenever an indexing session succeeds so operators can ship fresh calibration snapshots after every ingest.【F:kb/ingest/pipeline.py†L1-L120】【F:kb/ingest/pipeline.py†L328-L377】 `SQLiteMetadataStore` records every BM25 score returned by `bm25_search`, exposes `configure_bm25_statistics()` for callers, and persists the aggregated percentiles so the backend can load them lazily.【F:kb/store/sqlite_meta.py†L1-L90】【F:kb/store/sqlite_meta.py†L220-L303】【F:kb/store/sqlite_meta.py†L1184-L1262】 `KnowledgeSearchBackend` now resolves a stats path, enables collection on the metadata store, and swaps `_normalize_bm25_score()` to instantiate the requested normalizer with AB-experiment toggles and environment overrides, falling back to sigmoid when stats are missing.【F:kb/api/search_backend.py†L1-L141】【F:kb/api/search_backend.py†L103-L224】【F:kb/api/search_backend.py†L472-L550】 Runtime configuration picked up a `bm25_normalization` stanza so deployments can pin strategies or custom stats paths from TOML without patching code.【F:kb/config.py†L1-L220】 Regression coverage lives in `tests/unit/retrieval/test_bm25_stats.py`, `tests/unit/retrieval/test_bm25_normalizer.py`, and new normalization tests inside `tests/unit/search/test_search_backend.py`.【F:tests/unit/retrieval/test_bm25_stats.py†L1-L47】【F:tests/unit/retrieval/test_bm25_normalizer.py†L1-L32】【F:tests/unit/search/test_search_backend.py†L1-L155】
 
 2. **WP4.2 – Accurate token counting (Anthropic-backed)**
-   1. *Directory and baseline utilities*
+   1. _Directory and baseline utilities_
       - Under `agent-core/src/utils/`, introduce `token-counter.ts` exporting a `TokenCounter` class plus a singleton factory (`getTokenCounter()`), so existing workflows can import it without circular dependencies.
       - Add shared type definitions (`TokenCountResult`, `TokenCountMode = 'exact' | 'estimate'`) and configuration (model name, batch size, TTL) adjacent to the class.
-   2. *Anthropic integration and caching*
+   2. _Anthropic integration and caching_
       - Implement an `AnthropicTokenClient` wrapper that performs the `/v1/messages/count_tokens` (or latest) call using the API key already handled elsewhere in `agent-core/src/llm`. Reuse existing HTTP clients/utilities instead of adding a new dependency.
       - Build a small in-memory cache keyed by `(model, text_hash)` with a configurable max size + TTL (default 15 minutes) to meet the “singleton caching” acceptance criteria. The `TokenCounter` should expose `countExact(texts: string[], model?: string)` and `estimate(texts: string[], model?: string)`; the latter can fall back to heuristics (e.g., `text.length / 4`) but must emit telemetry about error bounds.
       - Provide instrumentation hooks: structured logs when Anthropic is called, counters for cache hit/miss, and an optional `collectMetrics()` snapshot for experiments.
-   3. *Workflow integration*
+   3. _Workflow integration_
       - Identify all workflows that currently estimate or assume token budgets (search `agent-core/src` for `maxTokens`, `tokenBudget`, etc.) and route them through the new utility. Prioritize orchestration entry points (e.g., `orchestrator/planner`, `workflows/autonomous_session`) to ensure every outgoing LLM call obtains counts before building prompts.
       - Respect the <10 % estimation error requirement by: (a) using exact counts for safety-critical steps (final responses, long context assembly) and (b) running a calibration routine that compares heuristic estimates to exact counts, storing the rolling error rate inside the singleton to adjust scaling factors dynamically.
-   4. *Testing and documentation*
+   4. _Testing and documentation_
       - Add unit tests with mocked Anthropic responses (success, throttling, failure fallback) and cache-behavior assertions. Include calibration tests that inject known token lengths and verify the estimation error guard rail.
       - Provide smoke/e2e coverage by extending existing workflow tests to assert they call into `TokenCounter` (e.g., spy/mocking) and respect budgets.
       - Update `docs/POINTS-OF-ORDER.md` (this section) plus any relevant runbooks with setup instructions (API env vars, cache tuning, calibration procedure).
