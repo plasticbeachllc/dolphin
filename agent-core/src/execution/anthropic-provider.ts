@@ -4,7 +4,10 @@ import { join } from "path";
 
 import type { AgentEvent } from "../../../shared/types/events";
 import type { ToolExecutorMessage } from "../llm/tool-executor";
-import { AnthropicToolExecutor, type AnthropicMessageContent } from "../llm/anthropic-tool-executor";
+import {
+  AnthropicToolExecutor,
+  type AnthropicMessageContent,
+} from "../llm/anthropic-tool-executor";
 import { ClaudeClient, type AuthMode } from "../llm/claude-client";
 import { MCPClient } from "../mcp/mcp-client";
 import type { ChatProvider, AuthStatus, ExecuteParams, ExecuteResult } from "./chat-provider";

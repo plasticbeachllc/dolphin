@@ -59,15 +59,14 @@ export class OpenAIClient {
 
   constructor(config: OpenAIClientConfig, factory?: OpenAIFactory) {
     const apiKey =
-      config.apiKey ||
-      process.env.DOLPHIN_OPENAI_API_KEY ||
-      process.env.OPENAI_API_KEY;
+      config.apiKey || process.env.DOLPHIN_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
 
     if (!apiKey) {
       throw new Error("OPENAI_API_KEY is not set");
     }
 
-    const baseURL = config.baseUrl || process.env.DOLPHIN_OPENAI_BASE_URL || process.env.OPENAI_BASE_URL;
+    const baseURL =
+      config.baseUrl || process.env.DOLPHIN_OPENAI_BASE_URL || process.env.OPENAI_BASE_URL;
 
     this.config = config;
     const create = factory ?? ((options) => new OpenAI(options));

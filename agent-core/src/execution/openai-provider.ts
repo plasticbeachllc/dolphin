@@ -33,7 +33,8 @@ export class OpenAIProvider implements ChatProvider {
   constructor(config: OpenAIProviderConfig) {
     this.mcpClient = config.mcpClient ?? new MCPClient();
     this.model = config.model ?? "gpt-5.1-codex";
-    this.defaultOnEvent = config.onEvent ?? ((event) => console.error(`[OpenAIProvider] Event: ${event.type}`));
+    this.defaultOnEvent =
+      config.onEvent ?? ((event) => console.error(`[OpenAIProvider] Event: ${event.type}`));
     this.apiKey = this.resolveApiKey(config.apiKey);
     this.apiKeySource = this.resolveApiKeySource(config.apiKey);
     this.baseUrl = this.resolveBaseUrl(config.baseUrl);

@@ -60,7 +60,8 @@ export async function createChatProvider(options: ProviderFactoryOptions): Promi
     });
   }
 
-  const hasOpenAIKey = settings.openAIApiKey || process.env.DOLPHIN_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+  const hasOpenAIKey =
+    settings.openAIApiKey || process.env.DOLPHIN_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
   if (hasOpenAIKey) {
     return new OpenAIProvider({
       workspaceRoot: options.workspaceRoot,

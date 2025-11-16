@@ -93,7 +93,10 @@ class E2EMockClaudeProvider implements ChatProvider {
   private buildResponse(prompt: string): string {
     const normalized = prompt.toLowerCase();
 
-    if (normalized.includes("helping with code research") || normalized.includes("begin your research now")) {
+    if (
+      normalized.includes("helping with code research") ||
+      normalized.includes("begin your research now")
+    ) {
       return this.researchResponse();
     }
 

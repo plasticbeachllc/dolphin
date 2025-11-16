@@ -115,7 +115,10 @@ class AgentCoreV2 {
         });
 
         let architectProvider: ChatProvider = this.editorProvider;
-        if (!providerSettings.model && this.editorProvider.getProviderMetadata().provider === "openai") {
+        if (
+          !providerSettings.model &&
+          this.editorProvider.getProviderMetadata().provider === "openai"
+        ) {
           architectProvider = await createChatProvider({
             workspaceRoot: this.workspaceRoot,
             mcpClient: this.mcpClient,

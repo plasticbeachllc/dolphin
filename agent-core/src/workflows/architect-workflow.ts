@@ -337,7 +337,11 @@ export class ArchitectWorkflow implements IWorkflow {
       if (parsedQuestions.length === 0 && llmResponse.includes("?")) {
         parsedQuestions = [
           {
-            question: llmResponse.split(/\r?\n/).find((line) => line.trim().endsWith("?"))?.trim() ?? llmResponse,
+            question:
+              llmResponse
+                .split(/\r?\n/)
+                .find((line) => line.trim().endsWith("?"))
+                ?.trim() ?? llmResponse,
             priority: "medium",
             reason: "Unable to extract individual questions",
           },
@@ -483,8 +487,7 @@ export class ArchitectWorkflow implements IWorkflow {
       filesToCreate: parsedPlan.files_to_create || parsedPlan.filesToCreate || [],
       steps: (parsedPlan.steps || []).map((s) => (typeof s === "string" ? s : s.description)),
       complexity: parsedPlan.complexity || "medium",
-      estimatedTokens:
-        parsedPlan.estimated_tokens || parsedPlan.estimatedTokens || planTokensUsed,
+      estimatedTokens: parsedPlan.estimated_tokens || parsedPlan.estimatedTokens || planTokensUsed,
       overview: parsedPlan.overview,
     };
 

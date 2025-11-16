@@ -1,6 +1,12 @@
 import type { AgentEvent } from "../../../shared/types/events";
 import type { MCPClient } from "../mcp/mcp-client";
-import { createErrorResult, createToolResult, type MCPTool, type ToolCall, type ToolResult } from "./tool-utils";
+import {
+  createErrorResult,
+  createToolResult,
+  type MCPTool,
+  type ToolCall,
+  type ToolResult,
+} from "./tool-utils";
 import { generateFileWriteDiff } from "./diff-generator";
 
 export interface ToolExecutorMessage<TContent = unknown> {
@@ -100,12 +106,16 @@ export class ToolExecutorEngine<TContent, TTool, TResponse> {
         throw new Error("Generation aborted by user");
       }
 
-      const { response, assistantMessage, usage, stopReason: callStopReason } =
-        await this.adapter.callModel({
-          messages,
-          tools: this.availableTools,
-          signal: this.abortController.signal,
-        });
+      const {
+        response,
+        assistantMessage,
+        usage,
+        stopReason: callStopReason,
+      } = await this.adapter.callModel({
+        messages,
+        tools: this.availableTools,
+        signal: this.abortController.signal,
+      });
 
       messages.push(assistantMessage);
 

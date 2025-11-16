@@ -248,7 +248,8 @@ export class ContextBuilder {
     let total = 0;
 
     for (const item of items) {
-      const tokens = typeof item.tokens === "number" ? item.tokens : this.estimateFileTokens(item.content);
+      const tokens =
+        typeof item.tokens === "number" ? item.tokens : this.estimateFileTokens(item.content);
       total += tokens;
     }
 

@@ -1,5 +1,9 @@
 import { describe, it, expect } from "bun:test";
-import { ToolExecutorEngine, type ToolExecutorAdapter, type ToolExecutorMessage } from "../../../src/llm/tool-executor";
+import {
+  ToolExecutorEngine,
+  type ToolExecutorAdapter,
+  type ToolExecutorMessage,
+} from "../../../src/llm/tool-executor";
 import type { MCPClient } from "../../../src/mcp/mcp-client";
 import type { AgentEvent } from "../../../../shared/types/events";
 
@@ -23,7 +27,12 @@ class SequenceAdapter implements ToolExecutorAdapter<string, string, MockRespons
   async callModel(): Promise<{
     response: MockResponse;
     assistantMessage: ToolExecutorMessage<string>;
-    usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number };
+    usage: {
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadTokens: number;
+      cacheWriteTokens: number;
+    };
     stopReason?: string;
   }> {
     const next = this.sequence.shift() ?? 0;

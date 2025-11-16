@@ -262,4 +262,8 @@ export class ClaudeClient {
       willUseSubscription: cliAuthenticated && !willUseAPIKey,
     };
   }
+
+  getModel(): string {
+    return this.config.model;
+  }
 }

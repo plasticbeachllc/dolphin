@@ -25,7 +25,12 @@ import type { UsageStats, ToolExecutorMessage } from "../../../src/llm/tool-exec
 
 class MockChatProvider implements ChatProvider {
   private responses: Array<{ text: string; usage: UsageStats }> = [];
-  private totalUsage: UsageStats = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+  private totalUsage: UsageStats = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+  };
 
   enqueueResponse(text: string, usage?: UsageStats) {
     this.responses.push({ text, usage: usage ?? this.defaultUsage() });
@@ -36,7 +41,10 @@ class MockChatProvider implements ChatProvider {
   }
 
   async execute(params: ExecuteParams): Promise<ExecuteResult> {
-    const response = this.responses.shift() ?? { text: "default response", usage: this.defaultUsage() };
+    const response = this.responses.shift() ?? {
+      text: "default response",
+      usage: this.defaultUsage(),
+    };
 
     if (params.onEvent) {
       for (const char of response.text) {
@@ -173,7 +181,12 @@ describe("ArchitectWorkflow", () => {
 
   describe("Research Phase", () => {
     test("should execute research phase successfully", async () => {
-      const researchUsage: UsageStats = { inputTokens: 11, outputTokens: 7, cacheReadTokens: 2, cacheWriteTokens: 0 };
+      const researchUsage: UsageStats = {
+        inputTokens: 11,
+        outputTokens: 7,
+        cacheReadTokens: 2,
+        cacheWriteTokens: 0,
+      };
       mockProvider.enqueueResponse("Found relevant authentication patterns.", researchUsage);
       mockProvider.enqueueResponse("I have a few questions? [READY_TO_PLAN]");
       mockProvider.enqueueResponse(createPlanResponse());
@@ -188,8 +201,12 @@ describe("ArchitectWorkflow", () => {
         }
       }
 
-      expect(updates.some((u) => u.type === "state_change" && u.data.state === "researching")).toBe(true);
-      expect(updates.some((u) => u.type === "state_change" && u.data.state === "clarifying")).toBe(true);
+      expect(updates.some((u) => u.type === "state_change" && u.data.state === "researching")).toBe(
+        true
+      );
+      expect(updates.some((u) => u.type === "state_change" && u.data.state === "clarifying")).toBe(
+        true
+      );
 
       expect(researchResult).toBeDefined();
       expect(researchResult?.findings).toContain("authentication patterns");
@@ -211,13 +228,21 @@ describe("ArchitectWorkflow", () => {
 
       for await (const update of workflow.execute(taskInput)) {
         updates.push(update);
-        if (update.type === "progress" && update.data.phase === "clarification" && update.data.result) {
+        if (
+          update.type === "progress" &&
+          update.data.phase === "clarification" &&
+          update.data.result
+        ) {
           clarificationResult = update.data.result as ClarificationResult;
         }
       }
 
-      expect(updates.some((u) => u.type === "state_change" && u.data.state === "clarifying")).toBe(true);
-      expect(updates.some((u) => u.type === "state_change" && u.data.state === "planning")).toBe(true);
+      expect(updates.some((u) => u.type === "state_change" && u.data.state === "clarifying")).toBe(
+        true
+      );
+      expect(updates.some((u) => u.type === "state_change" && u.data.state === "planning")).toBe(
+        true
+      );
       expect(clarificationResult).toBeDefined();
       expect(clarificationResult?.conversationTurns).toBeGreaterThan(0);
       expect(clarificationResult?.readyForPlanning).toBe(true);

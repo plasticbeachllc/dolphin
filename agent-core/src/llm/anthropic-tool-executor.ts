@@ -16,8 +16,6 @@ import {
   type ToolResult,
 } from "./tool-utils";
 
-const DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-5-20250929";
-
 export type AnthropicMessageContent = string | Anthropic.ContentBlock[];
 
 interface AnthropicAdapterOptions {
@@ -114,10 +112,11 @@ class AnthropicAdapter
     if (!apiClient) {
       throw new Error("API client not initialized");
     }
+    const model = this.claudeClient.getModel();
 
     const stream = apiClient.messages.stream(
       {
-        model: DEFAULT_CLAUDE_MODEL,
+        model,
         max_tokens: 4096,
         tools,
         messages: messages.map((message) => ({
@@ -130,15 +129,13 @@ class AnthropicAdapter
 
     const fullContent: Anthropic.ContentBlock[] = [];
     let currentTextBlock = "";
-    let currentToolUse:
-      | {
-          type: "tool_use";
-          id: string;
-          name: string;
-          inputJson: string;
-          input?: Record<string, unknown>;
-        }
-      | null = null;
+    let currentToolUse: {
+      type: "tool_use";
+      id: string;
+      name: string;
+      inputJson: string;
+      input?: Record<string, unknown>;
+    } | null = null;
 
     for await (const event of stream) {
       switch (event.type) {
@@ -170,7 +167,10 @@ class AnthropicAdapter
             currentTextBlock = "";
           } else if (currentToolUse) {
             try {
-              currentToolUse.input = JSON.parse(currentToolUse.inputJson) as Record<string, unknown>;
+              currentToolUse.input = JSON.parse(currentToolUse.inputJson) as Record<
+                string,
+                unknown
+              >;
             } catch {
               currentToolUse.input = {};
             }
@@ -201,7 +201,10 @@ class AnthropicAdapter
   ): Promise<Anthropic.Message> {
     const { runClaudeCode } = await import("./claude-cli-process");
     const systemPrompt = `You have access to the following tools via MCP:\n\n${tools
-      .map((tool) => `- ${tool.name}: ${tool.description}\n  Input: ${JSON.stringify(tool.input_schema)}`)
+      .map(
+        (tool) =>
+          `- ${tool.name}: ${tool.description}\n  Input: ${JSON.stringify(tool.input_schema)}`
+      )
       .join("\n\n")}`;
 
     const anthropicMessages = messages.map(

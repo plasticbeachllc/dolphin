@@ -8,7 +8,11 @@ import {
 } from "./tool-executor";
 import type { MCPTool, ToolResult, ToolCall } from "./tool-utils";
 import type { OpenAIClient } from "./openai-client";
-import { type OpenAIResponse, type OpenAIInputMessage, type OpenAIResponseTool } from "./openai-client";
+import {
+  type OpenAIResponse,
+  type OpenAIInputMessage,
+  type OpenAIResponseTool,
+} from "./openai-client";
 
 export type OpenAIMessageContent = Array<{ type: string; [key: string]: unknown }>;
 
@@ -84,8 +88,9 @@ class OpenAIAdapter
 
   extractToolCalls(response: OpenAIResponse): ToolCall[] {
     return response.output
-      .filter((item): item is { type: "tool_call"; call_id: string; name: string; arguments: string } =>
-        item.type === "tool_call"
+      .filter(
+        (item): item is { type: "tool_call"; call_id: string; name: string; arguments: string } =>
+          item.type === "tool_call"
       )
       .map((call) => ({
         id: call.call_id,
@@ -103,7 +108,8 @@ class OpenAIAdapter
         output: [
           {
             type: "output_text",
-            text: typeof result.content === "string" ? result.content : JSON.stringify(result.content),
+            text:
+              typeof result.content === "string" ? result.content : JSON.stringify(result.content),
           },
         ],
         is_error: result.is_error,

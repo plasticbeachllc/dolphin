@@ -5,7 +5,6 @@
 **Owner:** Agent Core / VSCode Extension  
 **Status:** Draft – Ready for Implementation
 
-
 ## Phase 1 (Agent Core) Alignment
 
 The first implementation milestone focused on getting the Agent Core to boot with
@@ -13,13 +12,13 @@ both Anthropic and OpenAI models, mirroring the original Phase 1 charter for the
 provider initiative. The following deliverables are covered by the current code
 base:
 
-| Deliverable                                      | Status | Notes |
-| ------------------------------------------------ | :----: | ----- |
-| Shared chat provider abstraction (`ChatProvider`) |  ✅   | Implemented in `agent-core/src/execution/chat-provider.ts` and adopted by the orchestrator/editor/architect workflows. |
-| Anthropic + OpenAI client wrappers               |  ✅   | `AnthropicProvider` keeps the CLI + API dual-mode AuthManager, while `OpenAIProvider` uses the new OpenAI Responses adapter with streaming/tool support. |
-| Tool execution engine with provider adapters     |  ✅   | `ToolExecutorEngine` powers both Anthropic and OpenAI adapters (`anthropic-tool-executor.ts`, `openai-tool-executor.ts`). |
-| Provider selection knobs                         |  ✅   | `~/.dolphin/config` + `DOLPHIN_*` env vars select provider/model/temperature; a custom OpenAI-compatible base URL/API key are now supported via `provider.openai` overrides. |
-| MCP workflow integration                         |  ✅   | Both providers use the same MCP tool loop and bubble up token usage to orchestrator telemetry. |
+| Deliverable                                       | Status | Notes                                                                                                                                                                        |
+| ------------------------------------------------- | :----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared chat provider abstraction (`ChatProvider`) |   ✅   | Implemented in `agent-core/src/execution/chat-provider.ts` and adopted by the orchestrator/editor/architect workflows.                                                       |
+| Anthropic + OpenAI client wrappers                |   ✅   | `AnthropicProvider` keeps the CLI + API dual-mode AuthManager, while `OpenAIProvider` uses the new OpenAI Responses adapter with streaming/tool support.                     |
+| Tool execution engine with provider adapters      |   ✅   | `ToolExecutorEngine` powers both Anthropic and OpenAI adapters (`anthropic-tool-executor.ts`, `openai-tool-executor.ts`).                                                    |
+| Provider selection knobs                          |   ✅   | `~/.dolphin/config` + `DOLPHIN_*` env vars select provider/model/temperature; a custom OpenAI-compatible base URL/API key are now supported via `provider.openai` overrides. |
+| MCP workflow integration                          |   ✅   | Both providers use the same MCP tool loop and bubble up token usage to orchestrator telemetry.                                                                               |
 
 **Default models:** Phase 1 now ships with `claude-sonnet-4-5-20250929` for the Anthropic path. When the OpenAI provider is selected, the editor/coding workflow defaults to `gpt-5.1-codex` while the architect workflow defaults to `gpt-5.1`, keeping runtime behavior aligned with the plan's "Claude 4.5" / "GPT 5.1" targeting without extra configuration.
 
@@ -254,7 +253,7 @@ export class ClaudeLLMProvider implements ILLMProvider {
     this.claudeClient =
       config.claudeClient ??
       new ClaudeClient({
-        model: config.model,           // from front-end/config
+        model: config.model, // from front-end/config
         maxTokens: 4096,
         temperature: 1.0,
       });
@@ -281,7 +280,7 @@ export class ClaudeLLMProvider implements ILLMProvider {
     const result = await executor.executeWithTools(
       params.message,
       // Pass through rich content blocks from history.
-      (params.conversationHistory ?? []).map((m) => ({ role: m.role, content: m.content })),
+      (params.conversationHistory ?? []).map((m) => ({ role: m.role, content: m.content }))
     );
 
     return {
@@ -332,7 +331,7 @@ import OpenAI from "openai";
 
 export interface OpenAIConfig {
   apiKey?: string;
-  model: string;         // e.g. "gpt-5.1-codex"
+  model: string; // e.g. "gpt-5.1-codex"
   maxTokens: number;
   temperature?: number;
 }
@@ -422,7 +421,7 @@ export class OpenAIToolExecutor {
 
   async executeWithTools(
     userMessage: string,
-    history: { role: "user" | "assistant"; content: LLMContent }[] = [],
+    history: { role: "user" | "assistant"; content: LLMContent }[] = []
   ): Promise<LLMExecuteResult> {
     this.abortController = new AbortController();
 
@@ -484,7 +483,7 @@ export class OpenAIToolExecutor {
   }
 
   private async executeToolCalls(
-    toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[],
+    toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[]
   ): Promise<unknown[]> {
     // Map each OpenAI tool call to MCP call, emit events, return results
   }
@@ -518,10 +517,7 @@ export class OpenAILLMProvider implements ILLMProvider {
   }
 
   async execute(params: LLMExecuteParams): Promise<LLMExecuteResult> {
-    return await this.executor.executeWithTools(
-      params.message,
-      params.conversationHistory ?? [],
-    );
+    return await this.executor.executeWithTools(params.message, params.conversationHistory ?? []);
   }
 
   abort(): void {
@@ -704,7 +700,7 @@ if (providerSetting === "openai" && openaiKey) {
 await agentBridge.start(agentCorePath, extensionPath, env);
 ```
 
-*(AgentBridge.start signature will be adjusted to accept an `env` object rather than a single API key.)*
+_(AgentBridge.start signature will be adjusted to accept an `env` object rather than a single API key.)_
 
 ### 4.2 Settings Page (UI)
 
@@ -751,8 +747,8 @@ Saving will post a message back to the extension to update secrets/settings.
 
 ```ts
 interface AuthStatusData {
-  provider: 'anthropic' | 'openai';
-  mode: 'subscription' | 'api_key' | 'none' | 'auto';
+  provider: "anthropic" | "openai";
+  mode: "subscription" | "api_key" | "none" | "auto";
   cliInstalled: boolean;
   cliAuthenticated: boolean;
   apiKeySet: boolean;

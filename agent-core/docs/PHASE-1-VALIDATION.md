@@ -24,15 +24,15 @@ Phase 1 implementation is **complete** with all core components delivered and te
 
 ### Phase 1 Success Criteria (from project plan)
 
-| #   | Criterion                                      | Status | Evidence                                                                                                                                                    |
-| --- | ---------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Editor Mode can handle simple tasks end-to-end | ✅     | [`editor-workflow.ts`](../src/workflows/editor-workflow.ts) + [`editor-workflow.test.ts`](../tests/integration/editor-workflow.test.ts) (323 lines)         |
-| 2   | Claude CLI subprocess spawning works reliably  | ✅     | [`anthropic-provider.ts`](../src/execution/anthropic-provider.ts) with process lifecycle management                                                   |
-| 3   | KB search integration functional               | ✅     | [`context-builder.ts`](../src/context/context-builder.ts) (320 lines) + [`kb-integration.test.ts`](../tests/integration/kb-integration.test.ts) (443 lines) |
-| 4   | State persists in TOML correctly               | ✅     | [`state-store.ts`](../src/state/state-store.ts) (459 lines) + [`state-store.test.ts`](../tests/unit/state-store.test.ts) (334 lines)                        |
-| 5   | 100+ tests passing                             | ✅     | 110+ test cases across 7 test suites                                                                                                                        |
-| 6   | Authentication detection works                 | ✅     | [`anthropic-provider.ts`](../src/execution/anthropic-provider.ts) AuthManager + [`claude-auth.test.ts`](../tests/integration/claude-auth.test.ts) (355 lines)     |
-| 7   | Streaming responses display in extension       | 🔜     | Ready for Phase 2 VSCode extension integration                                                                                                              |
+| #   | Criterion                                      | Status | Evidence                                                                                                                                                      |
+| --- | ---------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Editor Mode can handle simple tasks end-to-end | ✅     | [`editor-workflow.ts`](../src/workflows/editor-workflow.ts) + [`editor-workflow.test.ts`](../tests/integration/editor-workflow.test.ts) (323 lines)           |
+| 2   | Claude CLI subprocess spawning works reliably  | ✅     | [`anthropic-provider.ts`](../src/execution/anthropic-provider.ts) with process lifecycle management                                                           |
+| 3   | KB search integration functional               | ✅     | [`context-builder.ts`](../src/context/context-builder.ts) (320 lines) + [`kb-integration.test.ts`](../tests/integration/kb-integration.test.ts) (443 lines)   |
+| 4   | State persists in TOML correctly               | ✅     | [`state-store.ts`](../src/state/state-store.ts) (459 lines) + [`state-store.test.ts`](../tests/unit/state-store.test.ts) (334 lines)                          |
+| 5   | 100+ tests passing                             | ✅     | 110+ test cases across 7 test suites                                                                                                                          |
+| 6   | Authentication detection works                 | ✅     | [`anthropic-provider.ts`](../src/execution/anthropic-provider.ts) AuthManager + [`claude-auth.test.ts`](../tests/integration/claude-auth.test.ts) (355 lines) |
+| 7   | Streaming responses display in extension       | 🔜     | Ready for Phase 2 VSCode extension integration                                                                                                                |
 
 **Overall Status:** ✅ **6/7 criteria met** (streaming display deferred to Phase 2 UI work)
 
@@ -215,17 +215,17 @@ Phase 1 implementation is **complete** with all core components delivered and te
 
 ### Core Components (3,493 lines)
 
-| Component                                                   | Lines | Purpose                               | Status |
-| ----------------------------------------------------------- | ----- | ------------------------------------- | ------ |
-| [`orchestrator.ts`](../src/orchestrator/orchestrator.ts)    | 458   | State machine & workflow coordination | ✅     |
-| [`state-store.ts`](../src/state/state-store.ts)             | 459   | TOML persistence & versioning         | ✅     |
-| [`json-rpc.ts`](../src/utils/json-rpc.ts)                   | 291   | Extension communication protocol      | ✅     |
-| [`types/index.ts`](../src/types/index.ts)                   | 506   | TypeScript type system                | ✅     |
+| Component                                                         | Lines | Purpose                               | Status |
+| ----------------------------------------------------------------- | ----- | ------------------------------------- | ------ |
+| [`orchestrator.ts`](../src/orchestrator/orchestrator.ts)          | 458   | State machine & workflow coordination | ✅     |
+| [`state-store.ts`](../src/state/state-store.ts)                   | 459   | TOML persistence & versioning         | ✅     |
+| [`json-rpc.ts`](../src/utils/json-rpc.ts)                         | 291   | Extension communication protocol      | ✅     |
+| [`types/index.ts`](../src/types/index.ts)                         | 506   | TypeScript type system                | ✅     |
 | [`anthropic-provider.ts`](../src/execution/anthropic-provider.ts) | 493   | Multi-model CLI execution             | ✅     |
-| [`editor-workflow.ts`](../src/workflows/editor-workflow.ts) | 260   | Fast-path execution                   | ✅     |
-| [`context-builder.ts`](../src/context/context-builder.ts)   | 320   | KB integration & context assembly     | ✅     |
-| [`prompt-builder.ts`](../src/prompts/prompt-builder.ts)     | 207   | Phase-specific prompts                | ✅     |
-| [`toml-writer.ts`](../src/storage/toml-writer.ts)           | 499   | TOML serialization utilities          | ✅     |
+| [`editor-workflow.ts`](../src/workflows/editor-workflow.ts)       | 260   | Fast-path execution                   | ✅     |
+| [`context-builder.ts`](../src/context/context-builder.ts)         | 320   | KB integration & context assembly     | ✅     |
+| [`prompt-builder.ts`](../src/prompts/prompt-builder.ts)           | 207   | Phase-specific prompts                | ✅     |
+| [`toml-writer.ts`](../src/storage/toml-writer.ts)                 | 499   | TOML serialization utilities          | ✅     |
 
 **Total Production Code:** ~3,493 lines
 

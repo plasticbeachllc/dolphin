@@ -77,7 +77,10 @@ class MockClaudeProvider implements ChatProvider {
   private selectResponse(prompt: string): string {
     const normalized = prompt.toLowerCase();
 
-    if (normalized.includes("helping with code research") || normalized.includes("begin your research now")) {
+    if (
+      normalized.includes("helping with code research") ||
+      normalized.includes("begin your research now")
+    ) {
       return `Based on the KB search results, I found:
 - Authentication middleware in src/middleware/auth.ts
 - JWT utilities in src/utils/jwt.ts

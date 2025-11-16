@@ -55,13 +55,14 @@ describe("OpenAIProvider", () => {
     delete process.env.DOLPHIN_OPENAI_API_KEY;
 
     const okClient = {
-      streamResponse: async () => ({
-        id: "resp_1",
-        model: "test",
-        status: "completed",
-        output: [],
-        usage: { input_tokens: 0, output_tokens: 0 },
-      }) as OpenAIResponse,
+      streamResponse: async () =>
+        ({
+          id: "resp_1",
+          model: "test",
+          status: "completed",
+          output: [],
+          usage: { input_tokens: 0, output_tokens: 0 },
+        }) as OpenAIResponse,
     } as unknown as OpenAIClient;
 
     const provider = new OpenAIProvider({
@@ -80,13 +81,14 @@ describe("OpenAIProvider", () => {
     delete process.env.DOLPHIN_OPENAI_API_KEY;
 
     const okClient = {
-      streamResponse: async () => ({
-        id: "resp_1",
-        model: "test",
-        status: "completed",
-        output: [],
-        usage: { input_tokens: 0, output_tokens: 0 },
-      }) as OpenAIResponse,
+      streamResponse: async () =>
+        ({
+          id: "resp_1",
+          model: "test",
+          status: "completed",
+          output: [],
+          usage: { input_tokens: 0, output_tokens: 0 },
+        }) as OpenAIResponse,
     } as unknown as OpenAIClient;
 
     const provider = new OpenAIProvider({
