@@ -706,24 +706,14 @@ const openaiModel = vscode.workspace
 const anthropicKey = await context.secrets.get("dolphin.anthropicApiKey");
 const openaiKey = await context.secrets.get("dolphin.openaiApiKey");
 
-const env = {
-  ...process.env,
-  DOLPHIN_LLM_PROVIDER: providerSetting,
-  DOLPHIN_LLM_MODEL: providerSetting === "anthropic" ? anthropicModel : openaiModel,
-};
-
-// Only expose the key for the active provider.
-if (providerSetting === "anthropic" && anthropicKey) {
-  env.ANTHROPIC_API_KEY = anthropicKey;
-}
-if (providerSetting === "openai" && openaiKey) {
-  env.OPENAI_API_KEY = openaiKey;
-}
-
-await agentBridge.start(agentCorePath, extensionPath, env);
+await agentBridge.start(agentCorePath, extensionPath, {
+  anthropicApiKey: providerSetting === "anthropic" ? anthropicKey : undefined,
+  openaiApiKey: providerSetting === "openai" ? openaiKey : undefined,
+  kbApiKey: process.env.DOLPHIN_API_KEY,
+});
 ```
 
-_(AgentBridge.start signature will be adjusted to accept an `env` object rather than a single API key.)_
+_(AgentBridge.start now accepts an auth object instead of a single API key.)_
 
 ### 4.2 Settings Page (UI)
 
@@ -940,13 +930,13 @@ All tests must clean up after themselves (temp dirs, env vars, secrets, test set
 
 ### Phase 3 – VSCode Extension Integration
 
-14. Update `AgentBridge.start` to accept an `env` object instead of a single API key:
-    - Adjust spawning logic to use provided env instead of constructing it internally.
+14. Update `AgentBridge.start` to accept an auth/options object instead of a single API key:
+    - Populate spawn env with whatever keys are provided (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DOLPHIN_API_KEY`).
 15. In `extension.ts`:
     - Read `dolphin.llm.provider` and model settings.
     - Load both Anthropic and OpenAI API keys from secrets.
-    - Build env with `DOLPHIN_LLM_PROVIDER`, `DOLPHIN_LLM_MODEL`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`.
-    - Pass env into `agentBridge.start`.
+    - Build auth payload with `DOLPHIN_LLM_PROVIDER`, `DOLPHIN_LLM_MODEL`, and provider-specific keys.
+    - Pass the payload into `agentBridge.start` so Agent Core spawns with the right credentials.
 16. Update or add commands:
     - `dolphin.setClaudeApiKey` → stores `dolphin.anthropicApiKey`.
     - `dolphin.setOpenAIApiKey` → stores `dolphin.openaiApiKey`.

@@ -17,6 +17,8 @@ import { DriftDetector } from "./kb/drift-detector";
 const FALLBACK_KB_BASE_URL = "http://127.0.0.1:7777";
 let isTestEnv = false;
 let defaultKbBaseUrl = FALLBACK_KB_BASE_URL;
+const KB_API_KEY_SECRET_ID = "dolphin.kbApiKey";
+let defaultKbApiKey: string | undefined;
 
 function resolveKbBaseUrl(): string {
   try {
@@ -27,6 +29,60 @@ function resolveKbBaseUrl(): string {
     console.warn("[Extension] Failed to resolve KB base URL, using fallback", error);
     return FALLBACK_KB_BASE_URL;
   }
+}
+
+function getKbApiKey(): string | undefined {
+  return (
+    defaultKbApiKey ||
+    process.env.DOLPHIN_API_KEY ||
+    process.env.DOLPHIN_KB_API_KEY ||
+    undefined
+  );
+}
+
+function setKbApiKeyValue(value: string | undefined, source: "env" | "secret" | "command") {
+  defaultKbApiKey = value;
+
+  if (value) {
+    process.env.DOLPHIN_API_KEY = value;
+    process.env.DOLPHIN_KB_API_KEY = value;
+    try {
+      logger?.info?.(
+        `[Extension] KB API key loaded from ${
+          source === "env" ? "environment" : source === "secret" ? "secret storage" : "command"
+        }`
+      );
+    } catch {
+      // Logger may not be ready during activation bootstrap
+    }
+  }
+}
+
+async function initializeKbApiKey(context: vscode.ExtensionContext): Promise<void> {
+  const envKey = process.env.DOLPHIN_API_KEY || process.env.DOLPHIN_KB_API_KEY;
+  if (envKey) {
+    setKbApiKeyValue(envKey, "env");
+    return;
+  }
+
+  const storedKey = await context.secrets.get(KB_API_KEY_SECRET_ID);
+  if (storedKey) {
+    setKbApiKeyValue(storedKey, "secret");
+  } else {
+    try {
+      logger?.warn?.("[Extension] KB API key not configured; secured KB endpoints will reject requests.");
+    } catch {
+      // Logger may not be ready yet
+    }
+  }
+}
+
+function propagateKbApiKeyToConsumers(apiKey?: string): void {
+  const key = apiKey ?? getKbApiKey();
+  viewProvider?.updateKbApiKey(key);
+  fileWatcher?.setApiKey?.(key);
+  autoSyncManager?.updateApiKey?.(key);
+  driftDetector?.updateApiKey?.(key);
 }
 
 let agentBridge: AgentBridgeAdapter | null = null;
@@ -64,6 +120,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
   logger.debug(`Using KB base URL: ${defaultKbBaseUrl}`);
 
+  await initializeKbApiKey(context);
+
   try {
     // Initialize AgentBridge with shared output channel
     logger.info(
@@ -78,15 +136,18 @@ export async function activate(context: vscode.ExtensionContext) {
     logger.debug(`Extension path: ${extensionPath}`);
 
     // Retrieve API key from SecretStorage
-    const apiKey = await context.secrets.get("dolphin.apiKey");
-    if (apiKey) {
+    const anthropicApiKey = await context.secrets.get("dolphin.apiKey");
+    if (anthropicApiKey) {
       logger.info("API key found in SecretStorage");
     } else {
       logger.info("No API key found in SecretStorage - will use CLI or env");
     }
 
     try {
-      await agentBridge.start(agentCorePath, extensionPath, apiKey);
+      await agentBridge.start(agentCorePath, extensionPath, {
+        anthropicApiKey,
+        kbApiKey: getKbApiKey(),
+      });
       logger.info("AgentBridge started successfully");
     } catch (startError: unknown) {
       const message = startError instanceof Error ? startError.message : String(startError);
@@ -132,6 +193,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // Add API integration for file sync (Phase 2)
         config.apiBaseUrl = defaultKbBaseUrl;
         config.repoName = path.basename(workspaceFolder.uri.fsPath);
+        config.apiKey = getKbApiKey();
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         logger.warn(`Failed to load watcher config, using defaults: ${message}`);
@@ -149,6 +211,7 @@ export async function activate(context: vscode.ExtensionContext) {
           ],
           apiBaseUrl: defaultKbBaseUrl,
           repoName: path.basename(workspaceFolder.uri.fsPath),
+          apiKey: getKbApiKey(),
         };
       }
       fileWatcher = new FileWatcher(config, async (changes) => {
@@ -168,6 +231,7 @@ export async function activate(context: vscode.ExtensionContext) {
       });
 
       await fileWatcher.startWatching(workspaceFolder);
+      fileWatcher.setApiKey(getKbApiKey());
       context.subscriptions.push({
         dispose: () => fileWatcher?.dispose(),
       });
@@ -197,8 +261,11 @@ export async function activate(context: vscode.ExtensionContext) {
         autoSyncConfig,
         path.basename(workspaceFolder.uri.fsPath),
         defaultKbBaseUrl,
-        outputChannel
+        outputChannel,
+        vscode.workspace,
+        getKbApiKey()
       );
+      autoSyncManager.updateApiKey(getKbApiKey());
       await autoSyncManager.start();
       context.subscriptions.push({
         dispose: () => autoSyncManager?.dispose(),
@@ -210,8 +277,11 @@ export async function activate(context: vscode.ExtensionContext) {
       driftDetector = new DriftDetector(
         path.basename(workspaceFolder.uri.fsPath),
         defaultKbBaseUrl,
-        outputChannel
+        outputChannel,
+        undefined,
+        getKbApiKey()
       );
+      driftDetector.updateApiKey(getKbApiKey());
       await driftDetector.start();
       context.subscriptions.push({
         dispose: () => driftDetector?.dispose(),
@@ -226,7 +296,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Register webview provider with AgentBridge
     logger.info("Creating DolphinViewProvider with AgentBridge...");
-    viewProvider = new DolphinViewProvider(context.extensionUri, outputChannel, agentBridge);
+    viewProvider = new DolphinViewProvider(
+      context.extensionUri,
+      outputChannel,
+      agentBridge,
+      getKbApiKey()
+    );
     logger.debug("Registering webview view provider for 'dolphin.chatView'...");
     context.subscriptions.push(
       vscode.window.registerWebviewViewProvider("dolphin.chatView", viewProvider, {
@@ -283,6 +358,42 @@ export async function activate(context: vscode.ExtensionContext) {
           await context.secrets.store("dolphin.apiKey", apiKey);
           vscode.window.showInformationMessage("API key stored securely");
           outputChannel.appendLine("[Dolphin] API key stored in SecretStorage");
+        }
+      })
+    );
+
+    // Command: dolphin.kb.setApiKey - Set the KB API key for REST endpoints
+    context.subscriptions.push(
+      vscode.commands.registerCommand("dolphin.kb.setApiKey", async () => {
+        outputChannel.appendLine("[Dolphin] Executing dolphin.kb.setApiKey");
+        const kbKey = await vscode.window.showInputBox({
+          prompt: "Enter your Dolphin KB API Key",
+          password: true,
+          placeHolder: "kb-local-secret",
+          ignoreFocusOut: true,
+        });
+
+        if (!kbKey) {
+          outputChannel.appendLine("[Dolphin] KB API key input cancelled");
+          return;
+        }
+
+        await context.secrets.store(KB_API_KEY_SECRET_ID, kbKey);
+        setKbApiKeyValue(kbKey, "command");
+        propagateKbApiKeyToConsumers(kbKey);
+
+        const choice = await vscode.window.showInformationMessage(
+          "KB API key stored securely. Restart the Dolphin KB to apply it to the agent?",
+          "Restart Now",
+          "Later"
+        );
+
+        if (choice === "Restart Now") {
+          await vscode.commands.executeCommand("dolphin.kb.restart");
+        } else {
+          vscode.window.showInformationMessage(
+            "Run 'Dolphin: Restart Knowledge Base' later so the agent picks up the new key."
+          );
         }
       })
     );
@@ -351,9 +462,12 @@ export async function activate(context: vscode.ExtensionContext) {
             path.join("..", "agent-core", "src", "main.ts")
           );
           const extensionPath = context.extensionPath;
-          const apiKey = await context.secrets.get("dolphin.apiKey");
+          const anthropicApiKey = await context.secrets.get("dolphin.apiKey");
 
-          await agentBridge.start(agentCorePath, extensionPath, apiKey);
+          await agentBridge.start(agentCorePath, extensionPath, {
+            anthropicApiKey,
+            kbApiKey: getKbApiKey(),
+          });
 
           // Update view provider with new bridge
           if (viewProvider) {
@@ -361,9 +475,12 @@ export async function activate(context: vscode.ExtensionContext) {
             viewProvider = new DolphinViewProvider(
               context.extensionUri,
               outputChannel,
-              agentBridge
+              agentBridge,
+              getKbApiKey()
             );
           }
+
+          propagateKbApiKeyToConsumers();
 
           outputChannel.appendLine("[KB Restart] Agent and KB restarted successfully");
           vscode.window.showInformationMessage("KB restarted successfully");
@@ -539,6 +656,8 @@ export async function activate(context: vscode.ExtensionContext) {
     }
     logger.info("Activation complete");
 
+    propagateKbApiKeyToConsumers();
+
     // Return extension API for testing and integration
     return {
       getAgentBridge: () => agentBridge,
@@ -679,11 +798,17 @@ async function recoverFromCrash(_context: vscode.ExtensionContext): Promise<void
     const apiBaseUrl = defaultKbBaseUrl;
 
     // Check for pending changes that accumulated during offline period
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    const kbApiKey = getKbApiKey();
+    if (kbApiKey) {
+      headers["X-API-Key"] = kbApiKey;
+    }
+
     const response = await fetch(`${apiBaseUrl}/v1/repos/${repoName}/pending-changes?limit=10`, {
       method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers,
     });
 
     if (!response.ok) {

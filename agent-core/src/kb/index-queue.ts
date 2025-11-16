@@ -20,11 +20,13 @@ export class IndexQueue extends EventEmitter {
   private repoName: string;
   private activeTasks: Set<string> = new Set();
   private pollInterval: NodeJS.Timeout | null = null;
+  private kbApiKey?: string;
 
-  constructor(kbApiUrl: string, repoName: string) {
+  constructor(kbApiUrl: string, repoName: string, kbApiKey?: string) {
     super();
     this.kbApiUrl = kbApiUrl;
     this.repoName = repoName;
+    this.kbApiKey = kbApiKey || process.env.DOLPHIN_API_KEY || process.env.DOLPHIN_KB_API_KEY;
   }
 
   /**
@@ -35,7 +37,7 @@ export class IndexQueue extends EventEmitter {
 
     const response = await fetch(`${this.kbApiUrl}/v1/index`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: this.buildHeaders(),
       body: JSON.stringify({
         repo: this.repoName,
         files,
@@ -90,7 +92,9 @@ export class IndexQueue extends EventEmitter {
 
     for (const taskId of this.activeTasks) {
       try {
-        const response = await fetch(`${this.kbApiUrl}/v1/index/status/${taskId}`);
+        const response = await fetch(`${this.kbApiUrl}/v1/index/status/${taskId}`, {
+          headers: this.buildHeaders(),
+        });
 
         if (!response.ok) {
           console.error(`[IndexQueue] Failed to get status for task ${taskId}`);
@@ -149,5 +153,13 @@ export class IndexQueue extends EventEmitter {
       this.pollInterval = null;
     }
     this.activeTasks.clear();
+  }
+
+  private buildHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (this.kbApiKey) {
+      headers["X-API-Key"] = this.kbApiKey;
+    }
+    return headers;
   }
 }

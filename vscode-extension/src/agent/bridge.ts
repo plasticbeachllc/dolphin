@@ -13,7 +13,7 @@ import {
   createMessageConnection,
   MessageConnection,
 } from "vscode-jsonrpc/node";
-import { AgentBridgeAdapter } from "./types";
+import { AgentBridgeAdapter, AgentAuthOptions } from "./types";
 
 /**
  * AgentBridge manages communication with the Agent Core process via JSON-RPC.
@@ -50,7 +50,11 @@ export class AgentBridge implements AgentBridgeAdapter {
     this.outputChannel = outputChannel;
   }
 
-  async start(agentCorePath: string, extensionPath: string, apiKey?: string): Promise<void> {
+  async start(
+    agentCorePath: string,
+    extensionPath: string,
+    options?: AgentAuthOptions
+  ): Promise<void> {
     this.outputChannel.appendLine("[AgentBridge] Starting Agent Core...");
     this.isShuttingDown = false;
 
@@ -67,11 +71,23 @@ export class AgentBridge implements AgentBridgeAdapter {
     // Spawn Agent Core with workspace root and extension path
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
     const env = { ...process.env };
+    const anthropicKey = options?.anthropicApiKey ?? undefined;
+    const openaiKey = options?.openaiApiKey ?? undefined;
+    const kbApiKey = options?.kbApiKey ?? undefined;
 
-    // Add API key to environment if provided
-    if (apiKey) {
-      env.ANTHROPIC_API_KEY = apiKey;
-      this.outputChannel.appendLine("[AgentBridge] API key provided via SecretStorage");
+    if (anthropicKey) {
+      env.ANTHROPIC_API_KEY = anthropicKey;
+      this.outputChannel.appendLine("[AgentBridge] Anthropic API key provided via SecretStorage");
+    }
+
+    if (openaiKey) {
+      env.OPENAI_API_KEY = openaiKey;
+      this.outputChannel.appendLine("[AgentBridge] OpenAI API key provided via SecretStorage");
+    }
+
+    if (kbApiKey) {
+      env.DOLPHIN_API_KEY = kbApiKey;
+      this.outputChannel.appendLine("[AgentBridge] KB API key provided for agent HTTP calls");
     }
 
     this.process = spawn(bunPath, ["run", agentCorePath, workspaceRoot, extensionPath], {
@@ -122,7 +138,7 @@ export class AgentBridge implements AgentBridgeAdapter {
     this.process.on("error", (error) => {
       this.outputChannel.appendLine(`[AgentBridge] Process error: ${error.message}`);
       if (!this.isShuttingDown) {
-        this.handleCrash(agentCorePath, extensionPath, apiKey);
+        this.handleCrash(agentCorePath, extensionPath, options);
       }
     });
 
@@ -146,7 +162,7 @@ export class AgentBridge implements AgentBridgeAdapter {
       this.pendingRequests.clear();
 
       if (code !== 0 && code !== null && !this.isShuttingDown) {
-        this.handleCrash(agentCorePath, extensionPath, apiKey);
+        this.handleCrash(agentCorePath, extensionPath, options);
       }
     });
 
@@ -168,7 +184,7 @@ export class AgentBridge implements AgentBridgeAdapter {
   private async handleCrash(
     agentCorePath: string,
     extensionPath: string,
-    apiKey?: string
+    options?: AgentAuthOptions
   ): Promise<void> {
     // Check if we're shutting down before doing anything
     if (this.isShuttingDown) {
@@ -192,7 +208,7 @@ export class AgentBridge implements AgentBridgeAdapter {
 
       if (action === "Retry" && !this.isShuttingDown) {
         this.restartAttempts = 0;
-        this.start(agentCorePath, extensionPath, apiKey);
+        this.start(agentCorePath, extensionPath, options);
       }
       return;
     }
@@ -222,7 +238,7 @@ export class AgentBridge implements AgentBridgeAdapter {
 
       // Only restart if not shutting down
       if (!this.isShuttingDown) {
-        this.start(agentCorePath, extensionPath, apiKey);
+        this.start(agentCorePath, extensionPath, options);
       }
     }, backoff);
 

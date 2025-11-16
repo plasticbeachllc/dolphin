@@ -47,6 +47,10 @@
         "title": "Dolphin: Set API Key"
       },
       {
+        "command": "dolphin.kb.setApiKey",
+        "title": "Dolphin: Set KB API Key"
+      },
+      {
         "command": "dolphin.test",
         "title": "Dolphin: Test"
       },

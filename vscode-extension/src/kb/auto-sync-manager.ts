@@ -24,6 +24,7 @@ export class AutoSyncManager {
   private activityTracker: vscode.Disposable | null = null;
   private isProcessing: boolean = false;
   private isDisposed: boolean = false;
+  private apiKey?: string;
 
   private log(message: string): void {
     if (!this.isDisposed) {
@@ -40,8 +41,25 @@ export class AutoSyncManager {
     private repoName: string,
     private apiBaseUrl: string,
     private outputChannel: vscode.OutputChannel,
-    private workspaceApi: WorkspaceEventApi = vscode.workspace
-  ) {}
+    private workspaceApi: WorkspaceEventApi = vscode.workspace,
+    apiKey?: string
+  ) {
+    this.apiKey = apiKey;
+  }
+
+  public updateApiKey(apiKey?: string): void {
+    this.apiKey = apiKey;
+  }
+
+  private buildHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (this.apiKey) {
+      headers["X-API-Key"] = this.apiKey;
+    }
+    return headers;
+  }
 
   async start() {
     if (!this.config.enabled || this.config.mode === "off") {
@@ -191,9 +209,7 @@ export class AutoSyncManager {
   private async getPendingChanges(): Promise<PendingChange[]> {
     const response = await fetch(`${this.apiBaseUrl}/v1/repos/${this.repoName}/pending-changes`, {
       method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: this.buildHeaders(),
     });
 
     if (!response.ok) {
@@ -207,9 +223,7 @@ export class AutoSyncManager {
   private async triggerIndexing(filePaths: string[]): Promise<void> {
     const response = await fetch(`${this.apiBaseUrl}/v1/index`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: this.buildHeaders(),
       body: JSON.stringify({
         repo: this.repoName,
         files: filePaths,

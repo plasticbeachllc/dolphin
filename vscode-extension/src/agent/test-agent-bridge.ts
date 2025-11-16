@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { AgentEvent, ConversationListItem, LoadConversationResult } from "../types/events";
-import { AgentBridgeAdapter } from "./types";
+import { AgentBridgeAdapter, AgentAuthOptions } from "./types";
 
 interface ConversationState {
   id: string;
@@ -37,7 +37,11 @@ export class TestAgentBridge implements AgentBridgeAdapter {
     ];
   }
 
-  async start(_agentCorePath: string, _extensionPath: string, _apiKey?: string): Promise<void> {
+  async start(
+    _agentCorePath: string,
+    _extensionPath: string,
+    _options?: AgentAuthOptions
+  ): Promise<void> {
     if (this.isDisposed) {
       throw new Error("TestAgentBridge already disposed");
     }

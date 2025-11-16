@@ -154,6 +154,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ```bash
 # In dolphin root directory
+export DOLPHIN_API_KEY=kb-local-secret
 uv run dolphin serve
 ```
 
@@ -161,6 +162,15 @@ The KB server runs on `http://127.0.0.1:7777` by default. If you are running the
 Knowledge Bank elsewhere (containers, remote host, etc.) override the endpoint
 with the VS Code setting **`dolphin.kb.apiBaseUrl`** so the extension and its
 tests can talk to the correct server without environment variables.
+
+### KB API Authentication
+
+All `/v1/**` Knowledge Bank endpoints require the `X-API-Key` header to match the
+`DOLPHIN_API_KEY` environment variable that the Python service was launched
+with. When you start the KB manually set `DOLPHIN_API_KEY` (see above). Inside
+VS Code run the **Dolphin: Set KB API Key** command (`dolphin.kb.setApiKey`) to
+store the same value in SecretStorage so the extension, auto-sync, and KB panel
+can authenticate automatically.
 
 **Production Mode** (planned): KB server will auto-start with the extension.
 

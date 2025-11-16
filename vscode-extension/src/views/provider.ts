@@ -10,12 +10,15 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
   private workspaceChangeDisposable?: vscode.Disposable;
   private eventListenerDisposable?: vscode.Disposable;
   private isDisposed = false;
+  private kbApiKey?: string;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly outputChannel: vscode.OutputChannel,
-    private readonly agentBridge?: AgentBridgeAdapter
+    private readonly agentBridge?: AgentBridgeAdapter,
+    kbApiKey?: string
   ) {
+    this.kbApiKey = kbApiKey;
     // Set up event forwarding immediately when AgentBridge is available
     if (this.agentBridge) {
       this.eventListenerDisposable = this.agentBridge.onEvent((event) => {
@@ -143,6 +146,10 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
    */
   public prefillInput(text: string): void {
     this.postMessage({ type: "prefill_input", text });
+  }
+
+  public updateKbApiKey(kbApiKey?: string): void {
+    this.kbApiKey = kbApiKey;
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -781,14 +788,27 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
     timeoutMs: number = 5000
   ): Promise<unknown> {
     return new Promise((resolve, reject) => {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (this.kbApiKey) {
+        headers["X-API-Key"] = this.kbApiKey;
+      } else {
+        try {
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] Warning: KB API key not configured; request ${method} ${path} may fail`
+          );
+        } catch {
+          // Output channel may not be available
+        }
+      }
+
       const options = {
         hostname: "127.0.0.1",
         port: 7777,
         path: path,
         method: method,
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
         timeout: timeoutMs,
       };
 

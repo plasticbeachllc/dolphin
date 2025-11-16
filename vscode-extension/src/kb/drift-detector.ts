@@ -11,6 +11,7 @@ export class DriftDetector {
   private checkTimer: NodeJS.Timeout | null = null;
   private checkIntervalMs: number = 3600000; // 1 hour default
   private isDisposed: boolean = false;
+  private apiKey?: string;
 
   private log(message: string): void {
     if (!this.isDisposed) {
@@ -26,11 +27,25 @@ export class DriftDetector {
     private repoName: string,
     private apiBaseUrl: string,
     private outputChannel: vscode.OutputChannel,
-    checkIntervalMs?: number
+    checkIntervalMs?: number,
+    apiKey?: string
   ) {
     if (checkIntervalMs) {
       this.checkIntervalMs = checkIntervalMs;
     }
+    this.apiKey = apiKey;
+  }
+
+  public updateApiKey(apiKey?: string): void {
+    this.apiKey = apiKey;
+  }
+
+  private buildHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (this.apiKey) {
+      headers["X-API-Key"] = this.apiKey;
+    }
+    return headers;
   }
 
   async start() {
@@ -86,9 +101,7 @@ export class DriftDetector {
   private async fetchDriftEvents(): Promise<DriftEvent[]> {
     const response = await fetch(`${this.apiBaseUrl}/v1/repos/${this.repoName}/drift`, {
       method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: this.buildHeaders(),
     });
 
     if (!response.ok) {
@@ -108,9 +121,7 @@ export class DriftDetector {
 
     const response = await fetch(`${this.apiBaseUrl}/v1/repos/${this.repoName}/changes`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: this.buildHeaders(),
       body: JSON.stringify({
         changes,
       }),

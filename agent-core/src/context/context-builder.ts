@@ -27,6 +27,7 @@ export interface ContextBuilderConfig {
   kbUrl?: string;
   kbTimeoutMs?: number;
   tokenCounter?: TokenCounterLike;
+  kbApiKey?: string;
 }
 
 /**
@@ -37,12 +38,15 @@ export class ContextBuilder {
   private kbUrl: string;
   private kbTimeoutMs: number;
   private tokenCounter: TokenCounterLike;
+  private kbApiKey?: string;
 
   constructor(config: ContextBuilderConfig) {
     this.workspaceRoot = config.workspaceRoot;
     this.kbUrl = config.kbUrl || "http://127.0.0.1:7777";
     this.kbTimeoutMs = config.kbTimeoutMs ?? 2000;
     this.tokenCounter = config.tokenCounter ?? getTokenCounter();
+    this.kbApiKey =
+      config.kbApiKey || process.env.DOLPHIN_API_KEY || process.env.DOLPHIN_KB_API_KEY || undefined;
   }
 
   /**
@@ -110,7 +114,7 @@ export class ContextBuilder {
     try {
       const response = await fetch(`${this.kbUrl}/v1/search`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: this.buildHeaders(),
         body: JSON.stringify({
           query,
           top_k: 20,
@@ -151,6 +155,14 @@ export class ContextBuilder {
     } finally {
       clearTimeout(timeoutHandle);
     }
+  }
+
+  private buildHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (this.kbApiKey) {
+      headers["X-API-Key"] = this.kbApiKey;
+    }
+    return headers;
   }
 
   /**

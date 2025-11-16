@@ -73,6 +73,16 @@ describe("Command Tests", () => {
     );
   });
 
+  it("Should register dolphin.kb.setApiKey command", async function () {
+    this.timeout(10000);
+
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(
+      commands.includes("dolphin.kb.setApiKey"),
+      "dolphin.kb.setApiKey command should be registered"
+    );
+  });
+
   // Phase 2: Editor Integration Commands
   describe("Contextual Editor Commands", () => {
     it("Should register dolphin.askAboutSelection command", async function () {
@@ -191,7 +201,7 @@ describe("Command Tests", () => {
       }
 
       // Skip setApiKey command that requires user input
-      if (cmd === "dolphin.setApiKey") {
+      if (cmd === "dolphin.setApiKey" || cmd === "dolphin.kb.setApiKey") {
         console.log(`  Skipping ${cmd} (requires user input)`);
         continue;
       }

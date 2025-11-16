@@ -83,6 +83,7 @@ class AgentCoreV2 {
     this.contextBuilder = new ContextBuilder({
       workspaceRoot,
       kbUrl: "http://127.0.0.1:7777",
+      kbApiKey: process.env.DOLPHIN_API_KEY || process.env.DOLPHIN_KB_API_KEY,
     });
 
     // Initialize Prompt Builder

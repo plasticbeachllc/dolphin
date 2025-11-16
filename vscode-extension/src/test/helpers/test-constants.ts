@@ -22,6 +22,7 @@ export const TEST_COMMANDS = {
   // KB commands
   KB_SHOW_STATUS: "dolphin.kb.showStatus",
   KB_RESTART: "dolphin.kb.restart",
+  KB_SET_API_KEY: "dolphin.kb.setApiKey",
 } as const;
 
 /**
