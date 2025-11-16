@@ -6,7 +6,7 @@
  * research and clarification phases.
  */
 
-import { describe, test, expect, beforeAll } from "bun:test";
+import { describe, test, expect, beforeAll, afterAll, mock } from "bun:test";
 import { ArchitectWorkflow } from "../../../src/workflows/architect-workflow";
 import { ContextBuilder } from "../../../src/context/context-builder";
 import { PromptBuilder } from "../../../src/prompts/prompt-builder";
@@ -67,8 +67,52 @@ medium`,
 describe("ArchitectWorkflow KB Integration", () => {
   let workflow: ArchitectWorkflow;
   let contextBuilder: ContextBuilder;
+  let originalFetch: typeof fetch;
 
   beforeAll(() => {
+    originalFetch = global.fetch;
+
+    const sampleHits = [
+      {
+        file_path: "src/middleware/auth.ts",
+        start_line: 10,
+        end_line: 80,
+        snippet_text: "export function authMiddleware(req, res, next) { /* ... */ }",
+        language: "typescript",
+        score: 0.92,
+        chunk_id: "chunk_auth_middleware",
+      },
+      {
+        file_path: "src/utils/jwt.ts",
+        start_line: 1,
+        end_line: 60,
+        snippet_text: "export const signJwt = () => {/* ... */};",
+        language: "typescript",
+        score: 0.88,
+        chunk_id: "chunk_jwt_utils",
+      },
+    ];
+
+    global.fetch = mock(async (input: Request | string, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.url;
+
+      if (url.includes("localhost:9999")) {
+        throw new Error("Connection refused");
+      }
+
+      if (url.includes("/v1/search")) {
+        return {
+          ok: true,
+          json: async () => sampleHits,
+        } as Response;
+      }
+
+      return {
+        ok: true,
+        json: async () => ({}),
+      } as Response;
+    }) as unknown as typeof fetch;
+
     // Setup with real context builder (will use mock KB for testing)
     contextBuilder = new ContextBuilder({
       workspaceRoot: "/test/workspace",
@@ -84,6 +128,10 @@ describe("ArchitectWorkflow KB Integration", () => {
       promptBuilder,
       maxClarificationTurns: 2,
     });
+  });
+
+  afterAll(() => {
+    global.fetch = originalFetch;
   });
 
   describe("KB Search During Research", () => {

@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from kb.logging.structured_logger import LogLevel, StructuredLogger
+from kb.observability.structured_logger import LogLevel, StructuredLogger
 
 
 class TestStructuredLogger:
@@ -256,8 +256,8 @@ class TestStructuredLogger:
 
     # OpenTelemetry integration tests
 
-    @patch("kb.logging.structured_logger.OTEL_AVAILABLE", True)
-    @patch("kb.logging.structured_logger.trace")
+    @patch("kb.observability.structured_logger.OTEL_AVAILABLE", True)
+    @patch("kb.observability.structured_logger.trace")
     def test_otel_trace_context_extraction(self, mock_trace, logger):
         """Test OpenTelemetry trace context extraction."""
         # Mock span with valid context
@@ -278,8 +278,8 @@ class TestStructuredLogger:
         assert len(entry["trace_id"]) == 32  # 128-bit trace ID as hex
         assert len(entry["span_id"]) == 16  # 64-bit span ID as hex
 
-    @patch("kb.logging.structured_logger.OTEL_AVAILABLE", True)
-    @patch("kb.logging.structured_logger.trace")
+    @patch("kb.observability.structured_logger.OTEL_AVAILABLE", True)
+    @patch("kb.observability.structured_logger.trace")
     def test_otel_no_active_span(self, mock_trace, logger):
         """Test logging when no active span exists."""
         mock_trace.get_current_span.return_value = None
@@ -403,8 +403,8 @@ class TestStructuredLogger:
     def test_full_feature_integration(self, logger):
         """Test all features working together."""
         with (
-            patch("kb.logging.structured_logger.OTEL_AVAILABLE", True),
-            patch("kb.logging.structured_logger.trace") as mock_trace,
+            patch("kb.observability.structured_logger.OTEL_AVAILABLE", True),
+            patch("kb.observability.structured_logger.trace") as mock_trace,
         ):
             # Setup OpenTelemetry mock
             mock_span = Mock()

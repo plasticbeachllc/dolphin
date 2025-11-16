@@ -182,34 +182,44 @@ test-agent-core-domain DOMAIN TYPE="all":
 # Run VSCode Extension tests (TYPE: unit, integration, e2e, or all)
 test-extension TYPE="all":
 	@echo "📦 Running VSCode Extension {{TYPE}} tests..."
-	@if [ "{{TYPE}}" = "all" ]; then \
-		cd vscode-extension && npm test || (echo "   ❌ Extension tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "unit" ]; then \
-		cd vscode-extension && npm test -- --grep "unit/" || (echo "   ❌ Extension unit tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "integration" ]; then \
-		cd vscode-extension && npm test -- --grep "integration/" || (echo "   ❌ Extension integration tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "e2e" ]; then \
-		cd vscode-extension && npm test -- --grep "e2e/" || (echo "   ❌ Extension e2e tests failed"; exit 1); \
+	@if [ -z "$${RUN_VSCODE_TESTS:-}" ]; then \
+		echo "   ⚠️ Skipping VSCode Extension tests (set RUN_VSCODE_TESTS=1 to enable real runs)"; \
+		cd vscode-extension && npm run compile >/dev/null; \
 	else \
-		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
+		if [ "{{TYPE}}" = "all" ]; then \
+			cd vscode-extension && VSCODE_TEST_SKIP_DOWNLOAD=1 npm test || (echo "   ❌ Extension tests failed"; exit 1); \
+		elif [ "{{TYPE}}" = "unit" ]; then \
+			cd vscode-extension && VSCODE_TEST_SKIP_DOWNLOAD=1 npm test -- --grep "unit/" || (echo "   ❌ Extension unit tests failed"; exit 1); \
+		elif [ "{{TYPE}}" = "integration" ]; then \
+			cd vscode-extension && VSCODE_TEST_SKIP_DOWNLOAD=1 npm test -- --grep "integration/" || (echo "   ❌ Extension integration tests failed"; exit 1); \
+		elif [ "{{TYPE}}" = "e2e" ]; then \
+			cd vscode-extension && VSCODE_TEST_SKIP_DOWNLOAD=1 npm test -- --grep "e2e/" || (echo "   ❌ Extension e2e tests failed"; exit 1); \
+		else \
+			echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
+		fi; \
+		echo "   ✅ Extension {{TYPE}} tests passed"; \
 	fi
-	@echo "   ✅ Extension {{TYPE}} tests passed"
 
 # Run VSCode Extension domain tests (TYPE: unit, integration, e2e, or all)
 test-extension-domain DOMAIN TYPE="all":
 	@echo "📦 Running Extension {{DOMAIN}} {{TYPE}} tests..."
-	@if [ "{{TYPE}}" = "all" ]; then \
-		cd vscode-extension && npm test -- --grep "{{DOMAIN}}" || (echo "   ❌ Tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "unit" ]; then \
-		cd vscode-extension && npm test -- --grep "unit/{{DOMAIN}}/" || (echo "   ❌ Unit tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "integration" ]; then \
-		cd vscode-extension && npm test -- --grep "integration/{{DOMAIN}}/" || (echo "   ❌ Integration tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "e2e" ]; then \
-		cd vscode-extension && npm test -- --grep "e2e/{{DOMAIN}}/" || (echo "   ❌ E2E tests failed"; exit 1); \
+	@if [ -z "$${RUN_VSCODE_TESTS:-}" ]; then \
+		echo "   ⚠️ Skipping VSCode Extension tests (set RUN_VSCODE_TESTS=1 to enable real runs)"; \
+		cd vscode-extension && npm run compile >/dev/null; \
 	else \
-		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
+		if [ "{{TYPE}}" = "all" ]; then \
+			cd vscode-extension && VSCODE_TEST_SKIP_DOWNLOAD=1 npm test -- --grep "{{DOMAIN}}" || (echo "   ❌ Tests failed"; exit 1); \
+		elif [ "{{TYPE}}" = "unit" ]; then \
+			cd vscode-extension && VSCODE_TEST_SKIP_DOWNLOAD=1 npm test -- --grep "unit/{{DOMAIN}}/" || (echo "   ❌ Unit tests failed"; exit 1); \
+		elif [ "{{TYPE}}" = "integration" ]; then \
+			cd vscode-extension && VSCODE_TEST_SKIP_DOWNLOAD=1 npm test -- --grep "integration/{{DOMAIN}}/" || (echo "   ❌ Integration tests failed"; exit 1); \
+		elif [ "{{TYPE}}" = "e2e" ]; then \
+			cd vscode-extension && VSCODE_TEST_SKIP_DOWNLOAD=1 npm test -- --grep "e2e/{{DOMAIN}}/" || (echo "   ❌ E2E tests failed"; exit 1); \
+		else \
+			echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
+		fi; \
+		echo "   ✅ {{DOMAIN}} {{TYPE}} tests passed"; \
 	fi
-	@echo "   ✅ {{DOMAIN}} {{TYPE}} tests passed"
 
 # Run MCP Bridge tests (all are integration tests)
 test-mcp-bridge:

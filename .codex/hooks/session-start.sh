@@ -35,30 +35,30 @@ fi
 # Install Python dependencies
 # ============================================================================
 echo "🐍 Installing Python dependencies with uv..."
-cd "$CLAUDE_PROJECT_DIR"
+cd "$CODEX_WORKSPACE_DIR"
 uv sync --group test --group dev
 
 # ============================================================================
 # Install TypeScript/Bun dependencies
 # ============================================================================
 echo "📦 Installing agent-core dependencies..."
-cd "$CLAUDE_PROJECT_DIR/agent-core"
+cd "$CODEX_WORKSPACE_DIR/agent-core"
 bun install
 
 echo "📦 Installing mcp-bridge dependencies..."
-cd "$CLAUDE_PROJECT_DIR/mcp-bridge"
+cd "$CODEX_WORKSPACE_DIR/mcp-bridge"
 bun install
 
 echo "📦 Installing shared dependencies..."
-cd "$CLAUDE_PROJECT_DIR/shared"
+cd "$CODEX_WORKSPACE_DIR/shared"
 bun install
 
 echo "📦 Installing VSCode extension dependencies..."
-cd "$CLAUDE_PROJECT_DIR/vscode-extension"
+cd "$CODEX_WORKSPACE_DIR/vscode-extension"
 npm install
 
 echo "📦 Installing webview dependencies..."
-cd "$CLAUDE_PROJECT_DIR/vscode-extension/webview"
+cd "$CODEX_WORKSPACE_DIR/vscode-extension/webview"
 bun install
 
 echo "✅ Dolphin environment setup complete!"

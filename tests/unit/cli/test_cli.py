@@ -85,10 +85,18 @@ class TestInitCommand:
 class TestAddRepoCommand:
     """Test kb add-repo command."""
 
+    def _set_store_root(self, config_path: Path, store_root: Path) -> None:
+        store_root.mkdir(parents=True, exist_ok=True)
+        config_text = config_path.read_text()
+        config_text = config_text.replace('store_root = "~/.dolphin/knowledge_store"', f'store_root = "{store_root}"')
+        config_path.write_text(config_text)
+
     def test_add_repo_registers_repository(self, tmp_path, git_repo):
         """Test that add-repo successfully registers a repo."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
+        self._set_store_root(config_path, tmp_path / "store")
+        self._set_store_root(config_path, tmp_path / "store")
 
         result = runner.invoke(
             app,
@@ -114,6 +122,7 @@ class TestAddRepoCommand:
         """Test that add-repo fails for non-existent directory."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
+        self._set_store_root(config_path, tmp_path / "store")
 
         nonexistent = tmp_path / "nonexistent"
         result = runner.invoke(app, ["add-repo", "test", str(nonexistent)])
@@ -125,6 +134,7 @@ class TestAddRepoCommand:
         """Test that add-repo fails when path is a file."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
+        self._set_store_root(config_path, tmp_path / "store")
 
         file_path = tmp_path / "file.txt"
         file_path.write_text("content")
@@ -137,10 +147,13 @@ class TestAddRepoCommand:
         """Test add-repo with small embedding model."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
+        self._set_store_root(config_path, tmp_path / "store")
+        self._set_store_root(config_path, tmp_path / "store")
 
         result = runner.invoke(
             app,
             ["add-repo", "test-repo", str(git_repo), "--default-embed-model", "small"],
+            env={"DOLPHIN_CONFIG_PATH": str(config_path)},
         )
 
         assert result.exit_code == 0
@@ -150,10 +163,12 @@ class TestAddRepoCommand:
         """Test add-repo with large embedding model."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
+        self._set_store_root(config_path, tmp_path / "store")
 
         result = runner.invoke(
             app,
             ["add-repo", "test-repo", str(git_repo), "--default-embed-model", "large"],
+            env={"DOLPHIN_CONFIG_PATH": str(config_path)},
         )
 
         assert result.exit_code == 0
@@ -163,6 +178,7 @@ class TestAddRepoCommand:
         """Test that add-repo rejects invalid embedding model."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
+        self._set_store_root(config_path, tmp_path / "store")
 
         result = runner.invoke(
             app,
@@ -173,24 +189,34 @@ class TestAddRepoCommand:
                 "--default-embed-model",
                 "invalid",
             ],
+            env={"DOLPHIN_CONFIG_PATH": str(config_path)},
         )
 
         assert result.exit_code == 2
         assert "must be 'small' or 'large'" in result.stdout
 
-    def test_add_repo_expands_tilde_in_path(self, tmp_path):
+    def test_add_repo_expands_tilde_in_path(self, tmp_path, monkeypatch):
         """Test that add-repo expands ~ in path."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
+        self._set_store_root(config_path, tmp_path / "store")
 
-        # Create a directory that exists
+        # Point Path.home() and environment home variables to the tmp directory
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
         test_dir = Path.home() / ".test_dolphin_repo"
         test_dir.mkdir(exist_ok=True)
 
         try:
-            result = runner.invoke(app, ["add-repo", "test", "~/.test_dolphin_repo"])
-            # Should not fail with path expansion error
-            assert "~" not in result.stdout or result.exit_code == 0
+            result = runner.invoke(
+                app,
+                ["add-repo", "test", "~/.test_dolphin_repo"],
+                env={"DOLPHIN_CONFIG_PATH": str(config_path)},
+            )
+            assert result.exit_code == 0
+            assert "Repository registered" in result.stdout
         finally:
             if test_dir.exists():
                 test_dir.rmdir()

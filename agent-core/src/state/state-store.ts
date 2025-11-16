@@ -9,7 +9,7 @@
 import * as TOML from "@iarna/toml";
 import { readFile, writeFile, mkdir, readdir, unlink, stat } from "fs/promises";
 import { join, resolve, relative } from "path";
-import { existsSync } from "fs";
+import { existsSync, mkdirSync } from "fs";
 import { PathValidator } from "../../../shared/security/path-validator";
 import { z } from "zod";
 import type { TaskSession, Plan, SessionSummary, StateStoreConfig } from "../types/index.js";
@@ -225,7 +225,9 @@ export class StateStore {
     this.plansDir = join(this.storagePath, "plans");
     this.conversationsDir = join(this.storagePath, "conversations");
 
-    // Ensure directories exist first, then initialize validators
+    // Ensure directories exist synchronously before validators are used
+    this.ensureDirectoriesSync();
+    // Fire-and-forget async validation to keep behavior consistent
     void this.ensureDirectories();
   }
 
@@ -258,6 +260,18 @@ export class StateStore {
     for (const dir of dirs) {
       if (!existsSync(dir)) {
         await mkdir(dir, { recursive: true });
+      }
+    }
+  }
+
+  /**
+   * Synchronous directory creation used during construction
+   */
+  private ensureDirectoriesSync(): void {
+    const dirs = [this.storagePath, this.sessionsDir, this.plansDir, this.conversationsDir];
+    for (const dir of dirs) {
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
       }
     }
   }

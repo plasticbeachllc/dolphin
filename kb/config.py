@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -321,7 +322,20 @@ def load_config(path: Path | None = None, repo_path: Path | None = None) -> KBCo
             with repo_config_path.open("rb") as f:
                 config_data = tomllib.load(f) or {}
 
-    # 3) User config
+    # 3) Environment override (
+    if not config_data and path is None:
+        env_config_path = os.environ.get("DOLPHIN_CONFIG_PATH")
+        if env_config_path:
+            env_path = _to_path(env_config_path)
+            if not env_path.exists():
+                raise FileNotFoundError(
+                    f"Config not found at {env_path}. Create one with 'dolphin init' or unset DOLPHIN_CONFIG_PATH."
+                )
+            _log.debug("Loading config from DOLPHIN_CONFIG_PATH: %s", env_path)
+            with env_path.open("rb") as f:
+                config_data = tomllib.load(f) or {}
+
+    # 4) User config fallback
     if not config_data and path is None:
         user_config = USER_CONFIG_PATH
         if not user_config.exists():

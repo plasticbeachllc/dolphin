@@ -221,7 +221,7 @@ module = [
     "kb.ingest.optimized_pipeline",
     "kb.graph_intelligence.graph_store",
     "kb.retrieval.rankers",
-    "kb.logging.structured_logger",
+    "kb.observability.structured_logger",
     "kb.chunkers.ts_chunker",
     "kb.chunkers.py_chunker",
     "kb.ingest.graph_helpers",

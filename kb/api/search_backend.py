@@ -13,7 +13,7 @@ from ..cache import QueryCache, create_cache
 from ..config import KBConfig
 from ..constants.retrieval_config import RETRIEVAL_PARAMS
 from ..embeddings.provider import EmbeddingProvider, create_provider, set_default_provider
-from ..logging.structured_logger import StructuredLogger
+from ..observability.structured_logger import StructuredLogger
 from ..retrieval.ann_tuning import ANNParams
 from ..retrieval.cross_encoder_rerank import CrossEncoderReranker
 from ..retrieval.graph_context import GraphContextEnricher
@@ -827,7 +827,7 @@ class KnowledgeSearchBackend:
 
 def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     # Map kwargs to KBConfig fields and create config
-    config_data = {"store_root": store_root}
+    config_data = {"storage": {"store_root": store_root}}
 
     # Initialize embedding section for nested config
     embedding_data = {}

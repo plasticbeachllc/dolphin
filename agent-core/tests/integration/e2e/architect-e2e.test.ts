@@ -10,9 +10,15 @@ import { Orchestrator } from "../../../src/orchestrator/orchestrator";
 import { ArchitectWorkflow } from "../../../src/workflows/architect-workflow";
 import { EditorWorkflow } from "../../../src/workflows/editor-workflow";
 import { StateStore } from "../../../src/state/state-store";
-import { ContextBuilder } from "../../../src/context/context-builder";
 import { PromptBuilder } from "../../../src/prompts/prompt-builder";
-import type { TaskInput, TaskSession } from "../../../src/types/index";
+import type {
+  TaskInput,
+  TaskSession,
+  Context,
+  ContextBuildParams,
+  FileContent,
+  KBResult,
+} from "../../../src/types/index";
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -225,6 +231,61 @@ If issues arise:
   }
 }
 
+// Deterministic context builder to avoid real KB/file IO during tests
+class TestContextBuilder {
+  async build(params: ContextBuildParams): Promise<Context> {
+    const files: FileContent[] = (params.files ?? []).map((path) => ({
+      path,
+      content: this.stubFileContent(path),
+      language: this.detectLanguage(path),
+      tokens: 120,
+    }));
+
+    const kbResults: KBResult[] =
+      params.searchQuery && params.searchQuery.length > 0
+        ? [
+            {
+              file: "src/auth/jwt.ts",
+              startLine: 10,
+              endLine: 40,
+              content: `Stub KB context for "${params.searchQuery}"`,
+              language: "typescript",
+              score: 0.95,
+              chunkId: "kb_stub_chunk",
+            },
+          ]
+        : [];
+
+    const totalTokens =
+      files.reduce((sum, file) => sum + file.tokens, 0) + kbResults.length * 200;
+
+    return {
+      kbResults,
+      files,
+      repoMap: null,
+      totalTokens,
+      truncated: totalTokens > params.maxTokens,
+    };
+  }
+
+  private stubFileContent(path: string): string {
+    return `// Stub content for ${path}\nexport const placeholder = true;`;
+  }
+
+  private detectLanguage(path: string): string {
+    const ext = path.split(".").pop()?.toLowerCase();
+    const languageMap: Record<string, string> = {
+      ts: "typescript",
+      tsx: "typescript",
+      js: "javascript",
+      jsx: "javascript",
+      py: "python",
+    };
+
+    return languageMap[ext ?? ""] || "text";
+  }
+}
+
 describe("ArchitectWorkflow E2E", () => {
   let tempDir: string;
   let stateStore: StateStore;
@@ -243,10 +304,7 @@ describe("ArchitectWorkflow E2E", () => {
 
   const createOrchestrator = (scenario: string = "happy_path") => {
     const claudeProvider = new E2EMockClaudeProvider(scenario);
-    const contextBuilder = new ContextBuilder({
-      workspaceRoot: tempDir,
-      kbUrl: "http://localhost:7777",
-    });
+    const contextBuilder = new TestContextBuilder();
     const promptBuilder = new PromptBuilder();
 
     const architectWorkflow = new ArchitectWorkflow({

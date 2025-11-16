@@ -1100,7 +1100,7 @@ logger.info(f"[SEARCH] Embed model: {request.embed_model}")
 **After:**
 
 ```python
-from kb.logging.structured_logger import StructuredLogger
+from kb.observability.structured_logger import StructuredLogger
 
 # In KnowledgeSearchBackend.__init__
 self.logger = StructuredLogger("kb.search_backend")

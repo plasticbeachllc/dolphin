@@ -174,9 +174,11 @@ def real_backend(tmp_path: Path):
     # Cleanup: Clear any existing test data from previous runs
     with backend.sql_store._connect() as conn:
         cur = conn.cursor()
-        # Clear FTS5 table
-        cur.execute("DELETE FROM chunks_fts")
-        # Clear LanceDB tables (requires deleting actual table files)
+        # Clear FTS5 table (best effort — some environments disallow writes)
+        try:
+            cur.execute("DELETE FROM chunks_fts")
+        except Exception:
+            pass
         conn.commit()
 
     # Clear LanceDB tables for both models
@@ -199,7 +201,10 @@ def real_backend(tmp_path: Path):
     try:
         with backend.sql_store._connect() as conn:
             cur = conn.cursor()
-            cur.execute("DELETE FROM chunks_fts")
+            try:
+                cur.execute("DELETE FROM chunks_fts")
+            except Exception:
+                pass
             conn.commit()
     except Exception:
         pass  # Best effort cleanup

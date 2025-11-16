@@ -20,8 +20,10 @@ describe("EditorWorkflow Integration", () => {
   let contextBuilder: ContextBuilder;
   let promptBuilder: PromptBuilder;
   let testWorkspace: string;
+  let originalFetch: typeof fetch;
 
   beforeEach(() => {
+    originalFetch = global.fetch;
     // Create temporary workspace directory for tests
     testWorkspace = mkdtempSync(join(tmpdir(), "dolphin-test-"));
 
@@ -87,6 +89,7 @@ describe("EditorWorkflow Integration", () => {
   });
 
   afterEach(() => {
+    global.fetch = originalFetch;
     // Clean up temporary workspace
     if (testWorkspace) {
       try {
