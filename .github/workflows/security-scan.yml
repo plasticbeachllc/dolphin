@@ -1,4 +1,4 @@
-name: Security Scan
+`name: Security Scan
 
 on:
   pull_request:
@@ -35,6 +35,7 @@ jobs:
           - agent-core
           - mcp-bridge
           - vscode-extension
+          - shared
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
