@@ -1,152 +1,326 @@
-# Provider Selection and Multi-Model Strategy
+# Provider Integration Specification
 
-This document proposes an initial framework for expanding Dolphin's supported inference providers beyond the existing Vlaude subscription and Anthropic API key setups. It focuses on adding OpenAI endpoints while defining reusable abstractions so that future providers (Azure OpenAI, Google, etc.) can be added with minimal effort.
+This document is the canonical specification for expanding Dolphin's inference layer to support multiple providers while keeping the user experience provider-agnostic. It replaces the earlier OpenAI-only proposal and now formalizes: OpenAI (GPT 5.1 family), Anthropic (Claude 4.5 family), and user-provided OpenAI-compatible endpoints.
 
-## Goals
+## 1. Objectives
 
-1. **Flexible Provider Registry** – Allow runtime selection of a model provider, decoupled from call sites.
-2. **Unified Capability Matrix** – Capture what each provider supports (chat completions, tool use, streaming, vision, JSON modes, etc.).
-3. **Consistent Configuration** – Normalize environment variables, secrets, and rate-limit safety.
-4. **Provider-Agnostic UX** – Keep CLI, MCP bridge, and Agent Core workflows identical regardless of the backend.
-5. **Extensible Testing** – Ensure new providers have smoke tests, replay fixtures, and guardrails for cost/regressions.
+1. **Unify Provider Selection** – All call sites (Agent Core, MCP Bridge, VS Code, CLI) reference a single provider registry and invocation contract.
+2. **Encode Capabilities** – Capture each provider's authentication methods, supported models, modalities, limits, and quirks.
+3. **Enable Extensibility** – Adding a provider requires only registry data plus optional thin client code.
+4. **Support Custom Endpoints** – Users can point Dolphin at any OpenAI-compatible inference URL without new code.
+5. **Ship-Tested Spec** – Provide function headers, pseudocode, and QA requirements to guide implementation across TypeScript and Python surfaces.
 
-## Terminology
+## 2. Provider Matrix
 
-| Term       | Definition                                                                        |
-| ---------- | --------------------------------------------------------------------------------- |
-| Provider   | Logical API backend (Anthropic, OpenAI, Vlaude, etc.).                            |
-| Plan       | Billing plan or account type (Vlaude subscription, pay-as-you-go API).            |
-| Model      | Specific deployable model (claude-3.5-sonnet, gpt-4o, etc.).                      |
-| Capability | Feature supported by a provider/model (function calling, streaming, image input). |
+| Provider ID | Models (Initial)                                      | Authentication                       | Modalities                           | Notes |
+| ----------- | ------------------------------------------------------ | ------------------------------------ | ------------------------------------ | ----- |
+| `openai`    | `gpt-5.1`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `text-embedding-3-large`, `text-embedding-3-small` | API key only (`OPENAI_API_KEY`)      | Chat, tool calling, JSON, vision, audio, embeddings | Default OpenAI cloud endpoint; GPT models serve chat/tool flows while the `text-embedding-3-*` family powers the KB embeddings surface. |
+| `openai-compatible` | User-provided model IDs (OpenAI spec-compliant) | API key in header plus custom base URL | Mirrors OpenAI compatibility surface | Covers Azure OpenAI, self-hosted servers, etc.; embeddings supported when the endpoint exposes `text-embedding-3-large`, `text-embedding-3-small`, or future embedding IDs declared in the manifest. |
+| `anthropic` | `claude-4.5-sonnet`, `claude-4.5-haiku`               | Subscription token **or** API key    | Chat, tool use, JSON (beta)          | Requires dual-auth support toggled per deployment; no embedding surface yet. |
 
-## Current State Snapshot
+### Capability Snapshot
 
-| Surface Area          | Current Behavior                                                                               |
-| --------------------- | ---------------------------------------------------------------------------------------------- |
-| **Agent Core**        | Hard-coded Anthropic + Vlaude flows. Env vars: `ANTHROPIC_API_KEY`, Vlaude subscription token. |
-| **MCP Bridge**        | Same as Agent Core. Provider logic lives inside handler modules, not abstracted.               |
-| **VS Code Extension** | Assumes back-end providers exist but does not expose selection UI.                             |
-| **Docs/Onboarding**   | Mentions only Anthropic/Vlaude flows.                                                          |
+| Capability          | gpt-5.1 | gpt-5.1-codex | gpt-5.1-codex-mini | claude-4.5-sonnet | claude-4.5-haiku |
+| ------------------- | ------- | ------------- | ------------------ | ----------------- | ---------------- |
+| Context tokens      | 200K    | 200K          | 100K               | 200K              | 100K             |
+| Tool/function calls | ✅      | ✅            | ✅                 | ✅ (Claude tools)  | ✅               |
+| Streaming           | ✅      | ✅            | ✅                 | ✅                 | ✅               |
+| JSON strict mode    | ✅      | ✅            | ✅                 | ⚠️ (beta)         | ⚠️              |
+| Code interpreter    | ❌      | ⚠️ (beta)     | ❌                 | ❌                 | ❌               |
+| Audio input/output  | ✅      | ✅            | ✅                 | ❌                 | ❌               |
+| Vision              | ✅      | ✅            | ✅                 | ✅                 | ✅               |
+| Embeddings (`text-embedding-3-large` / `text-embedding-3-small`) | ✅ (via dedicated endpoint) | ✅ (via dedicated endpoint) | ✅ (via dedicated endpoint) | ❌                 | ❌               |
 
-## High-Level Architecture Changes
+## 3. Architecture Overview
 
-1. **Provider Registry Module**
-   - Central map: `provider_id -> ProviderConfig`.
-   - Responsible for validation, capability lookup, default models.
-   - Lives in shared package (likely `shared/providers/`).
+```
+┌─────────────────────────┐
+│ Provider Registry (TS/py│
+│   provider_config.toml  │
+└────────────┬────────────┘
+             │
+   ┌─────────▼──────────┐
+   │ Client Factory     │
+   │ (per surface)      │
+   └─────────┬──────────┘
+             │
+   ┌─────────▼──────────┐
+   │ Invocation Layer   │
+   │ (invoke_model)     │
+   └─────────┬──────────┘
+             │
+   ┌─────────▼──────────┐
+   │ Call Sites         │
+   │ Agent Core / MCP   │
+   └────────────────────┘
+```
 
-2. **Client Factory Layer**
-   - Returns typed client (Anthropic SDK, OpenAI SDK, custom HTTP).
-   - Handles retries, telemetry tagging, PII scrubbing.
+* **Provider Registry** – Source of truth for provider metadata, auth schema, default models, throttling, and capability tags.
+* **Client Factory** – Produces typed HTTP clients with shared middleware (retry, logging, PII scrubbing).
+* **Invocation Layer** – Normalizes request/response payloads and surfaces streaming callbacks. Auto-failover between providers is explicitly **not** supported in the first release; callers must pick a provider per request.
 
-3. **Call Site Refactor**
-   - Replace direct Anthropic/Vlaude references with provider-agnostic `invoke_model(request)` calls.
-   - Ensure MCP bridge and Agent Core share the same invocation contract.
+## 4. Configuration Specification
 
-4. **Configuration Surface**
-   - Add `DOLPHIN_PROVIDER=openai|anthropic|vlaude|auto` with overrides (per-scenario, per-agent).
-   - Support env-var namespace per provider (e.g., `OPENAI_API_KEY`, `OPENAI_BASE_URL`).
+### Environment Variables
 
-5. **Observability**
-   - Provider-specific metrics (latency, cost, retries) for dashboards.
-   - Structured logs include `provider_id`, `model`, and response metadata.
+| Variable | Description | Applies To |
+| -------- | ----------- | ---------- |
+| `DOLPHIN_PROVIDER` | Default provider (`openai`, `anthropic`, `openai-compatible`). | All surfaces. |
+| `OPENAI_API_KEY` | API key for OpenAI models. | `openai`, `openai-compatible`. |
+| `OPENAI_BASE_URL` | Override base URL (e.g., `https://oai-proxy.company.com/v1`). | `openai-compatible`; optional for `openai`. |
+| `OPENAI_COMPAT_MODELS` | Comma list of custom model IDs if discovery is manual. | `openai-compatible`. |
+| `ANTHROPIC_API_KEY` | Claude API key auth. | `anthropic`. |
+| `ANTHROPIC_SUBSCRIPTION_TOKEN` | Subscription auth token. | `anthropic`. |
+| `ANTHROPIC_AUTH_MODE` | `subscription` or `api-key`; default `api-key`. | `anthropic`. |
+| `PROVIDER_TIMEOUT_SECONDS` | Default timeout per request. | All. |
+| `PROVIDER_MAX_RETRIES` | Default retry attempts. | All. |
 
-## OpenAI Provider Requirements
+### Configuration Rules
 
-### Supported Endpoints
+1. **Precedence**: CLI flag > per-agent config > environment default > registry default.
+2. **Dual Anthropic Auth**: If both `ANTHROPIC_SUBSCRIPTION_TOKEN` and `ANTHROPIC_API_KEY` are present, prefer the mode specified by `ANTHROPIC_AUTH_MODE`.
+3. **Custom OpenAI-Compatible**: Users may set `DOLPHIN_PROVIDER=openai-compatible` plus `OPENAI_BASE_URL` and `OPENAI_API_KEY`. Optional JSON config (see section 7) can extend metadata per endpoint.
+4. **Embeddings**: Until additional vendor support lands, embedding creation routes must target the OpenAI family (native or compatible) and call a supported `text-embedding-3-*` model (default `text-embedding-3-large`, optional `text-embedding-3-small`). Anthropic requests should raise a configuration error and instruct operators to switch providers before re-attempting. The manifest may enumerate future OpenAI embedding IDs, and callers must respect the configured default to keep routing centralized.
 
-| Endpoint                    | Purpose                     | Notes                                                                     |
-| --------------------------- | --------------------------- | ------------------------------------------------------------------------- |
-| `POST /v1/chat/completions` | Chat + tool-calling         | Support `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `o1`, `gpt-4o-audio-preview`. |
-| `POST /v1/responses`        | Unified reasoning interface | Needed for o1-style models.                                               |
-| `POST /v1/embeddings`       | Embeddings                  | Map to Dolphin KB embedding pipeline.                                     |
+## 5. Provider Registry Specification
 
-### Configuration
+Define a single TOML manifest (`provider_config.toml`) consumed by both TypeScript and Python via generated types.
 
-| Variable               | Example                     | Description                                |
-| ---------------------- | --------------------------- | ------------------------------------------ |
-| `OPENAI_API_KEY`       | `sk-...`                    | Required for all OpenAI calls.             |
-| `OPENAI_BASE_URL`      | `https://api.openai.com/v1` | Optional for Azure/on-prem proxies.        |
-| `OPENAI_ORG_ID`        | `org_...`                   | Optional header when needed.               |
-| `OPENAI_PROJECT_ID`    | `proj_...`                  | Optional; some enterprise orgs require it. |
-| `OPENAI_DEFAULT_MODEL` | `gpt-4o-mini`               | Fallback if agent config does not specify. |
+```toml
+[openai]
+base_url = "https://api.openai.com/v1"
+features = ["json_mode", "streaming"]
 
-**Secret Management**
+[openai.auth]
+type = "api-key"
+env = ["OPENAI_API_KEY"]
 
-- Mirror existing `.env` loading conventions (`env.example`, `shared/config`).
-- Clarify precedence: CLI flags > per-agent config > `OPENAI_DEFAULT_MODEL`.
-- Add validation CLI command (`uv run dolphin providers test openai`).
+[openai.base_url_overrides]
+env = ["OPENAI_BASE_URL"]
 
-### Capability Matrix (Initial)
+[openai.models.gpt-5_1]
+default = true
+modalities = ["text", "tool", "vision", "audio"]
+max_tokens = 200000
 
-| Capability   | `gpt-4o` | `gpt-4o-mini` | `gpt-4.1` | `o1`                        |
-| ------------ | -------- | ------------- | --------- | --------------------------- |
-| Tool Calling | ✅       | ✅            | ✅        | ⚠️ (limited)                |
-| Streaming    | ✅       | ✅            | ✅        | ⚠️ (currently no streaming) |
-| JSON Mode    | ✅       | ✅            | ✅        | ❌                          |
-| Vision       | ✅       | ✅            | ✅        | ⚠️ (text only)              |
-| Audio Input  | ✅       | ✅            | ✅        | ❌                          |
-| Audio Output | ✅       | ✅            | ✅        | ❌                          |
+[openai.models.gpt-5_1-codex]
+modalities = ["text", "tool"]
+optimized_for = "code"
 
-## Migration Steps
+[openai.models.gpt-5_1-codex-mini]
+modalities = ["text", "tool"]
+max_tokens = 100000
 
-1. **Design**
-   - Finalize provider registry schema (YAML/TS/py dataclasses?).
-   - Decide canonical provider identifiers (e.g., `anthropic`, `openai`, `vlaude`).
+[openai.embeddings.text-embedding-3-large]
+modalities = ["embedding"]
+dimensions = 3072
+default = true
 
-2. **Shared Utilities**
-   - Implement provider registry + capability lookup.
-   - Provide typed request/response models for chat + embeddings.
+[openai.embeddings.text-embedding-3-small]
+modalities = ["embedding"]
+dimensions = 1536
+default = false
 
-3. **OpenAI Client**
-   - Wrap OpenAI SDK (Node + Python) or use `fetch`/`httpx` manually for deterministic logging.
-   - Ensure user-agent header identifies Dolphin build + surface (Agent Core vs MCP).
+[openai.throttling]
+rps = 60
 
-4. **Integration into Agent Core**
-   - Extend orchestrator config schema with `provider` field.
-   - Support per-task overrides (e.g., research uses `o1`, quick replies use `gpt-4o-mini`).
+[anthropic]
+features = ["streaming"]
 
-5. **Integration into MCP Bridge**
-   - Mirror the provider selection logic; ensure tool-call payloads translate correctly.
+[anthropic.auth]
+type = "multi"
 
-6. **CLI / KB Updates**
-   - Add `openai` option in KB embedding settings.
-   - Provide migration script to map existing `ANTHROPIC_API_KEY` usage.
+[anthropic.auth.modes.api-key]
+env = ["ANTHROPIC_API_KEY"]
 
-7. **Testing**
-   - Mocked unit tests for provider registry.
-   - Replay tests using recorded OpenAI responses (vcrpy / Polly).
-   - Optional smoke test script (manual) to verify credentials.
+[anthropic.auth.modes.subscription]
+env = ["ANTHROPIC_SUBSCRIPTION_TOKEN"]
 
-8. **Docs and Onboarding**
-   - Update README + docs/ARCHITECTURE with new provider narrative.
-   - Add troubleshooting section (rate limits, 429 handling, network proxies).
+[anthropic.models.claude-4_5-sonnet]
+default = true
+modalities = ["text", "tool", "vision"]
 
-## Security & Compliance
+[anthropic.models.claude-4_5-haiku]
+modalities = ["text", "tool"]
 
-- **PII Controls**: Reuse existing redaction filters before payload logging.
-- **Least Privilege**: Encourage dedicated OpenAI project per deployment; document RBAC steps.
-- **Key Rotation**: Provide script/CLI to test and rotate keys safely.
-- **Data Residency**: Document that OpenAI defaults to US; note options for Azure OpenAI in future.
+[anthropic.throttling]
+rps = 20
+```
 
-## Telemetry & Cost Awareness
+### Shared Type Definition (pseudo-TypeScript)
 
-- Add provider tag to telemetry events (OpenTelemetry spans, metrics).
-- Track per-provider token usage to support budgeting dashboards.
-- Provide opt-in prompt/response sampling for debugging, respecting privacy settings.
+```ts
+interface ProviderConfig {
+  id: string;
+  auth: ApiKeyAuth | MultiAuth;
+  baseUrl: string;
+  models: Record<string, ModelConfig>;
+  features: FeatureTag[];
+  throttling?: { rps: number; burst: number };
+  embeddings_supported: boolean;
+}
+```
 
-## Open Questions
+### Pricing Metadata & Dynamic Feed
 
-1. Should provider registry live in shared TypeScript + Python packages, or should we generate artifacts from a single source (e.g., YAML -> codegen)?
-2. How do we unify tool schemas when providers enforce different shapes (Anthropic vs OpenAI function calling)?
-3. Do we need feature flags to roll out OpenAI gradually? (e.g., `DOLPHIN_PROVIDER=openai` for canaries only.)
-4. What SLA differences must we surface to users (latency, context window, cost multipliers)?
+The manifest intentionally omits static pricing to avoid staleness. A separate dynamic feed ingests provider-owned pricing files (e.g., OpenAI usage APIs, Anthropic CSV) at startup, persists them to `provider_pricing_cache.json`, and exposes accessors to the CLI/UI for cost estimation. The feed refreshes on a configurable TTL and falls back to cached values when offline. Implementation detail: `load_pricing_feed()` runs independently from manifest parsing and must handle provider-specific schemas.
 
-## Next Steps Checklist
+## 6. Python Knowledge-Base Integration
 
-- [ ] Confirm registry data model + storage location.
-- [ ] Draft configuration examples for `.env`, CLI, and VS Code UI.
-- [ ] Prototype OpenAI client wrapper with logging + retries.
-- [ ] Integrate provider selection into Agent Core orchestrator.
-- [ ] Add docs section covering provider selection UI/CLI flows.
-- [ ] Plan QA and smoke testing for OpenAI rollout.
+The knowledge-base (KB) ingestion pipeline already owns its own OpenAI-only embedding provider (`kb/embeddings/provider.py`). To
+keep that layer in sync with the manifest-driven defaults we now require the following updates:
+
+1. **Manifest Loader** – Add `shared/providers/loader.py` (Python) that mirrors the TS loader and exposes `load_provider_config`
+   for any subsystem. The KB package must depend on this loader instead of duplicating embedding metadata.
+2. **Embedding Model Resolution** – Update `kb/embeddings/provider.py` to:
+   - Read the OpenAI (or OpenAI-compatible) entry from the manifest at module import, caching the embedding map `{model_id:
+     dimensions}`.
+   - Honor `DOLPHIN_EMBEDDING_MODEL` (existing env) but validate that the requested ID exists in the manifest `openai.embeddings`
+     table; fall back to the manifest `default = true` entry when unset.
+   - Surface a descriptive configuration error if the manifest marks the provider as `embeddings_supported = false` (e.g., when
+     `DOLPHIN_PROVIDER=anthropic`).
+3. **Dimension Source of Truth** – Replace the hard-coded `MODEL_DIMENSIONS` dictionary with a manifest-derived helper so
+   LanceDB collection sizing stays consistent when new embedding IDs are added.
+4. **Retry + Auth Reuse** – Reuse the new provider auth resolution helper instead of manually reading `OPENAI_API_KEY`;
+   ensures OpenAI-compatible base URLs and headers flow into the KB pipeline automatically.
+5. **Tests** – Extend `tests/unit/kb/test_embeddings_provider.py` (or add new coverage) to assert that:
+   - Unsupported provider selections raise errors referencing the manifest entry.
+   - Switching the manifest default between `text-embedding-3-large` and `text-embedding-3-small` updates batch dimension logic
+     without code changes.
+
+> Result: Once these changes land, the KB layer will automatically inherit future embedding IDs or provider toggles simply by
+> shipping a new manifest.
+
+## 7. Client Factory Specification
+
+### Function Headers (TypeScript)
+
+```ts
+// shared/providers/index.ts
+export async function loadProviderConfig(id: ProviderId): Promise<ProviderConfig>;
+
+export function createProviderClient(options: {
+  providerId: ProviderId;
+  surface: 'agent-core' | 'mcp' | 'cli';
+  authContext?: AuthOverride;
+}): ProviderClient;
+
+export interface ProviderClient {
+  invokeModel(req: InvokeModelRequest): AsyncIterable<InvokeChunk>;
+  listModels(): Promise<ModelSummary[]>;
+}
+```
+
+### Function Headers (Python)
+
+```py
+# shared/providers/factory.py
+from typing import AsyncIterator
+
+async def load_provider_config(provider_id: str) -> ProviderConfig: ...
+
+def create_provider_client(*, provider_id: str, surface: str, auth_override: dict | None = None) -> ProviderClient: ...
+
+class ProviderClient(Protocol):
+    async def invoke_model(self, request: InvokeModelRequest) -> AsyncIterator[InvokeChunk]: ...
+    async def list_models(self) -> list[ModelSummary]: ...
+    async def supports_embeddings(self) -> bool: ...
+```
+
+### Client Factory Pseudocode
+
+```pseudo
+function create_provider_client(provider_id, surface, auth_override):
+    config = load_provider_config(provider_id)
+    auth = resolve_auth(config.auth, auth_override)
+    http = HttpClient(base_url=resolve_base_url(config), headers=build_headers(surface, auth))
+    middleware = compose([trace_middleware(surface), retry_middleware(config), pii_scrubber])
+    if provider_id in ['openai', 'openai-compatible']:
+        return OpenAIClient(http, middleware)
+    if provider_id == 'anthropic':
+        return AnthropicClient(http, middleware)
+    raise UnknownProviderError(provider_id)
+```
+
+## 8. Invocation Layer Specification
+
+### Shared Request Schema
+
+```ts
+interface InvokeModelRequest {
+  model: string;
+  provider?: ProviderId;
+  messages: Message[];
+  tools?: ToolDefinition[];
+  response_format?: 'json' | 'text';
+  max_output_tokens?: number;
+  temperature?: number;
+  stream?: boolean;
+}
+```
+
+### Pseudocode
+
+```pseudo
+async function invoke_model(request):
+    provider = request.provider or env.DOLPHIN_PROVIDER or 'openai'
+    client = create_provider_client(provider, surface=request.surface)
+    if request.stream:
+        async for chunk in client.invoke_model(request):
+            yield normalize_chunk(chunk, provider)
+    else:
+        chunks = []
+        async for chunk in client.invoke_model(request):
+            chunks.append(chunk)
+        return merge_chunks(chunks)
+```
+
+### OpenAI-Compatible Endpoint Support
+
+* Users specify `DOLPHIN_PROVIDER=openai-compatible`.
+* Required env vars: `OPENAI_API_KEY`, `OPENAI_BASE_URL` (e.g., Azure, LM Studio, llama.cpp server following OpenAI schema).
+* Optional per-endpoint config file (`~/.dolphin/providers.d/custom.json`) extends registry with custom throttling, model aliases, or TLS settings.
+* Client implementation reuses OpenAI JSON wire format; only base URL / headers differ.
+
+## 9. Authentication Workflows
+
+### Anthropic
+
+1. Determine mode via `ANTHROPIC_AUTH_MODE` or fallback order: `subscription` if subscription token exists, else `api-key`.
+2. Subscription mode sets `X-Subscription-Token` header; API mode sets `x-api-key` header.
+3. Telemetry includes `auth_mode` tag for debugging.
+
+### OpenAI & Compatible
+
+1. `Authorization: Bearer <OPENAI_API_KEY>` header always present.
+2. Optional `OpenAI-Organization` and `OpenAI-Project` headers if env variables exist.
+3. Base URL defaults to `https://api.openai.com/v1`; override allowed for compatibility endpoints.
+
+## 10. Error Handling & Retries
+
+| Error Type | Strategy |
+| ---------- | -------- |
+| 429 / Rate limit | Exponential backoff with jitter, respect provider `Retry-After`. |
+| 5xx | Retry up to `PROVIDER_MAX_RETRIES` with capped backoff. |
+| Auth failures | Fail fast with actionable error message (mention env var). |
+| Schema mismatch | Log provider response + request metadata (excluding PII) and surface structured error. |
+
+## 11. Testing Requirements
+
+1. **Unit Tests** – Provider registry parsing, auth resolution, base URL overrides.
+2. **Integration Tests** – Mocked HTTP (vcrpy / MSW) verifying request payloads for each provider + auth mode.
+3. **Smoke Tests** – Optional manual script `uv run dolphin providers smoke --provider openai` hitting live endpoints with environment credentials.
+4. **Compatibility Tests** – JSON fixtures representing OpenAI-compatible responses to ensure normalization works for third-party servers.
+
+## 12. Documentation & UX Updates
+
+- Update README + onboarding to describe new providers and environment variables.
+- Provide UI copy for VS Code settings: dropdown of providers plus custom endpoint fields.
+- Document migration steps from legacy Vlaude/Anthropic-only stack.
+
+## 13. Open Questions
+
+1. Do we expose provider selection per tool type once additional embedding vendors are added?
+2. What heuristics should gate the dynamic pricing feed refresh interval in offline environments?
+3. When Anthropic ships embeddings, do we split the registry or extend the existing manifest schema?
+
