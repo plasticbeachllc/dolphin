@@ -53,7 +53,6 @@ cd "$CODEX_WORKSPACE_DIR"
 
 find . -name "__pycache__" -type d -prune -exec rm -rf {} +
 find . -name ".pytest_cache" -type d -prune -exec rm -rf {} +
-rm -rf .mypy_cache dist build
 
 uv cache prune || true
 bun pm cache rm || true
