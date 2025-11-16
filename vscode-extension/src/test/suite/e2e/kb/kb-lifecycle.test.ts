@@ -250,14 +250,20 @@ describe("KB Lifecycle Management", function () {
   });
 
   describe("KB Configuration", () => {
-    it("KB configuration keys should be readable via get()", () => {
+    it("KB configuration keys should be readable via get()", function () {
       // Use inspect() to verify default values exist in package.json
       const config = vscode.workspace.getConfiguration("dolphin");
+      const inspect = config.inspect?.bind(config);
+      if (!inspect) {
+        console.warn("[KB Config Test] workspace.getConfiguration().inspect unavailable; skipping checks");
+        this.skip();
+        return;
+      }
 
       // Use inspect() which returns defaultValue, globalValue, workspaceValue, etc.
-      const kbDebounceInspect = config.inspect("kb.debounceMs");
-      const kbBatchIntervalInspect = config.inspect("kb.batchIntervalMs");
-      const autoSyncEnabledInspect = config.inspect("kb.autoSync.enabled");
+      const kbDebounceInspect = inspect!("kb.debounceMs");
+      const kbBatchIntervalInspect = inspect!("kb.batchIntervalMs");
+      const autoSyncEnabledInspect = inspect!("kb.autoSync.enabled");
 
       // Check that default values are defined in package.json
       assert.ok(
@@ -274,13 +280,19 @@ describe("KB Lifecycle Management", function () {
       );
     });
 
-    it("KB configuration should have valid default types from package.json", () => {
+    it("KB configuration should have valid default types from package.json", function () {
       const config = vscode.workspace.getConfiguration("dolphin");
+      const inspect = config.inspect?.bind(config);
+      if (!inspect) {
+        console.warn("[KB Config Test] workspace.getConfiguration().inspect unavailable; skipping type assertions");
+        this.skip();
+        return;
+      }
 
       // Use inspect() to get default values and verify types
-      const kbDebounceInspect = config.inspect<number>("kb.debounceMs");
-      const excludePatternsInspect = config.inspect<string[]>("kb.excludePatterns");
-      const autoSyncEnabledInspect = config.inspect<boolean>("kb.autoSync.enabled");
+      const kbDebounceInspect = inspect("kb.debounceMs");
+      const excludePatternsInspect = inspect("kb.excludePatterns");
+      const autoSyncEnabledInspect = inspect("kb.autoSync.enabled");
 
       // Verify types match package.json definitions using default values
       if (kbDebounceInspect?.defaultValue !== undefined) {

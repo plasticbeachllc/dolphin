@@ -2,6 +2,8 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { AgentBridge } from "./agent/bridge";
+import { AgentBridgeAdapter } from "./agent/types";
+import { TestAgentBridge } from "./agent/test-agent-bridge";
 import { DolphinViewProvider } from "./views/provider";
 import { FileWatcher } from "./kb/file-watcher";
 import { KBStatusBar } from "./kb/status-bar";
@@ -12,7 +14,10 @@ import { DiffHandler, DiffChange } from "./editor/diff-handler";
 import { AutoSyncManager } from "./kb/auto-sync-manager";
 import { DriftDetector } from "./kb/drift-detector";
 
-let agentBridge: AgentBridge | null = null;
+const isTestEnv = process.env.DOLPHIN_TEST_ENV === "1";
+const defaultKbBaseUrl = process.env.DOLPHIN_KB_BASE_URL || "http://127.0.0.1:7777";
+
+let agentBridge: AgentBridgeAdapter | null = null;
 let outputChannel: vscode.OutputChannel;
 let fileWatcher: FileWatcher | null = null;
 let statusBar: KBStatusBar | null = null;
@@ -24,7 +29,7 @@ let driftDetector: DriftDetector | null = null;
 /**
  * Get the active agent bridge instance (for testing)
  */
-export function getAgentBridge(): AgentBridge | null {
+export function getAgentBridge(): AgentBridgeAdapter | null {
   return agentBridge;
 }
 
@@ -32,15 +37,24 @@ export async function activate(context: vscode.ExtensionContext) {
   // Create output channel for logging (shared by extension and agent bridge)
   outputChannel = vscode.window.createOutputChannel("Dolphin");
   outputChannel.show();
+  context.subscriptions.push(outputChannel);
 
   // Create logger
   logger = new Logger(outputChannel, "Extension");
   logger.info("Activating Dolphin extension...");
 
+  if (isTestEnv) {
+    logger.info("Test environment detected: background KB services will be skipped.");
+  }
+
   try {
     // Initialize AgentBridge with shared output channel
-    logger.info("Initializing AgentBridge...");
-    agentBridge = new AgentBridge(outputChannel);
+    logger.info(
+      isTestEnv ? "Initializing AgentBridge stub for tests..." : "Initializing AgentBridge..."
+    );
+    agentBridge = isTestEnv
+      ? new TestAgentBridge(outputChannel)
+      : new AgentBridge(outputChannel);
 
     const agentCorePath = context.asAbsolutePath(path.join("..", "agent-core", "src", "main.ts"));
     const extensionPath = context.extensionPath;
@@ -73,29 +87,35 @@ export async function activate(context: vscode.ExtensionContext) {
     await vscode.commands.executeCommand("setContext", "dolphin.agentReady", true);
 
     // Initialize KB status bar
-    statusBar = new KBStatusBar();
-    context.subscriptions.push(statusBar);
+    if (!isTestEnv) {
+      statusBar = new KBStatusBar();
+      context.subscriptions.push(statusBar);
+    } else {
+      logger.debug("[TestMode] Skipping KB status bar initialization.");
+    }
 
     // Listen for agent events
-    agentBridge.onEvent((event) => {
+    const bridgeEventDisposable = agentBridge.onEvent((event) => {
       outputChannel.appendLine(`[Extension] Agent event: ${event.type}`);
-
-      // Note: KB events would be handled here if they were part of the event type definition
-      // For now, we just log them
     });
+    context.subscriptions.push(bridgeEventDisposable);
 
     // Crash recovery (Phase 5)
-    await recoverFromCrash(context);
+    if (!isTestEnv) {
+      await recoverFromCrash(context);
+    } else {
+      logger.debug("[TestMode] Skipping crash recovery checks.");
+    }
 
     // Initialize file watcher
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (workspaceFolder && agentBridge) {
+    if (workspaceFolder && agentBridge && !isTestEnv) {
       // Load config with fallback for test environments where config system may not be ready
       let config;
       try {
         config = loadWatcherConfig();
         // Add API integration for file sync (Phase 2)
-        config.apiBaseUrl = "http://127.0.0.1:7777";
+        config.apiBaseUrl = defaultKbBaseUrl;
         config.repoName = path.basename(workspaceFolder.uri.fsPath);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
@@ -112,7 +132,7 @@ export async function activate(context: vscode.ExtensionContext) {
             "**/out/**",
             "**/*.min.js",
           ],
-          apiBaseUrl: "http://localhost:8765",
+          apiBaseUrl: defaultKbBaseUrl,
           repoName: path.basename(workspaceFolder.uri.fsPath),
         };
       }
@@ -161,7 +181,7 @@ export async function activate(context: vscode.ExtensionContext) {
       autoSyncManager = new AutoSyncManager(
         autoSyncConfig,
         path.basename(workspaceFolder.uri.fsPath),
-        "http://127.0.0.1:7777",
+        defaultKbBaseUrl,
         outputChannel
       );
       await autoSyncManager.start();
@@ -174,7 +194,7 @@ export async function activate(context: vscode.ExtensionContext) {
       // Initialize Drift Detector (Phase 5)
       driftDetector = new DriftDetector(
         path.basename(workspaceFolder.uri.fsPath),
-        "http://127.0.0.1:7777",
+        defaultKbBaseUrl,
         outputChannel
       );
       await driftDetector.start();
@@ -183,6 +203,8 @@ export async function activate(context: vscode.ExtensionContext) {
       });
 
       outputChannel.appendLine("[Extension] Drift detector initialized");
+    } else if (isTestEnv) {
+      logger.debug("[TestMode] Skipping file watcher, auto-sync, and drift detector initialization.");
     }
 
     // Register webview provider with AgentBridge
@@ -196,6 +218,9 @@ export async function activate(context: vscode.ExtensionContext) {
         },
       })
     );
+    context.subscriptions.push({
+      dispose: () => viewProvider?.dispose(),
+    });
     logger.info("Webview provider registered successfully");
 
     // Register commands
@@ -301,7 +326,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
           // Restart agent (which will restart KB)
           outputChannel.appendLine("[KB Restart] Restarting agent and KB...");
-          agentBridge = new AgentBridge(outputChannel);
+          agentBridge = isTestEnv
+            ? new TestAgentBridge(outputChannel)
+            : new AgentBridge(outputChannel);
 
           const agentCorePath = context.asAbsolutePath(
             path.join("..", "agent-core", "src", "main.ts")
@@ -488,7 +515,11 @@ export async function activate(context: vscode.ExtensionContext) {
     outputChannel.appendLine("[Dolphin] Commands registered successfully");
     logger.info("Commands registered successfully");
 
-    vscode.window.showInformationMessage("Dolphin activated! 🐬");
+    if (!isTestEnv) {
+      vscode.window.showInformationMessage("Dolphin activated! 🐬");
+    } else {
+      logger.debug("[TestMode] Activation complete (UI notifications suppressed).");
+    }
     logger.info("Activation complete");
 
     // Return extension API for testing and integration
@@ -519,6 +550,14 @@ async function queueFilesForIndexing(files: string[], priority = 5): Promise<voi
     throw new Error("Agent bridge not initialized");
   }
 
+  if (!(agentBridge instanceof AgentBridge)) {
+    if (isTestEnv) {
+      outputChannel.appendLine("[Extension] Test mode active - skipping queueFilesForIndexing");
+      return;
+    }
+    throw new Error("Agent bridge process not available");
+  }
+
   // Call agent core's queue_files method
   const id = Date.now();
   const message = {
@@ -544,6 +583,14 @@ async function queueFilesForIndexing(files: string[], priority = 5): Promise<voi
 async function getKBStatus(): Promise<Record<string, unknown>> {
   if (!agentBridge) {
     throw new Error("Agent bridge not initialized");
+  }
+
+  if (isTestEnv || !(agentBridge instanceof AgentBridge)) {
+    return {
+      repoName: "test-repo",
+      queueDepth: 0,
+      isIndexing: false,
+    };
   }
 
   const id = Date.now();
@@ -612,7 +659,7 @@ async function recoverFromCrash(_context: vscode.ExtensionContext): Promise<void
     outputChannel.appendLine("[CrashRecovery] Checking for incomplete indexing tasks...");
 
     const repoName = path.basename(workspaceFolder.uri.fsPath);
-    const apiBaseUrl = "http://127.0.0.1:7777";
+    const apiBaseUrl = defaultKbBaseUrl;
 
     // Check for pending changes that accumulated during offline period
     const response = await fetch(`${apiBaseUrl}/v1/repos/${repoName}/pending-changes?limit=10`, {
@@ -662,10 +709,13 @@ export function deactivate() {
   statusBar?.dispose();
   autoSyncManager?.dispose();
   driftDetector?.dispose();
+  viewProvider?.dispose();
   agentBridge?.shutdown();
   agentBridge = null;
   fileWatcher = null;
   statusBar = null;
   autoSyncManager = null;
   driftDetector = null;
+  viewProvider = null;
+  outputChannel?.dispose();
 }

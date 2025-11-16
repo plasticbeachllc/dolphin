@@ -3,7 +3,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 import * as http from "http";
-import { AgentBridge } from "../agent/bridge";
+import { AgentBridgeAdapter } from "../agent/types";
 
 export class DolphinViewProvider implements vscode.WebviewViewProvider {
   private webviewView?: vscode.WebviewView;
@@ -14,7 +14,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly outputChannel: vscode.OutputChannel,
-    private readonly agentBridge?: AgentBridge
+    private readonly agentBridge?: AgentBridgeAdapter
   ) {
     // Set up event forwarding immediately when AgentBridge is available
     if (this.agentBridge) {

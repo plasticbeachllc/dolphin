@@ -13,6 +13,7 @@ import {
   createMessageConnection,
   MessageConnection,
 } from "vscode-jsonrpc/node";
+import { AgentBridgeAdapter } from "./types";
 
 /**
  * AgentBridge manages communication with the Agent Core process via JSON-RPC.
@@ -23,7 +24,7 @@ import {
  * - Includes correlation IDs (requestId) in all notifications for event tracking
  * - Handles message chunking/boundary issues via StreamMessageReader
  */
-export class AgentBridge {
+export class AgentBridge implements AgentBridgeAdapter {
   private process: ChildProcess | null = null;
   private messageId = 0;
   private eventEmitter = new vscode.EventEmitter<AgentEvent>();
