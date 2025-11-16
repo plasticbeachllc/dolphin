@@ -42,6 +42,19 @@ interface CacheEntry {
   lastAccessed: number;
 }
 
+type CountTokensResponse = {
+  input_tokens: number;
+};
+
+function isCountTokensResponse(value: unknown): value is CountTokensResponse {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "input_tokens" in value &&
+    typeof (value as { input_tokens: unknown }).input_tokens === "number"
+  );
+}
+
 export interface TokenCounterLike {
   countExact(texts: string[], model?: string): Promise<TokenCountResult>;
   estimate(texts: string[], model?: string): TokenCountResult;
@@ -84,10 +97,14 @@ export class AnthropicTokenClient {
       `[TokenCounter] Calling Anthropic count_tokens (model=${resolvedModel}, chars=${text.length})`
     );
 
-    const response = await this.client.messages.countTokens({
+    const response: unknown = await this.client.beta.messages.countTokens({
       model: resolvedModel,
       messages: [{ role: "user", content: text }],
     });
+
+    if (!isCountTokensResponse(response)) {
+      throw new Error("Anthropic countTokens response missing input_tokens");
+    }
 
     return response.input_tokens;
   }

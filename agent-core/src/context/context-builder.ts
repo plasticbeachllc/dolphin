@@ -244,18 +244,12 @@ export class ContextBuilder {
   /**
    * Estimate tokens for KB results
    */
-  private estimateTokens(items: KBResult[] | FileContent[]): number {
+  private estimateTokens(items: Array<KBResult | FileContent>): number {
     let total = 0;
 
     for (const item of items) {
-      if ("content" in item) {
-        const hasTokens = Object.prototype.hasOwnProperty.call(item, "tokens");
-        if (hasTokens && typeof (item as KBResult | FileContent).tokens === "number") {
-          total += (item as KBResult | FileContent).tokens || 0;
-        } else {
-          total += this.estimateFileTokens(item.content);
-        }
-      }
+      const tokens = typeof item.tokens === "number" ? item.tokens : this.estimateFileTokens(item.content);
+      total += tokens;
     }
 
     return total;
