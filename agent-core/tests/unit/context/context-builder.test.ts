@@ -4,22 +4,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ContextBuilder } from "../../../src/context/context-builder";
 import type { ContextBuilderConfig } from "../../../src/context/context-builder";
-import type {
-  TokenCounterLike,
-  TokenCountResult,
-} from "../../../src/utils/token-counter";
+import type { TokenCounterLike, TokenCountResult } from "../../../src/utils/token-counter";
 
 class StubTokenCounter implements TokenCounterLike {
-  public countExact = mock(async (texts: string[]): Promise<TokenCountResult> => ({
-    mode: "exact",
-    model: "claude-sonnet-4-20250514",
-    totalTokens: texts.length * 10,
-    perInput: texts.map(() => 10),
-    cacheHits: 0,
-    cacheMisses: texts.length,
-    usedCache: false,
-    timestamp: Date.now(),
-  }));
+  public countExact = mock(
+    async (texts: string[]): Promise<TokenCountResult> => ({
+      mode: "exact",
+      model: "claude-sonnet-4-20250514",
+      totalTokens: texts.length * 10,
+      perInput: texts.map(() => 10),
+      cacheHits: 0,
+      cacheMisses: texts.length,
+      usedCache: false,
+      timestamp: Date.now(),
+    })
+  );
 
   estimate(texts: string[]): TokenCountResult {
     return {

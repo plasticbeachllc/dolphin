@@ -1,9 +1,11 @@
 # Provider Implementation Plan
 
 ## Scope
+
 Implement the multi-provider architecture described in `docs/PROVIDER.md`, covering OpenAI GPT 5.1 family, Anthropic Claude 4.5 family (subscription + API auth), and a user-provided OpenAI-compatible inference endpoint surfaced through the GUI (re-using the OpenAI wrapper). The canonical `provider_config.toml` ships read-only with every runtime (no user-editable manifest) and is backed by a checked-in JSON Schema that drives every generated type. The scope is limited to LLM inference clients (Agent Core, MCP Bridge, VS Code extension); the existing KB embedding APIs stay untouched. Initial scope explicitly limits embeddings to the OpenAI family and standardizes on the `text-embedding-3-*` models (default `text-embedding-3-large`, optional `text-embedding-3-small`, ready for future IDs); there is still no auto-failover between vendors.
 
 ### Non-Goals
+
 - No changes to `kb/` ingestion, embedding selection, or LanceDB schemas.
 - No new KB authentication or configuration settings tied to the provider manifest.
 - No attempt to route KB embedding calls through the shared provider factory in this release.
@@ -43,14 +45,14 @@ Implement the multi-provider architecture described in `docs/PROVIDER.md`, cover
 
 ## Risks & Mitigations
 
-| Risk | Mitigation |
-| ---- | ---------- |
-| Divergent payload schemas | Normalize request/response at invocation layer; add conformance tests. |
-| Auth misconfiguration | Provide `providers check` command and detailed error surfaces. |
-| Rate-limit instability | Central retry/backoff middleware with provider-specific caps. |
+| Risk                                        | Mitigation                                                                                                                              |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Divergent payload schemas                   | Normalize request/response at invocation layer; add conformance tests.                                                                  |
+| Auth misconfiguration                       | Provide `providers check` command and detailed error surfaces.                                                                          |
+| Rate-limit instability                      | Central retry/backoff middleware with provider-specific caps.                                                                           |
 | User-provided endpoints deviating from spec | Constrain the GUI to OpenAI-compatible flows only and reuse the OpenAI client wrapper + schema validation before accepting custom URLs. |
-| Bundled manifest drifting across surfaces | Version JSON Schema + manifest together and gate releases on regenerating shared TS/Python types + validator snapshots. |
-| Pricing feed drift or downtime | Cache last-known-good feed locally and surface TTL/health metrics. |
+| Bundled manifest drifting across surfaces   | Version JSON Schema + manifest together and gate releases on regenerating shared TS/Python types + validator snapshots.                 |
+| Pricing feed drift or downtime              | Cache last-known-good feed locally and surface TTL/health metrics.                                                                      |
 
 ## Deliverables Checklist
 
