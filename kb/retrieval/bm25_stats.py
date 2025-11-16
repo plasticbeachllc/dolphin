@@ -6,9 +6,9 @@ import json
 import logging
 import math
 import threading
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Iterable
 
 import numpy as np
 
@@ -61,7 +61,7 @@ class BM25Statistics:
         )
 
     @classmethod
-    def from_dict(cls, payload: dict[str, object]) -> "BM25Statistics":
+    def from_dict(cls, payload: dict[str, object]) -> BM25Statistics:
         percentiles = payload.get("percentiles", {}) if isinstance(payload, dict) else {}
         return cls(
             min_score=float(payload["min_score"]),
@@ -78,7 +78,7 @@ class BM25Statistics:
         )
 
     @classmethod
-    def load(cls, path: Path) -> "BM25Statistics":
+    def load(cls, path: Path) -> BM25Statistics:
         data = json.loads(path.read_text(encoding="utf-8"))
         return cls.from_dict(data)
 
@@ -140,4 +140,3 @@ class BM25StatisticsCollector:
             return None
         stats.save(path)
         return path
-

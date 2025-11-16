@@ -13,8 +13,7 @@ from .bm25_stats import BM25Statistics
 class ScoreNormalizer(Protocol):
     name: str
 
-    def normalize(self, score: float) -> float:
-        ...
+    def normalize(self, score: float) -> float: ...
 
 
 @dataclass(slots=True)
@@ -78,4 +77,3 @@ class QuantileNormalizer:
             return lo_val
         ratio = (score - lo_score) / (hi_score - lo_score)
         return lo_val + ratio * (hi_val - lo_val)
-

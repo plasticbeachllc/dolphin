@@ -36,7 +36,6 @@ from ..store import LanceDBStore, SQLiteMetadataStore
 from ..store.graph_store import GraphStore
 from ..store.sqlite_meta import generate_fts_content_id
 
-
 logger = logging.getLogger(__name__)
 
 
