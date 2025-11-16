@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +11,7 @@ from pathspec import PathSpec
 
 from ..chunkers.registry import chunk_file as chunk_file_with_config, detect_language_from_extension
 from ..config import KBConfig
+from ..constants.retrieval_config import RETRIEVAL_PARAMS
 from ..embeddings.provider import embed_texts_with_retry
 from ..graph_intelligence.graph_manager import GraphManager
 from ..hashing import hash_text
@@ -35,6 +37,9 @@ from ..store.graph_store import GraphStore
 from ..store.sqlite_meta import generate_fts_content_id
 
 
+logger = logging.getLogger(__name__)
+
+
 @dataclass
 class IngestionPipeline:
     """Coordinates scanning, chunking, and persistence."""
@@ -51,6 +56,8 @@ class IngestionPipeline:
             self.graph_store = GraphStore(self.metadata.db_path)
         if self.graph_managers is None:
             self.graph_managers = {}
+        self._bm25_stats_path: Path | None = self._resolve_bm25_stats_path()
+        self._configure_bm25_statistics()
 
     def get_graph_manager(self, repo_id: int) -> GraphManager:
         """Get or create GraphManager for a repository.
@@ -79,6 +86,30 @@ class IngestionPipeline:
                 cache_ttl_minutes=10,
             )
         return self.graph_managers[repo_id]
+
+    def _resolve_bm25_stats_path(self) -> Path:
+        config_path = self.config.retrieval.bm25_normalization.stats_path
+        if config_path:
+            return Path(config_path).expanduser()
+        return self.config.resolved_store_root() / RETRIEVAL_PARAMS.BM25_NORMALIZATION.stats_filename
+
+    def _configure_bm25_statistics(self) -> None:
+        if not hasattr(self.metadata, "configure_bm25_statistics"):
+            return
+        try:
+            self.metadata.configure_bm25_statistics(self._bm25_stats_path)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Failed to enable BM25 statistics collection", exc_info=exc)
+
+    def _flush_bm25_statistics(self) -> None:
+        if not hasattr(self.metadata, "flush_bm25_statistics"):
+            return
+        try:
+            path = self.metadata.flush_bm25_statistics()
+            if path:
+                print(f"  BM25 score statistics written to {path}")
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Failed to flush BM25 statistics", exc_info=exc)
 
     def compute_graph_metrics(self, repo_id: int) -> dict[str, Any]:
         """Compute and store graph metrics for a repository.
@@ -748,6 +779,7 @@ class IngestionPipeline:
                 chunks_pruned=chunks_pruned,
             )
             self.metadata.set_session_status(session_id, "succeeded")
+            self._flush_bm25_statistics()
         else:
             print(f"Dry run: would have updated counters for session {session_id}")
 
