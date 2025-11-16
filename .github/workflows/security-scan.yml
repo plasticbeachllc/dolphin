@@ -1,0 +1,59 @@
+name: Security Scan
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-audit:
+    name: Python dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+      - name: Install Python
+        run: uv python install
+      - name: Install dependencies
+        run: uv sync --dev
+      - name: Run pip-audit
+        run: uv run pip-audit --progress-spinner=off
+
+  node-audit:
+    name: JavaScript dependency audit
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project:
+          - .
+          - agent-core
+          - mcp-bridge
+          - vscode-extension
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies (${{ matrix.project }})
+        id: install
+        working-directory: ${{ matrix.project }}
+        run: |
+          if [ ! -f package.json ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No package.json found for ${{ matrix.project }}, skipping"
+            exit 0
+          fi
+          npm install --ignore-scripts
+          echo "found=true" >> "$GITHUB_OUTPUT"
+      - name: Audit npm dependencies (${{ matrix.project }})
+        if: steps.install.outputs.found == 'true'
+        working-directory: ${{ matrix.project }}
+        run: npm audit --omit=dev --audit-level=high
