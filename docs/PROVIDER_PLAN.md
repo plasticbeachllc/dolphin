@@ -575,17 +575,21 @@ All tests must clean up after themselves (temp dirs, env vars, secrets, test set
 
 14. Update `AgentBridge.start` to accept an auth/options object instead of a single API key:
     - Populate spawn env with whatever keys are provided (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DOLPHIN_API_KEY`).
+    - **Env precedence contract:** Extension payload values always win, followed by settings-derived defaults in `~/.dolphin/config`, then any inherited OS env vars. `AgentBridge.start` MUST merge partial payloads, only overwriting the keys explicitly provided by the VSCode host so that CLI users who already exported `ANTHROPIC_API_KEY` keep working if the extension omits that provider.
+    - Document the merge order inline so follow-up work in Phase 4 can rely on the same behavior.
 15. In `extension.ts`:
     - Read `dolphin.llm.provider` and model settings.
     - Load both Anthropic and OpenAI API keys from secrets.
     - Build auth payload with `DOLPHIN_LLM_PROVIDER`, `DOLPHIN_LLM_MODEL`, and provider-specific keys.
+    - **Model payload semantics:** send a single `DOLPHIN_LLM_MODEL` that corresponds to the active provider (`dolphin.llm.model.anthropic` or `dolphin.llm.model.openai`). If the configured model is missing or invalid, fall back to the defaults established in Phase 1 (`claude-sonnet-4-5-20250929` for Anthropic, `gpt-5.1-codex` for OpenAI) and log a warning so the UI can show a toast. Do **not** send additional provider-specific model env vars until we add multi-provider hot swapping.
     - Pass the payload into `agentBridge.start` so Agent Core spawns with the right credentials.
 16. Update or add commands:
     - `dolphin.setClaudeApiKey` → stores `dolphin.anthropicApiKey`.
     - `dolphin.setOpenAIApiKey` → stores `dolphin.openaiApiKey`.
+    - Both commands prompt with `showInputBox`, validate non-empty strings, and persist secrets exclusively through VSCode `SecretStorage`. If legacy storage existed (none today), migration would happen once at activation by copying any existing global state into the new secret keys before deletion. Each command should surface success/error notifications via `window.showInformationMessage` / `showErrorMessage` to aid troubleshooting.
 17. Update Auth Status plumbing:
     - Ensure the `auth_status` payload from Agent Core includes `provider`.
-    - Update webview `AuthStatus` component to render provider‑aware labels & hints.
+    - Extend the JSON-RPC message that Agent Core emits so every `auth_status` event contains `{ provider, authenticated, mode, error, warning }`, and thread that field through the extension host to the Svelte webview message bus (`postMessage`). The webview `AuthStatus` component renders provider-aware labels & hints using the new field, and tests must assert both the extension host and UI layer handle the augmented schema.
 
 ### Phase 4 – Settings UI & UX Polish
 
