@@ -37,7 +37,7 @@ describe("EditorWorkflow Integration", () => {
       loadSession: mock(async () => null),
     };
 
-    // Mock ClaudeProvider
+    // Mock ChatProvider
     mockClaudeProvider = {
       execute: mock(async (params: unknown) => {
         // Call onEvent callback if provided
@@ -67,6 +67,7 @@ describe("EditorWorkflow Integration", () => {
         };
       }),
       ensureAuthenticated: mock(async () => {}),
+      getProviderMetadata: () => ({ provider: "anthropic", model: "claude-sonnet-4-20250514" }),
     };
 
     // Real ContextBuilder with temporary workspace
@@ -80,7 +81,7 @@ describe("EditorWorkflow Integration", () => {
 
     // Create workflow
     workflow = new EditorWorkflow({
-      claudeProvider: mockClaudeProvider,
+      chatProvider: mockClaudeProvider,
       contextBuilder,
       promptBuilder,
       stateStore: mockStateStore,

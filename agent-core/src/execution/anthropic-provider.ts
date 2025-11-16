@@ -1,37 +1,19 @@
-// agent-core/src/execution/claude-provider.ts
 import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
 import type { AgentEvent } from "../../../shared/types/events";
+import type { ToolExecutorMessage } from "../llm/tool-executor";
+import { AnthropicToolExecutor, type AnthropicMessageContent } from "../llm/anthropic-tool-executor";
 import { ClaudeClient, type AuthMode } from "../llm/claude-client";
-import {
-  ClaudeToolExecutor,
-  type Message as ToolExecutorMessage,
-} from "../llm/claude-tool-executor";
 import { MCPClient } from "../mcp/mcp-client";
-
-export interface AuthStatus {
-  authenticated: boolean;
-  mode: "subscription" | "api_key" | "none";
-  source?: string;
-  warning?: string;
-  error?: string;
-}
+import type { ChatProvider, AuthStatus, ExecuteParams, ExecuteResult } from "./chat-provider";
 
 export interface AuthManagerOptions {
   settingsPath?: string;
   apiKeyEnvVar?: string;
 }
 
-/**
- * Lightweight helper for detecting Claude authentication state.
- *
- * The integration tests exercise OAuth detection via the Claude CLI as well as
- * fallback Anthropic API key usage. We intentionally keep the implementation
- * resilient: the presence of a settings file is treated as an OAuth login even
- * if the JSON cannot be parsed so corrupted files don't break the workflow.
- */
 export class AuthManager {
   private readonly settingsPath: string;
   private readonly apiKeyEnvVar: string;
@@ -49,14 +31,11 @@ export class AuthManager {
     try {
       const raw = readFileSync(this.settingsPath, "utf-8");
       if (!raw.trim()) {
-        // Empty file means no token
         return false;
       }
-
       const data = JSON.parse(raw) as { token?: string } | undefined;
       return !!data?.token;
     } catch {
-      // Corrupted or unreadable files indicate a problem, not valid auth
       return false;
     }
   }
@@ -65,8 +44,6 @@ export class AuthManager {
     const hasOAuth = this.hasOAuthToken();
     const apiKey = process.env[this.apiKeyEnvVar];
 
-    // When both OAuth and API key are present, Claude CLI prioritizes the API key
-    // This means the user will incur pay-per-token charges despite having a subscription
     if (hasOAuth && apiKey) {
       return {
         authenticated: true,
@@ -115,70 +92,49 @@ export class AuthManager {
   }
 }
 
-export interface ClaudeProviderConfig {
+export interface AnthropicProviderConfig {
   workspaceRoot: string;
   claudeClient?: ClaudeClient;
   mcpClient?: MCPClient;
   maxToolRounds?: number;
   authManager?: AuthManager;
-  toolExecutor?: ClaudeToolExecutor;
+  toolExecutor?: AnthropicToolExecutor;
   onEvent?: (event: AgentEvent) => void;
+  model?: string;
+  temperature?: number;
 }
 
-export interface ExecuteParams {
-  message: string;
-  conversationHistory?: ToolExecutorMessage[];
-  onEvent?: (event: AgentEvent) => void;
-}
-
-export interface ExecuteResult {
-  messages: ToolExecutorMessage[];
-  stopReason: string | undefined;
-  toolRounds: number;
-  usage: {
-    inputTokens: number;
-    outputTokens: number;
-    cacheReadTokens: number;
-    cacheWriteTokens: number;
-  };
-}
-
-/**
- * ClaudeProvider - Simplified wrapper around ClaudeToolExecutor
- *
- * Provides a clean interface for workflows to execute Claude with tool support.
- * Delegates actual execution to ClaudeToolExecutor.
- */
-export class ClaudeProvider {
-  private executor: ClaudeToolExecutor;
+export class AnthropicProvider implements ChatProvider {
+  private executor: AnthropicToolExecutor;
   private claudeClient: ClaudeClient;
   private mcpClient: MCPClient;
   private workspaceRoot: string;
   private authManager: AuthManager;
   private maxToolRounds: number;
   private defaultOnEvent: (event: AgentEvent) => void;
+  private readonly model: string;
 
-  constructor(config: ClaudeProviderConfig) {
+  constructor(config: AnthropicProviderConfig) {
     this.workspaceRoot = config.workspaceRoot;
     this.authManager = config.authManager ?? new AuthManager();
+    this.model = config.model ?? "claude-sonnet-4-20250514";
 
     this.claudeClient =
       config.claudeClient ??
       new ClaudeClient({
-        model: "claude-sonnet-4-20250514",
+        model: this.model,
         maxTokens: 4096,
-        temperature: 1.0,
+        temperature: config.temperature ?? 1.0,
       });
 
     this.mcpClient = config.mcpClient ?? new MCPClient();
     this.maxToolRounds = config.maxToolRounds ?? 10;
     this.defaultOnEvent =
-      config.onEvent ?? ((event) => console.error(`[ClaudeProvider] Event: ${event.type}`));
+      config.onEvent ?? ((event) => console.error(`[AnthropicProvider] Event: ${event.type}`));
 
-    // Create tool executor with default event handler if none provided
     this.executor =
       config.toolExecutor ??
-      new ClaudeToolExecutor({
+      new AnthropicToolExecutor({
         claudeClient: this.claudeClient,
         mcpClient: this.mcpClient,
         maxToolRounds: this.maxToolRounds,
@@ -186,44 +142,33 @@ export class ClaudeProvider {
       });
   }
 
-  /**
-   * Execute a message with Claude and tool support
-   */
   async execute(params: ExecuteParams): Promise<ExecuteResult> {
-    // If custom event handler provided, create new executor instance
     let executor = this.executor;
 
     if (params.onEvent) {
-      executor = new ClaudeToolExecutor({
+      executor = new AnthropicToolExecutor({
         claudeClient: this.claudeClient,
         mcpClient: this.mcpClient,
         maxToolRounds: this.maxToolRounds,
         onEvent: params.onEvent,
       });
-
-      // Initialize tools
       await executor.initialize();
     }
 
-    // Execute with tool support
-    const result = await executor.executeWithTools(
-      params.message,
-      params.conversationHistory || []
-    );
+    const history = this.mapHistory(params.conversationHistory);
+    const userMessage: ToolExecutorMessage<AnthropicMessageContent> = {
+      role: "user",
+      content: params.message,
+    };
 
+    const result = await executor.executeWithTools(userMessage, history);
     return result;
   }
 
-  /**
-   * Initialize tool executor (must be called before first execute)
-   */
   async initialize(): Promise<void> {
     await this.executor.initialize();
   }
 
-  /**
-   * Abort current execution
-   */
   abort(): void {
     this.executor.abort();
   }
@@ -236,9 +181,6 @@ export class ClaudeProvider {
     await this.authManager.ensureAuthenticated();
   }
 
-  /**
-   * Get authentication status
-   */
   async getAuthStatus(): Promise<{
     mode: AuthMode;
     cliInstalled: boolean;
@@ -249,15 +191,24 @@ export class ClaudeProvider {
     return await this.claudeClient.getAuthStatus();
   }
 
-  /**
-   * Get usage statistics
-   */
-  getUsage(): {
-    inputTokens: number;
-    outputTokens: number;
-    cacheReadTokens: number;
-    cacheWriteTokens: number;
-  } {
+  getUsage() {
     return this.executor.getUsage();
+  }
+
+  getProviderMetadata() {
+    return { provider: "anthropic", model: this.model };
+  }
+
+  private mapHistory(
+    history?: Array<{ role: "user" | "assistant"; content: string }>
+  ): ToolExecutorMessage<AnthropicMessageContent>[] {
+    if (!history) {
+      return [];
+    }
+
+    return history.map((message) => ({
+      role: message.role,
+      content: message.content,
+    }));
   }
 }

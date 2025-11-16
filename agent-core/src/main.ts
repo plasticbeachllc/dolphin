@@ -15,8 +15,8 @@ import { ArchitectWorkflow } from "./workflows/architect-workflow";
 import { StateStore } from "./state/state-store";
 import { MCPClient } from "./mcp/mcp-client";
 import { KBManager } from "./kb/kb-manager";
-import { ClaudeClient } from "./llm/claude-client";
-import { ClaudeProvider } from "./execution/claude-provider";
+import type { ChatProvider } from "./execution/chat-provider";
+import { createChatProvider } from "./execution/provider-factory";
 import { ContextBuilder } from "./context/context-builder";
 import { PromptBuilder } from "./prompts/prompt-builder";
 import { PlanStore } from "./storage/plan-store";
@@ -53,14 +53,19 @@ class AgentCoreV2 {
     "workflow_streaming",
   ];
 
-  private orchestrator: Orchestrator;
-  private claudeProvider: ClaudeProvider;
+  private orchestrator: Orchestrator | null = null;
+  private chatProvider: ChatProvider | null = null;
+  private workflowsReady: Promise<void> | null = null;
   private mcpClient: MCPClient;
   private kbManager: KBManager;
   private workspaceRoot: string;
   private extensionPath?: string;
   private writeQueue: Promise<void> = Promise.resolve();
   private requestIdCounter = 0;
+  private contextBuilder: ContextBuilder;
+  private promptBuilder: PromptBuilder;
+  private stateStore: StateStore;
+  private planStore: PlanStore;
 
   constructor(workspaceRoot: string, extensionPath?: string) {
     this.workspaceRoot = workspaceRoot;
@@ -72,64 +77,64 @@ class AgentCoreV2 {
     // Initialize MCP Client
     this.mcpClient = new MCPClient();
 
-    // Initialize Claude Client (unified API + CLI support)
-    const claudeClient = new ClaudeClient({
-      model: "claude-sonnet-4-20250514",
-      maxTokens: 4096,
-      temperature: 1.0,
-    });
-
-    // Initialize Claude Provider (wraps ClaudeToolExecutor)
-    this.claudeProvider = new ClaudeProvider({
-      claudeClient,
-      mcpClient: this.mcpClient,
-      maxToolRounds: 10,
-      workspaceRoot,
-    });
-
     // Initialize Context Builder
-    const contextBuilder = new ContextBuilder({
+    this.contextBuilder = new ContextBuilder({
       workspaceRoot,
       kbUrl: "http://127.0.0.1:7777",
     });
 
     // Initialize Prompt Builder
-    const promptBuilder = new PromptBuilder();
+    this.promptBuilder = new PromptBuilder();
 
     // Initialize State Store
-    const stateStore = new StateStore({
+    this.stateStore = new StateStore({
       storagePath: pathJoin(workspaceRoot, ".dolphin"),
     });
 
     // Initialize Plan Store (for architect workflow)
-    const planStore = new PlanStore(workspaceRoot);
+    this.planStore = new PlanStore(workspaceRoot);
+  }
 
-    // Initialize Editor Workflow
-    const editorWorkflow = new EditorWorkflow({
-      claudeProvider: this.claudeProvider,
-      contextBuilder,
-      promptBuilder,
-      stateStore,
-      workspaceRoot,
-    });
+  private async ensureWorkflowsReady(): Promise<void> {
+    if (this.orchestrator) {
+      return;
+    }
 
-    // Initialize Architect Workflow
-    const architectWorkflow = new ArchitectWorkflow({
-      claudeProvider: this.claudeProvider,
-      contextBuilder,
-      promptBuilder,
-      stateStore,
-      planStore,
-      workspaceRoot,
-    });
+    if (!this.workflowsReady) {
+      this.workflowsReady = (async () => {
+        this.chatProvider = await createChatProvider({
+          workspaceRoot: this.workspaceRoot,
+          mcpClient: this.mcpClient,
+          maxToolRounds: 10,
+        });
 
-    // Initialize Orchestrator
-    this.orchestrator = new Orchestrator({
-      workspaceRoot,
-      stateStore,
-      editorWorkflow,
-      architectWorkflow,
-    });
+        const editorWorkflow = new EditorWorkflow({
+          chatProvider: this.chatProvider,
+          contextBuilder: this.contextBuilder,
+          promptBuilder: this.promptBuilder,
+          stateStore: this.stateStore,
+          workspaceRoot: this.workspaceRoot,
+        });
+
+        const architectWorkflow = new ArchitectWorkflow({
+          chatProvider: this.chatProvider,
+          contextBuilder: this.contextBuilder,
+          promptBuilder: this.promptBuilder,
+          stateStore: this.stateStore,
+          planStore: this.planStore,
+          workspaceRoot: this.workspaceRoot,
+        });
+
+        this.orchestrator = new Orchestrator({
+          workspaceRoot: this.workspaceRoot,
+          stateStore: this.stateStore,
+          editorWorkflow,
+          architectWorkflow,
+        });
+      })();
+    }
+
+    await this.workflowsReady;
   }
 
   async start() {
@@ -146,9 +151,13 @@ class AgentCoreV2 {
     const mcpBridgePath = pathJoin(__dirname, "../../mcp-bridge/src/index.ts");
     await this.mcpClient.start(mcpBridgePath);
 
-    // Initialize Claude Provider (load tools from MCP)
-    console.error("[Agent Core V2] Initializing Claude Provider...");
-    await this.claudeProvider.initialize();
+    await this.ensureWorkflowsReady();
+    if (!this.chatProvider) {
+      throw new Error("Chat provider failed to initialize");
+    }
+
+    console.error("[Agent Core V2] Initializing chat provider...");
+    await this.chatProvider.initialize();
 
     // List available tools
     const tools = await this.mcpClient.listTools();
@@ -156,13 +165,15 @@ class AgentCoreV2 {
       `[Agent Core V2] Available tools: ${tools.map((t: { name: string }) => t.name).join(", ")}`
     );
 
-    // Check Claude authentication
-    const authStatus = await this.claudeProvider.getAuthStatus();
-    console.error(`[Agent Core V2] Claude auth mode: ${authStatus.mode}`);
-    if (authStatus.mode === "subscription" && authStatus.willUseSubscription) {
-      console.error("[Agent Core V2] Using Claude subscription (free)");
-    } else if (authStatus.mode === "api_key") {
-      console.error("[Agent Core V2] Using API key (pay-per-use)");
+    const providerInfo = this.chatProvider.getProviderMetadata();
+    const authStatus = await this.chatProvider.detectAuthStatus();
+    console.error(
+      `[Agent Core V2] Chat provider: ${providerInfo.provider} (model=${providerInfo.model})`
+    );
+    if (authStatus.authenticated) {
+      console.error(`[Agent Core V2] Authenticated via ${authStatus.mode}`);
+    } else {
+      console.error(`[Agent Core V2] Authentication missing: ${authStatus.error ?? "unknown"}`);
     }
 
     // Set up stdio communication using JSON-RPC framing
@@ -261,6 +272,10 @@ class AgentCoreV2 {
 
   private async handleRequest(request: ExtensionRequest): Promise<unknown> {
     console.error(`[Agent Core V2] Handling request: ${request.method}`);
+    await this.ensureWorkflowsReady();
+    if (!this.orchestrator) {
+      throw new Error("Orchestrator not initialized");
+    }
 
     switch (request.method) {
       case "sendMessage":
@@ -395,7 +410,7 @@ class AgentCoreV2 {
 
   private shutdown() {
     console.error("[Agent Core V2] Shutting down...");
-    this.claudeProvider.abort();
+    this.chatProvider?.abort();
     this.mcpClient.shutdown();
     this.kbManager.shutdown();
     process.exit(0);

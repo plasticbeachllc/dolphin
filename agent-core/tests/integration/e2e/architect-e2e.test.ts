@@ -22,31 +22,118 @@ import type {
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import type {
+  ChatProvider,
+  ExecuteParams,
+  ExecuteResult,
+  AuthStatus,
+} from "../../../src/execution/chat-provider";
+import type { UsageStats, ToolExecutorMessage } from "../../../src/llm/tool-executor";
 
-// Comprehensive mock Claude provider
-class E2EMockClaudeProvider {
+// Comprehensive mock provider
+class E2EMockClaudeProvider implements ChatProvider {
   private scenario: string;
+  private totalUsage: UsageStats = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+  };
 
   constructor(scenario: string = "happy_path") {
     this.scenario = scenario;
   }
 
-  async *execute(params: unknown) {
-    const { model } = params;
+  async initialize(): Promise<void> {}
 
-    let response = "";
+  async execute(params: ExecuteParams): Promise<ExecuteResult> {
+    const prompt = params.message ?? "";
+    const response = this.buildResponse(prompt);
+    const usage = this.defaultUsage();
 
-    if (this.scenario === "happy_path") {
-      if (model === "claude-haiku-4-20250514") {
-        response = `# Research Findings
+    if (params.onEvent) {
+      for (const char of response) {
+        params.onEvent({ type: "content_delta", delta: char });
+      }
+    }
+
+    this.incrementUsage(usage);
+
+    const history = params.conversationHistory ?? [];
+    const messages: ToolExecutorMessage[] = [
+      ...history,
+      { role: "user", content: prompt },
+      { role: "assistant", content: response },
+    ];
+
+    return {
+      messages,
+      stopReason: "end_turn",
+      toolRounds: 0,
+      usage,
+    };
+  }
+
+  abort(): void {}
+
+  async detectAuthStatus(): Promise<AuthStatus> {
+    return { authenticated: true, mode: "mock" };
+  }
+
+  async ensureAuthenticated(): Promise<void> {}
+
+  getUsage(): UsageStats {
+    return { ...this.totalUsage };
+  }
+
+  getProviderMetadata() {
+    return { provider: "mock", model: "mock-model" };
+  }
+
+  private buildResponse(prompt: string): string {
+    const normalized = prompt.toLowerCase();
+
+    if (normalized.includes("helping with code research") || normalized.includes("begin your research now")) {
+      return this.researchResponse();
+    }
+
+    if (
+      normalized.includes("plan must be provided as a toml code block") ||
+      normalized.includes("creating implementation plan") ||
+      normalized.includes("begin creating the plan now")
+    ) {
+      return this.planResponse();
+    }
+
+    if (prompt.includes("You are Claude, an expert coding assistant")) {
+      return "Here is the requested change with explanations.";
+    }
+
+    if (normalized.includes("clarification phase")) {
+      return this.clarificationResponse();
+    }
+
+    return "Acknowledged.";
+  }
+
+  private researchResponse(): string {
+    if (this.scenario === "needs_multiple_clarifications") {
+      return "Basic research findings about authentication system.";
+    }
+
+    if (this.scenario === "max_turns_reached") {
+      return "Research complete";
+    }
+
+    return `# Research Findings
 
 ## Codebase Architecture
 The application uses a standard Express.js architecture with the following key components:
 
-- **Authentication**: JWT-based auth with refresh tokens (src/auth/)
-- **API Routes**: RESTful endpoints in src/routes/
-- **Middleware**: Request validation and error handling (src/middleware/)
-- **Database**: PostgreSQL with Prisma ORM (src/db/)
+- Authentication: JWT-based auth with refresh tokens (src/auth/)
+- API Routes: RESTful endpoints in src/routes/
+- Middleware: Request validation and error handling (src/middleware/)
+- Database: PostgreSQL with Prisma ORM (src/db/)
 
 ## Current Auth Implementation
 - JWT tokens stored in httpOnly cookies
@@ -55,182 +142,109 @@ The application uses a standard Express.js architecture with the following key c
 - Basic session management
 
 ## Relevant Files
-- src/auth/jwt.ts - Token generation and validation
-- src/middleware/auth.ts - Authentication middleware
-- src/routes/auth.ts - Auth endpoints (login, register, refresh)
-- src/models/user.ts - User model and validation`;
-      } else if (model === "claude-sonnet-4-20250514") {
-        response = `I've reviewed the research findings and have a good understanding of the current authentication system.
+- src/auth/jwt.ts
+- src/middleware/auth.ts
+- src/routes/auth.ts
+- src/models/user.ts`;
+  }
 
-I have a few clarifying questions to ensure the implementation meets your needs:
-
-1. **Rate Limiting**: Should we implement rate limiting on all auth endpoints or just login/register?
-2. **Token Expiry**: What should be the expiry time for access tokens and refresh tokens?
-3. **Multi-Factor Auth**: Is 2FA required in this phase, or should we design for future extension?
-
-Based on typical security best practices, I recommend:
-- Rate limiting on all auth endpoints (especially login)
-- Short-lived access tokens (15 minutes) with longer refresh tokens (7 days)
-- Architecture that supports 2FA addition later
-
-If you're comfortable with these defaults, I'm [READY_TO_PLAN]`;
-      } else if (model === "claude-opus-4-20250514") {
-        response = `## Overview
-
-Enhance the authentication system with rate limiting, improved token management, and security hardening. The implementation will extend the existing JWT-based auth system while maintaining backward compatibility.
-
-## Goals
-1. Prevent brute force attacks via rate limiting
-2. Implement token rotation for enhanced security
-3. Add comprehensive audit logging
-4. Improve error handling and security responses
-
-## Files to Modify
-
-- \`src/middleware/auth.ts\` - Add rate limiting middleware
-- \`src/auth/jwt.ts\` - Implement token rotation logic
-- \`src/routes/auth.ts\` - Update endpoints with new security features
-- \`src/models/user.ts\` - Add failed login tracking
-- \`src/db/schema.prisma\` - Add audit log table
-
-## Files to Create
-
-- \`src/middleware/rate-limit.ts\` - Rate limiting implementation
-- \`src/auth/token-rotation.ts\` - Refresh token rotation logic
-- \`src/utils/audit-logger.ts\` - Security event logging
-- \`src/tests/auth-security.test.ts\` - Security-focused tests
-
-## Implementation Steps
-
-1. **Add Rate Limiting Middleware**
-   - Install express-rate-limit package
-   - Create rate-limit.ts with configurable limits
-   - Apply to auth endpoints: 5 attempts per 15 minutes for login
-   - Apply to auth endpoints: 3 attempts per hour for register
-
-2. **Implement Token Rotation**
-   - Modify jwt.ts to support token families
-   - Add rotation logic in token-rotation.ts
-   - Update refresh endpoint to rotate tokens on use
-   - Invalidate all tokens in family if reuse detected
-
-3. **Add Audit Logging**
-   - Create audit log database table in schema.prisma
-   - Implement audit-logger.ts utility
-   - Log all auth events: login, logout, token refresh, failed attempts
-   - Include IP address, user agent, timestamp
-
-4. **Update Failed Login Tracking**
-   - Add failed_login_count and locked_until fields to User model
-   - Implement account lockout after 5 failed attempts
-   - Add 30-minute lockout period
-   - Send email notification on account lock
-
-5. **Security Response Handling**
-   - Standardize error responses to prevent user enumeration
-   - Return generic "Invalid credentials" for both email and password errors
-   - Add timing attack prevention with constant-time comparisons
-   - Implement secure password reset flow
-
-6. **Testing**
-   - Write comprehensive security tests
-   - Test rate limiting enforcement
-   - Test token rotation and invalidation
-   - Test account lockout functionality
-   - Perform security audit
-
-## Database Schema Changes
-
-\`\`\`prisma
-model User {
-  id                String   @id @default(uuid())
-  email             String   @unique
-  password_hash     String
-  failed_login_count Int     @default(0)
-  locked_until      DateTime?
-  created_at        DateTime @default(now())
-  updated_at        DateTime @updatedAt
-}
-
-model AuditLog {
-  id         String   @id @default(uuid())
-  user_id    String?
-  event_type String   // 'login', 'logout', 'token_refresh', 'failed_login'
-  ip_address String
-  user_agent String
-  success    Boolean
-  metadata   Json?
-  timestamp  DateTime @default(now())
-}
-
-model TokenFamily {
-  id            String   @id @default(uuid())
-  user_id       String
-  family_id     String   @unique
-  revoked       Boolean  @default(false)
-  created_at    DateTime @default(now())
-}
-\`\`\`
-
-## Security Considerations
-
-1. **Rate Limiting**: Use Redis for distributed rate limiting in production
-2. **Token Storage**: Refresh tokens stored in httpOnly, secure cookies
-3. **Token Rotation**: Detect and prevent token reuse attacks
-4. **Audit Logs**: Store indefinitely for security analysis
-5. **Account Lockout**: Email notification and manual unlock process
-
-## Estimated Effort
-
-**Complexity**: medium
-**Time Estimate**: 2-3 days
-**Testing Time**: 1 day
-
-## Rollback Plan
-
-If issues arise:
-1. Disable rate limiting via feature flag
-2. Revert to single-token system (no rotation)
-3. Keep audit logging (low risk)
-
-## Success Metrics
-
-- Zero successful brute force attacks in testing
-- All security tests passing
-- Audit logs capturing all auth events
-- Token rotation preventing reuse attacks
-- Response times under 100ms for auth endpoints`;
-      }
-    } else if (this.scenario === "needs_multiple_clarifications") {
-      if (model === "claude-haiku-4-20250514") {
-        response = "Basic research findings about authentication system.";
-      } else if (model === "claude-sonnet-4-20250514") {
-        // First clarification turn
-        response = `I need to understand a few things:
+  private clarificationResponse(): string {
+    if (this.scenario === "needs_multiple_clarifications") {
+      return `I need to understand a few things:
 
 1. What specific security vulnerability are we addressing?
 2. What is the current authentication method?`;
-      }
-    } else if (this.scenario === "max_turns_reached") {
-      if (model === "claude-haiku-4-20250514") {
-        response = "Research complete";
-      } else if (model === "claude-sonnet-4-20250514") {
-        // Never sends [READY_TO_PLAN], forcing max turns
-        response = "I have some more questions about the implementation...";
-      } else if (model === "claude-opus-4-20250514") {
-        response = "## Plan\nImplementation details based on available information.";
-      }
     }
 
-    for (const char of response) {
-      yield {
-        type: "text" as const,
-        content: char,
-      };
+    if (this.scenario === "max_turns_reached") {
+      return "I have some more questions about the implementation...";
     }
+
+    return `I've reviewed the research findings and have a good understanding of the current authentication system.
+
+I have a few clarifying questions to ensure the implementation meets your needs:
+
+1. Rate Limiting: Should we implement rate limiting on all auth endpoints or just login/register?
+2. Token Expiry: What should be the expiry time for access tokens and refresh tokens?
+3. Multi-Factor Auth: Is 2FA required now or later?
+
+If you're comfortable with these defaults, I'm [READY_TO_PLAN]`;
+  }
+
+  private planResponse(): string {
+    if (this.scenario === "max_turns_reached") {
+      return "## Plan\nImplementation details based on available information.";
+    }
+
+    return `## Overview
+Enhance the authentication system with rate limiting, token rotation, and audit logging.
+
+${"```toml"}
+plan_version = 1
+overview = """
+Secure auth flows with layered protections, telemetry, and auditability.
+"""
+complexity = "medium"
+estimated_tokens = 2000
+
+files_to_modify = [
+  "src/middleware/auth.ts",
+  "src/auth/jwt.ts",
+  "src/routes/auth.ts",
+  "src/models/user.ts",
+  "src/db/schema.prisma"
+]
+
+files_to_create = [
+  "src/middleware/rate-limit.ts",
+  "src/auth/token-rotation.ts",
+  "src/utils/audit-logger.ts",
+  "src/tests/auth-security.test.ts"
+]
+
+[[steps]]
+id = 1
+description = "Add configurable rate limiting middleware and attach to all auth routes"
+files = ["src/middleware/auth.ts", "src/middleware/rate-limit.ts", "src/routes/auth.ts"]
+estimated_tokens = 500
+
+[[steps]]
+id = 2
+description = "Implement refresh token rotation with JWT helpers and persistence"
+files = ["src/auth/jwt.ts", "src/auth/token-rotation.ts", "src/models/user.ts"]
+estimated_tokens = 600
+
+[[steps]]
+id = 3
+description = "Create audit logging utilities and schema tables"
+files = ["src/utils/audit-logger.ts", "src/db/schema.prisma"]
+estimated_tokens = 450
+
+[[steps]]
+id = 4
+description = "Backfill security regression tests for auth flows"
+files = ["src/tests/auth-security.test.ts"]
+estimated_tokens = 300
+${"```"}
+
+## Steps
+1. Add rate limiting middleware
+2. Implement token rotation
+3. Add audit logging
+4. Update security-focused tests`;
+  }
+
+  private defaultUsage(): UsageStats {
+    return { inputTokens: 20, outputTokens: 15, cacheReadTokens: 0, cacheWriteTokens: 0 };
+  }
+
+  private incrementUsage(usage: UsageStats) {
+    this.totalUsage.inputTokens += usage.inputTokens;
+    this.totalUsage.outputTokens += usage.outputTokens;
+    this.totalUsage.cacheReadTokens += usage.cacheReadTokens;
+    this.totalUsage.cacheWriteTokens += usage.cacheWriteTokens;
   }
 }
-
 // Deterministic context builder to avoid real KB/file IO during tests
 class TestContextBuilder {
   async build(params: ContextBuildParams): Promise<Context> {
@@ -307,14 +321,14 @@ describe("ArchitectWorkflow E2E", () => {
     const promptBuilder = new PromptBuilder();
 
     const architectWorkflow = new ArchitectWorkflow({
-      claudeProvider: claudeProvider as unknown,
+      chatProvider: claudeProvider as unknown as ChatProvider,
       contextBuilder: contextBuilder as unknown,
       promptBuilder,
       maxClarificationTurns: 2,
     });
 
     const editorWorkflow = new EditorWorkflow({
-      claudeProvider: claudeProvider as unknown,
+      chatProvider: claudeProvider as unknown as ChatProvider,
       contextBuilder: contextBuilder as unknown,
       promptBuilder,
     });

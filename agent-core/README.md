@@ -23,7 +23,7 @@ Based on the comprehensive [Dolphin v2 Orchestration Project Plan](../docs/orche
 - ✅ [`Orchestrator`](src/orchestrator/orchestrator.ts) - State machine & workflow coordination (458 lines)
 - ✅ [`StateStore`](src/state/state-store.ts) - TOML persistence & versioning (459 lines)
 - ✅ [`JSON-RPC`](src/utils/json-rpc.ts) - Extension communication (291 lines)
-- ✅ [`ClaudeProvider`](src/execution/claude-provider.ts) - Multi-model CLI execution (493 lines)
+- ✅ [`AnthropicProvider`](src/execution/anthropic-provider.ts) / [`OpenAIProvider`](src/execution/openai-provider.ts) - Multi-provider chat interface
 - ✅ [`EditorWorkflow`](src/workflows/editor-workflow.ts) - Fast-path execution (260 lines)
 - ✅ [`ContextBuilder`](src/context/context-builder.ts) - KB integration (320 lines)
 - ✅ [`PromptBuilder`](src/prompts/prompt-builder.ts) - Phase-specific prompts (207 lines)
@@ -66,7 +66,7 @@ VSCode Extension (Svelte 5)
          ↕
    Workflow Implementations
          ↕
-   ClaudeProvider (CLI subprocess)
+   ChatProvider (Anthropic/OpenAI)
          ↕
    Claude Code CLI
 ```
@@ -95,13 +95,13 @@ bun run tests/run-integration-tests.ts
 ```typescript
 import { Orchestrator } from "./src/orchestrator/orchestrator";
 import { EditorWorkflow } from "./src/workflows/editor-workflow";
-import { ClaudeProvider } from "./src/execution/claude-provider";
+import { AnthropicProvider } from "./src/execution/anthropic-provider";
 import { ContextBuilder } from "./src/context/context-builder";
 import { PromptBuilder } from "./src/prompts/prompt-builder";
 import { StateStore } from "./src/state/state-store";
 
 // Setup
-const claudeProvider = new ClaudeProvider({
+const chatProvider = new AnthropicProvider({
   workspaceRoot: "/path/to/workspace",
 });
 
@@ -113,7 +113,7 @@ const contextBuilder = new ContextBuilder({
 const promptBuilder = new PromptBuilder();
 
 const editorWorkflow = new EditorWorkflow({
-  claudeProvider,
+  chatProvider,
   contextBuilder,
   promptBuilder,
 });
@@ -148,14 +148,14 @@ for await (const update of orchestrator.subscribeToUpdates(session.id)) {
 
 ### Authentication Helpers
 
-`ClaudeProvider` ships with a lightweight `AuthManager` that understands both
+`AnthropicProvider` ships with a lightweight `AuthManager` that understands both
 Claude CLI OAuth logins and the `ANTHROPIC_API_KEY` environment variable. You
-can use it directly, or call the convenience methods on `ClaudeProvider`:
+can use it directly, or call the convenience methods on the provider:
 
 ```typescript
-import { AuthManager, ClaudeProvider } from "./src/execution/claude-provider";
+import { AuthManager, AnthropicProvider } from "./src/execution/anthropic-provider";
 
-const provider = new ClaudeProvider({ workspaceRoot: "/path/to/workspace" });
+const provider = new AnthropicProvider({ workspaceRoot: "/path/to/workspace" });
 await provider.ensureAuthenticated();
 
 const authManager = new AuthManager();
@@ -202,7 +202,9 @@ agent-core-v2/
 │   ├── workflows/
 │   │   └── editor-workflow.ts       # Fast-path execution
 │   ├── execution/
-│   │   └── claude-provider.ts       # Multi-model CLI spawning
+│   │   ├── anthropic-provider.ts   # Anthropic ChatProvider implementation
+│   │   ├── openai-provider.ts      # OpenAI ChatProvider implementation
+│   │   └── provider-factory.ts     # Provider selection helper
 │   ├── context/
 │   │   └── context-builder.ts       # KB integration
 │   ├── prompts/
