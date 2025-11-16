@@ -131,6 +131,37 @@ describe("Knowledge Bank Integration", () => {
       // Should return empty results
       expect(context.kbResults.length).toBe(0);
     });
+
+    it("should timeout KB search when request hangs", async () => {
+      global.fetch = mock(async (_url: string, init?: RequestInit) => {
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            const abortError = new Error("Aborted");
+            abortError.name = "AbortError";
+            reject(abortError);
+          });
+        });
+      }) as unknown;
+
+      const timeoutBuilder = new ContextBuilder({
+        workspaceRoot: "/test/workspace",
+        kbUrl: "http://localhost:7777",
+        kbTimeoutMs: 50,
+      });
+
+      const params: ContextBuildParams = {
+        searchQuery: "slow query",
+        files: [],
+        maxTokens: 10000,
+      };
+
+      const start = Date.now();
+      const context = await timeoutBuilder.build(params);
+      const duration = Date.now() - start;
+
+      expect(duration).toBeLessThan(500);
+      expect(context.kbResults.length).toBe(0);
+    });
   });
 
   describe("Context Assembly", () => {

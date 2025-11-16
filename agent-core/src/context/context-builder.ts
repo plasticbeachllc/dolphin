@@ -23,6 +23,7 @@ import type {
 export interface ContextBuilderConfig {
   workspaceRoot: string;
   kbUrl?: string;
+  kbTimeoutMs?: number;
 }
 
 /**
@@ -31,10 +32,12 @@ export interface ContextBuilderConfig {
 export class ContextBuilder {
   private workspaceRoot: string;
   private kbUrl: string;
+  private kbTimeoutMs: number;
 
   constructor(config: ContextBuilderConfig) {
     this.workspaceRoot = config.workspaceRoot;
     this.kbUrl = config.kbUrl || "http://127.0.0.1:7777";
+    this.kbTimeoutMs = config.kbTimeoutMs ?? 2000;
   }
 
   /**
@@ -93,6 +96,9 @@ export class ContextBuilder {
    * Search Knowledge Bank for relevant code
    */
   private async searchKnowledgeBank(query: string): Promise<KBResult[]> {
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => controller.abort(), this.kbTimeoutMs);
+
     try {
       const response = await fetch(`${this.kbUrl}/v1/search`, {
         method: "POST",
@@ -103,6 +109,7 @@ export class ContextBuilder {
           diversity_threshold: 0.7,
           use_reranking: true,
         }),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -124,8 +131,16 @@ export class ContextBuilder {
         }))
         .sort((a, b) => b.score - a.score);
     } catch (error) {
-      console.error("[ContextBuilder] KB search error:", error);
+      if (error instanceof Error && error.name === "AbortError") {
+        console.warn(
+          `[ContextBuilder] KB search timed out after ${this.kbTimeoutMs}ms while querying '${query}'`
+        );
+      } else {
+        console.error("[ContextBuilder] KB search error:", error);
+      }
       return [];
+    } finally {
+      clearTimeout(timeoutHandle);
     }
   }
 
