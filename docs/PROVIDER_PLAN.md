@@ -12,13 +12,13 @@ both Anthropic and OpenAI models, mirroring the original Phase 1 charter for the
 provider initiative. The following deliverables are covered by the current code
 base:
 
-| Deliverable                                       | Status | Notes                                                                                                                                                                        |
-| ------------------------------------------------- | :----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Shared chat provider abstraction (`ChatProvider`) |   ✅   | Implemented in `agent-core/src/execution/chat-provider.ts` and adopted by the orchestrator/editor/architect workflows.                                                       |
-| Anthropic + OpenAI client wrappers                |   ✅   | `AnthropicProvider` keeps the CLI + API dual-mode AuthManager, while `OpenAIProvider` uses the new OpenAI Responses adapter with streaming/tool support.                     |
-| Tool execution engine with provider adapters      |   ✅   | `ToolExecutorEngine` powers both Anthropic and OpenAI adapters (`anthropic-tool-executor.ts`, `openai-tool-executor.ts`).                                                    |
-| Provider selection knobs                          |   ✅   | `~/.dolphin/config` + `DOLPHIN_*` env vars select provider/model/temperature; a custom OpenAI-compatible base URL/API key are now supported via `provider.openai` overrides. |
-| MCP workflow integration                          |   ✅   | Both providers use the same MCP tool loop and bubble up token usage to orchestrator telemetry.                                                                               |
+| Deliverable                                       | Status | Evidence & Notes |
+| ------------------------------------------------- | :----: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared chat provider abstraction (`ChatProvider`) |   ✅   | `agent-core/src/execution/chat-provider.ts` defines the shared surface and is consumed by the orchestrator + workflows in `agent-core/src/main.ts`, ensuring editor/architect flows bind against the same interface. |
+| Anthropic + OpenAI client wrappers                |   ✅   | `agent-core/src/execution/anthropic-provider.ts` wraps `ClaudeClient` + auth manager, while `agent-core/src/execution/openai-provider.ts` together with `agent-core/src/llm/openai-client.ts` implement the OpenAI Responses adapter with streaming/tool support. |
+| Tool execution engine with provider adapters      |   ✅   | `agent-core/src/llm/tool-executor.ts` now backs both `anthropic-tool-executor.ts` and `openai-tool-executor.ts`, giving each provider consistent tool call orchestration and diff-generation hooks. |
+| Provider selection knobs                          |   ✅   | `agent-core/src/utils/provider-settings.ts` + `agent-core/src/execution/provider-factory.ts` honor `~/.dolphin/config` and the `DOLPHIN_*`/`OPENAI_*` env vars, enabling default model overrides and OpenAI-compatible API endpoint injection. |
+| MCP workflow integration                          |   ✅   | Both providers are wired through the shared `MCPClient` + tool loop (`agent-core/src/mcp/mcp-client.ts`), so usage accounting and tool telemetry reach the orchestrator in the same format. |
 
 **Default models:** Phase 1 now ships with `claude-sonnet-4-5-20250929` for the Anthropic path. When the OpenAI provider is selected, the editor/coding workflow defaults to `gpt-5.1-codex` while the architect workflow defaults to `gpt-5.1`, keeping runtime behavior aligned with the plan's "Claude 4.5" / "GPT 5.1" targeting without extra configuration.
 
@@ -37,6 +37,29 @@ that are **not** part of the Phase 1 Agent Core drop:
 Those gaps are now explicitly noted here to avoid ambiguity between the plan and
 the repository state. Subsequent phases should re-use the abstractions landed in
 Phase 1 to flesh out the remaining milestones.
+
+### Phase 2 Readiness Check
+
+Phase 1 exit criteria are satisfied: both Anthropic and OpenAI providers run
+through the shared chat abstraction, the provider factory switches between them
+based on config/env, and the tool execution and MCP plumbing are commonized.
+The latest targeted tests (see **Testing** in this change) confirm the
+OpenAI/Anthropic factory + provider paths remain green. With no additional
+Phase 1 blockers identified, the codebase is ready for Phase 2 planning and
+implementation to begin.
+
+### Phase 2 (Agent Core) Implementation Status
+
+Phase 2 deliverables are now implemented in the repository, so the OpenAI path
+is production-ready alongside Anthropic:
+
+| Deliverable | Status | Evidence & Notes |
+| --- | :---: | --- |
+| `OpenAIClient` streaming wrapper | ✅ | `agent-core/src/llm/openai-client.ts` owns the Responses streaming integration, chunks deltas via `onTextChunk`, and captures token usage so providers receive structured totals. |
+| `OpenAIToolExecutor` adapter | ✅ | `agent-core/src/llm/openai-tool-executor.ts` bridges MCP tools into OpenAI's function schema, dispatches deltas as `content_delta` events, and reuses the shared `ToolExecutorEngine` loop. |
+| `OpenAIProvider` + factory wiring | ✅ | `agent-core/src/execution/openai-provider.ts` injects the executor/client pair, resolves auth/base-url sources, and exposes provider metadata, while `agent-core/src/execution/provider-factory.ts` now promotes OpenAI when requested or when only OpenAI credentials are present. |
+| Unit coverage | ✅ | `agent-core/tests/unit/llm/openai-client.test.ts`, `agent-core/tests/unit/execution/openai-provider.test.ts`, and `agent-core/tests/unit/execution/provider-factory.test.ts` lock regression coverage around the client, provider, and selection logic. |
+| Integration coverage | ✅ | `agent-core/tests/integration/auth/openai-auth.test.ts` verifies env/settings precedence + `ensureAuthenticated`, and `agent-core/tests/integration/editor/openai-editor-workflow.test.ts` drives the Editor workflow end-to-end against a mocked OpenAI client to ensure streaming + persistence behaviors stay intact. |
 
 ---
 
