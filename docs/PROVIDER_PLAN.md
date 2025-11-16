@@ -59,7 +59,7 @@ follow-up item:
 | `OpenAIClient` streaming wrapper  |   ✅   | `agent-core/src/llm/openai-client.ts` owns the Responses streaming integration, chunks deltas via `onTextChunk`, and captures token usage so providers receive structured totals.                                                                                                                                        |
 | `OpenAIToolExecutor` adapter      |   ✅   | `agent-core/src/llm/openai-tool-executor.ts` bridges MCP tools into OpenAI's function schema, dispatches deltas as `content_delta` events, and reuses the shared `ToolExecutorEngine` loop.                                                                                                                              |
 | `OpenAIProvider` + factory wiring |   ✅   | `agent-core/src/execution/openai-provider.ts` injects the executor/client pair, resolves auth/base-url sources, and exposes provider metadata, while `agent-core/src/execution/provider-factory.ts` now promotes OpenAI when requested or when only OpenAI credentials are present.                                      |
-| Unit coverage                     |   ⚠️   | `agent-core/tests/unit/llm/openai-client.test.ts`, `agent-core/tests/unit/execution/openai-provider.test.ts`, and `agent-core/tests/unit/execution/provider-factory.test.ts` cover the client/provider/factory paths. A dedicated `OpenAIToolExecutor` suite is still pending. |
+| Unit coverage                     |   ⚠️   | `agent-core/tests/unit/llm/openai-client.test.ts`, `agent-core/tests/unit/execution/openai-provider.test.ts`, and `agent-core/tests/unit/execution/provider-factory.test.ts` cover the client/provider/factory paths. A dedicated `OpenAIToolExecutor` suite is still pending.                                           |
 | Integration coverage              |   ✅   | `agent-core/tests/integration/auth/openai-auth.test.ts` verifies env/settings precedence + `ensureAuthenticated`, and `agent-core/tests/integration/editor/openai-editor-workflow.test.ts` drives the Editor workflow end-to-end against a mocked OpenAI client to ensure streaming + persistence behaviors stay intact. |
 
 ---
@@ -562,14 +562,14 @@ All tests must clean up after themselves (temp dirs, env vars, secrets, test set
 
 ### Phase 2 – OpenAI Provider (Agent Core)
 
-| # | Deliverable | Status | Evidence / Notes |
-| - | ----------- | :----: | ---------------- |
-| 8 | Implement `OpenAIClient` with streaming + auth helpers | ✅ | `agent-core/src/llm/openai-client.ts` now wraps the Responses API, handles env overrides, and streams deltas via `onTextChunk`. |
-| 9 | Build `OpenAIToolExecutor` with MCP + streaming events | ✅ | `agent-core/src/llm/openai-tool-executor.ts` subclasses `ToolExecutorEngine`, translates MCP tools into OpenAI functions, and emits `content_delta` events. |
-| 10 | Provide a ChatProvider implementation for OpenAI | ✅ | `agent-core/src/execution/openai-provider.ts` composes the client + executor, resolves auth metadata, and exposes provider metadata. |
-| 11 | Extend provider factory to support OpenAI selection | ✅ | `agent-core/src/execution/provider-factory.ts` now promotes OpenAI when explicitly requested or when only OpenAI credentials exist. |
-| 12 | Add unit coverage for the new components | ⚠️ | `openai-client`, `openai-provider`, and `provider-factory` unit tests exist. Dedicated `OpenAIToolExecutor` tests are still outstanding (only the shared engine is covered). |
-| 13 | Add integration tests for OpenAI auth + workflows | ✅ | `agent-core/tests/integration/auth/openai-auth.test.ts` and `agent-core/tests/integration/editor/openai-editor-workflow.test.ts` cover auth precedence + streaming editor runs. |
+| #   | Deliverable                                            | Status | Evidence / Notes                                                                                                                                                                |
+| --- | ------------------------------------------------------ | :----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 8   | Implement `OpenAIClient` with streaming + auth helpers |   ✅   | `agent-core/src/llm/openai-client.ts` now wraps the Responses API, handles env overrides, and streams deltas via `onTextChunk`.                                                 |
+| 9   | Build `OpenAIToolExecutor` with MCP + streaming events |   ✅   | `agent-core/src/llm/openai-tool-executor.ts` subclasses `ToolExecutorEngine`, translates MCP tools into OpenAI functions, and emits `content_delta` events.                     |
+| 10  | Provide a ChatProvider implementation for OpenAI       |   ✅   | `agent-core/src/execution/openai-provider.ts` composes the client + executor, resolves auth metadata, and exposes provider metadata.                                            |
+| 11  | Extend provider factory to support OpenAI selection    |   ✅   | `agent-core/src/execution/provider-factory.ts` now promotes OpenAI when explicitly requested or when only OpenAI credentials exist.                                             |
+| 12  | Add unit coverage for the new components               |   ⚠️   | `openai-client`, `openai-provider`, and `provider-factory` unit tests exist. Dedicated `OpenAIToolExecutor` tests are still outstanding (only the shared engine is covered).    |
+| 13  | Add integration tests for OpenAI auth + workflows      |   ✅   | `agent-core/tests/integration/auth/openai-auth.test.ts` and `agent-core/tests/integration/editor/openai-editor-workflow.test.ts` cover auth precedence + streaming editor runs. |
 
 ### Phase 3 – VSCode Extension Integration
 
