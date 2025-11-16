@@ -14,7 +14,7 @@ This document is the canonical specification for expanding Dolphin's inference l
 
 | Provider ID | Models (Initial)                                      | Authentication                       | Modalities                           | Notes |
 | ----------- | ------------------------------------------------------ | ------------------------------------ | ------------------------------------ | ----- |
-| `openai`    | `gpt-5.1`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `text-embedding-3-large`, `text-embedding-3-small` | API key only (`OPENAI_API_KEY`)      | Chat, tool calling, JSON, vision, audio, embeddings | Default OpenAI cloud endpoint; GPT models serve chat/tool flows while the `text-embedding-3-*` family powers the KB embeddings surface. |
+| `openai`    | `gpt-5.1`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `text-embedding-3-large`, `text-embedding-3-small` | API key only (`OPENAI_API_KEY`)      | Chat, tool calling, JSON, vision, audio, embeddings | Default OpenAI cloud endpoint; GPT models serve chat/tool flows while the `text-embedding-3-*` family remains available for the existing KB pipeline but is **not** modified as part of this effort. |
 | `openai-compatible` | User-provided model IDs (OpenAI spec-compliant) | API key in header plus custom base URL | Mirrors OpenAI compatibility surface | Covers Azure OpenAI, self-hosted servers, etc.; embeddings supported when the endpoint exposes `text-embedding-3-large`, `text-embedding-3-small`, or future embedding IDs declared in the manifest. |
 | `anthropic` | `claude-4.5-sonnet`, `claude-4.5-haiku`               | Subscription token **or** API key    | Chat, tool use, JSON (beta)          | Requires dual-auth support toggled per deployment; no embedding surface yet. |
 
@@ -165,31 +165,9 @@ interface ProviderConfig {
 
 The manifest intentionally omits static pricing to avoid staleness. A separate dynamic feed ingests provider-owned pricing files (e.g., OpenAI usage APIs, Anthropic CSV) at startup, persists them to `provider_pricing_cache.json`, and exposes accessors to the CLI/UI for cost estimation. The feed refreshes on a configurable TTL and falls back to cached values when offline. Implementation detail: `load_pricing_feed()` runs independently from manifest parsing and must handle provider-specific schemas.
 
-## 6. Python Knowledge-Base Integration
+## 6. Out-of-Scope: KB Embeddings
 
-The knowledge-base (KB) ingestion pipeline already owns its own OpenAI-only embedding provider (`kb/embeddings/provider.py`). To
-keep that layer in sync with the manifest-driven defaults we now require the following updates:
-
-1. **Manifest Loader** – Add `shared/providers/loader.py` (Python) that mirrors the TS loader and exposes `load_provider_config`
-   for any subsystem. The KB package must depend on this loader instead of duplicating embedding metadata.
-2. **Embedding Model Resolution** – Update `kb/embeddings/provider.py` to:
-   - Read the OpenAI (or OpenAI-compatible) entry from the manifest at module import, caching the embedding map `{model_id:
-     dimensions}`.
-   - Honor `DOLPHIN_EMBEDDING_MODEL` (existing env) but validate that the requested ID exists in the manifest `openai.embeddings`
-     table; fall back to the manifest `default = true` entry when unset.
-   - Surface a descriptive configuration error if the manifest marks the provider as `embeddings_supported = false` (e.g., when
-     `DOLPHIN_PROVIDER=anthropic`).
-3. **Dimension Source of Truth** – Replace the hard-coded `MODEL_DIMENSIONS` dictionary with a manifest-derived helper so
-   LanceDB collection sizing stays consistent when new embedding IDs are added.
-4. **Retry + Auth Reuse** – Reuse the new provider auth resolution helper instead of manually reading `OPENAI_API_KEY`;
-   ensures OpenAI-compatible base URLs and headers flow into the KB pipeline automatically.
-5. **Tests** – Extend `tests/unit/kb/test_embeddings_provider.py` (or add new coverage) to assert that:
-   - Unsupported provider selections raise errors referencing the manifest entry.
-   - Switching the manifest default between `text-embedding-3-large` and `text-embedding-3-small` updates batch dimension logic
-     without code changes.
-
-> Result: Once these changes land, the KB layer will automatically inherit future embedding IDs or provider toggles simply by
-> shipping a new manifest.
+Provider work for this release is limited to LLM inference surfaces (Agent Core, MCP Bridge, CLI, and the VS Code extension). The existing knowledge-base (KB) embedding APIs, storage contracts, and auth flows remain unchanged; any future manifest alignment for embeddings will be revisited under a separate spec.
 
 ## 7. Client Factory Specification
 
