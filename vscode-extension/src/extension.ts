@@ -14,8 +14,20 @@ import { DiffHandler, DiffChange } from "./editor/diff-handler";
 import { AutoSyncManager } from "./kb/auto-sync-manager";
 import { DriftDetector } from "./kb/drift-detector";
 
-const isTestEnv = process.env.DOLPHIN_TEST_ENV === "1";
-const defaultKbBaseUrl = process.env.DOLPHIN_KB_BASE_URL || "http://127.0.0.1:7777";
+const FALLBACK_KB_BASE_URL = "http://127.0.0.1:7777";
+let isTestEnv = false;
+let defaultKbBaseUrl = FALLBACK_KB_BASE_URL;
+
+function resolveKbBaseUrl(): string {
+  try {
+    return vscode.workspace
+      .getConfiguration("dolphin.kb")
+      .get<string>("apiBaseUrl", FALLBACK_KB_BASE_URL);
+  } catch (error) {
+    console.warn("[Extension] Failed to resolve KB base URL, using fallback", error);
+    return FALLBACK_KB_BASE_URL;
+  }
+}
 
 let agentBridge: AgentBridgeAdapter | null = null;
 let outputChannel: vscode.OutputChannel;
@@ -43,9 +55,14 @@ export async function activate(context: vscode.ExtensionContext) {
   logger = new Logger(outputChannel, "Extension");
   logger.info("Activating Dolphin extension...");
 
+  isTestEnv = context.extensionMode === vscode.ExtensionMode.Test;
+  defaultKbBaseUrl = resolveKbBaseUrl();
+
   if (isTestEnv) {
     logger.info("Test environment detected: background KB services will be skipped.");
   }
+
+  logger.debug(`Using KB base URL: ${defaultKbBaseUrl}`);
 
   try {
     // Initialize AgentBridge with shared output channel
