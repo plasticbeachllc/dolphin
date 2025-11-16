@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from kb.store.connection_pool import close_connection_pool
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
@@ -32,6 +33,25 @@ class TestSQLiteMetadataStore:
         same_repo = store.get_repo_by_name("test-repo")
         assert same_repo is not None
         assert same_repo["id"] == repo["id"], "Duplicate repo should return same ID"
+
+    def test_connection_pool_integration(self, temp_db_path):
+        """Ensure metadata store reuses pooled connections for repeated queries."""
+
+        store = SQLiteMetadataStore(temp_db_path)
+        store.initialize()
+
+        repo_path = Path("/mock/repo")
+        store.record_repo("pooled-repo", repo_path)
+        store.get_repo_by_name("pooled-repo")
+        store.get_repo_by_name("pooled-repo")
+
+        pool = store._get_connection_pool()
+        stats = pool.stats()
+
+        assert stats["created_connections"] >= pool.pool_size
+        assert stats["reused_connections"] >= 2
+
+        close_connection_pool(temp_db_path)
 
     def test_session_management(self, temp_db_path):
         """Test session lifecycle and status transitions."""

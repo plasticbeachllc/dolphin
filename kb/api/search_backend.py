@@ -250,25 +250,16 @@ class KnowledgeSearchBackend:
                 # Log error but continue with empty BM25 results
                 request_logger.warning("BM25 search failed", error=e)
 
-        # Apply request filters to both vector and BM25 results
-        vector_filtered = self._apply_request_filters(vector_formatted, request)
-        bm25_filtered = self._apply_request_filters(bm25_hydrated, request)
+        # Apply request filters and file-type scoring in a single pass for better perf
+        vector_filtered = self._filter_and_score_results(vector_formatted, request)
+        bm25_filtered = self._filter_and_score_results(bm25_hydrated, request)
 
         request_logger.debug(
-            "Applied request filters",
+            "Applied request filtering and scoring adjustments",
             {
                 "vector_filtered_count": len(vector_filtered),
                 "bm25_filtered_count": len(bm25_filtered),
             },
-        )
-
-        # Apply file type scoring adjustments to deprioritize config files
-        vector_filtered = self._apply_file_type_scoring(vector_filtered)
-        bm25_filtered = self._apply_file_type_scoring(bm25_filtered)
-
-        request_logger.debug(
-            "Applied file type scoring",
-            {"vector_count": len(vector_filtered), "bm25_count": len(bm25_filtered)},
         )
 
         hits = reciprocal_rank_fusion([vector_filtered, bm25_filtered])
@@ -448,121 +439,96 @@ class KnowledgeSearchBackend:
             formatted.append({**r, "chunk_id": r.get("id"), "score": score})
         return formatted
 
-    def _apply_request_filters(
+    def _filter_and_score_results(
         self, results: list[dict[str, object]], request: SearchRequest
     ) -> list[dict[str, object]]:
-        """Apply repo, path_prefix, and negative filters to results."""
-        from pathlib import PurePosixPath
+        """Apply repo filters, path rules, and file-type scoring in one pass."""
 
-        def normalize_path(path_str: str) -> PurePosixPath:
-            """Normalize a path by removing leading ./ and / characters."""
-            path_str = path_str.lstrip("./")
-            path_str = path_str.lstrip("/")
-            return PurePosixPath(path_str)
+        import fnmatch
 
-        filtered = results
+        def normalize_path(path_str: str) -> str:
+            normalized = (path_str or "").lstrip("./")
+            normalized = normalized.lstrip("/")
+            normalized = normalized.rstrip("/")
+            return normalized
 
-        # Filter by repos if specified
-        if request.repos:
-            repo_set = set(request.repos)
-            filtered = [r for r in filtered if r.get("repo") in repo_set]
-
-        # Filter by path_prefix if specified (positive filtering)
-        if request.path_prefix:
-
-            def matches_prefix(path_str: str) -> bool:
-                path = normalize_path(path_str)
-                # Type check: path_prefix is already checked to be non-None above
-                assert request.path_prefix is not None
-                for prefix_str in request.path_prefix:
-                    prefix = normalize_path(prefix_str)
-                    try:
-                        # Check if path is relative to prefix
-                        path.relative_to(prefix)
+        def matches_prefix(path: str, prefixes: tuple[str, ...]) -> bool:
+            for prefix in prefixes:
+                if not prefix:
+                    return True
+                try:
+                    if path == prefix or path.startswith(f"{prefix}/"):
                         return True
-                    except ValueError:
-                        # Not relative to this prefix
-                        continue
-                return False
+                except Exception:
+                    # Pure string operations shouldn't raise but keep defensive handling
+                    continue
+            return False
 
-            # Cast to str since we know r is a dict with string path
-            filtered = [r for r in filtered if matches_prefix(str(r.get("path", "")))]
+        def matches_pattern(path: str, basename: str, patterns: tuple[str, ...]) -> bool:
+            for pattern in patterns:
+                if fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(basename, pattern):
+                    return True
+            return False
 
-        # Negative filtering: exclude_paths (exact path prefix exclusions)
-        if request.exclude_paths:
-
-            def matches_excluded_path(path_str: str) -> bool:
-                path = normalize_path(path_str)
-                # Type check: exclude_paths is already checked to be non-None above
-                assert request.exclude_paths is not None
-                for excl_str in request.exclude_paths:
-                    excl = normalize_path(excl_str)
-                    try:
-                        # Check if path is relative to excluded prefix
-                        path.relative_to(excl)
-                        return True
-                    except ValueError:
-                        # Not relative to this exclusion
-                        continue
-                return False
-
-            # Cast to str since we know r is a dict with string path
-            filtered = [r for r in filtered if not matches_excluded_path(str(r.get("path", "")))]
-
-        # Negative filtering: exclude_patterns (glob/fnmatch pattern exclusions)
-        if request.exclude_patterns:
-            import fnmatch
-
-            def matches_excluded_pattern(path_str: str) -> bool:
-                path = normalize_path(path_str)
-                # Type check: exclude_patterns is already checked to be non-None above
-                assert request.exclude_patterns is not None
-                for pattern in request.exclude_patterns:
-                    # Match against both full path and basename
-                    if fnmatch.fnmatch(str(path), pattern) or fnmatch.fnmatch(path.name, pattern):
-                        return True
-                return False
-
-            # Cast to str since we know r is a dict with string path
-            filtered = [r for r in filtered if not matches_excluded_pattern(str(r.get("path", "")))]
-
-        return filtered
-
-    def _apply_file_type_scoring(self, results: list[dict[str, object]]) -> list[dict[str, object]]:
-        """Apply scoring adjustments based on file type to deprioritize config files.
-
-        Config files (TOML, JSON, YAML) are penalized to prevent them from
-        dominating search results, especially when they contain many chunks.
-        """
-        adjusted = []
-        for result in results:
-            path_obj = result.get("path", "")
-            # Cast to string for type safety
-            path = str(path_obj) if path_obj else ""
-            score_obj = result.get("score", 0.0)
-            # Cast to float for type safety
-            score = float(score_obj) if isinstance(score_obj, (int, float)) else 0.0
-
-            # Check if this is a config file
-            is_config = (
-                path.endswith(".toml")
-                or path.endswith(".json")
-                or path.endswith(".yaml")
-                or path.endswith(".yml")
-                or "config.toml" in path.lower()
-                or "package.json" in path.lower()
-                or "tsconfig.json" in path.lower()
+        def is_config_file(path: str) -> bool:
+            lowered = path.lower()
+            return (
+                lowered.endswith(".toml")
+                or lowered.endswith(".json")
+                or lowered.endswith(".yaml")
+                or lowered.endswith(".yml")
+                or "config.toml" in lowered
+                or "package.json" in lowered
+                or "tsconfig.json" in lowered
             )
 
-            if is_config:
-                result = {
-                    **result,
-                    "score": score * RETRIEVAL_PARAMS.CONFIG_FILE_SCORE_PENALTY,
-                }
+        def apply_penalty(result: dict[str, object]) -> dict[str, object]:
+            score_obj = result.get("score", 0.0)
+            score = float(score_obj) if isinstance(score_obj, (int, float)) else 0.0
+            return {
+                **result,
+                "score": score * RETRIEVAL_PARAMS.CONFIG_FILE_SCORE_PENALTY,
+            }
 
-            adjusted.append(result)
+        repo_filter = set(request.repos) if request.repos else None
+        include_prefixes: tuple[str, ...] = (
+            tuple(normalize_path(prefix) for prefix in request.path_prefix)
+            if request.path_prefix
+            else tuple()
+        )
+        exclude_prefixes: tuple[str, ...] = (
+            tuple(normalize_path(prefix) for prefix in request.exclude_paths)
+            if request.exclude_paths
+            else tuple()
+        )
+        exclude_patterns: tuple[str, ...] = tuple(request.exclude_patterns or tuple())
 
-        return adjusted
+        filtered: list[dict[str, object]] = []
+
+        for result in results:
+            repo_name = result.get("repo")
+            if repo_filter and repo_name not in repo_filter:
+                continue
+
+            raw_path = str(result.get("path", "") or "")
+            normalized_path = normalize_path(raw_path)
+            basename = normalized_path.rsplit("/", 1)[-1] if normalized_path else ""
+
+            if include_prefixes and not matches_prefix(normalized_path, include_prefixes):
+                continue
+
+            if exclude_prefixes and matches_prefix(normalized_path, exclude_prefixes):
+                continue
+
+            if exclude_patterns and matches_pattern(normalized_path, basename, exclude_patterns):
+                continue
+
+            if is_config_file(raw_path):
+                filtered.append(apply_penalty(result))
+            else:
+                filtered.append(result)
+
+        return filtered
 
     def _hydrate_bm25_results(
         self, bm25_results: list[dict], sql_store: SQLiteMetadataStore

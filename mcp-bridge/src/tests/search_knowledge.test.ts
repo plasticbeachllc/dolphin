@@ -214,7 +214,7 @@ describe("search_knowledge", () => {
 
   // NOTE: This test is disabled because the mock server doesn't implement the same
   // filtering logic as the real Python backend. The real backend now filters results
-  // in search_backend.py using _apply_request_filters() which respects path_prefix.
+  // in search_backend.py using _filter_and_score_results(), which respects path_prefix.
   //
   // To properly test this, we would need to either:
   // 1. Update the mock server to implement the same filtering

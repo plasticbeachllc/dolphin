@@ -2,8 +2,11 @@
 
 from typing import cast
 
+import pytest
+
 from kb.api.app import SearchRequest
 from kb.api.search_backend import KnowledgeSearchBackend
+from kb.constants.retrieval_config import RETRIEVAL_PARAMS
 from kb.embeddings.provider import EmbeddingProvider
 from kb.store.lancedb_store import LanceDBStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
@@ -11,6 +14,93 @@ from kb.store.sqlite_meta import SQLiteMetadataStore
 
 class TestNegativeFiltering:
     """Test suite for exclude_paths and exclude_patterns filtering."""
+
+    @staticmethod
+    def _legacy_filter_then_score(
+        results: list[dict[str, object]], request: SearchRequest
+    ) -> list[dict[str, object]]:
+        """Reproduce the historical multi-pass filtering and scoring pipeline."""
+
+        from pathlib import PurePosixPath
+        import fnmatch
+
+        def normalize_path(path_str: str) -> PurePosixPath:
+            path_str = path_str.lstrip("./")
+            path_str = path_str.lstrip("/")
+            return PurePosixPath(path_str)
+
+        filtered = results
+
+        if request.repos:
+            repo_set = set(request.repos)
+            filtered = [r for r in filtered if r.get("repo") in repo_set]
+
+        if request.path_prefix:
+
+            def matches_prefix(path_str: str) -> bool:
+                path = normalize_path(path_str)
+                assert request.path_prefix is not None
+                for prefix_str in request.path_prefix:
+                    prefix = normalize_path(prefix_str)
+                    try:
+                        path.relative_to(prefix)
+                        return True
+                    except ValueError:
+                        continue
+                return False
+
+            filtered = [r for r in filtered if matches_prefix(str(r.get("path", "")))]
+
+        if request.exclude_paths:
+
+            def matches_excluded_path(path_str: str) -> bool:
+                path = normalize_path(path_str)
+                assert request.exclude_paths is not None
+                for excl_str in request.exclude_paths:
+                    excl = normalize_path(excl_str)
+                    try:
+                        path.relative_to(excl)
+                        return True
+                    except ValueError:
+                        continue
+                return False
+
+            filtered = [r for r in filtered if not matches_excluded_path(str(r.get("path", "")))]
+
+        if request.exclude_patterns:
+            assert request.exclude_patterns is not None
+
+            def matches_excluded_pattern(path_str: str) -> bool:
+                path = normalize_path(path_str)
+                for pattern in request.exclude_patterns:
+                    if fnmatch.fnmatch(str(path), pattern) or fnmatch.fnmatch(path.name, pattern):
+                        return True
+                return False
+
+            filtered = [r for r in filtered if not matches_excluded_pattern(str(r.get("path", "")))]
+
+        adjusted: list[dict[str, object]] = []
+        for item in filtered:
+            path_obj = item.get("path", "")
+            path = str(path_obj) if path_obj else ""
+            score_obj = item.get("score", 0.0)
+            score = float(score_obj) if isinstance(score_obj, (int, float)) else 0.0
+            is_config = (
+                path.endswith(".toml")
+                or path.endswith(".json")
+                or path.endswith(".yaml")
+                or path.endswith(".yml")
+                or "config.toml" in path.lower()
+                or "package.json" in path.lower()
+                or "tsconfig.json" in path.lower()
+            )
+
+            if is_config:
+                adjusted.append({**item, "score": score * RETRIEVAL_PARAMS.CONFIG_FILE_SCORE_PENALTY})
+            else:
+                adjusted.append(item)
+
+        return adjusted
 
     def test_exclude_paths_single_path(self):
         """Test excluding a single path prefix."""
@@ -35,7 +125,7 @@ class TestNegativeFiltering:
             sql_store=cast(SQLiteMetadataStore, None),
         )
 
-        filtered = backend._apply_request_filters(results, request)
+        filtered = backend._filter_and_score_results(results, request)
 
         # Should exclude tests/ directory
         assert len(filtered) == 3
@@ -72,11 +162,61 @@ class TestNegativeFiltering:
             sql_store=cast(SQLiteMetadataStore, None),
         )
 
-        filtered = backend._apply_request_filters(results, request)
+        filtered = backend._filter_and_score_results(results, request)
 
-        # Should only include src/ files
+    def test_filter_and_score_matches_legacy_pipeline(self):
+        """Ensure the new single-pass helper matches the historical behavior."""
+
+        results = [
+            {"chunk_id": "1", "repo": "test", "path": "src/main.py", "score": 0.9},
+            {"chunk_id": "2", "repo": "test", "path": "tests/test_main.py", "score": 0.8},
+            {"chunk_id": "3", "repo": "test", "path": "docs/guide.md", "score": 0.7},
+            {"chunk_id": "4", "repo": "lib", "path": "src/lib.py", "score": 0.6},
+            {"chunk_id": "5", "repo": "lib", "path": "config/settings.toml", "score": 0.5},
+        ]
+
+        request = SearchRequest(
+            query="test",
+            repos=["test"],
+            path_prefix=["src/"],
+            exclude_patterns=["*test_*.py"],
+        )
+
+        backend = KnowledgeSearchBackend(
+            embedding_provider=cast(EmbeddingProvider, None),
+            lance_store=cast(LanceDBStore, None),
+            sql_store=cast(SQLiteMetadataStore, None),
+        )
+
+        combined = backend._filter_and_score_results(results, request)
+        legacy = self._legacy_filter_then_score(results, request)
+
+        assert combined == legacy
+
+    def test_config_files_are_penalized_but_retained(self):
+        """Config files should remain in results but with reduced scores."""
+
+        results = [
+            {"chunk_id": "1", "repo": "test", "path": "src/main.py", "score": 1.0},
+            {"chunk_id": "2", "repo": "test", "path": "config/settings.toml", "score": 1.0},
+        ]
+
+        backend = KnowledgeSearchBackend(
+            embedding_provider=cast(EmbeddingProvider, None),
+            lance_store=cast(LanceDBStore, None),
+            sql_store=cast(SQLiteMetadataStore, None),
+        )
+
+        filtered = backend._filter_and_score_results(results, SearchRequest(query="test"))
+
         assert len(filtered) == 2
-        assert all(isinstance(r["path"], str) and r["path"].startswith("src/") for r in filtered)
+
+        config_result = next(r for r in filtered if r["path"] == "config/settings.toml")
+        assert pytest.approx(config_result["score"]) == 1.0 * RETRIEVAL_PARAMS.CONFIG_FILE_SCORE_PENALTY
+
+        # Non-config results remain unaffected
+        code_result = next(r for r in filtered if r["path"] == "src/main.py")
+        assert code_result["score"] == 1.0
 
     def test_exclude_patterns_glob_matching(self):
         """Test excluding files by glob patterns."""
@@ -101,7 +241,7 @@ class TestNegativeFiltering:
             sql_store=cast(SQLiteMetadataStore, None),
         )
 
-        filtered = backend._apply_request_filters(results, request)
+        filtered = backend._filter_and_score_results(results, request)
 
         # Should exclude test files and config files
         assert len(filtered) == 2
@@ -126,7 +266,7 @@ class TestNegativeFiltering:
             sql_store=cast(SQLiteMetadataStore, None),
         )
 
-        filtered = backend._apply_request_filters(results, request)
+        filtered = backend._filter_and_score_results(results, request)
 
         # Should only include production TypeScript files
         assert len(filtered) == 2
@@ -168,7 +308,7 @@ class TestNegativeFiltering:
             sql_store=cast(SQLiteMetadataStore, None),
         )
 
-        filtered = backend._apply_request_filters(results, request)
+        filtered = backend._filter_and_score_results(results, request)
 
         # Should exclude tests/, node_modules/, test_*.py, and *.json
         assert len(filtered) == 2
@@ -202,7 +342,7 @@ class TestNegativeFiltering:
             sql_store=cast(SQLiteMetadataStore, None),
         )
 
-        filtered = backend._apply_request_filters(results, request)
+        filtered = backend._filter_and_score_results(results, request)
 
         # Should only include src/main.py
         assert len(filtered) == 1
@@ -224,7 +364,7 @@ class TestNegativeFiltering:
             sql_store=cast(SQLiteMetadataStore, None),
         )
 
-        filtered = backend._apply_request_filters(results, request)
+        filtered = backend._filter_and_score_results(results, request)
 
         # Should properly normalize and exclude /tests/test.py
         assert len(filtered) == 2
@@ -245,7 +385,7 @@ class TestNegativeFiltering:
             sql_store=cast(SQLiteMetadataStore, None),
         )
 
-        filtered = backend._apply_request_filters(results, request)
+        filtered = backend._filter_and_score_results(results, request)
 
         # Should return all results
         assert len(filtered) == 2
@@ -268,7 +408,7 @@ class TestNegativeFiltering:
             sql_store=cast(SQLiteMetadataStore, None),
         )
 
-        filtered = backend._apply_request_filters(results, request)
+        filtered = backend._filter_and_score_results(results, request)
 
         # Should return all results
         assert len(filtered) == 2

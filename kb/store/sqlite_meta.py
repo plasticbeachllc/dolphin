@@ -5,7 +5,7 @@ import logging
 import re
 import sqlite3
 import threading
-from contextlib import closing
+from contextlib import closing, contextmanager
 from datetime import UTC
 from pathlib import Path
 from typing import Any, TypedDict
@@ -15,6 +15,7 @@ from sqlmodel import SQLModel, create_engine
 
 from kb.retrieval.bm25_stats import BM25StatisticsCollector
 from kb.security import PathValidator
+from kb.store.connection_pool import SQLiteConnectionPool, get_connection_pool
 
 
 class RepoRecord(TypedDict):
@@ -109,20 +110,30 @@ class SQLiteMetadataStore:
     """SQLite-backed metadata store using SQLModel for schema materialization."""
 
     def __init__(self, db_path: Path | str) -> None:
-        self.db_path = Path(db_path) if isinstance(db_path, str) else db_path
+        path_obj = Path(db_path) if isinstance(db_path, str) else db_path
+        self.db_path = path_obj.expanduser().absolute()
         self._init_lock = threading.Lock()
         self._initialized = False
         self._initializing = False
         self._bm25_stats_collector: BM25StatisticsCollector | None = None
         self._bm25_stats_path: Path | None = None
+        self._connection_pool: SQLiteConnectionPool | None = None
 
-    def _connect(self) -> sqlite3.Connection:
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        with closing(conn.cursor()) as cur:
-            cur.execute("PRAGMA foreign_keys = ON;")
-        return conn
+    def _get_connection_pool(self) -> SQLiteConnectionPool:
+        """Lazily create (or fetch) the connection pool for this store."""
+
+        if self._connection_pool is None:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            self._connection_pool = get_connection_pool(self.db_path)
+        return self._connection_pool
+
+    @contextmanager
+    def _connect(self):
+        """Provide a pooled SQLite connection as a context manager."""
+
+        pool = self._get_connection_pool()
+        with pool.connection() as conn:
+            yield conn
 
     def _engine(self):
         # Create SQLAlchemy engine for SQLModel and enforce foreign_keys pragma on connect.
