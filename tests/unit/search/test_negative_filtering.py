@@ -69,10 +69,11 @@ class TestNegativeFiltering:
 
         if request.exclude_patterns:
             assert request.exclude_patterns is not None
+            exclude_patterns = request.exclude_patterns
 
             def matches_excluded_pattern(path_str: str) -> bool:
                 path = normalize_path(path_str)
-                for pattern in request.exclude_patterns:
+                for pattern in exclude_patterns:
                     if fnmatch.fnmatch(str(path), pattern) or fnmatch.fnmatch(path.name, pattern):
                         return True
                 return False
