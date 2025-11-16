@@ -27,8 +27,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,svelte}\""
   },
   "devDependencies": {
-    "prettier": "^3.4.2",
-    "typescript": "^5.7.2"
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
     "@tailwindcss/forms": "^0.5.10",

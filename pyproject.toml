@@ -30,6 +30,7 @@ dependencies = [
     # Core dependencies (~200MB)
     "fastapi",
     "uvicorn",
+    "starlette>=0.49.1",
     "typer",
     "lancedb",
     "pydantic",
