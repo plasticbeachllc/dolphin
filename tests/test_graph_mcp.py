@@ -7,7 +7,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pytest
 
@@ -15,17 +15,16 @@ FIXTURE_DIR = Path(__file__).parent / "fixtures"
 DEFAULT_FIXTURE = "mcp_graph_response.json"
 
 
-def _load_fixture_response(fixture_name: str = DEFAULT_FIXTURE) -> Dict[str, Any]:
+def _load_fixture_response(fixture_name: str = DEFAULT_FIXTURE) -> dict[str, Any]:
     fixture_path = FIXTURE_DIR / fixture_name
     if not fixture_path.exists():
         raise FileNotFoundError(
-            f"Missing MCP fixture at {fixture_path}. "
-            "Update tests/fixtures/*.json if the format changes."
+            f"Missing MCP fixture at {fixture_path}. Update tests/fixtures/*.json if the format changes."
         )
     return json.loads(fixture_path.read_text())
 
 
-def _run_live_mcp_request() -> Optional[Dict[str, Any]]:
+def _run_live_mcp_request() -> dict[str, Any] | None:
     request = {
         "jsonrpc": "2.0",
         "id": 1,
@@ -68,23 +67,35 @@ def _run_live_mcp_request() -> Optional[Dict[str, Any]]:
         return None
 
 
-def _extract_graph_context_blocks(content: List[Dict[str, Any]]) -> List[str]:
-    contexts: List[str] = []
+def _extract_graph_context_blocks(content: list[dict[str, Any]]) -> list[str]:
+    contexts: list[str] = []
     for block in content:
-        if block.get("type") == "text" and "graph context" in block.get("text", "").lower():
-            contexts.append(block["text"])
+        if block.get("type") != "text":
+            continue
+        text = block.get("text", "")
+        if text.lower().startswith("#### code graph context"):
+            contexts.append(text)
     return contexts
 
 
+FIXTURE_CASES = [
+    ("mcp_graph_response.json", True, 1, 1, ["graphstore"]),
+    ("mcp_graph_response_multi_repo.json", True, 2, 2, ["graphstore", "agentbridge"]),
+    ("mcp_graph_response_no_context.json", False, 0, 1, []),
+]
+
+
 @pytest.mark.parametrize(
-    ("fixture_name", "expect_graph"),
-    [
-        ("mcp_graph_response.json", True),
-        ("mcp_graph_response_no_context.json", False),
-    ],
+    "fixture_name, expect_graph, expected_contexts, expected_resources, keywords",
+    FIXTURE_CASES,
 )
 def test_mcp_graph_fixture_coverage(
-    fixture_name: str, expect_graph: bool, tmp_path: Path
+    fixture_name: str,
+    expect_graph: bool,
+    expected_contexts: int,
+    expected_resources: int,
+    keywords: list[str],
+    tmp_path: Path,
 ) -> None:
     """Ensure fixtures cover both graph context and no-context scenarios."""
 
@@ -95,9 +106,11 @@ def test_mcp_graph_fixture_coverage(
 
     if expect_graph:
         assert contexts, f"{fixture_name} should include graph context"
+        assert len(contexts) == expected_contexts
         snippet = contexts[0]
         assert "graph context" in snippet.lower()
-        assert "graphstore" in snippet.lower() or "node" in snippet.lower()
+        for keyword in keywords:
+            assert any(keyword in ctx.lower() for ctx in contexts), f"{fixture_name} should mention {keyword}"
         debug_file = tmp_path / f"{fixture_name}.snippet.txt"
         debug_file.write_text(snippet)
     else:
@@ -105,11 +118,13 @@ def test_mcp_graph_fixture_coverage(
 
     resource_blocks = [c for c in content if c.get("type") == "resource"]
     assert resource_blocks, f"{fixture_name} should provide at least one resource block"
+    if expected_resources:
+        assert len(resource_blocks) == expected_resources, (
+            f"{fixture_name} expected {expected_resources} resource blocks"
+        )
     for block in resource_blocks:
         href = block.get("href", "")
-        assert href.startswith(
-            "file://"
-        ), f"Resources in {fixture_name} should point to file URIs (got {href})"
+        assert href.startswith("file://"), f"Resources in {fixture_name} should point to file URIs (got {href})"
 
 
 @pytest.mark.skipif(
@@ -122,11 +137,11 @@ def test_mcp_search_live_has_graph_context() -> None:
     response = _run_live_mcp_request()
     if response is None:
         pytest.skip("Live MCP search not available")
+        return
 
     content = response.get("result", {}).get("content", [])
     contexts = _extract_graph_context_blocks(content)  # type: ignore[arg-type]
 
     assert contexts, (
-        "Live MCP search should include graph context. "
-        "Ensure the repository is indexed before enabling this test."
+        "Live MCP search should include graph context. Ensure the repository is indexed before enabling this test."
     )

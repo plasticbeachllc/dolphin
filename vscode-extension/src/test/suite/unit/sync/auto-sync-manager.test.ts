@@ -16,13 +16,7 @@ describe("AutoSyncManager Tests", () => {
     apiBaseUrl = "http://localhost:8765",
     repoName = "test-repo"
   ): AutoSyncManager => {
-    const manager = new AutoSyncManager(
-      config,
-      repoName,
-      apiBaseUrl,
-      outputChannel,
-      workspaceStub
-    );
+    const manager = new AutoSyncManager(config, repoName, apiBaseUrl, outputChannel, workspaceStub);
     managers.push(manager);
     return manager;
   };

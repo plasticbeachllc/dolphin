@@ -255,7 +255,9 @@ describe("KB Lifecycle Management", function () {
       const config = vscode.workspace.getConfiguration("dolphin");
       const inspect = config.inspect?.bind(config);
       if (!inspect) {
-        console.warn("[KB Config Test] workspace.getConfiguration().inspect unavailable; skipping checks");
+        console.warn(
+          "[KB Config Test] workspace.getConfiguration().inspect unavailable; skipping checks"
+        );
         this.skip();
         return;
       }
@@ -284,7 +286,9 @@ describe("KB Lifecycle Management", function () {
       const config = vscode.workspace.getConfiguration("dolphin");
       const inspect = config.inspect?.bind(config);
       if (!inspect) {
-        console.warn("[KB Config Test] workspace.getConfiguration().inspect unavailable; skipping type assertions");
+        console.warn(
+          "[KB Config Test] workspace.getConfiguration().inspect unavailable; skipping type assertions"
+        );
         this.skip();
         return;
       }

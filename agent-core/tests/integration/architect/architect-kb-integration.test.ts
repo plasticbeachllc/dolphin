@@ -93,7 +93,7 @@ describe("ArchitectWorkflow KB Integration", () => {
       },
     ];
 
-    global.fetch = mock(async (input: Request | string, init?: RequestInit) => {
+    global.fetch = mock(async (input: Request | string, _init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.url;
 
       if (url.includes("localhost:9999")) {

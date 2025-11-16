@@ -1,9 +1,5 @@
 import * as vscode from "vscode";
-import {
-  AgentEvent,
-  ConversationListItem,
-  LoadConversationResult,
-} from "../types/events";
+import { AgentEvent, ConversationListItem, LoadConversationResult } from "../types/events";
 
 export interface AgentBridgeAdapter {
   start(agentCorePath: string, extensionPath: string, apiKey?: string): Promise<void>;

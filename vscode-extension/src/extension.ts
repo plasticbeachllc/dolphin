@@ -52,9 +52,7 @@ export async function activate(context: vscode.ExtensionContext) {
     logger.info(
       isTestEnv ? "Initializing AgentBridge stub for tests..." : "Initializing AgentBridge..."
     );
-    agentBridge = isTestEnv
-      ? new TestAgentBridge(outputChannel)
-      : new AgentBridge(outputChannel);
+    agentBridge = isTestEnv ? new TestAgentBridge(outputChannel) : new AgentBridge(outputChannel);
 
     const agentCorePath = context.asAbsolutePath(path.join("..", "agent-core", "src", "main.ts"));
     const extensionPath = context.extensionPath;
@@ -204,7 +202,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
       outputChannel.appendLine("[Extension] Drift detector initialized");
     } else if (isTestEnv) {
-      logger.debug("[TestMode] Skipping file watcher, auto-sync, and drift detector initialization.");
+      logger.debug(
+        "[TestMode] Skipping file watcher, auto-sync, and drift detector initialization."
+      );
     }
 
     // Register webview provider with AgentBridge
