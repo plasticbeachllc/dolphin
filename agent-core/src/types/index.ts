@@ -311,7 +311,7 @@ export interface ContextBuildParams {
  */
 export type ClaudeModel =
   | "claude-opus-4-20250514"
-  | "claude-sonnet-4-20250514"
+  | "claude-sonnet-4-5-20250929"
   | "claude-haiku-4-20250514";
 
 /**

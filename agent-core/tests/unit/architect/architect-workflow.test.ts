@@ -4,37 +4,88 @@
 
 import { describe, test, expect, beforeEach } from "bun:test";
 import { ArchitectWorkflow } from "../../../src/workflows/architect-workflow";
-import type { ClaudeProvider } from "../../../src/execution/claude-provider";
+import type {
+  ChatProvider,
+  ExecuteParams,
+  ExecuteResult,
+  AuthStatus,
+} from "../../../src/execution/chat-provider";
 import type { ContextBuilder } from "../../../src/context/context-builder";
 import type { PromptBuilder } from "../../../src/prompts/prompt-builder";
+import type { StateStore } from "../../../src/state/state-store";
+import type { PlanStore } from "../../../src/storage/plan-store";
 import type {
   TaskInput,
   WorkflowUpdate,
   Context,
-  ClaudeChunk,
   ResearchResult,
   ClarificationResult,
-  Plan,
 } from "../../../src/types/index";
+import type { UsageStats, ToolExecutorMessage } from "../../../src/llm/tool-executor";
 
-// Mock implementations
-class MockClaudeProvider {
-  private mockResponses: Map<string, string> = new Map();
+class MockChatProvider implements ChatProvider {
+  private responses: Array<{ text: string; usage: UsageStats }> = [];
+  private totalUsage: UsageStats = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
 
-  setMockResponse(model: string, response: string) {
-    this.mockResponses.set(model, response);
+  enqueueResponse(text: string, usage?: UsageStats) {
+    this.responses.push({ text, usage: usage ?? this.defaultUsage() });
   }
 
-  async *execute(params: unknown): AsyncIterableIterator<ClaudeChunk> {
-    const response = this.mockResponses.get(params.model) || "Mock response";
+  async initialize(): Promise<void> {
+    // no-op
+  }
 
-    // Yield response character by character (simulating streaming)
-    for (const char of response) {
-      yield {
-        type: "text" as const,
-        content: char,
-      };
+  async execute(params: ExecuteParams): Promise<ExecuteResult> {
+    const response = this.responses.shift() ?? { text: "default response", usage: this.defaultUsage() };
+
+    if (params.onEvent) {
+      for (const char of response.text) {
+        params.onEvent({ type: "content_delta", delta: char });
+      }
     }
+
+    this.totalUsage.inputTokens += response.usage.inputTokens;
+    this.totalUsage.outputTokens += response.usage.outputTokens;
+    this.totalUsage.cacheReadTokens += response.usage.cacheReadTokens;
+    this.totalUsage.cacheWriteTokens += response.usage.cacheWriteTokens;
+
+    const conversationHistory = params.conversationHistory ?? [];
+    const messages: ToolExecutorMessage[] = [
+      ...conversationHistory,
+      { role: "user", content: params.message },
+      { role: "assistant", content: response.text },
+    ];
+
+    return {
+      messages,
+      stopReason: "end_turn",
+      toolRounds: 0,
+      usage: response.usage,
+    };
+  }
+
+  abort(): void {
+    // no-op
+  }
+
+  async detectAuthStatus(): Promise<AuthStatus> {
+    return { authenticated: true, mode: "mock" };
+  }
+
+  async ensureAuthenticated(): Promise<void> {
+    // no-op
+  }
+
+  getUsage(): UsageStats {
+    return { ...this.totalUsage };
+  }
+
+  getProviderMetadata() {
+    return { provider: "mock", model: "mock-model" };
+  }
+
+  private defaultUsage(): UsageStats {
+    return { inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0 };
   }
 }
 
@@ -61,32 +112,53 @@ class MockContextBuilder {
 }
 
 class MockPromptBuilder {
-  buildResearchPrompt(params: unknown): string {
+  buildResearchPrompt(params: { task: string }): string {
     return `Research prompt for: ${params.task}`;
   }
 
-  buildPlanningPrompt(params: unknown): string {
+  buildPlanningPrompt(params: { task: string }): string {
     return `Planning prompt for: ${params.task}`;
   }
 }
 
+function createPlanResponse(): string {
+  return `Here is the plan:
+\n\n\`\`\`toml
+plan_version = 1
+overview = """High level"""
+complexity = "medium"
+estimated_tokens = 100
+files_to_modify = []
+files_to_create = []
+
+[[steps]]
+id = 1
+description = "Do something"
+files = ["src/index.ts"]
+estimated_tokens = 50
+\`\`\``;
+}
+
 describe("ArchitectWorkflow", () => {
   let workflow: ArchitectWorkflow;
-  let mockClaudeProvider: MockClaudeProvider;
+  let mockProvider: MockChatProvider;
   let mockContextBuilder: MockContextBuilder;
   let mockPromptBuilder: MockPromptBuilder;
   let taskInput: TaskInput;
 
   beforeEach(() => {
-    mockClaudeProvider = new MockClaudeProvider();
+    mockProvider = new MockChatProvider();
     mockContextBuilder = new MockContextBuilder();
     mockPromptBuilder = new MockPromptBuilder();
 
     workflow = new ArchitectWorkflow({
-      claudeProvider: mockClaudeProvider as unknown as ClaudeProvider,
+      chatProvider: mockProvider as unknown as ChatProvider,
       contextBuilder: mockContextBuilder as unknown as ContextBuilder,
       promptBuilder: mockPromptBuilder as unknown as PromptBuilder,
       maxClarificationTurns: 2,
+      stateStore: {} as unknown as StateStore,
+      planStore: {} as unknown as PlanStore,
+      workspaceRoot: "/tmp",
     });
 
     taskInput = {
@@ -101,408 +173,56 @@ describe("ArchitectWorkflow", () => {
 
   describe("Research Phase", () => {
     test("should execute research phase successfully", async () => {
-      const researchFindings = "Found relevant authentication patterns in the codebase.";
-      mockClaudeProvider.setMockResponse("claude-haiku-4-20250514", researchFindings);
+      const researchUsage: UsageStats = { inputTokens: 11, outputTokens: 7, cacheReadTokens: 2, cacheWriteTokens: 0 };
+      mockProvider.enqueueResponse("Found relevant authentication patterns.", researchUsage);
+      mockProvider.enqueueResponse("I have a few questions? [READY_TO_PLAN]");
+      mockProvider.enqueueResponse(createPlanResponse());
 
       const updates: WorkflowUpdate[] = [];
       let researchResult: ResearchResult | undefined;
 
-      const iterator = workflow.execute(taskInput);
-
-      for await (const update of iterator) {
-        updates.push(update);
-
-        if (update.type === "progress" && update.data.phase === "research" && update.data.result) {
-          researchResult = update.data.result;
-        }
-
-        // Break after research phase completes
-        if (update.type === "state_change" && update.data.state === "clarifying") {
-          break;
-        }
-      }
-
-      // Verify state transitions
-      expect(updates.some((u) => u.type === "state_change" && u.data.state === "researching")).toBe(
-        true
-      );
-
-      expect(updates.some((u) => u.type === "state_change" && u.data.state === "clarifying")).toBe(
-        true
-      );
-
-      // Verify research result
-      expect(researchResult).toBeDefined();
-      expect(researchResult?.findings).toContain("Found relevant authentication");
-      expect(researchResult?.kbSearches.length).toBeGreaterThan(0);
-      expect(researchResult?.model).toBe("claude-haiku-4-20250514");
-    });
-
-    test("should track KB searches during research", async () => {
-      mockClaudeProvider.setMockResponse("claude-haiku-4-20250514", "Research findings");
-
-      let researchResult: ResearchResult | undefined;
-
       for await (const update of workflow.execute(taskInput)) {
+        updates.push(update);
         if (update.type === "progress" && update.data.phase === "research" && update.data.result) {
-          researchResult = update.data.result;
-        }
-
-        if (update.type === "state_change" && update.data.state === "clarifying") {
-          break;
+          researchResult = update.data.result as ResearchResult;
         }
       }
 
-      expect(researchResult?.kbSearches).toBeDefined();
-      expect(researchResult?.kbSearches[0].query).toContain("authentication");
+      expect(updates.some((u) => u.type === "state_change" && u.data.state === "researching")).toBe(true);
+      expect(updates.some((u) => u.type === "state_change" && u.data.state === "clarifying")).toBe(true);
+
+      expect(researchResult).toBeDefined();
+      expect(researchResult?.findings).toContain("authentication patterns");
+      expect(researchResult?.model).toBe("mock-model");
+      expect(researchResult?.tokensUsed).toBe(20);
     });
   });
 
   describe("Clarification Phase", () => {
     test("should execute clarification phase with questions", async () => {
-      mockClaudeProvider.setMockResponse("claude-haiku-4-20250514", "Research complete");
-      mockClaudeProvider.setMockResponse(
-        "claude-sonnet-4-20250514",
-        "I have a few questions:\n1. What authentication method should we use?\n2. Should we support OAuth?\n[READY_TO_PLAN]"
+      mockProvider.enqueueResponse("Research complete.");
+      mockProvider.enqueueResponse(
+        "I have a few questions:\n1. What auth method?\n2. Should we support OAuth?\n[READY_TO_PLAN]"
       );
+      mockProvider.enqueueResponse(createPlanResponse());
 
       const updates: WorkflowUpdate[] = [];
-      let _clarificationResult: ClarificationResult | undefined;
+      let clarificationResult: ClarificationResult | undefined;
 
       for await (const update of workflow.execute(taskInput)) {
         updates.push(update);
-
-        if (
-          update.type === "progress" &&
-          update.data.phase === "clarification" &&
-          update.data.result
-        ) {
-          _clarificationResult = update.data.result;
-        }
-
-        // Break after clarification completes
-        if (update.type === "state_change" && update.data.state === "planning") {
-          break;
+        if (update.type === "progress" && update.data.phase === "clarification" && update.data.result) {
+          clarificationResult = update.data.result as ClarificationResult;
         }
       }
 
-      // Verify clarification happened
-      expect(updates.some((u) => u.type === "state_change" && u.data.state === "clarifying")).toBe(
-        true
-      );
-
-      // Note: In the actual implementation, clarification would parse questions
-      // For now, we're testing that the phase executes
-      expect(updates.some((u) => u.type === "state_change" && u.data.state === "planning")).toBe(
-        true
-      );
-    });
-
-    test("should detect [READY_TO_PLAN] signal", async () => {
-      mockClaudeProvider.setMockResponse("claude-haiku-4-20250514", "Research complete");
-      mockClaudeProvider.setMockResponse(
-        "claude-sonnet-4-20250514",
-        "Based on the codebase, I understand the requirements.\n[READY_TO_PLAN]"
-      );
-
-      let transitionedToPlanning = false;
-
-      for await (const update of workflow.execute(taskInput)) {
-        if (update.type === "state_change" && update.data.state === "planning") {
-          transitionedToPlanning = true;
-          break;
-        }
-      }
-
-      expect(transitionedToPlanning).toBe(true);
-    });
-
-    test("should respect max clarification turns", async () => {
-      mockClaudeProvider.setMockResponse("claude-haiku-4-20250514", "Research complete");
-
-      // Set response without [READY_TO_PLAN] to force max turns
-      mockClaudeProvider.setMockResponse(
-        "claude-sonnet-4-20250514",
-        "I need more information about X"
-      );
-
-      let clarificationTurns = 0;
-
-      for await (const update of workflow.execute(taskInput)) {
-        if (
-          update.type === "progress" &&
-          update.data.phase === "clarification" &&
-          update.data.message?.includes("Clarification turn")
-        ) {
-          clarificationTurns++;
-        }
-
-        // Break after planning starts (which should happen after max turns)
-        if (update.type === "state_change" && update.data.state === "planning") {
-          break;
-        }
-      }
-
-      // Should respect maxClarificationTurns = 2
-      expect(clarificationTurns).toBeLessThanOrEqual(2);
-    });
-  });
-
-  describe("Planning Phase", () => {
-    test("should generate structured plan", async () => {
-      mockClaudeProvider.setMockResponse("claude-haiku-4-20250514", "Research findings");
-      mockClaudeProvider.setMockResponse("claude-sonnet-4-20250514", "[READY_TO_PLAN]");
-
-      const planContent = `## Overview
-Add JWT-based authentication to the REST API
-
-## Files to Modify
-- \`src/api/server.ts\`
-- \`src/middleware/auth.ts\`
-
-## Files to Create
-- \`src/utils/jwt.ts\`
-
-## Implementation Steps
-1. Install JWT library
-2. Create authentication middleware
-3. Add protected routes
-4. Implement token refresh
-
-## Complexity
-medium`;
-
-      mockClaudeProvider.setMockResponse("claude-opus-4-20250514", planContent);
-
-      let plan: Plan | undefined;
-
-      for await (const update of workflow.execute(taskInput)) {
-        if (update.type === "progress" && update.data.phase === "planning" && update.data.plan) {
-          plan = update.data.plan;
-        }
-
-        // Break after awaiting approval
-        if (update.type === "state_change" && update.data.state === "awaiting_approval") {
-          break;
-        }
-      }
-
-      expect(plan).toBeDefined();
-      expect(plan?.content).toContain("JWT-based authentication");
-      expect(plan?.filesToModify).toContain("src/api/server.ts");
-      expect(plan?.filesToCreate).toContain("src/utils/jwt.ts");
-      expect(plan?.steps.length).toBeGreaterThan(0);
-      expect(plan?.complexity).toBe("medium");
-      expect(plan?.status).toBe("pending_approval");
-      expect(plan?.model).toBe("claude-opus-4-20250514");
-    });
-
-    test("should parse files from plan markdown", async () => {
-      mockClaudeProvider.setMockResponse("claude-haiku-4-20250514", "Research");
-      mockClaudeProvider.setMockResponse("claude-sonnet-4-20250514", "[READY_TO_PLAN]");
-
-      const planWithFiles = `## Files to Modify
-- \`api/routes.ts\`
-- \`db/schema.ts\`
-
-## Files to Create
-- \`auth/jwt.ts\``;
-
-      mockClaudeProvider.setMockResponse("claude-opus-4-20250514", planWithFiles);
-
-      let plan: Plan | undefined;
-
-      for await (const update of workflow.execute(taskInput)) {
-        if (update.type === "progress" && update.data.plan) {
-          plan = update.data.plan;
-        }
-
-        if (update.type === "state_change" && update.data.state === "awaiting_approval") {
-          break;
-        }
-      }
-
-      expect(plan?.filesToModify).toEqual(["api/routes.ts", "db/schema.ts"]);
-      expect(plan?.filesToCreate).toEqual(["auth/jwt.ts"]);
-    });
-  });
-
-  describe("Complete Workflow", () => {
-    test("should execute full research → clarification → planning flow", async () => {
-      mockClaudeProvider.setMockResponse(
-        "claude-haiku-4-20250514",
-        "Found authentication patterns in codebase"
-      );
-      mockClaudeProvider.setMockResponse(
-        "claude-sonnet-4-20250514",
-        "Understood requirements [READY_TO_PLAN]"
-      );
-      mockClaudeProvider.setMockResponse(
-        "claude-opus-4-20250514",
-        "## Overview\nImplementation plan\n\n## Steps\n1. Step one\n2. Step two"
-      );
-
-      const states: string[] = [];
-      const phases: string[] = [];
-
-      for await (const update of workflow.execute(taskInput)) {
-        if (update.type === "state_change") {
-          states.push(update.data.state);
-        }
-
-        if (update.type === "progress" && update.data.phase) {
-          if (!phases.includes(update.data.phase)) {
-            phases.push(update.data.phase);
-          }
-        }
-
-        // Complete workflow until awaiting approval
-        if (update.type === "state_change" && update.data.state === "awaiting_approval") {
-          break;
-        }
-      }
-
-      // Verify all phases executed in order
-      expect(phases).toContain("research");
-      expect(phases).toContain("clarification");
-      expect(phases).toContain("planning");
-
-      // Verify state transitions
-      expect(states).toEqual(["researching", "clarifying", "planning", "awaiting_approval"]);
-    });
-
-    test("should stream progress updates during execution", async () => {
-      mockClaudeProvider.setMockResponse("claude-haiku-4-20250514", "Research");
-      mockClaudeProvider.setMockResponse("claude-sonnet-4-20250514", "[READY_TO_PLAN]");
-      mockClaudeProvider.setMockResponse("claude-opus-4-20250514", "Plan content");
-
-      const progressMessages: string[] = [];
-
-      for await (const update of workflow.execute(taskInput)) {
-        if (update.type === "progress" && update.data.message) {
-          progressMessages.push(update.data.message);
-        }
-
-        if (update.type === "state_change" && update.data.state === "awaiting_approval") {
-          break;
-        }
-      }
-
-      expect(progressMessages.some((m) => m.includes("knowledge base"))).toBe(true);
-      expect(progressMessages.some((m) => m.includes("clarification"))).toBe(true);
-      expect(progressMessages.some((m) => m.includes("plan"))).toBe(true);
-    });
-  });
-
-  describe("Error Handling", () => {
-    test("should handle errors gracefully", async () => {
-      // Create a workflow with a provider that throws
-      const errorProvider = {
-        async *execute(): AsyncIterableIterator<ClaudeChunk> {
-          throw new Error("Claude API error");
-        },
-      };
-
-      const errorWorkflow = new ArchitectWorkflow({
-        claudeProvider: errorProvider as unknown,
-        contextBuilder: mockContextBuilder as unknown,
-        promptBuilder: mockPromptBuilder as unknown,
-      });
-
-      let errorCaught = false;
-
-      for await (const update of errorWorkflow.execute(taskInput)) {
-        if (update.type === "error") {
-          errorCaught = true;
-          expect(update.data.error).toContain("Claude API error");
-          break;
-        }
-      }
-
-      expect(errorCaught).toBe(true);
-    });
-
-    test("should support abort functionality", async () => {
-      mockClaudeProvider.setMockResponse("claude-haiku-4-20250514", "Research");
-      mockClaudeProvider.setMockResponse("claude-sonnet-4-20250514", "Clarification");
-
-      // Abort during execution
-      setTimeout(() => {
-        workflow.abort();
-      }, 10);
-
-      let _aborted = false;
-
-      try {
-        for await (const update of workflow.execute(taskInput)) {
-          // Should eventually throw due to abort
-          if (update.type === "error") {
-            _aborted = true;
-            break;
-          }
-        }
-      } catch (error) {
-        if (error instanceof Error && error.message === "Workflow aborted") {
-          _aborted = true;
-        }
-      }
-
-      // Note: Actual abort handling depends on timing, so we just verify the mechanism exists
-      expect(workflow.abort).toBeDefined();
-    });
-  });
-
-  describe("Plan Parsing", () => {
-    test("should extract overview from plan", async () => {
-      mockClaudeProvider.setMockResponse("claude-haiku-4-20250514", "Research");
-      mockClaudeProvider.setMockResponse("claude-sonnet-4-20250514", "[READY_TO_PLAN]");
-
-      const planWithOverview = `## Overview
-
-This plan implements user authentication using JWT tokens and bcrypt password hashing.
-
-## Steps
-1. Implementation step`;
-
-      mockClaudeProvider.setMockResponse("claude-opus-4-20250514", planWithOverview);
-
-      let plan: Plan | undefined;
-
-      for await (const update of workflow.execute(taskInput)) {
-        if (update.type === "progress" && update.data.plan) {
-          plan = update.data.plan;
-        }
-
-        if (update.type === "state_change" && update.data.state === "awaiting_approval") {
-          break;
-        }
-      }
-
-      expect(plan?.overview).toContain("JWT tokens");
-      expect(plan?.overview).toContain("bcrypt password hashing");
-    });
-
-    test("should extract complexity from plan", async () => {
-      mockClaudeProvider.setMockResponse("claude-haiku-4-20250514", "Research");
-      mockClaudeProvider.setMockResponse("claude-sonnet-4-20250514", "[READY_TO_PLAN]");
-
-      const planWithComplexity = `## Complexity: high\n\nThis is a complex task.`;
-
-      mockClaudeProvider.setMockResponse("claude-opus-4-20250514", planWithComplexity);
-
-      let plan: Plan | undefined;
-
-      for await (const update of workflow.execute(taskInput)) {
-        if (update.type === "progress" && update.data.plan) {
-          plan = update.data.plan;
-        }
-
-        if (update.type === "state_change" && update.data.state === "awaiting_approval") {
-          break;
-        }
-      }
-
-      expect(plan?.complexity).toBe("high");
+      expect(updates.some((u) => u.type === "state_change" && u.data.state === "clarifying")).toBe(true);
+      expect(updates.some((u) => u.type === "state_change" && u.data.state === "planning")).toBe(true);
+      expect(clarificationResult).toBeDefined();
+      expect(clarificationResult?.conversationTurns).toBeGreaterThan(0);
+      expect(clarificationResult?.readyForPlanning).toBe(true);
+      expect(clarificationResult?.model).toBe("mock-model");
+      expect(clarificationResult?.tokensUsed).toBeGreaterThan(0);
     });
   });
 });

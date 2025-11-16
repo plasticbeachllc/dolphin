@@ -10,7 +10,7 @@ class StubTokenCounter implements TokenCounterLike {
   public countExact = mock(
     async (texts: string[]): Promise<TokenCountResult> => ({
       mode: "exact",
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-5-20250929",
       totalTokens: texts.length * 10,
       perInput: texts.map(() => 10),
       cacheHits: 0,
@@ -23,7 +23,7 @@ class StubTokenCounter implements TokenCounterLike {
   estimate(texts: string[]): TokenCountResult {
     return {
       mode: "estimate",
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-5-20250929",
       totalTokens: texts.length * 5,
       perInput: texts.map(() => 5),
       cacheHits: 0,

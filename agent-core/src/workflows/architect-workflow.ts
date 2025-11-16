@@ -24,23 +24,23 @@ import type {
 
 import type { ContextBuilder } from "../context/context-builder.js";
 import type { PromptBuilder } from "../prompts/prompt-builder.js";
-import type { ClaudeProvider } from "../execution/claude-provider.js";
+import type { ChatProvider } from "../execution/chat-provider.js";
 import type { StateStore } from "../state/state-store.js";
 import type { PlanStore } from "../storage/plan-store.js";
-import { MODELS, DEFAULT_MAX_CLARIFICATION_TURNS } from "./constants.js";
-import type { TokenCounterLike, TokenCountResult } from "../utils/token-counter.js";
-import { getTokenCounter } from "../utils/token-counter.js";
+import { DEFAULT_MAX_CLARIFICATION_TURNS } from "./constants.js";
+import type { ToolExecutorMessage, UsageStats } from "../llm/tool-executor.js";
 import { parsePlanFromMarkdown, parseLegacyMarkdownPlan } from "./plan-parser.js";
 
+type WorkflowPhaseName = "research" | "clarification" | "planning";
+
 export interface ArchitectWorkflowConfig {
-  claudeProvider: ClaudeProvider;
+  chatProvider: ChatProvider;
   contextBuilder: ContextBuilder;
   promptBuilder: PromptBuilder;
   stateStore: StateStore;
   planStore: PlanStore;
   workspaceRoot: string;
   maxClarificationTurns?: number;
-  tokenCounter?: TokenCounterLike;
 }
 
 /**
@@ -50,12 +50,10 @@ export class ArchitectWorkflow implements IWorkflow {
   private config: ArchitectWorkflowConfig;
   private maxClarificationTurns: number;
   private aborted = false;
-  private tokenCounter: TokenCounterLike;
 
   constructor(config: ArchitectWorkflowConfig) {
     this.config = config;
     this.maxClarificationTurns = config.maxClarificationTurns || DEFAULT_MAX_CLARIFICATION_TURNS;
-    this.tokenCounter = config.tokenCounter ?? getTokenCounter();
   }
 
   /**
@@ -200,39 +198,24 @@ export class ArchitectWorkflow implements IWorkflow {
       },
     };
 
-    // Execute research with Haiku (fast, cost-effective)
-    let findings = "";
-    for await (const chunk of this.config.claudeProvider.execute({
-      model: MODELS.RESEARCH,
+    const researchCall = await this.callChatProvider({
+      sessionId,
+      phase: "research",
       prompt: researchPrompt,
-      systemPrompt: this.getResearchSystemPrompt(),
-      context,
-      thinkingMode: "normal",
-    })) {
-      const typedChunk = chunk as { type: string; content?: string };
-      if (typedChunk.type === "text") {
-        const content = typedChunk.content as string;
-        findings += content;
+    });
 
-        yield {
-          type: "chunk",
-          sessionId,
-          timestamp: new Date().toISOString(),
-          data: {
-            type: "text",
-            content: content,
-            phase: "research",
-          },
-        };
-      }
+    for (const chunkUpdate of researchCall.chunkUpdates) {
+      yield chunkUpdate;
     }
 
-    const researchTokenResult = await this.countTokensOrEstimate([findings], MODELS.RESEARCH);
+    const findings = researchCall.text;
+    const usageTokens = this.getUsageTotal(researchCall.usage);
+    const providerInfo = this.config.chatProvider.getProviderMetadata();
 
     const result: ResearchResult = {
       completedAt: new Date().toISOString(),
-      model: MODELS.RESEARCH,
-      tokensUsed: researchTokenResult.totalTokens,
+      model: providerInfo.model,
+      tokensUsed: usageTokens,
       findings,
       kbSearches,
       relevantFiles,
@@ -268,11 +251,15 @@ export class ArchitectWorkflow implements IWorkflow {
     let conversationTurns = 0;
     let readyForPlanning = false;
     let conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [];
+    let clarificationTokensUsed = 0;
 
     // Initial clarification prompt with research context
     conversationHistory.push({
       role: "user",
-      content: this.buildInitialClarificationPrompt(input, research),
+      content: `${this.getClarificationSystemPrompt(1)}\n\n${this.buildInitialClarificationPrompt(
+        input,
+        research
+      )}`,
     });
 
     yield {
@@ -303,31 +290,21 @@ export class ArchitectWorkflow implements IWorkflow {
         },
       };
 
-      // Execute clarification with Sonnet (good reasoning, balanced cost)
-      let llmResponse = "";
-      for await (const chunk of this.config.claudeProvider.execute({
-        model: MODELS.CLARIFICATION,
+      const priorHistory =
+        conversationHistory.length > 1 ? conversationHistory.slice(0, -1) : undefined;
+      const clarificationCall = await this.callChatProvider({
+        sessionId,
+        phase: "clarification",
         prompt: conversationHistory[conversationHistory.length - 1].content,
-        systemPrompt: this.getClarificationSystemPrompt(conversationTurns),
-        thinkingMode: "normal",
-      })) {
-        const typedChunk = chunk as { type: string; content?: string };
-        if (typedChunk.type === "text") {
-          const content = typedChunk.content as string;
-          llmResponse += content;
+        conversationHistory: priorHistory,
+      });
 
-          yield {
-            type: "chunk",
-            sessionId,
-            timestamp: new Date().toISOString(),
-            data: {
-              type: "text",
-              content: content,
-              phase: "clarification",
-            },
-          };
-        }
+      for (const chunkUpdate of clarificationCall.chunkUpdates) {
+        yield chunkUpdate;
       }
+
+      const llmResponse = clarificationCall.text;
+      clarificationTokensUsed += this.getUsageTotal(clarificationCall.usage);
 
       conversationHistory.push({
         role: "assistant",
@@ -356,7 +333,16 @@ export class ArchitectWorkflow implements IWorkflow {
       }
 
       // Parse questions from LLM response
-      const parsedQuestions = this.parseQuestionsFromResponse(llmResponse);
+      let parsedQuestions = this.parseQuestionsFromResponse(llmResponse);
+      if (parsedQuestions.length === 0 && llmResponse.includes("?")) {
+        parsedQuestions = [
+          {
+            question: llmResponse.split(/\r?\n/).find((line) => line.trim().endsWith("?"))?.trim() ?? llmResponse,
+            priority: "medium",
+            reason: "Unable to extract individual questions",
+          },
+        ];
+      }
       questions.push(...parsedQuestions);
 
       // Wait for user response
@@ -380,15 +366,10 @@ export class ArchitectWorkflow implements IWorkflow {
       }
     }
 
-    const clarificationTokenResult = await this.countTokensOrEstimate(
-      conversationHistory.map((msg) => msg.content),
-      MODELS.CLARIFICATION
-    );
-
     const result: ClarificationResult = {
       completedAt: new Date().toISOString(),
-      model: MODELS.CLARIFICATION,
-      tokensUsed: clarificationTokenResult.totalTokens,
+      model: this.config.chatProvider.getProviderMetadata().model,
+      tokensUsed: clarificationTokensUsed,
       conversationTurns,
       questions,
       responses,
@@ -451,32 +432,18 @@ export class ArchitectWorkflow implements IWorkflow {
       systemPrompt: this.getPlanningSystemPrompt(),
     });
 
-    // Execute planning with Opus (best reasoning)
-    let planContent = "";
-    for await (const chunk of this.config.claudeProvider.execute({
-      model: MODELS.PLANNING,
+    const planningCall = await this.callChatProvider({
+      sessionId,
+      phase: "planning",
       prompt: planningPrompt,
-      systemPrompt: this.getPlanningSystemPrompt(),
-      context,
-      thinkingMode: "extended",
-    })) {
-      const typedChunk = chunk as { type: string; content?: string };
-      if (typedChunk.type === "text") {
-        const content = typedChunk.content as string;
-        planContent += content;
+    });
 
-        yield {
-          type: "chunk",
-          sessionId,
-          timestamp: new Date().toISOString(),
-          data: {
-            type: "text",
-            content: content,
-            phase: "planning",
-          },
-        };
-      }
+    for (const chunkUpdate of planningCall.chunkUpdates) {
+      yield chunkUpdate;
     }
+
+    const planContent = planningCall.text;
+    const planTokensUsed = this.getUsageTotal(planningCall.usage);
 
     // Parse plan from markdown with robust TOML extraction
     let parsedPlan: Partial<{
@@ -497,26 +464,19 @@ export class ArchitectWorkflow implements IWorkflow {
       const result = parsePlanFromMarkdown(planContent);
       parsedPlan = result.plan;
       _parseSource = result.source;
-      console.log(`[ArchitectWorkflow] Plan parsed from ${result.source}`);
     } catch (tomlError) {
       // Fallback to legacy markdown parsing
-      console.warn(
-        "[ArchitectWorkflow] TOML parsing failed, using legacy markdown parser:",
-        tomlError
-      );
       parsedPlan = parseLegacyMarkdownPlan(planContent);
       _parseSource = "legacy-markdown";
     }
-
-    const planTokenResult = await this.countTokensOrEstimate([planContent], MODELS.PLANNING);
 
     // Convert TOML snake_case to Plan camelCase
     const plan: Plan = {
       version: 1,
       status: "pending_approval",
       createdAt: new Date().toISOString(),
-      model: MODELS.PLANNING,
-      tokensUsed: planTokenResult.totalTokens,
+      model: this.config.chatProvider.getProviderMetadata().model,
+      tokensUsed: planTokensUsed,
       estimatedCost: 0.015, // Rough estimate for Opus
       content: planContent,
       filesToModify: parsedPlan.files_to_modify || parsedPlan.filesToModify || [],
@@ -524,7 +484,7 @@ export class ArchitectWorkflow implements IWorkflow {
       steps: (parsedPlan.steps || []).map((s) => (typeof s === "string" ? s : s.description)),
       complexity: parsedPlan.complexity || "medium",
       estimatedTokens:
-        parsedPlan.estimated_tokens || parsedPlan.estimatedTokens || planTokenResult.totalTokens,
+        parsedPlan.estimated_tokens || parsedPlan.estimatedTokens || planTokensUsed,
       overview: parsedPlan.overview,
     };
 
@@ -549,7 +509,7 @@ export class ArchitectWorkflow implements IWorkflow {
     const questions: ClarificationQuestion[] = [];
 
     // Look for question patterns (lines ending with ?)
-    const lines = response.split("\n");
+    const lines = response.split(/\r?\n/);
     for (const line of lines) {
       const trimmed = line.trim();
       if (trimmed.endsWith("?") && trimmed.length > 10) {
@@ -564,18 +524,76 @@ export class ArchitectWorkflow implements IWorkflow {
     return questions;
   }
 
-  private async countTokensOrEstimate(texts: string[], model: string): Promise<TokenCountResult> {
-    const payload = texts.length ? texts : [""];
+  private async callChatProvider(options: {
+    sessionId: string;
+    phase: WorkflowPhaseName;
+    prompt: string;
+    conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
+  }): Promise<{ text: string; usage: UsageStats; chunkUpdates: WorkflowUpdate[] }> {
+    const chunkUpdates: WorkflowUpdate[] = [];
+    let collectedText = "";
 
-    try {
-      return await this.tokenCounter.countExact(payload, model);
-    } catch (error) {
-      console.warn(
-        `[ArchitectWorkflow] TokenCounter failed for model ${model}, falling back to estimate`,
-        error
-      );
-      return this.tokenCounter.estimate(payload, model);
+    const result = await this.config.chatProvider.execute({
+      message: options.prompt,
+      conversationHistory: options.conversationHistory,
+      onEvent: (event) => {
+        if (event.type === "content_delta" && event.delta) {
+          chunkUpdates.push({
+            type: "chunk",
+            sessionId: options.sessionId,
+            timestamp: new Date().toISOString(),
+            data: {
+              type: "text",
+              content: event.delta,
+              phase: options.phase,
+            },
+          });
+          collectedText += event.delta;
+        }
+      },
+    });
+
+    if (!collectedText) {
+      collectedText = this.extractAssistantText(result.messages);
     }
+
+    return { text: collectedText, usage: result.usage, chunkUpdates };
+  }
+
+  private extractAssistantText(messages: ToolExecutorMessage[]): string {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (message.role === "assistant") {
+        return this.stringifyContent(message.content);
+      }
+    }
+    return "";
+  }
+
+  private stringifyContent(content: unknown): string {
+    if (typeof content === "string") {
+      return content;
+    }
+
+    if (Array.isArray(content)) {
+      return content.map((item) => this.stringifyContent(item)).join("");
+    }
+
+    if (content && typeof content === "object") {
+      const typed = content as { text?: unknown; content?: unknown; type?: string };
+      if (typeof typed.text === "string") {
+        return typed.text;
+      }
+      if (typed.type === "text" && typeof typed.content === "string") {
+        return typed.content;
+      }
+    }
+
+    return "";
+  }
+
+  private getUsageTotal(usage: UsageStats): number {
+    return usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheWriteTokens;
   }
 
   /**
