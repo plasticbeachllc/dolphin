@@ -9,6 +9,8 @@
 import { existsSync } from "fs";
 import { readFile } from "fs/promises";
 import { PathValidator } from "../../../shared/security/path-validator";
+import type { TokenCounterLike } from "../utils/token-counter.js";
+import { getTokenCounter } from "../utils/token-counter.js";
 import type {
   Context,
   ContextBuildParams,
@@ -24,6 +26,7 @@ export interface ContextBuilderConfig {
   workspaceRoot: string;
   kbUrl?: string;
   kbTimeoutMs?: number;
+  tokenCounter?: TokenCounterLike;
 }
 
 /**
@@ -33,11 +36,13 @@ export class ContextBuilder {
   private workspaceRoot: string;
   private kbUrl: string;
   private kbTimeoutMs: number;
+  private tokenCounter: TokenCounterLike;
 
   constructor(config: ContextBuilderConfig) {
     this.workspaceRoot = config.workspaceRoot;
     this.kbUrl = config.kbUrl || "http://127.0.0.1:7777";
     this.kbTimeoutMs = config.kbTimeoutMs ?? 2000;
+    this.tokenCounter = config.tokenCounter ?? getTokenCounter();
   }
 
   /**
@@ -56,7 +61,6 @@ export class ContextBuilder {
     if (params.searchQuery) {
       try {
         context.kbResults = await this.searchKnowledgeBank(params.searchQuery);
-        context.totalTokens += this.estimateTokens(context.kbResults);
       } catch (error) {
         console.error("[ContextBuilder] KB search failed:", error);
         // Continue without KB results
@@ -66,7 +70,6 @@ export class ContextBuilder {
     // 2. Explicitly requested files
     if (params.files && params.files.length > 0) {
       context.files = await this.loadFiles(params.files);
-      context.totalTokens += this.estimateTokens(context.files);
     }
 
     // 3. Repo map (future feature)
@@ -74,6 +77,9 @@ export class ContextBuilder {
       // TODO: Implement repo map generation
       context.repoMap = null;
     }
+
+    context.totalTokens =
+      this.estimateTokens(context.kbResults) + this.estimateTokens(context.files);
 
     // 4. Apply token limit
     if (context.totalTokens > params.maxTokens) {
@@ -84,6 +90,8 @@ export class ContextBuilder {
       context.totalTokens = truncated.totalTokens;
       context.truncated = true;
     }
+
+    await this.reconcileTokenCounts(context);
 
     return context;
   }
@@ -128,6 +136,7 @@ export class ContextBuilder {
           language: r.language,
           score: r.score,
           chunkId: r.chunk_id,
+          tokens: this.estimateFileTokens(r.snippet_text),
         }))
         .sort((a, b) => b.score - a.score);
     } catch (error) {
@@ -240,7 +249,12 @@ export class ContextBuilder {
 
     for (const item of items) {
       if ("content" in item) {
-        total += this.estimateFileTokens(item.content);
+        const hasTokens = Object.prototype.hasOwnProperty.call(item, "tokens");
+        if (hasTokens && typeof (item as KBResult | FileContent).tokens === "number") {
+          total += (item as KBResult | FileContent).tokens || 0;
+        } else {
+          total += this.estimateFileTokens(item.content);
+        }
       }
     }
 
@@ -330,9 +344,9 @@ export class ContextBuilder {
     let used = 0;
 
     for (const result of sorted) {
-      const tokens = this.estimateFileTokens(result.content);
+      const tokens = result.tokens ?? this.estimateFileTokens(result.content);
       if (used + tokens <= tokenBudget) {
-        fitted.push(result);
+        fitted.push({ ...result, tokens });
         used += tokens;
       } else {
         break;
@@ -340,5 +354,37 @@ export class ContextBuilder {
     }
 
     return fitted;
+  }
+
+  private async reconcileTokenCounts(context: Context): Promise<void> {
+    const fileContents = context.files.map((file) => file.content);
+    const kbContents = context.kbResults.map((result) => result.content);
+    let totalTokens = 0;
+
+    try {
+      if (fileContents.length) {
+        const result = await this.tokenCounter.countExact(fileContents);
+        context.files = context.files.map((file, index) => ({
+          ...file,
+          tokens: result.perInput[index] ?? file.tokens ?? this.estimateFileTokens(file.content),
+        }));
+        totalTokens += result.totalTokens;
+      }
+
+      if (kbContents.length) {
+        const result = await this.tokenCounter.countExact(kbContents);
+        context.kbResults = context.kbResults.map((kbResult, index) => ({
+          ...kbResult,
+          tokens:
+            result.perInput[index] ?? kbResult.tokens ?? this.estimateFileTokens(kbResult.content),
+        }));
+        totalTokens += result.totalTokens;
+      }
+    } catch (error) {
+      console.warn("[ContextBuilder] Failed to compute exact token counts:", error);
+      totalTokens = this.estimateTokens(context.kbResults) + this.estimateTokens(context.files);
+    }
+
+    context.totalTokens = totalTokens;
   }
 }

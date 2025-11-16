@@ -698,6 +698,7 @@ Columns:
 - ✅ Health checks (shallow + deep)
 - ✅ Repository listing with stats
 - ✅ Hybrid search (BM25 + Vector with RRF scoring)
+- ✅ Stats-driven BM25 normalization with ingest-time collectors and min/max/quantile strategies
 - ✅ Maximal Marginal Relevance (MMR) for diverse results
 - ✅ Cross-encoder reranking (optional)
 - ✅ Chunk and file retrieval
