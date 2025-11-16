@@ -200,6 +200,7 @@ class AnthropicAdapter
     tools: AnthropicTool[]
   ): Promise<Anthropic.Message> {
     const { runClaudeCode } = await import("./claude-cli-process");
+    const model = this.claudeClient.getModel();
     const systemPrompt = `You have access to the following tools via MCP:\n\n${tools
       .map(
         (tool) =>
@@ -227,7 +228,7 @@ class AnthropicAdapter
     for await (const chunk of runClaudeCode({
       systemPrompt,
       messages: anthropicMessages,
-      model: DEFAULT_CLAUDE_MODEL,
+      model,
       maxOutputTokens: 4096,
     })) {
       if (typeof chunk === "string") {
@@ -264,7 +265,7 @@ class AnthropicAdapter
       type: "message",
       role: "assistant",
       content: fullContent,
-      model: DEFAULT_CLAUDE_MODEL,
+      model,
       stop_reason: stopReason,
       stop_sequence: null,
       usage,
