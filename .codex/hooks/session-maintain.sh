@@ -3,6 +3,7 @@ set -euo pipefail
 
 echo "🧹 Running Dolphin maintenance..."
 
+CODEX_WORKSPACE_DIR="$(git rev-parse --show-toplevel)"
 cd "$CODEX_WORKSPACE_DIR"
 
 # ============================================================================

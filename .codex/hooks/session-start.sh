@@ -4,6 +4,8 @@ set -euo pipefail
 # SessionStart hook for Dolphin project
 # Installs dependencies for Python backend and TypeScript/Bun components
 echo "🐬 Setting up Dolphin development environment..."
+CODEX_WORKSPACE_DIR="$(git rev-parse --show-toplevel)"
+
 
 # ============================================================================
 # Install uv (Python package manager)
