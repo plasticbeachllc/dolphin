@@ -7,7 +7,7 @@ import pytest
 from kb.api.app import SearchRequest
 from kb.api.search_backend import create_search_backend
 from kb.chunkers.types import Chunk
-from kb.config import KBConfig
+from kb.config import KBConfig, RerankingConfig, RetrievalConfig
 from kb.ingest.pipeline import IngestionPipeline
 from kb.store import LanceDBStore, SQLiteMetadataStore
 
@@ -33,7 +33,9 @@ def rerank_backend(tmp_path):
 
     config = KBConfig(
         store_root=store_root,
-        retrieval={"reranking": {"enabled": True, "model_name": "test-model"}},  # type: ignore[arg-type]
+        retrieval=RetrievalConfig(
+            reranking=RerankingConfig(enabled=True, model="test-model")
+        ),
     )
 
     lancedb = LanceDBStore(config.store_root)
