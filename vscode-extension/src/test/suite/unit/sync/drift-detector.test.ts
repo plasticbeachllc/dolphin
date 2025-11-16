@@ -123,7 +123,7 @@ describe("DriftDetector Tests", () => {
       // Start will fail due to unavailable API, but should handle gracefully
       try {
         await detector.start();
-      } catch (error) {
+      } catch {
         // Expected - API not available in test
       }
 
@@ -200,7 +200,7 @@ describe("DriftDetector Tests", () => {
         await detector.detectDrift();
         // Should complete without throwing
         assert.ok(true, "Should handle API errors gracefully");
-      } catch (error) {
+      } catch {
         // Some errors may propagate, but they should be caught internally
         assert.ok(true, "Error was caught");
       }
@@ -219,7 +219,7 @@ describe("DriftDetector Tests", () => {
       try {
         await detector.detectDrift();
         assert.ok(true, "Should handle network failures");
-      } catch (error) {
+      } catch {
         assert.ok(true, "Network error handled");
       }
     });
@@ -234,7 +234,7 @@ describe("DriftDetector Tests", () => {
       try {
         await detector.detectDrift();
         assert.ok(true, "Should handle malformed responses");
-      } catch (error) {
+      } catch {
         assert.ok(true, "Malformed response handled");
       }
     });
@@ -248,7 +248,7 @@ describe("DriftDetector Tests", () => {
       // First detection (will fail)
       try {
         await detector.detectDrift();
-      } catch (error) {
+      } catch {
         // Expected
       }
 
@@ -256,7 +256,7 @@ describe("DriftDetector Tests", () => {
       try {
         await detector.detectDrift();
         assert.ok(true, "Should continue after error");
-      } catch (error) {
+      } catch {
         assert.ok(true, "Can handle multiple errors");
       }
     });
@@ -422,7 +422,7 @@ describe("DriftDetector Tests", () => {
 
         try {
           await detector.start();
-        } catch (error) {
+        } catch {
           // Expected - API not available
         }
 

@@ -22,7 +22,7 @@ describe("Claude Authentication Integration", () => {
       if (existsSync(testSettingsPath)) {
         unlinkSync(testSettingsPath);
       }
-    } catch (error) {
+    } catch {
       // Ignore cleanup errors
     }
   });
@@ -40,7 +40,7 @@ describe("Claude Authentication Integration", () => {
       if (existsSync(testSettingsDir)) {
         rmSync(testSettingsDir, { recursive: true, force: true });
       }
-    } catch (error) {
+    } catch {
       // Ignore cleanup errors
     }
   });
@@ -69,7 +69,7 @@ describe("Claude Authentication Integration", () => {
       // Cleanup
       try {
         unlinkSync(testSettingsPath);
-      } catch (error) {
+      } catch {
         // Ignore
       }
     });
@@ -110,7 +110,7 @@ describe("Claude Authentication Integration", () => {
       // Cleanup
       try {
         unlinkSync(testSettingsPath);
-      } catch (error) {
+      } catch {
         // Ignore
       }
     });
@@ -229,7 +229,7 @@ describe("Claude Authentication Integration", () => {
       // Cleanup
       try {
         unlinkSync(testSettingsPath);
-      } catch (error) {
+      } catch {
         // Ignore
       }
     });
@@ -289,7 +289,7 @@ describe("Claude Authentication Integration", () => {
       // Cleanup
       try {
         unlinkSync(testSettingsPath);
-      } catch (error) {
+      } catch {
         // Ignore
       }
     });
@@ -345,7 +345,7 @@ describe("Claude Authentication Integration", () => {
       // Cleanup
       try {
         unlinkSync(testSettingsPath);
-      } catch (error) {
+      } catch {
         // Ignore
       }
     });

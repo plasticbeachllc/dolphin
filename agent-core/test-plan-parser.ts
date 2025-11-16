@@ -137,7 +137,7 @@ for (const test of tests) {
       console.log(`  Complexity: ${result.complexity}`);
       console.log(`  Files to modify: ${result.files_to_modify?.length || 0}`);
       console.log(`  Steps: ${result.steps?.length || 0}`);
-    } catch (legacyError) {
+    } catch {
       console.log(`✗ Failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }

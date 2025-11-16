@@ -1,6 +1,5 @@
 import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import { restGetFileSlice } from "../../rest/client.js";
 import { mimeFromLangOrPath } from "../../util/mime.js";
 import { logInfo, logError } from "../../util/logger.js";
@@ -22,6 +21,17 @@ const INPUT_SHAPE = {
 
 const INPUT = z.object(INPUT_SHAPE);
 
+const FETCH_LINES_JSON_SCHEMA: Tool["inputSchema"] = {
+  type: "object",
+  properties: {
+    repo: { type: "string" },
+    path: { type: "string" },
+    start: { type: "integer", minimum: 1 },
+    end: { type: "integer", minimum: 1 },
+  },
+  required: ["repo", "path", "start", "end"],
+};
+
 export function makeFetchLines(): {
   definition: Tool;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -32,7 +42,7 @@ export function makeFetchLines(): {
     name: "fetch_lines",
     description:
       "Fetch a file slice [start, end] inclusive from disk and return fenced code with citation.",
-    inputSchema: zodToJsonSchema(INPUT) as Tool["inputSchema"],
+    inputSchema: FETCH_LINES_JSON_SCHEMA,
     annotations: { title: "Fetch File Lines", readOnlyHint: true, idempotentHint: true },
   };
 

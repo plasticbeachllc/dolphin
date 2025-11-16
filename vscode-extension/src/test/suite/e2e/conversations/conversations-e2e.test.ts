@@ -35,7 +35,7 @@ describe("Conversations E2E Tests", () => {
         await vscode.commands.executeCommand("dolphin.focusInput");
         await sleep(100);
         assert.ok(true, "Focus input command executed");
-      } catch (err) {
+      } catch {
         // Expected in headless test environment
         console.log("focusInput failed in test environment (expected)");
       }
@@ -50,14 +50,14 @@ describe("Conversations E2E Tests", () => {
       try {
         await vscode.commands.executeCommand("dolphin.focusInput");
         await sleep(100);
-      } catch (e) {
+      } catch {
         // Expected in test environment
       }
 
       try {
         await vscode.commands.executeCommand("dolphin.focusInput");
         await sleep(100);
-      } catch (e) {
+      } catch {
         // Expected in test environment
       }
 
@@ -127,7 +127,7 @@ describe("Conversations E2E Tests", () => {
       try {
         await vscode.commands.executeCommand("dolphin.focusInput");
         assert.ok(true, "Focus input executed");
-      } catch (error) {
+      } catch {
         // Expected in test environment without visible webview
         assert.ok(true, "Focus input failed as expected in headless environment");
       }
@@ -165,7 +165,7 @@ describe("Conversations E2E Tests", () => {
       // Verify commands work
       try {
         await vscode.commands.executeCommand("dolphin.focusInput");
-      } catch (e) {
+      } catch {
         // Expected in test environment
       }
 
@@ -217,7 +217,7 @@ describe("Conversations E2E Tests", () => {
 
       try {
         await vscode.commands.executeCommand("dolphin.focusInput");
-      } catch (e) {
+      } catch {
         // Expected
       }
 
@@ -246,7 +246,7 @@ describe("Conversations E2E Tests", () => {
       // Try operations that might fail
       try {
         await vscode.commands.executeCommand("dolphin.focusInput");
-      } catch (e) {
+      } catch {
         // Expected to fail in headless environment
       }
 

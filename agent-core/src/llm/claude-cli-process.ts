@@ -241,7 +241,7 @@ function parseChunk(
 function attemptParseChunk(data: string): ClaudeCodeMessage | null {
   try {
     return JSON.parse(data);
-  } catch (error) {
+  } catch {
     return null;
   }
 }

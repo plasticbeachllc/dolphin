@@ -21,7 +21,7 @@ describe("Webview Tests", () => {
 
       // If we got here without error, the view exists
       assert.ok(true, "Dolphin chat view can be focused");
-    } catch (err) {
+    } catch {
       // In headless mode, focusing might fail, but we can check if the command exists
       const commands = await vscode.commands.getCommands(true);
       assert.ok(commands.length > 0, "Commands should be available");

@@ -71,7 +71,7 @@ export class DiffHandler {
         try {
           const fileContent = await vscode.workspace.fs.readFile(fileUri);
           const _currentContent = Buffer.from(fileContent).toString("utf8");
-        } catch (error) {
+        } catch {
           // File might not exist yet, that's ok
           fileExists = false;
         }

@@ -1,7 +1,6 @@
 // mcp-bridge/src/tools/file-write-tool.ts
 import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { randomBytes } from "crypto";
@@ -15,6 +14,17 @@ const INPUT_SHAPE = {
 
 const INPUT = z.object(INPUT_SHAPE);
 
+const FILE_WRITE_JSON_SCHEMA: Tool["inputSchema"] = {
+  type: "object",
+  properties: {
+    path: { type: "string" },
+    content: { type: "string" },
+    create_backup: { type: "boolean" },
+    create_directories: { type: "boolean" },
+  },
+  required: ["path", "content"],
+};
+
 // type _Input = z.infer<typeof INPUT>;
 
 export function makeFileWrite(): {
@@ -26,7 +36,7 @@ export function makeFileWrite(): {
   const definition: Tool = {
     name: "file_write",
     description: "Write content to a file with atomic operation and optional backup",
-    inputSchema: zodToJsonSchema(INPUT) as Tool["inputSchema"],
+    inputSchema: FILE_WRITE_JSON_SCHEMA,
     annotations: {
       title: "Write File",
       readOnlyHint: false,

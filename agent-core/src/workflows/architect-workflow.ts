@@ -468,7 +468,7 @@ export class ArchitectWorkflow implements IWorkflow {
       const result = parsePlanFromMarkdown(planContent);
       parsedPlan = result.plan;
       _parseSource = result.source;
-    } catch (tomlError) {
+    } catch {
       // Fallback to legacy markdown parsing
       parsedPlan = parseLegacyMarkdownPlan(planContent);
       _parseSource = "legacy-markdown";

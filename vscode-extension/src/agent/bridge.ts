@@ -401,7 +401,7 @@ export class AgentBridge implements AgentBridgeAdapter {
     // Try to log shutdown, but don't fail if channel is disposed
     try {
       this.outputChannel.appendLine("[AgentBridge] Shutting down...");
-    } catch (e) {
+    } catch {
       // Output channel may already be disposed in tests
     }
 

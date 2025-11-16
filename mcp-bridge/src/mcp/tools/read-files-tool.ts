@@ -1,7 +1,6 @@
 // mcp-bridge/src/tools/read-files-tool.ts
 import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import * as fs from "fs/promises";
 import * as path from "path";
 
@@ -12,6 +11,21 @@ const INPUT_SHAPE = {
 };
 
 const INPUT = z.object(INPUT_SHAPE);
+
+const READ_FILES_JSON_SCHEMA: Tool["inputSchema"] = {
+  type: "object",
+  properties: {
+    paths: {
+      type: "array",
+      minItems: 1,
+      maxItems: 50,
+      items: { type: "string" },
+    },
+    max_size_bytes: { type: "integer" },
+    fail_on_error: { type: "boolean" },
+  },
+  required: ["paths"],
+};
 
 // type _Input = z.infer<typeof INPUT>;
 
@@ -41,7 +55,7 @@ export function makeReadFiles(): {
   const definition: Tool = {
     name: "read_files",
     description: "Read multiple files in batch with optional partial failure handling",
-    inputSchema: zodToJsonSchema(INPUT) as Tool["inputSchema"],
+    inputSchema: READ_FILES_JSON_SCHEMA,
     annotations: {
       title: "Read Files",
       readOnlyHint: true,

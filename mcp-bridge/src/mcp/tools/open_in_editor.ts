@@ -1,6 +1,5 @@
 import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import { restListRepos, type RepoInfo } from "../../rest/client.js";
 import { logInfo, logError } from "../../util/logger.js";
 
@@ -12,6 +11,17 @@ const INPUT_SHAPE = {
 };
 
 const INPUT = z.object(INPUT_SHAPE);
+
+const OPEN_IN_EDITOR_JSON_SCHEMA: Tool["inputSchema"] = {
+  type: "object",
+  properties: {
+    repo: { type: "string" },
+    path: { type: "string" },
+    line: { type: "integer", minimum: 1 },
+    column: { type: "integer", minimum: 1 },
+  },
+  required: ["repo", "path"],
+};
 
 type CacheEntry = { ts: number; repos: RepoInfo[] };
 let cache: CacheEntry | null = null;
@@ -30,7 +40,7 @@ export function makeOpenInEditor(): {
   const definition: Tool = {
     name: "open_in_editor",
     description: "Compute a vscode://file URI for a repo path and optional position.",
-    inputSchema: zodToJsonSchema(INPUT) as Tool["inputSchema"],
+    inputSchema: OPEN_IN_EDITOR_JSON_SCHEMA,
     annotations: { title: "Open in VS Code", readOnlyHint: false },
   };
 

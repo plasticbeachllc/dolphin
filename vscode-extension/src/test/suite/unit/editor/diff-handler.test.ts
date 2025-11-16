@@ -110,7 +110,7 @@ describe("DiffHandler Tests", () => {
       try {
         const results = await DiffHandler.applyMultipleDiffs(diffs);
         assert.strictEqual(results.length, 0, "Should return empty results array");
-      } catch (err) {
+      } catch {
         assert.fail("Should not throw error for empty array");
       }
     });

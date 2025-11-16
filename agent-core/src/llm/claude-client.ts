@@ -249,7 +249,7 @@ export class ClaudeClient {
     let mode: AuthMode = "auto";
     try {
       mode = await this.detectAuthMode();
-    } catch (error) {
+    } catch {
       // No auth configured - return "auto" as mode
       mode = "auto";
     }

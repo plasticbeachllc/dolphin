@@ -544,7 +544,7 @@ describe("ArchitectWorkflow KB Integration", () => {
             break;
           }
         }
-      } catch (error) {
+      } catch {
         // KB errors should be caught and handled
       }
 

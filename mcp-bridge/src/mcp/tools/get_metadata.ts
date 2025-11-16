@@ -1,6 +1,5 @@
 import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import { restGetChunk } from "../../rest/client.js";
 import { logInfo, logError } from "../../util/logger.js";
 
@@ -15,6 +14,14 @@ import { logInfo, logError } from "../../util/logger.js";
 const INPUT_SHAPE = { chunk_id: z.string() };
 const INPUT = z.object(INPUT_SHAPE);
 
+const GET_METADATA_JSON_SCHEMA: Tool["inputSchema"] = {
+  type: "object",
+  properties: {
+    chunk_id: { type: "string" },
+  },
+  required: ["chunk_id"],
+};
+
 export function makeGetMetadata(): {
   definition: Tool;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -24,7 +31,7 @@ export function makeGetMetadata(): {
   const definition: Tool = {
     name: "get_metadata",
     description: "Return metadata for a chunk by chunk_id.",
-    inputSchema: zodToJsonSchema(INPUT) as Tool["inputSchema"],
+    inputSchema: GET_METADATA_JSON_SCHEMA,
     annotations: { title: "Chunk Metadata", readOnlyHint: true, idempotentHint: true },
   };
 

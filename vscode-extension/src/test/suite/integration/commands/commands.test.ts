@@ -19,7 +19,7 @@ describe("Command Tests", () => {
 
       // If we got here, command executed successfully
       assert.ok(true, "dolphin.focusInput command executed successfully");
-    } catch (err) {
+    } catch {
       // Command might fail in headless mode if webview isn't visible
       // But it should still be registered
       const commands = await vscode.commands.getCommands(true);
@@ -38,7 +38,7 @@ describe("Command Tests", () => {
       await sleep(500);
 
       assert.ok(true, "dolphin.newConversation command executed successfully");
-    } catch (err) {
+    } catch {
       const commands = await vscode.commands.getCommands(true);
       assert.ok(
         commands.includes("dolphin.newConversation"),
@@ -55,7 +55,7 @@ describe("Command Tests", () => {
       await sleep(500);
 
       assert.ok(true, "dolphin.test command executed successfully");
-    } catch (err) {
+    } catch {
       const commands = await vscode.commands.getCommands(true);
       assert.ok(commands.includes("dolphin.test"), "dolphin.test command should be registered");
     }
@@ -152,7 +152,7 @@ describe("Command Tests", () => {
         await vscode.commands.executeCommand("dolphin.explainCode", testCode, fileName, language);
         await sleep(500);
         assert.ok(true, "dolphin.explainCode executed with parameters");
-      } catch (err) {
+      } catch {
         // May fail in headless mode, but command should be registered
         const commands = await vscode.commands.getCommands(true);
         assert.ok(commands.includes("dolphin.explainCode"));
@@ -213,9 +213,9 @@ describe("Command Tests", () => {
       try {
         await vscode.commands.executeCommand(cmd);
         console.log(`✓ Command ${cmd} executed successfully`);
-      } catch (err) {
+      } catch (error) {
         // Some commands might fail without proper context, but shouldn't crash
-        console.log(`  Command ${cmd} threw error (may be expected):`, err);
+        console.log(`  Command ${cmd} threw error (may be expected):`, error);
       }
     }
 

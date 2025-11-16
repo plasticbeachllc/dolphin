@@ -95,7 +95,7 @@ describe("EditorWorkflow Integration", () => {
     if (testWorkspace) {
       try {
         rmSync(testWorkspace, { recursive: true, force: true });
-      } catch (error) {
+      } catch {
         // Ignore cleanup errors
       }
     }

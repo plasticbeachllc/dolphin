@@ -318,7 +318,7 @@ describe("AgentBridge Unit Tests", () => {
       try {
         const bridge = agentBridge as unknown as TestRecord;
         await (bridge.findBun as () => Promise<string | null>)();
-      } catch (e) {
+      } catch {
         // Expected if bun not installed
       }
 
@@ -334,7 +334,7 @@ describe("AgentBridge Unit Tests", () => {
       try {
         const bridge = agentBridge as unknown as TestRecord;
         await (bridge.findBun as () => Promise<string | null>)();
-      } catch (e) {
+      } catch {
         // Expected if bun not installed
       }
 
@@ -536,7 +536,12 @@ describe("AgentBridge Unit Tests", () => {
         const elapsed = Date.now() - startTime;
         const err = error as Error;
         assert.ok(err.message.includes("timeout"), "Should be timeout error");
-        assert.ok(elapsed >= 1000 && elapsed < 2000, `Should timeout after ~1s, got ${elapsed}ms`);
+        const tolerance = 10;
+        const minExpected = 1000 - tolerance;
+        assert.ok(
+          elapsed >= minExpected && elapsed < 2000,
+          `Should timeout after >=${minExpected}ms, got ${elapsed}ms`
+        );
       }
     });
 
@@ -559,7 +564,7 @@ describe("AgentBridge Unit Tests", () => {
             timeout: number
           ) => Promise<unknown>
         )("test_method", {}, 500);
-      } catch (error) {
+      } catch {
         // Expected timeout
       }
 

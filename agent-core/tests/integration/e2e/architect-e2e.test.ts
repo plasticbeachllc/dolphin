@@ -630,7 +630,7 @@ describe("ArchitectWorkflow E2E", () => {
     for (const dir of tempDirs) {
       try {
         await rm(dir, { recursive: true, force: true });
-      } catch (error) {
+      } catch {
         // Ignore cleanup errors
       }
     }

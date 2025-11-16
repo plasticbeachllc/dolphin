@@ -103,7 +103,7 @@ export class MCPClient {
           }
         }
       }
-    } catch (error) {
+    } catch {
       console.error("[MCP Client] Failed to parse response:", data);
     }
   }

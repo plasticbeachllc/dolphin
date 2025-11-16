@@ -1,6 +1,5 @@
 import type { Tool, CallToolResult, TextContent } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import { restSearch, type SearchResponse } from "../../rest/client.js";
 import { fetchSnippetsInParallel, type SnippetFetchRequest } from "./snippet_fetcher.js";
 import { CONFIG } from "../../util/config.js";
@@ -61,6 +60,35 @@ const INPUT_SHAPE = {
 };
 
 const INPUT = z.object(INPUT_SHAPE);
+
+const SEARCH_KNOWLEDGE_JSON_SCHEMA: Tool["inputSchema"] = {
+  type: "object",
+  properties: {
+    query: { type: "string", minLength: 1 },
+    repos: { type: "array", items: { type: "string" } },
+    path_prefix: { type: "array", items: { type: "string" } },
+    exclude_paths: { type: "array", items: { type: "string" } },
+    exclude_patterns: { type: "array", items: { type: "string" } },
+    top_k: { type: "integer", minimum: 1, maximum: 100 },
+    max_snippets: { type: "integer", minimum: 1 },
+    deadline_ms: { type: "integer", minimum: 50 },
+    embed_model: { type: "string", enum: ["small", "large"] },
+    score_cutoff: { type: "number" },
+    mmr_enabled: { type: "boolean" },
+    mmr_lambda: { type: "number", minimum: 0, maximum: 1 },
+    cursor: { type: "string" },
+    ann_strategy: {
+      type: "string",
+      enum: ["speed", "accuracy", "adaptive", "custom"],
+    },
+    ann_nprobes: { type: "integer", minimum: 1, maximum: 50 },
+    ann_refine_factor: { type: "integer", minimum: 1, maximum: 100 },
+    include_graph_context: { type: "boolean" },
+    context_lines_before: { type: "integer", minimum: 0, maximum: 10 },
+    context_lines_after: { type: "integer", minimum: 0, maximum: 10 },
+  },
+  required: ["query"],
+};
 
 type _Input = z.infer<typeof INPUT>;
 
@@ -258,7 +286,7 @@ export function makeSearchKnowledge(): {
     name: "search_knowledge",
     description:
       "Semantically query code and docs across indexed repositories and return ranked snippets with citations.",
-    inputSchema: zodToJsonSchema(INPUT) as Tool["inputSchema"],
+    inputSchema: SEARCH_KNOWLEDGE_JSON_SCHEMA,
     annotations: {
       title: "Search Knowledge Base",
       readOnlyHint: true,

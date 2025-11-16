@@ -17,7 +17,7 @@ async function waitForConfigSystem(): Promise<void> {
       vscode.workspace.getConfiguration("dolphin");
       console.log("Configuration system is ready");
       return;
-    } catch (error) {
+    } catch {
       console.log(`Config not ready (attempt ${attempt + 1}/${maxAttempts}), waiting...`);
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }

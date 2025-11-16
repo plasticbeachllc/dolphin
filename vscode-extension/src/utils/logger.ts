@@ -26,7 +26,7 @@ export class Logger {
       const config = vscode.workspace.getConfiguration("dolphin");
       const levelStr = config.get<string>("logLevel", "info");
       return Logger.logLevelMap[levelStr] ?? LogLevel.INFO;
-    } catch (error) {
+    } catch {
       // Config not ready yet (e.g., during test initialization)
       return LogLevel.INFO;
     }

@@ -1,6 +1,5 @@
 import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import { restGetChunk } from "../../rest/client.js";
 import { mimeFromLangOrPath } from "../../util/mime.js";
 import { logInfo, logError } from "../../util/logger.js";
@@ -16,6 +15,14 @@ import { logInfo, logError } from "../../util/logger.js";
 const INPUT_SHAPE = { chunk_id: z.string() };
 const INPUT = z.object(INPUT_SHAPE);
 
+const FETCH_CHUNK_JSON_SCHEMA: Tool["inputSchema"] = {
+  type: "object",
+  properties: {
+    chunk_id: { type: "string" },
+  },
+  required: ["chunk_id"],
+};
+
 export function makeFetchChunk(): {
   definition: Tool;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -25,7 +32,7 @@ export function makeFetchChunk(): {
   const definition: Tool = {
     name: "fetch_chunk",
     description: "Fetch a chunk by chunk_id and return fenced code with citation.",
-    inputSchema: zodToJsonSchema(INPUT) as Tool["inputSchema"],
+    inputSchema: FETCH_CHUNK_JSON_SCHEMA,
     annotations: { title: "Fetch Chunk", readOnlyHint: true, idempotentHint: true },
   };
 
