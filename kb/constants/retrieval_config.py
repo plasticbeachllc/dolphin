@@ -8,6 +8,17 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class BM25NormalizationConfig:
+    """Default configuration for BM25 normalization strategies."""
+
+    default_strategy: str = "sigmoid"
+    fallback_strategy: str = "sigmoid"
+    ab_variant_probability: float = 0.0
+    stats_filename: str = "bm25_stats.json"
+    min_sample_size: int = 100
+
+
+@dataclass(frozen=True)
 class RetrievalConstants:
     """Retrieval hyperparameters for search backend.
 
@@ -38,16 +49,10 @@ class RetrievalConstants:
     BM25_SCORE_NORMALIZATION_FACTOR: float = 10.0
     """Sigmoid normalization parameter for BM25 scores.
 
-    Rationale: BM25 scores range [0, 50+] while vector scores are [0, 1].
-    Dividing by 10 before sigmoid maps typical BM25 scores (1-20) to
-    [0.27, 0.95] which aligns well with vector score distribution.
-
-    NOTE: This is suboptimal. Future work will implement min-max
-    normalization based on actual BM25 score distributions per dataset.
-    See WP4.1 for improved normalization implementation.
-
-    A/B test: EXP-2024-09-20 (scheduled for replacement)
+    This remains the fallback path even after min-max/quantile strategies launch.
     """
+
+    BM25_NORMALIZATION: BM25NormalizationConfig = BM25NormalizationConfig()
 
     # RRF Parameters
     RRF_K: int = 60
