@@ -15,7 +15,10 @@ describe("Editor workflow with OpenAI provider", () => {
   let workflow: EditorWorkflow;
   let contextBuilder: ContextBuilder;
   let promptBuilder: PromptBuilder;
-  let mockStateStore: { saveSession: ReturnType<typeof mock>; loadSession: ReturnType<typeof mock> };
+  let mockStateStore: {
+    saveSession: ReturnType<typeof mock>;
+    loadSession: ReturnType<typeof mock>;
+  };
   let originalFetch: typeof fetch;
 
   const response: OpenAIResponse = {
@@ -62,7 +65,10 @@ describe("Editor workflow with OpenAI provider", () => {
     promptBuilder = new PromptBuilder();
 
     originalFetch = global.fetch;
-    global.fetch = mock(async () => ({ ok: true, json: async () => [] })) as unknown as typeof fetch;
+    global.fetch = mock(async () => ({
+      ok: true,
+      json: async () => [],
+    })) as unknown as typeof fetch;
 
     const provider = new OpenAIProvider({
       workspaceRoot,
@@ -99,10 +105,17 @@ describe("Editor workflow with OpenAI provider", () => {
       updates.push(update);
     }
 
-    const startUpdate = updates.find((u) => u.type === "state_change" && u.data.state === "executing");
-    const completionUpdate = updates.find((u) => u.type === "state_change" && u.data.state === "complete");
+    const startUpdate = updates.find(
+      (u) => u.type === "state_change" && u.data.state === "executing"
+    );
+    const completionUpdate = updates.find(
+      (u) => u.type === "state_change" && u.data.state === "complete"
+    );
     const toolSummaryUpdate = updates.find(
-      (u) => u.type === "progress" && u.data.phase === "complete" && u.data.message?.includes("tool rounds")
+      (u) =>
+        u.type === "progress" &&
+        u.data.phase === "complete" &&
+        u.data.message?.includes("tool rounds")
     );
 
     expect(startUpdate).toBeDefined();
