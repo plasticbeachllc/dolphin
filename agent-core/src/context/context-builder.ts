@@ -78,7 +78,8 @@ export class ContextBuilder {
       context.repoMap = null;
     }
 
-    context.totalTokens = this.estimateTokens(context.kbResults) + this.estimateTokens(context.files);
+    context.totalTokens =
+      this.estimateTokens(context.kbResults) + this.estimateTokens(context.files);
 
     // 4. Apply token limit
     if (context.totalTokens > params.maxTokens) {
