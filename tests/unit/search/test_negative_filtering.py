@@ -272,3 +272,28 @@ class TestNegativeFiltering:
 
         # Should return all results
         assert len(filtered) == 2
+
+    def test_filter_and_score_respects_negative_filters(self):
+        """Ensure the combined helper enforces negative filtering rules."""
+        results = [
+            {"chunk_id": "1", "repo": "test", "path": "src/main.py", "score": 0.9},
+            {"chunk_id": "2", "repo": "test", "path": "src/generated.py", "score": 0.5},
+            {"chunk_id": "3", "repo": "test", "path": "tests/test_main.py", "score": 0.7},
+        ]
+
+        request = SearchRequest(
+            query="demo",
+            exclude_paths=["tests/"],
+            exclude_patterns=["*.generated.py", "src/generated.py"],
+        )
+
+        backend = KnowledgeSearchBackend(
+            embedding_provider=cast(EmbeddingProvider, None),
+            lance_store=cast(LanceDBStore, None),
+            sql_store=cast(SQLiteMetadataStore, None),
+        )
+
+        filtered = backend._filter_and_score_results(results, request)
+
+        assert len(filtered) == 1
+        assert filtered[0]["path"] == "src/main.py"

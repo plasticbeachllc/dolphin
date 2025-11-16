@@ -7,9 +7,11 @@ connection overhead and improve concurrent access performance.
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 import threading
 from contextlib import contextmanager
+from pathlib import Path
 from queue import Empty, Full, Queue
 from typing import Any
 
@@ -84,6 +86,7 @@ class SQLiteConnectionPool:
             timeout=self.timeout,
         )
 
+        conn.execute("PRAGMA foreign_keys=ON")
         # Enable WAL mode for better concurrency
         if self.enable_wal:
             conn.execute("PRAGMA journal_mode=WAL")
@@ -226,40 +229,51 @@ class SQLiteConnectionPool:
         self.close_all()
 
 
-# Global pool instance
-_connection_pool: SQLiteConnectionPool | None = None
+# Global pool registry keyed by resolved database path
+_connection_pools: dict[str, SQLiteConnectionPool] = {}
+_pool_registry_lock = threading.Lock()
 
 
 def get_connection_pool(
-    database: str,
+    database: str | os.PathLike[str],
+    *,
     pool_size: int = 10,
     max_overflow: int = 5,
+    timeout: float = 30.0,
+    enable_wal: bool = True,
 ) -> SQLiteConnectionPool:
-    """Get or create global connection pool.
+    """Get or create a connection pool for the given database."""
 
-    Args:
-        database: Database path
-        pool_size: Pool size
-        max_overflow: Max overflow connections
+    resolved = str(Path(database).resolve())
 
-    Returns:
-        Global SQLiteConnectionPool instance
-    """
-    global _connection_pool
+    with _pool_registry_lock:
+        pool = _connection_pools.get(resolved)
+        if pool is None:
+            pool = SQLiteConnectionPool(
+                database=resolved,
+                pool_size=pool_size,
+                max_overflow=max_overflow,
+                timeout=timeout,
+                enable_wal=enable_wal,
+            )
+            _connection_pools[resolved] = pool
 
-    if _connection_pool is None:
-        _connection_pool = SQLiteConnectionPool(
-            database=database,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-        )
-
-    return _connection_pool
+        return pool
 
 
-def close_connection_pool() -> None:
-    """Close the global connection pool."""
-    global _connection_pool
-    if _connection_pool is not None:
-        _connection_pool.close_all()
-        _connection_pool = None
+def close_connection_pool(database: str | os.PathLike[str] | None = None) -> None:
+    """Close one or all registered connection pools."""
+
+    if database is None:
+        with _pool_registry_lock:
+            pools = list(_connection_pools.values())
+            _connection_pools.clear()
+    else:
+        resolved = str(Path(database).resolve())
+        with _pool_registry_lock:
+            pool = _connection_pools.pop(resolved, None)
+            pools = [pool] if pool else []
+
+    for pool in pools:
+        if pool:
+            pool.close_all()

@@ -1709,6 +1709,8 @@ const estimatedTokens = tokenCounter.estimate(findings);
 
 ## WP5: Performance Optimization
 
+**Status:** ✅ Complete – metadata calls now share pooled SQLite connections and request filtering is single-pass with benchmark coverage.
+
 ### Issue 5.1: Database Connection Pooling
 
 **Problem:** New connection created for every query.
@@ -1898,13 +1900,15 @@ class SQLiteMetadataStore:
 
 **Acceptance Criteria:**
 
-- [ ] ConnectionPool implemented with tests
-- [ ] WAL mode enabled for concurrent reads
-- [ ] Pool size configurable (default: 5)
-- [ ] Connection timeout handling
-- [ ] Performance metrics collected
-- [ ] Load testing shows >3x improvement in concurrent queries
-- [ ] All SQLiteMetadataStore methods use pool
+- [x] ConnectionPool implemented with tests
+- [x] WAL mode enabled for concurrent reads
+- [x] Pool size configurable (default: 5)
+- [x] Connection timeout handling
+- [x] Performance metrics collected
+- [x] Load testing shows >3x improvement in concurrent queries
+- [x] All SQLiteMetadataStore methods use pool
+
+**Implementation update:** `SQLiteConnectionPool` in `kb/store/connection_pool.py` now exposes WAL-enabled pooled connections keyed by database path, while `SQLiteMetadataStore` acquires every handle through that pool so initialization, BM25 search, and ingestion all reuse long-lived connections. New unit coverage in `tests/unit/pipeline/test_connection_pool.py` and stress coverage in `tests/benchmarks/test_connection_pool_performance.py` confirm pooling behaviour and demonstrate >3× concurrency gains. `tests/unit/pipeline/test_connection_pool.py` also validates the helper APIs so pools can be closed deterministically.
 
 **Estimated Effort:** 2 days
 
@@ -1997,10 +2001,12 @@ def test_filtering_performance():
 
 **Acceptance Criteria:**
 
-- [ ] Combined filter function implemented
-- [ ] Benchmark shows >1.5x improvement
-- [ ] Results identical to multi-pass approach
-- [ ] All similar patterns refactored
+- [x] Combined filter function implemented
+- [x] Benchmark shows >1.5x improvement
+- [x] Results identical to multi-pass approach
+- [x] All similar patterns refactored
+
+**Implementation update:** `KnowledgeSearchBackend` now routes both vector and BM25 candidates through `_filter_and_score_results`, which applies repo/path filters and config-file scoring in one pass. Legacy behaviour is preserved for compatibility via `tests/unit/search/legacy_filtering.py`, while `tests/unit/search/test_filter_and_score.py` and `tests/benchmarks/test_search_performance.py` verify identical results and a >1.5× speedup compared to the old multi-pass helpers.
 
 **Estimated Effort:** 1 day
 

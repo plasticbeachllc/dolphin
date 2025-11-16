@@ -665,36 +665,13 @@ def index_repository(repo_name: str, full: bool = False):
     return pipeline.index(repo_name, full=full)
 ```
 
-#### P2. No Connection Pooling in Active Use
+#### P2. Connection Pool Integration (Resolved)
 
-**File:** `kb/store/sqlite_meta.py:115-121`
-**Severity:** CRITICAL
-**Impact:** 40-60% overhead from connection creation on every query
+**Files:** `kb/store/sqlite_meta.py`, `kb/store/connection_pool.py`, `tests/unit/pipeline/test_connection_pool.py`, `tests/benchmarks/test_connection_pool_performance.py`
+**Severity:** CRITICAL → ✅ Mitigated
+**Impact:** 40-60% overhead from per-query connection creation (eliminated)
 
-**Current:**
-
-```python
-def _connect(self) -> sqlite3.Connection:
-    conn = sqlite3.connect(self.db_path)  # New connection each time
-    return conn
-```
-
-**Remediation:** Integrate existing connection pool:
-
-```python
-from kb.store.connection_pool import ConnectionPool
-
-class SQLiteMetadataStore:
-    def __init__(self, db_path: Path):
-        self.db_path = db_path
-        self.pool = ConnectionPool(
-            database=str(db_path),
-            max_connections=10,
-        )
-
-    def _connect(self):
-        return self.pool.get_connection()
-```
+`SQLiteMetadataStore` now acquires every handle via `SQLiteConnectionPool`, so initialization, BM25 search, and ingestion steps reuse pooled WAL-enabled connections with configurable sizes, overflow, and timeouts. The pool registry is keyed by database path, exposing deterministic teardown helpers for tests and scripts. Regression coverage exercises pooling semantics plus a concurrency benchmark that demonstrates >3× throughput under simulated connection latency. The previous `_connect` helper has been replaced by a context manager that delegates to the shared pool, satisfying the original remediation plan in production code.
 
 #### P3. Content Hydration N+1 Query Pattern
 

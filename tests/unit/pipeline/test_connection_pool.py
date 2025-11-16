@@ -286,15 +286,21 @@ class TestGlobalPoolHelpers:
             # Should return same instance
             assert pool1 is pool2
 
+            # Different database should produce a different pool instance
+            other_db = f"{db_path}.other"
+            pool3 = get_connection_pool(other_db, pool_size=5)
+            assert pool3 is not pool1
+
             # Close pool
             close_connection_pool()
 
         finally:
             # Cleanup
-            try:
-                Path(db_path).unlink()
-            except Exception:
-                pass
+            for candidate in (db_path, f"{db_path}.other"):
+                try:
+                    Path(candidate).unlink()
+                except Exception:
+                    pass
 
     def test_close_connection_pool(self):
         """Test closing global pool."""
@@ -308,11 +314,11 @@ class TestGlobalPoolHelpers:
                 conn.execute("SELECT 1")
 
             # Close pool
-            close_connection_pool()
+            close_connection_pool(db_path)
 
             # Getting pool again should create new instance
             pool2 = get_connection_pool(db_path, pool_size=2)
-            assert pool2 is not None
+            assert pool2 is not pool
 
             close_connection_pool()
 
