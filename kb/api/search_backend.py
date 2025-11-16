@@ -492,14 +492,10 @@ class KnowledgeSearchBackend:
 
         repo_filter = set(request.repos) if request.repos else None
         include_prefixes: tuple[str, ...] = (
-            tuple(normalize_path(prefix) for prefix in request.path_prefix)
-            if request.path_prefix
-            else tuple()
+            tuple(normalize_path(prefix) for prefix in request.path_prefix) if request.path_prefix else tuple()
         )
         exclude_prefixes: tuple[str, ...] = (
-            tuple(normalize_path(prefix) for prefix in request.exclude_paths)
-            if request.exclude_paths
-            else tuple()
+            tuple(normalize_path(prefix) for prefix in request.exclude_paths) if request.exclude_paths else tuple()
         )
         exclude_patterns: tuple[str, ...] = tuple(request.exclude_patterns or tuple())
 
