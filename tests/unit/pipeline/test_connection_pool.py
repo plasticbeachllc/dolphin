@@ -325,9 +325,10 @@ class TestGlobalPoolHelpers:
     def test_connection_pools_are_per_database(self):
         """Different database paths should receive isolated pool instances."""
 
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f1, tempfile.NamedTemporaryFile(
-            suffix=".db", delete=False
-        ) as f2:
+        with (
+            tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f1,
+            tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f2,
+        ):
             db_path_1 = f1.name
             db_path_2 = f2.name
 
@@ -348,9 +349,10 @@ class TestGlobalPoolHelpers:
     def test_close_specific_pool(self):
         """Closing a specific pool should not impact other databases."""
 
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f1, tempfile.NamedTemporaryFile(
-            suffix=".db", delete=False
-        ) as f2:
+        with (
+            tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f1,
+            tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f2,
+        ):
             db_path_1 = f1.name
             db_path_2 = f2.name
 

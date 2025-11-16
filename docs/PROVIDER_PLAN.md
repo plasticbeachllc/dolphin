@@ -5,6 +5,40 @@
 **Owner:** Agent Core / VSCode Extension  
 **Status:** Draft – Ready for Implementation
 
+
+## Phase 1 (Agent Core) Alignment
+
+The first implementation milestone focused on getting the Agent Core to boot with
+both Anthropic and OpenAI models, mirroring the original Phase 1 charter for the
+provider initiative. The following deliverables are covered by the current code
+base:
+
+| Deliverable                                      | Status | Notes |
+| ------------------------------------------------ | :----: | ----- |
+| Shared chat provider abstraction (`ChatProvider`) |  ✅   | Implemented in `agent-core/src/execution/chat-provider.ts` and adopted by the orchestrator/editor/architect workflows. |
+| Anthropic + OpenAI client wrappers               |  ✅   | `AnthropicProvider` keeps the CLI + API dual-mode AuthManager, while `OpenAIProvider` uses the new OpenAI Responses adapter with streaming/tool support. |
+| Tool execution engine with provider adapters     |  ✅   | `ToolExecutorEngine` powers both Anthropic and OpenAI adapters (`anthropic-tool-executor.ts`, `openai-tool-executor.ts`). |
+| Provider selection knobs                         |  ✅   | `~/.dolphin/config` + `DOLPHIN_*` env vars select provider/model/temperature; a custom OpenAI-compatible base URL/API key are now supported via `provider.openai` overrides. |
+| MCP workflow integration                         |  ✅   | Both providers use the same MCP tool loop and bubble up token usage to orchestrator telemetry. |
+
+**Default models:** Phase 1 now ships with `claude-sonnet-4-5-20250929` for the Anthropic path. When the OpenAI provider is selected, the editor/coding workflow defaults to `gpt-5.1-codex` while the architect workflow defaults to `gpt-5.1`, keeping runtime behavior aligned with the plan's "Claude 4.5" / "GPT 5.1" targeting without extra configuration.
+
+### Remaining Gaps vs. Original Plan
+
+The broader provider roadmap in `docs/PROVIDER.md` still includes several items
+that are **not** part of the Phase 1 Agent Core drop:
+
+- Canonical `provider_config.toml` manifest + JSON Schema generation (still
+  tracked, but the runtime currently consumes `~/.dolphin/config`).
+- CLI `providers check` validation command.
+- GUI workflow for collecting a custom OpenAI-compatible endpoint.
+- Dynamic pricing feed and cost estimators.
+- MCP Bridge / VS Code wiring (Agent Core only so far).
+
+Those gaps are now explicitly noted here to avoid ambiguity between the plan and
+the repository state. Subsequent phases should re-use the abstractions landed in
+Phase 1 to flesh out the remaining milestones.
+
 ---
 
 ## 1. Vision & Goals

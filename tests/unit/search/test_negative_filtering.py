@@ -16,9 +16,7 @@ class TestNegativeFiltering:
     """Test suite for exclude_paths and exclude_patterns filtering."""
 
     @staticmethod
-    def _legacy_filter_then_score(
-        results: list[dict[str, object]], request: SearchRequest
-    ) -> list[dict[str, object]]:
+    def _legacy_filter_then_score(results: list[dict[str, object]], request: SearchRequest) -> list[dict[str, object]]:
         """Reproduce the historical multi-pass filtering and scoring pipeline."""
 
         import fnmatch

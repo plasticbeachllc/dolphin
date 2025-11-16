@@ -1648,7 +1648,7 @@ export class TokenCounter {
   async count(text: string): Promise<number> {
     // Use Anthropic's count_tokens API
     const response = await this.anthropic.messages.countTokens({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-5-20250929",
       messages: [{ role: "user", content: text }],
     });
 

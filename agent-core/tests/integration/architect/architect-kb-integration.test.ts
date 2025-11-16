@@ -11,56 +11,157 @@ import { ArchitectWorkflow } from "../../../src/workflows/architect-workflow";
 import { ContextBuilder } from "../../../src/context/context-builder";
 import { PromptBuilder } from "../../../src/prompts/prompt-builder";
 import type { TaskInput, WorkflowUpdate, ResearchResult } from "../../../src/types/index";
+import type {
+  ChatProvider,
+  ExecuteParams,
+  ExecuteResult,
+  AuthStatus,
+} from "../../../src/execution/chat-provider";
+import type { UsageStats, ToolExecutorMessage } from "../../../src/llm/tool-executor";
 
-// Simple mock Claude provider for integration tests
-class MockClaudeProvider {
-  async *execute(params: unknown) {
-    const responses = {
-      "claude-haiku-4-20250514": `Based on the KB search results, I found:
+// Simple mock provider for integration tests
+class MockClaudeProvider implements ChatProvider {
+  private totalUsage: UsageStats = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+  };
+
+  async initialize(): Promise<void> {}
+
+  async execute(params: ExecuteParams): Promise<ExecuteResult> {
+    const prompt = params.message ?? "";
+    const response = this.selectResponse(prompt);
+    const usage = this.defaultUsage();
+
+    if (params.onEvent) {
+      for (const char of response) {
+        params.onEvent({ type: "content_delta", delta: char });
+      }
+    }
+
+    this.incrementUsage(usage);
+
+    const history = params.conversationHistory ?? [];
+    const messages: ToolExecutorMessage[] = [
+      ...history,
+      { role: "user", content: prompt },
+      { role: "assistant", content: response },
+    ];
+
+    return {
+      messages,
+      stopReason: "end_turn",
+      toolRounds: 0,
+      usage,
+    };
+  }
+
+  abort(): void {}
+
+  async detectAuthStatus(): Promise<AuthStatus> {
+    return { authenticated: true, mode: "mock" };
+  }
+
+  async ensureAuthenticated(): Promise<void> {}
+
+  getUsage(): UsageStats {
+    return { ...this.totalUsage };
+  }
+
+  getProviderMetadata() {
+    return { provider: "mock", model: "mock-model" };
+  }
+
+  private selectResponse(prompt: string): string {
+    const normalized = prompt.toLowerCase();
+
+    if (normalized.includes("helping with code research") || normalized.includes("begin your research now")) {
+      return `Based on the KB search results, I found:
 - Authentication middleware in src/middleware/auth.ts
 - JWT utilities in src/utils/jwt.ts
 - User model in src/models/user.ts
 
-The codebase follows a standard Express.js pattern with middleware-based auth.`,
+The codebase follows a standard Express.js pattern with middleware-based auth.`;
+    }
 
-      "claude-sonnet-4-20250514": `I have reviewed the codebase and understand the authentication patterns.
+    if (
+      normalized.includes("plan must be provided as a toml code block") ||
+      normalized.includes("creating implementation plan") ||
+      normalized.includes("begin creating the plan now")
+    ) {
+      return `## Overview
+Enhance the existing authentication system with additional security features.
+
+Here is the proposed implementation plan:
+
+${"```toml"}
+plan_version = 1
+overview = """
+Enhance the auth middleware with stronger protections and password policies.
+"""
+complexity = "medium"
+estimated_tokens = 1200
+
+files_to_modify = [
+  "src/middleware/auth.ts",
+  "src/utils/jwt.ts",
+  "src/models/user.ts"
+]
+
+files_to_create = [
+  "src/middleware/rate-limit.ts",
+  "src/utils/password-policy.ts"
+]
+
+[[steps]]
+id = 1
+description = "Introduce shared rate limiting middleware and wire it through auth routes"
+files = ["src/middleware/auth.ts", "src/middleware/rate-limit.ts"]
+estimated_tokens = 400
+
+[[steps]]
+id = 2
+description = "Expand JWT utilities to support refresh rotation and revocation lists"
+files = ["src/utils/jwt.ts"]
+estimated_tokens = 300
+
+[[steps]]
+id = 3
+description = "Store password policy settings on the user model with validation helpers"
+files = ["src/models/user.ts", "src/utils/password-policy.ts"]
+estimated_tokens = 300
+${"```"}
+
+## Implementation Steps
+1. Add rate limiting to auth endpoints (estimated 400 tokens)
+2. Implement password complexity requirements (estimated 300 tokens)
+3. Add refresh token rotation (estimated 300 tokens)`;
+    }
+
+    if (normalized.includes("clarification phase")) {
+      return `I have reviewed the codebase and understand the authentication patterns.
 
 Questions for clarification:
 1. Should we extend the existing JWT implementation or replace it?
 2. Do we need to support multiple authentication methods?
 
-[READY_TO_PLAN]`,
-
-      "claude-opus-4-20250514": `## Overview
-Enhance the existing authentication system with additional security features.
-
-## Files to Modify
-- \`src/middleware/auth.ts\`
-- \`src/utils/jwt.ts\`
-- \`src/models/user.ts\`
-
-## Files to Create
-- \`src/middleware/rate-limit.ts\`
-- \`src/utils/password-policy.ts\`
-
-## Implementation Steps
-1. Add rate limiting to auth endpoints
-2. Implement password complexity requirements
-3. Add refresh token rotation
-4. Enhance token validation
-
-## Complexity
-medium`,
-    };
-
-    const response = responses[params.model as keyof typeof responses] || "Mock response";
-
-    for (const char of response) {
-      yield {
-        type: "text" as const,
-        content: char,
-      };
+[READY_TO_PLAN]`;
     }
+
+    return "Acknowledged.";
+  }
+
+  private defaultUsage(): UsageStats {
+    return { inputTokens: 15, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0 };
+  }
+
+  private incrementUsage(usage: UsageStats) {
+    this.totalUsage.inputTokens += usage.inputTokens;
+    this.totalUsage.outputTokens += usage.outputTokens;
+    this.totalUsage.cacheReadTokens += usage.cacheReadTokens;
+    this.totalUsage.cacheWriteTokens += usage.cacheWriteTokens;
   }
 }
 
@@ -123,7 +224,7 @@ describe("ArchitectWorkflow KB Integration", () => {
     const claudeProvider = new MockClaudeProvider();
 
     workflow = new ArchitectWorkflow({
-      claudeProvider: claudeProvider as unknown,
+      chatProvider: claudeProvider as unknown as ChatProvider,
       contextBuilder: contextBuilder as unknown,
       promptBuilder,
       maxClarificationTurns: 2,
@@ -415,7 +516,7 @@ describe("ArchitectWorkflow KB Integration", () => {
       });
 
       const offlineWorkflow = new ArchitectWorkflow({
-        claudeProvider: new MockClaudeProvider() as unknown,
+        chatProvider: new MockClaudeProvider() as unknown as ChatProvider,
         contextBuilder: offlineContextBuilder as unknown,
         promptBuilder: new PromptBuilder(),
       });

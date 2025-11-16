@@ -65,7 +65,7 @@ export async function* runClaudeCode(
   const {
     systemPrompt,
     messages,
-    model = "claude-sonnet-4-20250514",
+    model = "claude-sonnet-4-5-20250929",
     maxOutputTokens = 16000,
     cwd,
     timeout: _timeout = 600000, // 10 minutes like Kilocode

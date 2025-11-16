@@ -11,7 +11,7 @@ export const MODELS = {
   RESEARCH: "claude-haiku-4-20250514" as const,
 
   /** Balanced model for clarification and reasoning */
-  CLARIFICATION: "claude-sonnet-4-20250514" as const,
+  CLARIFICATION: "claude-sonnet-4-5-20250929" as const,
 
   /** Most capable model for complex planning */
   PLANNING: "claude-opus-4-20250514" as const,

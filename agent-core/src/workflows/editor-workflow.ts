@@ -1,6 +1,6 @@
 // agent-core/src/workflows/editor-workflow.ts
 import type { IWorkflow, TaskInput, WorkflowUpdate } from "../types/index";
-import type { ClaudeProvider } from "../execution/claude-provider";
+import type { ChatProvider } from "../execution/chat-provider";
 import type { ContextBuilder } from "../context/context-builder";
 import type { PromptBuilder } from "../prompts/prompt-builder";
 import type { StateStore } from "../state/state-store";
@@ -10,7 +10,7 @@ import type { AgentEvent } from "../../../shared/types/events";
  * Configuration for EditorWorkflow
  */
 export interface EditorWorkflowConfig {
-  claudeProvider: ClaudeProvider;
+  chatProvider: ChatProvider;
   contextBuilder: ContextBuilder;
   promptBuilder: PromptBuilder;
   stateStore: StateStore;
@@ -84,7 +84,7 @@ export class EditorWorkflow implements IWorkflow {
       const startTime = Date.now();
 
       // Collect events and forward them
-      const result = await this.config.claudeProvider.execute({
+      const result = await this.config.chatProvider.execute({
         message: systemPrompt,
         conversationHistory: input.conversationHistory,
         onEvent: (event: AgentEvent) => {
@@ -122,12 +122,13 @@ export class EditorWorkflow implements IWorkflow {
 
       // Step 5: Save state
       try {
+        const providerInfo = this.config.chatProvider.getProviderMetadata();
         await this.config.stateStore.saveSession({
           id: sessionId,
           mode: "editor",
           state: "complete",
           metadata: {
-            modelUsed: ["claude-sonnet-4-20250514"],
+            modelUsed: [providerInfo.model],
             tokensUsed: result.usage.inputTokens + result.usage.outputTokens,
             estimatedCost: 0, // TODO: calculate based on mode
             startedAt: new Date(startTime).toISOString(),

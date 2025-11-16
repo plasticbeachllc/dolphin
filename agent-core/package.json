@@ -17,6 +17,7 @@
     "@iarna/toml": "^2.2.5",
     "diff": "^8.0.2",
     "marked": "^17.0.0",
+    "openai": "^4.104.0",
     "toml": "^3.0.0",
     "uuid": "^13.0.0",
     "vscode-jsonrpc": "^8.2.1",

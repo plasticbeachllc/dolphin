@@ -62,7 +62,7 @@ export interface TokenCounterLike {
 }
 
 const DEFAULT_CONFIG: TokenCounterConfig = {
-  defaultModel: "claude-sonnet-4-20250514",
+  defaultModel: "claude-sonnet-4-5-20250929",
   cacheTTLms: 15 * 60 * 1000,
   cacheMaxEntries: 512,
   estimationCharsPerToken: 4,

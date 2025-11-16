@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { ClaudeProvider, AuthManager } from "../../../src/execution/claude-provider";
+import { AnthropicProvider, AuthManager } from "../../../src/execution/anthropic-provider";
 import { existsSync, writeFileSync, mkdirSync, unlinkSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -167,11 +167,11 @@ describe("Claude Authentication Integration", () => {
     });
   });
 
-  describe("ClaudeProvider Authentication", () => {
-    let provider: ClaudeProvider;
+  describe("AnthropicProvider Authentication", () => {
+    let provider: AnthropicProvider;
 
     beforeEach(() => {
-      provider = new ClaudeProvider({
+      provider = new AnthropicProvider({
         workspaceRoot: "/test/workspace",
         authManager: new AuthManager({ settingsPath: testSettingsPath }),
       });

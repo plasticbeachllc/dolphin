@@ -27,11 +27,11 @@ Phase 1 implementation is **complete** with all core components delivered and te
 | #   | Criterion                                      | Status | Evidence                                                                                                                                                    |
 | --- | ---------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Editor Mode can handle simple tasks end-to-end | ✅     | [`editor-workflow.ts`](../src/workflows/editor-workflow.ts) + [`editor-workflow.test.ts`](../tests/integration/editor-workflow.test.ts) (323 lines)         |
-| 2   | Claude CLI subprocess spawning works reliably  | ✅     | [`claude-provider.ts`](../src/execution/claude-provider.ts) (493 lines) with process lifecycle management                                                   |
+| 2   | Claude CLI subprocess spawning works reliably  | ✅     | [`anthropic-provider.ts`](../src/execution/anthropic-provider.ts) with process lifecycle management                                                   |
 | 3   | KB search integration functional               | ✅     | [`context-builder.ts`](../src/context/context-builder.ts) (320 lines) + [`kb-integration.test.ts`](../tests/integration/kb-integration.test.ts) (443 lines) |
 | 4   | State persists in TOML correctly               | ✅     | [`state-store.ts`](../src/state/state-store.ts) (459 lines) + [`state-store.test.ts`](../tests/unit/state-store.test.ts) (334 lines)                        |
 | 5   | 100+ tests passing                             | ✅     | 110+ test cases across 7 test suites                                                                                                                        |
-| 6   | Authentication detection works                 | ✅     | [`claude-provider.ts`](../src/execution/claude-provider.ts) AuthManager + [`claude-auth.test.ts`](../tests/integration/claude-auth.test.ts) (355 lines)     |
+| 6   | Authentication detection works                 | ✅     | [`anthropic-provider.ts`](../src/execution/anthropic-provider.ts) AuthManager + [`claude-auth.test.ts`](../tests/integration/claude-auth.test.ts) (355 lines)     |
 | 7   | Streaming responses display in extension       | 🔜     | Ready for Phase 2 VSCode extension integration                                                                                                              |
 
 **Overall Status:** ✅ **6/7 criteria met** (streaming display deferred to Phase 2 UI work)
@@ -87,9 +87,9 @@ Phase 1 implementation is **complete** with all core components delivered and te
 
 ### Week 2: Claude Provider & Workflows
 
-#### ✅ ClaudeProvider (493 lines)
+#### ✅ ChatProvider (Anthropic/OpenAI)
 
-- **File:** [`src/execution/claude-provider.ts`](../src/execution/claude-provider.ts)
+- **File:** [`src/execution/anthropic-provider.ts`](../src/execution/anthropic-provider.ts)
 - **Features:**
   - CLI subprocess spawning with proper lifecycle management
   - Multi-model support mapping: Haiku (research), Opus (planning), Sonnet (coding)
@@ -117,7 +117,7 @@ Phase 1 implementation is **complete** with all core components delivered and te
   - API key detection (`ANTHROPIC_API_KEY`)
   - Priority handling (OAuth > API key)
   - Warning system for pay-as-you-go
-- **Implementation:** [`AuthManager`](../src/execution/claude-provider.ts:436-493) class
+- **Implementation:** [`AuthManager`](../src/execution/anthropic-provider.ts:1-120) class
 
 ---
 
@@ -221,7 +221,7 @@ Phase 1 implementation is **complete** with all core components delivered and te
 | [`state-store.ts`](../src/state/state-store.ts)             | 459   | TOML persistence & versioning         | ✅     |
 | [`json-rpc.ts`](../src/utils/json-rpc.ts)                   | 291   | Extension communication protocol      | ✅     |
 | [`types/index.ts`](../src/types/index.ts)                   | 506   | TypeScript type system                | ✅     |
-| [`claude-provider.ts`](../src/execution/claude-provider.ts) | 493   | Multi-model CLI execution             | ✅     |
+| [`anthropic-provider.ts`](../src/execution/anthropic-provider.ts) | 493   | Multi-model CLI execution             | ✅     |
 | [`editor-workflow.ts`](../src/workflows/editor-workflow.ts) | 260   | Fast-path execution                   | ✅     |
 | [`context-builder.ts`](../src/context/context-builder.ts)   | 320   | KB integration & context assembly     | ✅     |
 | [`prompt-builder.ts`](../src/prompts/prompt-builder.ts)     | 207   | Phase-specific prompts                | ✅     |
@@ -266,12 +266,12 @@ idle → researching → planning → awaiting_approval → executing → comple
 MODEL_CONFIG = {
   research: "claude-haiku-4-20250514", // Fast exploration
   planning: "claude-opus-4-20250514", // Best reasoning
-  coding: "claude-sonnet-4-20250514", // Balanced
-  editor: "claude-sonnet-4-20250514", // Fast & capable
+  coding: "claude-sonnet-4-5-20250929", // Balanced
+  editor: "claude-sonnet-4-5-20250929", // Fast & capable
 };
 ```
 
-**Validated by:** [`claude-provider.ts`](../src/execution/claude-provider.ts:35-40)
+**Validated by:** [`anthropic-provider.ts`](../src/execution/anthropic-provider.ts:1-120)
 
 ### Context Priority System ✅
 
