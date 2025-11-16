@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import math
+import os
+import random
 import time
 import uuid
 from collections.abc import Sequence
@@ -15,6 +16,8 @@ from ..constants.retrieval_config import RETRIEVAL_PARAMS
 from ..embeddings.provider import EmbeddingProvider, create_provider, set_default_provider
 from ..observability.structured_logger import StructuredLogger
 from ..retrieval.ann_tuning import ANNParams
+from ..retrieval.bm25_normalizer import MinMaxNormalizer, QuantileNormalizer, ScoreNormalizer, SigmoidNormalizer
+from ..retrieval.bm25_stats import BM25Statistics
 from ..retrieval.cross_encoder_rerank import CrossEncoderReranker
 from ..retrieval.graph_context import GraphContextEnricher
 from ..retrieval.rankers import maximal_marginal_relevance, reciprocal_rank_fusion
@@ -58,6 +61,98 @@ class KnowledgeSearchBackend:
                 max_related_nodes=10,
                 max_edges_per_node=5,
             )
+        self._bm25_stats_path = self._resolve_bm25_stats_path()
+        self._bm25_normalizer: ScoreNormalizer | None = None
+        self._bm25_normalizer_metadata: dict[str, Any] = {}
+        self._configure_bm25_statistics_collection()
+
+    def _resolve_bm25_stats_path(self) -> Path:
+        env_override = os.environ.get("DOLPHIN_BM25_STATS_PATH")
+        if env_override:
+            return Path(env_override).expanduser()
+        if self.config and self.config.retrieval.bm25_normalization.stats_path:
+            return Path(self.config.retrieval.bm25_normalization.stats_path).expanduser()
+        if self.config:
+            return self.config.resolved_store_root() / RETRIEVAL_PARAMS.BM25_NORMALIZATION.stats_filename
+        return Path.home() / ".dolphin" / "knowledge_store" / RETRIEVAL_PARAMS.BM25_NORMALIZATION.stats_filename
+
+    def _configure_bm25_statistics_collection(self) -> None:
+        if not hasattr(self.sql_store, "configure_bm25_statistics"):
+            return
+        try:
+            self.sql_store.configure_bm25_statistics(self._bm25_stats_path)
+        except Exception as exc:  # pragma: no cover - defensive
+            self.logger.warning("Failed to enable BM25 statistics collection", error=exc)
+
+    def _load_bm25_stats(self) -> BM25Statistics | None:
+        if not self._bm25_stats_path or not self._bm25_stats_path.exists():
+            return None
+        try:
+            stats = BM25Statistics.load(self._bm25_stats_path)
+        except Exception as exc:
+            self.logger.warning("Unable to load BM25 stats", {"path": str(self._bm25_stats_path)}, error=exc)
+            return None
+        min_sample = RETRIEVAL_PARAMS.BM25_NORMALIZATION.min_sample_size
+        if stats.sample_size < min_sample:
+            self.logger.debug(
+                "BM25 stats present but below minimum sample size",
+                {"sample_size": stats.sample_size, "required": min_sample},
+            )
+            return None
+        return stats
+
+    def _build_bm25_normalizer(self) -> ScoreNormalizer:
+        defaults = RETRIEVAL_PARAMS.BM25_NORMALIZATION
+        config = self.config.retrieval.bm25_normalization if self.config else None
+        forced_strategy = os.environ.get("DOLPHIN_FORCE_BM25_NORMALIZER")
+        requested = (forced_strategy or (config.strategy if config else defaults.default_strategy)).lower()
+        fallback = (config.fallback_strategy if config else defaults.fallback_strategy).lower()
+        probability = config.ab_variant_probability if config else defaults.ab_variant_probability
+        stats: BM25Statistics | None = None
+        selected = requested
+        variant_applied = True
+        if not forced_strategy and selected != fallback and 0.0 < probability < 1.0:
+            roll = random.random()
+            if roll > probability:
+                selected = fallback
+                variant_applied = False
+        if selected in {"min_max", "quantile"}:
+            stats = self._load_bm25_stats()
+            if not stats:
+                self.logger.warning(
+                    "BM25 stats unavailable, reverting to fallback",
+                    {"requested": selected, "fallback": fallback},
+                )
+                selected = fallback
+        if selected == "min_max" and stats:
+            normalizer: ScoreNormalizer = MinMaxNormalizer(stats)
+        elif selected == "quantile" and stats:
+            normalizer = QuantileNormalizer(stats)
+        else:
+            normalizer = SigmoidNormalizer(RETRIEVAL_PARAMS.BM25_SCORE_NORMALIZATION_FACTOR)
+            selected = "sigmoid"
+        self._bm25_normalizer_metadata = {
+            "strategy": selected,
+            "requested": requested,
+            "fallback": fallback,
+            "forced": bool(forced_strategy),
+            "ab_probability": probability,
+            "ab_variant_enabled": variant_applied,
+            "stats_path": str(self._bm25_stats_path),
+            "stats_sample_size": (stats.sample_size if stats else 0),
+        }
+        self.logger.debug("BM25 normalizer initialized", self._bm25_normalizer_metadata)
+        return normalizer
+
+    def _normalize_bm25_score(self, score: float) -> float:
+        if self._bm25_normalizer is None:
+            self._bm25_normalizer = self._build_bm25_normalizer()
+        try:
+            return float(self._bm25_normalizer.normalize(score))
+        except Exception as exc:  # pragma: no cover - defensive
+            self.logger.warning("BM25 normalization failed, reverting to sigmoid", error=exc)
+            self._bm25_normalizer = SigmoidNormalizer(RETRIEVAL_PARAMS.BM25_SCORE_NORMALIZATION_FACTOR)
+            return float(self._bm25_normalizer.normalize(score))
 
     def search(self, request: SearchRequest) -> Sequence[dict[str, object]]:
         # Generate correlation ID for this search request
@@ -507,9 +602,7 @@ class KnowledgeSearchBackend:
                 chunk_data = sql_store.get_chunk_by_id(chunk_id)
 
             # Normalize BM25 score to [0, 1] range for fusion
-            # BM25 scores are unbounded, use sigmoid normalization
-            bm25_score = result["score"]
-            normalized_score = 1 / (1 + math.exp(-bm25_score / RETRIEVAL_PARAMS.BM25_SCORE_NORMALIZATION_FACTOR))
+            normalized_score = self._normalize_bm25_score(result["score"])
 
             # Create result dict with available data
             hydrated_result = {

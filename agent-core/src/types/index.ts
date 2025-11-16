@@ -171,6 +171,7 @@ export interface KBResult {
   language: string;
   score: number;
   chunkId: string;
+  tokens?: number;
 }
 
 /**

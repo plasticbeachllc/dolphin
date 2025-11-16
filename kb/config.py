@@ -76,6 +76,14 @@ class HybridSearchConfig:
 
 
 @dataclass
+class BM25NormalizationRuntimeConfig:
+    strategy: str = "sigmoid"
+    stats_path: str | None = None
+    fallback_strategy: str = "sigmoid"
+    ab_variant_probability: float = 0.0
+
+
+@dataclass
 class ANNConfig:
     strategy: str = "adaptive"
     metric: str = "cosine"
@@ -93,6 +101,7 @@ class RetrievalConfig:
     max_snippet_tokens: int = 240
     mmr_enabled: bool = True
     mmr_lambda: float = 0.7
+    bm25_normalization: BM25NormalizationRuntimeConfig = field(default_factory=BM25NormalizationRuntimeConfig)
 
 
 @dataclass
@@ -186,16 +195,36 @@ class KBConfig:
         return config
 
     @classmethod
+    def _build_bm25_normalization_config(cls, data: dict) -> BM25NormalizationRuntimeConfig:
+        """Build BM25 normalization configuration from mapping."""
+        config = BM25NormalizationRuntimeConfig()
+        if not data:
+            return config
+
+        if "strategy" in data:
+            config.strategy = str(data["strategy"]).lower()
+        if data.get("stats_path"):
+            config.stats_path = str(data["stats_path"])
+        if "fallback_strategy" in data:
+            config.fallback_strategy = str(data["fallback_strategy"]).lower()
+        if "ab_variant_probability" in data:
+            config.ab_variant_probability = cls._coerce_optional(data["ab_variant_probability"], float)
+
+        return config
+
+    @classmethod
     def _build_retrieval_config(cls, data: dict) -> RetrievalConfig:
         """Build retrieval configuration from mapping."""
         reranking_data = data.get("reranking", {}) if isinstance(data, dict) else {}
         hybrid_search_data = data.get("hybrid_search", {}) if isinstance(data, dict) else {}
         ann_data = data.get("ann", {}) if isinstance(data, dict) else {}
+        bm25_data = data.get("bm25_normalization", {}) if isinstance(data, dict) else {}
 
         config = RetrievalConfig(
             reranking=cls._build_reranking_config(reranking_data),
             hybrid_search=cls._build_hybrid_search_config(hybrid_search_data),
             ann=cls._build_ann_config(ann_data),
+            bm25_normalization=cls._build_bm25_normalization_config(bm25_data),
         )
 
         if "score_cutoff" in data:

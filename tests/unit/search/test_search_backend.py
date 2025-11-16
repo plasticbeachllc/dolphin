@@ -5,6 +5,9 @@ import pytest
 
 from kb.api.app import SearchRequest
 from kb.api.search_backend import KnowledgeSearchBackend, create_search_backend
+from kb.config import KBConfig
+from kb.retrieval.bm25_normalizer import SigmoidNormalizer
+from kb.retrieval.bm25_stats import BM25Statistics
 
 
 @pytest.fixture
@@ -21,6 +24,7 @@ def mock_providers():
             "get_repo_by_name",
             "get_file_id",
             "index_chunk_for_fts",
+            "configure_bm25_statistics",
         ]
     )
     return embedding_provider, lance_store, sql_store
@@ -161,6 +165,57 @@ class TestKnowledgeSearchBackend:
         sql_store.get_chunk_by_id.assert_not_called()
         assert hydrated[0]["start_line"] == 10
         assert hydrated[0]["chunk_id"] == deterministic_id
+
+    def test_bm25_normalization_uses_min_max_when_stats_available(self, tmp_path: Path):
+        stats_path = tmp_path / "bm25_stats.json"
+        stats = BM25Statistics(
+            min_score=0.0,
+            max_score=40.0,
+            mean=10.0,
+            median=8.0,
+            std=2.5,
+            p05=1.0,
+            p25=5.0,
+            p75=12.0,
+            p95=20.0,
+            p99=30.0,
+            sample_size=200,
+        )
+        stats.save(stats_path)
+        config = KBConfig.from_mapping(
+            {
+                "storage": {"store_root": str(tmp_path)},
+                "retrieval": {"bm25_normalization": {"strategy": "min_max", "stats_path": str(stats_path)}},
+            }
+        )
+        embedding_provider = MagicMock()
+        lance_store = MagicMock()
+        sql_store = MagicMock(spec=["configure_bm25_statistics"])
+        backend = KnowledgeSearchBackend(embedding_provider, lance_store, sql_store, config=config)
+
+        normalized = backend._normalize_bm25_score(20.0)
+
+        assert normalized == pytest.approx(0.5, rel=1e-3)
+        sql_store.configure_bm25_statistics.assert_called_once()
+
+    def test_bm25_normalization_falls_back_without_stats(self, tmp_path: Path):
+        missing_path = tmp_path / "absent_stats.json"
+        config = KBConfig.from_mapping(
+            {
+                "storage": {"store_root": str(tmp_path)},
+                "retrieval": {"bm25_normalization": {"strategy": "min_max", "stats_path": str(missing_path)}},
+            }
+        )
+        embedding_provider = MagicMock()
+        lance_store = MagicMock()
+        sql_store = MagicMock(spec=["configure_bm25_statistics"])
+        backend = KnowledgeSearchBackend(embedding_provider, lance_store, sql_store, config=config)
+
+        value = 12.0
+        normalized = backend._normalize_bm25_score(value)
+        expected = SigmoidNormalizer().normalize(value)
+
+        assert normalized == pytest.approx(expected, rel=1e-6)
 
 
 @pytest.fixture
