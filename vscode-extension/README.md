@@ -157,7 +157,10 @@ export ANTHROPIC_API_KEY=sk-ant-...
 uv run dolphin serve
 ```
 
-The KB server runs on `http://localhost:8000` by default.
+The KB server runs on `http://127.0.0.1:7777` by default. If you are running the
+Knowledge Bank elsewhere (containers, remote host, etc.) override the endpoint
+with the VS Code setting **`dolphin.kb.apiBaseUrl`** so the extension and its
+tests can talk to the correct server without environment variables.
 
 **Production Mode** (planned): KB server will auto-start with the extension.
 
@@ -237,12 +240,21 @@ See [TESTING-GUIDE.md](../docs/TESTING-GUIDE.md) for complete testing instructio
 ### Extension Tests
 
 ```bash
-# Run extension tests
+# Run the full VS Code test suite headlessly
 npm test
+
+# Filter by label (unit, integration, e2e)
+npm test -- --label unit
+npm test -- --label integration
+npm test -- --label e2e
 
 # Compile and watch
 npm run watch
 ```
+
+The `.vscode-test.mjs` config pins a VS Code build and launches Electron with
+headless-friendly flags, so no additional environment variables or xvfb setup is
+required in CI.
 
 ### Integration Testing
 
@@ -303,7 +315,7 @@ See [Implementation Status](../docs/IMPLEMENTATION-STATUS.md) for roadmap.
 
 ```bash
 # Check if KB is running
-curl http://localhost:8000/health
+curl http://127.0.0.1:7777/health
 
 # If not, start it
 uv run dolphin serve

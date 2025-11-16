@@ -87,6 +87,11 @@
           "default": 2000,
           "description": "Milliseconds to wait after file change before indexing"
         },
+        "dolphin.kb.apiBaseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:7777",
+          "description": "Base URL for the Dolphin knowledge base API"
+        },
         "dolphin.kb.batchIntervalMs": {
           "type": "number",
           "default": 5000,
