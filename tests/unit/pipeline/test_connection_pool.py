@@ -322,6 +322,60 @@ class TestGlobalPoolHelpers:
             except Exception:
                 pass
 
+    def test_connection_pools_are_per_database(self):
+        """Different database paths should receive isolated pool instances."""
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f1, tempfile.NamedTemporaryFile(
+            suffix=".db", delete=False
+        ) as f2:
+            db_path_1 = f1.name
+            db_path_2 = f2.name
+
+        try:
+            pool1 = get_connection_pool(db_path_1, pool_size=2)
+            pool2 = get_connection_pool(db_path_2, pool_size=2)
+
+            assert pool1 is not pool2
+
+            close_connection_pool()
+        finally:
+            for db_path in (db_path_1, db_path_2):
+                try:
+                    Path(db_path).unlink()
+                except Exception:
+                    pass
+
+    def test_close_specific_pool(self):
+        """Closing a specific pool should not impact other databases."""
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f1, tempfile.NamedTemporaryFile(
+            suffix=".db", delete=False
+        ) as f2:
+            db_path_1 = f1.name
+            db_path_2 = f2.name
+
+        try:
+            pool1 = get_connection_pool(db_path_1, pool_size=2)
+            pool2 = get_connection_pool(db_path_2, pool_size=2)
+
+            close_connection_pool(db_path_1)
+
+            # Pool for db_path_2 should remain usable
+            with pool2.connection() as conn:
+                conn.execute("SELECT 1")
+
+            # Requesting db_path_1 again should yield a new instance
+            pool1_recreated = get_connection_pool(db_path_1, pool_size=2)
+            assert pool1_recreated is not pool1
+
+            close_connection_pool()
+        finally:
+            for db_path in (db_path_1, db_path_2):
+                try:
+                    Path(db_path).unlink()
+                except Exception:
+                    pass
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

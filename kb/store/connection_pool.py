@@ -10,8 +10,10 @@ import logging
 import sqlite3
 import threading
 from contextlib import contextmanager
+from pathlib import Path
 from queue import Empty, Full, Queue
 from typing import Any
+from weakref import WeakValueDictionary
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,7 @@ class SQLiteConnectionPool:
 
     def __init__(
         self,
-        database: str,
+        database: str | Path,
         pool_size: int = 10,
         max_overflow: int = 5,
         timeout: float = 30.0,
@@ -47,7 +49,7 @@ class SQLiteConnectionPool:
             timeout: Connection acquisition timeout (seconds)
             enable_wal: Enable WAL mode for better concurrency
         """
-        self.database = database
+        self.database = str(Path(database).expanduser())
         self.pool_size = pool_size
         self.max_overflow = max_overflow
         self.timeout = timeout
@@ -87,6 +89,9 @@ class SQLiteConnectionPool:
         # Enable WAL mode for better concurrency
         if self.enable_wal:
             conn.execute("PRAGMA journal_mode=WAL")
+
+        # Always enforce foreign key constraints for metadata integrity
+        conn.execute("PRAGMA foreign_keys=ON")
 
         # Optimization pragmas
         conn.execute("PRAGMA synchronous=NORMAL")
@@ -226,40 +231,46 @@ class SQLiteConnectionPool:
         self.close_all()
 
 
-# Global pool instance
-_connection_pool: SQLiteConnectionPool | None = None
+# Weak registry of pools keyed by normalized db path
+_connection_pools: WeakValueDictionary[str, SQLiteConnectionPool] = WeakValueDictionary()
+
+
+def _normalize_db_path(database: str | Path) -> str:
+    """Normalize a database path for consistent keying."""
+
+    path = Path(database).expanduser()
+    return str(path.absolute())
 
 
 def get_connection_pool(
-    database: str,
+    database: str | Path,
     pool_size: int = 10,
     max_overflow: int = 5,
 ) -> SQLiteConnectionPool:
-    """Get or create global connection pool.
+    """Get or create a connection pool for the provided database path."""
 
-    Args:
-        database: Database path
-        pool_size: Pool size
-        max_overflow: Max overflow connections
-
-    Returns:
-        Global SQLiteConnectionPool instance
-    """
-    global _connection_pool
-
-    if _connection_pool is None:
-        _connection_pool = SQLiteConnectionPool(
-            database=database,
+    db_key = _normalize_db_path(database)
+    pool = _connection_pools.get(db_key)
+    if pool is None:
+        pool = SQLiteConnectionPool(
+            database=db_key,
             pool_size=pool_size,
             max_overflow=max_overflow,
         )
+        _connection_pools[db_key] = pool
+    return pool
 
-    return _connection_pool
 
+def close_connection_pool(database: str | Path | None = None) -> None:
+    """Close one or all registered connection pools."""
 
-def close_connection_pool() -> None:
-    """Close the global connection pool."""
-    global _connection_pool
-    if _connection_pool is not None:
-        _connection_pool.close_all()
-        _connection_pool = None
+    if database is None:
+        for pool in list(_connection_pools.values()):
+            pool.close_all()
+        _connection_pools.clear()
+        return
+
+    db_key = _normalize_db_path(database)
+    pool = _connection_pools.pop(db_key, None)
+    if pool is not None:
+        pool.close_all()

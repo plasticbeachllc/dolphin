@@ -699,6 +699,8 @@ Columns:
 - ✅ Repository listing with stats
 - ✅ Hybrid search (BM25 + Vector with RRF scoring)
 - ✅ Stats-driven BM25 normalization with ingest-time collectors and min/max/quantile strategies
+- ✅ SQLiteMetadataStore reuses a WAL-enabled connection pool for every query path
+- ✅ Search backend applies repo/path filtering + config penalties in a single pass
 - ✅ Maximal Marginal Relevance (MMR) for diverse results
 - ✅ Cross-encoder reranking (optional)
 - ✅ Chunk and file retrieval

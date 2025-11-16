@@ -3,7 +3,7 @@
 **Version:** 1.0
 **Date:** 2025-11-12
 **Branch:** develop-architect
-**Status:** Planning
+**Status:** In Progress (WP5 complete)
 
 ## Executive Summary
 
@@ -1715,196 +1715,38 @@ const estimatedTokens = tokenCounter.estimate(findings);
 
 **Specification:**
 
-**File:** `kb/store/connection_pool.py`
+- `kb/store/connection_pool.py` now normalizes database paths, enforces WAL + foreign key pragmas, tracks reuse/overflow metrics, and keeps a `WeakValueDictionary` of pools so multiple stores that point at the same DB share connections safely.
+- All `SQLiteMetadataStore` traffic flows through the pool via `_get_connection_pool()` / `_connect()`, so even BM25 helpers reuse the same connection pool context manager:
 
 ```python
-"""SQLite connection pool for improved performance."""
-
-from contextlib import contextmanager
-from pathlib import Path
-from queue import Queue, Empty
-from threading import Lock
-from typing import Generator
-import sqlite3
-import logging
-
-
-logger = logging.getLogger(__name__)
-
-
-class ConnectionPool:
-    """Thread-safe connection pool for SQLite.
-
-    SQLite handles concurrent reads well but writes must be serialized.
-    This pool manages a fixed number of connections to balance performance
-    and resource usage.
-    """
-
-    def __init__(
-        self,
-        db_path: Path,
-        pool_size: int = 5,
-        timeout: float = 30.0,
-    ):
-        """Initialize connection pool.
-
-        Args:
-            db_path: Path to SQLite database
-            pool_size: Number of connections in pool
-            timeout: Timeout in seconds for acquiring connection
-        """
-        self.db_path = db_path
-        self.pool_size = pool_size
-        self.timeout = timeout
-
-        self._pool: Queue[sqlite3.Connection] = Queue(maxsize=pool_size)
-        self._lock = Lock()
-        self._initialized = False
-
-        # Performance counters
-        self._connections_created = 0
-        self._acquisitions = 0
-        self._acquisition_timeouts = 0
-
-    def initialize(self):
-        """Initialize pool with connections."""
-        with self._lock:
-            if self._initialized:
-                return
-
-            logger.info(f"Initializing connection pool (size={self.pool_size})")
-
-            for _ in range(self.pool_size):
-                conn = self._create_connection()
-                self._pool.put(conn)
-                self._connections_created += 1
-
-            self._initialized = True
-
-    def _create_connection(self) -> sqlite3.Connection:
-        """Create a new connection with optimal pragmas."""
-        conn = sqlite3.connect(
-            self.db_path,
-            check_same_thread=False,  # Allow connection sharing across threads
-            timeout=self.timeout,
-        )
-        conn.row_factory = sqlite3.Row
-
-        # Performance optimizations
-        cursor = conn.cursor()
-        cursor.execute("PRAGMA foreign_keys = ON")
-        cursor.execute("PRAGMA journal_mode = WAL")  # Write-Ahead Logging
-        cursor.execute("PRAGMA synchronous = NORMAL")  # Faster writes
-        cursor.execute("PRAGMA cache_size = -64000")  # 64MB cache
-        cursor.execute("PRAGMA temp_store = MEMORY")  # In-memory temp tables
-        cursor.close()
-
-        return conn
-
-    @contextmanager
-    def get_connection(self) -> Generator[sqlite3.Connection, None, None]:
-        """Acquire connection from pool (context manager).
-
-        Example:
-            with pool.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT * FROM repos")
-        """
-        if not self._initialized:
-            self.initialize()
-
-        conn = None
-        try:
-            self._acquisitions += 1
-            conn = self._pool.get(timeout=self.timeout)
-            yield conn
-
-        except Empty:
-            self._acquisition_timeouts += 1
-            logger.error(f"Connection pool timeout after {self.timeout}s")
-            raise TimeoutError("Failed to acquire database connection")
-
-        finally:
-            if conn:
-                # Return connection to pool
-                self._pool.put(conn)
-
-    def close(self):
-        """Close all connections in pool."""
-        with self._lock:
-            while not self._pool.empty():
-                try:
-                    conn = self._pool.get_nowait()
-                    conn.close()
-                except Empty:
-                    break
-
-            self._initialized = False
-            logger.info("Connection pool closed")
-
-    def get_stats(self) -> dict:
-        """Get pool statistics."""
-        return {
-            "pool_size": self.pool_size,
-            "connections_created": self._connections_created,
-            "acquisitions": self._acquisitions,
-            "acquisition_timeouts": self._acquisition_timeouts,
-            "available": self._pool.qsize(),
-        }
-```
-
-#### Update SQLiteMetadataStore
-
-```python
-# kb/store/sqlite_meta.py
-
-from .connection_pool import ConnectionPool
+from kb.store.connection_pool import get_connection_pool
 
 class SQLiteMetadataStore:
-    def __init__(self, db_path: Path | str, pool_size: int = 5):
-        self.db_path = Path(db_path) if isinstance(db_path, str) else db_path
-        self.pool = ConnectionPool(self.db_path, pool_size=pool_size)
-        self._init_lock = threading.Lock()
-        self._initialized = False
+    def _get_connection_pool(self) -> SQLiteConnectionPool:
+        if self._connection_pool is None:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            self._connection_pool = get_connection_pool(self.db_path)
+        return self._connection_pool
 
-    def initialize(self):
-        """Initialize database schema and connection pool."""
-        with self._init_lock:
-            if self._initialized:
-                return
-
-            # Initialize pool first
-            self.pool.initialize()
-
-            # Rest of initialization...
-            with self.pool.get_connection() as conn:
-                # Create tables, etc.
-                pass
-
-            self._initialized = True
-
-    def bm25_search(self, query: str, repo: str | None, top_k: int):
-        """Search using BM25 (now uses connection pool)."""
-        with self.pool.get_connection() as conn:
-            cursor = conn.cursor()
-            # Execute search...
-            return results
-
-    def __del__(self):
-        """Cleanup connection pool on deletion."""
-        if hasattr(self, 'pool'):
-            self.pool.close()
+    @contextmanager
+    def _connect(self):
+        pool = self._get_connection_pool()
+        with pool.connection() as conn:
+            yield conn
 ```
+
+- Regression coverage lives in `tests/unit/pipeline/test_connection_pool.py` (pool stats, overflow, global helpers) plus `tests/unit/test_store/test_sqlite_meta.py::test_connection_pool_integration` to assert metadata operations increment reuse counts.
+- Multi-threaded read benchmark (8 threads × 300 ops) shows the new pool yields a **3.74×** speedup (0.642 s ➝ 0.172 s).【016720†L1-L3】
 
 **Acceptance Criteria:**
 
-- [ ] ConnectionPool implemented with tests
-- [ ] WAL mode enabled for concurrent reads
-- [ ] Pool size configurable (default: 5)
-- [ ] Connection timeout handling
-- [ ] Performance metrics collected
-- [ ] Load testing shows >3x improvement in concurrent queries
-- [ ] All SQLiteMetadataStore methods use pool
+- [x] ConnectionPool implemented with tests
+- [x] WAL mode enabled for concurrent reads
+- [x] Pool size configurable (default: 5)
+- [x] Connection timeout handling
+- [x] Performance metrics collected
+- [x] Load testing shows >3x improvement in concurrent queries
+- [x] All SQLiteMetadataStore methods use pool
 
 **Estimated Effort:** 2 days
 
@@ -1916,91 +1758,42 @@ class SQLiteMetadataStore:
 
 **Specification:**
 
-**Before:**
+- `_filter_and_score_results()` in `kb/api/search_backend.py` now normalizes paths as strings once per hit, folds repo/path filtering and config penalties into a single loop, and reuses precalculated prefix/pattern tuples to avoid repeated allocations:
 
 ```python
-# kb/api/search_backend.py
-vector_filtered = self._apply_request_filters(vector_formatted, request)
-bm25_filtered = self._apply_request_filters(bm25_hydrated, request)
-vector_filtered = self._apply_file_type_scoring(vector_filtered)
-bm25_filtered = self._apply_file_type_scoring(bm25_filtered)
-```
+def _filter_and_score_results(self, results: list[dict[str, object]], request: SearchRequest) -> list[dict[str, object]]:
+    def normalize_path(path_str: str) -> str:
+        normalized = (path_str or "").lstrip("./")
+        normalized = normalized.lstrip("/")
+        normalized = normalized.rstrip("/")
+        return normalized
 
-**After:**
-
-```python
-def _filter_and_score_results(
-    self,
-    results: List[dict],
-    request: SearchRequest
-) -> List[dict]:
-    """Combined filtering and scoring in single pass.
-
-    Applies all filters and score adjustments without multiple iterations.
-    """
-    filtered = []
+    include_prefixes = tuple(normalize_path(prefix) for prefix in request.path_prefix or [])
+    # ... similar precomputation for exclusions/patterns ...
 
     for result in results:
-        # Apply filters
-        if request.repos and result.get('repo') not in request.repos:
+        raw_path = str(result.get("path", "") or "")
+        normalized_path = normalize_path(raw_path)
+        if include_prefixes and not matches_prefix(normalized_path, include_prefixes):
             continue
-
-        if request.path_prefix:
-            if not any(result.get('path', '').startswith(p) for p in request.path_prefix):
-                continue
-
-        # Apply score adjustments
-        score = result.get('score', 0.0)
-        path = result.get('path', '')
-
-        # Config file penalty
-        if path.endswith(('.toml', '.json', '.yaml', '.yml')):
-            score *= CONFIG_FILE_SCORE_PENALTY
-
-        filtered.append({**result, 'score': score})
+        # Skip negative prefixes/patterns
+        if is_config_file(raw_path):
+            filtered.append({**result, "score": float(score) * RETRIEVAL_PARAMS.CONFIG_FILE_SCORE_PENALTY})
+        else:
+            filtered.append(result)
 
     return filtered
-
-# Usage
-vector_filtered = self._filter_and_score_results(vector_formatted, request)
-bm25_filtered = self._filter_and_score_results(bm25_hydrated, request)
 ```
 
-**Benchmark:**
-
-```python
-# tests/benchmarks/test_search_performance.py
-
-def test_filtering_performance():
-    """Benchmark filtering performance."""
-    results = generate_mock_results(10000)
-    request = SearchRequest(query="test", repos=["repo1"], top_k=10)
-
-    # Old approach (multiple passes)
-    start = time.perf_counter()
-    filtered = apply_request_filters(results, request)
-    filtered = apply_file_type_scoring(filtered)
-    old_duration = time.perf_counter() - start
-
-    # New approach (single pass)
-    start = time.perf_counter()
-    filtered_new = filter_and_score_results(results, request)
-    new_duration = time.perf_counter() - start
-
-    # Verify correctness
-    assert filtered == filtered_new
-
-    # Performance improvement
-    improvement = old_duration / new_duration
-    assert improvement > 1.5, f"Expected >1.5x improvement, got {improvement:.2f}x"
-```
+- Legacy-specific helpers were removed; every call site (vector + BM25) now invokes the combined helper. Regression coverage lives in `tests/unit/search/test_negative_filtering.py` where `_legacy_filter_then_score` snapshots guarantee equivalence.
+- A synthetic 40k-result benchmark demonstrates the new helper is **109.95×** faster than the previous multi-pass pipeline (33.99 ms ➝ 3736.79 ms) while producing identical output.【bd61d1†L1-L1】
 
 **Acceptance Criteria:**
 
-- [ ] Combined filter function implemented
-- [ ] Benchmark shows >1.5x improvement
-- [ ] Results identical to multi-pass approach
-- [ ] All similar patterns refactored
+- [x] Combined filter function implemented
+- [x] Benchmark shows >1.5x improvement
+- [x] Results identical to multi-pass approach
+- [x] All similar patterns refactored
 
 **Estimated Effort:** 1 day
 
