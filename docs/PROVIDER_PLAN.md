@@ -50,15 +50,16 @@ implementation to begin.
 
 ### Phase 2 (Agent Core) Implementation Status
 
-Phase 2 deliverables are now implemented in the repository, so the OpenAI path
-is production-ready alongside Anthropic:
+Phase 2 runtime deliverables now live in the repository, so the OpenAI path
+ships alongside Anthropic. Targeted OpenAI tool-executor unit tests remain a
+follow-up item:
 
 | Deliverable                       | Status | Evidence & Notes                                                                                                                                                                                                                                                                                                         |
 | --------------------------------- | :----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `OpenAIClient` streaming wrapper  |   ✅   | `agent-core/src/llm/openai-client.ts` owns the Responses streaming integration, chunks deltas via `onTextChunk`, and captures token usage so providers receive structured totals.                                                                                                                                        |
 | `OpenAIToolExecutor` adapter      |   ✅   | `agent-core/src/llm/openai-tool-executor.ts` bridges MCP tools into OpenAI's function schema, dispatches deltas as `content_delta` events, and reuses the shared `ToolExecutorEngine` loop.                                                                                                                              |
 | `OpenAIProvider` + factory wiring |   ✅   | `agent-core/src/execution/openai-provider.ts` injects the executor/client pair, resolves auth/base-url sources, and exposes provider metadata, while `agent-core/src/execution/provider-factory.ts` now promotes OpenAI when requested or when only OpenAI credentials are present.                                      |
-| Unit coverage                     |   ✅   | `agent-core/tests/unit/llm/openai-client.test.ts`, `agent-core/tests/unit/execution/openai-provider.test.ts`, and `agent-core/tests/unit/execution/provider-factory.test.ts` lock regression coverage around the client, provider, and selection logic.                                                                  |
+| Unit coverage                     |   ⚠️   | `agent-core/tests/unit/llm/openai-client.test.ts`, `agent-core/tests/unit/execution/openai-provider.test.ts`, and `agent-core/tests/unit/execution/provider-factory.test.ts` cover the client/provider/factory paths. A dedicated `OpenAIToolExecutor` suite is still pending. |
 | Integration coverage              |   ✅   | `agent-core/tests/integration/auth/openai-auth.test.ts` verifies env/settings precedence + `ensureAuthenticated`, and `agent-core/tests/integration/editor/openai-editor-workflow.test.ts` drives the Editor workflow end-to-end against a mocked OpenAI client to ensure streaming + persistence behaviors stay intact. |
 
 ---
@@ -110,18 +111,18 @@ Notes:
 
 ### 2.3 Core Architectural Changes
 
-1. Introduce a **provider‑neutral LLM interface** in agent-core:
-   - Workflows depend on `ILLMProvider` instead of `ClaudeProvider`.
-2. Implement two concrete providers:
-   - `ClaudeLLMProvider` – wraps current Claude client and tool executor.
-   - `OpenAILLMProvider` – new provider using OpenAI Chat + tools.
+1. Introduce a **provider-neutral chat interface** in agent-core:
+   - Workflows now depend on `ChatProvider` (`agent-core/src/execution/chat-provider.ts`).
+2. Implement provider-specific classes:
+   - `AnthropicProvider` continues to wrap the Claude client + executor stack.
+   - `OpenAIProvider` injects the Phase 2 OpenAI client + executor pair.
 3. Add a **factory** in Agent Core that:
-   - Reads provider + model from environment.
-   - Constructs the appropriate `ILLMProvider` instance.
-4. Update VSCode extension:
+   - Loads persisted provider preferences via `provider-settings.ts`.
+   - Detects which credentials are present and returns the matching `ChatProvider` instance.
+4. Update VSCode extension (Phase 3+ scope):
    - Settings UI for provider & model selection on the Settings page.
    - Commands to manage both Anthropic and OpenAI keys.
-   - Auth Status UI updated to display provider‑aware state.
+   - Auth Status UI updated to display provider-aware state.
 
 ### 2.4 OpenAI Integration Details
 
@@ -135,208 +136,68 @@ Notes:
 
 ## 3. Agent Core Spec
 
-### 3.1 Provider‑Neutral Interface
+### 3.1 Provider-Neutral Interface
 
-**File:** `agent-core/src/llm/llm-provider.ts`
+**File:** `agent-core/src/execution/chat-provider.ts`
 
 ```ts
-export type LLMProviderName = "anthropic" | "openai";
-
-export type LLMBlockType =
-  | "text"
-  | "code"
-  | "tool_call"
-  | "tool_result"
-  | "system_note"
-  | "markdown";
-
-export interface LLMBaseBlock {
-  type: LLMBlockType;
-  provider: LLMProviderName;
-  /**
-   * Escape hatch for provider-specific data (Anthropic/OpenAI/etc).
-   * May be omitted when persisting to disk to keep formats stable.
-   */
-  rawProviderPayload?: unknown;
-}
-
-export interface LLMTextBlock extends LLMBaseBlock {
-  type: "text" | "markdown";
-  text: string;
-}
-
-export interface LLMCodeBlock extends LLMBaseBlock {
-  type: "code";
-  language?: string;
-  code: string;
-}
-
-export interface LLMToolCallBlock extends LLMBaseBlock {
-  type: "tool_call";
-  toolName: string;
-  arguments: Record<string, unknown>;
-  callId: string;
-}
-
-export interface LLMToolResultBlock extends LLMBaseBlock {
-  type: "tool_result";
-  toolName: string;
-  callId: string;
-  result: unknown;
-  isError?: boolean;
-}
-
-export type LLMBlock =
-  | LLMTextBlock
-  | LLMCodeBlock
-  | LLMToolCallBlock
-  | LLMToolResultBlock
-  | LLMBaseBlock; // open for future extension
-
-/**
- * Content may be a single block or an ordered array of blocks.
- * Implementations MUST preserve structure from the underlying SDK.
- */
-export type LLMContent = LLMBlock | LLMBlock[];
-
-export interface LLMMessage {
-  role: "user" | "assistant";
-  content: LLMContent;
-}
-
-export interface LLMAuthStatus {
-  provider: LLMProviderName;
-  mode: "subscription" | "api_key" | "none";
-  apiKeySet: boolean;
-  cliInstalled?: boolean;
-  cliAuthenticated?: boolean;
-  willUseSubscription?: boolean;
+export interface AuthStatus {
+  authenticated: boolean;
+  mode: "subscription" | "api_key" | "none" | string;
+  source?: string;
   warning?: string;
   error?: string;
 }
 
-export interface LLMExecuteParams {
+export interface ExecuteParams {
   message: string;
-  // Provider implementations may attach rich content blocks to history entries.
-  conversationHistory?: LLMMessage[];
+  conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
   onEvent?: (event: AgentEvent) => void;
 }
 
-export interface LLMExecuteResult {
-  // Full conversation messages with provider-specific content preserved.
-  messages: LLMMessage[];
+export interface ExecuteResult {
+  messages: ToolExecutorMessage[];
   stopReason?: string;
   toolRounds: number;
-  usage: {
-    inputTokens: number;
-    outputTokens: number;
-    cacheReadTokens: number;
-    cacheWriteTokens: number;
-  };
+  usage: UsageStats;
 }
 
-export interface ILLMProvider {
-  readonly name: LLMProviderName;
-
+export interface ChatProvider {
   initialize(): Promise<void>;
-  execute(params: LLMExecuteParams): Promise<LLMExecuteResult>;
-  /**
-   * Best-effort, fire-and-forget cancellation.
-   * Implementations must be idempotent; some events may still arrive briefly
-   * after abort is called while upstream streams are draining.
-   */
+  execute(params: ExecuteParams): Promise<ExecuteResult>;
   abort(): void;
-  getAuthStatus(): Promise<LLMAuthStatus>;
-  getUsage(): LLMExecuteResult["usage"];
+  detectAuthStatus(): Promise<AuthStatus>;
+  ensureAuthenticated(): Promise<void>;
+  getUsage(): UsageStats;
+  getProviderMetadata(): { provider: string; model: string };
 }
 ```
 
-Existing `ClaudeProvider` will be adapted to implement `ILLMProvider` (as `ClaudeLLMProvider`).
+`EditorWorkflow` and `ArchitectWorkflow` each keep a `ChatProvider` reference and no longer
+reference Anthropic-specific classes directly. Provider metadata, auth status, and usage
+metrics now flow through this shared contract, which is what Phase 2 builds upon.
 
-### 3.2 Claude Provider (Anthropic)
+### 3.2 Anthropic Provider (Claude)
 
 **Files:**
 
-- `agent-core/src/execution/claude-provider.ts` → refactor into `ClaudeLLMProvider`.
-- `agent-core/src/llm/claude-client.ts` (unchanged external API).
-- `agent-core/src/llm/claude-tool-executor.ts` (unchanged external API).
+- `agent-core/src/execution/anthropic-provider.ts`
+- `agent-core/src/llm/anthropic-tool-executor.ts`
+- `agent-core/src/llm/claude-client.ts`
 
-**Key changes (pseudocode):**
+`AnthropicProvider` now implements the shared `ChatProvider` interface. It wires the existing
+Claude client + tool executor stack into the new abstraction while keeping the AuthManager
+logic that checks both CLI OAuth tokens and `ANTHROPIC_API_KEY`. Notable behaviors:
 
-```ts
-// agent-core/src/execution/claude-llm-provider.ts
-export class ClaudeLLMProvider implements ILLMProvider {
-  readonly name = "anthropic" as const;
-  private executor: ClaudeToolExecutor;
-  private claudeClient: ClaudeClient;
-  private authManager: AuthManager;
+- Defaults to `claude-sonnet-4-5-20250929` while allowing overrides through provider settings.
+- Streams events through the shared `AnthropicToolExecutor`, creating a per-request executor
+  when a custom `onEvent` callback is provided.
+- `detectAuthStatus()` delegates to `AuthManager`, so subscription vs API-key flows are still
+  surfaced to the orchestrator and UI.
+- Usage is returned directly from the executor, so workflow telemetry remains unchanged.
 
-  constructor(config: ClaudeProviderConfig & { model: string }) {
-    this.authManager = config.authManager ?? new AuthManager();
-    this.claudeClient =
-      config.claudeClient ??
-      new ClaudeClient({
-        model: config.model, // from front-end/config
-        maxTokens: 4096,
-        temperature: 1.0,
-      });
-    this.executor =
-      config.toolExecutor ??
-      new ClaudeToolExecutor({
-        claudeClient: this.claudeClient,
-        mcpClient: config.mcpClient,
-        maxToolRounds: config.maxToolRounds ?? 10,
-        onEvent: config.onEvent ?? defaultOnEvent,
-      });
-  }
-
-  async initialize(): Promise<void> {
-    await this.executor.initialize();
-  }
-
-  async execute(params: LLMExecuteParams): Promise<LLMExecuteResult> {
-    const executor =
-      params.onEvent && params.onEvent !== defaultOnEvent
-        ? new ClaudeToolExecutor({ ...this.executorConfig, onEvent: params.onEvent })
-        : this.executor;
-
-    const result = await executor.executeWithTools(
-      params.message,
-      // Pass through rich content blocks from history.
-      (params.conversationHistory ?? []).map((m) => ({ role: m.role, content: m.content }))
-    );
-
-    return {
-      // Preserve rich content blocks from Claude (no flattening).
-      messages: result.messages as LLMMessage[],
-      stopReason: result.stopReason,
-      toolRounds: result.toolRounds,
-      usage: executor.getUsage(),
-    };
-  }
-
-  abort(): void {
-    this.executor.abort();
-  }
-
-  async getAuthStatus(): Promise<LLMAuthStatus> {
-    const status = await this.claudeClient.getAuthStatus();
-    return {
-      provider: "anthropic",
-      mode: status.apiKeySet || status.cliAuthenticated ? "api_key" : "none", // refined mapping
-      apiKeySet: status.apiKeySet,
-      cliInstalled: status.cliInstalled,
-      cliAuthenticated: status.cliAuthenticated,
-      willUseSubscription: status.willUseSubscription,
-      warning: undefined,
-    };
-  }
-
-  getUsage(): LLMExecuteResult["usage"] {
-    return this.executor.getUsage();
-  }
-}
-```
+Phase 1 completed this refactor, giving Phase 2 a consistent surface to plug in the new
+OpenAI implementation.
 
 ### 3.3 OpenAI Client & Tool Executor
 
@@ -344,274 +205,68 @@ export class ClaudeLLMProvider implements ILLMProvider {
 
 - `agent-core/src/llm/openai-client.ts`
 - `agent-core/src/llm/openai-tool-executor.ts`
-- `agent-core/src/execution/openai-llm-provider.ts`
+- `agent-core/src/execution/openai-provider.ts`
 
-**OpenAIClient pseudocode:**
+Phase 2 introduced an OpenAI pathway that mirrors the Anthropic architecture:
 
-```ts
-// agent-core/src/llm/openai-client.ts
-import OpenAI from "openai";
+- `OpenAIClient` is a thin wrapper around the official `openai` SDK Responses API.
+  - Accepts model/temperature/base URL overrides via config or env vars.
+  - Streams deltas through `onTextChunk` callbacks so workflows receive incremental events.
+  - Returns structured usage totals (`input_tokens`, `output_tokens`).
+- `OpenAIToolExecutor` subclasses `ToolExecutorEngine`, translating MCP tools to OpenAI
+  function definitions and emitting tool call/result messages that match the Responses schema.
+- `OpenAIProvider` implements `ChatProvider` by composing the client + executor pair. It
+  resolves API keys/base URLs from provider settings or env vars, exposes auth metadata, and
+  maps stored conversation history into OpenAI content blocks.
 
-export interface OpenAIConfig {
-  apiKey?: string;
-  model: string; // e.g. "gpt-5.1-codex"
-  maxTokens: number;
-  temperature?: number;
-}
-
-export interface OpenAIChatRequest {
-  messages: { role: "user" | "assistant" | "system"; content: string }[];
-  tools?: OpenAI.ChatCompletionTool[];
-}
-
-export interface OpenAIChatResult {
-  message: OpenAI.Chat.Completions.ChatCompletionMessage;
-  usage: {
-    input_tokens: number;
-    output_tokens: number;
-  };
-}
-
-export class OpenAIClient {
-  private client: OpenAI;
-  private config: OpenAIConfig;
-
-  constructor(config: OpenAIConfig) {
-    const apiKey = config.apiKey ?? process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error("OPENAI_API_KEY is required for OpenAI provider");
-    }
-    this.client = new OpenAI({ apiKey });
-    this.config = config;
-  }
-
-  async chat(request: OpenAIChatRequest): Promise<OpenAIChatResult> {
-    const completion = await this.client.chat.completions.create({
-      model: this.config.model,
-      messages: request.messages,
-      tools: request.tools,
-      temperature: this.config.temperature ?? 1.0,
-      max_tokens: this.config.maxTokens,
-    });
-
-    const message = completion.choices[0]?.message;
-    return {
-      message,
-      usage: {
-        input_tokens: completion.usage?.prompt_tokens ?? 0,
-        output_tokens: completion.usage?.completion_tokens ?? 0,
-      },
-    };
-  }
-
-  async getAuthStatus(): Promise<LLMAuthStatus> {
-    const apiKeySet = !!(this.config.apiKey ?? process.env.OPENAI_API_KEY);
-    return {
-      provider: "openai",
-      mode: apiKeySet ? "api_key" : "none",
-      apiKeySet,
-    };
-  }
-}
-```
-
-**OpenAIToolExecutor pseudocode:**
-
-```ts
-// agent-core/src/llm/openai-tool-executor.ts
-export class OpenAIToolExecutor {
-  private config: {
-    openaiClient: OpenAIClient;
-    mcpClient: MCPClient;
-    maxToolRounds: number;
-    onEvent: (event: AgentEvent) => void;
-  };
-  private tools: OpenAI.ChatCompletionTool[] = [];
-  private abortController: AbortController | null = null;
-
-  constructor(config: OpenAIToolExecutor["config"]) {
-    this.config = config;
-  }
-
-  async initialize(): Promise<void> {
-    const mcpTools = await this.config.mcpClient.listTools();
-    this.tools = mapMCPToOpenAITools(mcpTools);
-  }
-
-  abort(): void {
-    this.abortController?.abort();
-  }
-
-  async executeWithTools(
-    userMessage: string,
-    history: { role: "user" | "assistant"; content: LLMContent }[] = []
-  ): Promise<LLMExecuteResult> {
-    this.abortController = new AbortController();
-
-    const messages: OpenAI.ChatCompletionMessageParam[] = [
-      // Map existing history into OpenAI’s message format, preserving content
-      // structure where possible.
-      ...history.map((m) => ({
-        role: m.role,
-        content: m.content as OpenAI.ChatCompletionContentPart[] | string,
-      })),
-      { role: "user", content: userMessage },
-    ];
-
-    let toolRounds = 0;
-    let usageTotals = { inputTokens: 0, outputTokens: 0 };
-
-    while (toolRounds < this.config.maxToolRounds) {
-      if (this.abortController.signal.aborted) {
-        throw new Error("Generation aborted by user");
-      }
-
-      const { message, usage } = await this.config.openaiClient.chat({
-        messages,
-        tools: this.tools,
-      });
-
-      usageTotals.inputTokens += usage.input_tokens;
-      usageTotals.outputTokens += usage.output_tokens;
-
-      if (!message.tool_calls || message.tool_calls.length === 0) {
-        messages.push({ role: "assistant", content: message.content ?? "" });
-        break;
-      }
-
-      // Execute tools via MCP
-      const toolResults = await this.executeToolCalls(message.tool_calls);
-      messages.push({ role: "assistant", content: message.content ?? "" });
-      messages.push({ role: "user", content: toolResultsAsJson(toolResults) });
-      toolRounds++;
-    }
-
-    return {
-      messages: messages
-        .filter((m) => m.role === "assistant" || m.role === "user")
-        .map((m) => ({
-          role: m.role as "user" | "assistant",
-          // Preserve OpenAI content blocks or strings as-is.
-          content: m.content as LLMContent,
-        })),
-      stopReason: undefined,
-      toolRounds,
-      usage: {
-        inputTokens: usageTotals.inputTokens,
-        outputTokens: usageTotals.outputTokens,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-      },
-    };
-  }
-
-  private async executeToolCalls(
-    toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[]
-  ): Promise<unknown[]> {
-    // Map each OpenAI tool call to MCP call, emit events, return results
-  }
-}
-```
-
-**OpenAI LLM Provider pseudocode:**
-
-```ts
-// agent-core/src/execution/openai-llm-provider.ts
-export class OpenAILLMProvider implements ILLMProvider {
-  readonly name = "openai" as const;
-  private client: OpenAIClient;
-  private executor: OpenAIToolExecutor;
-
-  constructor(config: { model: string; mcpClient: MCPClient; maxToolRounds?: number }) {
-    this.client = new OpenAIClient({
-      model: config.model,
-      maxTokens: 4096,
-    });
-    this.executor = new OpenAIToolExecutor({
-      openaiClient: this.client,
-      mcpClient: config.mcpClient,
-      maxToolRounds: config.maxToolRounds ?? 10,
-      onEvent: (event) => console.error("[OpenAI] Event:", event.type),
-    });
-  }
-
-  async initialize(): Promise<void> {
-    await this.executor.initialize();
-  }
-
-  async execute(params: LLMExecuteParams): Promise<LLMExecuteResult> {
-    return await this.executor.executeWithTools(params.message, params.conversationHistory ?? []);
-  }
-
-  abort(): void {
-    this.executor.abort();
-  }
-
-  async getAuthStatus(): Promise<LLMAuthStatus> {
-    return await this.client.getAuthStatus();
-  }
-
-  getUsage(): LLMExecuteResult["usage"] {
-    // Could aggregate from executor; stub initially.
-    return {
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    };
-  }
-}
-```
+Together these components satisfy the Phase 2 charter: OpenAI chats (Editor + Architect) use
+streaming, tool loops, and MCP telemetry identical to Anthropic while relying on the shared
+provider abstractions.
 
 ### 3.4 Provider Factory
 
-**File:** `agent-core/src/llm/provider-factory.ts`
+**File:** `agent-core/src/execution/provider-factory.ts`
+
+`createChatProvider` now centralizes provider selection. It loads
+`provider-settings.json`, checks explicit preferences, and then falls back to whichever
+credential is available. Key excerpt:
 
 ```ts
-export interface ProviderFactoryConfig {
-  mcpClient: MCPClient;
-}
+export async function createChatProvider(options: ProviderFactoryOptions): Promise<ChatProvider> {
+  const settings = options.settings ?? loadProviderSettings();
+  const preference = settings.provider ?? "auto";
+  const authManager = options.authManager ?? new AuthManager();
+  const openAIModel = settings.model ?? options.defaultOpenAIModel;
 
-export interface ProviderFactoryResult {
-  providerName: LLMProviderName;
-  llmProvider: ILLMProvider;
-}
-
-export function createLLMProvider(config: ProviderFactoryConfig): ProviderFactoryResult {
-  const providerEnv = process.env.DOLPHIN_LLM_PROVIDER as LLMProviderName | undefined;
-  const modelEnv = process.env.DOLPHIN_LLM_MODEL;
-
-  if (!providerEnv || !modelEnv) {
-    throw new Error(
-      "LLM provider is not configured. Set DOLPHIN_LLM_PROVIDER and DOLPHIN_LLM_MODEL via the front end."
-    );
+  if (preference === "anthropic") {
+    return new AnthropicProvider({ ... });
   }
 
-  const provider = providerEnv;
-
-  if (provider === "anthropic") {
-    return {
-      providerName: "anthropic",
-      llmProvider: new ClaudeLLMProvider({
-        model: modelEnv,
-        mcpClient: config.mcpClient,
-      }),
-    };
+  if (preference === "openai") {
+    ensureOpenAIKey(settings);
+    return new OpenAIProvider({ ... });
   }
 
-  if (provider === "openai") {
-    return {
-      providerName: "openai",
-      llmProvider: new OpenAILLMProvider({
-        model: modelEnv,
-        mcpClient: config.mcpClient,
-      }),
-    };
+  const anthropicStatus = await authManager.detectAuthStatus();
+  if (anthropicStatus.authenticated) {
+    return new AnthropicProvider({ ... });
   }
 
-  throw new Error(`Unsupported LLM provider: ${provider}`);
+  const hasOpenAIKey =
+    settings.openAIApiKey || process.env.DOLPHIN_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+  if (hasOpenAIKey) {
+    return new OpenAIProvider({ ... });
+  }
+
+  throw new Error(
+    "No chat provider credentials found. Authenticate with Claude CLI / ANTHROPIC_API_KEY or set OPENAI_API_KEY."
+  );
 }
 ```
+
+This auto-detection path is why the extension work can roll out incrementally—the CLI can
+launch Agent Core without new settings and still obtain a provider as long as one set of
+credentials exists. Phase 2 exercised this logic heavily via the new tests listed below.
 
 ### 3.5 Agent Core Wiring
 
@@ -860,33 +515,23 @@ All tests must clean up after themselves (temp dirs, env vars, secrets, test set
 
 ### 5.1 Agent Core Unit Tests
 
-- **New suites:**
+- **New suites (Phase 2):**
   - `agent-core/tests/unit/llm/openai-client.test.ts`
-  - `agent-core/tests/unit/llm/openai-tool-executor.test.ts`
-  - `agent-core/tests/unit/llm/provider-factory.test.ts`
-- Coverage:
-  - OpenAIClient:
-    - Missing `OPENAI_API_KEY` → throws with clear error.
-    - Valid key (mocked) → `chat()` called with correct parameters.
-  - OpenAIToolExecutor:
-    - Maps MCP tools into OpenAI tools.
-    - Handles no tool_calls → returns final assistant message.
-    - Handles single/multiple tool_calls with mocked MCP responses.
-    - Aborts correctly when `abort()` called.
-  - Provider factory:
-    - Creates correct provider based on env.
-    - Throws on unsupported provider values.
+  - `agent-core/tests/unit/execution/openai-provider.test.ts`
+  - `agent-core/tests/unit/execution/provider-factory.test.ts`
+- **Outstanding gap:** add targeted `openai-tool-executor` unit coverage. The current
+  `tool-executor.test.ts` exercises the shared engine but not the OpenAI adapter.
 
 ### 5.2 Agent Core Integration Tests
 
-- New suites:
-  - `agent-core/tests/integration/llm/openai-auth.test.ts`
-  - `agent-core/tests/integration/llm/openai-editor-workflow.test.ts`
+- Suites landed for Phase 2:
+  - `agent-core/tests/integration/auth/openai-auth.test.ts`
+  - `agent-core/tests/integration/editor/openai-editor-workflow.test.ts`
 - Scenarios:
   - With `DOLPHIN_LLM_PROVIDER=openai` and `OPENAI_API_KEY` set:
-    - Editor workflow runs a simple task using mocked OpenAI client.
+    - Editor workflow runs a simple task using a mocked OpenAI client and verifies streaming.
   - With `DOLPHIN_LLM_PROVIDER=anthropic`:
-    - Existing Claude integration tests remain passing.
+    - Existing Claude integration tests remain passing, exercising regression coverage for auto-detection.
 
 ### 5.3 VSCode Extension Tests
 
@@ -907,26 +552,24 @@ All tests must clean up after themselves (temp dirs, env vars, secrets, test set
 
 ### Phase 1 – Abstractions & Wiring (Agent Core)
 
-1. Add `ILLMProvider`, `LLMAuthStatus`, `LLMExecuteParams`, `LLMExecuteResult` in `agent-core/src/llm/llm-provider.ts`.
-2. Refactor existing `ClaudeProvider` into `ClaudeLLMProvider`:
-   - Implement `ILLMProvider`.
-   - Adjust tests to reference the new class.
-3. Update `EditorWorkflow` and `ArchitectWorkflow` to depend on `ILLMProvider` instead of `ClaudeProvider`.
-4. Implement `createLLMProvider` factory and call it from `agent-core/src/main.ts`.
-5. Update `get_auth_status` handling to use `ILLMProvider.getAuthStatus()` and include `provider`.
+1. Add `ChatProvider`, `AuthStatus`, `ExecuteParams`, `ExecuteResult` in `agent-core/src/execution/chat-provider.ts`.
+2. Refactor existing `ClaudeProvider` into the shared abstraction by implementing `ChatProvider`.
+3. Update `EditorWorkflow` and `ArchitectWorkflow` to depend on `ChatProvider` instead of `ClaudeProvider`.
+4. Implement `createChatProvider` factory (now `agent-core/src/execution/provider-factory.ts`) and call it from `agent-core/src/main.ts`.
+5. Update `get_auth_status` handling to rely on `ChatProvider.detectAuthStatus()` and surface the provider name.
 6. Neutralize prompts in `PromptBuilder` to remove “You are Claude” wording.
 7. Run `bun test` for agent-core and fix any breakages.
 
 ### Phase 2 – OpenAI Provider (Agent Core)
 
-8. Implement `OpenAIClient` with minimal `chat()` + `getAuthStatus()` using OpenAI Node SDK.
-9. Implement `OpenAIToolExecutor`:
-   - Map MCP tools → OpenAI tools.
-   - Implement tool loop (similar to `ClaudeToolExecutor`) **with streaming and incremental `AgentEvent` emission**.
-10. Implement `OpenAILLMProvider` that wraps `OpenAIClient` + `OpenAIToolExecutor`.
-11. Extend provider factory to support `"openai"`.
-12. Add unit tests for `OpenAIClient`, `OpenAIToolExecutor`, and OpenAI provider.
-13. Add integration tests for OpenAI auth and editor workflow (with mocked client).
+| # | Deliverable | Status | Evidence / Notes |
+| - | ----------- | :----: | ---------------- |
+| 8 | Implement `OpenAIClient` with streaming + auth helpers | ✅ | `agent-core/src/llm/openai-client.ts` now wraps the Responses API, handles env overrides, and streams deltas via `onTextChunk`. |
+| 9 | Build `OpenAIToolExecutor` with MCP + streaming events | ✅ | `agent-core/src/llm/openai-tool-executor.ts` subclasses `ToolExecutorEngine`, translates MCP tools into OpenAI functions, and emits `content_delta` events. |
+| 10 | Provide a ChatProvider implementation for OpenAI | ✅ | `agent-core/src/execution/openai-provider.ts` composes the client + executor, resolves auth metadata, and exposes provider metadata. |
+| 11 | Extend provider factory to support OpenAI selection | ✅ | `agent-core/src/execution/provider-factory.ts` now promotes OpenAI when explicitly requested or when only OpenAI credentials exist. |
+| 12 | Add unit coverage for the new components | ⚠️ | `openai-client`, `openai-provider`, and `provider-factory` unit tests exist. Dedicated `OpenAIToolExecutor` tests are still outstanding (only the shared engine is covered). |
+| 13 | Add integration tests for OpenAI auth + workflows | ✅ | `agent-core/tests/integration/auth/openai-auth.test.ts` and `agent-core/tests/integration/editor/openai-editor-workflow.test.ts` cover auth precedence + streaming editor runs. |
 
 ### Phase 3 – VSCode Extension Integration
 
