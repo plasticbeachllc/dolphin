@@ -33,10 +33,7 @@ function resolveKbBaseUrl(): string {
 
 function getKbApiKey(): string | undefined {
   return (
-    defaultKbApiKey ||
-    process.env.DOLPHIN_API_KEY ||
-    process.env.DOLPHIN_KB_API_KEY ||
-    undefined
+    defaultKbApiKey || process.env.DOLPHIN_API_KEY || process.env.DOLPHIN_KB_API_KEY || undefined
   );
 }
 
@@ -70,7 +67,9 @@ async function initializeKbApiKey(context: vscode.ExtensionContext): Promise<voi
     setKbApiKeyValue(storedKey, "secret");
   } else {
     try {
-      logger?.warn?.("[Extension] KB API key not configured; secured KB endpoints will reject requests.");
+      logger?.warn?.(
+        "[Extension] KB API key not configured; secured KB endpoints will reject requests."
+      );
     } catch {
       // Logger may not be ready yet
     }
