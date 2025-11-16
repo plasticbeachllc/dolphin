@@ -13,6 +13,7 @@ from typing import Any, TypedDict
 from sqlalchemy import event
 from sqlmodel import SQLModel, create_engine
 
+from kb.retrieval.bm25_stats import BM25StatisticsCollector
 from kb.security import PathValidator
 
 
@@ -112,6 +113,8 @@ class SQLiteMetadataStore:
         self._init_lock = threading.Lock()
         self._initialized = False
         self._initializing = False
+        self._bm25_stats_collector: BM25StatisticsCollector | None = None
+        self._bm25_stats_path: Path | None = None
 
     def _connect(self) -> sqlite3.Connection:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -223,6 +226,28 @@ class SQLiteMetadataStore:
 
             finally:
                 self._initializing = False
+
+    def configure_bm25_statistics(self, stats_path: Path | str | None, *, max_samples: int = 100_000) -> None:
+        """Enable collection of BM25 scores for normalization telemetry."""
+        if stats_path is None:
+            self._bm25_stats_collector = None
+            self._bm25_stats_path = None
+            return
+        resolved = Path(stats_path) if isinstance(stats_path, str) else stats_path
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        self._bm25_stats_collector = BM25StatisticsCollector(max_samples=max_samples)
+        self._bm25_stats_path = resolved
+        logger.info("[SQLiteMeta] BM25 statistics collection enabled", extra={"path": str(resolved)})
+
+    def flush_bm25_statistics(self) -> Path | None:
+        """Persist collected BM25 stats if enough samples exist."""
+        if not self._bm25_stats_collector or not self._bm25_stats_path:
+            return None
+        return self._bm25_stats_collector.flush_to(self._bm25_stats_path)
+
+    def _record_bm25_score(self, score: float) -> None:
+        if self._bm25_stats_collector:
+            self._bm25_stats_collector.record(score)
 
     def _validate_table_schema(self, cur, table_name: str) -> None:
         """Validate table schema integrity."""
@@ -1244,13 +1269,15 @@ class SQLiteMetadataStore:
                 # Convert to list of dicts
                 results = []
                 for row in rows:
+                    score = float(row[4])
+                    self._record_bm25_score(score)
                     results.append(
                         {
                             "chunk_id": str(row[0]),
                             "repo": str(row[1]),
                             "path": str(row[2]),
                             "text_hash": str(row[3]),  # Include text_hash for hydration
-                            "score": float(row[4]),  # Positive BM25 score
+                            "score": score,  # Positive BM25 score
                             "rank": int(row[5]),
                         }
                     )

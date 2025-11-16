@@ -27,7 +27,9 @@ import type { PromptBuilder } from "../prompts/prompt-builder.js";
 import type { ClaudeProvider } from "../execution/claude-provider.js";
 import type { StateStore } from "../state/state-store.js";
 import type { PlanStore } from "../storage/plan-store.js";
-import { MODELS, CHARS_PER_TOKEN, DEFAULT_MAX_CLARIFICATION_TURNS } from "./constants.js";
+import { MODELS, DEFAULT_MAX_CLARIFICATION_TURNS } from "./constants.js";
+import type { TokenCounterLike, TokenCountResult } from "../utils/token-counter.js";
+import { getTokenCounter } from "../utils/token-counter.js";
 import { parsePlanFromMarkdown, parseLegacyMarkdownPlan } from "./plan-parser.js";
 
 export interface ArchitectWorkflowConfig {
@@ -38,6 +40,7 @@ export interface ArchitectWorkflowConfig {
   planStore: PlanStore;
   workspaceRoot: string;
   maxClarificationTurns?: number;
+  tokenCounter?: TokenCounterLike;
 }
 
 /**
@@ -47,10 +50,12 @@ export class ArchitectWorkflow implements IWorkflow {
   private config: ArchitectWorkflowConfig;
   private maxClarificationTurns: number;
   private aborted = false;
+  private tokenCounter: TokenCounterLike;
 
   constructor(config: ArchitectWorkflowConfig) {
     this.config = config;
     this.maxClarificationTurns = config.maxClarificationTurns || DEFAULT_MAX_CLARIFICATION_TURNS;
+    this.tokenCounter = config.tokenCounter ?? getTokenCounter();
   }
 
   /**
@@ -222,10 +227,12 @@ export class ArchitectWorkflow implements IWorkflow {
       }
     }
 
+    const researchTokenResult = await this.countTokensOrEstimate([findings], MODELS.RESEARCH);
+
     const result: ResearchResult = {
       completedAt: new Date().toISOString(),
       model: MODELS.RESEARCH,
-      tokensUsed: Math.floor(findings.length / CHARS_PER_TOKEN),
+      tokensUsed: researchTokenResult.totalTokens,
       findings,
       kbSearches,
       relevantFiles,
@@ -373,12 +380,15 @@ export class ArchitectWorkflow implements IWorkflow {
       }
     }
 
+    const clarificationTokenResult = await this.countTokensOrEstimate(
+      conversationHistory.map((msg) => msg.content),
+      MODELS.CLARIFICATION
+    );
+
     const result: ClarificationResult = {
       completedAt: new Date().toISOString(),
       model: MODELS.CLARIFICATION,
-      tokensUsed: Math.floor(
-        conversationHistory.reduce((sum, msg) => sum + msg.content.length, 0) / CHARS_PER_TOKEN
-      ),
+      tokensUsed: clarificationTokenResult.totalTokens,
       conversationTurns,
       questions,
       responses,
@@ -498,13 +508,15 @@ export class ArchitectWorkflow implements IWorkflow {
       _parseSource = "legacy-markdown";
     }
 
+    const planTokenResult = await this.countTokensOrEstimate([planContent], MODELS.PLANNING);
+
     // Convert TOML snake_case to Plan camelCase
     const plan: Plan = {
       version: 1,
       status: "pending_approval",
       createdAt: new Date().toISOString(),
       model: MODELS.PLANNING,
-      tokensUsed: Math.floor(planContent.length / CHARS_PER_TOKEN),
+      tokensUsed: planTokenResult.totalTokens,
       estimatedCost: 0.015, // Rough estimate for Opus
       content: planContent,
       filesToModify: parsedPlan.files_to_modify || parsedPlan.filesToModify || [],
@@ -512,9 +524,7 @@ export class ArchitectWorkflow implements IWorkflow {
       steps: (parsedPlan.steps || []).map((s) => (typeof s === "string" ? s : s.description)),
       complexity: parsedPlan.complexity || "medium",
       estimatedTokens:
-        parsedPlan.estimated_tokens ||
-        parsedPlan.estimatedTokens ||
-        Math.floor(planContent.length / CHARS_PER_TOKEN),
+        parsedPlan.estimated_tokens || parsedPlan.estimatedTokens || planTokenResult.totalTokens,
       overview: parsedPlan.overview,
     };
 
@@ -552,6 +562,20 @@ export class ArchitectWorkflow implements IWorkflow {
     }
 
     return questions;
+  }
+
+  private async countTokensOrEstimate(texts: string[], model: string): Promise<TokenCountResult> {
+    const payload = texts.length ? texts : [""];
+
+    try {
+      return await this.tokenCounter.countExact(payload, model);
+    } catch (error) {
+      console.warn(
+        `[ArchitectWorkflow] TokenCounter failed for model ${model}, falling back to estimate`,
+        error
+      );
+      return this.tokenCounter.estimate(payload, model);
+    }
   }
 
   /**
