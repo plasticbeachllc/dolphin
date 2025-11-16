@@ -2,13 +2,14 @@ import * as assert from "assert";
 import * as vscode from "vscode";
 import { AgentBridge } from "../../../../agent/bridge";
 import { MockConnection, TestRecord } from "../../../helpers/mock-types";
+import { createMockOutputChannel } from "../../../helpers/mock-output-channel";
 
 describe("AgentBridge Unit Tests", () => {
   let agentBridge: AgentBridge;
   let outputChannel: vscode.OutputChannel;
 
   beforeEach(() => {
-    outputChannel = vscode.window.createOutputChannel("Test Agent Bridge");
+    outputChannel = createMockOutputChannel("Test Agent Bridge");
     agentBridge = new AgentBridge(outputChannel);
   });
 

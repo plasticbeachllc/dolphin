@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import * as http from "http";
 import { HttpTestResponse, ExtensionExports } from "./mock-types";
+import { createMockOutputChannel } from "./mock-output-channel";
 
 /**
  * Wait for a condition to be true with timeout
@@ -116,15 +117,11 @@ export function captureOutputChannel(name: string): {
   getContent: () => string;
   dispose: () => void;
 } {
-  const content: string[] = [];
-  const _originalAppendLine = vscode.window.createOutputChannel(name).appendLine;
-
-  // Note: This is a simplified version. In real implementation,
-  // you'd need to hook into the actual output channel.
+  const channel = createMockOutputChannel(name);
 
   return {
-    getContent: () => content.join("\n"),
-    dispose: () => {},
+    getContent: () => channel.getOutput(),
+    dispose: () => channel.dispose(),
   };
 }
 

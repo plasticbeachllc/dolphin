@@ -1,6 +1,7 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { DriftDetector, DriftEvent } from "../../../../kb/drift-detector";
+import { createMockOutputChannel } from "../../../helpers/mock-output-channel";
 
 describe("DriftDetector Tests", () => {
   let outputChannel: vscode.OutputChannel;
@@ -8,7 +9,7 @@ describe("DriftDetector Tests", () => {
 
   // Create output channel ONCE for all tests to avoid DisposableStore warnings
   before(() => {
-    outputChannel = vscode.window.createOutputChannel("DriftDetector Test");
+    outputChannel = createMockOutputChannel("DriftDetector Test");
   });
 
   // Clean up output channel AFTER all tests

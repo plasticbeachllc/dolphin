@@ -2,6 +2,7 @@ import * as assert from "assert";
 import * as vscode from "vscode";
 import { DolphinViewProvider } from "../../../../views/provider";
 import { AgentBridge } from "../../../../agent/bridge";
+import { createMockOutputChannel } from "../../../helpers/mock-output-channel";
 
 describe("DolphinViewProvider Unit Tests", () => {
   let provider: DolphinViewProvider;
@@ -9,7 +10,7 @@ describe("DolphinViewProvider Unit Tests", () => {
   let mockAgentBridge: AgentBridge;
 
   beforeEach(() => {
-    outputChannel = vscode.window.createOutputChannel("Test");
+    outputChannel = createMockOutputChannel("Test");
     mockAgentBridge = new AgentBridge(outputChannel);
     const extensionUri = vscode.Uri.file("/test/path");
     provider = new DolphinViewProvider(extensionUri, outputChannel, mockAgentBridge);

@@ -1,15 +1,35 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { AutoSyncManager, AutoSyncConfig, PendingChange } from "../../../../kb/auto-sync-manager";
+import { createMockOutputChannel } from "../../../helpers/mock-output-channel";
 
 describe("AutoSyncManager Tests", () => {
   let outputChannel: vscode.OutputChannel;
   let mockConfig: AutoSyncConfig;
   let managers: AutoSyncManager[] = [];
+  const workspaceStub: Pick<typeof vscode.workspace, "onDidChangeTextDocument"> = {
+    onDidChangeTextDocument: () => ({ dispose: () => {} }),
+  };
+
+  const createManager = (
+    config: AutoSyncConfig,
+    apiBaseUrl = "http://localhost:8765",
+    repoName = "test-repo"
+  ): AutoSyncManager => {
+    const manager = new AutoSyncManager(
+      config,
+      repoName,
+      apiBaseUrl,
+      outputChannel,
+      workspaceStub
+    );
+    managers.push(manager);
+    return manager;
+  };
 
   // Create output channel ONCE for all tests to avoid DisposableStore warnings
   before(() => {
-    outputChannel = vscode.window.createOutputChannel("AutoSyncManager Test");
+    outputChannel = createMockOutputChannel("AutoSyncManager Test");
   });
 
   // Clean up output channel AFTER all tests
@@ -40,26 +60,13 @@ describe("AutoSyncManager Tests", () => {
 
   describe("Initialization", () => {
     it("Should create AutoSyncManager instance", () => {
-      const manager = new AutoSyncManager(
-        mockConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
-
+      const manager = createManager(mockConfig);
       assert.ok(manager, "Manager should be created");
     });
 
     it("Should not start when disabled", async () => {
       const disabledConfig = { ...mockConfig, enabled: false };
-      const manager = new AutoSyncManager(
-        disabledConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
+      const manager = createManager(disabledConfig);
 
       await manager.start();
       // Should not throw and should log disabled message
@@ -68,13 +75,7 @@ describe("AutoSyncManager Tests", () => {
 
     it("Should not start when mode is off", async () => {
       const offConfig = { ...mockConfig, mode: "off" as const };
-      const manager = new AutoSyncManager(
-        offConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
+      const manager = createManager(offConfig);
 
       await manager.start();
       assert.ok(true, "Should handle off mode gracefully");
@@ -84,92 +85,44 @@ describe("AutoSyncManager Tests", () => {
   describe("Configuration Properties", () => {
     it("Should accept manual mode configuration", () => {
       const manualConfig = { ...mockConfig, mode: "manual" as const };
-      const manager = new AutoSyncManager(
-        manualConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
-
+      const manager = createManager(manualConfig);
       assert.ok(manager, "Should accept manual mode");
     });
 
     it("Should accept smart mode configuration", () => {
       const smartConfig = { ...mockConfig, mode: "smart" as const };
-      const manager = new AutoSyncManager(
-        smartConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
-
+      const manager = createManager(smartConfig);
       assert.ok(manager, "Should accept smart mode");
     });
 
     it("Should accept aggressive mode configuration", () => {
       const aggressiveConfig = { ...mockConfig, mode: "aggressive" as const };
-      const manager = new AutoSyncManager(
-        aggressiveConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
-
+      const manager = createManager(aggressiveConfig);
       assert.ok(manager, "Should accept aggressive mode");
     });
 
     it("Should use provided idleTimeMs setting", () => {
       const customConfig = { ...mockConfig, idleTimeMs: 60000 };
-      const manager = new AutoSyncManager(
-        customConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
-
+      const manager = createManager(customConfig);
       assert.ok(manager, "Should accept custom idle time");
     });
 
     it("Should use provided maxBatchSize setting", () => {
       const customConfig = { ...mockConfig, maxBatchSize: 50 };
-      const manager = new AutoSyncManager(
-        customConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
-
+      const manager = createManager(customConfig);
       assert.ok(manager, "Should accept custom batch size");
     });
 
     it("Should use provided checkIntervalMs setting", () => {
       const customConfig = { ...mockConfig, checkIntervalMs: 10000 };
-      const manager = new AutoSyncManager(
-        customConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
-
+      const manager = createManager(customConfig);
       assert.ok(manager, "Should accept custom check interval");
     });
   });
 
   describe("Batching Logic", () => {
     it("Should handle empty changes array", () => {
-      const manager = new AutoSyncManager(
-        mockConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
+      const manager = createManager(mockConfig);
 
       // Test internal batching (accessing via type assertion to test private method)
       const changes: PendingChange[] = [];
@@ -182,13 +135,7 @@ describe("AutoSyncManager Tests", () => {
     });
 
     it("Should create single batch for changes within limit", () => {
-      const manager = new AutoSyncManager(
-        mockConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
+      const manager = createManager(mockConfig);
 
       const changes: PendingChange[] = [
         {
@@ -221,13 +168,7 @@ describe("AutoSyncManager Tests", () => {
     });
 
     it("Should split changes into multiple batches when exceeding limit", () => {
-      const manager = new AutoSyncManager(
-        mockConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
+      const manager = createManager(mockConfig);
 
       const changes: PendingChange[] = [];
       for (let i = 0; i < 25; i++) {
@@ -251,13 +192,7 @@ describe("AutoSyncManager Tests", () => {
     });
 
     it("Should respect batch size of 1", () => {
-      const manager = new AutoSyncManager(
-        mockConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
+      const manager = createManager(mockConfig);
 
       const changes: PendingChange[] = [
         {
@@ -287,13 +222,7 @@ describe("AutoSyncManager Tests", () => {
 
   describe("Disposal", () => {
     it("Should properly dispose resources", () => {
-      const manager = new AutoSyncManager(
-        mockConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
+      const manager = createManager(mockConfig);
 
       // Manually dispose for this test
       manager.dispose();
@@ -303,13 +232,7 @@ describe("AutoSyncManager Tests", () => {
     });
 
     it("Should handle multiple dispose calls", () => {
-      const manager = new AutoSyncManager(
-        mockConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
+      const manager = createManager(mockConfig);
 
       manager.dispose();
       manager.dispose();
@@ -320,13 +243,7 @@ describe("AutoSyncManager Tests", () => {
     });
 
     it("Should dispose after starting", async () => {
-      const manager = new AutoSyncManager(
-        mockConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
+      const manager = createManager(mockConfig);
 
       await manager.start();
       // Will be disposed in afterEach
@@ -337,39 +254,21 @@ describe("AutoSyncManager Tests", () => {
   describe("Mode-Specific Behavior", () => {
     it("Manual mode should be initialized", () => {
       const manualConfig = { ...mockConfig, mode: "manual" as const };
-      const manager = new AutoSyncManager(
-        manualConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
+      const manager = createManager(manualConfig);
 
       assert.ok(manager, "Manual mode manager should be created");
     });
 
     it("Smart mode should be initialized", () => {
       const smartConfig = { ...mockConfig, mode: "smart" as const };
-      const manager = new AutoSyncManager(
-        smartConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
+      const manager = createManager(smartConfig);
 
       assert.ok(manager, "Smart mode manager should be created");
     });
 
     it("Aggressive mode should be initialized", () => {
       const aggressiveConfig = { ...mockConfig, mode: "aggressive" as const };
-      const manager = new AutoSyncManager(
-        aggressiveConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
+      const manager = createManager(aggressiveConfig);
 
       assert.ok(manager, "Aggressive mode manager should be created");
     });
@@ -377,13 +276,7 @@ describe("AutoSyncManager Tests", () => {
 
   describe("Error Handling", () => {
     it("Should handle API errors gracefully", async () => {
-      const manager = new AutoSyncManager(
-        mockConfig,
-        "test-repo",
-        "http://invalid-url-that-does-not-exist",
-        outputChannel
-      );
-      managers.push(manager);
+      const manager = createManager(mockConfig, "http://invalid-url-that-does-not-exist");
 
       // Start manager - it will try to fetch pending changes
       // This should not crash even if API is unavailable
@@ -396,13 +289,7 @@ describe("AutoSyncManager Tests", () => {
     });
 
     it("Should handle invalid API responses", async () => {
-      const manager = new AutoSyncManager(
-        mockConfig,
-        "test-repo",
-        "http://localhost:99999", // Invalid port
-        outputChannel
-      );
-      managers.push(manager);
+      const manager = createManager(mockConfig, "http://localhost:99999"); // Invalid port
 
       await manager.start();
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -421,13 +308,7 @@ describe("AutoSyncManager Tests", () => {
         checkIntervalMs: 30000,
       };
 
-      const manager = new AutoSyncManager(
-        defaultConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
+      const manager = createManager(defaultConfig);
 
       assert.ok(manager, "Should work with default configuration");
     });
@@ -441,13 +322,7 @@ describe("AutoSyncManager Tests", () => {
         checkIntervalMs: 1000,
       };
 
-      const manager = new AutoSyncManager(
-        minimalConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
+      const manager = createManager(minimalConfig);
 
       assert.ok(manager, "Should work with minimal configuration");
     });
@@ -461,13 +336,7 @@ describe("AutoSyncManager Tests", () => {
         checkIntervalMs: 100000,
       };
 
-      const manager = new AutoSyncManager(
-        extremeConfig,
-        "test-repo",
-        "http://localhost:8765",
-        outputChannel
-      );
-      managers.push(manager);
+      const manager = createManager(extremeConfig);
 
       assert.ok(manager, "Should work with extreme configuration values");
     });
@@ -478,13 +347,7 @@ describe("AutoSyncManager Tests", () => {
       const repos = ["my-repo", "test-project", "backend-service"];
 
       for (const repo of repos) {
-        const manager = new AutoSyncManager(
-          mockConfig,
-          repo,
-          "http://localhost:8765",
-          outputChannel
-        );
-        managers.push(manager);
+        const manager = createManager(mockConfig, "http://localhost:8765", repo);
 
         assert.ok(manager, `Should accept repo name: ${repo}`);
       }
@@ -494,8 +357,7 @@ describe("AutoSyncManager Tests", () => {
       const urls = ["http://localhost:8765", "http://127.0.0.1:9000", "https://api.example.com"];
 
       for (const url of urls) {
-        const manager = new AutoSyncManager(mockConfig, "test-repo", url, outputChannel);
-        managers.push(manager);
+        const manager = createManager(mockConfig, url);
 
         assert.ok(manager, `Should accept API URL: ${url}`);
       }

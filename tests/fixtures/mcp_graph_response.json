@@ -1,0 +1,22 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "### Prompt Ready Response\nDolphin search results with graph data." 
+      },
+      {
+        "type": "text",
+        "text": "#### Code Graph Context\n- Node: GraphStore::GraphSearch (class)\n- Source: kb/graph/graph_store.py:10-40\n- Outbound Edges:\n  - `GraphStore.search` → `GraphStore._build_graph_context`\n- Description: Entry point used by MCP search_knowledge to add graph snippets.\n\nAdditional context lines..."
+      },
+      {
+        "type": "resource",
+        "href": "file:///workspace/kb/graph/graph_store.py",
+        "mimeType": "text/x-python",
+        "text": "class GraphStore: ..."
+      }
+    ]
+  }
+}

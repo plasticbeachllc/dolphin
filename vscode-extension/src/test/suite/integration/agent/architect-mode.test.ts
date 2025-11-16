@@ -8,6 +8,7 @@ import * as assert from "assert";
 import * as vscode from "vscode";
 import { AgentBridge } from "../../../../agent/bridge";
 import * as path from "path";
+import { createMockOutputChannel } from "../../../helpers/mock-output-channel";
 
 describe("Architect Mode E2E Tests", function () {
   this.timeout(70000); // Extended timeout for agent-core startup
@@ -19,7 +20,7 @@ describe("Architect Mode E2E Tests", function () {
   before(async function () {
     this.timeout(120000); // Increase timeout for agent startup
 
-    outputChannel = vscode.window.createOutputChannel("Dolphin Architect Tests");
+    outputChannel = createMockOutputChannel("Dolphin Architect Tests");
     agentBridge = new AgentBridge(outputChannel);
 
     // Start agent bridge

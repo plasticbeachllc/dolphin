@@ -1,6 +1,8 @@
 // vscode-extension/src/kb/auto-sync-manager.ts
 import * as vscode from "vscode";
 
+type WorkspaceEventApi = Pick<typeof vscode.workspace, "onDidChangeTextDocument">;
+
 export interface AutoSyncConfig {
   enabled: boolean;
   mode: "off" | "manual" | "smart" | "aggressive";
@@ -37,7 +39,8 @@ export class AutoSyncManager {
     private config: AutoSyncConfig,
     private repoName: string,
     private apiBaseUrl: string,
-    private outputChannel: vscode.OutputChannel
+    private outputChannel: vscode.OutputChannel,
+    private workspaceApi: WorkspaceEventApi = vscode.workspace
   ) {}
 
   async start() {
@@ -57,11 +60,16 @@ export class AutoSyncManager {
 
   private startActivityTracking() {
     // Track text document changes
-    this.activityTracker = vscode.workspace.onDidChangeTextDocument(() => {
-      if (!this.isDisposed) {
-        this.lastActivityTime = Date.now();
-      }
-    });
+    try {
+      this.activityTracker = this.workspaceApi.onDidChangeTextDocument(() => {
+        if (!this.isDisposed) {
+          this.lastActivityTime = Date.now();
+        }
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log(`[AutoSync] Failed to start activity tracking: ${message}`);
+    }
   }
 
   private startPeriodicCheck() {
