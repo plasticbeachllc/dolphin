@@ -114,6 +114,7 @@ dev = [
     "psutil>=7.1.2",
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
+    "pip-audit>=2.7.3",
     "ruff>=0.1.0",
     "twine>=6.2.0",
     "ty>=0.0.1a26",
