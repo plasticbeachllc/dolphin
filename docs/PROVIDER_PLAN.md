@@ -86,10 +86,62 @@ Notes:
 ```ts
 export type LLMProviderName = "anthropic" | "openai";
 
-// Content can be plain text or provider-specific rich blocks
-// (e.g., Anthropic ContentBlock[], OpenAI message content arrays).
-// Implementations MUST preserve whatever the underlying SDK returns.
-export type LLMContent = unknown;
+export type LLMBlockType =
+  | "text"
+  | "code"
+  | "tool_call"
+  | "tool_result"
+  | "system_note"
+  | "markdown";
+
+export interface LLMBaseBlock {
+  type: LLMBlockType;
+  provider: LLMProviderName;
+  /**
+   * Escape hatch for provider-specific data (Anthropic/OpenAI/etc).
+   * May be omitted when persisting to disk to keep formats stable.
+   */
+  rawProviderPayload?: unknown;
+}
+
+export interface LLMTextBlock extends LLMBaseBlock {
+  type: "text" | "markdown";
+  text: string;
+}
+
+export interface LLMCodeBlock extends LLMBaseBlock {
+  type: "code";
+  language?: string;
+  code: string;
+}
+
+export interface LLMToolCallBlock extends LLMBaseBlock {
+  type: "tool_call";
+  toolName: string;
+  arguments: Record<string, unknown>;
+  callId: string;
+}
+
+export interface LLMToolResultBlock extends LLMBaseBlock {
+  type: "tool_result";
+  toolName: string;
+  callId: string;
+  result: unknown;
+  isError?: boolean;
+}
+
+export type LLMBlock =
+  | LLMTextBlock
+  | LLMCodeBlock
+  | LLMToolCallBlock
+  | LLMToolResultBlock
+  | LLMBaseBlock; // open for future extension
+
+/**
+ * Content may be a single block or an ordered array of blocks.
+ * Implementations MUST preserve structure from the underlying SDK.
+ */
+export type LLMContent = LLMBlock | LLMBlock[];
 
 export interface LLMMessage {
   role: "user" | "assistant";
