@@ -46,7 +46,6 @@ dependencies = [
     "pyyaml",
     "python-dotenv",
     "sqlite-utils",
-    "tomli ; python_full_version < '3.11'",
     # Graph intelligence dependencies (Phase 1)
     "networkx>=3.2",
     "python-louvain>=0.16",
