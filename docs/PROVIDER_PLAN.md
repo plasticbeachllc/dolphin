@@ -734,6 +734,81 @@ interface AuthStatusData {
 
 The extension already requests `get_auth_status` from Agent Core; only shape/labels change.
 
+### 4.4 Webview Rendering & Streaming of LLM Blocks
+
+**Goal:** Render responses in a rich, provider‑agnostic way while leveraging any formatting the LLM gives us (code blocks, markdown, tool calls/results).
+
+#### 4.4.1 Message Model in the Webview
+
+- Agent Core sends chat messages as an array of `LLMMessage`:
+  - `role: "user" | "assistant"`
+  - `content: LLMContent` (`LLMBlock | LLMBlock[]`)
+- The webview flattens each `LLMMessage.content` into a linear array of `LLMBlock`s for rendering, grouped per message and role.
+- Provider differences are hidden behind the `LLMBlock` union; the webview only branches on:
+  - `block.type` (`text`, `markdown`, `code`, `tool_call`, `tool_result`, `system_note`)
+  - `block.provider` for minor cosmetic tweaks (icons, labels).
+
+#### 4.4.2 Block‑Type Rendering
+
+- **Text / Markdown (`LLMTextBlock` with `type: "text" | "markdown"`):**
+  - Use the existing markdown renderer in the webview to display:
+    - Paragraphs, headings, lists.
+    - Inline code and fenced code blocks.
+  - For fenced code blocks detected in markdown:
+    - Convert them into `CodeBlock` UI with language label and copy‑to‑clipboard.
+  - Ensure any HTML is sanitized before insertion.
+
+- **Code (`LLMCodeBlock`):**
+  - Render using the webview’s existing code block component:
+    - Syntax highlight based on `language`.
+    - Show language badge and copy button.
+    - Optionally support an inline “Apply” action when paired with tool diffs (future).
+
+- **Tool Call (`LLMToolCallBlock`):**
+  - Render as a compact “Tool Call” card:
+    - Header: tool name, provider icon.
+    - Body: pretty‑printed `arguments` (JSON) in a monospaced block.
+    - Status pill: “Running…” until a matching `tool_result` arrives.
+  - Cards should be visually distinct but lightweight to avoid overwhelming the main chat.
+
+- **Tool Result (`LLMToolResultBlock`):**
+  - Render as a “Tool Result” card aligned with the previous tool call:
+    - Header: tool name, matching call id.
+    - Body:
+      - If `isError`, show error styling and error message extracted from `result`.
+      - Otherwise, show summarized result plus a “View raw” toggle for complex payloads.
+
+- **System Note (`LLMBaseBlock` with `type: "system_note"`):**
+  - Render as subtle, low‑contrast inline notes (e.g., “switched provider”, “truncated output”).
+
+- **Raw Provider Payload (`rawProviderPayload`):**
+  - Not rendered by default.
+  - Expose via an optional “Developer Mode” / “Show raw LLM data” toggle that:
+    - Shows a collapsible JSON inspector for debugging.
+    - Is clearly marked as provider‑specific and non‑stable.
+
+#### 4.4.3 Streaming & Incremental Updates
+
+- Agent Core continues to emit streaming `AgentEvent`s (e.g., `content_delta`, `tool_call_started`, `tool_call_completed`) during `execute`.
+- Webview handling:
+  - Maintain an in‑memory representation of the current assistant message as an array of `LLMBlock`s.
+  - For text/markdown:
+    - Append new `LLMTextBlock` segments as they arrive.
+    - Coalesce adjacent text blocks for efficient rendering where possible.
+  - For tool calls:
+    - On `tool_call_started`, insert a provisional `LLMToolCallBlock` with minimal arguments.
+    - On `tool_call_completed`, either:
+      - Insert a new `LLMToolResultBlock` card, or
+      - Update an existing one if streaming yields partial results.
+- The UI should ensure smooth scrolling and minimal layout jumps while blocks are appended.
+
+#### 4.4.4 Persistence Considerations
+
+- When conversations are persisted (TOML, JSON, etc.):
+  - Persist only the normalized `LLMBlock` representation (text/markdown/code/tool_call/tool_result).
+  - Strip `rawProviderPayload` by default to keep storage stable and provider‑agnostic.
+  - On restore, the webview rehydrates messages from `LLMBlock`s only; provider‑specific details can be reattached in memory if needed for debugging.
+
 ---
 
 ## 5. Testing Strategy
