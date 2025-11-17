@@ -468,4 +468,44 @@ describe("DolphinViewProvider Unit Tests", () => {
       }, 50);
     });
   });
+
+  describe("auth status requests", () => {
+    it("forwards provider-aware payloads to the webview", async () => {
+      const posted: unknown[] = [];
+      let messageHandler: ((message: unknown) => Thenable<void> | void) | undefined;
+
+      const mockWebviewView = {
+        webview: {
+          options: {},
+          postMessage: (message: unknown) => {
+            posted.push(message);
+            return Promise.resolve(true);
+          },
+          onDidReceiveMessage: (callback: (message: unknown) => Thenable<void> | void) => {
+            messageHandler = callback;
+            return { dispose: () => {} };
+          },
+          asWebviewUri: (resource: vscode.Uri) => resource,
+        },
+      } as unknown as vscode.WebviewView;
+
+      (provider as unknown as { getHtml: () => string }).getHtml = () =>
+        "<!doctype html><html></html>";
+      (provider as unknown as { sendTheme: () => void }).sendTheme = () => {};
+      provider.resolveWebviewView(mockWebviewView);
+
+      const expected = {
+        providers: [{ provider: "anthropic", authenticated: true, mode: "subscription" }],
+      };
+      (mockAgentBridge as unknown as { getAuthStatus: () => Promise<unknown> }).getAuthStatus =
+        async () => expected;
+
+      await (messageHandler as (message: unknown) => Promise<void>)({ type: "get_auth_status" });
+
+      assert.strictEqual(posted.length, 1, "Should emit one auth_status message");
+      const payload = posted[0] as { type: string; status: unknown };
+      assert.strictEqual(payload.type, "auth_status", "Should forward auth_status type");
+      assert.deepStrictEqual(payload.status, expected, "Should forward provider payload");
+    });
+  });
 });

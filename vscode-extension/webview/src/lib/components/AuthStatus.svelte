@@ -3,18 +3,23 @@
   import { Badge } from '$lib/components/ui/badge';
   import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
   import { getVSCodeAPI } from '$lib/api/vscode';
-  
-  interface AuthStatusData {
-    mode: 'claude_cli' | 'api_key' | 'auto';
-    cliInstalled: boolean;
-    cliAuthenticated: boolean;
-    apiKeySet: boolean;
-    willUseSubscription: boolean;
+  import {
+    type ProviderAuthStatus,
+    getProviderDisplayName,
+    getStatusHeadline,
+    getStatusHint,
+    getStatusIcon,
+    getStatusTone
+  } from './auth-status-helpers';
+
+  interface AuthStatusPayload {
+    providers: ProviderAuthStatus[];
   }
-  
-  let authStatus = $state<AuthStatusData | null>(null);
+
+  let providerStatuses = $state<ProviderAuthStatus[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
+  let lastUpdated = $state<string | null>(null);
   
   onMount(async () => {
     await fetchAuthStatus();
@@ -27,27 +32,25 @@
       
       // Use the singleton VSCode API
       const vscode = getVSCodeAPI();
-      vscode.postMessage({
-        type: 'get_auth_status'
-      });
-      
-      // Listen for response
       const handleMessage = (event: MessageEvent) => {
-        const message = event.data;
+        const message = event.data as { type?: string; status?: AuthStatusPayload };
         if (message.type === 'auth_status') {
-          authStatus = message.status;
+          providerStatuses = message.status?.providers ?? [];
+          lastUpdated = new Date().toLocaleTimeString();
           loading = false;
+          clearTimeout(timeout);
           window.removeEventListener('message', handleMessage);
         }
       };
-      
+
       window.addEventListener('message', handleMessage);
-      
-      // Timeout after 5 seconds
-      setTimeout(() => {
+      vscode.postMessage({ type: 'get_auth_status' });
+
+      const timeout = setTimeout(() => {
         if (loading) {
           error = 'Failed to fetch auth status';
           loading = false;
+          window.removeEventListener('message', handleMessage);
         }
       }, 5000);
     } catch (err: any) {
@@ -55,33 +58,19 @@
       loading = false;
     }
   }
-  
-  function getStatusColor(status: AuthStatusData): string {
-    if (status.willUseSubscription) return 'bg-green-500';
-    if (status.apiKeySet) return 'bg-blue-500';
-    return 'bg-yellow-500';
-  }
-  
-  function getStatusText(status: AuthStatusData): string {
-    if (status.willUseSubscription) return 'Using Claude Subscription';
-    if (status.apiKeySet) return 'Using API Key';
-    if (status.cliInstalled && !status.cliAuthenticated) return 'CLI Not Authenticated';
-    if (!status.cliInstalled && !status.apiKeySet) return 'Not Configured';
-    return 'Auto-detecting...';
-  }
-  
-  function getStatusIcon(status: AuthStatusData): string {
-    if (status.willUseSubscription) return '✅';
-    if (status.apiKeySet) return '💳';
-    if (status.cliInstalled && !status.cliAuthenticated) return '⚠️';
-    return '❌';
+
+  function getBadgeVariant(status: ProviderAuthStatus): 'default' | 'secondary' | 'destructive' {
+    const tone = getStatusTone(status);
+    if (tone === 'success') return 'default';
+    if (tone === 'warning') return 'secondary';
+    return 'destructive';
   }
 </script>
 
 <Card>
   <CardHeader>
     <CardTitle>Authentication Status</CardTitle>
-    <CardDescription>Current Claude AI configuration</CardDescription>
+    <CardDescription>Current Anthropic / OpenAI configuration</CardDescription>
   </CardHeader>
   <CardContent>
     {#if loading}
@@ -93,75 +82,39 @@
       <div class="rounded-md bg-destructive/10 p-3">
         <p class="text-sm text-destructive">❌ {error}</p>
       </div>
-    {:else if authStatus}
+    {:else}
       <div class="space-y-4">
-        <!-- Status Badge -->
-        <div class="flex items-center space-x-2">
-          <span class="text-2xl">{getStatusIcon(authStatus)}</span>
-          <div>
-            <p class="font-medium">{getStatusText(authStatus)}</p>
-            <p class="text-xs text-muted-foreground">Mode: {authStatus.mode}</p>
-          </div>
-        </div>
-        
-        <!-- Details -->
-        <div class="space-y-2 text-sm">
-          <div class="flex items-center justify-between">
-            <span class="text-muted-foreground">CLI Installed:</span>
-            <Badge variant={authStatus.cliInstalled ? 'default' : 'secondary'}>
-              {authStatus.cliInstalled ? 'Yes' : 'No'}
-            </Badge>
-          </div>
-          
-          <div class="flex items-center justify-between">
-            <span class="text-muted-foreground">CLI Authenticated:</span>
-            <Badge variant={authStatus.cliAuthenticated ? 'default' : 'secondary'}>
-              {authStatus.cliAuthenticated ? 'Yes' : 'No'}
-            </Badge>
-          </div>
-          
-          <div class="flex items-center justify-between">
-            <span class="text-muted-foreground">API Key Set:</span>
-            <Badge variant={authStatus.apiKeySet ? 'default' : 'secondary'}>
-              {authStatus.apiKeySet ? 'Yes' : 'No'}
-            </Badge>
-          </div>
-        </div>
-        
-        <!-- Help Text -->
-        {#if authStatus.willUseSubscription}
-          <div class="rounded-md bg-green-500/10 p-3">
-            <p class="text-sm text-green-700 dark:text-green-400">
-              🎉 Using your Claude subscription - no API costs!
-            </p>
-          </div>
-        {:else if authStatus.apiKeySet}
-          <div class="rounded-md bg-blue-500/10 p-3">
-            <p class="text-sm text-blue-700 dark:text-blue-400">
-              Using API key - pay-per-token billing applies
-            </p>
-          </div>
-        {:else if authStatus.cliInstalled && !authStatus.cliAuthenticated}
-          <div class="rounded-md bg-yellow-500/10 p-3">
-            <p class="text-sm text-yellow-700 dark:text-yellow-400">
-              ⚠️ Claude CLI installed but not authenticated
-            </p>
-            <p class="text-xs text-muted-foreground mt-1">
-              Run: <code class="bg-muted px-1 rounded">claude</code> to authenticate
+        {#if providerStatuses.length === 0}
+          <div class="rounded-md bg-secondary/30 p-3">
+            <p class="text-sm text-muted-foreground">
+              Provider configuration unavailable. Set a provider and API key in VS Code settings to
+              see detailed status.
             </p>
           </div>
         {:else}
-          <div class="rounded-md bg-destructive/10 p-3">
-            <p class="text-sm text-destructive">
-              ❌ No authentication configured
-            </p>
-            <p class="text-xs text-muted-foreground mt-1">
-              Install Claude CLI or set ANTHROPIC_API_KEY
-            </p>
-          </div>
+          {#each providerStatuses as status (status.provider)}
+            <div class="rounded-md border p-3 space-y-2">
+              <div class="flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                  <span class="text-2xl">{getStatusIcon(status)}</span>
+                  <div>
+                    <p class="font-medium">{getProviderDisplayName(status.provider)}</p>
+                    <p class="text-xs text-muted-foreground">{getStatusHeadline(status)}</p>
+                  </div>
+                </div>
+                <Badge variant={getBadgeVariant(status)}>
+                  {status.authenticated ? 'Authenticated' : 'Action Required'}
+                </Badge>
+              </div>
+              <p class="text-xs text-muted-foreground">{getStatusHint(status)}</p>
+            </div>
+          {/each}
         {/if}
-        
-        <!-- Refresh Button -->
+
+        {#if lastUpdated}
+          <p class="text-xs text-muted-foreground">Last updated: {lastUpdated}</p>
+        {/if}
+
         <button
           onclick={() => fetchAuthStatus()}
           class="text-sm text-muted-foreground hover:text-foreground underline"

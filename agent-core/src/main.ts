@@ -22,6 +22,8 @@ import { PromptBuilder } from "./prompts/prompt-builder";
 import { PlanStore } from "./storage/plan-store";
 import { join as pathJoin } from "path";
 import { loadProviderSettings } from "./utils/provider-settings";
+import { buildProviderAuthStatuses } from "./utils/auth-status";
+import type { ProviderAuthStatus } from "../../shared/types/events";
 
 interface Message {
   jsonrpc: "2.0";
@@ -411,9 +413,20 @@ class AgentCoreV2 {
         return { success: true };
       }
 
+      case "getAuthStatus":
+      case "get_auth_status": {
+        const providers = await this.collectAuthStatuses();
+        return { providers };
+      }
+
       default:
         throw new Error(`Unknown method: ${request.method}`);
     }
+  }
+
+  private async collectAuthStatuses(): Promise<ProviderAuthStatus[]> {
+    const providers = this.getUniqueProviders();
+    return buildProviderAuthStatuses(providers);
   }
 
   private sendResponse(id: number, result: unknown) {

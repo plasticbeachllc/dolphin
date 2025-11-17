@@ -1,5 +1,5 @@
 // vscode-extension/src/agent/bridge.ts
-import { ChildProcess, spawn } from "child_process";
+import { ChildProcess, spawn, SpawnOptionsWithoutStdio } from "child_process";
 import * as vscode from "vscode";
 import type {
   AgentEvent,
@@ -13,7 +13,33 @@ import {
   createMessageConnection,
   MessageConnection,
 } from "vscode-jsonrpc/node";
-import { AgentBridgeAdapter, AgentAuthOptions } from "./types";
+import { AgentBridgeAdapter, AgentAuthOptions, AgentEnvironmentLayers } from "./types";
+import type { AgentAuthStatusResponse } from "../types/auth";
+
+export function mergeAgentEnvironment(
+  baseEnv: NodeJS.ProcessEnv,
+  layers?: AgentEnvironmentLayers
+): NodeJS.ProcessEnv {
+  const merged: NodeJS.ProcessEnv = { ...baseEnv };
+
+  const applyLayer = (layer?: Record<string, string | undefined>) => {
+    if (!layer) {
+      return;
+    }
+    for (const [key, value] of Object.entries(layer)) {
+      if (!key || typeof value !== "string") {
+        continue;
+      }
+      merged[key] = value;
+    }
+  };
+
+  // Merge order matters: defaults override inherited env, extension overrides beat defaults.
+  applyLayer(layers?.defaults);
+  applyLayer(layers?.overrides);
+
+  return merged;
+}
 
 /**
  * AgentBridge manages communication with the Agent Core process via JSON-RPC.
@@ -43,11 +69,17 @@ export class AgentBridge implements AgentBridgeAdapter {
   private restartBackoffs = [1000, 3000, 10000]; // 1s, 3s, 10s
   private isShuttingDown = false;
   private restartTimers: NodeJS.Timeout[] = []; // Track restart timers for cleanup
+  private readonly spawnImpl: (
+    command: string,
+    args?: readonly string[] | undefined,
+    options?: SpawnOptionsWithoutStdio | undefined
+  ) => ChildProcess;
 
   public readonly onEvent = this.eventEmitter.event;
 
-  constructor(outputChannel: vscode.OutputChannel) {
+  constructor(outputChannel: vscode.OutputChannel, spawnFn: typeof spawn = spawn) {
     this.outputChannel = outputChannel;
+    this.spawnImpl = spawnFn;
   }
 
   async start(
@@ -70,27 +102,41 @@ export class AgentBridge implements AgentBridgeAdapter {
 
     // Spawn Agent Core with workspace root and extension path
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
-    const env = { ...process.env };
-    const anthropicKey = options?.anthropicApiKey ?? undefined;
-    const openaiKey = options?.openaiApiKey ?? undefined;
-    const kbApiKey = options?.kbApiKey ?? undefined;
+    const authLayer: Record<string, string | undefined> = {};
+    if (options?.anthropicApiKey) {
+      authLayer.ANTHROPIC_API_KEY = options.anthropicApiKey;
+    }
+    if (options?.openaiApiKey) {
+      authLayer.OPENAI_API_KEY = options.openaiApiKey;
+    }
+    if (options?.kbApiKey) {
+      authLayer.DOLPHIN_API_KEY = options.kbApiKey;
+    }
 
-    if (anthropicKey) {
-      env.ANTHROPIC_API_KEY = anthropicKey;
+    const env = mergeAgentEnvironment(process.env, {
+      defaults: options?.env?.defaults,
+      overrides: { ...options?.env?.overrides, ...authLayer },
+    });
+
+    if (authLayer.ANTHROPIC_API_KEY) {
       this.outputChannel.appendLine("[AgentBridge] Anthropic API key provided via SecretStorage");
     }
 
-    if (openaiKey) {
-      env.OPENAI_API_KEY = openaiKey;
+    if (authLayer.OPENAI_API_KEY) {
       this.outputChannel.appendLine("[AgentBridge] OpenAI API key provided via SecretStorage");
     }
 
-    if (kbApiKey) {
-      env.DOLPHIN_API_KEY = kbApiKey;
+    if (authLayer.DOLPHIN_API_KEY) {
       this.outputChannel.appendLine("[AgentBridge] KB API key provided for agent HTTP calls");
     }
 
-    this.process = spawn(bunPath, ["run", agentCorePath, workspaceRoot, extensionPath], {
+    this.outputChannel.appendLine(
+      `[AgentBridge] Provider env → provider=${env.DOLPHIN_LLM_PROVIDER ?? "inherit"}, model=${
+        env.DOLPHIN_LLM_MODEL ?? "inherit"
+      }`
+    );
+
+    this.process = this.spawnImpl(bunPath, ["run", agentCorePath, workspaceRoot, extensionPath], {
       stdio: ["pipe", "pipe", "pipe"],
       env,
     });
@@ -343,8 +389,8 @@ export class AgentBridge implements AgentBridgeAdapter {
     await this.sendNotification("send_message", request);
   }
 
-  async getAuthStatus(): Promise<unknown> {
-    return this.sendRequest("get_auth_status", undefined, 3000);
+  async getAuthStatus(): Promise<AgentAuthStatusResponse> {
+    return (await this.sendRequest("get_auth_status", undefined, 3000)) as AgentAuthStatusResponse;
   }
 
   async abortGeneration(): Promise<void> {

@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { AgentEvent, ConversationListItem, LoadConversationResult } from "../types/events";
 import { AgentBridgeAdapter, AgentAuthOptions } from "./types";
+import type { AgentAuthStatusResponse } from "../types/auth";
 
 interface ConversationState {
   id: string;
@@ -96,11 +97,15 @@ export class TestAgentBridge implements AgentBridgeAdapter {
     });
   }
 
-  async getAuthStatus(): Promise<unknown> {
+  async getAuthStatus(): Promise<AgentAuthStatusResponse> {
     return {
-      status: "connected",
-      provider: "test",
-      lastChecked: new Date().toISOString(),
+      providers: [
+        {
+          provider: "test",
+          authenticated: true,
+          mode: "test",
+        },
+      ],
     };
   }
 
