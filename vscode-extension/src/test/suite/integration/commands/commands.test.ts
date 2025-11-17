@@ -201,7 +201,14 @@ describe("Command Tests", () => {
       }
 
       // Skip setApiKey command that requires user input
-      if (cmd === "dolphin.setApiKey" || cmd === "dolphin.kb.setApiKey") {
+      if (
+        [
+          "dolphin.setApiKey",
+          "dolphin.kb.setApiKey",
+          "dolphin.setClaudeApiKey",
+          "dolphin.setOpenAIApiKey",
+        ].includes(cmd)
+      ) {
         console.log(`  Skipping ${cmd} (requires user input)`);
         continue;
       }

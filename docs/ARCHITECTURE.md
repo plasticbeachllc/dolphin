@@ -356,11 +356,11 @@ All file operations use PathValidator to prevent:
 
 **Location**: `vscode-extension/`
 
-**Purpose**: Rich AI coding assistant integrated into VSCode with beautiful UI and seamless Claude integration.
+**Purpose**: Rich AI coding assistant integrated into VSCode with beautiful UI and seamless Anthropic + OpenAI integration.
 
 **Key Features**:
 
-- Real-time streaming Claude responses
+- Real-time streaming Claude or GPT responses
 - SvelteKit-based webview with shadcn/ui components
 - Tool call visualization cards
 - Message persistence across sessions
