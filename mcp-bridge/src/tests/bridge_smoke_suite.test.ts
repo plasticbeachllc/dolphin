@@ -15,7 +15,11 @@ function createDeps(overrides: Partial<BridgeSmokeDeps> = {}): BridgeSmokeDeps {
       repos: [{ name: "repoa", path: "/tmp/repo", chunks: 5, files: 2 }],
     }),
     makeSearchKnowledge: () => ({
-      definition: { name: "search", description: "", inputSchema: { type: "object", properties: {} } },
+      definition: {
+        name: "search",
+        description: "",
+        inputSchema: { type: "object", properties: {} },
+      },
       handler: async () => ({
         isError: false,
         content: [{ type: "text", text: "summary" }],
@@ -23,12 +27,19 @@ function createDeps(overrides: Partial<BridgeSmokeDeps> = {}): BridgeSmokeDeps {
       }),
     }),
     makeFetchChunk: () => ({
-      definition: { name: "chunk", description: "", inputSchema: { type: "object", properties: {} } },
+      definition: {
+        name: "chunk",
+        description: "",
+        inputSchema: { type: "object", properties: {} },
+      },
       handler: async () => ({
         isError: false,
         content: [
           { type: "text", text: "Chunk chunk-1" },
-          { type: "resource", resource: { uri: "kb://chunk-1", mimeType: "text/plain", text: "code" } },
+          {
+            type: "resource",
+            resource: { uri: "kb://chunk-1", mimeType: "text/plain", text: "code" },
+          },
         ],
         data: {
           chunk_id: baseHit.chunk_id,
@@ -42,15 +53,28 @@ function createDeps(overrides: Partial<BridgeSmokeDeps> = {}): BridgeSmokeDeps {
       }),
     }),
     makeFetchLines: () => ({
-      definition: { name: "lines", description: "", inputSchema: { type: "object", properties: {} } },
+      definition: {
+        name: "lines",
+        description: "",
+        inputSchema: { type: "object", properties: {} },
+      },
       handler: async () => ({
         isError: false,
         content: [{ type: "text", text: "Lines" }],
-        data: { repo: baseHit.repo, path: baseHit.path, start_line: baseHit.start_line, end_line: baseHit.end_line },
+        data: {
+          repo: baseHit.repo,
+          path: baseHit.path,
+          start_line: baseHit.start_line,
+          end_line: baseHit.end_line,
+        },
       }),
     }),
     makeGetVectorStoreInfo: () => ({
-      definition: { name: "info", description: "", inputSchema: { type: "object", properties: {} } },
+      definition: {
+        name: "info",
+        description: "",
+        inputSchema: { type: "object", properties: {} },
+      },
       handler: async () => ({
         isError: false,
         content: [{ type: "text", text: "info" }],
@@ -89,7 +113,11 @@ describe("runBridgeSmokeSuite", () => {
   it("surfaces tool-level errors such as search failures", async () => {
     const deps = createDeps({
       makeSearchKnowledge: () => ({
-        definition: { name: "search", description: "", inputSchema: { type: "object", properties: {} } },
+        definition: {
+          name: "search",
+          description: "",
+          inputSchema: { type: "object", properties: {} },
+        },
         handler: async () => ({
           isError: true,
           content: [{ type: "text", text: "Search failed" }],

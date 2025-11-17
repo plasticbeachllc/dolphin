@@ -69,7 +69,9 @@ export async function runBridgeSmokeSuite(
         const repos = await deps.listRepos();
         log(`Found ${repos.repos.length} indexed repo(s)`);
         if (repos.repos.length === 0) {
-          throw new Error("No repositories indexed. Index a repo before running the bridge smoke test.");
+          throw new Error(
+            "No repositories indexed. Index a repo before running the bridge smoke test."
+          );
         }
       },
     },

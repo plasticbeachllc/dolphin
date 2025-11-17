@@ -44,7 +44,9 @@ async function main() {
   console.log(`   ❌ Failed: ${report.failed}`);
 
   if (report.failed > 0) {
-    console.log("\n❌ One or more smoke tests failed. Ensure kb-api is reachable at 127.0.0.1:7777.");
+    console.log(
+      "\n❌ One or more smoke tests failed. Ensure kb-api is reachable at 127.0.0.1:7777."
+    );
     process.exit(1);
   }
 
