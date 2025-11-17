@@ -182,9 +182,9 @@ describe("Error Handling Tests", () => {
       mockBridge = new MockAgentBridge();
     });
 
-    afterEach(() => {
+    afterEach(async () => {
       if (mockBridge) {
-        mockBridge.shutdown();
+        await mockBridge.shutdown();
       }
     });
 

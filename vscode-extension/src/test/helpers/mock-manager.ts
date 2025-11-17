@@ -55,7 +55,7 @@ export function getMockEnvironment(): MockEnvironment {
 export async function teardownMockEnvironment(): Promise<void> {
   if (mockEnvironment) {
     await mockEnvironment.kbServer.stop();
-    mockEnvironment.agentBridge.shutdown();
+    await mockEnvironment.agentBridge.shutdown();
     mockEnvironment = null;
   }
 }

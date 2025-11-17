@@ -62,7 +62,7 @@ The e2e tests were showing DisposableStore warnings because of improper disposal
 Correct disposal order for tests:
 
 ```typescript
-afterEach(() => {
+afterEach(async () => {
   // 1. Stop event listeners (DolphinViewProvider)
   if (provider) {
     provider.dispose();
@@ -70,7 +70,7 @@ afterEach(() => {
 
   // 2. Shutdown agent and cancel async operations
   if (agentBridge) {
-    agentBridge.shutdown();
+    await agentBridge.shutdown();
   }
 
   // 3. Finally dispose output channel

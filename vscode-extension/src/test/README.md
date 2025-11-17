@@ -240,7 +240,7 @@ mockBridge.simulateToolCall("search", { query: "test" });
 
 // Clean up
 disposable.dispose();
-mockBridge.shutdown();
+await mockBridge.shutdown();
 ```
 
 **New Capabilities:**

@@ -168,6 +168,13 @@ export function getAgentBridge(): AgentBridgeAdapter | null {
   return agentBridge;
 }
 
+function requireAgentBridge(): AgentBridgeAdapter {
+  if (!agentBridge) {
+    throw new Error("Agent bridge is not initialized");
+  }
+  return agentBridge;
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   // Create output channel for logging (shared by extension and agent bridge)
   outputChannel = vscode.window.createOutputChannel("Dolphin");
@@ -224,8 +231,10 @@ export async function activate(context: vscode.ExtensionContext) {
       logger.info("No provider API keys found - relying on CLI or env vars");
     }
 
+    const activeBridge = requireAgentBridge();
+
     try {
-      await agentBridge.start(agentCorePath, extensionPath, {
+      await activeBridge.start(agentCorePath, extensionPath, {
         anthropicApiKey,
         openaiApiKey,
         kbApiKey: getKbApiKey(),
@@ -254,7 +263,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     // Listen for agent events
-    const bridgeEventDisposable = agentBridge.onEvent((event) => {
+    const bridgeEventDisposable = activeBridge.onEvent((event) => {
       outputChannel.appendLine(`[Extension] Agent event: ${event.type}`);
     });
     context.subscriptions.push(bridgeEventDisposable);
@@ -382,7 +391,7 @@ export async function activate(context: vscode.ExtensionContext) {
     viewProvider = new DolphinViewProvider(
       context.extensionUri,
       outputChannel,
-      agentBridge,
+      requireAgentBridge(),
       getKbApiKey()
     );
     logger.debug("Registering webview view provider for 'dolphin.chatView'...");
@@ -552,7 +561,7 @@ export async function activate(context: vscode.ExtensionContext) {
           outputChannel.appendLine("[KB Restart] Shutting down agent and KB...");
 
           // Shutdown existing agent (this also shuts down KB)
-          agentBridge.shutdown();
+          await requireAgentBridge().shutdown();
 
           // Wait a moment for cleanup
           await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -578,7 +587,9 @@ export async function activate(context: vscode.ExtensionContext) {
           const anthropicApiKey = await context.secrets.get(CLAUDE_SECRET_ID);
           const openaiApiKey = await context.secrets.get(OPENAI_SECRET_ID);
 
-          await agentBridge.start(agentCorePath, extensionPath, {
+          const restartedBridge = requireAgentBridge();
+
+          await restartedBridge.start(agentCorePath, extensionPath, {
             anthropicApiKey,
             openaiApiKey,
             kbApiKey: getKbApiKey(),
@@ -591,7 +602,7 @@ export async function activate(context: vscode.ExtensionContext) {
             viewProvider = new DolphinViewProvider(
               context.extensionUri,
               outputChannel,
-              agentBridge,
+              restartedBridge,
               getKbApiKey()
             );
           }
@@ -962,13 +973,13 @@ async function recoverFromCrash(_context: vscode.ExtensionContext): Promise<void
   }
 }
 
-export function deactivate() {
+export async function deactivate() {
   fileWatcher?.dispose();
   statusBar?.dispose();
   autoSyncManager?.dispose();
   driftDetector?.dispose();
   viewProvider?.dispose();
-  agentBridge?.shutdown();
+  await agentBridge?.shutdown();
   agentBridge = null;
   fileWatcher = null;
   statusBar = null;
