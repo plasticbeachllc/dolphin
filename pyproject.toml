@@ -195,6 +195,11 @@ show_contexts = true
 
 [tool.ruff]
 line-length = 120
+exclude = [
+    ".vscode",
+    "uv.lock",
+    "package-lock.json"
+]
 
 # Configure linting behavior
 [tool.ruff.lint]

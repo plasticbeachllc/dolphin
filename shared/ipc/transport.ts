@@ -55,6 +55,54 @@ export type MessageHandler = (message: any) => void | Promise<void>;
 /**
  * Enhanced IPC transport using vscode-jsonrpc
  */
+const UNDEFINED_RESULT_SENTINEL = { __ipcUndefinedResult__: true } as const;
+
+type IpcErrorPayload = {
+  message?: string;
+  code?: number;
+  data?: any;
+};
+
+class LazyTransformedPromise<T> implements Promise<T> {
+  readonly [Symbol.toStringTag] = "Promise";
+
+  constructor(
+    private readonly inner: Promise<any>,
+    private readonly transform: (value: any) => Promise<T>
+  ) {}
+
+  then<TResult1 = T, TResult2 = never>(
+    onFulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null,
+    onRejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null
+  ): Promise<TResult1 | TResult2> {
+    return this.inner.then(
+      (value) => this.transform(value).then(onFulfilled, onRejected),
+      (error) => (onRejected ? onRejected(error) : Promise.reject(error))
+    );
+  }
+
+  catch<TResult = never>(
+    onRejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null
+  ): Promise<T | TResult> {
+    return this.then(undefined, onRejected);
+  }
+
+  finally(onFinally?: (() => void) | undefined | null): Promise<T> {
+    const handler = () => {
+      if (onFinally) {
+        onFinally();
+      }
+    };
+    return this.then(
+      (value) => Promise.resolve(handler()).then(() => value),
+      (reason) =>
+        Promise.resolve(handler()).then(() => {
+          throw reason;
+        })
+    );
+  }
+}
+
 export class IPCTransport {
   private reader: MessageReader;
   private writer: MessageWriter;
@@ -64,7 +112,6 @@ export class IPCTransport {
     string | number,
     {
       resolve: (value: any) => void;
-      reject: (error: Error) => void;
       timeout: NodeJS.Timeout;
     }
   >();
@@ -72,6 +119,7 @@ export class IPCTransport {
   private defaultHandler?: MessageHandler;
   private enableMetrics: boolean;
   private requestIdCounter = 0;
+  private disposed = false;
 
   constructor(config: TransportConfig) {
     this.reader = new StreamMessageReader(config.input);
@@ -90,12 +138,7 @@ export class IPCTransport {
 
     this.reader.onClose(() => {
       console.error("[IPCTransport] Reader closed");
-      // Reject all pending requests when reader closes
-      for (const [id, pending] of this.pendingRequests) {
-        clearTimeout(pending.timeout);
-        pending.reject(new Error("Connection closed"));
-      }
-      this.pendingRequests.clear();
+      this.rejectAllPendingRequests("Connection closed");
     });
   }
 
@@ -117,6 +160,10 @@ export class IPCTransport {
    * Send a request and wait for response
    */
   async request(method: string, params: any, timeout: number = 30000): Promise<any> {
+    if (this.disposed) {
+      throw new Error("Transport disposed");
+    }
+
     if (this.pendingRequests.size >= this.security.maxPendingRequests) {
       throw new Error(`Too many pending requests (max: ${this.security.maxPendingRequests})`);
     }
@@ -131,13 +178,18 @@ export class IPCTransport {
     };
 
     // Create pending promise
-    const promise = new Promise<any>((resolve, reject) => {
+    const promise = new Promise<any>((resolve) => {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(id);
-        reject(new Error(`Request timeout: ${method}`));
+        const timeoutPayload: IpcErrorPayload = {
+          message: `Request timeout: ${method}`,
+          code: RPCErrorCode.INTERNAL_ERROR,
+          data: { __transportTimeout: true },
+        };
+        resolve({ __ipcError: timeoutPayload });
       }, timeout);
 
-      this.pendingRequests.set(id, { resolve, reject, timeout: timer });
+      this.pendingRequests.set(id, { resolve, timeout: timer });
     });
 
     // Send request - if this fails, clean up pending request
@@ -149,10 +201,24 @@ export class IPCTransport {
         clearTimeout(pending.timeout);
         this.pendingRequests.delete(id);
       }
-      throw error;
+      throw (error instanceof Error ? error : new Error(String(error)));
     }
 
-    return promise;
+    return new LazyTransformedPromise(promise, (value) => {
+      if (value && typeof value === "object" && "__ipcError" in value) {
+        const payload = (value as any).__ipcError;
+        const rejection =
+          payload instanceof Error
+            ? payload
+            : {
+                message: payload?.message ?? "Unknown error",
+                code: payload?.code,
+                data: payload?.data,
+              };
+        return Promise.reject(rejection);
+      }
+      return Promise.resolve(value);
+    });
   }
 
   /**
@@ -172,10 +238,11 @@ export class IPCTransport {
    * Send a response to a request
    */
   async respond(id: string | number, result: any): Promise<void> {
+    const safeResult = result === undefined ? { ...UNDEFINED_RESULT_SENTINEL } : result;
     const message: VSCodeMessage = {
       jsonrpc: "2.0",
       id,
-      result,
+      result: safeResult,
     };
 
     await this.sendMessage(message);
@@ -216,7 +283,17 @@ export class IPCTransport {
       );
     }
 
-    await this.writer.write(message);
+    try {
+      await this.writer.write(message);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        /stream was destroyed|connection (?:reset|closed)|write after/i.test(error.message)
+      ) {
+        throw new Error("Connection closed");
+      }
+      throw error instanceof Error ? error : new Error(String(error));
+    }
   }
 
   /**
@@ -242,13 +319,20 @@ export class IPCTransport {
 
           if (message.error) {
             const errorMessage = message.error.message || "Unknown error";
-            const error = new Error(errorMessage);
-            // Attach error code and data for better debugging
-            (error as any).code = message.error.code;
-            (error as any).data = message.error.data;
-            pending.reject(error);
+            const errorPayload: IpcErrorPayload = {
+              message: errorMessage,
+              code: message.error.code,
+              data: message.error.data,
+            };
+            pending.resolve({ __ipcError: errorPayload });
           } else {
-            pending.resolve(message.result);
+            const result =
+              message.result &&
+              typeof message.result === "object" &&
+              "__ipcUndefinedResult__" in message.result
+                ? undefined
+                : message.result;
+            pending.resolve(result);
           }
         } else {
           // Response for unknown request ID - log but don't crash
@@ -326,15 +410,15 @@ export class IPCTransport {
    * Close the transport
    */
   dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+
     this.reader.dispose();
     this.writer.dispose();
 
-    // Reject all pending requests
-    for (const [id, pending] of this.pendingRequests) {
-      clearTimeout(pending.timeout);
-      pending.reject(new Error("Transport disposed"));
-    }
-    this.pendingRequests.clear();
+    this.rejectAllPendingRequests("Transport disposed");
   }
 
   /**
@@ -349,6 +433,19 @@ export class IPCTransport {
    */
   getSerializationFormat(): SerializationFormat {
     return this.serializer.format;
+  }
+
+  private rejectAllPendingRequests(message: string): void {
+    for (const [id, pending] of this.pendingRequests.entries()) {
+      clearTimeout(pending.timeout);
+      this.pendingRequests.delete(id);
+      const errorPayload: IpcErrorPayload = {
+        message,
+        code: RPCErrorCode.INTERNAL_ERROR,
+        data: { __transportInternal: true, requestId: id },
+      };
+      pending.resolve({ __ipcError: errorPayload });
+    }
   }
 }
 

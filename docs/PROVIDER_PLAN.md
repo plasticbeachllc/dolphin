@@ -82,8 +82,8 @@ This plan focuses on **core chat and tool‑enabled workflows** (Editor & Archit
 ### 2.1 Supported Providers & Models
 
 - **Anthropic**
-  - `claude-3.5-sonnet` (Sonnet 4.5)
-  - `claude-3.5-haiku` (Haiku 4.5)
+  - `claude-4.5-sonnet` (Sonnet 4.5)
+  - `claude-4.5-haiku` (Haiku 4.5)
 - **OpenAI**
   - `gpt-5.1`
   - `gpt-5.1-codex`
@@ -100,7 +100,7 @@ Notes:
 
 - VSCode settings (example keys):
   - `dolphin.llm.provider`: `"anthropic"` | `"openai"`
-  - `dolphin.llm.model.anthropic`: `"claude-3.5-sonnet"` / `"claude-3.5-haiku"`
+  - `dolphin.llm.model.anthropic`: `"claude-4.5-sonnet"` / `"claude-4.5-haiku"`
   - `dolphin.llm.model.openai`: `"gpt-5.1"` / `"gpt-5.1-codex"` / `"gpt-5.1-codex-mini"`
 - Secrets:
   - `dolphin.anthropicApiKey`
@@ -334,7 +334,7 @@ Workflows replace `claudeProvider` with `llmProvider` and call `execute` identic
 **Settings (package.json, not shown here):**
 
 - `dolphin.llm.provider`: `"anthropic"` | `"openai"`
-- `dolphin.llm.model.anthropic`: `"claude-3.5-sonnet"` / `"claude-3.5-haiku"`
+- `dolphin.llm.model.anthropic`: `"claude-4.5-sonnet"` / `"claude-4.5-haiku"`
 - `dolphin.llm.model.openai`: `"gpt-5.1"` / `"gpt-5.1-codex"` / `"gpt-5.1-codex-mini"`
 
 **Secrets:**
@@ -352,7 +352,7 @@ const providerSetting = vscode.workspace
 
 const anthropicModel = vscode.workspace
   .getConfiguration("dolphin.llm")
-  .get<string>("model.anthropic", "claude-3.5-sonnet");
+  .get<string>("model.anthropic", "claude-4.5-sonnet");
 
 const openaiModel = vscode.workspace
   .getConfiguration("dolphin.llm")

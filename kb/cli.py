@@ -6,12 +6,15 @@ including knowledge base management, API serving, and persona management.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import typer
 
 # Import kb CLI functions for top-level commands
 # Import subcommand apps
+from kb.api_key import get_or_create_kb_api_key
+from kb.observability import StructuredLogger
 from kb.ingest.cli import (
     add_repo as kb_add_repo,
     app as kb_app,
@@ -61,6 +64,9 @@ def dolphin_callback(
 app.add_typer(kb_app, name="kb", help="Knowledge base management commands")
 
 
+_log = StructuredLogger("kb.cli", {"component": "dolphin_cli"})
+
+
 # ==============================================================================
 # Top-Level Knowledge Base Commands
 # ==============================================================================
@@ -72,6 +78,16 @@ def init(
 ) -> None:
     """Initialize the knowledge store (config + SQLite + LanceDB collections)."""
     kb_init(config_path)
+
+    # Ensure the shared KB API key exists for future processes
+    try:
+        get_or_create_kb_api_key()
+    except Exception as exc:  # pragma: no cover - defensive logging
+        _log.warning(
+            "Failed to initialize KB API key",
+            {"command": "init"},
+            error=exc,
+        )
 
 
 @app.command()
@@ -333,6 +349,9 @@ def serve(
 ) -> None:
     """Start the dolphin API server."""
     import uvicorn
+
+    if not os.environ.get("DOLPHIN_API_KEY") and not os.environ.get("DOLPHIN_KB_API_KEY"):
+        os.environ["DOLPHIN_API_KEY"] = get_or_create_kb_api_key()
 
     uvicorn.run("kb.api.server:app_with_lifespan", host=host, port=port, reload=False)
 
