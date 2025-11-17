@@ -31,7 +31,15 @@ export interface ProviderAuthStatus {
 }
 
 export type AgentEvent =
-  | { type: "agent_ready"; version: string; capabilities: string[]; requestId?: string }
+  | {
+      type: "agent_ready";
+      version: string;
+      capabilities: string[];
+      requestId?: string;
+      hasWorkspace?: boolean;
+      workspaceName?: string | null;
+      workspacePath?: string | null;
+    }
   | { type: "ready"; data: { version: string; capabilities: string[] } }
   | { type: "workflow_update"; data: any }
   | { type: "content_delta"; delta: string; requestId?: string }

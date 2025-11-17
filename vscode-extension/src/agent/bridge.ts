@@ -457,42 +457,91 @@ export class AgentBridge implements AgentBridgeAdapter {
     });
   }
 
-  shutdown(): void {
-    this.isShuttingDown = true;
+  private clearRestartTimers(): void {
+    for (const timer of this.restartTimers) {
+      clearTimeout(timer);
+    }
+    this.restartTimers = [];
+  }
 
-    // Try to log shutdown, but don't fail if channel is disposed
+  private disposeConnectionResources(message: string): void {
+    if (this.connection) {
+      this.connection.dispose();
+      this.connection = null;
+    }
+
+    for (const [_id, pending] of this.pendingRequests.entries()) {
+      if (pending.timeout) {
+        clearTimeout(pending.timeout);
+      }
+      pending.reject(new Error(message));
+    }
+    this.pendingRequests.clear();
+  }
+
+  async stop(signal: NodeJS.Signals = "SIGTERM", timeoutMs = 5000): Promise<void> {
+    this.isShuttingDown = true;
+    this.clearRestartTimers();
+
+    const activeProcess = this.process;
+    if (!activeProcess) {
+      this.disposeConnectionResources("Agent bridge stopped");
+      return;
+    }
+
+    const alreadyExited = activeProcess.exitCode !== null || activeProcess.killed;
+
+    if (!alreadyExited) {
+      await new Promise<void>((resolve) => {
+        const cleanup = () => {
+          activeProcess.removeListener("exit", onExit);
+          activeProcess.removeListener("error", onError);
+          resolve();
+        };
+
+        const onExit = () => cleanup();
+        const onError = () => cleanup();
+        activeProcess.once("exit", onExit);
+        activeProcess.once("error", onError);
+
+        try {
+          activeProcess.kill(signal);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.outputChannel.appendLine(
+            `[AgentBridge] Failed to send ${signal} to Agent Core: ${message}`
+          );
+        }
+
+        if (timeoutMs > 0) {
+          setTimeout(() => {
+            if (!activeProcess.killed) {
+              try {
+                activeProcess.kill("SIGKILL");
+              } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.outputChannel.appendLine(
+                  `[AgentBridge] Failed to send SIGKILL to Agent Core: ${message}`
+                );
+              }
+            }
+          }, timeoutMs);
+        }
+      });
+    }
+
+    this.process = null;
+    this.disposeConnectionResources("Agent bridge stopped");
+  }
+
+  async shutdown(): Promise<void> {
     try {
       this.outputChannel.appendLine("[AgentBridge] Shutting down...");
     } catch {
       // Output channel may already be disposed in tests
     }
 
-    // Cancel all restart timers to prevent async operations after disposal
-    for (const timer of this.restartTimers) {
-      clearTimeout(timer);
-    }
-    this.restartTimers = [];
-
-    // Dispose connection first
-    if (this.connection) {
-      this.connection.dispose();
-      this.connection = null;
-    }
-
-    // Clean up all pending requests
-    for (const [_id, pending] of this.pendingRequests.entries()) {
-      if (pending.timeout) {
-        clearTimeout(pending.timeout);
-      }
-      pending.reject(new Error("Agent bridge is shutting down"));
-    }
-    this.pendingRequests.clear();
-
-    // Dispose event emitter to prevent new event listeners
+    await this.stop();
     this.eventEmitter.dispose();
-
-    // Kill the process
-    this.process?.kill("SIGTERM");
-    this.process = null;
   }
 }

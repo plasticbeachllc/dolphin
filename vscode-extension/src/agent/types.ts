@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { AgentEvent, ConversationListItem, LoadConversationResult } from "../types/events";
+import type { AgentAuthStatusResponse } from "../types/auth";
 
 export interface AgentEnvironmentLayers {
   defaults?: Record<string, string | undefined>;
@@ -15,10 +16,11 @@ export interface AgentAuthOptions {
 
 export interface AgentBridgeAdapter {
   start(agentCorePath: string, extensionPath: string, options?: AgentAuthOptions): Promise<void>;
-  shutdown(): void;
+  stop(): Promise<void>;
+  shutdown(): Promise<void>;
   readonly onEvent: vscode.Event<AgentEvent>;
   sendMessage(content: string, mode?: "code" | "architect"): Promise<void>;
-  getAuthStatus(): Promise<unknown>;
+  getAuthStatus(): Promise<AgentAuthStatusResponse>;
   abortGeneration(): Promise<void>;
   clearConversation(): Promise<void>;
   listConversations(): Promise<ConversationListItem[]>;

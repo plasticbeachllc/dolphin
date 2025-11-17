@@ -5,6 +5,9 @@ import * as fs from "fs";
 import * as http from "http";
 import { AgentBridgeAdapter } from "../agent/types";
 import type { AgentAuthStatusResponse } from "../types/auth";
+import { PROVIDER_SECRET_COMMANDS, type ProviderId } from "../config/provider-options";
+import type { ExtensionToWebviewMessage, WebviewToExtensionMessage } from "../shared/messages";
+import type { ErrorCode } from "../types/events";
 
 export class DolphinViewProvider implements vscode.WebviewViewProvider {
   private webviewView?: vscode.WebviewView;
@@ -48,7 +51,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Forwarding event to webview: ${event.type} (requestId: ${requestId})`
             );
-            this.webviewView.webview.postMessage(event);
+            this.postMessage(event);
           } catch {
             // Webview may be disposed
           }
@@ -79,6 +82,48 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
     };
   }
 
+  private createErrorEvent(message: string, code: ErrorCode = "SERVICE_UNAVAILABLE"): ExtensionToWebviewMessage {
+    return {
+      type: "error",
+      error: {
+        code,
+        message,
+        suggestions: ["Check the Dolphin output channel for details."],
+        recoverable: true,
+      },
+    };
+  }
+
+  private async handleSecretRequest(provider: ProviderId, webview: vscode.Webview): Promise<void> {
+    const command = PROVIDER_SECRET_COMMANDS[provider];
+    if (!command) {
+      webview.postMessage({
+        type: "secretStatus",
+        provider,
+        ok: false,
+        message: `Unknown provider: ${provider}`,
+      } satisfies ExtensionToWebviewMessage);
+      return;
+    }
+
+    try {
+      await vscode.commands.executeCommand(command);
+      webview.postMessage({
+        type: "secretStatus",
+        provider,
+        ok: true,
+      } satisfies ExtensionToWebviewMessage);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      webview.postMessage({
+        type: "secretStatus",
+        provider,
+        ok: false,
+        message: errorMessage,
+      } satisfies ExtensionToWebviewMessage);
+    }
+  }
+
   /**
    * Handle workspace folder changes
    */
@@ -106,7 +151,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
       const workspacePath = workspaceFolder ? workspaceFolder.uri.fsPath : null;
 
       // Send updated workspace status to webview
-      this.webviewView.webview.postMessage({
+      this.postMessage({
         type: "workspace_changed",
         hasWorkspace,
         capabilities,
@@ -119,7 +164,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
   /**
    * Post a message to the webview
    */
-  public postMessage(message: unknown): void {
+  public postMessage(message: ExtensionToWebviewMessage): void {
     // Don't post messages if disposed
     if (this.isDisposed) {
       return;
@@ -215,7 +260,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
     }
 
     // Handle messages from webview
-    webviewView.webview.onDidReceiveMessage(async (message) => {
+    webviewView.webview.onDidReceiveMessage(async (message: WebviewToExtensionMessage) => {
       this.outputChannel.appendLine(
         `[DolphinViewProvider] Received message from webview: ${JSON.stringify(message)}`
       );
@@ -245,7 +290,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               ? path.basename(workspaceFolder.uri.fsPath)
               : null;
 
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "agent_ready",
               version: "0.1.0",
               capabilities,
@@ -266,11 +311,11 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               `[DolphinViewProvider] WARNING: agentBridge not available`
             );
             // Send mock response for testing
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "content_delta",
               delta: "<p>Agent bridge not connected. This is a test response.</p>",
             });
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "task_completed",
               success: true,
             });
@@ -295,7 +340,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               this.outputChannel.appendLine(
                 `[DolphinViewProvider] Received auth status: ${JSON.stringify(status)}`
               );
-              webviewView.webview.postMessage({
+              this.postMessage({
                 type: "auth_status",
                 status,
               });
@@ -304,7 +349,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               this.outputChannel.appendLine(
                 `[DolphinViewProvider] Error getting auth status: ${errorMessage}`
               );
-              webviewView.webview.postMessage({
+              this.postMessage({
                 type: "auth_status",
                 status: DolphinViewProvider.buildFallbackAuthStatus(),
               });
@@ -313,11 +358,15 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Agent not connected, using mock data`
             );
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "auth_status",
               status: DolphinViewProvider.buildFallbackAuthStatus(),
             });
           }
+          break;
+
+        case "setSecret":
+          await this.handleSecretRequest(message.provider, webviewView.webview);
           break;
 
         case "apply_diff":
@@ -342,7 +391,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           if (this.agentBridge) {
             try {
               const conversations = await this.agentBridge.listConversations();
-              webviewView.webview.postMessage({
+              this.postMessage({
                 type: "conversations_listed",
                 conversations: conversations,
               });
@@ -351,10 +400,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               this.outputChannel.appendLine(
                 `[DolphinViewProvider] Error listing conversations: ${errorMessage}`
               );
-              webviewView.webview.postMessage({
-                type: "error",
-                error: { message: `Failed to list conversations: ${errorMessage}` },
-              });
+              this.postMessage(this.createErrorEvent(`Failed to list conversations: ${errorMessage}`));
             }
           }
           break;
@@ -366,7 +412,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           if (this.agentBridge) {
             try {
               const result = await this.agentBridge.loadConversation(message.conversationId);
-              webviewView.webview.postMessage({
+              this.postMessage({
                 type: "conversation_loaded",
                 conversation: result.conversation,
                 branchInfo: result.branchInfo,
@@ -376,10 +422,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               this.outputChannel.appendLine(
                 `[DolphinViewProvider] Error loading conversation: ${errorMessage}`
               );
-              webviewView.webview.postMessage({
-                type: "error",
-                error: { message: `Failed to load conversation: ${errorMessage}` },
-              });
+              this.postMessage(this.createErrorEvent(`Failed to load conversation: ${errorMessage}`));
             }
           }
           break;
@@ -391,7 +434,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           if (this.agentBridge) {
             try {
               await this.agentBridge.deleteConversation(message.conversationId);
-              webviewView.webview.postMessage({
+              this.postMessage({
                 type: "conversation_deleted",
                 conversationId: message.conversationId,
               });
@@ -400,10 +443,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               this.outputChannel.appendLine(
                 `[DolphinViewProvider] Error deleting conversation: ${errorMessage}`
               );
-              webviewView.webview.postMessage({
-                type: "error",
-                error: { message: `Failed to delete conversation: ${errorMessage}` },
-              });
+              this.postMessage(this.createErrorEvent(`Failed to delete conversation: ${errorMessage}`));
             }
           }
           break;
@@ -415,7 +455,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           if (this.agentBridge) {
             try {
               await this.agentBridge.renameConversation(message.conversationId, message.newTitle);
-              webviewView.webview.postMessage({
+              this.postMessage({
                 type: "conversation_renamed",
                 conversationId: message.conversationId,
                 newTitle: message.newTitle,
@@ -425,10 +465,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               this.outputChannel.appendLine(
                 `[DolphinViewProvider] Error renaming conversation: ${errorMessage}`
               );
-              webviewView.webview.postMessage({
-                type: "error",
-                error: { message: `Failed to rename conversation: ${errorMessage}` },
-              });
+              this.postMessage(this.createErrorEvent(`Failed to rename conversation: ${errorMessage}`));
             }
           }
           break;
@@ -444,7 +481,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               path: message.path,
               default_embed_model: message.default_embed_model || "large",
             });
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "kb_register_repo_response",
               requestId: message.requestId,
               data,
@@ -454,7 +491,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Error registering repo: ${errorMessage}`
             );
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "kb_register_repo_response",
               requestId: message.requestId,
               error: errorMessage || "Failed to register repository",
@@ -468,7 +505,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           );
           try {
             const data = await this.httpRequest("GET", `/v1/repos/${message.repoName}/stats`);
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "kb_get_stats_response",
               requestId: message.requestId,
               data,
@@ -478,7 +515,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Error getting KB stats: ${errorMessage}`
             );
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "kb_get_stats_response",
               requestId: message.requestId,
               error: errorMessage || "Failed to get KB stats",
@@ -496,7 +533,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               `/v1/repos/${message.repoName}/reindex`,
               message.request
             );
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "kb_trigger_reindex_response",
               requestId: message.requestId,
               data,
@@ -506,7 +543,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Error triggering reindex: ${errorMessage}`
             );
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "kb_trigger_reindex_response",
               requestId: message.requestId,
               error: errorMessage || "Failed to trigger reindex",
@@ -529,7 +566,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Sending kb_get_status_response to webview with requestId: ${message.requestId}`
             );
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "kb_get_status_response",
               requestId: message.requestId,
               data,
@@ -543,7 +580,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Sending error response to webview`
             );
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "kb_get_status_response",
               requestId: message.requestId,
               error: errorMessage || "Failed to get index status",
@@ -560,7 +597,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               "DELETE",
               `/v1/repos/${message.repoName}/index?confirmed=${message.confirmed}`
             );
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "kb_clear_index_response",
               requestId: message.requestId,
               data,
@@ -570,7 +607,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Error clearing index: ${errorMessage}`
             );
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "kb_clear_index_response",
               requestId: message.requestId,
               error: errorMessage || "Failed to clear index",
@@ -586,7 +623,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Config exists: ${exists} at ${configPath}`
             );
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "dolphin_config_status",
               exists,
               path: configPath,
@@ -596,7 +633,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Error checking config: ${errorMessage}`
             );
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "dolphin_config_status",
               exists: true, // Assume exists on error to avoid false positives
               error: errorMessage,
@@ -624,7 +661,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             const configPath = path.join(require("os").homedir(), ".dolphin", "config.toml");
             const exists = fs.existsSync(configPath);
 
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "dolphin_init_response",
               success: exists,
               path: configPath,
@@ -634,7 +671,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Error initializing: ${errorMessage}`
             );
-            webviewView.webview.postMessage({
+            this.postMessage({
               type: "dolphin_init_response",
               success: false,
               error: errorMessage || "Failed to initialize Dolphin settings",
@@ -770,7 +807,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           buttonForeground: getColor("button.foreground", "#ffffff"),
         },
       },
-    });
+    } satisfies ExtensionToWebviewMessage);
   }
 
   /**

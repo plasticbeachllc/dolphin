@@ -5,7 +5,7 @@
   import AppNavigation from '$lib/components/navigation/AppNavigation.svelte';
   import WelcomeCard from '$lib/components/WelcomeCard.svelte';
   import { sendMessage, onMessage, abortGeneration, saveState, getState } from '$lib/api/vscode';
-  import type { AgentEvent } from '@shared/types/events';
+  import type { ExtensionToWebviewMessage } from '@extension-shared/messages';
   import SettingsPage from './routes/settings/+page.svelte';
   import ProfilePage from './routes/profile/+page.svelte';
   import ConversationsGallery from './routes/gallery/conversations/+page.svelte';
@@ -119,7 +119,7 @@
       }
     }, 1000);
     
-    const unsubscribe = onMessage((event: AgentEvent) => {
+    const unsubscribe = onMessage((event: ExtensionToWebviewMessage) => {
       console.log('[App] Received event from extension:', event);
       
       switch (event.type) {

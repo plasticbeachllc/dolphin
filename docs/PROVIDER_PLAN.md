@@ -600,6 +600,14 @@ All tests must clean up after themselves (temp dirs, env vars, secrets, test set
 
 ### Phase 4 – Settings UI & UX Polish
 
+#### Phase 4 Readiness Checklist (2025-01-17)
+
+- ✅ **Message contracts consolidated** – `vscode-extension/src/shared/messages.ts` now declares the canonical extension ⇄ webview payloads (including the upcoming `settings.save`, `settings.saved`, `settings.error`, `setSecret`, and `secretStatus` events) so both `provider.ts` and `webview/src/lib/api/vscode.ts` share a single source of truth.
+- ✅ **Provider/model definitions centralized** – `vscode-extension/src/config/provider-options.ts` exports the provider list, defaults, and model enums, and a dedicated Mocha test (`src/test/suite/unit/config/provider-options.test.ts`) asserts the VS Code `package.json` contributions stay in sync with §2.1.
+- ✅ **Secret command bridging verified** – `DolphinViewProvider` now handles the `setSecret` message by invoking the existing `dolphin.setClaudeApiKey` / `dolphin.setOpenAIApiKey` commands and replying with `secretStatus` results; integration tests cover both success and failure cases.
+- ✅ **Restart plumbing hardened** – `AgentBridge` exposes an `async stop()` plus an awaited `shutdown()` so future `settings.save` handlers can serialize provider restarts without races, and every caller/tests now await teardown.
+- ✅ **Test plan captured** – Webview Bun specs will cover the settings route’s dropdown rendering + dirty-state logic, while extension-host Mocha suites (building on the new provider option + secret tests) will exercise `settings.save` validation, telemetry hooks, and the agent restart path.
+
 18. **Settings surface (webview-owned) + provider selector behavior**
     - The **Svelte settings webview** (`vscode-extension/webview/src/routes/settings/+page.svelte`) remains the single UX for provider/model selection. It owns the dropdowns and pushes changes to the real VS Code settings service through the extension host so the `package.json` `contributes.configuration` entries (`dolphin.llm.provider`, `dolphin.llm.model.*`) stay authoritative.
     - The provider dropdown stays simple: two options (`Anthropic (Claude 4.5)` / `OpenAI (GPT‑5.1 family)`) rendered from a hard-coded enum shared with the extension (`vscode-extension/src/config/provider-options.ts`). The webview, not VS Code’s stock settings UI, controls selected state to keep layout consistent with the existing custom settings page.

@@ -24,6 +24,8 @@ const config = {
     // Path aliases - moved from tsconfig.json per SvelteKit recommendations
     alias: {
       "@shared": "../../shared",
+      "@extension-config": "../src/config",
+      "@extension-shared": "../src/shared",
     },
   },
 };

@@ -18,7 +18,7 @@ describe("AgentBridge Unit Tests", () => {
     agentBridge = new AgentBridge(outputChannel);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // CRITICAL: Shutdown AgentBridge BEFORE disposing output channel
     // This prevents async operations from trying to use disposed resources
     if (agentBridge) {
@@ -27,7 +27,7 @@ describe("AgentBridge Unit Tests", () => {
       if (process && !process.kill) {
         (process as TestRecord).kill = () => true;
       }
-      agentBridge.shutdown();
+      await agentBridge.shutdown();
     }
 
     // Dispose output channel AFTER shutdown completes
@@ -393,7 +393,7 @@ describe("AgentBridge Unit Tests", () => {
   });
 
   describe("Connection Cleanup on Shutdown", () => {
-    it("Should dispose connection and clear pending requests on shutdown", () => {
+    it("Should dispose connection and clear pending requests on shutdown", async () => {
       let disposeCalled = false;
       const mockConnection: Partial<MockConnection> = {
         sendNotification: () => {},
@@ -422,7 +422,7 @@ describe("AgentBridge Unit Tests", () => {
       };
       bridgeA.process = mockProcess;
 
-      agentBridge.shutdown();
+      await agentBridge.shutdown();
 
       assert.ok(disposeCalled, "Should dispose connection");
       bridgeA = agentBridge as unknown as TestRecord;
@@ -435,7 +435,7 @@ describe("AgentBridge Unit Tests", () => {
       assert.ok(bridgeA.isShuttingDown as boolean, "isShuttingDown should be true");
     });
 
-    it("Should reject all pending requests with shutdown error on shutdown", (done) => {
+    it("Should reject all pending requests with shutdown error on shutdown", async () => {
       let rejectionError: Error | null = null;
 
       const mockConnection: Partial<MockConnection> = {
@@ -462,20 +462,19 @@ describe("AgentBridge Unit Tests", () => {
       };
       bridgeB.process = mockProcess;
 
-      agentBridge.shutdown();
+      await agentBridge.shutdown();
 
-      // Give it a moment to process
-      setTimeout(() => {
-        assert.ok(rejectionError, "Should reject pending request");
+        if (!rejectionError) {
+          throw new Error("Should reject pending request");
+        }
+        const error = rejectionError as Error;
         assert.ok(
-          rejectionError?.message.includes("shutting down"),
+          error.message.includes("Agent bridge stopped"),
           "Error should mention shutdown"
         );
-        done();
-      }, 100);
-    });
+      });
 
-    it("Should clear timeout for pending requests on shutdown", () => {
+    it("Should clear timeout for pending requests on shutdown", async () => {
       const mockTimer = setTimeout(() => {}, 5000);
       let timerCleared = false;
 
@@ -505,7 +504,7 @@ describe("AgentBridge Unit Tests", () => {
       const mockProcess = { kill: () => true };
       bridgeC.process = mockProcess;
 
-      agentBridge.shutdown();
+      await agentBridge.shutdown();
 
       assert.ok(timerCleared, "Should clear timeout");
 

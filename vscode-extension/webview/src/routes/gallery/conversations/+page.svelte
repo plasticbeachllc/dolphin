@@ -16,8 +16,9 @@
 		Loader2,
 		Plus
 	} from 'lucide-svelte';
-	import { listConversations, loadConversation, deleteConversation, renameConversation, onMessage, getVSCodeAPI } from '$lib/api/vscode';
-	import type { ConversationListItem, AgentEvent } from '@shared/types/events';
+        import { listConversations, loadConversation, deleteConversation, renameConversation, onMessage, getVSCodeAPI } from '$lib/api/vscode';
+        import type { ConversationListItem } from '@shared/types/events';
+        import type { ExtensionToWebviewMessage } from '@extension-shared/messages';
 
 	// Props from parent
 	interface Props {
@@ -74,7 +75,7 @@
 		console.log('[ConversationsGallery] Mounting, fetching conversations...');
 		
 		// Set up listener for conversation events
-		const unsubscribe = onMessage((event: AgentEvent) => {
+                const unsubscribe = onMessage((event: ExtensionToWebviewMessage) => {
 			console.log('[ConversationsGallery] Received event:', event);
 			
 			switch (event.type) {

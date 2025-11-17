@@ -60,7 +60,11 @@ export class TestAgentBridge implements AgentBridgeAdapter {
     }, 0);
   }
 
-  shutdown(): void {
+  async stop(): Promise<void> {
+    await this.shutdown();
+  }
+
+  async shutdown(): Promise<void> {
     if (this.isDisposed) {
       return;
     }

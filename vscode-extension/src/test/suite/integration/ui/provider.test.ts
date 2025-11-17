@@ -30,7 +30,7 @@ describe("DolphinViewProvider Unit Tests", () => {
       if (process && !process.kill) {
         process.kill = () => true;
       }
-      mockAgentBridge.shutdown();
+      await mockAgentBridge.shutdown();
     }
 
     // Wait for shutdown to complete before disposing output channel
@@ -51,7 +51,7 @@ describe("DolphinViewProvider Unit Tests", () => {
         return originalAppendLine.call(outputChannel, message);
       };
 
-      provider.postMessage({ type: "test" });
+      provider.postMessage({ type: "focus_input" });
 
       const hasNotReadyMessage = messages.some((m) => m.includes("not ready"));
       assert.ok(hasNotReadyMessage, "Should log that webview is not ready");
@@ -76,12 +76,18 @@ describe("DolphinViewProvider Unit Tests", () => {
       // We can't call it directly due to missing dependencies, so we'll inject it
       (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
-      provider.postMessage({ type: "test", data: "test-data" });
+      provider.postMessage({
+        type: "workspace_changed",
+        hasWorkspace: true,
+        capabilities: ["kb_search"],
+        workspaceName: "demo",
+        workspacePath: "/tmp/demo",
+      });
 
       assert.ok(sentMessage, "Message should have been sent");
       const messageRecord = sentMessage as Record<string, unknown>;
-      assert.strictEqual(messageRecord.type, "test", "Message type should match");
-      assert.strictEqual(messageRecord.data, "test-data", "Message data should match");
+      assert.strictEqual(messageRecord.type, "workspace_changed", "Message type should match");
+      assert.strictEqual(messageRecord.hasWorkspace, true, "Should propagate payload fields");
     });
   });
 
@@ -506,6 +512,100 @@ describe("DolphinViewProvider Unit Tests", () => {
       const payload = posted[0] as { type: string; status: unknown };
       assert.strictEqual(payload.type, "auth_status", "Should forward auth_status type");
       assert.deepStrictEqual(payload.status, expected, "Should forward provider payload");
+    });
+  });
+
+  describe("secret command bridging", () => {
+    let originalExecuteCommand: typeof vscode.commands.executeCommand;
+
+    before(() => {
+      originalExecuteCommand = vscode.commands.executeCommand;
+    });
+
+    afterEach(() => {
+      vscode.commands.executeCommand = originalExecuteCommand;
+    });
+
+    it("invokes provider-specific command and emits success status", async () => {
+      const posted: unknown[] = [];
+      let messageHandler: ((message: unknown) => Thenable<void> | void) | undefined;
+
+      const mockWebviewView = {
+        webview: {
+          options: {},
+          postMessage: (message: unknown) => {
+            posted.push(message);
+            return Promise.resolve(true);
+          },
+          onDidReceiveMessage: (callback: (message: unknown) => Thenable<void> | void) => {
+            messageHandler = callback;
+            return { dispose: () => {} };
+          },
+          asWebviewUri: (resource: vscode.Uri) => resource,
+        },
+      } as unknown as vscode.WebviewView;
+
+      (provider as unknown as { getHtml: () => string }).getHtml = () => "<!doctype html><html></html>";
+      (provider as unknown as { sendTheme: () => void }).sendTheme = () => {};
+      provider.resolveWebviewView(mockWebviewView);
+
+      let invokedCommand: string | undefined;
+      vscode.commands.executeCommand = (async (command: string) => {
+        invokedCommand = command;
+        return undefined;
+      }) as typeof vscode.commands.executeCommand;
+
+      await (messageHandler as (message: unknown) => Promise<void>)({
+        type: "setSecret",
+        provider: "anthropic",
+      });
+
+      assert.strictEqual(invokedCommand, "dolphin.setClaudeApiKey");
+      const payload = posted[posted.length - 1] as { type: string; provider: string; ok: boolean };
+      assert.deepStrictEqual(payload, {
+        type: "secretStatus",
+        provider: "anthropic",
+        ok: true,
+      });
+    });
+
+    it("returns failure metadata when the command throws", async () => {
+      const posted: unknown[] = [];
+      let messageHandler: ((message: unknown) => Thenable<void> | void) | undefined;
+
+      const mockWebviewView = {
+        webview: {
+          options: {},
+          postMessage: (message: unknown) => {
+            posted.push(message);
+            return Promise.resolve(true);
+          },
+          onDidReceiveMessage: (callback: (message: unknown) => Thenable<void> | void) => {
+            messageHandler = callback;
+            return { dispose: () => {} };
+          },
+          asWebviewUri: (resource: vscode.Uri) => resource,
+        },
+      } as unknown as vscode.WebviewView;
+
+      (provider as unknown as { getHtml: () => string }).getHtml = () => "<!doctype html><html></html>";
+      (provider as unknown as { sendTheme: () => void }).sendTheme = () => {};
+      provider.resolveWebviewView(mockWebviewView);
+
+      vscode.commands.executeCommand = (async () => {
+        throw new Error("Command failed");
+      }) as typeof vscode.commands.executeCommand;
+
+      await (messageHandler as (message: unknown) => Promise<void>)({
+        type: "setSecret",
+        provider: "openai",
+      });
+
+      const payload = posted[posted.length - 1] as { type: string; provider: string; ok: boolean; message?: string };
+      assert.strictEqual(payload.type, "secretStatus");
+      assert.strictEqual(payload.provider, "openai");
+      assert.strictEqual(payload.ok, false);
+      assert.ok(payload.message?.includes("Command failed"));
     });
   });
 });

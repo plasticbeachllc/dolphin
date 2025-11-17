@@ -1,14 +1,14 @@
-export type SupportedProvider = "anthropic" | "openai";
+import {
+  DEFAULT_MODEL_BY_PROVIDER,
+  MODEL_IDS_BY_PROVIDER,
+  type ProviderId,
+} from "./provider-options";
 
-export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
-  anthropic: "claude-sonnet-4-5-20250929",
-  openai: "gpt-5.1-codex",
-};
+export type SupportedProvider = ProviderId;
 
-export const SUPPORTED_MODELS: Record<SupportedProvider, string[]> = {
-  anthropic: ["claude-sonnet-4-5-20250929", "claude-sonnet-4-5", "claude-haiku-4-5"],
-  openai: ["gpt-5.1", "gpt-5.1-codex", "gpt-5.1-codex-mini"],
-};
+export const DEFAULT_MODELS: Record<SupportedProvider, string> = DEFAULT_MODEL_BY_PROVIDER;
+
+export const SUPPORTED_MODELS: Record<SupportedProvider, string[]> = MODEL_IDS_BY_PROVIDER;
 
 export interface ProviderSettingsInput {
   provider?: string | null;

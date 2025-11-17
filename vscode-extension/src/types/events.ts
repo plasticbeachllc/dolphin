@@ -23,7 +23,15 @@ export type ExtensionRequest =
 // Agent Core → Extension
 // All events include an optional requestId for correlation/logging
 export type AgentEvent =
-  | { type: "agent_ready"; version: string; capabilities: string[]; requestId?: string }
+  | {
+      type: "agent_ready";
+      version: string;
+      capabilities: string[];
+      requestId?: string;
+      hasWorkspace?: boolean;
+      workspaceName?: string | null;
+      workspacePath?: string | null;
+    }
   | { type: "content_delta"; delta: string; requestId?: string }
   | { type: "plan_generated"; plan: Plan; requestId?: string }
   | { type: "plan_step_started"; stepId: string; description: string; requestId?: string }
@@ -71,7 +79,26 @@ export type AgentEvent =
     }
   | { type: "conversations_listed"; conversations: ConversationListItem[] }
   | { type: "conversation_deleted"; conversationId: string }
-  | { type: "conversation_renamed"; conversationId: string; newTitle: string };
+  | { type: "conversation_renamed"; conversationId: string; newTitle: string }
+  | {
+      type: "workspace_changed";
+      hasWorkspace: boolean;
+      capabilities: string[];
+      workspaceName?: string | null;
+      workspacePath?: string | null;
+    }
+  | {
+      type: "dolphin_config_status";
+      exists: boolean;
+      path?: string;
+      error?: string;
+    }
+  | {
+      type: "dolphin_init_response";
+      success: boolean;
+      path?: string;
+      error?: string;
+    };
 
 export interface Plan {
   id: string;
