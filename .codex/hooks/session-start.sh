@@ -68,4 +68,4 @@ echo "✅ Dolphin environment setup complete!"
 # ============================================================================
 # Install VSCode dependencies
 # ============================================================================
-apt-get install -y libatk1.0-0t64 at-spi2-common libatk-bridge2.0-0t64 libgtk-3-0t64 libasound2t64 libgbm1
+# tbd
