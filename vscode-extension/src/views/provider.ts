@@ -82,7 +82,10 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
     };
   }
 
-  private createErrorEvent(message: string, code: ErrorCode = "SERVICE_UNAVAILABLE"): ExtensionToWebviewMessage {
+  private createErrorEvent(
+    message: string,
+    code: ErrorCode = "SERVICE_UNAVAILABLE"
+  ): ExtensionToWebviewMessage {
     return {
       type: "error",
       error: {
@@ -400,7 +403,9 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               this.outputChannel.appendLine(
                 `[DolphinViewProvider] Error listing conversations: ${errorMessage}`
               );
-              this.postMessage(this.createErrorEvent(`Failed to list conversations: ${errorMessage}`));
+              this.postMessage(
+                this.createErrorEvent(`Failed to list conversations: ${errorMessage}`)
+              );
             }
           }
           break;
@@ -422,7 +427,9 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               this.outputChannel.appendLine(
                 `[DolphinViewProvider] Error loading conversation: ${errorMessage}`
               );
-              this.postMessage(this.createErrorEvent(`Failed to load conversation: ${errorMessage}`));
+              this.postMessage(
+                this.createErrorEvent(`Failed to load conversation: ${errorMessage}`)
+              );
             }
           }
           break;
@@ -443,7 +450,9 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               this.outputChannel.appendLine(
                 `[DolphinViewProvider] Error deleting conversation: ${errorMessage}`
               );
-              this.postMessage(this.createErrorEvent(`Failed to delete conversation: ${errorMessage}`));
+              this.postMessage(
+                this.createErrorEvent(`Failed to delete conversation: ${errorMessage}`)
+              );
             }
           }
           break;
@@ -465,7 +474,9 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
               this.outputChannel.appendLine(
                 `[DolphinViewProvider] Error renaming conversation: ${errorMessage}`
               );
-              this.postMessage(this.createErrorEvent(`Failed to rename conversation: ${errorMessage}`));
+              this.postMessage(
+                this.createErrorEvent(`Failed to rename conversation: ${errorMessage}`)
+              );
             }
           }
           break;

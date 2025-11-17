@@ -1,7 +1,10 @@
 // vscode-extension/webview/src/lib/api/vscode.ts
 // API for communicating with VS Code extension
 
-import type { ExtensionToWebviewMessage, WebviewToExtensionMessage } from "@extension-shared/messages";
+import type {
+  ExtensionToWebviewMessage,
+  WebviewToExtensionMessage,
+} from "@extension-shared/messages";
 import type { ProviderId } from "@extension-config/provider-options";
 
 interface VSCodeApi {

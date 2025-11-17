@@ -545,7 +545,8 @@ describe("DolphinViewProvider Unit Tests", () => {
         },
       } as unknown as vscode.WebviewView;
 
-      (provider as unknown as { getHtml: () => string }).getHtml = () => "<!doctype html><html></html>";
+      (provider as unknown as { getHtml: () => string }).getHtml = () =>
+        "<!doctype html><html></html>";
       (provider as unknown as { sendTheme: () => void }).sendTheme = () => {};
       provider.resolveWebviewView(mockWebviewView);
 
@@ -588,7 +589,8 @@ describe("DolphinViewProvider Unit Tests", () => {
         },
       } as unknown as vscode.WebviewView;
 
-      (provider as unknown as { getHtml: () => string }).getHtml = () => "<!doctype html><html></html>";
+      (provider as unknown as { getHtml: () => string }).getHtml = () =>
+        "<!doctype html><html></html>";
       (provider as unknown as { sendTheme: () => void }).sendTheme = () => {};
       provider.resolveWebviewView(mockWebviewView);
 
@@ -601,7 +603,12 @@ describe("DolphinViewProvider Unit Tests", () => {
         provider: "openai",
       });
 
-      const payload = posted[posted.length - 1] as { type: string; provider: string; ok: boolean; message?: string };
+      const payload = posted[posted.length - 1] as {
+        type: string;
+        provider: string;
+        ok: boolean;
+        message?: string;
+      };
       assert.strictEqual(payload.type, "secretStatus");
       assert.strictEqual(payload.provider, "openai");
       assert.strictEqual(payload.ok, false);

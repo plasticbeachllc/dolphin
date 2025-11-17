@@ -464,15 +464,12 @@ describe("AgentBridge Unit Tests", () => {
 
       await agentBridge.shutdown();
 
-        if (!rejectionError) {
-          throw new Error("Should reject pending request");
-        }
-        const error = rejectionError as Error;
-        assert.ok(
-          error.message.includes("Agent bridge stopped"),
-          "Error should mention shutdown"
-        );
-      });
+      if (!rejectionError) {
+        throw new Error("Should reject pending request");
+      }
+      const error = rejectionError as Error;
+      assert.ok(error.message.includes("Agent bridge stopped"), "Error should mention shutdown");
+    });
 
     it("Should clear timeout for pending requests on shutdown", async () => {
       const mockTimer = setTimeout(() => {}, 5000);
