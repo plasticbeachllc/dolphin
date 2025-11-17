@@ -4,6 +4,7 @@ import * as path from "path";
 import * as fs from "fs";
 import * as http from "http";
 import { AgentBridgeAdapter } from "../agent/types";
+import type { AgentAuthStatusResponse } from "../types/auth";
 
 export class DolphinViewProvider implements vscode.WebviewViewProvider {
   private webviewView?: vscode.WebviewView;
@@ -62,6 +63,20 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
         }
       });
     }
+  }
+
+  private static buildFallbackAuthStatus(): AgentAuthStatusResponse {
+    return {
+      providers: [
+        {
+          provider: "unknown",
+          authenticated: false,
+          mode: "none",
+          warning: "Authentication status is unavailable",
+          error: "Unable to reach Agent Core",
+        },
+      ],
+    };
   }
 
   /**
@@ -273,54 +288,34 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           this.outputChannel.appendLine(`[DolphinViewProvider] Processing get_auth_status request`);
           if (this.agentBridge) {
             try {
-              // Request auth status from agent via JSON-RPC
               this.outputChannel.appendLine(
                 `[DolphinViewProvider] Requesting auth status from agent`
               );
-
-              // Use the new getAuthStatus method on AgentBridge
               const status = await this.agentBridge.getAuthStatus();
-
               this.outputChannel.appendLine(
                 `[DolphinViewProvider] Received auth status: ${JSON.stringify(status)}`
               );
-
-              // Send status to webview
               webviewView.webview.postMessage({
                 type: "auth_status",
-                status: status,
+                status,
               });
             } catch (error: unknown) {
               const errorMessage = error instanceof Error ? error.message : String(error);
               this.outputChannel.appendLine(
                 `[DolphinViewProvider] Error getting auth status: ${errorMessage}`
               );
-              // Send error state
               webviewView.webview.postMessage({
                 type: "auth_status",
-                status: {
-                  mode: "auto",
-                  cliInstalled: false,
-                  cliAuthenticated: false,
-                  apiKeySet: false,
-                  willUseSubscription: false,
-                },
+                status: DolphinViewProvider.buildFallbackAuthStatus(),
               });
             }
           } else {
-            // Mock auth status when agent not connected
             this.outputChannel.appendLine(
               `[DolphinViewProvider] Agent not connected, using mock data`
             );
             webviewView.webview.postMessage({
               type: "auth_status",
-              status: {
-                mode: "auto",
-                cliInstalled: false,
-                cliAuthenticated: false,
-                apiKeySet: false,
-                willUseSubscription: false,
-              },
+              status: DolphinViewProvider.buildFallbackAuthStatus(),
             });
           }
           break;

@@ -22,6 +22,14 @@ export type ExtensionRequest =
 
 // Agent Core → Extension
 // All events include an optional requestId for correlation/logging
+export interface ProviderAuthStatus {
+  provider: string;
+  authenticated: boolean;
+  mode: string;
+  warning?: string;
+  error?: string;
+}
+
 export type AgentEvent =
   | { type: "agent_ready"; version: string; capabilities: string[]; requestId?: string }
   | { type: "ready"; data: { version: string; capabilities: string[] } }

@@ -1,8 +1,13 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { AgentBridge } from "../../../../agent/bridge";
+import { EventEmitter } from "events";
+import { PassThrough } from "stream";
+import { AgentBridge, mergeAgentEnvironment } from "../../../../agent/bridge";
 import { MockConnection, TestRecord } from "../../../helpers/mock-types";
 import { createMockOutputChannel } from "../../../helpers/mock-output-channel";
+import type { ChildProcess, SpawnOptionsWithoutStdio } from "child_process";
+type SpawnImpl = typeof import("child_process").spawn;
+import type { AgentAuthStatusResponse } from "../../../../types/auth";
 
 describe("AgentBridge Unit Tests", () => {
   let agentBridge: AgentBridge;
@@ -111,7 +116,11 @@ describe("AgentBridge Unit Tests", () => {
   describe("getAuthStatus", () => {
     it("Should send get_auth_status request and resolve with result", async () => {
       let requestMethod: string | undefined;
-      const mockResult = { authenticated: true, user: "test@example.com" };
+      const mockResult: AgentAuthStatusResponse = {
+        providers: [
+          { provider: "anthropic", authenticated: true, mode: "subscription" },
+        ],
+      };
 
       const mockConnection: Partial<MockConnection> = {
         sendRequest: (method: string, _params?: Record<string, unknown>) => {
@@ -986,6 +995,72 @@ describe("AgentBridge Unit Tests", () => {
           "Should be a timeout error"
         );
       }
+    });
+  });
+
+  describe("start", () => {
+    class StubProcess extends EventEmitter {
+      stdout = new PassThrough();
+      stderr = new PassThrough();
+      stdin = new PassThrough();
+      kill(): boolean {
+        return true;
+      }
+    }
+
+    it("merges env vars with correct precedence", async () => {
+      const spawned: { env?: NodeJS.ProcessEnv } = {};
+      const stub = new StubProcess();
+      const spawnStub = (
+        _command: string,
+        _args?: readonly string[],
+        options?: SpawnOptionsWithoutStdio
+      ): ChildProcess => {
+        spawned.env = options?.env;
+        return stub as unknown as ChildProcess;
+      };
+      const spawnFn = spawnStub as SpawnImpl;
+
+      agentBridge = new AgentBridge(outputChannel, spawnFn);
+      (agentBridge as unknown as { findBun: () => Promise<string> }).findBun = async () => "/bin/bun";
+      (agentBridge as unknown as { waitForReady: () => Promise<void> }).waitForReady = async () => {};
+
+      const originalModel = process.env.DOLPHIN_LLM_MODEL;
+      process.env.DOLPHIN_LLM_MODEL = "should-not-stick";
+
+      await agentBridge.start("agent-core.ts", "/ext", {
+        anthropicApiKey: "sk-ant",
+        openaiApiKey: "sk-openai",
+        env: {
+          defaults: { DOLPHIN_LLM_PROVIDER: "anthropic", DOLPHIN_LLM_MODEL: "claude" },
+          overrides: { DOLPHIN_LLM_MODEL: "claude-custom" },
+        },
+      });
+
+      assert.strictEqual(spawned.env?.DOLPHIN_LLM_PROVIDER, "anthropic");
+      assert.strictEqual(spawned.env?.DOLPHIN_LLM_MODEL, "claude-custom");
+      assert.strictEqual(spawned.env?.ANTHROPIC_API_KEY, "sk-ant");
+      assert.strictEqual(spawned.env?.OPENAI_API_KEY, "sk-openai");
+
+      if (originalModel) {
+        process.env.DOLPHIN_LLM_MODEL = originalModel;
+      } else {
+        delete process.env.DOLPHIN_LLM_MODEL;
+      }
+    });
+  });
+
+  describe("mergeAgentEnvironment", () => {
+    it("applies overrides after defaults", () => {
+      const merged = mergeAgentEnvironment(
+        { EXISTING: "1" },
+        {
+          defaults: { EXISTING: "2", DEFAULT_ONLY: "a" },
+          overrides: { EXISTING: "3" },
+        }
+      );
+      assert.strictEqual(merged.EXISTING, "3");
+      assert.strictEqual(merged.DEFAULT_ONLY, "a");
     });
   });
 });

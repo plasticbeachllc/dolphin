@@ -47,6 +47,14 @@
         "title": "Dolphin: Set API Key"
       },
       {
+        "command": "dolphin.setClaudeApiKey",
+        "title": "Dolphin: Set Claude API Key"
+      },
+      {
+        "command": "dolphin.setOpenAIApiKey",
+        "title": "Dolphin: Set OpenAI API Key"
+      },
+      {
         "command": "dolphin.kb.setApiKey",
         "title": "Dolphin: Set KB API Key"
       },
@@ -190,6 +198,35 @@
           ],
           "default": "info",
           "description": "Logging verbosity level"
+        },
+        "dolphin.llm.provider": {
+          "type": "string",
+          "enum": [
+            "anthropic",
+            "openai"
+          ],
+          "default": "anthropic",
+          "description": "Select which provider Dolphin should use for chat"
+        },
+        "dolphin.llm.model.anthropic": {
+          "type": "string",
+          "enum": [
+            "claude-sonnet-4-5-20250929",
+            "claude-sonnet-4-5",
+            "claude-haiku-4-5"
+          ],
+          "default": "claude-sonnet-4-5-20250929",
+          "description": "Claude model to use when the Anthropic provider is selected"
+        },
+        "dolphin.llm.model.openai": {
+          "type": "string",
+          "enum": [
+            "gpt-5.1",
+            "gpt-5.1-codex",
+            "gpt-5.1-codex-mini"
+          ],
+          "default": "gpt-5.1-codex",
+          "description": "OpenAI model to use when the OpenAI provider is selected"
         }
       }
     },

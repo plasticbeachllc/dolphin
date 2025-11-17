@@ -13,14 +13,16 @@ export interface ProviderSettings {
 
 export function loadProviderSettings(): ProviderSettings {
   const fromEnv: ProviderSettings = {};
-  if (process.env.DOLPHIN_PROVIDER) {
-    const provider = process.env.DOLPHIN_PROVIDER.toLowerCase();
+  const providerEnv = process.env.DOLPHIN_LLM_PROVIDER ?? process.env.DOLPHIN_PROVIDER;
+  if (providerEnv) {
+    const provider = providerEnv.toLowerCase();
     if (provider === "anthropic" || provider === "openai") {
       fromEnv.provider = provider;
     }
   }
-  if (process.env.DOLPHIN_MODEL) {
-    fromEnv.model = process.env.DOLPHIN_MODEL;
+  const modelEnv = process.env.DOLPHIN_LLM_MODEL ?? process.env.DOLPHIN_MODEL;
+  if (modelEnv) {
+    fromEnv.model = modelEnv;
   }
   if (process.env.DOLPHIN_TEMPERATURE) {
     const parsed = Number(process.env.DOLPHIN_TEMPERATURE);

@@ -13,11 +13,16 @@ import { DolphinCodeActionProvider } from "./editor/code-actions";
 import { DiffHandler, DiffChange } from "./editor/diff-handler";
 import { AutoSyncManager } from "./kb/auto-sync-manager";
 import { DriftDetector } from "./kb/drift-detector";
+import { resolveProviderSettings } from "./config/provider-settings";
+import type { ProviderSettingsResult } from "./config/provider-settings";
 
 const FALLBACK_KB_BASE_URL = "http://127.0.0.1:7777";
 let isTestEnv = false;
 let defaultKbBaseUrl = FALLBACK_KB_BASE_URL;
 const KB_API_KEY_SECRET_ID = "dolphin.kbApiKey";
+const CLAUDE_SECRET_ID = "dolphin.anthropicApiKey";
+const OPENAI_SECRET_ID = "dolphin.openaiApiKey";
+const LEGACY_CLAUDE_SECRET_ID = "dolphin.apiKey";
 let defaultKbApiKey: string | undefined;
 
 function resolveKbBaseUrl(): string {
@@ -76,6 +81,65 @@ async function initializeKbApiKey(context: vscode.ExtensionContext): Promise<voi
   }
 }
 
+async function migrateLegacyAnthropicSecret(context: vscode.ExtensionContext): Promise<void> {
+  const legacyValue = await context.secrets.get(LEGACY_CLAUDE_SECRET_ID);
+  const modernValue = await context.secrets.get(CLAUDE_SECRET_ID);
+
+  if (legacyValue && !modernValue) {
+    await context.secrets.store(CLAUDE_SECRET_ID, legacyValue);
+    await context.secrets.delete(LEGACY_CLAUDE_SECRET_ID);
+    try {
+      logger?.info?.("[Extension] Migrated legacy Anthropic API key secret to new namespace");
+    } catch {
+      // Logger may not be initialized yet
+    }
+  }
+}
+
+function buildProviderEnvDefaults(selection: ProviderSettingsResult): Record<string, string> {
+  return {
+    DOLPHIN_LLM_PROVIDER: selection.provider,
+    DOLPHIN_LLM_MODEL: selection.model,
+    DOLPHIN_PROVIDER: selection.provider,
+    DOLPHIN_MODEL: selection.model,
+  };
+}
+
+function surfaceProviderWarnings(warnings: string[]): void {
+  if (!warnings.length) {
+    return;
+  }
+  for (const warning of warnings) {
+    logger?.warn?.(`[Extension] ${warning}`);
+    void vscode.window.showWarningMessage(warning);
+  }
+}
+
+async function promptForProviderSecret(
+  context: vscode.ExtensionContext,
+  options: {
+    secretId: string;
+    prompt: string;
+    placeholder: string;
+    successMessage: string;
+  }
+): Promise<void> {
+  const apiKey = await vscode.window.showInputBox({
+    prompt: options.prompt,
+    password: true,
+    placeHolder: options.placeholder,
+    ignoreFocusOut: true,
+  });
+
+  if (!apiKey) {
+    await vscode.window.showErrorMessage("API key cannot be empty");
+    return;
+  }
+
+  await context.secrets.store(options.secretId, apiKey.trim());
+  await vscode.window.showInformationMessage(options.successMessage);
+}
+
 function propagateKbApiKeyToConsumers(apiKey?: string): void {
   const key = apiKey ?? getKbApiKey();
   viewProvider?.updateKbApiKey(key);
@@ -120,6 +184,7 @@ export async function activate(context: vscode.ExtensionContext) {
   logger.debug(`Using KB base URL: ${defaultKbBaseUrl}`);
 
   await initializeKbApiKey(context);
+  await migrateLegacyAnthropicSecret(context);
 
   try {
     // Initialize AgentBridge with shared output channel
@@ -134,18 +199,33 @@ export async function activate(context: vscode.ExtensionContext) {
     logger.debug(`Agent Core path: ${agentCorePath}`);
     logger.debug(`Extension path: ${extensionPath}`);
 
-    // Retrieve API key from SecretStorage
-    const anthropicApiKey = await context.secrets.get("dolphin.apiKey");
+    const llmConfig = vscode.workspace.getConfiguration("dolphin.llm");
+    const providerSelection = resolveProviderSettings({
+      provider: llmConfig.get<string>("provider"),
+      anthropicModel: llmConfig.get<string>("model.anthropic"),
+      openaiModel: llmConfig.get<string>("model.openai"),
+    });
+    surfaceProviderWarnings(providerSelection.warnings);
+
+    const anthropicApiKey = await context.secrets.get(CLAUDE_SECRET_ID);
+    const openaiApiKey = await context.secrets.get(OPENAI_SECRET_ID);
+
     if (anthropicApiKey) {
-      logger.info("API key found in SecretStorage");
-    } else {
-      logger.info("No API key found in SecretStorage - will use CLI or env");
+      logger.info("Anthropic API key found in SecretStorage");
+    }
+    if (openaiApiKey) {
+      logger.info("OpenAI API key found in SecretStorage");
+    }
+    if (!anthropicApiKey && !openaiApiKey) {
+      logger.info("No provider API keys found - relying on CLI or env vars");
     }
 
     try {
       await agentBridge.start(agentCorePath, extensionPath, {
         anthropicApiKey,
+        openaiApiKey,
         kbApiKey: getKbApiKey(),
+        env: { defaults: buildProviderEnvDefaults(providerSelection) },
       });
       logger.info("AgentBridge started successfully");
     } catch (startError: unknown) {
@@ -342,22 +422,40 @@ export async function activate(context: vscode.ExtensionContext) {
       })
     );
 
-    // Command: dolphin.setApiKey - Set the Anthropic API key
+    // Command: dolphin.setApiKey - legacy alias for Claude API key
     context.subscriptions.push(
       vscode.commands.registerCommand("dolphin.setApiKey", async () => {
         outputChannel.appendLine("[Dolphin] Executing dolphin.setApiKey");
-        const apiKey = await vscode.window.showInputBox({
+        await promptForProviderSecret(context, {
+          secretId: CLAUDE_SECRET_ID,
           prompt: "Enter your Anthropic API Key",
-          password: true,
-          placeHolder: "sk-ant-...",
-          ignoreFocusOut: true,
+          placeholder: "sk-ant-...",
+          successMessage: "Anthropic API key stored securely",
         });
+      })
+    );
 
-        if (apiKey) {
-          await context.secrets.store("dolphin.apiKey", apiKey);
-          vscode.window.showInformationMessage("API key stored securely");
-          outputChannel.appendLine("[Dolphin] API key stored in SecretStorage");
-        }
+    context.subscriptions.push(
+      vscode.commands.registerCommand("dolphin.setClaudeApiKey", async () => {
+        outputChannel.appendLine("[Dolphin] Executing dolphin.setClaudeApiKey");
+        await promptForProviderSecret(context, {
+          secretId: CLAUDE_SECRET_ID,
+          prompt: "Enter your Anthropic (Claude) API Key",
+          placeholder: "sk-ant-...",
+          successMessage: "Claude API key stored securely",
+        });
+      })
+    );
+
+    context.subscriptions.push(
+      vscode.commands.registerCommand("dolphin.setOpenAIApiKey", async () => {
+        outputChannel.appendLine("[Dolphin] Executing dolphin.setOpenAIApiKey");
+        await promptForProviderSecret(context, {
+          secretId: OPENAI_SECRET_ID,
+          prompt: "Enter your OpenAI API Key",
+          placeholder: "sk-openai-...",
+          successMessage: "OpenAI API key stored securely",
+        });
       })
     );
 
@@ -461,11 +559,22 @@ export async function activate(context: vscode.ExtensionContext) {
             path.join("..", "agent-core", "src", "main.ts")
           );
           const extensionPath = context.extensionPath;
-          const anthropicApiKey = await context.secrets.get("dolphin.apiKey");
+          const refreshConfig = vscode.workspace.getConfiguration("dolphin.llm");
+          const llmSelection = resolveProviderSettings({
+            provider: refreshConfig.get<string>("provider"),
+            anthropicModel: refreshConfig.get<string>("model.anthropic"),
+            openaiModel: refreshConfig.get<string>("model.openai"),
+          });
+          surfaceProviderWarnings(llmSelection.warnings);
+
+          const anthropicApiKey = await context.secrets.get(CLAUDE_SECRET_ID);
+          const openaiApiKey = await context.secrets.get(OPENAI_SECRET_ID);
 
           await agentBridge.start(agentCorePath, extensionPath, {
             anthropicApiKey,
+            openaiApiKey,
             kbApiKey: getKbApiKey(),
+            env: { defaults: buildProviderEnvDefaults(llmSelection) },
           });
 
           // Update view provider with new bridge
