@@ -4,7 +4,14 @@
   import { MessageList, ChatInput, ChatHeader, ModeSelector, ArchitectModeBanner } from '$lib/components/chat';
   import AppNavigation from '$lib/components/navigation/AppNavigation.svelte';
   import WelcomeCard from '$lib/components/WelcomeCard.svelte';
-  import { sendMessage, onMessage, abortGeneration, saveState, getState } from '$lib/api/vscode';
+  import {
+    sendMessage,
+    onMessage,
+    abortGeneration,
+    saveState,
+    getState,
+    getVSCodeAPI,
+  } from '$lib/api/vscode';
   import type { ExtensionToWebviewMessage } from '@extension-shared/messages';
   import SettingsPage from './routes/settings/+page.svelte';
   import ProfilePage from './routes/profile/+page.svelte';
@@ -361,12 +368,13 @@
   }
   
   function checkConfigExists() {
-    const vscode = window.acquireVsCodeApi?.();
-    if (!vscode) {
+    try {
+      const vscode = getVSCodeAPI();
+      vscode.postMessage({ type: 'check_dolphin_config' });
+    } catch (error) {
+      console.warn('[App] Unable to check config status:', error);
       checkingConfig = false;
-      return;
     }
-    vscode.postMessage({ type: 'check_dolphin_config' });
   }
 </script>
 
