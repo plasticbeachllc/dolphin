@@ -312,3 +312,39 @@ uv run pytest tests/unit/ -k "test_search"  # Run tests matching pattern
    ```bash
    just test-all                              # Comprehensive validation
    ```
+
+## Current Coverage Evaluation (2025-05)
+
+### Python backend
+
+- **Unit + integration depth** – The Python suite spans every major KB domain (API, chunkers, ingest, search, cache, pipeline, etc.) across `tests/unit/` and `tests/integration/`, so the majority of business logic executes under pytest during CI.【F:tests/README.md†L31-L137】
+- **End-to-end coverage** – `tests/e2e/workflows/test_indexing_workflow.py` drives a full repo lifecycle (registration, incremental indexing, ignore rules, error handling, and forced reindex), while `tests/e2e/workflows/test_search_workflow.py` covers indexing → search flows, query variance, ranking, semantic quality, and performance assertions.【F:tests/e2e/workflows/test_indexing_workflow.py†L1-L199】【F:tests/e2e/workflows/test_search_workflow.py†L1-L390】
+- **Gap to note** – search filtering scenarios are still marked `@pytest.mark.skip`, so repo/path-based filtering currently lacks regression coverage.【F:tests/e2e/workflows/test_search_workflow.py†L392-L419】
+
+### Agent Core (TypeScript)
+
+- The Bun test harness exercises architect/orchestrator logic via domain-focused unit suites plus long-running orchestrator/architect E2Es that mock the workflows and persistence, validating streaming updates, cancellation, and concurrency scenarios.【F:agent-core/tests/integration/e2e/orchestrator-e2e.test.ts†L1-L120】
+- Coverage largely stops at the workflow layer; RPC bridges and Claude adapters are mocked, so live Claude + KB integration is deferred to manual QA.
+
+### VS Code extension & Webview
+
+- Mocha-based suites (`vscode-extension/src/test/suite/*`) activate the extension against a mock KB server and assert command registration, mock HTTP plumbing, and KB workflow interactions end-to-end.【F:vscode-extension/src/test/suite/e2e/workflows/integration.test.ts†L1-L120】
+- Playwright UX automation currently covers only the API-key acquisition flow by driving a real VS Code instance via Electron, so editor UX, chat, and KB browsing are untested at the UI layer.【F:vscode-extension/playwright/tests/api-keys.spec.ts†L1-L104】
+- The Svelte webview bundle includes a smoke test component (`App.test.svelte`) but does not exercise real panels or stores yet.【F:vscode-extension/webview/src/App.test.svelte†L1-L34】
+
+### MCP bridge & shared packages
+
+- The bridge ships a single manual integration harness (`mcp-bridge/test-integration.ts`) that requires a running KB REST server, so it is rarely run in CI and lacks stubbed unit coverage for MCP tools or transport errors.【F:mcp-bridge/test-integration.ts†L1-L90】
+- Shared TypeScript utilities only have coverage for `kb-auth.ts`, ensuring API-key persistence logic works across environments.【F:shared/tests/kb-auth.test.ts†L1-L60】
+
+### Observability stack
+
+- The observability package documents a thorough plan but explicitly calls out that nothing has been validated end-to-end yet, so dashboards, exporters, and alerting are untested in automation.【F:observability/TESTING.md†L1-L44】
+
+### Lightweight improvement ideas
+
+1. **Turn the skipped Python search filters into runnable cases** – After enabling repo/path filters in `KnowledgeSearchBackend`, re-enable `test_search_filter_by_file_type` and `test_search_filter_by_path` to prevent regressions and ensure CLI/UI consumers receive filtered results.【F:tests/e2e/workflows/test_search_workflow.py†L392-L419】
+2. **Add stubbed MCP bridge tests** – Extract the REST client calls from `mcp-bridge/test-integration.ts` into injectable adapters and write Vitest-based unit tests that mock the HTTP responses so CI can validate tool payloads without a live KB server.【F:mcp-bridge/test-integration.ts†L1-L90】
+3. **Expand Playwright smoke flows** – Build on the existing API-key automation by scripting one “index repo → search → inspect chunk” happy path inside VS Code, which would reuse the helper functions already present in `api-keys.spec.ts` for launching the editor.【F:vscode-extension/playwright/tests/api-keys.spec.ts†L1-L110】
+4. **Add a minimal observability health check** – Convert the manual steps from `observability/TESTING.md` into a `just observability-smoke` task that boots the docker-compose stack, pings `/metrics`, and tears it down so we know metrics wiring stays healthy after config changes.【F:observability/TESTING.md†L1-L80】
+5. **Cover shared IPC/security helpers** – Mirror the approach used in `shared/tests/kb-auth.test.ts` to add Bun unit tests for `shared/ipc` and `shared/security`, ensuring cross-project helpers remain stable.【F:shared/tests/kb-auth.test.ts†L1-L60】

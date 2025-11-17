@@ -1,6 +1,6 @@
 """End-to-end tests for search workflow."""
 
-import pytest
+from typing import Any
 
 from kb.api.app import SearchRequest
 from kb.api.search_backend import KnowledgeSearchBackend
@@ -24,6 +24,7 @@ def _run_search(
     top_k: int,
     repo_name: str,
     embed_model: str,
+    **overrides: Any,
 ):
     request = SearchRequest(
         query=query,
@@ -31,8 +32,19 @@ def _run_search(
         embed_model=embed_model,
         repos=[repo_name],
         include_graph_context=False,
+        **overrides,
     )
     return backend.search(request)
+
+
+def _extract_result_path(result: dict[str, object]) -> str:
+    """Best-effort helper to normalize the file path from a search result."""
+
+    if isinstance(result.get("file_path"), str) and result["file_path"]:
+        return str(result["file_path"])
+    if isinstance(result.get("path"), str) and result["path"]:
+        return str(result["path"])
+    return ""
 
 
 class TestSearchWorkflow:
@@ -392,28 +404,66 @@ class TestSearchPerformance:
 class TestSearchFiltering:
     """Test search filtering capabilities."""
 
-    @pytest.mark.skip(reason="File filtering not implemented in current backend")
     def test_search_filter_by_file_type(self, e2e_kb_setup):
-        """Test filtering search results by file type."""
+        """Filtering with exclude_patterns should drop file types like Markdown."""
+
         setup = e2e_kb_setup
         pipeline = setup["pipeline"]
         setup["lancedb_store"]
         repo_name = setup["repo_name"]
 
-        # Index
         pipeline.index(repo_name, dry_run=False, force=True)
+        backend = _create_backend(setup)
 
-        _ = _create_backend(setup)
+        query = "Sample Project authentication docs"
+        baseline_results = _run_search(
+            backend,
+            query,
+            top_k=5,
+            repo_name=repo_name,
+            embed_model=setup["config"].default_embed_model,
+        )
+        assert any(_extract_result_path(result).endswith("README.md") for result in baseline_results)
 
-    @pytest.mark.skip(reason="Path filtering not implemented in current backend")
+        filtered_results = _run_search(
+            backend,
+            query,
+            top_k=5,
+            repo_name=repo_name,
+            embed_model=setup["config"].default_embed_model,
+            exclude_patterns=["*.md"],
+        )
+
+        assert not any(_extract_result_path(result).endswith("README.md") for result in filtered_results)
+
     def test_search_filter_by_path(self, e2e_kb_setup):
-        """Test filtering search results by file path."""
+        """Filtering with path_prefix should limit results to the requested file."""
+
         setup = e2e_kb_setup
         pipeline = setup["pipeline"]
         setup["lancedb_store"]
         repo_name = setup["repo_name"]
 
-        # Index
         pipeline.index(repo_name, dry_run=False, force=True)
+        backend = _create_backend(setup)
 
-        _ = _create_backend(setup)
+        general_results = _run_search(
+            backend,
+            "authentication",
+            top_k=5,
+            repo_name=repo_name,
+            embed_model=setup["config"].default_embed_model,
+        )
+        assert len(general_results) > 0
+
+        filtered_results = _run_search(
+            backend,
+            "authentication",
+            top_k=5,
+            repo_name=repo_name,
+            embed_model=setup["config"].default_embed_model,
+            path_prefix=["main.py"],
+        )
+
+        assert len(filtered_results) > 0
+        assert all(_extract_result_path(result).endswith("main.py") for result in filtered_results)
