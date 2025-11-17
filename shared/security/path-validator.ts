@@ -80,8 +80,7 @@ export class PathValidator {
     }
   }
 
-  private static readonly DOT_HOMOGLYPHS =
-    /[\u2024\u2025\u2026\u2027\uFF0E\uFF61\uFF0F\u2027]/g;
+  private static readonly DOT_HOMOGLYPHS = /[\u2024\u2025\u2026\u2027\uFF0E\uFF61\uFF0F\u2027]/g;
 
   /**
    * Normalize an input path by decoding URL sequences (including nested) and replacing homoglyphs.

@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import secrets
 from pathlib import Path
-from typing import Optional
 
 KB_API_KEY_FILENAME = "kb_api_key"
 
@@ -15,7 +14,7 @@ def get_kb_key_path() -> Path:
     return Path.home() / ".dolphin" / KB_API_KEY_FILENAME
 
 
-def _env_override() -> Optional[str]:
+def _env_override() -> str | None:
     """Return API key from environment if set."""
     for name in ("DOLPHIN_API_KEY", "DOLPHIN_KB_API_KEY"):
         value = os.environ.get(name)
@@ -26,7 +25,7 @@ def _env_override() -> Optional[str]:
     return None
 
 
-def load_kb_api_key() -> Optional[str]:
+def load_kb_api_key() -> str | None:
     """Load KB API key without creating it."""
     env_val = _env_override()
     if env_val:

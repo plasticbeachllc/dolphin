@@ -201,7 +201,7 @@ export class IPCTransport {
         clearTimeout(pending.timeout);
         this.pendingRequests.delete(id);
       }
-      throw (error instanceof Error ? error : new Error(String(error)));
+      throw error instanceof Error ? error : new Error(String(error));
     }
 
     return new LazyTransformedPromise(promise, (value) => {

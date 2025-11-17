@@ -14,7 +14,6 @@ import typer
 # Import kb CLI functions for top-level commands
 # Import subcommand apps
 from kb.api_key import get_or_create_kb_api_key
-from kb.observability import StructuredLogger
 from kb.ingest.cli import (
     add_repo as kb_add_repo,
     app as kb_app,
@@ -25,6 +24,7 @@ from kb.ingest.cli import (
     rm_repo as kb_rm_repo,
     status as kb_status,
 )
+from kb.observability import StructuredLogger
 
 
 def get_version() -> str:

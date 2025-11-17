@@ -102,7 +102,7 @@ Precedence rules (for all components):
    - If present, read and use its contents.
 3. **First-use creation**
    - If file is missing, generate a new key, write to `~/.dolphin/kb_api_key`, and then use that key.
-    - Creation is only performed by official entry points listed in §2.3.
+   - Creation is only performed by official entry points listed in §2.3.
 
 This allows:
 
@@ -828,70 +828,78 @@ This section is a concrete, step-by-step checklist to drive implementation. Each
 ### 7.4 Agent Core Integration (Read-Only)
 
 10. **Resolve key read-only in Agent Core**
-   - [ ] In `agent-core/src/main.ts`:
-     - [ ] Import `resolveKbApiKey` from `@dolphin/shared/kb-auth`.
-     - [ ] Implement `initializeKbApiKeyEnv` (or adjust existing logic) to:
-       - [ ] Check `process.env.DOLPHIN_API_KEY` / `DOLPHIN_KB_API_KEY` first.
-       - [ ] If not set, call `resolveKbApiKey({ readOnly: true })`.
-       - [ ] If a key is found, set both `DOLPHIN_API_KEY` and `DOLPHIN_KB_API_KEY` in `process.env`.
-       - [ ] Do **not** call `getOrCreateKbApiKey` from Agent Core (read-only consumer).
-   - [ ] Ensure `ContextBuilder` and `IndexQueue` continue to read `kbApiKey` from env/config as before.
+
+- [ ] In `agent-core/src/main.ts`:
+  - [ ] Import `resolveKbApiKey` from `@dolphin/shared/kb-auth`.
+  - [ ] Implement `initializeKbApiKeyEnv` (or adjust existing logic) to:
+    - [ ] Check `process.env.DOLPHIN_API_KEY` / `DOLPHIN_KB_API_KEY` first.
+    - [ ] If not set, call `resolveKbApiKey({ readOnly: true })`.
+    - [ ] If a key is found, set both `DOLPHIN_API_KEY` and `DOLPHIN_KB_API_KEY` in `process.env`.
+    - [ ] Do **not** call `getOrCreateKbApiKey` from Agent Core (read-only consumer).
+- [ ] Ensure `ContextBuilder` and `IndexQueue` continue to read `kbApiKey` from env/config as before.
 
 11. **Agent Core tests**
-   - [ ] Add tests around `initializeKbApiKeyEnv`:
-     - [ ] When env already has `DOLPHIN_API_KEY`, no file lookups are performed.
-     - [ ] When env is empty but `~/.dolphin/kb_api_key` exists (simulated via `homeDir` override), env is populated with that value.
-     - [ ] When neither env nor file is present, Agent Core leaves env unset (and KB requests will be rejected until an official entry point creates the key).
+
+- [ ] Add tests around `initializeKbApiKeyEnv`:
+  - [ ] When env already has `DOLPHIN_API_KEY`, no file lookups are performed.
+  - [ ] When env is empty but `~/.dolphin/kb_api_key` exists (simulated via `homeDir` override), env is populated with that value.
+  - [ ] When neither env nor file is present, Agent Core leaves env unset (and KB requests will be rejected until an official entry point creates the key).
 
 ### 7.5 MCP Bridge Integration
 
 12. **CLI: official key creator for pure MCP setups**
-   - [ ] In `mcp-bridge/src/cli.ts`:
-     - [ ] Import `getOrCreateKbApiKey` from `@dolphin/shared/kb-auth`.
-     - [ ] Before starting the MCP server:
-       - [ ] Resolve KB API key:
-         - [ ] Use env override if set.
-         - [ ] Otherwise, call `getOrCreateKbApiKey()` (official key creator).
-       - [ ] Set `process.env.DOLPHIN_API_KEY` (and optionally `DOLPHIN_KB_API_KEY`) to that value so the rest of the process can read it.
+
+- [ ] In `mcp-bridge/src/cli.ts`:
+  - [ ] Import `getOrCreateKbApiKey` from `@dolphin/shared/kb-auth`.
+  - [ ] Before starting the MCP server:
+    - [ ] Resolve KB API key:
+      - [ ] Use env override if set.
+      - [ ] Otherwise, call `getOrCreateKbApiKey()` (official key creator).
+    - [ ] Set `process.env.DOLPHIN_API_KEY` (and optionally `DOLPHIN_KB_API_KEY`) to that value so the rest of the process can read it.
 
 13. **REST client: read-only usage**
-   - [ ] In `mcp-bridge/src/rest/client.ts`:
-     - [ ] Import `resolveKbApiKey` from `@dolphin/shared/kb-auth`.
-     - [ ] Implement a module-level `getKbApiKey()` that:
-       - [ ] Caches a resolved key.
-       - [ ] Checks env first.
-       - [ ] If env is empty, calls `resolveKbApiKey({ readOnly: true })`.
-       - [ ] Never calls `getOrCreateKbApiKey`.
-     - [ ] In `doFetch`, set `X-API-Key` header when `getKbApiKey()` returns a key.
+
+- [ ] In `mcp-bridge/src/rest/client.ts`:
+  - [ ] Import `resolveKbApiKey` from `@dolphin/shared/kb-auth`.
+  - [ ] Implement a module-level `getKbApiKey()` that:
+    - [ ] Caches a resolved key.
+    - [ ] Checks env first.
+    - [ ] If env is empty, calls `resolveKbApiKey({ readOnly: true })`.
+    - [ ] Never calls `getOrCreateKbApiKey`.
+  - [ ] In `doFetch`, set `X-API-Key` header when `getKbApiKey()` returns a key.
 
 14. **MCP bridge tests**
-   - [ ] Extend `rest_client.test.ts` to assert:
-     - [ ] `X-API-Key` is set when `DOLPHIN_API_KEY` is provided.
-     - [ ] `X-API-Key` is set from the shared key file when env is empty but file exists (via `homeDir` override).
-   - [ ] Add tests for CLI behavior:
-     - [ ] When no env or file exists, `dolphin-mcp` creates the file and sets `DOLPHIN_API_KEY`.
-     - [ ] When env is present, no file is created/modified.
+
+- [ ] Extend `rest_client.test.ts` to assert:
+  - [ ] `X-API-Key` is set when `DOLPHIN_API_KEY` is provided.
+  - [ ] `X-API-Key` is set from the shared key file when env is empty but file exists (via `homeDir` override).
+- [ ] Add tests for CLI behavior:
+  - [ ] When no env or file exists, `dolphin-mcp` creates the file and sets `DOLPHIN_API_KEY`.
+  - [ ] When env is present, no file is created/modified.
 
 ### 7.6 Final Validation and Documentation
 
 15. **End-to-end validation**
-   - [ ] On a clean dev machine (or isolated environment) with no existing `~/.dolphin`:
-     - [ ] Run `uv run dolphin init` and confirm `~/.dolphin/config.toml` and `~/.dolphin/kb_api_key` are created.
-     - [ ] Run `uv run dolphin serve` and confirm:
-       - [ ] `/health` is reachable without auth.
-       - [ ] `/v1/search` returns `401` without `X-API-Key` and succeeds when `X-API-Key` matches the file.
-     - [ ] Install and activate the VS Code extension and confirm:
-       - [ ] No manual API key prompts are required.
-       - [ ] KB features (search, auto-sync) work without configuring env.
-     - [ ] Start `dolphin-mcp` and confirm it can query the KB successfully.
+
+- [ ] On a clean dev machine (or isolated environment) with no existing `~/.dolphin`:
+  - [ ] Run `uv run dolphin init` and confirm `~/.dolphin/config.toml` and `~/.dolphin/kb_api_key` are created.
+  - [ ] Run `uv run dolphin serve` and confirm:
+    - [ ] `/health` is reachable without auth.
+    - [ ] `/v1/search` returns `401` without `X-API-Key` and succeeds when `X-API-Key` matches the file.
+  - [ ] Install and activate the VS Code extension and confirm:
+    - [ ] No manual API key prompts are required.
+    - [ ] KB features (search, auto-sync) work without configuring env.
+  - [ ] Start `dolphin-mcp` and confirm it can query the KB successfully.
 
 16. **Docs updates**
-   - [ ] Update `README.md`, `vscode-extension/README.md`, and any other relevant docs to:
-     - [ ] Explain that Dolphin auto-generates and manages `~/.dolphin/kb_api_key`.
-     - [ ] Note that env vars `DOLPHIN_API_KEY` / `DOLPHIN_KB_API_KEY` are optional and intended for advanced use (tests/CI/remote).
-   - [ ] Cross-link `docs/API_KEY_PLAN.md` from architecture or security docs if helpful for maintainers.
+
+- [ ] Update `README.md`, `vscode-extension/README.md`, and any other relevant docs to:
+  - [ ] Explain that Dolphin auto-generates and manages `~/.dolphin/kb_api_key`.
+  - [ ] Note that env vars `DOLPHIN_API_KEY` / `DOLPHIN_KB_API_KEY` are optional and intended for advanced use (tests/CI/remote).
+- [ ] Cross-link `docs/API_KEY_PLAN.md` from architecture or security docs if helpful for maintainers.
 
 17. **Security checklist**
-   - [ ] Confirm the key is never logged or surfaced in UI.
-   - [ ] Confirm file permissions are best-effort restrictive (`0o600` on POSIX; documented caveats on Windows).
-   - [ ] Confirm all KB clients now send `X-API-Key` when talking to `/v1/**` endpoints.
+
+- [ ] Confirm the key is never logged or surfaced in UI.
+- [ ] Confirm file permissions are best-effort restrictive (`0o600` on POSIX; documented caveats on Windows).
+- [ ] Confirm all KB clients now send `X-API-Key` when talking to `/v1/**` endpoints.
