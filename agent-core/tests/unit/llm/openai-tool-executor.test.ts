@@ -146,9 +146,7 @@ describe("OpenAIToolExecutor", () => {
         id: "resp_final",
         model: "gpt-5.1-codex",
         status: "completed",
-        output: [
-          { type: "message", role: "assistant", content: [{ type: "text", text: "done" }] },
-        ],
+        output: [{ type: "message", role: "assistant", content: [{ type: "text", text: "done" }] }],
         usage: { input_tokens: 4, output_tokens: 2 },
         stop_reason: "end_turn",
       },

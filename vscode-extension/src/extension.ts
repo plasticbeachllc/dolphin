@@ -138,9 +138,7 @@ async function promptForProviderSecret(
   }
 
   await context.secrets.store(options.secretId, apiKey.trim());
-  outputChannel?.appendLine(
-    `[Dolphin] ${options.successLog ?? options.successMessage}`
-  );
+  outputChannel?.appendLine(`[Dolphin] ${options.successLog ?? options.successMessage}`);
   await vscode.window.showInformationMessage(options.successMessage);
 }
 
