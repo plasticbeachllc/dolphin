@@ -33,14 +33,23 @@ class OpenAIAdapter
   }
 
   mapMCPTools(tools: MCPTool[]): OpenAIResponseTool[] {
-    return tools.map((tool) => ({
-      type: "function",
-      function: {
+    return tools
+      .filter((tool) => {
+        const hasName = typeof tool.name === "string" && tool.name.trim().length > 0;
+        if (!hasName) {
+          console.warn("[OpenAIAdapter] Skipping MCP tool without name", tool);
+        }
+        return hasName;
+      })
+      .map((tool) => ({
         name: tool.name,
-        description: tool.description,
-        parameters: tool.inputSchema,
-      },
-    }));
+        type: "function",
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.inputSchema,
+        },
+      }));
   }
 
   async callModel({
@@ -59,12 +68,12 @@ class OpenAIAdapter
   }> {
     const openaiMessages: OpenAIInputMessage[] = messages.map((message) => ({
       role: message.role,
-      content: message.content,
+      content: this.normalizeContent(message.role, message.content),
     }));
 
     const response = await this.client.streamResponse({
       messages: openaiMessages,
-      tools,
+      tools: tools.length > 0 ? tools : undefined,
       signal,
       onTextChunk: (delta) => {
         if (typeof delta === "string") {
@@ -126,7 +135,7 @@ class OpenAIAdapter
     if (messageBlock && "content" in messageBlock) {
       return (messageBlock as { content: OpenAIMessageContent }).content;
     }
-    return [{ type: "text", text: "" }];
+    return [{ type: "output_text", text: "" }];
   }
 
   private toUsage(response: OpenAIResponse): UsageStats {
@@ -144,6 +153,21 @@ class OpenAIAdapter
     } catch {
       return {};
     }
+  }
+
+  private normalizeContent(
+    role: "user" | "assistant",
+    content: OpenAIMessageContent
+  ): OpenAIMessageContent {
+    return content.map((block) => {
+      if (block.type === "text") {
+        return {
+          ...block,
+          type: role === "assistant" ? "output_text" : "input_text",
+        };
+      }
+      return block;
+    });
   }
 }
 

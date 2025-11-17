@@ -7,7 +7,6 @@ const message = messageArg ?? "Plan a simple dashboard UI for my validation suit
 const mode = modeArg ?? "architect";
 
 const agentCorePath = join(process.cwd(), "agent-core");
-
 console.log(`[runner] launching Agent Core from ${agentCorePath}`);
 
 const child = spawn({
@@ -15,20 +14,27 @@ const child = spawn({
   cwd: agentCorePath,
   stdin: "pipe",
   stdout: "pipe",
-  stderr: "pipe",
+  stderr: "inherit",
   env: process.env,
 });
 
-child.stderr?.on("data", (chunk) => {
-  process.stderr.write(chunk);
-});
+async function startStdoutReader() {
+  if (!child.stdout) {
+    console.warn("[runner] child stdout unavailable");
+    return;
+  }
+  const reader = child.stdout.getReader();
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done || !value) {
+      break;
+    }
+    stdoutBuffer = Buffer.concat([stdoutBuffer, Buffer.from(value)]);
+    processStdoutBuffer();
+  }
+}
 
 let stdoutBuffer = Buffer.alloc(0);
-child.stdout?.on("data", (chunk) => {
-  stdoutBuffer = Buffer.concat([stdoutBuffer, Buffer.from(chunk)]);
-  processStdoutBuffer();
-});
-
 function processStdoutBuffer() {
   const delimiter = Buffer.from("\r\n\r\n");
   while (stdoutBuffer.length > 0) {
@@ -73,13 +79,17 @@ function sendTask() {
   };
   const body = JSON.stringify(request);
   const payload = `Content-Length: ${Buffer.byteLength(body, "utf-8")}\r\n\r\n${body}`;
-  child.stdin?.write(payload);
+  child.stdin.write(payload);
   console.log(`[runner] sent ${mode} request: ${message}`);
 }
 
 child.exited.then((code) => {
   console.log(`[runner] agent exited with code ${code}`);
   process.exit(code ?? 0);
+});
+
+startStdoutReader().catch((error) => {
+  console.error("[runner] stdout reader failed", error);
 });
 
 setTimeout(sendTask, 1000);

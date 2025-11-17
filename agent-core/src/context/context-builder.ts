@@ -112,7 +112,7 @@ export class ContextBuilder {
     const timeoutHandle = setTimeout(() => controller.abort(), this.kbTimeoutMs);
 
     try {
-      const response = await fetch(`${this.kbUrl}/v1/search`, {
+      const response = await fetch(`${this.kbUrl.replace(/\/$/, "")}/search`, {
         method: "POST",
         headers: this.buildHeaders(),
         body: JSON.stringify({
