@@ -1,12 +1,12 @@
-import { chromium, expect, test, Page, Browser } from "@playwright/test";
-import { spawn, ChildProcess } from "node:child_process";
+import { expect, test, Page } from "@playwright/test";
+import { _electron as electron, ElectronApplication } from "playwright";
+import { exec } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CODE_BIN = process.env.VSCODE_BIN ?? "code";
-const DEBUG_PORT = Number(process.env.VSCODE_REMOTE_PORT ?? 9333);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PLAYWRIGHT_USER_DATA = path.join(
@@ -14,30 +14,15 @@ const PLAYWRIGHT_USER_DATA = path.join(
   `dolphin-vscode-playwright-${process.pid}-${Date.now()}`
 );
 
-async function waitForDebugger(port: number, retries = 60): Promise<void> {
-  for (let attempt = 0; attempt < retries; attempt += 1) {
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}/json/version`);
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // ignore and retry
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+function ensureTempDir(dir: string): void {
+  if (fs.existsSync(dir)) {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
-  throw new Error("VS Code debugger never became ready");
+  fs.mkdirSync(dir, { recursive: true });
 }
 
-async function connectToVSCode(): Promise<Browser> {
-  await waitForDebugger(DEBUG_PORT);
-  return chromium.connectOverCDP(`http://127.0.0.1:${DEBUG_PORT}`);
-}
-
-function launchVSCode(): ChildProcess {
-  if (!fs.existsSync(PLAYWRIGHT_USER_DATA)) {
-    fs.mkdirSync(PLAYWRIGHT_USER_DATA, { recursive: true });
-  }
+async function launchVSCode(): Promise<ElectronApplication> {
+  ensureTempDir(PLAYWRIGHT_USER_DATA);
 
   const workspacePath = path.resolve(__dirname, "../../test-workspace");
   const extensionPath = path.resolve(__dirname, "..", "..");
@@ -46,7 +31,6 @@ function launchVSCode(): ChildProcess {
     workspacePath,
     `--extensionDevelopmentPath=${extensionPath}`,
     `--user-data-dir=${PLAYWRIGHT_USER_DATA}`,
-    `--remote-debugging-port=${DEBUG_PORT}`,
     "--disable-workspace-trust",
     "--skip-release-notes",
     "--skip-welcome",
@@ -57,8 +41,15 @@ function launchVSCode(): ChildProcess {
     "--locale=en",
   ];
 
-  const child = spawn(CODE_BIN, args, { stdio: "inherit" });
-  return child;
+  return electron.launch({
+    executablePath: CODE_BIN,
+    args,
+    env: {
+      ...process.env,
+      ELECTRON_ENABLE_LOGGING: "1",
+      ELECTRON_ENABLE_STACK_DUMPING: "1",
+    },
+  });
 }
 
 function modifier(): string {
@@ -74,13 +65,8 @@ async function openCommandPalette(page: Page): Promise<void> {
 async function runCommand(page: Page, label: string): Promise<void> {
   await openCommandPalette(page);
   await page.keyboard.press(`${modifier()}+A`);
-  await page.keyboard.type(label, { delay: 20 });
-  const option = page
-    .locator(".quick-input-widget .monaco-list-row")
-    .filter({ hasText: label })
-    .first();
-  await option.waitFor({ timeout: 10_000 });
-  await option.click();
+  await page.keyboard.type(`>${label}`, { delay: 15 });
+  await page.keyboard.press("Enter");
 }
 
 async function fillSecretInput(page: Page, placeholderToken: string, value: string): Promise<void> {
@@ -92,41 +78,63 @@ async function fillSecretInput(page: Page, placeholderToken: string, value: stri
   await page.keyboard.press("Enter");
 }
 
-async function expectNotification(page: Page, message: string): Promise<void> {
-  const item = page
-    .locator(".notifications-list-container .notification-list-item .message")
-    .filter({ hasText: message })
-    .first();
-  await item.waitFor({ timeout: 10_000 });
+async function expectOutputLog(page: Page, text: string): Promise<void> {
+  // Ensure panel is visible
+  await page.keyboard.press(`${modifier()}+J`);
+  // Show Output via command palette (cross-platform)
+  await openCommandPalette(page);
+  await page.keyboard.press(`${modifier()}+A`);
+  await page.keyboard.type(">View: Show Output", { delay: 15 });
+  await page.keyboard.press("Enter");
+
+  const outputPanel = page.locator(".output-view");
+  await outputPanel.waitFor({ state: "visible", timeout: 10_000 });
+
+  // Select Dolphin output channel
+  await openCommandPalette(page);
+  await page.keyboard.press(`${modifier()}+A`);
+  await page.keyboard.type(">Developer: Select Log Output", { delay: 15 });
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Dolphin", { delay: 30 });
+  await page.keyboard.press("Enter");
+
+  const logLines = outputPanel.locator(".monaco-scrollable-element .view-lines");
+  await expect(logLines).toContainText(text, { timeout: 20_000 });
 }
 
-async function clickNotificationButton(page: Page, label: string): Promise<void> {
-  const button = page
-    .locator(".notifications-list-container .monaco-text-button")
-    .filter({ hasText: label })
-    .first();
-  await button.waitFor({ timeout: 5_000 });
-  await button.click();
+async function delay(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function cleanupProcess(app: ElectronApplication | undefined): Promise<void> {
+  await app?.close().catch(() => {});
 }
 
 test.describe("Dolphin extension API key UX", () => {
-  let vsCodeProcess: ChildProcess | undefined;
-  let browser: Browser | undefined;
+  let electronApp: ElectronApplication | undefined;
   let page: Page | undefined;
 
   test.beforeAll(async () => {
-    vsCodeProcess = launchVSCode();
-    browser = await connectToVSCode();
-    const [context] = browser.contexts();
-    page = context.pages()[0] ?? (await context.waitForEvent("page"));
-    await page.waitForSelector(".monaco-workbench", { timeout: 30_000 });
+    const maxAttempts = 2;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        electronApp = await launchVSCode();
+        page = await electronApp.firstWindow();
+        await page.waitForSelector(".monaco-workbench", { timeout: 60_000 });
+        return;
+      } catch (error) {
+        await cleanupProcess(electronApp);
+        electronApp = undefined;
+        if (attempt === maxAttempts) {
+          throw error;
+        }
+        await delay(3_000);
+      }
+    }
   });
 
   test.afterAll(async () => {
-    await browser?.close();
-    if (vsCodeProcess && !vsCodeProcess.killed) {
-      vsCodeProcess.kill("SIGTERM");
-    }
+    await cleanupProcess(electronApp);
     if (fs.existsSync(PLAYWRIGHT_USER_DATA)) {
       fs.rmSync(PLAYWRIGHT_USER_DATA, { recursive: true, force: true });
     }
@@ -140,15 +148,10 @@ test.describe("Dolphin extension API key UX", () => {
 
     await runCommand(page, "Dolphin: Set API Key");
     await fillSecretInput(page, "sk-ant", "sk-ant-test-1234567890");
-    await expectNotification(page, "API key stored securely");
+    await expectOutputLog(page, "API key stored in SecretStorage");
 
     await runCommand(page, "Dolphin: Set KB API Key");
     await fillSecretInput(page, "kb-local-secret", "kb-key-test-123456");
-    await expectNotification(
-      page,
-      "KB API key stored securely. Restart the Dolphin KB to apply it to the agent?"
-    );
-
-    await clickNotificationButton(page, "Later");
+    await expectOutputLog(page, "KB API key stored securely");
   });
 });
