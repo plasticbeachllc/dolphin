@@ -122,6 +122,7 @@ async function promptForProviderSecret(
     prompt: string;
     placeholder: string;
     successMessage: string;
+    successLog?: string;
   }
 ): Promise<void> {
   const apiKey = await vscode.window.showInputBox({
@@ -137,6 +138,9 @@ async function promptForProviderSecret(
   }
 
   await context.secrets.store(options.secretId, apiKey.trim());
+  outputChannel?.appendLine(
+    `[Dolphin] ${options.successLog ?? options.successMessage}`
+  );
   await vscode.window.showInformationMessage(options.successMessage);
 }
 
@@ -431,6 +435,7 @@ export async function activate(context: vscode.ExtensionContext) {
           prompt: "Enter your Anthropic API Key",
           placeholder: "sk-ant-...",
           successMessage: "Anthropic API key stored securely",
+          successLog: "API key stored in SecretStorage",
         });
       })
     );
@@ -443,6 +448,7 @@ export async function activate(context: vscode.ExtensionContext) {
           prompt: "Enter your Anthropic (Claude) API Key",
           placeholder: "sk-ant-...",
           successMessage: "Claude API key stored securely",
+          successLog: "Claude API key stored in SecretStorage",
         });
       })
     );
@@ -455,6 +461,7 @@ export async function activate(context: vscode.ExtensionContext) {
           prompt: "Enter your OpenAI API Key",
           placeholder: "sk-openai-...",
           successMessage: "OpenAI API key stored securely",
+          successLog: "OpenAI API key stored in SecretStorage",
         });
       })
     );
@@ -478,6 +485,7 @@ export async function activate(context: vscode.ExtensionContext) {
         await context.secrets.store(KB_API_KEY_SECRET_ID, kbKey);
         setKbApiKeyValue(kbKey, "command");
         propagateKbApiKeyToConsumers(kbKey);
+        outputChannel.appendLine("[Dolphin] KB API key stored securely");
 
         const choice = await vscode.window.showInformationMessage(
           "KB API key stored securely. Restart the Dolphin KB to apply it to the agent?",

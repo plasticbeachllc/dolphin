@@ -1,12 +1,17 @@
 import { expect, test, Page } from "@playwright/test";
 import { _electron as electron, ElectronApplication } from "playwright";
-import { exec } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const CODE_BIN = process.env.VSCODE_BIN ?? "code";
+const DEFAULT_VSCODE_PATH =
+  process.platform === "darwin"
+    ? "/Applications/Visual Studio Code.app/Contents/MacOS/Electron"
+    : process.platform === "win32"
+      ? "C:\\Program Files\\Microsoft VS Code\\Code.exe"
+      : "/usr/bin/code";
+const CODE_BIN = process.env.VSCODE_BIN ?? DEFAULT_VSCODE_PATH;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PLAYWRIGHT_USER_DATA = path.join(
@@ -66,29 +71,60 @@ async function runCommand(page: Page, label: string): Promise<void> {
   await openCommandPalette(page);
   await page.keyboard.press(`${modifier()}+A`);
   await page.keyboard.type(`>${label}`, { delay: 15 });
+  const targetEntry = page
+    .locator(".quick-input-widget .monaco-list-row")
+    .filter({ hasText: label })
+    .first();
+  await targetEntry.waitFor({ timeout: 3_000 }).catch(() => {});
   await page.keyboard.press("Enter");
 }
 
-async function fillSecretInput(page: Page, placeholderToken: string, value: string): Promise<void> {
+async function fillSecretInput(
+  page: Page,
+  placeholderToken: string,
+  value: string,
+  retry?: () => Promise<void>
+): Promise<void> {
   const secretInput = page
     .locator(`.quick-input-widget input[placeholder*="${placeholderToken}"]`)
     .first();
-  await secretInput.waitFor({ timeout: 5_000 });
+  try {
+    await secretInput.waitFor({ timeout: 5_000 });
+  } catch (error) {
+    if (!retry) {
+      throw error;
+    }
+    await retry();
+    await secretInput.waitFor({ timeout: 5_000 });
+  }
   await secretInput.fill(value);
   await page.keyboard.press("Enter");
 }
 
-async function expectOutputLog(page: Page, text: string): Promise<void> {
-  // Ensure panel is visible
-  await page.keyboard.press(`${modifier()}+J`);
-  // Show Output via command palette (cross-platform)
-  await openCommandPalette(page);
-  await page.keyboard.press(`${modifier()}+A`);
-  await page.keyboard.type(">View: Show Output", { delay: 15 });
-  await page.keyboard.press("Enter");
-
+async function showOutputPanel(page: Page): Promise<ReturnType<Page["locator"]>> {
   const outputPanel = page.locator(".output-view");
-  await outputPanel.waitFor({ state: "visible", timeout: 10_000 });
+
+  const runCommand = async (command: string) => {
+    await openCommandPalette(page);
+    await page.keyboard.press(`${modifier()}+A`);
+    await page.keyboard.type(command, { delay: 15 });
+    await page.keyboard.press("Enter");
+  };
+
+  await runCommand(">View: Show Output");
+  try {
+    await outputPanel.waitFor({ state: "visible", timeout: 10_000 });
+  } catch {
+    await runCommand(">View: Toggle Panel");
+    await runCommand(">View: Show Output");
+    await outputPanel.waitFor({ state: "visible", timeout: 10_000 });
+  }
+
+  return outputPanel;
+}
+
+async function expectOutputLog(page: Page, text: string): Promise<void> {
+  const outputPanel = await showOutputPanel(page);
 
   // Select Dolphin output channel
   await openCommandPalette(page);
@@ -147,11 +183,15 @@ test.describe("Dolphin extension API key UX", () => {
     }
 
     await runCommand(page, "Dolphin: Set API Key");
-    await fillSecretInput(page, "sk-ant", "sk-ant-test-1234567890");
+    await fillSecretInput(page, "sk-ant", "sk-ant-test-1234567890", async () => {
+      await runCommand(page, "Dolphin: Set API Key");
+    });
     await expectOutputLog(page, "API key stored in SecretStorage");
 
     await runCommand(page, "Dolphin: Set KB API Key");
-    await fillSecretInput(page, "kb-local-secret", "kb-key-test-123456");
+    await fillSecretInput(page, "kb-local-secret", "kb-key-test-123456", async () => {
+      await runCommand(page, "Dolphin: Set KB API Key");
+    });
     await expectOutputLog(page, "KB API key stored securely");
   });
 });
