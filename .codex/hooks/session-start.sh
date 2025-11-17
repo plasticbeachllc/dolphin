@@ -68,4 +68,4 @@ echo "✅ Dolphin environment setup complete!"
 # ============================================================================
 # Install VSCode dependencies
 # ============================================================================
-# tbd
+snap install --classic code
