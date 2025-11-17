@@ -12,7 +12,7 @@
  * 4. Performance monitoring via metrics
  */
 
-import msgpack from "msgpack5";
+import { Packr, Unpackr } from "msgpackr";
 
 /**
  * Serialization format
@@ -97,18 +97,20 @@ export class JSONSerializer implements ISerializer {
  */
 export class MessagePackSerializer implements ISerializer {
   readonly format: SerializationFormat = "msgpack";
-  private codec = msgpack();
+  private packr = new Packr();
+  private unpackr = new Unpackr();
   private lastMetrics: SerializationMetrics | null = null;
 
   serialize(data: any): Buffer {
     const startTime = performance.now();
-    const buffer = this.codec.encode(data);
+    const encoded = this.packr.encode(data);
+    const buffer = Buffer.isBuffer(encoded) ? encoded : Buffer.from(encoded);
     const endTime = performance.now();
 
     this.lastMetrics = {
       serializeTimeMs: endTime - startTime,
       deserializeTimeMs: 0,
-      originalSize: Buffer.byteLength(JSON.stringify(data), "utf-8"), // For comparison
+      originalSize: buffer.length,
       serializedSize: buffer.length,
     };
 
@@ -117,7 +119,12 @@ export class MessagePackSerializer implements ISerializer {
 
   deserialize(buffer: Buffer): any {
     const startTime = performance.now();
-    const data = this.codec.decode(buffer);
+    let data: any;
+    try {
+      data = this.unpackr.decode(buffer);
+    } catch (error) {
+      throw new Error("Invalid MessagePack payload");
+    }
     const endTime = performance.now();
 
     if (this.lastMetrics) {

@@ -11,16 +11,16 @@
     "benchmark": "node --experimental-specifier-resolution=node --loader ts-node/esm ipc/benchmark.ts"
   },
   "dependencies": {
-    "zod": "^3.23.8",
-    "prom-client": "^15.1.0",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/sdk-node": "^0.52.0",
     "@opentelemetry/auto-instrumentations-node": "^0.48.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.52.0",
     "@opentelemetry/resources": "^1.25.0",
+    "@opentelemetry/sdk-node": "^0.52.0",
     "@opentelemetry/semantic-conventions": "^1.25.0",
+    "msgpackr": "^1.11.5",
+    "prom-client": "^15.1.0",
     "vscode-jsonrpc": "^8.2.1",
-    "msgpack5": "^6.0.2"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

@@ -83,6 +83,7 @@ test-unit-all:
 	@just test-python unit
 	@just test-agent-core unit
 	@just test-extension unit
+	@just test-shared
 	@just test-webview
 	@echo ""
 	@echo "✅ All unit tests passed!"
@@ -226,6 +227,12 @@ test-mcp-bridge:
 	@echo "🌉 Running MCP Bridge tests..."
 	@cd mcp-bridge && bun test || (echo "   ❌ MCP Bridge tests failed"; exit 1)
 	@echo "   ✅ MCP Bridge tests passed"
+
+# Run shared package tests (bun)
+test-shared:
+	@echo "📦 Running shared package tests..."
+	@cd shared && bun test || (echo "   ❌ Shared package tests failed"; exit 1)
+	@echo "   ✅ Shared package tests passed"
 
 # Run Webview tests (all are unit tests)
 test-webview:

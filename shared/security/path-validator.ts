@@ -80,6 +80,36 @@ export class PathValidator {
     }
   }
 
+  private static readonly DOT_HOMOGLYPHS = /[\u2024\u2025\u2026\u2027\uFF0E\uFF61\uFF0F\u2027]/g;
+
+  /**
+   * Normalize an input path by decoding URL sequences (including nested) and replacing homoglyphs.
+   */
+  private static sanitizeInputPath(inputPath: string): string {
+    let value = inputPath;
+
+    // Replace dot-homoglyphs with literal dots to avoid traversal bypasses
+    value = value.replace(PathValidator.DOT_HOMOGLYPHS, ".");
+
+    // Convert Windows separators to forward slashes for consistent processing
+    value = value.replace(/\\/g, "/");
+
+    // Decode repeatedly (handles double-encoded traversal attempts)
+    for (let i = 0; i < 5; i++) {
+      try {
+        const decoded = decodeURIComponent(value);
+        if (decoded === value) {
+          break;
+        }
+        value = decoded;
+      } catch {
+        break;
+      }
+    }
+
+    return value;
+  }
+
   /**
    * Validate a single path and return the absolute resolved path
    *
@@ -90,18 +120,19 @@ export class PathValidator {
   validate(inputPath: string): string {
     const prefix = this.options.errorPrefix || "Access denied";
 
-    // Decode URL-encoded paths to prevent bypass attempts
-    let decodedPath = inputPath;
-    try {
-      decodedPath = decodeURIComponent(inputPath);
-    } catch {
-      // If decode fails, use original (might be already decoded)
-      decodedPath = inputPath;
-    }
+    // Decode URL-encoded paths and normalize homoglyphs
+    const normalizedInput = PathValidator.sanitizeInputPath(inputPath);
+    let decodedPath = normalizedInput;
 
     // Reject paths with null bytes (directory traversal technique)
     if (decodedPath.includes("\0")) {
       throw new PathValidationError(`${prefix}: null byte in path`, inputPath, "null_byte");
+    }
+
+    // Reject UNC-style or network paths (\\server\share or //server/share)
+    const trimmed = decodedPath.trim();
+    if (trimmed.startsWith("//") || trimmed.startsWith("\\\\")) {
+      throw new PathValidationError(`${prefix}: UNC paths are not allowed`, inputPath, "unc_path");
     }
 
     // Reject absolute paths that don't start with baseDir

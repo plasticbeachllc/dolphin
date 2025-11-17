@@ -283,6 +283,7 @@ describe("IPCTransport", () => {
       }
 
       limitedClient.dispose();
+      await Promise.allSettled([req1, req2]);
       client.dispose();
       server.dispose();
     });
@@ -498,7 +499,7 @@ describe("IPCTransport", () => {
 
       client.onMethod("outer", async (params) => {
         // Client makes a request back to server from within a handler
-        const innerResult = await server.request("inner", { value: params.value });
+        const innerResult = await client.request("inner", { value: params.value });
         return { outer_result: innerResult.inner_result + 10 };
       });
 
