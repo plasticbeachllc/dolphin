@@ -20,10 +20,11 @@ import { createChatProvider } from "./execution/provider-factory";
 import { ContextBuilder } from "./context/context-builder";
 import { PromptBuilder } from "./prompts/prompt-builder";
 import { PlanStore } from "./storage/plan-store";
-import { join as pathJoin } from "path";
+import { basename, join as pathJoin } from "path";
 import { loadProviderSettings } from "./utils/provider-settings";
 import { buildProviderAuthStatuses } from "./utils/auth-status";
 import type { ProviderAuthStatus } from "../../shared/types/events";
+import type { Plan, WorkflowUpdate } from "./types/index";
 
 interface Message {
   jsonrpc: "2.0";
@@ -308,6 +309,17 @@ class AgentCoreV2 {
         capabilities: this.capabilities,
       },
     });
+
+    const workspacePath = this.workspaceRoot;
+    const hasWorkspace = Boolean(workspacePath && workspacePath.trim().length > 0);
+    this.sendEvent({
+      type: "agent_ready",
+      version: this.version,
+      capabilities: this.capabilities,
+      hasWorkspace,
+      workspaceName: hasWorkspace ? basename(workspacePath) : null,
+      workspacePath: hasWorkspace ? workspacePath : null,
+    });
   }
 
   private async handleMessage(message: Message) {
@@ -316,9 +328,26 @@ class AgentCoreV2 {
       const request = message as ExtensionRequest;
       try {
         const result = await this.handleRequest(request);
-        this.sendResponse(message.id!, result);
+        if (message.id !== undefined) {
+          this.sendResponse(message.id, result);
+        }
       } catch (error: unknown) {
-        this.sendError(message.id!, error);
+        if (message.id !== undefined) {
+          this.sendError(message.id, error);
+        } else {
+          const err = error instanceof Error ? error : new Error(String(error));
+          console.error("[Agent Core V2] Notification handler error:", err);
+          this.sendEvent({
+            type: "error",
+            error: {
+              code: "SERVICE_UNAVAILABLE",
+              message: err.message,
+              details: err.stack,
+              suggestions: ["Check the Dolphin Agent output channel for details."],
+              recoverable: false,
+            },
+          });
+        }
       }
     }
   }
@@ -331,29 +360,69 @@ class AgentCoreV2 {
     }
 
     switch (request.method) {
+      case "list_conversations": {
+        // Conversation persistence not implemented yet; return empty list for now
+        return [];
+      }
       case "sendMessage":
       case "send_message": {
         const params = request.params as { message: string; context?: unknown; mode?: string };
         const { message, context, mode = "editor" } = params;
+        const workflowMode = (mode as "editor" | "architect") ?? "editor";
+        const autoApprovePlans = workflowMode === "architect";
+        const sanitizedContext = this.normalizeInputContext(context);
 
         // Start task with orchestrator
         const session = await this.orchestrator.startTask({
-          mode: mode as "editor" | "architect",
+          mode: workflowMode,
           message,
-          context,
+          context: sanitizedContext,
         });
 
         // Stream updates to extension in background
         void (async () => {
+          let planAutoApproved = false;
           try {
             for await (const update of this.orchestrator.subscribeToUpdates(session.id)) {
-              this.sendEvent({
-                type: "workflow_update",
-                data: update,
-              });
+              this.processWorkflowUpdate(update);
+
+              if (
+                autoApprovePlans &&
+                !planAutoApproved &&
+                this.isPlanApprovalUpdate(update)
+              ) {
+                try {
+                  await this.orchestrator?.approveTask(session.id);
+                  planAutoApproved = true;
+                } catch (error) {
+                  console.error("[Agent Core V2] Failed to auto-approve plan:", error);
+                }
+              }
             }
+
+            this.sendEvent({
+              type: "task_completed",
+              success: true,
+              result: { conversationId: session.id, mode: workflowMode },
+            });
           } catch (error) {
             console.error(`[Agent Core V2] Error streaming updates:`, error);
+            const err = error instanceof Error ? error : new Error(String(error));
+            this.sendEvent({
+              type: "error",
+              error: {
+                code: "SERVICE_UNAVAILABLE",
+                message: err.message,
+                details: err.stack,
+                suggestions: ["Check the Dolphin Agent output channel for details."],
+                recoverable: false,
+              },
+            });
+            this.sendEvent({
+              type: "task_completed",
+              success: false,
+              error: err.message,
+            });
           }
         })();
 
@@ -455,13 +524,111 @@ class AgentCoreV2 {
   private sendEvent(event: AgentEvent) {
     const notification: Message = {
       jsonrpc: "2.0",
-      method: "event",
+      method: "notify",
       params: {
         ...event,
         requestId: this.requestIdCounter++,
       },
     };
     this.send(notification);
+  }
+
+  private processWorkflowUpdate(update: WorkflowUpdate): void {
+    this.sendEvent({
+      type: "workflow_update",
+      data: update,
+    });
+
+    if (update.type === "chunk") {
+      const chunk = this.asRecord(update.data);
+      const delta = typeof chunk?.content === "string" ? chunk.content : null;
+      if (delta) {
+        this.sendEvent({ type: "content_delta", delta });
+      }
+      return;
+    }
+
+    if (update.type === "progress") {
+      const data = this.asRecord(update.data);
+      const plan = this.extractPlan(data?.plan);
+      if (plan) {
+        this.sendEvent({ type: "plan_generated", plan });
+        if (typeof plan.content === "string" && plan.content.trim().length > 0) {
+          this.sendEvent({ type: "content_delta", delta: plan.content });
+        }
+      }
+      return;
+    }
+
+    if (update.type === "error") {
+      const data = this.asRecord(update.data);
+      const message =
+        (typeof data?.error === "string" && data?.error) || "Workflow execution error";
+      this.sendEvent({
+        type: "error",
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message,
+          details: data ? JSON.stringify(data) : undefined,
+          suggestions: ["Check the Dolphin Agent output channel for details."],
+          recoverable: false,
+        },
+      });
+    }
+  }
+
+  private isPlanApprovalUpdate(update: WorkflowUpdate): boolean {
+    if (update.type !== "progress") {
+      return false;
+    }
+    const data = this.asRecord(update.data);
+    if (!data || data.phase !== "planning") {
+      return false;
+    }
+    return Boolean(this.extractPlan(data.plan));
+  }
+
+  private extractPlan(planCandidate: unknown): Plan | null {
+    if (planCandidate && typeof planCandidate === "object") {
+      const plan = planCandidate as Plan;
+      if (typeof plan.content === "string") {
+        return plan;
+      }
+    }
+    return null;
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> | null {
+    if (value && typeof value === "object") {
+      return value as Record<string, unknown>;
+    }
+    return null;
+  }
+
+  private normalizeInputContext(context: unknown): {
+    files: string[];
+    folders: string[];
+    selection: string;
+  } {
+    const fallback = { files: [] as string[], folders: [] as string[], selection: "" };
+    if (!context || typeof context !== "object") {
+      return fallback;
+    }
+
+    const record = context as {
+      files?: unknown;
+      folders?: unknown;
+      selection?: unknown;
+    };
+    const files = Array.isArray(record.files)
+      ? (record.files.filter((item): item is string => typeof item === "string") as string[])
+      : [];
+    const folders = Array.isArray(record.folders)
+      ? (record.folders.filter((item): item is string => typeof item === "string") as string[])
+      : [];
+    const selection = typeof record.selection === "string" ? record.selection : "";
+
+    return { files, folders, selection };
   }
 
   private send(message: Message) {

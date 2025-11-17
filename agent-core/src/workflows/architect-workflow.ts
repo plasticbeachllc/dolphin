@@ -62,6 +62,13 @@ export class ArchitectWorkflow implements IWorkflow {
   async *execute(input: TaskInput): AsyncIterableIterator<WorkflowUpdate> {
     const sessionId = `architect_${Date.now()}`;
     this.aborted = false;
+    const logPrefix = `[ArchitectWorkflow][${sessionId}]`;
+
+    console.error(
+      `${logPrefix} Starting architect workflow (mode=${input.mode ?? "architect"}) for task: ${
+        input.message
+      }`
+    );
 
     try {
       // ========================================================================
@@ -110,6 +117,8 @@ export class ArchitectWorkflow implements IWorkflow {
         data: { state: "awaiting_approval" },
       };
 
+      console.error(`${logPrefix} Plan ready, awaiting approval`);
+
       yield {
         type: "progress",
         sessionId,
@@ -132,6 +141,7 @@ export class ArchitectWorkflow implements IWorkflow {
           error: error instanceof Error ? error.message : String(error),
         },
       };
+      console.error(`${logPrefix} Workflow failed:`, error);
     }
   }
 
@@ -145,6 +155,9 @@ export class ArchitectWorkflow implements IWorkflow {
     sessionId: string,
     input: TaskInput
   ): AsyncGenerator<WorkflowUpdate, ResearchResult, unknown> {
+    const logPrefix = `[ArchitectWorkflow][${sessionId}]`;
+    console.error(`${logPrefix} Research phase: building KB context`);
+
     const _startTime = Date.now();
     const kbSearches: KBSearch[] = [];
     const relevantFiles: string[] = [];
@@ -160,6 +173,7 @@ export class ArchitectWorkflow implements IWorkflow {
     };
 
     // Build context with KB search
+    const contextStart = Date.now();
     const context = await this.config.contextBuilder.build({
       searchQuery: input.message,
       files: input.context.files,
@@ -167,6 +181,11 @@ export class ArchitectWorkflow implements IWorkflow {
       includeRepoMap: false,
       scope: "architect",
     });
+    console.error(
+      `${logPrefix} Research phase: KB context ready in ${Date.now() - contextStart}ms (results=${
+        context.kbResults.length
+      })`
+    );
 
     // Track KB searches
     for (const kbResult of context.kbResults) {
@@ -198,11 +217,13 @@ export class ArchitectWorkflow implements IWorkflow {
       },
     };
 
+    console.error(`${logPrefix} Research phase: invoking provider`);
     const researchCall = await this.callChatProvider({
       sessionId,
       phase: "research",
       prompt: researchPrompt,
     });
+    console.error(`${logPrefix} Research phase: provider completed`);
 
     for (const chunkUpdate of researchCall.chunkUpdates) {
       yield chunkUpdate;
@@ -246,6 +267,7 @@ export class ArchitectWorkflow implements IWorkflow {
     input: TaskInput,
     research: ResearchResult
   ): AsyncGenerator<WorkflowUpdate, ClarificationResult, unknown> {
+    const logPrefix = `[ArchitectWorkflow][${sessionId}]`;
     const questions: ClarificationQuestion[] = [];
     const responses: ClarificationResponse[] = [];
     let conversationTurns = 0;
@@ -292,12 +314,14 @@ export class ArchitectWorkflow implements IWorkflow {
 
       const priorHistory =
         conversationHistory.length > 1 ? conversationHistory.slice(0, -1) : undefined;
+      console.error(`${logPrefix} Clarification turn ${conversationTurns}: invoking provider`);
       const clarificationCall = await this.callChatProvider({
         sessionId,
         phase: "clarification",
         prompt: conversationHistory[conversationHistory.length - 1].content,
         conversationHistory: priorHistory,
       });
+      console.error(`${logPrefix} Clarification turn ${conversationTurns}: provider completed`);
 
       for (const chunkUpdate of clarificationCall.chunkUpdates) {
         yield chunkUpdate;
@@ -318,6 +342,10 @@ export class ArchitectWorkflow implements IWorkflow {
         conversationTurns >= this.maxClarificationTurns
       ) {
         readyForPlanning = true;
+
+        console.error(
+          `${logPrefix} Clarification produced ${parsedQuestions.length} question(s); pausing clarification loop`
+        );
 
         yield {
           type: "progress",
@@ -408,6 +436,7 @@ export class ArchitectWorkflow implements IWorkflow {
     research: ResearchResult,
     _clarification: ClarificationResult
   ): AsyncGenerator<WorkflowUpdate, Plan, unknown> {
+    const logPrefix = `[ArchitectWorkflow][${sessionId}]`;
     yield {
       type: "progress",
       sessionId,
@@ -417,6 +446,8 @@ export class ArchitectWorkflow implements IWorkflow {
         message: "Generating implementation plan...",
       },
     };
+
+    console.error(`${logPrefix} Planning phase: building context + prompt`);
 
     // Build context for planning
     const context = await this.config.contextBuilder.build({
@@ -436,11 +467,13 @@ export class ArchitectWorkflow implements IWorkflow {
       systemPrompt: this.getPlanningSystemPrompt(),
     });
 
+    console.error(`${logPrefix} Planning phase: invoking provider`);
     const planningCall = await this.callChatProvider({
       sessionId,
       phase: "planning",
       prompt: planningPrompt,
     });
+    console.error(`${logPrefix} Planning phase: provider completed`);
 
     for (const chunkUpdate of planningCall.chunkUpdates) {
       yield chunkUpdate;
@@ -491,6 +524,12 @@ export class ArchitectWorkflow implements IWorkflow {
       overview: parsedPlan.overview,
     };
 
+    console.error(
+      `${logPrefix} Planning phase: parsed plan with ${plan.filesToModify.length} files to modify and ${
+        plan.steps.length
+      } steps`
+    );
+
     yield {
       type: "progress",
       sessionId,
@@ -535,6 +574,9 @@ export class ArchitectWorkflow implements IWorkflow {
   }): Promise<{ text: string; usage: UsageStats; chunkUpdates: WorkflowUpdate[] }> {
     const chunkUpdates: WorkflowUpdate[] = [];
     let collectedText = "";
+    const startTime = Date.now();
+    const logPrefix = `[ArchitectWorkflow][${options.sessionId}]`;
+    console.error(`${logPrefix} LLM call (${options.phase}) started`);
 
     const result = await this.config.chatProvider.execute({
       message: options.prompt,
@@ -559,6 +601,12 @@ export class ArchitectWorkflow implements IWorkflow {
     if (!collectedText) {
       collectedText = this.extractAssistantText(result.messages);
     }
+
+    console.error(
+      `${logPrefix} LLM call (${options.phase}) completed in ${Date.now() - startTime}ms (toolRounds=${
+        result.toolRounds
+      })`
+    );
 
     return { text: collectedText, usage: result.usage, chunkUpdates };
   }

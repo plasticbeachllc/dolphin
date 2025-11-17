@@ -1,16 +1,18 @@
 #!/usr/bin/env bun
 import { spawn } from "bun";
-import { join } from "path";
+import { join, resolve } from "path";
 
-const [, , messageArg, modeArg] = process.argv;
+const [, , messageArg, modeArg, workspaceArg] = process.argv;
 const message = messageArg ?? "Plan a simple dashboard UI for my validation suite";
 const mode = modeArg ?? "architect";
+const workspaceRoot = workspaceArg ? resolve(workspaceArg) : process.cwd();
 
 const agentCorePath = join(process.cwd(), "agent-core");
 console.log(`[runner] launching Agent Core from ${agentCorePath}`);
+console.log(`[runner] workspace root: ${workspaceRoot}`);
 
 const child = spawn({
-  cmd: ["bun", "run", "src/main.ts"],
+  cmd: ["bun", "run", "src/main.ts", workspaceRoot],
   cwd: agentCorePath,
   stdin: "pipe",
   stdout: "pipe",
