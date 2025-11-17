@@ -600,13 +600,32 @@ All tests must clean up after themselves (temp dirs, env vars, secrets, test set
 
 ### Phase 4 – Settings UI & UX Polish
 
-18. Update settings page to:
-    - Add provider selector.
-    - Add provider‑specific model + key inputs.
-    - Wire Save button to send config to extension (or rely on VSCode settings UI if used).
-19. Ensure error states are friendly:
-    - Missing key for selected provider → clear message in Auth Status panel.
-20. Validate that switching provider in settings triggers a restart or refresh of Agent Core as needed.
+18. **Settings surface (webview-owned) + provider selector behavior**
+    - The **Svelte settings webview** (`vscode-extension/webview/src/routes/settings/+page.svelte`) remains the single UX for provider/model selection. It owns the dropdowns and pushes changes to the real VS Code settings service through the extension host so the `package.json` `contributes.configuration` entries (`dolphin.llm.provider`, `dolphin.llm.model.*`) stay authoritative.
+    - The provider dropdown stays simple: two options (`Anthropic (Claude 4.5)` / `OpenAI (GPT‑5.1 family)`) rendered from a hard-coded enum shared with the extension (`vscode-extension/src/config/provider-options.ts`). The webview, not VS Code’s stock settings UI, controls selected state to keep layout consistent with the existing custom settings page.
+    - On load, the webview asks the extension for the latest settings + `auth_status` snapshot. Each option shows an inline availability pill (✅ Ready / ⚠️ Key missing) computed by the extension by checking whether `dolphin.{anthropic|openai}ApiKey` exists. A refresh icon beside the pill re-sends the `get_auth_status` request so users can re-check prerequisites without closing the panel.
+
+19. **Model selection + API key capture**
+    - Render **two independent dropdowns**, one for Anthropic models and one for OpenAI models, so users can preconfigure both paths before switching providers. Values map to the hard-coded list already enumerated in §2.1; descriptions live in a shared map (`provider-options.ts`) so both extension and UI stay in sync until we add remote discovery.
+    - For API keys, keep the existing VS Code secret commands and expose a lightweight “Set API Key” button per provider in the webview. Clicking invokes `vscode.postMessage({ type: "setSecret", provider })`, the extension calls `commands.executeCommand('dolphin.setClaudeApiKey' | 'dolphin.setOpenAIApiKey')`, and upon success the extension responds with `{ type: "secretStatus", provider, ok: true }`. The webview performs only minimal preflight validation (non-empty input length check when we later inline prompts) and otherwise defers to the command validators so the code path stays standard practice. Keys are never echoed in the UI.
+
+20. **Save/apply + optimistic UI rules**
+    - The Save button emits `{ type: "settings.save", payload: { provider, models } }`. `DolphinViewProvider` updates the real VS Code settings via `workspace.getConfiguration('dolphin').update(...)`, writes both provider and model keys, and replies with `{ type: "settings.saved", payload }` only after all writes resolve.
+    - The webview **waits for this confirmation** before updating its “Current value” badges and before dismissing any dirty-state indicators. While the save is in-flight, the button shows a spinner and becomes disabled to prevent duplicate requests.
+    - Extension-side validation keeps the schema simple: reject saves when the active provider has no secret stored (respond with `{ type: "settings.error", code: 'missingSecret' }` so the webview can show inline warnings). All other validation (e.g., invalid enum) is covered by the dropdown options themselves.
+
+21. **Agent Core restart & responsiveness**
+    - The extension is the source of truth for detecting changes. After persisting settings, `extension.ts` compares the previous `{ provider, activeModel }` tuple to the new one. If either field changes, call `agentBridge.stop()` followed by `agentBridge.start(newEnv)` once the stop promise resolves. This keeps the restart logic centralized and avoids multi-restart storms when users tweak several controls before pressing Save.
+    - Because settings are applied in batches, there is no webview-side restart logic beyond awaiting the saved event. While Agent Core restarts, the webview shows the same spinner state and the Auth Status component continues to display the last-known status until a fresh `auth_status` event arrives.
+
+22. **Error copy, inline warnings, and telemetry**
+    - Missing-key scenarios surface as a yellow warning banner directly beneath the provider dropdown that fired the `missingSecret` code. The Auth Status panel mirrors this message verbatim ("OpenAI key missing — click Set API Key to continue"), keeping messaging simple per the UX guidance.
+    - Other save failures show a toast plus inline text, but no complex remediation flow is required.
+    - Send lightweight telemetry through the existing OpenTelemetry hooks (`observability/src/telemetry.ts`): emit events for `provider_changed`, `model_changed`, and `settings_error` with `{ provider, model, source: 'settings-webview' }`. No new backend plumbing is required; these flow into the centralized observability stack when enabled.
+
+23. **Integration with prerequisites view**
+    - The Auth Status card gains a “Refresh status” text button that reuses the same message as the inline availability pill. This ensures users always have a manual way to verify that key commands or external changes succeeded without waiting for polling.
+    - The settings page also keeps the existing "Test Connection" entry point (if present) so the prerequisites workflow remains cohesive with other panels.
 
 ### Phase 5 – Testing, Cleanup, and Docs
 
