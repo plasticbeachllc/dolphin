@@ -36,6 +36,7 @@ tests/**/coverage.xml
 tests/reports/*
 .coverage
 coverage.xml
+vscode-extension/playwright/test-results
 
 # profiling artifacts
 profiling_results/

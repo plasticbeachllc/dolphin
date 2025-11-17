@@ -68,9 +68,6 @@ echo "✅ Dolphin environment setup complete!"
 # ============================================================================
 # Install VSCode dependencies
 # ============================================================================
-sudo apt update
-sudo apt install snapd
-sudo snap install --classic code
-
-# snap install --classic code
-# 
+# sudo apt update
+# sudo apt install snapd
+# sudo snap install --classic code

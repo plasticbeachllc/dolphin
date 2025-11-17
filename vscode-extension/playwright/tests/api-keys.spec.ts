@@ -3,9 +3,12 @@ import { spawn, ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const CODE_BIN = process.env.VSCODE_BIN ?? "code";
 const DEBUG_PORT = Number(process.env.VSCODE_REMOTE_PORT ?? 9333);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const PLAYWRIGHT_USER_DATA = path.join(
   os.tmpdir(),
   `dolphin-vscode-playwright-${process.pid}-${Date.now()}`
