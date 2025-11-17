@@ -147,17 +147,22 @@ For production or if you prefer direct API access run the commands below from VS
 - `Dolphin: Set Claude API Key` (`dolphin.setClaudeApiKey`)
 - `Dolphin: Set OpenAI API Key` (`dolphin.setOpenAIApiKey`)
 
-Both commands store secrets in VS Code SecretStorage; the legacy `Dolphin: Set API Key` command now delegates to the Claude handler for compatibility. Environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) are still honored if you prefer exporting them manually.
+Both commands store secrets in VS Code SecretStorage; the legacy `Dolphin: Set API Key` command now delegates to the Claude handler for compatibility. Environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DOLPHIN_OPENAI_API_KEY`) are still honored if you prefer exporting them manually.
+
+The Auth Status panel mirrors the inline provider warnings and exposes a **Refresh status** button so you can poll the latest auth info after running the secret commands or editing environment variables. The existing “Test Connection” workflow remains available for deeper end-to-end verification.
 
 ### Provider & Model Selection
 
-The extension now drives Agent Core’s provider settings through VS Code configuration:
+The custom Svelte settings view owns provider/model selection while keeping the
+underlying VS Code settings authoritative:
 
-- `dolphin.llm.provider` – `anthropic` (default) or `openai`
-- `dolphin.llm.model.anthropic` – Claude Sonnet/Haiku variants
-- `dolphin.llm.model.openai` – GPT‑5.1 family models
+- **Provider dropdown** – Anthropic (Claude 4.5) or OpenAI (GPT‑5.1 family) rendered from the shared `provider-options.ts` enum. Each option shows an inline status pill (✅ Ready / ⚠️ Key missing) derived from the latest `auth_status` payload the extension forwards.
+- **Model dropdowns** – Separate pickers for Anthropic and OpenAI so you can preconfigure both paths before switching. Selections map to `dolphin.llm.model.anthropic` / `dolphin.llm.model.openai`.
+- **Set API Key buttons** – Trigger `dolphin.setClaudeApiKey` / `dolphin.setOpenAIApiKey` without leaving the panel. Success/fail is acknowledged via `{ type: "secretStatus", provider }`.
+- **Save workflow** – The Save button emits `settings.save`, shows a spinner, and disables until the extension replies with `{ type: "settings.saved" }`. If the active provider is missing a stored secret the extension returns `{ code: "missingSecret" }` and the panel highlights the warning inline plus inside the Auth Status card.
+- **Agent Core restart** – After settings persist, the extension compares the previous `{ provider, activeModel }` tuple and restarts Agent Core (stop → start) when either field changes. The webview simply keeps the spinner visible until a fresh `auth_status` arrives post-restart.
 
-Set these options via VS Code Settings (search for “Dolphin LLM”) or your `settings.json`. Invalid models automatically fall back to the defaults from the provider plan and emit a warning toast.
+You can still edit the backing settings via `settings.json` or VS Code’s GUI (`dolphin.llm.*`), but the webview is designed to be the canonical UX.
 
 ### Knowledge Bank Setup
 

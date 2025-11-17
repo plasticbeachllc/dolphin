@@ -8,7 +8,7 @@
 
 ## Overview
 
-The Dolphin v2 Agent Core is a complete replacement of the v1 Agent Core with a research-backed orchestration system. It implements a **Research → Plan → Code → Validate** workflow with multi-model Claude integration and deep Knowledge Bank semantic search.
+The Dolphin v2 Agent Core is a complete replacement of the v1 Agent Core with a research-backed orchestration system. It implements a **Research → Plan → Code → Validate** workflow with a provider-neutral LLM layer (Anthropic Claude + OpenAI GPT family) and deep Knowledge Bank semantic search.
 
 Based on the comprehensive [Dolphin v2 Orchestration Project Plan](../docs/orchestration/DOLPHIN-V2-ORCHESTRATION-PROJECT-PLAN.md).
 
@@ -49,11 +49,15 @@ idle → researching → planning → awaiting_approval → executing → comple
 ### Multi-Model Configuration
 
 ```typescript
-MODEL_CONFIG = {
-  research: "claude-haiku-4-20250514", // Fast, cost-effective
-  planning: "claude-opus-4-20250514", // Best reasoning
-  coding: "claude-sonnet-4-5-20250929", // Balanced
-  editor: "claude-sonnet-4-5-20250929", // Fast & capable
+const MODEL_CONFIG = {
+  anthropic: {
+    default: "claude-sonnet-4-5-20250929",
+    research: "claude-haiku-4-5",
+  },
+  openai: {
+    default: "gpt-5.1-codex",
+    architect: "gpt-5.1",
+  },
 };
 ```
 
@@ -68,7 +72,7 @@ VSCode Extension (Svelte 5)
          ↕
    ChatProvider (Anthropic/OpenAI)
          ↕
-   Claude Code CLI
+ Anthropic CLI/API or OpenAI Responses API
 ```
 
 ---
@@ -95,14 +99,28 @@ bun run tests/run-integration-tests.ts
 ```typescript
 import { Orchestrator } from "./src/orchestrator/orchestrator";
 import { EditorWorkflow } from "./src/workflows/editor-workflow";
-import { AnthropicProvider } from "./src/execution/anthropic-provider";
+import { createChatProvider } from "./src/execution/provider-factory";
 import { ContextBuilder } from "./src/context/context-builder";
 import { PromptBuilder } from "./src/prompts/prompt-builder";
 import { StateStore } from "./src/state/state-store";
+import { MCPClient } from "./src/mcp/mcp-client";
 
-// Setup
-const chatProvider = new AnthropicProvider({
+// Setup provider + MCP bridge
+const mcpClient = new MCPClient();
+await mcpClient.start("mcp-bridge/src/index.ts");
+
+const chatProvider = await createChatProvider({
   workspaceRoot: "/path/to/workspace",
+  mcpClient,
+  settings: {
+    provider: process.env.DOLPHIN_PROVIDER ?? "anthropic",
+    model: process.env.DOLPHIN_MODEL,
+    openAIApiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+const stateStore = new StateStore({
+  storagePath: ".dolphin",
 });
 
 const contextBuilder = new ContextBuilder({
@@ -116,17 +134,15 @@ const editorWorkflow = new EditorWorkflow({
   chatProvider,
   contextBuilder,
   promptBuilder,
-});
-
-const stateStore = new StateStore({
-  storagePath: ".dolphin",
+  stateStore,
+  workspaceRoot: "/path/to/workspace",
 });
 
 const orchestrator = new Orchestrator({
   workspaceRoot: "/path/to/workspace",
   stateStore,
   editorWorkflow,
-  architectWorkflow: editorWorkflow, // Phase 2
+  architectWorkflow: editorWorkflow, // supply dedicated architect workflow when configured
 });
 
 // Start task
@@ -149,55 +165,68 @@ for await (const update of orchestrator.subscribeToUpdates(session.id)) {
 ### Authentication Helpers
 
 `AnthropicProvider` ships with a lightweight `AuthManager` that understands both
-Claude CLI OAuth logins and the `ANTHROPIC_API_KEY` environment variable. You
-can use it directly, or call the convenience methods on the provider:
+Claude CLI OAuth logins and the `ANTHROPIC_API_KEY` environment variable.
+`OpenAIProvider` reports its own auth status by checking `OPENAI_API_KEY` or a
+custom `DOLPHIN_OPENAI_API_KEY` override, so UI surfaces can show whether the
+provider is ready before users swap workflows.
 
 ```typescript
-import { AuthManager, AnthropicProvider } from "./src/execution/anthropic-provider";
+import { AnthropicProvider, AuthManager } from "./src/execution/anthropic-provider";
+import { OpenAIProvider } from "./src/execution/openai-provider";
 
-const provider = new AnthropicProvider({ workspaceRoot: "/path/to/workspace" });
-await provider.ensureAuthenticated();
+const anthropic = new AnthropicProvider({ workspaceRoot: "/repo" });
+await anthropic.ensureAuthenticated();
 
 const authManager = new AuthManager();
-const status = await authManager.detectAuthStatus();
-console.log(status.mode, status.warning);
+console.log(await authManager.detectAuthStatus());
+
+const openai = new OpenAIProvider({
+  workspaceRoot: "/repo",
+  mcpClient,
+  apiKey: process.env.DOLPHIN_OPENAI_API_KEY,
+});
+console.log(await openai.detectAuthStatus());
 ```
 
 ### Provider selection & OpenAI-compatible endpoints
 
-The Agent Core now consumes a shared provider abstraction (see
+The Agent Core consumes a shared provider abstraction (see
 [`docs/PROVIDER_PLAN.md`](../docs/PROVIDER_PLAN.md)) and can talk to either the
 Anthropic CLI/API stack or any OpenAI-compatible Responses endpoint.
 
-Configure the defaults via environment variables or `~/.dolphin/config`:
+#### Environment variables
 
 ```bash
-# force provider + model (editor defaults to gpt-5.1-codex, architect defaults to gpt-5.1)
-export DOLPHIN_PROVIDER=openai
-export DOLPHIN_MODEL=gpt-5.1-codex
-export DOLPHIN_TEMPERATURE=0.4
+# Force OpenAI provider and override per-workflow defaults
+export DOLPHIN_LLM_PROVIDER=openai
+export DOLPHIN_LLM_MODEL_OPENAI=gpt-5.1-codex
 
-# route through a custom OpenAI-compatible gateway
+# Keep Anthropic as default provider but opt into Haiku
+export DOLPHIN_LLM_MODEL_ANTHROPIC=claude-haiku-4-5
+
+# Route through a custom OpenAI-compatible gateway
 export DOLPHIN_OPENAI_BASE_URL=https://my-proxy/v1
 export DOLPHIN_OPENAI_API_KEY=sk-proxy
 ```
 
-or the TOML config:
+#### `~/.dolphin/config` excerpt
 
 ```toml
-[provider]
+[llm]
 provider = "openai"
-model = "gpt-5.1-codex"
-temperature = 0.4
 
-[provider.openai]
-base_url = "https://my-proxy/v1"
+[llm.model]
+anthropic = "claude-sonnet-4-5-20250929"
+openai = "gpt-5.1-codex"
+
+[llm.openai]
 api_key = "sk-proxy"
+base_url = "https://my-proxy/v1"
 ```
 
-When `provider.openai.api_key` or `DOLPHIN_OPENAI_API_KEY` is present, the
-OpenAI provider will route traffic through the specified base URL without
-requiring `OPENAI_API_KEY`, enabling custom gateways while keeping Anthropic as
+When `llm.openai.api_key` (or `DOLPHIN_OPENAI_API_KEY`) is present, the OpenAI
+provider will route traffic through the specified base URL without requiring
+`OPENAI_API_KEY`, enabling custom gateways while keeping Anthropic as
 the default fallback when present.
 
 If you do not provide `DOLPHIN_MODEL` (or a config `model`), the editor workflow
@@ -294,14 +323,16 @@ agent-core-v2/
 ### ✅ Multi-Model Support
 
 - Model selection per workflow phase
+- Provider factory with Anthropic/OpenAI routing
 - CLI subprocess management
+- OpenAI Responses streaming client + tool executor
 - Streaming response parsing
 - Process lifecycle control
 
 ### ✅ Authentication
 
 - OAuth detection (`.claude/settings.json`)
-- API key detection (`ANTHROPIC_API_KEY`)
+- API key detection (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DOLPHIN_OPENAI_API_KEY`)
 - Priority handling (OAuth > API key)
 - Warning system for pay-as-you-go
 
@@ -340,7 +371,7 @@ agent-core-v2/
 ### Phase 1 (Complete) ✅
 
 - [x] Editor Mode works end-to-end
-- [x] Claude CLI subprocess spawning reliable
+- [x] Provider factory selects Anthropic/OpenAI reliably
 - [x] KB search integration functional
 - [x] State persists in TOML correctly
 - [x] 100+ tests passing

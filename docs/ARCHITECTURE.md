@@ -24,7 +24,7 @@ Technical architecture and implementation status for the Dolphin AI enablement p
 
 ## Overview
 
-Dolphin is a full-stack AI enablement platform that combines semantic code retrieval with multiple AI interfaces. The system decomposes repositories into language-aware chunks, embeds them using OpenAI, stores them in LanceDB, and provides semantic search via REST API, MCP protocol, and VSCode extension. The platform includes an intelligent agent orchestrator (agent-core) that manages Claude AI interactions and coordinates knowledge base searches.
+Dolphin is a full-stack AI enablement platform that combines semantic code retrieval with multiple AI interfaces. The system decomposes repositories into language-aware chunks, embeds them using OpenAI, stores them in LanceDB, and provides semantic search via REST API, MCP protocol, and VSCode extension. The platform includes an intelligent agent orchestrator (agent-core) that now manages Anthropic Claude **and** OpenAI GPT interactions through a shared provider abstraction, coordinating knowledge base searches for both ecosystems.
 
 ### Design Goals
 
@@ -34,7 +34,7 @@ Dolphin is a full-stack AI enablement platform that combines semantic code retri
 4. **Multiple Interfaces**: Support CLI, REST API, MCP, VSCode extension, and Continue IDE
 5. **Cost Control**: Deduplication and session spend caps
 6. **Local-First**: Run on MacBook Pro M4 (24GB RAM)
-7. **AI-Powered Assistance**: Intelligent agent orchestration with Claude integration
+7. **AI-Powered Assistance**: Intelligent agent orchestration with multi-provider Anthropic/OpenAI integration
 8. **Rich UI Experience**: Beautiful SvelteKit-based webview with real-time streaming
 
 ---
@@ -48,7 +48,7 @@ Dolphin is a full-stack AI enablement platform that combines semantic code retri
 │                      User Interfaces                          │
 ├──────────────┬──────────────┬──────────────┬─────────────────┤
 │ VSCode Ext   │Claude Desktop│  CLI (kb)    │  Direct REST    │
-│ (Svelte UI)  │   (MCP)      │  (Python)    │  (curl/bun)     │
+│ (Svelte UI)  │ / OpenAI UX  │  (Python)    │  (curl/bun)     │
 └──────┬───────┴──────┬───────┴──────┬───────┴──────┬──────────┘
        │              │              │              │
        │ JSON-RPC     │ MCP stdio    │              │ HTTP
@@ -56,7 +56,7 @@ Dolphin is a full-stack AI enablement platform that combines semantic code retri
 ┌──────────────┐  ┌───────────────────────────────────────────┐
 │ Agent Core   │  │      MCP Bridge (TypeScript/Bun)          │
 │ (Bun/TS)     │  │  • 6 MCP Tools                            │
-│ • Claude API │  │  • REST Client                            │
+│ • Provider-agnostic LLM API (Claude/OpenAI) │  │  • REST Client          │
 │ • KB Mgmt    │  │  • Content Truncation (50KB)              │
 │ • Task Plan  │  │  • Type-safe interfaces                   │
 │ • Storage    │  └──────────────────┬────────────────────────┘
@@ -218,7 +218,7 @@ Check localhost:8000/health
 
 **Location**: `agent-core/` _(V2 Architecture - Consolidated as of WP2)_
 
-**Purpose**: Intelligent agent orchestrator that manages Claude AI interactions, coordinates knowledge base searches, and handles conversation persistence with dual-workflow architecture.
+**Purpose**: Intelligent agent orchestrator that manages Anthropic Claude **and** OpenAI GPT interactions through a shared provider abstraction, coordinates knowledge base searches, and handles conversation persistence with dual-workflow architecture.
 
 **V2 Architecture Overview**:
 Agent-core has been fully consolidated from V1/V2 split into a unified module with:
@@ -231,7 +231,8 @@ Agent-core has been fully consolidated from V1/V2 split into a unified module wi
 
 **Key Features**:
 
-- Dual authentication support (Claude CLI subscription or API key)
+- Dual authentication support (Claude CLI subscription or API key) plus OpenAI / OpenAI-compatible API keys
+- Provider factory that selects Anthropic or OpenAI based on VS Code settings + environment overrides
 - JSON-RPC communication with VSCode extension
 - Automatic KB server lifecycle management (health checks, auto-start)
 - Session and plan persistence in TOML format with PathValidator security
@@ -245,8 +246,9 @@ Agent-core has been fully consolidated from V1/V2 split into a unified module wi
 - `src/main.ts` - JSON-RPC stdio entry point, component initialization
 - `src/workflows/` - Dual workflow architecture (Editor + Architect)
 - `src/orchestrator/orchestrator.ts` - State machine coordinator
-- `src/execution/claude-provider.ts` - Thin wrapper around tool executor (125 lines)
-- `src/llm/` - Claude API/CLI integration and agentic tool execution
+- `src/execution/anthropic-provider.ts` / `src/execution/openai-provider.ts` - ChatProvider implementations
+- `src/execution/provider-factory.ts` - Provider selection + auth surface
+- `src/llm/` - Anthropic + OpenAI client/tool executors and shared agentic loops
 - `src/context/context-builder.ts` - KB + file context aggregation
 - `src/prompts/prompt-builder.ts` - System prompt generation
 - `src/state/state-store.ts` - TOML session persistence with PathValidator
@@ -257,7 +259,7 @@ Agent-core has been fully consolidated from V1/V2 split into a unified module wi
 **Technologies**:
 
 - **Bun** - Fast JavaScript runtime
-- **Anthropic SDK** - Claude API integration
+- **Anthropic SDK & OpenAI SDK** - Provider integrations
 - **Zod** - Schema validation for state
 - **@iarna/toml** - TOML persistence for conversations and state
 - **diff** - Diff generation for code changes
@@ -360,7 +362,7 @@ All file operations use PathValidator to prevent:
 
 **Key Features**:
 
-- Real-time streaming Claude or GPT responses
+- Real-time streaming LLM responses (Claude/OpenAI)
 - SvelteKit-based webview with shadcn/ui components
 - Tool call visualization cards
 - Message persistence across sessions
@@ -719,10 +721,10 @@ Columns:
 ### ✅ Phase 8 Complete: VSCode Extension & Agent Core
 
 - ✅ VSCode extension with SvelteKit webview
-- ✅ Agent Core with Claude integration
+- ✅ Agent Core with Anthropic/OpenAI integration
 - ✅ JSON-RPC IPC communication
 - ✅ Conversation persistence (TOML format)
-- ✅ Dual authentication (Claude CLI / API key)
+- ✅ Dual authentication (Claude CLI / API key) + OpenAI / custom endpoint keys
 - ✅ Real-time streaming responses
 - ✅ Tool call visualization
 - ✅ KB lifecycle management (auto-start)
@@ -735,7 +737,7 @@ Columns:
 
 - ✅ Orchestration module structure
 - ✅ Discovery phase implementation
-- ✅ Claude-powered query planner
+- ✅ LLM-powered query planner (provider-neutral prompts)
 - ✅ Graph-aware context enricher
 - ✅ Result validator with confidence scoring
 - ✅ Integration with main.ts
