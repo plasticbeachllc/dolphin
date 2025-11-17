@@ -2,8 +2,6 @@
 
 from typing import Any
 
-import pytest
-
 from kb.api.app import SearchRequest
 from kb.api.search_backend import KnowledgeSearchBackend
 from kb.embeddings.provider import EmbeddingProvider
@@ -436,9 +434,7 @@ class TestSearchFiltering:
             exclude_patterns=["*.md"],
         )
 
-        assert not any(
-            _extract_result_path(result).endswith("README.md") for result in filtered_results
-        )
+        assert not any(_extract_result_path(result).endswith("README.md") for result in filtered_results)
 
     def test_search_filter_by_path(self, e2e_kb_setup):
         """Filtering with path_prefix should limit results to the requested file."""
