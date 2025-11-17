@@ -6,11 +6,7 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
 };
 
 export const SUPPORTED_MODELS: Record<SupportedProvider, string[]> = {
-  anthropic: [
-    "claude-sonnet-4-5-20250929",
-    "claude-sonnet-4-5",
-    "claude-haiku-4-5",
-  ],
+  anthropic: ["claude-sonnet-4-5-20250929", "claude-sonnet-4-5", "claude-haiku-4-5"],
   openai: ["gpt-5.1", "gpt-5.1-codex", "gpt-5.1-codex-mini"],
 };
 
@@ -26,9 +22,7 @@ export interface ProviderSettingsResult {
   warnings: string[];
 }
 
-export function resolveProviderSettings(
-  input: ProviderSettingsInput
-): ProviderSettingsResult {
+export function resolveProviderSettings(input: ProviderSettingsInput): ProviderSettingsResult {
   const normalizedProvider = (input.provider ?? "anthropic").toLowerCase();
   let provider: SupportedProvider = normalizedProvider === "openai" ? "openai" : "anthropic";
   const warnings: string[] = [];

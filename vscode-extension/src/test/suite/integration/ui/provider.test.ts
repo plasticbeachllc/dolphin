@@ -489,14 +489,16 @@ describe("DolphinViewProvider Unit Tests", () => {
         },
       } as unknown as vscode.WebviewView;
 
-      (provider as unknown as { getHtml: () => string }).getHtml = () => "<!doctype html><html></html>";
+      (provider as unknown as { getHtml: () => string }).getHtml = () =>
+        "<!doctype html><html></html>";
       (provider as unknown as { sendTheme: () => void }).sendTheme = () => {};
       provider.resolveWebviewView(mockWebviewView);
 
       const expected = {
         providers: [{ provider: "anthropic", authenticated: true, mode: "subscription" }],
       };
-      (mockAgentBridge as unknown as { getAuthStatus: () => Promise<unknown> }).getAuthStatus = async () => expected;
+      (mockAgentBridge as unknown as { getAuthStatus: () => Promise<unknown> }).getAuthStatus =
+        async () => expected;
 
       await (messageHandler as (message: unknown) => Promise<void>)({ type: "get_auth_status" });
 

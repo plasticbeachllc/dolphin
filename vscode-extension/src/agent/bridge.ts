@@ -119,9 +119,7 @@ export class AgentBridge implements AgentBridgeAdapter {
     });
 
     if (authLayer.ANTHROPIC_API_KEY) {
-      this.outputChannel.appendLine(
-        "[AgentBridge] Anthropic API key provided via SecretStorage"
-      );
+      this.outputChannel.appendLine("[AgentBridge] Anthropic API key provided via SecretStorage");
     }
 
     if (authLayer.OPENAI_API_KEY) {

@@ -573,12 +573,12 @@ All tests must clean up after themselves (temp dirs, env vars, secrets, test set
 
 ### Phase 3 – VSCode Extension Integration
 
-| #   | Deliverable                                                     | Status | Evidence / Notes |
-| --- | --------------------------------------------------------------- | :----: | ---------------- |
+| #   | Deliverable                                                     | Status | Evidence / Notes                                                                                                                                                                                                                                              |
+| --- | --------------------------------------------------------------- | :----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 14  | AgentBridge accepts structured auth/env payload and merges envs |   ✅   | `vscode-extension/src/agent/bridge.ts` now exports `mergeAgentEnvironment`, documents the precedence order, and spawns Agent Core with Anthropic/OpenAI/Dolphin keys sourced from the VS Code host. Tests cover the merge contract in `agent-bridge.test.ts`. |
-| 15  | Extension activation builds provider/model payload & secrets     |   ✅   | `vscode-extension/src/extension.ts` reads `dolphin.llm.*` settings, migrates the legacy secret, and passes provider/model defaults plus both API keys to AgentBridge. |
-| 16  | Secret-management commands for Anthropic/OpenAI                  |   ✅   | New commands `dolphin.setClaudeApiKey` and `dolphin.setOpenAIApiKey` prompt, validate, and persist secrets via VS Code `SecretStorage`, with the legacy command delegating to the Claude handler. |
-| 17  | Auth status plumbing emits `{ provider, authenticated, ... }`    |   ✅   | Agent Core responds to `get_auth_status` with provider-specific payloads, `DolphinViewProvider` forwards them, and the Svelte `AuthStatus` component renders provider-aware cards with new bun tests covering the helper logic. |
+| 15  | Extension activation builds provider/model payload & secrets    |   ✅   | `vscode-extension/src/extension.ts` reads `dolphin.llm.*` settings, migrates the legacy secret, and passes provider/model defaults plus both API keys to AgentBridge.                                                                                         |
+| 16  | Secret-management commands for Anthropic/OpenAI                 |   ✅   | New commands `dolphin.setClaudeApiKey` and `dolphin.setOpenAIApiKey` prompt, validate, and persist secrets via VS Code `SecretStorage`, with the legacy command delegating to the Claude handler.                                                             |
+| 17  | Auth status plumbing emits `{ provider, authenticated, ... }`   |   ✅   | Agent Core responds to `get_auth_status` with provider-specific payloads, `DolphinViewProvider` forwards them, and the Svelte `AuthStatus` component renders provider-aware cards with new bun tests covering the helper logic.                               |
 
 14. Update `AgentBridge.start` to accept an auth/options object instead of a single API key:
     - Populate spawn env with whatever keys are provided (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DOLPHIN_API_KEY`).
@@ -618,10 +618,10 @@ All tests must clean up after themselves (temp dirs, env vars, secrets, test set
     - `bun test` in `vscode-extension/webview`.
 
     **Latest local status (container build, 2025-01-16):**
-
     - ✅ `cd agent-core && bun test`
     - ✅ `cd vscode-extension/webview && bun test`
     - ❌ `cd vscode-extension && npm test` (fails because the VS Code Electron runner requires the system library `libatk-1.0.so.0`, which is not installed in the container image)
+
 23. Update docs:
     - `docs/ARCHITECTURE.md` – mention multi‑provider LLMs (Anthropic + OpenAI) for Agent Core.
     - `agent-core/README.md` – add examples for configuring Anthropic vs OpenAI.

@@ -1,8 +1,5 @@
 import * as assert from "assert";
-import {
-  resolveProviderSettings,
-  DEFAULT_MODELS,
-} from "../../../../config/provider-settings";
+import { resolveProviderSettings, DEFAULT_MODELS } from "../../../../config/provider-settings";
 
 describe("resolveProviderSettings", () => {
   it("defaults to anthropic when provider is missing", () => {

@@ -117,9 +117,7 @@ describe("AgentBridge Unit Tests", () => {
     it("Should send get_auth_status request and resolve with result", async () => {
       let requestMethod: string | undefined;
       const mockResult: AgentAuthStatusResponse = {
-        providers: [
-          { provider: "anthropic", authenticated: true, mode: "subscription" },
-        ],
+        providers: [{ provider: "anthropic", authenticated: true, mode: "subscription" }],
       };
 
       const mockConnection: Partial<MockConnection> = {
@@ -1022,8 +1020,10 @@ describe("AgentBridge Unit Tests", () => {
       const spawnFn = spawnStub as SpawnImpl;
 
       agentBridge = new AgentBridge(outputChannel, spawnFn);
-      (agentBridge as unknown as { findBun: () => Promise<string> }).findBun = async () => "/bin/bun";
-      (agentBridge as unknown as { waitForReady: () => Promise<void> }).waitForReady = async () => {};
+      (agentBridge as unknown as { findBun: () => Promise<string> }).findBun = async () =>
+        "/bin/bun";
+      (agentBridge as unknown as { waitForReady: () => Promise<void> }).waitForReady =
+        async () => {};
 
       const originalModel = process.env.DOLPHIN_LLM_MODEL;
       process.env.DOLPHIN_LLM_MODEL = "should-not-stick";
