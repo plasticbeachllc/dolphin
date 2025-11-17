@@ -725,87 +725,87 @@ This section is a concrete, step-by-step checklist to drive implementation. Each
 ### 7.1 Python: KB API Key Helper and CLI Integration
 
 1. **Add `kb/api_key.py`**
-   - [ ] Create new file `kb/api_key.py`.
-   - [ ] Implement:
-     - [ ] `KB_API_KEY_FILENAME = "kb_api_key"`.
-     - [ ] `get_kb_key_path() -> Path` returning `Path.home() / ".dolphin" / KB_API_KEY_FILENAME`.
-     - [ ] Private `_env_override() -> Optional[str]` that checks `DOLPHIN_API_KEY` then `DOLPHIN_KB_API_KEY`, strips, and returns first non-empty.
-     - [ ] `load_kb_api_key() -> Optional[str]`:
-       - [ ] Respect `_env_override()` first.
-       - [ ] If no env override, read `~/.dolphin/kb_api_key` if it exists; strip and return non-empty value; otherwise return `None`.
-     - [ ] `get_or_create_kb_api_key() -> str`:
-       - [ ] Respect `_env_override()` first (return without touching filesystem).
-       - [ ] Ensure parent directory of `get_kb_key_path()` exists (`mkdir(parents=True, exist_ok=True)`).
-       - [ ] If file exists and contains a non-empty key, return it.
-       - [ ] Generate a new key via `secrets.token_hex(32)` (64 hex chars).
-       - [ ] Create the file using exclusive semantics (`"x"` mode) and write the key plus newline.
-       - [ ] Attempt to `chmod` to `0o600` (ignore `OSError`).
-       - [ ] On `FileExistsError`, fall back to reading the file and returning its contents (or the in-memory key if empty).
+   - [x] Create new file `kb/api_key.py`.
+   - [x] Implement:
+     - [x] `KB_API_KEY_FILENAME = "kb_api_key"`.
+     - [x] `get_kb_key_path() -> Path` returning `Path.home() / ".dolphin" / KB_API_KEY_FILENAME`.
+     - [x] Private `_env_override() -> Optional[str]` that checks `DOLPHIN_API_KEY` then `DOLPHIN_KB_API_KEY`, strips, and returns first non-empty.
+     - [x] `load_kb_api_key() -> Optional[str]`:
+       - [x] Respect `_env_override()` first.
+       - [x] If no env override, read `~/.dolphin/kb_api_key` if it exists; strip and return non-empty value; otherwise return `None`.
+     - [x] `get_or_create_kb_api_key() -> str`:
+       - [x] Respect `_env_override()` first (return without touching filesystem).
+       - [x] Ensure parent directory of `get_kb_key_path()` exists (`mkdir(parents=True, exist_ok=True)`).
+       - [x] If file exists and contains a non-empty key, return it.
+       - [x] Generate a new key via `secrets.token_hex(32)` (64 hex chars).
+       - [x] Create the file using exclusive semantics (`"x"` mode) and write the key plus newline.
+       - [x] Attempt to `chmod` to `0o600` (ignore `OSError`).
+       - [x] On `FileExistsError`, fall back to reading the file and returning its contents (or the in-memory key if empty).
 
 2. **Wire `dolphin init` to ensure key exists**
-   - [ ] In `kb/cli.py`, import `get_or_create_kb_api_key`.
-   - [ ] After `kb_init(config_path)` in the `init` command:
-     - [ ] Call `get_or_create_kb_api_key()` inside a `try/except` block.
-     - [ ] Log (not print) a warning if key initialization fails, but do not raise—`init` should still succeed.
+   - [x] In `kb/cli.py`, import `get_or_create_kb_api_key`.
+   - [x] After `kb_init(config_path)` in the `init` command:
+     - [x] Call `get_or_create_kb_api_key()` inside a `try/except` block.
+     - [x] Log (not print) a warning if key initialization fails, but do not raise—`init` should still succeed.
 
 3. **Wire `dolphin serve` to set `DOLPHIN_API_KEY`**
-   - [ ] In `kb/cli.py` `serve` command:
-     - [ ] Import `os` and `get_or_create_kb_api_key`.
-     - [ ] Before `uvicorn.run(...)`:
-       - [ ] If neither `DOLPHIN_API_KEY` nor `DOLPHIN_KB_API_KEY` is present in `os.environ`, call `get_or_create_kb_api_key()` and set `os.environ["DOLPHIN_API_KEY"]` to the returned value.
-     - [ ] Leave existing host/port behavior unchanged.
+   - [x] In `kb/cli.py` `serve` command:
+     - [x] Import `os` and `get_or_create_kb_api_key`.
+     - [x] Before `uvicorn.run(...)`:
+       - [x] If neither `DOLPHIN_API_KEY` nor `DOLPHIN_KB_API_KEY` is present in `os.environ`, call `get_or_create_kb_api_key()` and set `os.environ["DOLPHIN_API_KEY"]` to the returned value.
+     - [x] Leave existing host/port behavior unchanged.
 
 4. **(Optional) Wire `dolphin-mcp` Python wrapper (if present)**
-   - [ ] If there is a Python entry point that starts the KB server on behalf of the MCP bridge, ensure it also uses `get_or_create_kb_api_key()` before spawning the server process.
+   - [ ] If there is a Python entry point that starts the KB server on behalf of the MCP bridge, ensure it also uses `get_or_create_kb_api_key()` before spawning the server process. _Status: No such wrapper exists today; leave unchecked unless a Python MCP entry point is added._
 
 5. **Python tests**
-   - [ ] Add a new test module (e.g. `tests/unit/config/test_api_key.py`):
-     - [ ] Use `tmp_path` / `monkeypatch` to fake `Path.home()` / `HOME` so tests don’t touch real `~/.dolphin`.
-     - [ ] `test_env_override_wins`:
-       - [ ] Set `DOLPHIN_API_KEY` in env, ensure `get_or_create_kb_api_key()` returns that value and no file is created.
-     - [ ] `test_file_created_on_first_call`:
-       - [ ] With no env and no file, call `get_or_create_kb_api_key()` and assert file exists and content matches.
-     - [ ] `test_subsequent_calls_reuse_file`:
-       - [ ] After first call, subsequent calls return the same key value.
-     - [ ] `test_load_kb_api_key_respects_env`:
-       - [ ] Env override takes precedence over file.
-     - [ ] `test_load_kb_api_key_returns_none_when_missing`:
-       - [ ] No env, no file → `None`.
-   - [ ] Add an integration-style test for `serve` (if feasible in the existing test harness) that verifies `DOLPHIN_API_KEY` is set in the server process environment when started without an env override.
+   - [x] Add a new test module (e.g. `tests/unit/config/test_api_key.py`):
+     - [x] Use `tmp_path` / `monkeypatch` to fake `Path.home()` / `HOME` so tests don’t touch real `~/.dolphin`.
+     - [x] `test_env_override_wins`:
+       - [x] Set `DOLPHIN_API_KEY` in env, ensure `get_or_create_kb_api_key()` returns that value and no file is created.
+     - [x] `test_file_created_on_first_call`:
+       - [x] With no env and no file, call `get_or_create_kb_api_key()` and assert file exists and content matches.
+     - [x] `test_subsequent_calls_reuse_file`:
+       - [x] After first call, subsequent calls return the same key value.
+     - [x] `test_load_kb_api_key_respects_env`:
+       - [x] Env override takes precedence over file.
+     - [x] `test_load_kb_api_key_returns_none_when_missing`:
+       - [x] No env, no file → `None`.
+   - [ ] Add an integration-style test for `serve` (if feasible in the existing test harness) that verifies `DOLPHIN_API_KEY` is set in the server process environment when started without an env override. _Status: not started; manual testing only._
 
 ### 7.2 Node/TS: Shared Helper `shared/kb-auth.ts`
 
 6. **Add shared Node helper**
-   - [ ] Create `shared/kb-auth.ts`.
+   - [x] Create `shared/kb-auth.ts`.
    - [ ] Implement:
-     - [ ] `KbAuthOptions` with `homeDir?: string` and `readOnly?: boolean`.
-     - [ ] `getKbKeyPath(opts?: KbAuthOptions): string` returning `<homeDir || os.homedir()>/'.dolphin/kb_api_key'`.
-     - [ ] `resolveKbApiKey(opts?: KbAuthOptions): string | undefined`:
-       - [ ] Check env (`DOLPHIN_API_KEY` then `DOLPHIN_KB_API_KEY`) and return first non-empty.
-       - [ ] If no env, compute key path and:
-         - [ ] If file exists, read and return its trimmed contents (or `undefined` if empty).
-         - [ ] If file does not exist, return `undefined` (do not create).
-     - [ ] `getOrCreateKbApiKey(opts?: KbAuthOptions): string`:
-       - [ ] Respect env override first; if present, return it.
-       - [ ] If file exists and non-empty, return its contents.
-       - [ ] Otherwise, create directory (with `fs.mkdirSync(dir, { recursive: true })`).
-       - [ ] Generate a key via `randomBytes(32).toString("hex")`.
-       - [ ] Use `fs.openSync(keyPath, "wx", 0o600)` and `fs.writeFileSync` to create the file.
-       - [ ] On `EEXIST`, read the file and return its contents (or the generated key as a fallback).
+     - [ ] `KbAuthOptions` with `homeDir?: string` and `readOnly?: boolean`. _Status: only `homeDir` exists; add `readOnly` flag so read-only consumers can opt out of creation explicitly._
+     - [x] `getKbKeyPath(opts?: KbAuthOptions): string` returning `<homeDir || os.homedir()>/'.dolphin/kb_api_key'`.
+     - [x] `resolveKbApiKey(opts?: KbAuthOptions): string | undefined`:
+       - [x] Check env (`DOLPHIN_API_KEY` then `DOLPHIN_KB_API_KEY`) and return first non-empty.
+       - [x] If no env, compute key path and:
+         - [x] If file exists, read and return its trimmed contents (or `undefined` if empty).
+         - [x] If file does not exist, return `undefined` (do not create).
+     - [x] `getOrCreateKbApiKey(opts?: KbAuthOptions): string`:
+       - [x] Respect env override first; if present, return it.
+       - [x] If file exists and non-empty, return its contents.
+       - [x] Otherwise, create directory (with `fs.mkdirSync(dir, { recursive: true })`).
+       - [x] Generate a key via `randomBytes(32).toString("hex")`.
+       - [x] Use `fs.openSync(keyPath, "wx", 0o600)` and `fs.writeFileSync` to create the file.
+       - [x] On `EEXIST`, read the file and return its contents (or the generated key as a fallback).
 
 7. **Node/TS tests for shared helper**
-   - [ ] Add tests in the `shared` package (e.g. `shared/__tests__/kb-auth.test.ts`):
-     - [ ] Use a temporary directory for `homeDir` to avoid touching the real home.
-     - [ ] `resolveKbApiKey` returns env override when set.
-     - [ ] `resolveKbApiKey` returns `undefined` when file is missing and `readOnly` is true.
-     - [ ] `getOrCreateKbApiKey` creates a file with a 64-character hex string when no env and no file.
-     - [ ] `getOrCreateKbApiKey` reuses existing file contents on subsequent calls.
-     - [ ] Simulate `EEXIST` by creating the file before calling helper and verify it gracefully reads the existing key.
+   - [x] Add tests in the `shared` package (e.g. `shared/__tests__/kb-auth.test.ts`):
+     - [x] Use a temporary directory for `homeDir` to avoid touching the real home.
+     - [x] `resolveKbApiKey` returns env override when set.
+     - [ ] `resolveKbApiKey` returns `undefined` when file is missing and `readOnly` is true. _Status: blocked until `readOnly` option exists._
+     - [x] `getOrCreateKbApiKey` creates a file with a 64-character hex string when no env and no file.
+     - [x] `getOrCreateKbApiKey` reuses existing file contents on subsequent calls.
+     - [ ] Simulate `EEXIST` by creating the file before calling helper and verify it gracefully reads the existing key. _Status: not covered—add regression test for EEXIST path._
 
 ### 7.3 VS Code Extension Integration
 
 8. **Wire extension activation to shared helper**
-   - [ ] Add dependency on `@dolphin/shared` (if not already available in the extension build).
+   - [ ] Add dependency on `@dolphin/shared` (if not already available in the extension build). _Status: not started; extension currently just logs a warning when no env/secret key is found._
    - [ ] In `vscode-extension/src/extension.ts`:
      - [ ] Import `getOrCreateKbApiKey` from `@dolphin/shared/kb-auth`.
      - [ ] Update `initializeKbApiKey` to:
@@ -829,7 +829,7 @@ This section is a concrete, step-by-step checklist to drive implementation. Each
 
 10. **Resolve key read-only in Agent Core**
 
-- [ ] In `agent-core/src/main.ts`:
+- [ ] In `agent-core/src/main.ts`: _Status: not started; the constructor still reads `process.env` directly without consulting `shared/kb-auth`._
   - [ ] Import `resolveKbApiKey` from `@dolphin/shared/kb-auth`.
   - [ ] Implement `initializeKbApiKeyEnv` (or adjust existing logic) to:
     - [ ] Check `process.env.DOLPHIN_API_KEY` / `DOLPHIN_KB_API_KEY` first.
@@ -840,7 +840,7 @@ This section is a concrete, step-by-step checklist to drive implementation. Each
 
 11. **Agent Core tests**
 
-- [ ] Add tests around `initializeKbApiKeyEnv`:
+- [ ] Add tests around `initializeKbApiKeyEnv`: _Status: blocked on helper wiring; no new tests exist yet._
   - [ ] When env already has `DOLPHIN_API_KEY`, no file lookups are performed.
   - [ ] When env is empty but `~/.dolphin/kb_api_key` exists (simulated via `homeDir` override), env is populated with that value.
   - [ ] When neither env nor file is present, Agent Core leaves env unset (and KB requests will be rejected until an official entry point creates the key).
@@ -849,7 +849,7 @@ This section is a concrete, step-by-step checklist to drive implementation. Each
 
 12. **CLI: official key creator for pure MCP setups**
 
-- [ ] In `mcp-bridge/src/cli.ts`:
+- [ ] In `mcp-bridge/src/cli.ts`: _Status: not started; CLI currently launches without touching the shared helper and assumes the user exported `DOLPHIN_API_KEY`._
   - [ ] Import `getOrCreateKbApiKey` from `@dolphin/shared/kb-auth`.
   - [ ] Before starting the MCP server:
     - [ ] Resolve KB API key:
@@ -859,7 +859,7 @@ This section is a concrete, step-by-step checklist to drive implementation. Each
 
 13. **REST client: read-only usage**
 
-- [ ] In `mcp-bridge/src/rest/client.ts`:
+- [ ] In `mcp-bridge/src/rest/client.ts`: _Status: not started; `doFetch` still omits `X-API-Key` entirely._
   - [ ] Import `resolveKbApiKey` from `@dolphin/shared/kb-auth`.
   - [ ] Implement a module-level `getKbApiKey()` that:
     - [ ] Caches a resolved key.
@@ -870,7 +870,7 @@ This section is a concrete, step-by-step checklist to drive implementation. Each
 
 14. **MCP bridge tests**
 
-- [ ] Extend `rest_client.test.ts` to assert:
+- [ ] Extend `rest_client.test.ts` to assert: _Status: pending rest-client changes; no API-key coverage today._
   - [ ] `X-API-Key` is set when `DOLPHIN_API_KEY` is provided.
   - [ ] `X-API-Key` is set from the shared key file when env is empty but file exists (via `homeDir` override).
 - [ ] Add tests for CLI behavior:
@@ -881,7 +881,7 @@ This section is a concrete, step-by-step checklist to drive implementation. Each
 
 15. **End-to-end validation**
 
-- [ ] On a clean dev machine (or isolated environment) with no existing `~/.dolphin`:
+- [ ] On a clean dev machine (or isolated environment) with no existing `~/.dolphin`: _Status: not started; blocked on VS Code + MCP integration above._
   - [ ] Run `uv run dolphin init` and confirm `~/.dolphin/config.toml` and `~/.dolphin/kb_api_key` are created.
   - [ ] Run `uv run dolphin serve` and confirm:
     - [ ] `/health` is reachable without auth.
@@ -893,13 +893,13 @@ This section is a concrete, step-by-step checklist to drive implementation. Each
 
 16. **Docs updates**
 
-- [ ] Update `README.md`, `vscode-extension/README.md`, and any other relevant docs to:
+- [ ] Update `README.md`, `vscode-extension/README.md`, and any other relevant docs to: _Status: pending once auto-provisioning ships._
   - [ ] Explain that Dolphin auto-generates and manages `~/.dolphin/kb_api_key`.
   - [ ] Note that env vars `DOLPHIN_API_KEY` / `DOLPHIN_KB_API_KEY` are optional and intended for advanced use (tests/CI/remote).
 - [ ] Cross-link `docs/API_KEY_PLAN.md` from architecture or security docs if helpful for maintainers.
 
 17. **Security checklist**
 
-- [ ] Confirm the key is never logged or surfaced in UI.
-- [ ] Confirm file permissions are best-effort restrictive (`0o600` on POSIX; documented caveats on Windows).
-- [ ] Confirm all KB clients now send `X-API-Key` when talking to `/v1/**` endpoints.
+- [ ] Confirm the key is never logged or surfaced in UI. _Status: pending; instrumentation not reviewed._
+- [ ] Confirm file permissions are best-effort restrictive (`0o600` on POSIX; documented caveats on Windows). _Status: partially covered in Python helper; need to verify Node + docs._
+- [ ] Confirm all KB clients now send `X-API-Key` when talking to `/v1/**` endpoints. _Status: blocked on VS Code propagation + MCP bridge changes._

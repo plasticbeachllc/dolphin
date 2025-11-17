@@ -3,21 +3,28 @@
  */
 
 import { describe, test, expect } from "bun:test";
-import { IPCTransport } from "../transport";
+import { IPCTransport, type SecurityConfig } from "../transport";
 import { PassThrough } from "stream";
 
-function createTransportPair() {
+type TransportPairOptions = {
+  clientSecurity?: SecurityConfig;
+  serverSecurity?: SecurityConfig;
+};
+
+function createTransportPair(options: TransportPairOptions = {}) {
   const clientToServer = new PassThrough();
   const serverToClient = new PassThrough();
 
   const client = new IPCTransport({
     input: serverToClient,
     output: clientToServer,
+    security: options.clientSecurity,
   });
 
   const server = new IPCTransport({
     input: clientToServer,
     output: serverToClient,
+    security: options.serverSecurity,
   });
 
   return { client, server };
@@ -25,14 +32,18 @@ function createTransportPair() {
 
 describe("Stress Tests", () => {
   test("should handle 10,000 concurrent requests without memory leaks", async () => {
-    const { client, server } = createTransportPair();
+    const count = 10000;
+    const securityOverride: SecurityConfig = { maxPendingRequests: count * 2 };
+    const { client, server } = createTransportPair({
+      clientSecurity: securityOverride,
+      serverSecurity: securityOverride,
+    });
 
     server.onMethod("process", async (params) => {
       return { result: params.value * 2 };
     });
 
     const initialMemory = process.memoryUsage().heapUsed;
-    const count = 10000;
 
     const results = await Promise.all(
       Array.from({ length: count }, (_, i) => client.request("process", { value: i }))

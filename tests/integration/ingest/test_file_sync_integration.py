@@ -26,7 +26,7 @@ from kb.store.lancedb_vector import LanceDBVectorStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
 TEST_API_KEY = "test-api-key"
-os.environ.setdefault("DOLPHIN_API_KEY", TEST_API_KEY)
+os.environ["DOLPHIN_API_KEY"] = TEST_API_KEY
 
 
 def create_api_client() -> TestClient:
