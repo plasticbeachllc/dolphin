@@ -493,7 +493,20 @@ export class AgentBridge implements AgentBridgeAdapter {
 
     if (!alreadyExited) {
       await new Promise<void>((resolve) => {
+        let completed = false;
+        let killTimer: NodeJS.Timeout | null = null;
+
         const cleanup = () => {
+          if (completed) {
+            return;
+          }
+          completed = true;
+
+          if (killTimer) {
+            clearTimeout(killTimer);
+            killTimer = null;
+          }
+
           activeProcess.removeListener("exit", onExit);
           activeProcess.removeListener("error", onError);
           resolve();
@@ -512,18 +525,19 @@ export class AgentBridge implements AgentBridgeAdapter {
             `[AgentBridge] Failed to send ${signal} to Agent Core: ${message}`
           );
         }
-
         if (timeoutMs > 0) {
-          setTimeout(() => {
-            if (!activeProcess.killed) {
-              try {
-                activeProcess.kill("SIGKILL");
-              } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                this.outputChannel.appendLine(
-                  `[AgentBridge] Failed to send SIGKILL to Agent Core: ${message}`
-                );
-              }
+          killTimer = setTimeout(() => {
+            if (completed || activeProcess.exitCode !== null) {
+              return;
+            }
+
+            try {
+              activeProcess.kill("SIGKILL");
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              this.outputChannel.appendLine(
+                `[AgentBridge] Failed to send SIGKILL to Agent Core: ${message}`
+              );
             }
           }, timeoutMs);
         }

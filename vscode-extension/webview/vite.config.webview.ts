@@ -44,6 +44,8 @@ export default defineConfig({
     alias: {
       $lib: path.resolve(__dirname, "src/lib"),
       "@shared": path.resolve(__dirname, "../../shared"),
+      "@extension-config": path.resolve(__dirname, "../src/config"),
+      "@extension-shared": path.resolve(__dirname, "../src/shared"),
     },
   },
 });
