@@ -18,7 +18,7 @@ scratch/
 # generated configs
 continue-config/
 kilocode-config/
-
+vscode-extension/.tmp/
 
 # cache artifacts
 .mypy_cache
