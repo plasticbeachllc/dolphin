@@ -251,10 +251,12 @@ Full workflow tests:
 **Run e2e tests:**
 
 ```bash
-just test-extension e2e                        # All extension E2E tests
+just test-extension e2e                        # All extension E2E tests (Mocha harness + Playwright)
 just test-extension-domain conversations e2e   # Conversations E2E only
 just test-extension-domain kb e2e              # KB lifecycle E2E only
 ```
+
+> **Playwright UX coverage:** The extension also ships a full VS Code UI automation suite under `vscode-extension/playwright/tests`. The root test flow (`npm run test:e2e` or `just test-extension e2e`) now runs the in-editor Mocha E2Es first and then executes the Playwright UX tests via `npm run test:extension:playwright`. Use that workspace directly (`npm run test --workspace vscode-extension/playwright`) when you want to exercise only the UI layer. First-time setup: `cd vscode-extension/playwright && npm install && npx playwright install --with-deps`.
 
 ### MCP Bridge
 

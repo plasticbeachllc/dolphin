@@ -1,7 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const DEFAULT_DEBUG_PORT = Number(process.env.VSCODE_REMOTE_PORT ?? 9333);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export default defineConfig({
   testDir: path.resolve(__dirname, "tests"),

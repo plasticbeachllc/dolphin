@@ -185,13 +185,15 @@ test-extension TYPE="all":
 	@echo "📦 Running VSCode Extension {{TYPE}} tests..."
 	@cd vscode-extension && npm run compile >/dev/null
 	if [ "{{TYPE}}" = "all" ]; then \
-		cd vscode-extension && npm test || { echo "   ❌ Extension tests failed"; exit 1; }; \
+		(cd vscode-extension && npm test) || { echo "   ❌ Extension tests failed"; exit 1; }; \
+		npm run test:extension:playwright || { echo "   ❌ Playwright UX tests failed"; exit 1; }; \
 	elif [ "{{TYPE}}" = "unit" ]; then \
-		cd vscode-extension && npm test -- --label unit || { echo "   ❌ Extension unit tests failed"; exit 1; }; \
+		(cd vscode-extension && npm test -- --label unit) || { echo "   ❌ Extension unit tests failed"; exit 1; }; \
 	elif [ "{{TYPE}}" = "integration" ]; then \
-		cd vscode-extension && npm test -- --label integration || { echo "   ❌ Extension integration tests failed"; exit 1; }; \
+		(cd vscode-extension && npm test -- --label integration) || { echo "   ❌ Extension integration tests failed"; exit 1; }; \
 	elif [ "{{TYPE}}" = "e2e" ]; then \
-		cd vscode-extension && npm test -- --label e2e || { echo "   ❌ Extension e2e tests failed"; exit 1; }; \
+		(cd vscode-extension && npm test -- --label e2e) || { echo "   ❌ Extension e2e tests failed"; exit 1; }; \
+		npm run test:extension:playwright || { echo "   ❌ Playwright UX tests failed"; exit 1; }; \
 	else \
 		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
 	fi; \

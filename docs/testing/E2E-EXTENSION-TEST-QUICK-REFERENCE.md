@@ -353,8 +353,8 @@ src/test/
 │   ├── kb-integration.test.ts          (refactored)
 │   └── ...
 │
-├── e2e/                           ✅ E2E tests (future)
-│   └── user-workflow.test.ts           (new)
+├── e2e/                           ✅ In-editor E2E harness (Mocha)
+│   └── user-workflow.test.ts
 │
 └── helpers/                       ✅ Shared utilities
     ├── shared-fixtures.ts              (new)
@@ -362,6 +362,8 @@ src/test/
     ├── mock-manager.ts                 (new)
     ├── mock-services.ts                (enhanced)
     └── test-utils.ts                   (existing)
+
+Playwright-driven UX tests live under `vscode-extension/playwright/tests` and are launched via the shared `npm run test:e2e` script (they run immediately after the VS Code harness completes).
 ```
 
 ---
@@ -380,8 +382,11 @@ npm run test:unit
 # Integration tests only
 npm run test:integration
 
-# E2E tests only
+# E2E tests (VS Code harness + Playwright UI)
 npm run test:e2e
+
+# Playwright UI tests only
+npm run test:extension:playwright
 
 # With coverage
 npm run test:coverage

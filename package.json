@@ -20,7 +20,7 @@
     "test:agent": "cd agent-core && bun test",
     "test:mcp": "cd mcp-bridge && npm run test:clean",
     "test:kb": "cd kb && pytest tests/",
-    "test:e2e": "cd vscode-extension && npm run test",
+    "test:e2e": "npm run test --workspace vscode-extension && npm run test --workspace vscode-extension/playwright",
     "test:extension:playwright": "npm run test --workspace vscode-extension/playwright",
     "test:all": "npm run test:agent && npm run test:mcp && npm run test:kb && npm run test:e2e",
     "clean": "rm -rf vscode-extension/out vscode-extension/webview/build agent-core/dist",
