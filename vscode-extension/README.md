@@ -8,11 +8,11 @@ The Dolphin VSCode Extension brings AI-powered code assistance directly into you
 
 ### Key Features
 
-- **AI Chat Interface**: Natural language conversations with Claude AI
+- **AI Chat Interface**: Natural language conversations with Claude or OpenAI models
 - **Semantic Code Search**: Automatically searches your indexed codebase for relevant context
 - **Dual Authentication**:
   - Claude CLI (subscription mode - no API costs)
-  - Anthropic API key (direct API access)
+  - Anthropic or OpenAI API keys (direct API access)
 - **Real-time Streaming**: See AI responses as they're generated
 - **Tool Call Visualization**: Monitor Knowledge Bank searches and tool executions
 - **Beautiful UI**: Modern Svelte-based interface with shadcn/ui components
@@ -140,13 +140,24 @@ claude
 # Select: "1. Claude account with subscription"
 ```
 
-**Option B: Anthropic API Key**
+**Option B: Anthropic or OpenAI API Keys**
 
-For production or if you prefer direct API access:
+For production or if you prefer direct API access run the commands below from VS Code:
 
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-```
+- `Dolphin: Set Claude API Key` (`dolphin.setClaudeApiKey`)
+- `Dolphin: Set OpenAI API Key` (`dolphin.setOpenAIApiKey`)
+
+Both commands store secrets in VS Code SecretStorage; the legacy `Dolphin: Set API Key` command now delegates to the Claude handler for compatibility. Environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) are still honored if you prefer exporting them manually.
+
+### Provider & Model Selection
+
+The extension now drives Agent Core’s provider settings through VS Code configuration:
+
+- `dolphin.llm.provider` – `anthropic` (default) or `openai`
+- `dolphin.llm.model.anthropic` – Claude Sonnet/Haiku variants
+- `dolphin.llm.model.openai` – GPT‑5.1 family models
+
+Set these options via VS Code Settings (search for “Dolphin LLM”) or your `settings.json`. Invalid models automatically fall back to the defaults from the provider plan and emit a warning toast.
 
 ### Knowledge Bank Setup
 

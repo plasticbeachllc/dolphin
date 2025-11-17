@@ -22,6 +22,8 @@ import { PromptBuilder } from "./prompts/prompt-builder";
 import { PlanStore } from "./storage/plan-store";
 import { join as pathJoin } from "path";
 import { loadProviderSettings } from "./utils/provider-settings";
+import { buildProviderAuthStatuses } from "./utils/auth-status";
+import type { ProviderAuthStatus } from "../../shared/types/events";
 
 interface Message {
   jsonrpc: "2.0";
@@ -416,6 +418,11 @@ class AgentCoreV2 {
     }
   }
 
+  private async collectAuthStatuses(): Promise<ProviderAuthStatus[]> {
+    const providers = this.getUniqueProviders();
+    return buildProviderAuthStatuses(providers);
+  }
+
   private sendResponse(id: number, result: unknown) {
     const response: Message = {
       jsonrpc: "2.0",
@@ -479,3 +486,8 @@ agent.start().catch((error) => {
   console.error("[Agent Core V2] Fatal error:", error);
   process.exit(1);
 });
+      case "getAuthStatus":
+      case "get_auth_status": {
+        const providers = await this.collectAuthStatuses();
+        return { providers };
+      }
