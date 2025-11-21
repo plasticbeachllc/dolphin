@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-import uvicorn
 
 # Import kb CLI functions for top-level commands
 # Import subcommand apps
@@ -350,6 +349,8 @@ def serve(
     port: Annotated[int, typer.Option("--port", help="Port to bind to")] = 7777,
 ) -> None:
     """Start the dolphin API server."""
+    import uvicorn
+
     if not os.environ.get("DOLPHIN_API_KEY") and not os.environ.get("DOLPHIN_KB_API_KEY"):
         os.environ["DOLPHIN_API_KEY"] = get_or_create_kb_api_key()
 
