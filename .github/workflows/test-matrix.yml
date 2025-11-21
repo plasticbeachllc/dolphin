@@ -30,6 +30,8 @@ jobs:
 
       - name: Install bun
         uses: oven-sh/setup-bun@v1
+        with:
+          cache: 'bun'
 
       - name: Setup Python
         run: uv python install
@@ -63,6 +65,8 @@ jobs:
 
       - name: Install bun
         uses: oven-sh/setup-bun@v1
+        with:
+          cache: 'bun'
 
       - name: Setup Python
         run: uv python install
@@ -89,24 +93,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install Python
-        run: uv python install
+          cache: 'bun'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -114,10 +104,24 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'uv'
+
+      - name: Install Python
+        run: uv python install
+
       - name: Install Python dependencies
         run: uv sync
 
-      - name: Run E2E tests
+      - name: Install Xvfb (for headless environment)
+        run: sudo apt-get install -y xvfb
+
+      - name: Run Extension Tests
         run: |
-          cd vscode-extension && bun run test:e2e
+          Xvfb :99 -screen 0 1024x768x24 &
+          export DISPLAY=:99.0
+          cd vscode-extension && npm run test:e2e
           npm run test --workspace vscode-extension/playwright
