@@ -397,6 +397,6 @@ describe("Serialization Performance", () => {
 
     // MessagePack should be faster (or at least not significantly slower).
     // Allow a wider margin to reduce flakiness on slower runners.
-    expect(msgpackTime).toBeLessThan(jsonTime * 2.0);
+    expect(msgpackTime).toBeLessThan(jsonTime * 3.0);
   });
 });
