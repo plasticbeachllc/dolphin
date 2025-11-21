@@ -4,6 +4,8 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { getOrCreateKbApiKey, getKbKeyPath } from "../../../../shared/kb-auth";
+import type { ExtensionContext } from "vscode";
+import { initializeKbApiKeyForTests, resetKbApiKeyForTests } from "../../extension";
 
 /**
  * Integration tests for VS Code extension KB API key auto-provisioning.
@@ -30,6 +32,7 @@ describe("VS Code Extension - KB API Key Integration", () => {
     if (fs.existsSync(testHomeDir)) {
       fs.rmSync(testHomeDir, { recursive: true, force: true });
     }
+    resetKbApiKeyForTests();
   });
 
   describe("initializeKbApiKey simulation", () => {
@@ -113,6 +116,61 @@ describe("VS Code Extension - KB API Key Integration", () => {
       // Should generate new key
       const key = getOrCreateKbApiKey({ homeDir: testHomeDir });
       assert.match(key, /^[0-9a-f]{64}$/);
+    });
+  });
+
+  describe("initializeKbApiKey end-to-end", () => {
+    const makeMockContext = (secretValue?: string): ExtensionContext =>
+      ({
+        secrets: {
+          async get(id: string) {
+            void id;
+            return secretValue;
+          },
+          async store(id: string, value: string) {
+            stored.id = id;
+            stored.value = value;
+          },
+          async delete(id: string) {
+            deletedIds.push(id);
+          },
+        },
+      } as unknown as ExtensionContext);
+
+    let stored: { id?: string; value?: string };
+    let deletedIds: string[];
+
+    beforeEach(() => {
+      stored = {};
+      deletedIds = [];
+      process.env.HOME = testHomeDir;
+      process.env.USERPROFILE = testHomeDir;
+    });
+
+    it("auto-provisions and stores KB key when env and SecretStorage are empty", async () => {
+      const ctx = makeMockContext();
+
+      await initializeKbApiKeyForTests(ctx);
+
+      const keyPath = getKbKeyPath({ homeDir: testHomeDir });
+      assert.ok(fs.existsSync(keyPath), "key file should be created");
+
+      const keyFromFile = fs.readFileSync(keyPath, "utf8").trim();
+      assert.match(keyFromFile, /^[0-9a-f]{64}$/);
+      assert.strictEqual(process.env.DOLPHIN_API_KEY, keyFromFile);
+      assert.strictEqual(stored.id, "dolphin.kbApiKey");
+      assert.strictEqual(stored.value, keyFromFile);
+    });
+
+    it("uses SecretStorage value when present and avoids touching filesystem", async () => {
+      const ctx = makeMockContext("secret-stored-key");
+
+      await initializeKbApiKeyForTests(ctx);
+
+      const keyPath = getKbKeyPath({ homeDir: testHomeDir });
+      assert.ok(!fs.existsSync(keyPath), "should not create key file when secret is present");
+      assert.strictEqual(process.env.DOLPHIN_API_KEY, "secret-stored-key");
+      assert.strictEqual(stored.id, undefined, "no new secret should be stored");
     });
   });
 });

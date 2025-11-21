@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -157,6 +157,37 @@ describe("KB Auth", () => {
 
       // Should be user read/write only (0600)
       expect(mode).toBe(0o600);
+    });
+
+    it("should handle EEXIST race during creation", () => {
+      const keyPath = getKbKeyPath({ homeDir: testHomeDir });
+      const dir = path.dirname(keyPath);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(keyPath, "preexisting-key\n", { encoding: "utf8" });
+
+      const openCalls: Array<unknown[]> = [];
+
+      // Mock fs module for the duration of this test to force EEXIST on openSync
+      mock.module("fs", () => {
+        return {
+          ...fs,
+          existsSync: () => false,
+          openSync: (...args: unknown[]) => {
+            openCalls.push(args);
+            const err = new Error("EEXIST");
+            // @ts-expect-error augment error code for branch coverage
+            err.code = "EEXIST";
+            throw err;
+          },
+        };
+      });
+
+      const key = getOrCreateKbApiKey({ homeDir: testHomeDir });
+
+      expect(openCalls.length).toBe(1);
+      expect(key).toBe("preexisting-key");
+
+      mock.restore();
     });
   });
 

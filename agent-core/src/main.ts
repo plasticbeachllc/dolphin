@@ -27,6 +27,22 @@ import type { ProviderAuthStatus } from "../../shared/types/events";
 import type { Plan, WorkflowUpdate } from "./types/index";
 import { resolveKbApiKey } from "../../shared/kb-auth";
 
+export function initializeKbApiKeyEnvGlobal(options?: { env?: NodeJS.ProcessEnv; homeDir?: string }) {
+  const targetEnv = options?.env ?? process.env;
+  const existing = targetEnv.DOLPHIN_API_KEY?.trim() || targetEnv.DOLPHIN_KB_API_KEY?.trim();
+  if (existing) {
+    return existing;
+  }
+
+  // Read-only resolution: Agent Core never creates the key itself
+  const key = resolveKbApiKey({ readOnly: true, homeDir: options?.homeDir });
+  if (key) {
+    targetEnv.DOLPHIN_API_KEY = key;
+    targetEnv.DOLPHIN_KB_API_KEY = key;
+  }
+  return key;
+}
+
 interface Message {
   jsonrpc: "2.0";
   id?: number;
@@ -106,17 +122,7 @@ class AgentCoreV2 {
   }
 
   private initializeKbApiKeyEnv() {
-    const existing = process.env.DOLPHIN_API_KEY?.trim() || process.env.DOLPHIN_KB_API_KEY?.trim();
-    if (existing) {
-      return;
-    }
-
-    // Read-only resolution: Agent Core never creates the key itself
-    const key = resolveKbApiKey({ readOnly: true });
-    if (key) {
-      process.env.DOLPHIN_API_KEY = key;
-      process.env.DOLPHIN_KB_API_KEY = key;
-    }
+    initializeKbApiKeyEnvGlobal();
   }
 
   private async ensureWorkflowsReady(): Promise<void> {
@@ -664,12 +670,14 @@ class AgentCoreV2 {
   }
 }
 
-// Start the agent
-const workspaceRoot = process.argv[2] || process.cwd();
-const extensionPath = process.argv[3];
+if (import.meta.main) {
+  // Start the agent only when invoked directly (not during tests/imports)
+  const workspaceRoot = process.argv[2] || process.cwd();
+  const extensionPath = process.argv[3];
 
-const agent = new AgentCoreV2(workspaceRoot, extensionPath);
-agent.start().catch((error) => {
-  console.error("[Agent Core V2] Fatal error:", error);
-  process.exit(1);
-});
+  const agent = new AgentCoreV2(workspaceRoot, extensionPath);
+  agent.start().catch((error) => {
+    console.error("[Agent Core V2] Fatal error:", error);
+    process.exit(1);
+  });
+}

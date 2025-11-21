@@ -771,7 +771,7 @@ This section is a concrete, step-by-step checklist to drive implementation. Each
        - [x] Env override takes precedence over file.
      - [x] `test_load_kb_api_key_returns_none_when_missing`:
        - [x] No env, no file → `None`.
-   - [ ] Add an integration-style test for `serve` (if feasible in the existing test harness) that verifies `DOLPHIN_API_KEY` is set in the server process environment when started without an env override. _Status: not started; manual testing only._
+   - [x] Add an integration-style test for `serve` (if feasible in the existing test harness) that verifies `DOLPHIN_API_KEY` is set in the server process environment when started without an env override. _Status: implemented in `tests/unit/cli/test_serve_api_key.py` with uvicorn stubbed._
 
 ### 7.2 Node/TS: Shared Helper `shared/kb-auth.ts`
 
@@ -800,7 +800,7 @@ This section is a concrete, step-by-step checklist to drive implementation. Each
      - [x] `resolveKbApiKey` returns `undefined` when file is missing and `readOnly` is true.
      - [x] `getOrCreateKbApiKey` creates a file with a 64-character hex string when no env and no file.
      - [x] `getOrCreateKbApiKey` reuses existing file contents on subsequent calls.
-     - [ ] Simulate `EEXIST` by creating the file before calling helper and verify it gracefully reads the existing key. _Status: still not covered—`getOrCreateKbApiKey` has a defensive `EEXIST` branch that is not exercised in tests._
+     - [x] Simulate `EEXIST` by creating the file before calling helper and verify it gracefully reads the existing key. _Status: covered via bun-test with a mocked `fs` forcing the `EEXIST` branch._
 
 ### 7.3 VS Code Extension Integration
 
@@ -820,10 +820,10 @@ This section is a concrete, step-by-step checklist to drive implementation. Each
      - [x] `DriftDetector`.
 
 9. **VS Code extension tests**
-   - [ ] Add or extend tests to cover:
-     - [ ] No env, no SecretStorage → `initializeKbApiKey` calls `getOrCreateKbApiKey` and sets internal key value. _Status: partially covered by `vscode-extension/src/test/integration/kb-api-key.test.ts` (which exercises `getOrCreateKbApiKey` directly) but `initializeKbApiKey` itself is not under test._
+   - [x] Add or extend tests to cover:
+     - [x] No env, no SecretStorage → `initializeKbApiKey` calls `getOrCreateKbApiKey` and sets internal key value. _Status: covered via `initializeKbApiKeyForTests` helper in `vscode-extension/src/test/integration/kb-api-key.test.ts`._
      - [x] Env override still respected when present. _Status: covered by `kb-api-key.test.ts` “should use environment variable if set”._
-     - [ ] SecretStorage value used when env is unset but secret exists. _Status: still TODO; no test currently exercises the SecretStorage branch._
+     - [x] SecretStorage value used when env is unset but secret exists. _Status: covered in the same integration test using a mocked SecretStorage context._
 
 ### 7.4 Agent Core Integration (Read-Only)
 
@@ -840,10 +840,10 @@ This section is a concrete, step-by-step checklist to drive implementation. Each
 
 11. **Agent Core tests**
 
-- [ ] Add tests around `initializeKbApiKeyEnv`: _Status: blocked on helper wiring; no new tests exist yet._
-  - [ ] When env already has `DOLPHIN_API_KEY`, no file lookups are performed.
-  - [ ] When env is empty but `~/.dolphin/kb_api_key` exists (simulated via `homeDir` override), env is populated with that value.
-  - [ ] When neither env nor file is present, Agent Core leaves env unset (and KB requests will be rejected until an official entry point creates the key).
+- [x] Add tests around `initializeKbApiKeyEnv`: _Status: implemented in `agent-core/src/__tests__/kb-api-key.test.ts`._
+  - [x] When env already has `DOLPHIN_API_KEY`, no file lookups are performed.
+  - [x] When env is empty but `~/.dolphin/kb_api_key` exists (simulated via `homeDir` override), env is populated with that value.
+  - [x] When neither env nor file is present, Agent Core leaves env unset (and KB requests will be rejected until an official entry point creates the key).
 
 ### 7.5 MCP Bridge Integration
 
@@ -881,22 +881,59 @@ This section is a concrete, step-by-step checklist to drive implementation. Each
 
 15. **End-to-end validation**
 
-- [ ] On a clean dev machine (or isolated environment) with no existing `~/.dolphin`: _Status: not started; blocked on VS Code + MCP integration above._
-  - [ ] Run `uv run dolphin init` and confirm `~/.dolphin/config.toml` and `~/.dolphin/kb_api_key` are created.
-  - [ ] Run `uv run dolphin serve` and confirm:
-    - [ ] `/health` is reachable without auth.
-    - [ ] `/v1/search` returns `401` without `X-API-Key` and succeeds when `X-API-Key` matches the file.
-  - [ ] Install and activate the VS Code extension and confirm:
-    - [ ] No manual API key prompts are required.
-    - [ ] KB features (search, auto-sync) work without configuring env.
-  - [ ] Start `dolphin-mcp` and confirm it can query the KB successfully.
+- [ ] On a clean dev machine (or isolated environment) with no existing `~/.dolphin`: _Status: not started; requires manual/interactive validation across CLI, VS Code, and MCP._
+
+**Step-by-step validation guide**
+
+1) **Reset environment (critical precondition)**
+   - Delete or move aside any existing `~/.dolphin` directory.
+   - Clear env overrides: `unset DOLPHIN_API_KEY DOLPHIN_KB_API_KEY`.
+
+2) **CLI bootstrap**
+   - Run `uv run dolphin init`.
+   - Verify `~/.dolphin/config.toml` and `~/.dolphin/kb_api_key` exist; ensure the key file is 64 hex chars and permissions `0600` (POSIX).
+
+3) **Server auth checks**
+   - Run `uv run dolphin serve` in a new shell (no env overrides).
+   - With a separate terminal:
+     - `curl http://127.0.0.1:7777/health` → expect 200 without `X-API-Key`.
+     - `curl -i http://127.0.0.1:7777/v1/search -d '{}' -H 'Content-Type: application/json'` → expect 401.
+     - `API_KEY=$(cat ~/.dolphin/kb_api_key)` then `curl -i http://127.0.0.1:7777/v1/search -d '{"query":"test"}' -H "Content-Type: application/json" -H "X-API-Key: $API_KEY"` → expect 200 (even if empty hits).
+
+4) **VS Code extension**
+   - Start the KB server (from step 3) or keep it running.
+   - Install/launch the extension with a clean VS Code profile.
+   - On first activation, confirm no prompt for KB key appears.
+   - Check that `~/.dolphin/kb_api_key` timestamp is unchanged (extension read, not rewrote).
+   - Trigger a KB action (e.g., run a search or let auto-sync queue a change) and confirm requests succeed; logs should show “KB API key auto-provisioned” only once, without the key value.
+
+5) **Agent Core (spawned by extension)**
+   - With the extension running, verify Agent Core inherits the key:
+     - In extension output/logs, confirm “KB API key provided for agent HTTP calls”.
+     - Optional: attach to Agent Core process and check `DOLPHIN_API_KEY` env is set to the file value.
+
+6) **MCP bridge (standalone)**
+   - Run `bunx dolphin-mcp` with no env overrides.
+   - Confirm `~/.dolphin/kb_api_key` is reused (not regenerated) and that startup logs show no warnings about missing API key.
+   - Invoke a simple MCP call (e.g., search via your MCP client) and ensure `X-API-Key` is sent (can verify via server logs or a mitm/proxy).
+
+7) **Env override sanity**
+   - Set `DOLPHIN_API_KEY="override-key"` (do not match file).
+   - Repeat a `curl` to `/v1/search` with `X-API-Key: override-key` → expect 200; using the file key should now 401.
+   - Start `bunx dolphin-mcp` and ensure it uses the override without touching the file.
+
+8) **Windows check (if applicable)**
+   - Repeat steps 2–6 on Windows. Confirm file is created in `%USERPROFILE%\.dolphin\kb_api_key`; note that permissions may be looser (document acceptable warning).
+
+9) **Summarize findings**
+   - Record pass/fail per step above and update this checklist accordingly.
 
 16. **Docs updates**
 
 - [x] Update `README.md`, `vscode-extension/README.md`, and any other relevant docs to: _Status: implemented; docs now describe auto‑provisioning and advanced env overrides._
   - [x] Explain that Dolphin auto-generates and manages `~/.dolphin/kb_api_key`.
   - [x] Note that env vars `DOLPHIN_API_KEY` / `DOLPHIN_KB_API_KEY` are optional and intended for advanced use (tests/CI/remote).
-- [ ] Cross-link `docs/API_KEY_PLAN.md` from architecture or security docs if helpful for maintainers.
+- [x] Cross-link `docs/API_KEY_PLAN.md` from architecture or security docs if helpful for maintainers. _Status: linked from `docs/ARCHITECTURE.md` (EP-11 section)._
 
 17. **Security checklist**
 

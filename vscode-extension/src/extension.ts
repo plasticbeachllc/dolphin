@@ -105,6 +105,19 @@ async function initializeKbApiKey(context: vscode.ExtensionContext): Promise<voi
   }
 }
 
+// Exported for tests to exercise the activation bootstrap without duplicating logic.
+export async function initializeKbApiKeyForTests(context: vscode.ExtensionContext): Promise<void> {
+  // Reset default in case previous tests mutated it
+  defaultKbApiKey = undefined;
+  await initializeKbApiKey(context);
+}
+
+export function resetKbApiKeyForTests(): void {
+  defaultKbApiKey = undefined;
+  delete process.env.DOLPHIN_API_KEY;
+  delete process.env.DOLPHIN_KB_API_KEY;
+}
+
 async function migrateLegacyAnthropicSecret(context: vscode.ExtensionContext): Promise<void> {
   const legacyValue = await context.secrets.get(LEGACY_CLAUDE_SECRET_ID);
   const modernValue = await context.secrets.get(CLAUDE_SECRET_ID);

@@ -733,6 +733,8 @@ Columns:
 
 ### 🚧 EP-11 In Progress: Architect Mode KB Discovery
 
+> For the unified KB API key design and status, see `docs/API_KEY_PLAN.md` (covers auto-provisioning, env overrides, and client behavior across CLI, Agent Core, VS Code, and MCP bridge).
+
 **Phase 1 (Foundation) - Completed ✅:**
 
 - ✅ Orchestration module structure
