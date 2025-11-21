@@ -83,6 +83,7 @@ test-all:
 test-all-headless:
 	@echo "🚀 Running tests that do NOT require VS Code/Electron..."
 	@echo ""
+	@rm -f /tmp/.X99-lock
 	@export DISPLAY=":99.0"
 	@Xvfb :99 -screen 0 1024x768x24 &
 	@sleep 3
@@ -119,6 +120,7 @@ test-integration-all:
 	@echo "✅ All integration tests passed!"
 
 test-integration-headless:
+	@rm -f /tmp/.X99-lock
 	@export DISPLAY=":99.0"
 	@Xvfb :99 -screen 0 1024x768x24 &
 	@sleep 3
@@ -145,6 +147,7 @@ test-e2e-all:
 just test-e2e-headless:
 	@echo "🎯 Running all E2E tests..."
 	@echo ""
+	@rm -f /tmp/.X99-lock
 	@export DISPLAY=":99.0"
 	@Xvfb :99 -screen 0 1024x768x24 &
 	@sleep 3
