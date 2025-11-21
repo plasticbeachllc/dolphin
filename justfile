@@ -85,7 +85,7 @@ test-all-headless:
 	@echo ""
 	@export DISPLAY=":99.0"
 	@Xvfb :99 -screen 0 1024x768x24 &
-    @sleep 3
+	@sleep 3
 	@just test-python all
 	@just test-agent-core all
 	@just test-mcp-bridge
@@ -121,7 +121,7 @@ test-integration-all:
 test-integration-headless:
 	@export DISPLAY=":99.0"
 	@Xvfb :99 -screen 0 1024x768x24 &
-    @sleep 3
+	@sleep 3
 	@echo "🔗 Running all integration tests..."
 	@echo ""
 	@just test-python integration
@@ -147,7 +147,7 @@ just test-e2e-headless:
 	@echo ""
 	@export DISPLAY=":99.0"
 	@Xvfb :99 -screen 0 1024x768x24 &
-    @sleep 3
+	@sleep 3
 	@just test-python e2e
 	@just test-agent-core e2e
 	@just test-extension e2e
