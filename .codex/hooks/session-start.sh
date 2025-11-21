@@ -66,8 +66,21 @@ bun install
 echo "✅ Dolphin environment setup complete!"
 
 # ============================================================================
-# Install VSCode dependencies
+# Install VSCode dependencies (code.visualstudio.com/docs/setup/linux)
 # ============================================================================
-# sudo apt update
-# sudo apt install snapd
-# sudo snap install --classic code
+echo "code code/add-microsoft-repo boolean true" | debconf-set-selections
+apt-get install wget gpg
+wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg
+install -D -o root -g root -m 644 microsoft.gpg /usr/share/keyrings/microsoft.gpg
+rm -f microsoft.gpg
+cat "Types: deb
+URIs: https://packages.microsoft.com/repos/code
+Suites: stable
+Components: main
+Architectures: amd64,arm64,armhf
+Signed-By: /usr/share/keyrings/microsoft.gpg
+" > /etc/apt/sources.list.d/vscode.sources
+apt install apt-transport-https
+apt update
+apt install code --assume-yes
+# apt install code-insiders --assume-yes

@@ -187,13 +187,20 @@ describe("Logger Unit Tests", () => {
   });
 
   describe("Different Log Levels", () => {
+    let originalGet: typeof vscode.workspace.getConfiguration;
+
     beforeEach(() => {
-      const _originalGet = vscode.workspace.getConfiguration;
+      originalGet = vscode.workspace.getConfiguration;
       vscode.workspace.getConfiguration = () =>
         ({
           get: (key: string, defaultValue?: unknown) =>
             key === "logLevel" ? "debug" : defaultValue,
         }) as vscode.WorkspaceConfiguration;
+    });
+
+    afterEach(() => {
+      // Restore the real configuration getter so subsequent tests see the full API
+      vscode.workspace.getConfiguration = originalGet;
     });
 
     it("Should log error messages", () => {

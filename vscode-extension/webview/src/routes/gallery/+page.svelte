@@ -616,20 +616,24 @@
 								executionTime={150}
 								collapsed={false}
 								diff={{
-									oldFileName: 'src/routes/+page.svelte',
-									newFileName: 'src/routes/+page.svelte',
-									additions: 1,
-									deletions: 1,
+									oldFileName: 'src/utils/math.ts',
+									newFileName: 'src/utils/math.ts',
+									additions: 4,
+									deletions: 3,
 									hunks: [
 										{
-											oldStart: 1,
-											oldLines: 1,
-											newStart: 1,
-											newLines: 1,
-											content: '@@ -1,5 +1,5 @@',
+											oldStart: 10,
+											oldLines: 3,
+											newStart: 10,
+											newLines: 4,
+											content: '@@ -10,3 +10,4 @@',
 											lines: [
-												'-const hello = "world";',
-												'+const hello = "dolphin";'
+												' function calculateTotal(items: Item[]) {',
+												'-  return items.reduce((acc, item) => acc + item.price, 0);',
+												'+  return items.reduce((acc, item) => {',
+												'+    return acc + (item.price * item.quantity);',
+												'+  }, 0);',
+												' }'
 											]
 										}
 									]
