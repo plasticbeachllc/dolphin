@@ -63,8 +63,6 @@ echo "📦 Installing webview dependencies..."
 cd "$CODEX_WORKSPACE_DIR/vscode-extension/webview"
 bun install
 
-echo "✅ Dolphin environment setup complete!"
-
 # ============================================================================
 # Install VSCode dependencies (code.visualstudio.com/docs/setup/linux)
 # ============================================================================
@@ -78,3 +76,5 @@ apt install apt-transport-https
 apt update
 apt install code --assume-yes
 # apt install code-insiders --assume-yes
+
+echo "✅ Dolphin environment setup complete!"
