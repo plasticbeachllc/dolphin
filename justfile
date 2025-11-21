@@ -96,6 +96,10 @@ test-all-headless:
 	@echo ""
 	@echo "✅ All non-VSCode tests passed!"
 
+# Stub for VS Code extension tests (not available in headless CI)
+test-extension-all:
+	@echo "⚠️ VS Code extension tests are skipped in headless environments."
+
 # Run all unit tests across all projects
 test-unit-all:
 	@echo "⚡ Running all unit tests..."

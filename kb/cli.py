@@ -25,6 +25,8 @@ from kb.ingest.cli import (
     status as kb_status,
 )
 from kb.observability import StructuredLogger
+import uvicorn
+from typing import Annotated
 
 
 def get_version() -> str:
@@ -344,12 +346,10 @@ def reset_all(
 
 @app.command()
 def serve(
-    host: str = typer.Option("127.0.0.1", "--host", help="Host to bind to"),
-    port: int = typer.Option(7777, "--port", help="Port to bind to"),
+    host: Annotated[str, typer.Option("--host", help="Host to bind to")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port", help="Port to bind to")] = 7777,
 ) -> None:
     """Start the dolphin API server."""
-    import uvicorn
-
     if not os.environ.get("DOLPHIN_API_KEY") and not os.environ.get("DOLPHIN_KB_API_KEY"):
         os.environ["DOLPHIN_API_KEY"] = get_or_create_kb_api_key()
 

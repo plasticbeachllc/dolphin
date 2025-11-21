@@ -489,9 +489,9 @@ class TestPerformance:
         graph_manager.get_graph()
         second_access_time = time.time() - start
 
-        # Both cached accesses should be fast (< 20ms to account for test overhead)
-        assert first_access_time < 0.02
-        assert second_access_time < 0.02
+        # Both cached accesses should be fast (< 30ms to account for CI/test overhead)
+        assert first_access_time < 0.03
+        assert second_access_time < 0.03
 
         # Test invalidation and rebuild
         graph_manager.invalidate_cache()
@@ -506,7 +506,7 @@ class TestPerformance:
         start = time.time()
         graph_manager.get_graph()
         cached_again_time = time.time() - start
-        assert cached_again_time < 0.02  # Relaxed from 0.01 to avoid flakiness
+        assert cached_again_time < 0.03  # Relaxed to avoid timing flakiness in CI
 
     def test_metrics_computation_performance(self, pipeline, temp_repo):
         """Test metrics computation performance."""

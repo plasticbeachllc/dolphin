@@ -116,6 +116,8 @@ just test-all-headless                    # Standard full-suite command for agen
 # Do NOT run `just test-all` in headless/Codex sessions; it requires a VS Code/Electron host.
 ```
 
+Consider only running relevant test sections in order to take time -- the entire suite is quite lengthy.
+
 ### 4. Code Quality Standards
 
 **Language-specific guidelines:**

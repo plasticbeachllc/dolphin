@@ -670,8 +670,8 @@ class AgentCoreV2 {
   }
 }
 
+// Start the agent only when executed directly (not when imported for tests)
 if (import.meta.main) {
-  // Start the agent only when invoked directly (not during tests/imports)
   const workspaceRoot = process.argv[2] || process.cwd();
   const extensionPath = process.argv[3];
 

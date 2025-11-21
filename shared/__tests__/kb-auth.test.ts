@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -165,29 +165,26 @@ describe("KB Auth", () => {
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(keyPath, "preexisting-key\n", { encoding: "utf8" });
 
-      const openCalls: Array<unknown[]> = [];
+      const originalExistsSync = fs.existsSync;
+      const originalOpenSync = fs.openSync;
 
-      // Mock fs module for the duration of this test to force EEXIST on openSync
-      mock.module("fs", () => {
-        return {
-          ...fs,
-          existsSync: () => false,
-          openSync: (...args: unknown[]) => {
-            openCalls.push(args);
-            const err = new Error("EEXIST");
-            // @ts-expect-error augment error code for branch coverage
-            err.code = "EEXIST";
-            throw err;
-          },
-        };
+      let openCalled = false;
+      const existsSpy = spyOn(fs, "existsSync").mockReturnValue(false as unknown as boolean);
+      const openSpy = spyOn(fs, "openSync").mockImplementation(() => {
+        openCalled = true;
+        const err = new Error("EEXIST");
+        // @ts-expect-error augment error code
+        err.code = "EEXIST";
+        throw err;
       });
 
       const key = getOrCreateKbApiKey({ homeDir: testHomeDir });
 
-      expect(openCalls.length).toBe(1);
+      expect(openCalled).toBe(true);
       expect(key).toBe("preexisting-key");
 
-      mock.restore();
+      existsSpy.mockRestore();
+      openSpy.mockRestore();
     });
   });
 
