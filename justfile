@@ -80,14 +80,18 @@ test-all:
 	@echo "✅ All tests passed!"
 
 # Run the Codex-friendly test suite (skips VS Code host requirements)
-test-all-no-vscode:
+test-all-headless:
 	@echo "🚀 Running tests that do NOT require VS Code/Electron..."
 	@echo ""
+	@export DISPLAY=":99.0"
+	@Xvfb :99 -screen 0 1024x768x24 &
+    @sleep 3
 	@just test-python all
 	@just test-agent-core all
 	@just test-mcp-bridge
 	@just test-shared
 	@just test-webview
+	@just test-extension-all
 	@echo ""
 	@echo "✅ All non-VSCode tests passed!"
 
@@ -114,6 +118,19 @@ test-integration-all:
 	@echo ""
 	@echo "✅ All integration tests passed!"
 
+test-integration-headless:
+	@export DISPLAY=":99.0"
+	@Xvfb :99 -screen 0 1024x768x24 &
+    @sleep 3
+	@echo "🔗 Running all integration tests..."
+	@echo ""
+	@just test-python integration
+	@just test-agent-core integration
+	@just test-mcp-bridge
+	@just test-extension integration
+	@echo ""
+	@echo "✅ All integration tests passed!"
+
 # Run all e2e tests across all projects (will require VS Code host)
 test-e2e-all:
 	@echo "🎯 Running all E2E tests..."
@@ -122,6 +139,18 @@ test-e2e-all:
 	@just test-agent-core e2e
 	@just test-extension e2e
 	@just test-playwright
+	@echo ""
+	@echo "✅ All E2E tests passed!"
+
+just test-e2e-headless:
+	@echo "🎯 Running all E2E tests..."
+	@echo ""
+	@export DISPLAY=":99.0"
+	@Xvfb :99 -screen 0 1024x768x24 &
+    @sleep 3
+	@just test-python e2e
+	@just test-agent-core e2e
+	@just test-extension e2e
 	@echo ""
 	@echo "✅ All E2E tests passed!"
 

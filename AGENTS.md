@@ -112,7 +112,7 @@ uv run pytest tests/unit/ -v              # Python unit tests
 uv run pytest tests/integration/ -v       # Python integration tests
 cd mcp-bridge && bun test                 # MCP tests
 cd agent-core && bun test                 # Agent tests
-just test-all-no-vscode                   # Standard full-suite command for agents (avoids VS Code host)
+just test-all-headless                    # Standard full-suite command for agents (avoids VS Code host)
 # Do NOT run `just test-all` in headless/Codex sessions; it requires a VS Code/Electron host.
 ```
 
