@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { initializeKbApiKeyEnvGlobal } from "../main";
-import { getOrCreateKbApiKey, getKbKeyPath, resolveKbApiKey } from "../../../shared/kb-auth";
+import { getKbKeyPath, resolveKbApiKey } from "../../../shared/kb-auth";
 
 describe("Agent Core KB API key env init", () => {
   let testHomeDir: string;

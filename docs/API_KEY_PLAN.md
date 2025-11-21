@@ -885,50 +885,50 @@ This section is a concrete, step-by-step checklist to drive implementation. Each
 
 **Step-by-step validation guide**
 
-1) **Reset environment (critical precondition)**
+1. **Reset environment (critical precondition)**
    - Delete or move aside any existing `~/.dolphin` directory.
    - Clear env overrides: `unset DOLPHIN_API_KEY DOLPHIN_KB_API_KEY`.
 
-2) **CLI bootstrap**
+2. **CLI bootstrap**
    - Run `uv run dolphin init`.
    - Verify `~/.dolphin/config.toml` and `~/.dolphin/kb_api_key` exist; ensure the key file is 64 hex chars and permissions `0600` (POSIX).
 
-3) **Server auth checks**
+3. **Server auth checks**
    - Run `uv run dolphin serve` in a new shell (no env overrides).
    - With a separate terminal:
      - `curl http://127.0.0.1:7777/health` → expect 200 without `X-API-Key`.
      - `curl -i http://127.0.0.1:7777/v1/search -d '{}' -H 'Content-Type: application/json'` → expect 401.
      - `API_KEY=$(cat ~/.dolphin/kb_api_key)` then `curl -i http://127.0.0.1:7777/v1/search -d '{"query":"test"}' -H "Content-Type: application/json" -H "X-API-Key: $API_KEY"` → expect 200 (even if empty hits).
 
-4) **VS Code extension**
+4. **VS Code extension**
    - Start the KB server (from step 3) or keep it running.
    - Install/launch the extension with a clean VS Code profile.
    - On first activation, confirm no prompt for KB key appears.
    - Check that `~/.dolphin/kb_api_key` timestamp is unchanged (extension read, not rewrote).
    - Trigger a KB action (e.g., run a search or let auto-sync queue a change) and confirm requests succeed; logs should show “KB API key auto-provisioned” only once, without the key value.
 
-5) **Agent Core (spawned by extension)**
+5. **Agent Core (spawned by extension)**
    - With the extension running, verify Agent Core inherits the key:
      - In extension output/logs, confirm “KB API key provided for agent HTTP calls”.
      - Optional: attach to Agent Core process and check `DOLPHIN_API_KEY` env is set to the file value.
 
-6) **MCP bridge (standalone)**
+6. **MCP bridge (standalone)**
    - Run `bunx dolphin-mcp` with no env overrides.
    - Confirm `~/.dolphin/kb_api_key` is reused (not regenerated) and that startup logs show no warnings about missing API key.
    - Invoke a simple MCP call (e.g., search via your MCP client) and ensure `X-API-Key` is sent (can verify via server logs or a mitm/proxy).
 
-7) **Env override sanity**
+7. **Env override sanity**
    - Set `DOLPHIN_API_KEY="override-key"` (do not match file).
    - Repeat a `curl` to `/v1/search` with `X-API-Key: override-key` → expect 200; using the file key should now 401.
    - Start `bunx dolphin-mcp` and ensure it uses the override without touching the file.
 
-8) **Windows check (if applicable)**
+8. **Windows check (if applicable)**
    - Repeat steps 2–6 on Windows. Confirm file is created in `%USERPROFILE%\.dolphin\kb_api_key`; note that permissions may be looser (document acceptable warning).
 
-9) **Summarize findings**
+9. **Summarize findings**
    - Record pass/fail per step above and update this checklist accordingly.
 
-16. **Docs updates**
+16) **Docs updates**
 
 - [x] Update `README.md`, `vscode-extension/README.md`, and any other relevant docs to: _Status: implemented; docs now describe auto‑provisioning and advanced env overrides._
   - [x] Explain that Dolphin auto-generates and manages `~/.dolphin/kb_api_key`.

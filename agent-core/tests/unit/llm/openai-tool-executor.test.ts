@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect } from "bun:test";
 import type { AgentEvent } from "../../../../shared/types/events";
 import type {
   OpenAIClient,
@@ -256,9 +256,7 @@ describe("OpenAIToolExecutor", () => {
       });
 
       await executor.initialize();
-      const userMessage: OpenAIMessageContent = [
-        { type: "text", text: "Hello, world!" },
-      ];
+      const userMessage: OpenAIMessageContent = [{ type: "text", text: "Hello, world!" }];
       await executor.executeWithTools({ role: "user", content: userMessage });
 
       expect(capturedMessages).toHaveLength(1);

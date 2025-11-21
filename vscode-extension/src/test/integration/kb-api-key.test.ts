@@ -135,7 +135,7 @@ describe("VS Code Extension - KB API Key Integration", () => {
             deletedIds.push(id);
           },
         },
-      } as unknown as ExtensionContext);
+      }) as unknown as ExtensionContext;
 
     let stored: { id?: string; value?: string };
     let deletedIds: string[];

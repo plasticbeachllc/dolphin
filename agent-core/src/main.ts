@@ -27,7 +27,10 @@ import type { ProviderAuthStatus } from "../../shared/types/events";
 import type { Plan, WorkflowUpdate } from "./types/index";
 import { resolveKbApiKey } from "../../shared/kb-auth";
 
-export function initializeKbApiKeyEnvGlobal(options?: { env?: NodeJS.ProcessEnv; homeDir?: string }) {
+export function initializeKbApiKeyEnvGlobal(options?: {
+  env?: NodeJS.ProcessEnv;
+  homeDir?: string;
+}) {
   const targetEnv = options?.env ?? process.env;
   const existing = targetEnv.DOLPHIN_API_KEY?.trim() || targetEnv.DOLPHIN_KB_API_KEY?.trim();
   if (existing) {
