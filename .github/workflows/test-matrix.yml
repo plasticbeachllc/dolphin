@@ -3,12 +3,12 @@ name: Test Matrix
 on:
   push:
     branches:
-      - '**'
+      - "**"
   pull_request:
     branches:
-      - 'feature/**'
-      - 'develop'
-      - 'main'
+      - "feature/**"
+      - "develop"
+      - "main"
 
 jobs:
   unit-tests:
@@ -26,12 +26,15 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'uv'
+          cache: "uv"
 
       - name: Install bun
         uses: oven-sh/setup-bun@v1
         with:
-          cache: 'bun'
+          cache: "bun"
+
+      - name: Install just
+        run: sudo apt-get update && sudo apt-get install -y just
 
       - name: Setup Python
         run: uv python install
@@ -42,8 +45,8 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --dev
 
-      - name: Run unit tests
-        run: bun run test:unit
+      - name: Run consolidated unit suite (no VSCode host)
+        run: just test-unit-all
 
   integration-tests:
     name: Integration Tests
@@ -61,12 +64,12 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'uv'
 
       - name: Install bun
         uses: oven-sh/setup-bun@v1
-        with:
-          cache: 'bun'
+
+      - name: Install just
+        run: sudo apt-get update && sudo apt-get install -y just
 
       - name: Setup Python
         run: uv python install
@@ -77,8 +80,15 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --dev
 
-      - name: Run integration tests
-        run: bun run test:integration
+      - name: Install just
+        run: sudo apt-get update && sudo apt-get install -y just
+
+      - name: Run consolidated integration suite
+        run: |
+          just test-python integration
+          just test-agent-core integration
+          just test-extension integration
+          just test-mcp-bridge
 
   e2e-tests:
     name: E2E Tests
@@ -96,19 +106,18 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          cache: 'bun'
+          cache: "bun"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'uv'
 
       - name: Install Python
         run: uv python install
@@ -116,12 +125,22 @@ jobs:
       - name: Install Python dependencies
         run: uv sync
 
-      - name: Install Xvfb (for headless environment)
+      - name: Install dependencies
+        run: bun install
+
+      - name: Install just
+        run: sudo apt-get update && sudo apt-get install -y just
+
+      - name: Install Xvfb (for headless VSCode)
         run: sudo apt-get install -y xvfb
 
-      - name: Run Extension Tests
+      - name: Run consolidated E2E suite (requires VSCode host)
+        env:
+          DISPLAY: :99.0
         run: |
           Xvfb :99 -screen 0 1024x768x24 &
-          export DISPLAY=:99.0
-          cd vscode-extension && npm run test:e2e
-          npm run test --workspace vscode-extension/playwright
+          sleep 3
+          just test-python e2e
+          just test-agent-core e2e
+          just test-extension e2e
+          just test-playwright
