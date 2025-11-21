@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { encoding_for_model } from "@dqbd/tiktoken";
+import { encoding_for_model } from "tiktoken";
 
 import { TokenCounter } from "../../../src/utils/token-counter";
 
