@@ -64,7 +64,8 @@ describe("Configuration Schema Tests", () => {
       const original = configuration.get<string | undefined>("logLevel");
 
       await configuration.update("logLevel", "debug", vscode.ConfigurationTarget.Global);
-      const updated = configuration.get<string>("logLevel");
+      // Re-fetch to avoid stale snapshots in the test host.
+      const updated = vscode.workspace.getConfiguration("dolphin").get<string>("logLevel");
 
       assert.strictEqual(updated, "debug", "logLevel should update to debug");
 
