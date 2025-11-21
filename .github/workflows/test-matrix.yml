@@ -1,14 +1,11 @@
 name: Test Matrix
 
 on:
-  push:
-    branches:
-      - '**'
   pull_request:
     branches:
-      - 'feature/**'
-      - 'develop'
-      - 'main'
+      - "feature/**"
+      - "develop"
+      - "main"
 
 jobs:
   unit-tests:
@@ -26,7 +23,6 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'uv'
 
       - name: Install bun
         uses: oven-sh/setup-bun@v1
@@ -50,7 +46,7 @@ jobs:
         python-version: ["3.12", "3.13"]
         # node-version: ["20"]
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && (github.base_ref == 'develop' || github.base_ref == 'main')
     needs: unit-tests
     steps:
       - name: Checkout code
@@ -59,7 +55,6 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'uv'
 
       - name: Install bun
         uses: oven-sh/setup-bun@v1
@@ -83,7 +78,7 @@ jobs:
         python-version: ["3.12", "3.13"]
         node-version: ["20"]
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && (github.base_ref == 'develop' || github.base_ref == 'main')
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
     needs: integration-tests
     steps:
       - name: Checkout code
@@ -92,8 +87,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -112,7 +107,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+          cache: "npm"
 
       - name: Install Python dependencies
         run: uv sync
