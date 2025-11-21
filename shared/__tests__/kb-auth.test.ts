@@ -11,10 +11,10 @@ describe("KB Auth", () => {
   beforeEach(() => {
     // Create a temporary test directory
     testHomeDir = fs.mkdtempSync(path.join(os.tmpdir(), "kb-auth-test-"));
-    
+
     // Save original environment
     originalEnv = { ...process.env };
-    
+
     // Clear KB-related env vars
     delete process.env.DOLPHIN_API_KEY;
     delete process.env.DOLPHIN_KB_API_KEY;
@@ -23,7 +23,7 @@ describe("KB Auth", () => {
   afterEach(() => {
     // Restore environment
     process.env = originalEnv;
-    
+
     // Clean up test directory
     if (fs.existsSync(testHomeDir)) {
       fs.rmSync(testHomeDir, { recursive: true, force: true });
@@ -106,14 +106,14 @@ describe("KB Auth", () => {
 
     it("should create new key file when none exists", () => {
       const key = getOrCreateKbApiKey({ homeDir: testHomeDir });
-      
+
       // Should be 64-character hex string
       expect(key).toMatch(/^[0-9a-f]{64}$/);
-      
+
       // File should exist
       const keyPath = getKbKeyPath({ homeDir: testHomeDir });
       expect(fs.existsSync(keyPath)).toBe(true);
-      
+
       // File should contain the key
       const fileContents = fs.readFileSync(keyPath, "utf8").trim();
       expect(fileContents).toBe(key);
@@ -131,10 +131,10 @@ describe("KB Auth", () => {
 
     it("should create directory if it doesn't exist", () => {
       const key = getOrCreateKbApiKey({ homeDir: testHomeDir });
-      
+
       const keyPath = getKbKeyPath({ homeDir: testHomeDir });
       const dir = path.dirname(keyPath);
-      
+
       expect(fs.existsSync(dir)).toBe(true);
       expect(fs.existsSync(keyPath)).toBe(true);
     });
@@ -143,7 +143,7 @@ describe("KB Auth", () => {
       // Simulate race condition by creating file after directory check
       const key1 = getOrCreateKbApiKey({ homeDir: testHomeDir });
       const key2 = getOrCreateKbApiKey({ homeDir: testHomeDir });
-      
+
       // Both should return the same key
       expect(key1).toBe(key2);
     });
@@ -151,10 +151,10 @@ describe("KB Auth", () => {
     it("should set file permissions to 0600", () => {
       const key = getOrCreateKbApiKey({ homeDir: testHomeDir });
       const keyPath = getKbKeyPath({ homeDir: testHomeDir });
-      
+
       const stats = fs.statSync(keyPath);
       const mode = stats.mode & 0o777;
-      
+
       // Should be user read/write only (0600)
       expect(mode).toBe(0o600);
     });
