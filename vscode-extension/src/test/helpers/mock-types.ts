@@ -103,7 +103,14 @@ export interface MockKBConfig {
 /**
  * Agent bridge event types
  */
-export type AgentEventType = "content_delta" | "task_completed" | "tool_call" | "error";
+export type AgentEventType =
+  | "content_delta"
+  | "message_chunk"
+  | "task_completed"
+  | "tool_call"
+  | "tool_call_started"
+  | "tool_call_completed"
+  | "error";
 
 /**
  * Agent bridge event structure
@@ -111,10 +118,12 @@ export type AgentEventType = "content_delta" | "task_completed" | "tool_call" | 
 export interface AgentEvent {
   type: AgentEventType;
   delta?: string;
+  content?: string;
   success?: boolean;
   error?: string;
   toolName?: string;
   toolArgs?: Record<string, unknown>;
+  name?: string;
 }
 
 /**

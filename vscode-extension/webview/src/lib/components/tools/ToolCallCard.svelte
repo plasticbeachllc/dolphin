@@ -86,34 +86,8 @@
 			</div>
 
 			<div class="flex items-center gap-2 shrink-0">
-				{#if isFileEditTool && getFilePath() && status === 'success'}
-					<button
-						class="peek-button text-xs"
-						onclick={handlePeekFile}
-						aria-label="View file {getFilePath()}"
-						title="View file"
-					>
-						👁️ View
-					</button>
-				{/if}
-
-				{#if executionTime}
-					<Badge variant="outline" class="text-xs">{executionTime}ms</Badge>
-				{/if}
-
-				{#if status === 'running'}
-					<Loader2 class="h-4 w-4 animate-spin text-blue-500" />
-				{:else if status === 'success'}
-					<Check class="h-4 w-4 text-green-500" />
-				{:else}
-					<X class="h-4 w-4 text-red-500" />
-				{/if}
-			</div>
-		</div>
-	</CardHeader>
-
 	{#if expanded}
-		<div transition:slide={{ duration: 200 }}>
+		<div>
 			<CardContent class="px-2! pb-2! pt-0!">
 				<div class="space-y-2">
 					<!-- Show diff viewer for file editing tools if diff data is available -->
@@ -122,16 +96,6 @@
 							<DiffViewer {diff} defaultExpanded={true} />
 						</div>
 					{/if}
-					
-					<div>
-						<div class="text-xs font-semibold mb-0.5 text-muted-foreground">Input</div>
-						<pre
-							class="text-xs bg-muted p-1.5 rounded overflow-x-auto">{JSON.stringify(
-								input,
-								null,
-								2
-							)}</pre>
-					</div>
 
 					{#if error}
 						<div class="bg-destructive/10 p-1.5 rounded text-xs text-destructive">

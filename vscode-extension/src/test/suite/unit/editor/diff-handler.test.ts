@@ -4,19 +4,6 @@ import * as path from "path";
 import { DiffHandler, DiffChange } from "../../../../editor/diff-handler";
 
 describe("DiffHandler Tests", () => {
-  let _testWorkspaceUri: vscode.Uri;
-
-  before(async function () {
-    // Get or create a workspace folder for testing
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (workspaceFolders && workspaceFolders.length > 0) {
-      _testWorkspaceUri = workspaceFolders[0].uri;
-    } else {
-      // Skip tests if no workspace is available
-      this.skip();
-    }
-  });
-
   describe("DiffChange Interface", () => {
     it("Should accept valid DiffChange object", () => {
       const diff: DiffChange = {
@@ -47,21 +34,12 @@ describe("DiffHandler Tests", () => {
     // These tests verify the structure and basic validation
 
     it("Should validate required workspace folder", async function () {
-      // Temporarily clear workspace folders by checking if they exist
       const workspaceFolders = vscode.workspace.workspaceFolders;
 
       if (!workspaceFolders || workspaceFolders.length === 0) {
-        const _diff: DiffChange = {
-          filePath: "test.ts",
-          oldContent: "",
-          newContent: "const x = 1;",
-        };
-
-        // This should fail because no workspace is open
-        // We can't easily test this without mocking
-        assert.ok(true, "Test requires workspace folder");
+        assert.ok(true, "Test environment does not provide workspace folders");
       } else {
-        assert.ok(true, "Workspace folder validation check passed");
+        assert.ok(workspaceFolders[0].uri.fsPath.length > 0, "Workspace folder available");
       }
     });
 

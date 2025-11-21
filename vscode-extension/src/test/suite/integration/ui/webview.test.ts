@@ -2,30 +2,31 @@ import * as assert from "assert";
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
-import { waitForExtensionActivation, sleep } from "../../../helpers/test-utils";
+import { TEST_TIMEOUTS } from "../../../helpers/test-constants";
+import {
+  activateExtension,
+  waitForCondition,
+  waitForWebviewReady,
+} from "../../../helpers/shared-fixtures";
 
 describe("Webview Tests", () => {
   before(async function () {
     this.timeout(15000);
-    await waitForExtensionActivation();
-    await sleep(1000);
+    await activateExtension();
+    await waitForWebviewReady(TEST_TIMEOUTS.WEBVIEW_READY);
   });
 
   it("Should be able to focus Dolphin chat view", async function () {
     this.timeout(10000);
 
-    try {
-      // Try to focus the Dolphin view
-      await vscode.commands.executeCommand("dolphin.chatView.focus");
-      await sleep(500);
+    await waitForCondition(
+      async () => (await vscode.commands.getCommands(true)).includes("dolphin.chatView.focus"),
+      { timeout: 2000, timeoutMessage: "chatView focus command not registered" }
+    );
 
-      // If we got here without error, the view exists
-      assert.ok(true, "Dolphin chat view can be focused");
-    } catch {
-      // In headless mode, focusing might fail, but we can check if the command exists
-      const commands = await vscode.commands.getCommands(true);
-      assert.ok(commands.length > 0, "Commands should be available");
-    }
+    await vscode.commands.executeCommand("dolphin.chatView.focus");
+
+    assert.ok(true, "Dolphin chat view can be focused");
   });
 
   it("Should have Dolphin activity bar contribution", async function () {

@@ -386,11 +386,7 @@ class AgentCoreV2 {
             for await (const update of this.orchestrator.subscribeToUpdates(session.id)) {
               this.processWorkflowUpdate(update);
 
-              if (
-                autoApprovePlans &&
-                !planAutoApproved &&
-                this.isPlanApprovalUpdate(update)
-              ) {
+              if (autoApprovePlans && !planAutoApproved && this.isPlanApprovalUpdate(update)) {
                 try {
                   await this.orchestrator?.approveTask(session.id);
                   planAutoApproved = true;

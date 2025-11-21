@@ -58,13 +58,37 @@ describe("Configuration Schema Tests", () => {
     });
   });
 
-  // Skip configuration update and inspection tests in headless test environment
-  // These require full VSCode workspace integration
-  describe.skip("Configuration Updates", () => {
-    // Tests skipped - require full VSCode workspace
+  describe("Configuration Updates", () => {
+    it("Should allow updating and restoring logLevel", async () => {
+      const configuration = vscode.workspace.getConfiguration("dolphin");
+      const original = configuration.get<string | undefined>("logLevel");
+
+      await configuration.update("logLevel", "debug", vscode.ConfigurationTarget.Global);
+      const updated = configuration.get<string>("logLevel");
+
+      assert.strictEqual(updated, "debug", "logLevel should update to debug");
+
+      // Restore original value to avoid polluting user settings
+      await configuration.update("logLevel", original, vscode.ConfigurationTarget.Global);
+    });
   });
 
-  describe.skip("Configuration Inspection", () => {
-    // Tests skipped - require full VSCode workspace
+  describe("Configuration Inspection", () => {
+    it("Should expose inspect metadata for KB settings", () => {
+      const configuration = vscode.workspace.getConfiguration("dolphin");
+      const inspect = configuration.inspect?.bind(configuration);
+
+      const kbInspect = inspect ? inspect("kb.apiBaseUrl") : undefined;
+      const modelInspect = inspect ? inspect("llm.model.anthropic") : undefined;
+
+      assert.ok(kbInspect?.defaultValue || configuration.get("kb.apiBaseUrl"));
+      assert.strictEqual(
+        typeof (kbInspect?.defaultValue ?? configuration.get("kb.apiBaseUrl")),
+        "string",
+        "kb.apiBaseUrl should be a string"
+      );
+
+      assert.ok(modelInspect?.defaultValue || configuration.get("llm.model.anthropic"));
+    });
   });
 });

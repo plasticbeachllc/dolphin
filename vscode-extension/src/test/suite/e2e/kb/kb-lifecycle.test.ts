@@ -254,30 +254,26 @@ describe("KB Lifecycle Management", function () {
       // Use inspect() to verify default values exist in package.json
       const config = vscode.workspace.getConfiguration("dolphin");
       const inspect = config.inspect?.bind(config);
-      if (!inspect) {
-        console.warn(
-          "[KB Config Test] workspace.getConfiguration().inspect unavailable; skipping checks"
-        );
-        this.skip();
-        return;
-      }
 
-      // Use inspect() which returns defaultValue, globalValue, workspaceValue, etc.
-      const kbDebounceInspect = inspect!("kb.debounceMs");
-      const kbBatchIntervalInspect = inspect!("kb.batchIntervalMs");
-      const autoSyncEnabledInspect = inspect!("kb.autoSync.enabled");
+      const kbDebounceInspect = inspect ? inspect("kb.debounceMs") : undefined;
+      const kbBatchIntervalInspect = inspect ? inspect("kb.batchIntervalMs") : undefined;
+      const autoSyncEnabledInspect = inspect ? inspect("kb.autoSync.enabled") : undefined;
 
-      // Check that default values are defined in package.json
+      // Fallback to get() when inspect() is unavailable (headless environments)
+      const kbDebounceFallback = config.get<number>("kb.debounceMs");
+      const kbBatchIntervalFallback = config.get<number>("kb.batchIntervalMs");
+      const autoSyncEnabledFallback = config.get<boolean>("kb.autoSync.enabled");
+
       assert.ok(
-        kbDebounceInspect?.defaultValue !== undefined,
+        kbDebounceInspect?.defaultValue !== undefined || kbDebounceFallback !== undefined,
         "kb.debounceMs should have a default value"
       );
       assert.ok(
-        kbBatchIntervalInspect?.defaultValue !== undefined,
+        kbBatchIntervalInspect?.defaultValue !== undefined || kbBatchIntervalFallback !== undefined,
         "kb.batchIntervalMs should have a default value"
       );
       assert.ok(
-        autoSyncEnabledInspect?.defaultValue !== undefined,
+        autoSyncEnabledInspect?.defaultValue !== undefined || autoSyncEnabledFallback !== undefined,
         "kb.autoSync.enabled should have a default value"
       );
     });
@@ -285,42 +281,29 @@ describe("KB Lifecycle Management", function () {
     it("KB configuration should have valid default types from package.json", function () {
       const config = vscode.workspace.getConfiguration("dolphin");
       const inspect = config.inspect?.bind(config);
-      if (!inspect) {
-        console.warn(
-          "[KB Config Test] workspace.getConfiguration().inspect unavailable; skipping type assertions"
-        );
-        this.skip();
-        return;
-      }
 
-      // Use inspect() to get default values and verify types
-      const kbDebounceInspect = inspect("kb.debounceMs");
-      const excludePatternsInspect = inspect("kb.excludePatterns");
-      const autoSyncEnabledInspect = inspect("kb.autoSync.enabled");
+      const kbDebounceInspect = inspect ? inspect("kb.debounceMs") : undefined;
+      const excludePatternsInspect = inspect ? inspect("kb.excludePatterns") : undefined;
+      const autoSyncEnabledInspect = inspect ? inspect("kb.autoSync.enabled") : undefined;
 
-      // Verify types match package.json definitions using default values
-      if (kbDebounceInspect?.defaultValue !== undefined) {
-        assert.strictEqual(
-          typeof kbDebounceInspect.defaultValue,
-          "number",
-          `kb.debounceMs default should be number, got ${typeof kbDebounceInspect.defaultValue}`
-        );
-      }
+      const kbDebounceValue = kbDebounceInspect?.defaultValue ?? config.get("kb.debounceMs");
+      const excludePatternsValue =
+        excludePatternsInspect?.defaultValue ?? config.get("kb.excludePatterns");
+      const autoSyncEnabledValue =
+        autoSyncEnabledInspect?.defaultValue ?? config.get("kb.autoSync.enabled");
 
-      if (excludePatternsInspect?.defaultValue !== undefined) {
-        assert.ok(
-          Array.isArray(excludePatternsInspect.defaultValue),
-          "kb.excludePatterns default should be array"
-        );
-      }
+      assert.strictEqual(
+        typeof kbDebounceValue,
+        "number",
+        "kb.debounceMs default should be number"
+      );
 
-      if (autoSyncEnabledInspect?.defaultValue !== undefined) {
-        assert.strictEqual(
-          typeof autoSyncEnabledInspect.defaultValue,
-          "boolean",
-          "kb.autoSync.enabled default should be boolean"
-        );
-      }
+      assert.ok(Array.isArray(excludePatternsValue), "kb.excludePatterns default should be array");
+      assert.strictEqual(
+        typeof autoSyncEnabledValue,
+        "boolean",
+        "kb.autoSync.enabled default should be boolean"
+      );
     });
   });
 

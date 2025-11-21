@@ -2,6 +2,7 @@
 	import * as Collapsible from '$lib/components/ui/collapsible';
 	import { Badge } from '$lib/components/ui/badge';
 	import { ChevronDown, ChevronRight, FileCode } from 'lucide-svelte';
+	import hljs from 'highlight.js';
 	
 	interface DiffHunk {
 		oldStart: number;
@@ -31,6 +32,57 @@
 	const additions = diff.additions;
 	const deletions = diff.deletions;
 	const fileChanges = 1;
+
+	// Detect language from filename
+	const language = $derived.by(() => {
+		const ext = diff.newFileName.split('.').pop()?.toLowerCase();
+		switch (ext) {
+			case 'ts':
+			case 'tsx':
+				return 'typescript';
+			case 'js':
+			case 'jsx':
+				return 'javascript';
+			case 'svelte':
+				return 'html'; // highlight.js doesn't have svelte by default, html is close enough
+			case 'css':
+				return 'css';
+			case 'json':
+				return 'json';
+			case 'md':
+				return 'markdown';
+			case 'py':
+				return 'python';
+			case 'go':
+				return 'go';
+			case 'rs':
+				return 'rust';
+			default:
+				return 'plaintext';
+		}
+	});
+
+	// Pre-calculate highlighted lines
+	const highlightedHunks = $derived.by(() => {
+		return diff.hunks.map(hunk => ({
+			...hunk,
+			lines: hunk.lines.map(line => {
+				const marker = line[0];
+				const content = line.slice(1);
+				let highlighted = content;
+				try {
+					highlighted = hljs.highlight(content, { language, ignoreIllegals: true }).value;
+				} catch (e) {
+					// Fallback to plain text
+				}
+				return {
+					marker,
+					content: highlighted,
+					type: marker === '+' ? 'add' : marker === '-' ? 'del' : 'ctx'
+				};
+			})
+		}));
+	});
 </script>
 
 <div class="diff-container">
@@ -89,30 +141,29 @@
 					<!-- Diff Content -->
 					<div class="bg-muted/20 font-mono text-xs max-h-96 overflow-auto">
 						{#if diff}
-							{#each diff.hunks as hunk}
+							{#each highlightedHunks as hunk}
 								<div class="hunk">
 									<div class="sticky top-0 px-4 py-1.5 bg-primary/10 border-y border-border/50 text-primary font-semibold">
 										@@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@
 									</div>
 									
 									{#each hunk.lines as line, lineIdx}
-										{@const lineType = line[0] === '+' ? 'add' : line[0] === '-' ? 'del' : 'ctx'}
-										<div class="diff-line {lineType}">
+										<div class="diff-line {line.type}">
 											<div class="line-numbers select-none flex">
-												<span class="line-num old-line {lineType === 'add' ? 'opacity-30' : ''}">
-													{lineType !== 'add' ? (hunk.oldStart + lineIdx) : ''}
+												<span class="line-num old-line {line.type === 'add' ? 'opacity-30' : ''}">
+													{line.type !== 'add' ? (hunk.oldStart + lineIdx) : ''}
 												</span>
-												<span class="line-num new-line {lineType === 'del' ? 'opacity-30' : ''}">
-													{lineType !== 'del' ? (hunk.newStart + lineIdx) : ''}
+												<span class="line-num new-line {line.type === 'del' ? 'opacity-30' : ''}">
+													{line.type !== 'del' ? (hunk.newStart + lineIdx) : ''}
 												</span>
 											</div>
 											
 											<span class="marker select-none font-bold">
-												{line[0]}
+												{line.marker}
 											</span>
 											
 											<span class="code-content flex-1">
-												{line.slice(1)}
+												{@html line.content}
 											</span>
 										</div>
 									{/each}

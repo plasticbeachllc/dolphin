@@ -56,9 +56,7 @@ function processStdoutBuffer() {
     if (stdoutBuffer.length < totalLength) {
       return;
     }
-    const body = stdoutBuffer
-      .slice(headerEnd + delimiter.length, totalLength)
-      .toString("utf-8");
+    const body = stdoutBuffer.slice(headerEnd + delimiter.length, totalLength).toString("utf-8");
     stdoutBuffer = stdoutBuffer.slice(totalLength);
     try {
       const parsed = JSON.parse(body);

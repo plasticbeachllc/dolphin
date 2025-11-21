@@ -599,6 +599,44 @@
 							/>
 						</CardContent>
 					</Card>
+
+					<Card>
+						<CardHeader>
+							<CardTitle>ToolCallCard - With Diff</CardTitle>
+							<CardDescription>Tool execution with file diff</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<ToolCallCard
+								tool="apply_diff"
+								input={{
+									path: "src/routes/+page.svelte",
+									diff: "@@ -1,5 +1,5 @@\n-const hello = \"world\";\n+const hello = \"dolphin\";"
+								}}
+								status="success"
+								executionTime={150}
+								collapsed={false}
+								diff={{
+									oldFileName: 'src/routes/+page.svelte',
+									newFileName: 'src/routes/+page.svelte',
+									additions: 1,
+									deletions: 1,
+									hunks: [
+										{
+											oldStart: 1,
+											oldLines: 1,
+											newStart: 1,
+											newLines: 1,
+											content: '@@ -1,5 +1,5 @@',
+											lines: [
+												'-const hello = "world";',
+												'+const hello = "dolphin";'
+											]
+										}
+									]
+								}}
+							/>
+						</CardContent>
+					</Card>
 				</div>
 			</section>
 

@@ -304,7 +304,7 @@ export class MockAgentBridge {
   /**
    * Send a message (simulates user sending message to agent).
    */
-  async sendMessage(content: string): Promise<void> {
+  async sendMessage(content: string, _mode?: string): Promise<void> {
     this.messageHistory.push(content);
 
     if (this.shouldThrowError) {

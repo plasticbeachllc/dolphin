@@ -17,12 +17,15 @@ All **Immediate Actions (IA-1 through IA-5)** from the E2E Extension Test Refact
 ### ✅ IA-1: Eliminate Code Duplication (Week 1, Days 1-3)
 
 **Status:** COMPLETE
-**Files Created:**
+**Files Created/Refactored:**
 
 - `vscode-extension/src/test/helpers/shared-fixtures.ts` (145 lines)
 - `vscode-extension/src/test/helpers/test-constants.ts` (51 lines)
 - `vscode-extension/src/test/suite/extension-activation.test.ts` (69 lines)
 - `vscode-extension/src/test/suite/commands-registry.test.ts` (53 lines)
+- `vscode-extension/src/test/suite/integration/commands/commands.test.ts` (duplication removed)
+- `vscode-extension/src/test/suite/e2e/workflows/integration.test.ts` (consolidated mocks)
+- `vscode-extension/src/test/suite/e2e/conversations/conversations-e2e.test.ts` (mock-driven)
 
 **Achievements:**
 
@@ -30,6 +33,7 @@ All **Immediate Actions (IA-1 through IA-5)** from the E2E Extension Test Refact
 - ✅ Consolidated command registration tests from 4 files into 1
 - ✅ Created reusable test helpers (activateExtension, assertCommandsExist, waitForCondition)
 - ✅ Established single source of truth for test constants
+- ✅ Command, workflow, and conversation suites now share fixtures instead of duplicating activation/registry logic
 - ✅ Code duplication reduced from 40-50% to <10%
 
 **Metrics:**
@@ -47,6 +51,9 @@ All **Immediate Actions (IA-1 through IA-5)** from the E2E Extension Test Refact
 
 - `vscode-extension/src/test/helpers/mock-manager.ts` (115 lines, new)
 - `vscode-extension/src/test/helpers/mock-services.ts` (enhanced from 235 to 328 lines)
+- `vscode-extension/src/test/suite/integration/agent/architect-mode.test.ts` (now mock-backed)
+- `vscode-extension/src/test/suite/e2e/workflows/integration.test.ts`
+- `vscode-extension/src/test/suite/e2e/conversations/conversations-e2e.test.ts`
 
 **Achievements:**
 
@@ -65,6 +72,7 @@ All **Immediate Actions (IA-1 through IA-5)** from the E2E Extension Test Refact
   - Response queue
   - State reset (`reset()`)
 - ✅ Easy configuration via `configureMockKB()` and `configureMockAgent()`
+- ✅ Mocks now drive architect mode, workflow, conversation, and KB lifecycle tests end-to-end
 
 **Metrics:**
 
@@ -81,6 +89,7 @@ All **Immediate Actions (IA-1 through IA-5)** from the E2E Extension Test Refact
 
 - `vscode-extension/src/test/suite/integration.test.ts`
 - `vscode-extension/src/test/suite/kb-lifecycle.test.ts`
+- `vscode-extension/src/test/suite/integration/ui/webview.test.ts`
 
 **Achievements:**
 
@@ -98,6 +107,7 @@ All **Immediate Actions (IA-1 through IA-5)** from the E2E Extension Test Refact
 
 - `integration.test.ts`: 1 call (1000ms)
 - `kb-lifecycle.test.ts`: 3 calls (5000ms + 3000ms + 100ms×3 = 8300ms+)
+- `webview.test.ts`: 2 calls (1500ms)
 
 ---
 
@@ -108,6 +118,13 @@ All **Immediate Actions (IA-1 through IA-5)** from the E2E Extension Test Refact
 
 - `vscode-extension/src/test/suite/integration.test.ts` (refactored)
 - `vscode-extension/src/test/suite/kb-lifecycle.test.ts` (completely rewritten)
+- `vscode-extension/src/test/suite/e2e/conversations/conversations-e2e.test.ts`
+- `vscode-extension/src/test/suite/e2e/workflows/integration.test.ts`
+- `vscode-extension/src/test/suite/integration/ui/webview.test.ts`
+- `vscode-extension/src/test/suite/integration/agent/architect-mode.test.ts`
+- `vscode-extension/src/test/suite/integration/commands/commands.test.ts`
+- `vscode-extension/src/test/suite/unit/core/configuration.test.ts`
+- `vscode-extension/src/test/suite/unit/editor/diff-handler.test.ts`
 
 **Achievements:**
 
@@ -149,6 +166,9 @@ await vscode.commands.executeCommand("dolphin.focusInput");
 **Files Modified:**
 
 - `vscode-extension/src/test/suite/kb-lifecycle.test.ts`
+- `vscode-extension/src/test/suite/unit/core/configuration.test.ts`
+- `vscode-extension/src/test/suite/unit/editor/diff-handler.test.ts`
+- `vscode-extension/src/test/suite/integration/agent/architect-mode.test.ts`
 
 **Achievements:**
 
@@ -175,16 +195,29 @@ await vscode.commands.executeCommand("dolphin.focusInput");
 
 ### Overall Test Quality Score
 
-| Metric                 | Before           | After     | Improvement      |
-| ---------------------- | ---------------- | --------- | ---------------- |
-| **Test Quality Score** | 3.5/10           | 8/10      | 2.3x better      |
-| **Code Duplication**   | 40-50%           | <10%      | 80% reduction    |
-| **Execution Time**     | ~60s (estimated) | <15s      | 75% faster       |
-| **False Positives**    | ~30%             | 0%        | 100% elimination |
-| **Mock Utilization**   | 20%              | 100%      | 5x increase      |
-| **Skipped Tests**      | 11               | 0         | 100% elimination |
-| **Sleep Calls**        | 50+ seconds      | 0 seconds | 100% elimination |
-| **Behavior Coverage**  | ~20%             | 80%       | 4x increase      |
+| Metric                 | Before | After | Improvement |
+| ---------------------- | ------ | ----- | ----------- |
+| **Test Quality Score** | 3.5/10 | 8/10  | 2.3x better |
+
+---
+
+## Pre-Merge Verification for E2E Extension Tests
+
+Use this quick loop to keep the refactored suites stable when preparing a merge:
+
+1. **Compile once**: `npm run build:extension` to ensure `out/test/suite` is in sync with sources and helpers.
+2. **Run label-filtered E2E suite**: `cd vscode-extension && npm test -- --label e2e` for the mock-backed conversations/workflows coverage.
+3. **Include UX checks**: `npm run test:extension:playwright` to validate the Svelte webview flows alongside the VS Code host.
+4. **Target regressions fast**: use `just test-extension-domain conversations e2e` or `workflows` when a single area fails to avoid rerunning the full matrix.
+5. **Handle Electron deps**: if launch errors cite missing GTK libraries (e.g., `libatk-1.0.so.0`), install them or rerun inside a devcontainer that includes VS Code test dependencies before marking the run green.
+6. **Reset mocks between runs**: rely on `MockAgentBridge.reset()`/`MockKBServer.reset()` (via shared fixtures) to keep the request history clean when iterating locally.
+   | **Code Duplication** | 40-50% | <10% | 80% reduction |
+   | **Execution Time** | ~60s (estimated) | <15s | 75% faster |
+   | **False Positives** | ~30% | 0% | 100% elimination |
+   | **Mock Utilization** | 20% | 100% | 5x increase |
+   | **Skipped Tests** | 11 | 0 | 100% elimination |
+   | **Sleep Calls** | 50+ seconds | 0 seconds | 100% elimination |
+   | **Behavior Coverage** | ~20% | 80% | 4x increase |
 
 ### File Statistics
 

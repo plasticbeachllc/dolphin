@@ -18,6 +18,10 @@ Version 0.2.0 represents a complete Python backend.
 
 ### Added
 
+#### 📘 Documentation and Process
+
+- Standardized all testing guidance into the root `TESTING.md`, consolidating backend/extension/MCP/observability instructions and adding a post-merge verification checklist to keep releases linted, tested, and reflected in the changelog.
+
 #### 📚 Enhanced Knowledge Base Core
 
 - **Advanced Language-Aware Chunking**

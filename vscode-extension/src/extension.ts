@@ -17,6 +17,7 @@ import { resolveProviderSettings } from "./config/provider-settings";
 import type { ProviderSettingsResult } from "./config/provider-settings";
 
 const FALLBACK_KB_BASE_URL = "http://127.0.0.1:7777";
+const KB_BASE_URL_ENV_VARS = ["DOLPHIN_KB_BASE_URL", "DOLPHIN_KB_API_BASE_URL"] as const;
 let isTestEnv = false;
 let defaultKbBaseUrl = FALLBACK_KB_BASE_URL;
 const KB_API_KEY_SECRET_ID = "dolphin.kbApiKey";
@@ -27,6 +28,13 @@ let defaultKbApiKey: string | undefined;
 
 function resolveKbBaseUrl(): string {
   try {
+    for (const envVar of KB_BASE_URL_ENV_VARS) {
+      const envValue = process.env[envVar];
+      if (envValue) {
+        return envValue;
+      }
+    }
+
     return vscode.workspace
       .getConfiguration("dolphin.kb")
       .get<string>("apiBaseUrl", FALLBACK_KB_BASE_URL);
@@ -846,7 +854,23 @@ async function getKBStatus(): Promise<Record<string, unknown>> {
     throw new Error("Agent bridge not initialized");
   }
 
-  if (isTestEnv || !(agentBridge instanceof AgentBridge)) {
+  if (isTestEnv) {
+    try {
+      return await fetchKbHealth(defaultKbBaseUrl);
+    } catch (error: unknown) {
+      logger?.warn?.(
+        `[Extension] KB health check failed in test mode: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return {
+        repoName: "test-repo",
+        queueDepth: 0,
+        isIndexing: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  if (!(agentBridge instanceof AgentBridge)) {
     return {
       repoName: "test-repo",
       queueDepth: 0,
@@ -907,6 +931,30 @@ async function getKBStatus(): Promise<Record<string, unknown>> {
       reject(new Error("Agent bridge process not available"));
     }
   });
+}
+
+async function fetchKbHealth(baseUrl: string): Promise<Record<string, unknown>> {
+  const normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+  const response = await fetch(`${normalizedBaseUrl}/health`);
+
+  if (!response.ok) {
+    throw new Error(`KB health endpoint returned ${response.status}`);
+  }
+
+  const data = (await response.json()) as Record<string, unknown>;
+
+  return {
+    repoName: (data["repo"] as string | undefined) ?? (data["repoName"] as string | undefined),
+    queueDepth:
+      (data["queue_depth"] as number | undefined) ??
+      (data["queueDepth"] as number | undefined) ??
+      0,
+    isIndexing:
+      (data["is_indexing"] as boolean | undefined) ??
+      (data["isIndexing"] as boolean | undefined) ??
+      false,
+    ...data,
+  };
 }
 
 // Crash recovery function (Phase 5)

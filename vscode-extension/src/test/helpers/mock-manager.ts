@@ -30,6 +30,10 @@ export async function setupMockEnvironment(): Promise<MockEnvironment> {
   const kbServer = new MockKBServer();
   await kbServer.start(MOCK_KB_CONFIG.PORT);
 
+  const kbBaseUrl = `http://${MOCK_KB_CONFIG.HOST}:${kbServer.port}`;
+  process.env.DOLPHIN_KB_BASE_URL = kbBaseUrl;
+  process.env.DOLPHIN_KB_API_BASE_URL = kbBaseUrl;
+
   // Create mock agent bridge
   const agentBridge = new MockAgentBridge();
 
@@ -58,6 +62,9 @@ export async function teardownMockEnvironment(): Promise<void> {
     await mockEnvironment.agentBridge.shutdown();
     mockEnvironment = null;
   }
+
+  delete process.env.DOLPHIN_KB_BASE_URL;
+  delete process.env.DOLPHIN_KB_API_BASE_URL;
 }
 
 /**

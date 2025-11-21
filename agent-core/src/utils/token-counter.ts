@@ -150,7 +150,7 @@ export class OpenAITokenClient {
       const encoding = encoding_for_model(model);
       this.encodings.set(model, encoding);
       return encoding;
-    } catch (error) {
+    } catch {
       // Fallback: use the general-purpose cl100k_base encoding for unrecognized models
       const fallbackModelId = "cl100k_base";
       const fallback = get_encoding(fallbackModelId);
@@ -269,11 +269,7 @@ export class TokenCounter implements TokenCounterLike {
     this.metrics.cacheMisses += cacheMisses;
     this.metrics.cacheSize = this.cache.size;
     const mode: TokenCountMode =
-      usedExactAPI && this.client.isReady()
-        ? "exact"
-        : usedOpenAI
-          ? "exact"
-          : "estimate";
+      usedExactAPI && this.client.isReady() ? "exact" : usedOpenAI ? "exact" : "estimate";
     this.metrics.lastMode = mode;
 
     return {
@@ -322,7 +318,12 @@ export class TokenCounter implements TokenCounterLike {
     return Math.max(0, Math.ceil(text.length / this.estimationCharsPerToken));
   }
 
-  private buildCacheKey(provider: string, model: string, baseUrl: string | undefined, text: string): string {
+  private buildCacheKey(
+    provider: string,
+    model: string,
+    baseUrl: string | undefined,
+    text: string
+  ): string {
     const hash = createHash("sha1").update(text).digest("hex");
     const endpoint = baseUrl || "default";
     return `${provider}:${endpoint}:${model}:${hash}`;

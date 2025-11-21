@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Date:** 2025-11-13
-**Status:** Implementation Ready
+**Status:** ✅ Completed (IA-1 through IA-5)
 **Owner:** Engineering Team
 
 ## Executive Summary
@@ -49,6 +49,7 @@ This document provides a comprehensive specification and implementation plan to 
 **Timeline:** Week 1, Days 1-3
 **Effort:** 3 days
 **Impact:** 60% reduction in maintenance burden
+**Status:** ✅ Completed — shared fixtures and consolidated command coverage adopted across integration and E2E suites.
 
 #### Problem Statement
 
@@ -431,6 +432,7 @@ import { TEST_COMMANDS, TEST_TIMEOUTS } from "../helpers/test-constants";
 **Timeline:** Week 1, Days 4-5
 **Effort:** 2 days
 **Impact:** Eliminate environment dependencies, increase test reliability
+**Status:** ✅ Completed — MockKBServer and MockAgentBridge now power conversation, architect mode, workflow, and KB lifecycle tests with centralized setup.
 
 #### Problem Statement
 
@@ -735,6 +737,7 @@ Same pattern as above.
 **Timeline:** Week 1, Day 5 + Week 2, Day 1
 **Effort:** 1.5 days
 **Impact:** 75% reduction in test execution time
+**Status:** ✅ Completed — all remaining sleep() usages replaced with waitForCondition/waitForWebviewReady.
 
 #### Problem Statement
 
@@ -826,6 +829,7 @@ disposable.dispose();
 **Timeline:** Week 2, Days 2-3
 **Effort:** 2 days
 **Impact:** Eliminate all false positives
+**Status:** ✅ Completed — command, workflow, and conversation suites assert concrete behavior and mock responses instead of permissive try/catch flows.
 
 #### Problem Statement
 
@@ -1012,6 +1016,7 @@ test("Should execute KB search and display results", async () => {
 **Timeline:** Week 2, Day 4
 **Effort:** 1 day
 **Impact:** Increase effective test coverage
+**Status:** ✅ Completed — all skipped cases replaced with executable mock-backed coverage (architect mode, configuration, KB config checks, and diff handler).
 
 #### Problem Statement
 
