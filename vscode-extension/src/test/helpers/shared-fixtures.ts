@@ -7,6 +7,7 @@ import * as vscode from "vscode";
 import * as assert from "assert";
 import { sleep } from "./test-utils";
 import { ExtensionExports } from "./mock-types";
+import { MOCK_KB_CONFIG } from "./test-constants";
 
 /**
  * Extension activation fixture with proper waiting.
@@ -15,6 +16,13 @@ import { ExtensionExports } from "./mock-types";
 export async function activateExtension(): Promise<vscode.Extension<ExtensionExports>> {
   const ext = vscode.extensions.getExtension("pb.dolphin");
   assert.ok(ext, "Extension should be installed");
+
+  // Ensure KB base URL points to the mock server for any test that activates the extension
+  if (!process.env.DOLPHIN_KB_BASE_URL || !process.env.DOLPHIN_KB_API_BASE_URL) {
+    const kbBase = `http://${MOCK_KB_CONFIG.HOST}:${MOCK_KB_CONFIG.PORT}`;
+    process.env.DOLPHIN_KB_BASE_URL = kbBase;
+    process.env.DOLPHIN_KB_API_BASE_URL = kbBase;
+  }
 
   if (!ext.isActive) {
     await ext.activate();

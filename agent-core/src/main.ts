@@ -25,6 +25,7 @@ import { loadProviderSettings } from "./utils/provider-settings";
 import { buildProviderAuthStatuses } from "./utils/auth-status";
 import type { ProviderAuthStatus } from "../../shared/types/events";
 import type { Plan, WorkflowUpdate } from "./types/index";
+import { resolveKbApiKey } from "../../shared/kb-auth";
 
 interface Message {
   jsonrpc: "2.0";
@@ -76,6 +77,9 @@ class AgentCoreV2 {
     this.workspaceRoot = workspaceRoot;
     this.extensionPath = extensionPath;
 
+    // Ensure KB API key is available in env (read-only resolution)
+    this.initializeKbApiKeyEnv();
+
     // Initialize KB Manager
     this.kbManager = new KBManager();
 
@@ -99,6 +103,20 @@ class AgentCoreV2 {
 
     // Initialize Plan Store (for architect workflow)
     this.planStore = new PlanStore(workspaceRoot);
+  }
+
+  private initializeKbApiKeyEnv() {
+    const existing = process.env.DOLPHIN_API_KEY?.trim() || process.env.DOLPHIN_KB_API_KEY?.trim();
+    if (existing) {
+      return;
+    }
+
+    // Read-only resolution: Agent Core never creates the key itself
+    const key = resolveKbApiKey({ readOnly: true });
+    if (key) {
+      process.env.DOLPHIN_API_KEY = key;
+      process.env.DOLPHIN_KB_API_KEY = key;
+    }
   }
 
   private async ensureWorkflowsReady(): Promise<void> {

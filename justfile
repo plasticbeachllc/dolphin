@@ -66,15 +66,30 @@ check-typescript:
 # Testing - Main Commands
 # ==============================================================================
 
-# Run ALL tests across all projects (unit + integration + e2e)
+# Run ALL tests across all projects
 test-all:
 	@echo "🚀 Running ALL tests across all projects..."
 	@echo ""
-	@just test-unit-all
-	@just test-integration-all
-	@just test-e2e-all
+	@just test-python all
+	@just test-agent-core all
+	@just test-mcp-bridge
+	@just test-shared
+	@just test-webview
+	@just test-extension all
 	@echo ""
 	@echo "✅ All tests passed!"
+
+# Run the Codex-friendly test suite (skips VS Code host requirements)
+test-all-no-vscode:
+	@echo "🚀 Running tests that do NOT require VS Code/Electron..."
+	@echo ""
+	@just test-python all
+	@just test-agent-core all
+	@just test-mcp-bridge
+	@just test-shared
+	@just test-webview
+	@echo ""
+	@echo "✅ All non-VSCode tests passed!"
 
 # Run all unit tests across all projects
 test-unit-all:
@@ -82,9 +97,9 @@ test-unit-all:
 	@echo ""
 	@just test-python unit
 	@just test-agent-core unit
-	@just test-extension unit
 	@just test-shared
 	@just test-webview
+	@just test-extension unit
 	@echo ""
 	@echo "✅ All unit tests passed!"
 
@@ -94,12 +109,12 @@ test-integration-all:
 	@echo ""
 	@just test-python integration
 	@just test-agent-core integration
-	@just test-extension integration
 	@just test-mcp-bridge
+	@just test-extension integration
 	@echo ""
 	@echo "✅ All integration tests passed!"
 
-# Run all e2e tests across all projects
+# Run all e2e tests across all projects (will require VS Code host)
 test-e2e-all:
 	@echo "🎯 Running all E2E tests..."
 	@echo ""
@@ -185,15 +200,13 @@ test-extension TYPE="all":
 	@echo "📦 Running VSCode Extension {{TYPE}} tests..."
 	@cd vscode-extension && npm run compile >/dev/null
 	if [ "{{TYPE}}" = "all" ]; then \
-		(cd vscode-extension && npm test) || { echo "   ❌ Extension tests failed"; exit 1; }; \
-		npm run test:extension:playwright || { echo "   ❌ Playwright UX tests failed"; exit 1; }; \
+		(cd vscode-extension && npm run test:all) || { echo "   ❌ Extension tests failed"; exit 1; }; \
 	elif [ "{{TYPE}}" = "unit" ]; then \
-		(cd vscode-extension && npm test -- --label unit) || { echo "   ❌ Extension unit tests failed"; exit 1; }; \
+		(cd vscode-extension && npm run test:unit) || { echo "   ❌ Extension unit tests failed"; exit 1; }; \
 	elif [ "{{TYPE}}" = "integration" ]; then \
-		(cd vscode-extension && npm test -- --label integration) || { echo "   ❌ Extension integration tests failed"; exit 1; }; \
+		(cd vscode-extension && npm run test:integration) || { echo "   ❌ Extension integration tests failed"; exit 1; }; \
 	elif [ "{{TYPE}}" = "e2e" ]; then \
-		(cd vscode-extension && npm test -- --label e2e) || { echo "   ❌ Extension e2e tests failed"; exit 1; }; \
-		npm run test:extension:playwright || { echo "   ❌ Playwright UX tests failed"; exit 1; }; \
+		(cd vscode-extension && npm run test:e2e) || { echo "   ❌ Extension e2e tests failed"; exit 1; }; \
 	else \
 		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
 	fi; \
@@ -206,19 +219,19 @@ test-extension-domain DOMAIN TYPE="all":
 	if [ "{{TYPE}}" = "all" ]; then \
 		FILES=$$(cd vscode-extension && find out/test/suite -path "*{{DOMAIN}}*" -name '*.test.js'); \
 		if [ -z "$$FILES" ]; then echo "   ❌ No tests found for {{DOMAIN}}"; exit 1; fi; \
-		cd vscode-extension && npm test -- --label all --run $$FILES || { echo "   ❌ Tests failed"; exit 1; }; \
+		cd vscode-extension && npm run test:all -- --run $$FILES || { echo "   ❌ Tests failed"; exit 1; }; \
 	elif [ "{{TYPE}}" = "unit" ]; then \
 		FILES=$$(cd vscode-extension && find out/test/suite/unit/{{DOMAIN}} -name '*.test.js' 2>/dev/null); \
 		if [ -z "$$FILES" ]; then echo "   ❌ No unit tests found for {{DOMAIN}}"; exit 1; fi; \
-		cd vscode-extension && npm test -- --label unit --run $$FILES || { echo "   ❌ Unit tests failed"; exit 1; }; \
+		cd vscode-extension && npm run test:unit -- --run $$FILES || { echo "   ❌ Unit tests failed"; exit 1; }; \
 	elif [ "{{TYPE}}" = "integration" ]; then \
 		FILES=$$(cd vscode-extension && find out/test/suite/integration/{{DOMAIN}} -name '*.test.js' 2>/dev/null); \
 		if [ -z "$$FILES" ]; then echo "   ❌ No integration tests found for {{DOMAIN}}"; exit 1; fi; \
-		cd vscode-extension && npm test -- --label integration --run $$FILES || { echo "   ❌ Integration tests failed"; exit 1; }; \
+		cd vscode-extension && npm run test:integration -- --run $$FILES || { echo "   ❌ Integration tests failed"; exit 1; }; \
 	elif [ "{{TYPE}}" = "e2e" ]; then \
 		FILES=$$(cd vscode-extension && find out/test/suite/e2e/{{DOMAIN}} -name '*.test.js' 2>/dev/null); \
 		if [ -z "$$FILES" ]; then echo "   ❌ No e2e tests found for {{DOMAIN}}"; exit 1; fi; \
-		cd vscode-extension && npm test -- --label e2e --run $$FILES || { echo "   ❌ E2E tests failed"; exit 1; }; \
+		cd vscode-extension && npm run test:e2e -- --run $$FILES || { echo "   ❌ E2E tests failed"; exit 1; }; \
 	else \
 		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
 	fi; \

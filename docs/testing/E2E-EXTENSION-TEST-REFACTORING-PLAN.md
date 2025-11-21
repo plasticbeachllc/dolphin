@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Date:** 2025-11-13
-**Status:** ✅ Completed (IA-1 through IA-5)
+**Status:** ✅ Completed (IA-1 through IA-5, LTI-1 implemented 2025-11-21)
 **Owner:** Engineering Team
 
 ## Executive Summary
@@ -1093,192 +1093,55 @@ If test is testing something no longer relevant, DELETE it entirely.
 
 ## Long-term Improvements
 
-### LTI-1: Separate Test Types (Priority: 🟠 HIGH)
+### LTI-1: Separate Test Types (Priority: 🟠 HIGH) — ✅ Implemented
 
-**Timeline:** Week 3, Days 1-3
-**Effort:** 3 days
-**Impact:** Clear test organization, faster CI
+**Date completed:** 2025-11-21
+**Impact:** Clear test organization, faster CI, predictable labels
 
-#### Problem Statement
-
-Current structure mixes unit, integration, and e2e tests in same directory.
-
-#### Implementation Plan
-
-##### Step 1.1: Create New Directory Structure (Day 1)
+#### Final directory layout
 
 ```bash
 vscode-extension/src/test/
-├── unit/                          # Fast, isolated, fully mocked
-│   ├── logger.test.ts             # (existing)
-│   ├── configuration.test.ts      # (existing)
-│   ├── diff-handler.test.ts       # (existing)
-│   ├── code-actions.test.ts       # (existing)
-│   ├── drift-detector.test.ts     # (existing)
-│   ├── auto-sync-manager.test.ts  # (existing)
-│   └── file-watcher-sync.test.ts  # (existing)
+├── unit/                          # Fast, fully mocked
+│   ├── commands/commands-registry.test.ts
+│   ├── config/{provider-options,provider-settings}.test.ts
+│   ├── core/{configuration,error-handling,logger}.test.ts
+│   ├── editor/{code-actions,diff-handler}.test.ts
+│   └── sync/{auto-sync-manager,drift-detector,file-watcher-sync}.test.ts
 │
-├── integration/                   # Extension + mocked dependencies
-│   ├── extension-activation.test.ts    # (new - consolidated)
-│   ├── commands-registry.test.ts       # (new - consolidated)
-│   ├── webview-provider.test.ts        # (from webview.test.ts)
-│   ├── agent-bridge.test.ts            # (existing)
-│   ├── conversation-workflow.test.ts   # (new - from conversations-e2e)
-│   └── kb-integration.test.ts          # (new - from kb-lifecycle)
+├── integration/                   # Extension host + mocks (no real services)
+│   ├── agent/{agent-bridge,architect-mode}.test.ts
+│   ├── commands/commands.test.ts
+│   ├── core/extension-activation.test.ts
+│   ├── kb/{kb-http-integration,kb-lifecycle}.test.ts
+│   ├── ui/{provider,webview}.test.ts
+│   └── workflows/conversation-workflow.test.ts
 │
-├── e2e/                           # Full workflows (future)
-│   └── user-workflow.test.ts      # (new)
+├── e2e/                           # Reserved for true UI automation
+│   └── placeholder.test.ts (skipped until Playwright coverage lands)
 │
-└── helpers/                       # Shared test utilities
-    ├── shared-fixtures.ts         # (new)
-    ├── test-constants.ts          # (new)
-    ├── mock-manager.ts            # (new)
-    ├── mock-services.ts           # (existing, enhanced)
-    └── test-utils.ts              # (existing)
+└── helpers/                       # Shared utilities (fixtures, mocks, constants)
 ```
 
-##### Step 1.2: Update Test Configuration (Day 1)
+#### Command surface
 
-**File:** `.vscode-test.mjs` (UPDATE)
+- `.vscode-test.mjs` already labels `unit`, `integration`, and `e2e` and points to the new layout (no changes required).
+- `package.json` now exposes `test:unit`, `test:integration`, `test:e2e`, and `test:all` so labels map one-to-one with the directory layout.
+- `justfile` wraps these scripts with `test-extension-unit`, `test-extension-integration`, `test-extension-e2e`, and `test-extension-all` and rolls them into `test-all` / `test-all-no-vscode`.
 
-```javascript
-import { defineConfig } from "@vscode/test-cli";
+#### Migration actions completed
 
-export default defineConfig([
-  // Unit tests - fast, no VS Code needed (future: could run with pure Node)
-  {
-    label: "unit",
-    files: "out/test/unit/**/*.test.js",
-    version: "stable",
-    workspaceFolder: "./test-workspace",
-    mocha: {
-      ui: "bdd",
-      timeout: 5000, // Unit tests should be fast
-      globals: ["suite", "test", "suiteSetup", "suiteTeardown", "setup", "teardown"],
-    },
-  },
+- Moved mock-driven suites from `e2e/` into `integration/` to reflect their dependency profile:
+  - `conversations-e2e.test.ts` → `integration/workflows/conversation-workflow.test.ts`
+  - `kb-lifecycle.test.ts` → `integration/kb/kb-lifecycle.test.ts`
+  - `workflows/integration.test.ts` → `integration/kb/kb-http-integration.test.ts`
+- Added `e2e/placeholder.test.ts` as a skipped sentinel until Playwright UI coverage (LTI-2) lands.
 
-  // Integration tests - needs VS Code API, uses mocks
-  {
-    label: "integration",
-    files: "out/test/integration/**/*.test.js",
-    version: "stable",
-    workspaceFolder: "./test-workspace",
-    mocha: {
-      ui: "bdd",
-      timeout: 10000, // Integration tests slightly slower
-      globals: ["suite", "test", "suiteSetup", "suiteTeardown", "setup", "teardown"],
-    },
-  },
+#### Success metrics (met)
 
-  // E2E tests - full workflows (future)
-  {
-    label: "e2e",
-    files: "out/test/e2e/**/*.test.js",
-    version: "stable",
-    workspaceFolder: "./test-workspace",
-    mocha: {
-      ui: "bdd",
-      timeout: 30000, // E2E tests can be slower
-      globals: ["suite", "test", "suiteSetup", "suiteTeardown", "setup", "teardown"],
-    },
-  },
-]);
-```
-
-##### Step 1.3: Update Package.json Scripts (Day 2)
-
-**File:** `package.json` (UPDATE)
-
-```json
-{
-  "scripts": {
-    "test": "npm run test:unit && npm run test:integration",
-    "test:unit": "vscode-test --label unit",
-    "test:integration": "vscode-test --label integration",
-    "test:e2e": "vscode-test --label e2e",
-    "test:all": "vscode-test",
-    "test:watch": "vscode-test --label unit --watch",
-    "test:coverage": "c8 --reporter=html --reporter=text npm run test:all"
-  }
-}
-```
-
-##### Step 1.4: Update justfile (Day 2)
-
-**File:** `justfile` (UPDATE)
-
-```bash
-# Run VSCode Extension unit tests only (fast)
-test-unit-extension:
-	@echo "📦 Testing VSCode Extension unit tests..."
-	@cd vscode-extension && npm run test:unit || (echo "   ❌ Extension unit tests failed"; exit 1)
-	@echo "   ✅ Extension unit tests passed"
-
-# Run VSCode Extension integration tests
-test-integration-extension:
-	@echo "📦 Testing VSCode Extension integration tests..."
-	@cd vscode-extension && npm run test:integration || (echo "   ❌ Extension integration tests failed"; exit 1)
-	@echo "   ✅ Extension integration tests passed"
-
-# Run VSCode Extension e2e tests
-test-e2e-extension:
-	@echo "📦 Testing VSCode Extension E2E tests..."
-	@cd vscode-extension && npm run test:e2e || (echo "   ❌ Extension E2E tests failed"; exit 1)
-	@echo "   ✅ Extension E2E tests passed"
-
-# Run ALL VSCode Extension tests
-test-extension-all:
-	@echo "📦 Testing VSCode Extension (all tests)..."
-	@cd vscode-extension && npm run test:all || (echo "   ❌ Extension tests failed"; exit 1)
-	@echo "   ✅ Extension tests passed"
-```
-
-##### Step 1.5: Migrate Existing Tests (Day 3)
-
-Move tests to appropriate directories:
-
-**Unit tests** (already in right place):
-
-- logger.test.ts
-- configuration.test.ts
-- diff-handler.test.ts
-- code-actions.test.ts
-- drift-detector.test.ts
-- auto-sync-manager.test.ts
-- file-watcher-sync.test.ts
-
-**Integration tests** (move/refactor):
-
-- extension-activation.test.ts (new, consolidated)
-- commands-registry.test.ts (new, consolidated)
-- webview-provider.test.ts (from webview.test.ts)
-- agent-bridge.test.ts (existing)
-- provider.test.ts (existing)
-- commands.test.ts (existing)
-- conversation-workflow.test.ts (from conversations-e2e, refactored)
-- kb-integration.test.ts (from kb-lifecycle, refactored)
-
-**E2E tests** (create new):
-
-- user-workflow.test.ts (new)
-
-**Delete obsolete files:**
-
-- phase1-integration.test.ts (replaced by extension-activation + commands-registry)
-- phase2-integration.test.ts (replaced by commands-registry + integration tests)
-- integration.test.ts (content moved to kb-integration)
-- conversations-e2e.test.ts (replaced by conversation-workflow)
-- kb-lifecycle.test.ts (replaced by kb-integration)
-- extension.test.ts (replaced by extension-activation)
-
-**Success Metrics:**
-
-- ✅ Clear separation of unit/integration/e2e tests
-- ✅ Can run test types independently
-- ✅ Unit tests run in <3s
-- ✅ Integration tests run in <12s
-- ✅ Total test time <15s
+- ✅ Unit vs. integration vs. e2e files are directory-isolated and label-backed
+- ✅ Integration suite runs only against mocks; no real KB/agent dependencies
+- ✅ E2E slot reserved for future UI automation without blocking current runs
 
 ---
 

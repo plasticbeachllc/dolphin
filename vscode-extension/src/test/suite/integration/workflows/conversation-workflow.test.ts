@@ -15,10 +15,10 @@ import { TEST_COMMANDS, TEST_TIMEOUTS } from "../../../helpers/test-constants";
 import { AgentEvent } from "../../../helpers/mock-types";
 
 /**
- * End-to-end conversation flows using mock agent bridge.
- * These tests verify command registration and conversation behavior without real services.
+ * Conversation flows using mock agent bridge.
+ * Runs in the integration suite (no real services or VS Code UI required).
  */
-describe("Conversations E2E Tests", function () {
+describe("Conversation Workflow (integration)", function () {
   this.timeout(40000);
 
   before(async () => {

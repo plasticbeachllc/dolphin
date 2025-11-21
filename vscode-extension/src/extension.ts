@@ -15,6 +15,7 @@ import { AutoSyncManager } from "./kb/auto-sync-manager";
 import { DriftDetector } from "./kb/drift-detector";
 import { resolveProviderSettings } from "./config/provider-settings";
 import type { ProviderSettingsResult } from "./config/provider-settings";
+import { getOrCreateKbApiKey } from "../../shared/kb-auth";
 
 const FALLBACK_KB_BASE_URL = "http://127.0.0.1:7777";
 const KB_BASE_URL_ENV_VARS = ["DOLPHIN_KB_BASE_URL", "DOLPHIN_KB_API_BASE_URL"] as const;
@@ -78,10 +79,25 @@ async function initializeKbApiKey(context: vscode.ExtensionContext): Promise<voi
   const storedKey = await context.secrets.get(KB_API_KEY_SECRET_ID);
   if (storedKey) {
     setKbApiKeyValue(storedKey, "secret");
-  } else {
+    return;
+  }
+
+  // Auto-generate per-user key (official entry point for VS Code users)
+  try {
+    const key = getOrCreateKbApiKey();
+    setKbApiKeyValue(key, "env");
+    await context.secrets.store(KB_API_KEY_SECRET_ID, key);
+    try {
+      logger?.info?.("[Extension] KB API key auto-provisioned from ~/.dolphin/kb_api_key");
+    } catch {
+      // Logger may not be ready yet
+    }
+  } catch (error) {
     try {
       logger?.warn?.(
-        "[Extension] KB API key not configured; secured KB endpoints will reject requests."
+        `[Extension] Failed to initialize KB API key automatically: ${
+          (error as Error).message ?? String(error)
+        }`
       );
     } catch {
       // Logger may not be ready yet

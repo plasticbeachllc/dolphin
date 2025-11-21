@@ -4,7 +4,6 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "outDir": "dist",
-    "rootDir": "src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -12,6 +11,6 @@
     "types": ["node"],
     "sourceMap": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "src/tests"]
+  "include": ["src/**/*", "../shared/**/*"],
+  "exclude": ["node_modules", "dist", "src/tests", "../shared/**/__tests__/**"]
 }

@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { createServer } from "./mcp/server.js";
+import { getOrCreateKbApiKey } from "../../../shared/kb-auth";
 
 // Environment variable configuration
 const DOLPHIN_API_URL =
@@ -23,6 +24,21 @@ try {
   console.error(`   Current value: ${DOLPHIN_API_URL}`);
   console.error("   Expected format: http://127.0.0.1:7777 or https://api.example.com");
   process.exit(1);
+}
+
+// Ensure KB API key is available (official entry point for pure MCP setups)
+if (!process.env.DOLPHIN_API_KEY && !process.env.DOLPHIN_KB_API_KEY) {
+  try {
+    const key = getOrCreateKbApiKey();
+    process.env.DOLPHIN_API_KEY = key;
+    process.env.DOLPHIN_KB_API_KEY = key;
+  } catch (error: unknown) {
+    console.warn(
+      "⚠️  Warning: Failed to initialize KB API key:",
+      error instanceof Error ? error.message : String(error)
+    );
+    console.warn("   Secured KB endpoints may reject requests.");
+  }
 }
 
 // Set process environment for the server

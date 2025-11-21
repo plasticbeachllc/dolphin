@@ -4,7 +4,10 @@ import * as path from "path";
 import { randomBytes } from "crypto";
 
 export interface KbAuthOptions {
+  /** Custom home directory override (mainly for tests) */
   homeDir?: string;
+  /** If true, never create the key file (read-only mode) */
+  readOnly?: boolean;
 }
 
 function getEnvKey(): string | undefined {
@@ -18,6 +21,16 @@ export function getKbKeyPath(opts?: KbAuthOptions): string {
   return path.join(home, ".dolphin", "kb_api_key");
 }
 
+/**
+ * Resolve KB API key in read-only mode (never creates the file).
+ *
+ * Precedence:
+ *   1) DOLPHIN_API_KEY env var
+ *   2) DOLPHIN_KB_API_KEY env var
+ *   3) ~/.dolphin/kb_api_key (if exists)
+ *
+ * @returns The resolved key, or undefined if not found
+ */
 export function resolveKbApiKey(opts?: KbAuthOptions): string | undefined {
   const envKey = getEnvKey();
   if (envKey) {

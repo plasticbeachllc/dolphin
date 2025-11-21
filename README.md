@@ -127,6 +127,29 @@ To generate a repo-specific config, use `dolphin init --repo` at the repository 
 export OPENAI_API_KEY="sk-your-openai-api-key-here"
 ```
 
+### API Key Management
+
+Dolphin automatically manages a per-user KB API key for securing Knowledge Base endpoints. **No manual configuration is required for typical desktop/CLI usage.**
+
+**Auto-Provisioning:**
+
+- Running `dolphin init` or `dolphin serve` automatically creates `~/.dolphin/kb_api_key`
+- The VS Code extension auto-provisions the key on first activation
+- The MCP bridge (`bunx dolphin-mcp`) auto-provisions the key on startup
+- The key is a 64-character hex string with file permissions set to `0600` (user-only)
+
+**Environment Variable Override (Advanced):**
+
+For CI/CD, testing, or remote deployments, you can override the auto-provisioned key:
+
+```bash
+export DOLPHIN_API_KEY="your-custom-key-here"
+# OR
+export DOLPHIN_KB_API_KEY="your-custom-key-here"
+```
+
+Environment variables take precedence over the file-based key.
+
 ### Post-Commit Hook (recommended)
 
 Add this line to the repo's `.git/postcommit` file, inserting the actual repo name.

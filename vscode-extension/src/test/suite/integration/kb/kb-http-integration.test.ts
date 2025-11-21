@@ -22,9 +22,9 @@ import {
 import { makeHttpGetRequest, makeHttpPostRequest } from "../../../helpers/test-utils";
 
 /**
- * Integration tests that exercise the extension against the mock KB server.
+ * HTTP-level KB interactions exercised against the mock KB server.
  */
-describe("Integration Tests", function () {
+describe("KB HTTP Integration", function () {
   this.timeout(20000);
 
   before(async () => {

@@ -1,6 +1,6 @@
 /**
- * KB lifecycle management tests using mock infrastructure.
- * Tests KB server startup, health checks, and status monitoring with mocks.
+ * KB lifecycle management against the mock KB server.
+ * Lives in the integration suite (no real KB instance required).
  */
 
 import * as assert from "assert";
@@ -21,7 +21,7 @@ import {
   MockMetadataResponse,
 } from "../../../helpers/mock-types";
 
-describe("KB Lifecycle Management", function () {
+describe("KB Lifecycle (integration)", function () {
   this.timeout(10000);
 
   before(async () => {

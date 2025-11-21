@@ -29,8 +29,8 @@ const withLabel = (label, files) => ({
 });
 
 export default defineConfig([
-  withLabel('all', 'out/test/suite/{unit,integration,e2e}/**/*.test.js'),
-  withLabel('unit', 'out/test/suite/unit/**/*.test.js'),
-  withLabel('integration', 'out/test/suite/integration/**/*.test.js'),
-  withLabel('e2e', 'out/test/suite/e2e/**/*.test.js'),
+  withLabel('all', 'out/**/src/test/**/*.test.js'),
+  withLabel('unit', 'out/**/src/test/suite/unit/**/*.test.js'),
+  withLabel('integration', 'out/**/src/test/suite/integration/**/*.test.js'),
+  withLabel('e2e', 'out/**/src/test/suite/e2e/**/*.test.js'),
 ]);

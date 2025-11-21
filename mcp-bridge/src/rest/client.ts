@@ -1,4 +1,5 @@
 import { CONFIG } from "../util/config.js";
+import { resolveKbApiKey } from "../../../shared/kb-auth";
 
 export interface RestError {
   error: {
@@ -89,11 +90,33 @@ function getBaseUrl(): string {
   return process.env.KB_REST_BASE_URL || process.env.DOLPHIN_API_URL || CONFIG.DOLPHIN_API_URL;
 }
 
+let KB_API_KEY: string | undefined;
+
+function getKbApiKey(): string | undefined {
+  if (KB_API_KEY !== undefined) {
+    return KB_API_KEY;
+  }
+  const envKey =
+    process.env.DOLPHIN_API_KEY?.trim() || process.env.DOLPHIN_KB_API_KEY?.trim() || "";
+  if (envKey) {
+    KB_API_KEY = envKey;
+    return KB_API_KEY;
+  }
+
+  KB_API_KEY = resolveKbApiKey({ readOnly: true });
+  return KB_API_KEY;
+}
+
 async function doFetch<T>(path: string, init?: RequestInit, signal?: AbortSignal): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("Content-Type", "application/json");
   headers.set("Accept", "application/json");
   headers.set("X-Client", "mcp");
+
+  const kbKey = getKbApiKey();
+  if (kbKey) {
+    headers.set("X-API-Key", kbKey);
+  }
 
   const baseUrl = getBaseUrl();
   const res = await fetch(baseUrl + path, { ...init, headers, signal });

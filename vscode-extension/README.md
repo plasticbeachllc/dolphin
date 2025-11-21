@@ -181,16 +181,39 @@ tests can talk to the correct server without environment variables.
 
 ### KB API Authentication
 
-All `/v1/**` Knowledge Bank endpoints require the `X-API-Key` header to match the
-`DOLPHIN_API_KEY` environment variable that the Python service was launched
-with. When you start the KB manually set `DOLPHIN_API_KEY` (see above). Inside
-VS Code run the **Dolphin: Set KB API Key** command (`dolphin.kb.setApiKey`) to
-store the same value in SecretStorage so the extension, auto-sync, and KB panel
-can authenticate automatically.
+**Auto-Provisioning (Recommended):**
 
-**Production Mode** (planned): KB server will auto-start with the extension.
+The VS Code extension automatically provisions a KB API key on first activation. **No manual configuration is required for typical usage.**
 
-See [KB Lifecycle Management Plan](../docs/KB-LIFECYCLE-MANAGEMENT.md) for details.
+- The extension creates `~/.dolphin/kb_api_key` automatically
+- The key is a 64-character hex string with `0600` permissions (user-only)
+- The key is stored in VS Code SecretStorage and propagated to all KB consumers
+
+**Manual Override (Advanced):**
+
+For CI/CD, testing, or custom deployments, you can override the auto-provisioned key:
+
+1. **Environment Variable** (highest precedence):
+
+   ```bash
+   export DOLPHIN_API_KEY="your-custom-key-here"
+   # OR
+   export DOLPHIN_KB_API_KEY="your-custom-key-here"
+   ```
+
+2. **VS Code Command**:
+   - Run **Dolphin: Set KB API Key** (`dolphin.kb.setApiKey`)
+   - This stores the key in SecretStorage
+
+**Development Mode:**
+
+When running the KB server manually for development:
+
+```bash
+# In dolphin root directory
+uv run dolphin serve
+# The server will use the auto-provisioned key from ~/.dolphin/kb_api_key
+```
 
 ## Project Structure
 

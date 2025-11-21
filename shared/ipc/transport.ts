@@ -14,7 +14,10 @@ import {
   StreamMessageWriter,
   type MessageReader,
   type MessageWriter,
-  type Message as VSCodeMessage,
+  type Message,
+  type RequestMessage,
+  type ResponseMessage,
+  type NotificationMessage,
 } from "vscode-jsonrpc/node";
 import { type ISerializer, SerializerFactory, type SerializationFormat } from "./serialization";
 
@@ -50,7 +53,9 @@ export interface TransportConfig {
 /**
  * Message handler type
  */
-export type MessageHandler = (message: any) => void | Promise<void>;
+type VSCodeMessage = RequestMessage | ResponseMessage | NotificationMessage;
+
+export type MessageHandler = (message: any) => any | Promise<any>;
 
 /**
  * Enhanced IPC transport using vscode-jsonrpc
@@ -62,46 +67,6 @@ type IpcErrorPayload = {
   code?: number;
   data?: any;
 };
-
-class LazyTransformedPromise<T> implements Promise<T> {
-  readonly [Symbol.toStringTag] = "Promise";
-
-  constructor(
-    private readonly inner: Promise<any>,
-    private readonly transform: (value: any) => Promise<T>
-  ) {}
-
-  then<TResult1 = T, TResult2 = never>(
-    onFulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null,
-    onRejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null
-  ): Promise<TResult1 | TResult2> {
-    return this.inner.then(
-      (value) => this.transform(value).then(onFulfilled, onRejected),
-      (error) => (onRejected ? onRejected(error) : Promise.reject(error))
-    );
-  }
-
-  catch<TResult = never>(
-    onRejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null
-  ): Promise<T | TResult> {
-    return this.then(undefined, onRejected);
-  }
-
-  finally(onFinally?: (() => void) | undefined | null): Promise<T> {
-    const handler = () => {
-      if (onFinally) {
-        onFinally();
-      }
-    };
-    return this.then(
-      (value) => Promise.resolve(handler()).then(() => value),
-      (reason) =>
-        Promise.resolve(handler()).then(() => {
-          throw reason;
-        })
-    );
-  }
-}
 
 export class IPCTransport {
   private reader: MessageReader;
@@ -170,7 +135,7 @@ export class IPCTransport {
 
     const id = this.generateId();
 
-    const message: VSCodeMessage = {
+    const message: RequestMessage = {
       jsonrpc: "2.0",
       id,
       method,
@@ -204,7 +169,7 @@ export class IPCTransport {
       throw error instanceof Error ? error : new Error(String(error));
     }
 
-    return new LazyTransformedPromise(promise, (value) => {
+    return promise.then((value) => {
       if (value && typeof value === "object" && "__ipcError" in value) {
         const payload = (value as any).__ipcError;
         const rejection =
@@ -217,7 +182,7 @@ export class IPCTransport {
               };
         return Promise.reject(rejection);
       }
-      return Promise.resolve(value);
+      return value;
     });
   }
 
@@ -299,23 +264,24 @@ export class IPCTransport {
   /**
    * Handle incoming message
    */
-  private async handleMessage(message: VSCodeMessage): Promise<void> {
+  private async handleMessage(message: Message): Promise<void> {
     try {
-      // Validate message structure
       if (!message || typeof message !== "object") {
         console.error("[IPCTransport] Invalid message structure:", message);
         return;
       }
 
-      // Handle response to our request
-      if (
-        message.id !== undefined &&
-        (message.result !== undefined || message.error !== undefined)
-      ) {
-        const pending = this.pendingRequests.get(message.id);
+      if (this.isResponseMessage(message)) {
+        const id = message.id;
+        if (id === null) {
+          console.warn("[IPCTransport] Received response with null id", message);
+          return;
+        }
+
+        const pending = this.pendingRequests.get(id);
         if (pending) {
           clearTimeout(pending.timeout);
-          this.pendingRequests.delete(message.id);
+          this.pendingRequests.delete(id);
 
           if (message.error) {
             const errorMessage = message.error.message || "Unknown error";
@@ -329,44 +295,45 @@ export class IPCTransport {
             const result =
               message.result &&
               typeof message.result === "object" &&
-              "__ipcUndefinedResult__" in message.result
+              "__ipcUndefinedResult__" in (message.result as Record<string, unknown>)
                 ? undefined
                 : message.result;
             pending.resolve(result);
           }
         } else {
-          // Response for unknown request ID - log but don't crash
-          console.warn("[IPCTransport] Received response for unknown request ID:", message.id);
+          console.warn("[IPCTransport] Received response for unknown request ID:", id);
         }
         return;
       }
 
-      // Handle request
-      if (message.method && message.id !== undefined) {
+      if (this.isRequestMessage(message)) {
+        const id = message.id;
+        if (id === null) {
+          await this.respondError("unknown", RPCErrorCode.INVALID_REQUEST, "Request id is null");
+          return;
+        }
+
         const handler = this.messageHandlers.get(message.method);
 
         if (!handler) {
-          await this.respondError(message.id, -32601, `Method not found: ${message.method}`);
+          await this.respondError(id, -32601, `Method not found: ${message.method}`);
           return;
         }
 
         try {
           const result = await handler(message.params);
-          await this.respond(message.id, result);
+          await this.respond(id, result);
         } catch (error) {
-          // Catch all errors from handlers and send proper error response
           const errorMessage = error instanceof Error ? error.message : "Internal error";
           const errorData = error instanceof Error ? { stack: error.stack } : error;
-          await this.respondError(message.id, -32603, errorMessage, errorData);
+          await this.respondError(id, -32603, errorMessage, errorData);
         }
         return;
       }
 
-      // Handle notification
-      if (message.method) {
+      if (this.isNotificationMessage(message)) {
         const handler = this.messageHandlers.get(message.method);
         if (handler) {
-          // Notifications don't send responses, but we should catch errors
           try {
             await handler(message.params);
           } catch (error) {
@@ -385,7 +352,6 @@ export class IPCTransport {
         return;
       }
 
-      // Unknown message type
       console.warn("[IPCTransport] Unknown message type:", message);
       if (this.defaultHandler) {
         try {
@@ -433,6 +399,21 @@ export class IPCTransport {
    */
   getSerializationFormat(): SerializationFormat {
     return this.serializer.format;
+  }
+
+  private isResponseMessage(message: Message): message is ResponseMessage {
+    return (
+      typeof (message as any).id !== "undefined" &&
+      ("result" in (message as any) || "error" in (message as any))
+    );
+  }
+
+  private isRequestMessage(message: Message): message is RequestMessage {
+    return typeof (message as any).id !== "undefined" && typeof (message as any).method === "string";
+  }
+
+  private isNotificationMessage(message: Message): message is NotificationMessage {
+    return !("id" in (message as any)) && typeof (message as any).method === "string";
   }
 
   private rejectAllPendingRequests(message: string): void {

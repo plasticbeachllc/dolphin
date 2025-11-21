@@ -61,6 +61,28 @@ Add to `claude_desktop_config.json`:
 | `DOLPHIN_API_URL` | `http://127.0.0.1:7777` | Dolphin API endpoint                     |
 | `LOG_LEVEL`       | `info`                  | Logging level (debug, info, warn, error) |
 
+### API Key Authentication
+
+**Auto-Provisioning (Recommended):**
+
+The MCP bridge automatically provisions a KB API key on startup. **No manual configuration is required for typical usage.**
+
+- Running `bunx dolphin-mcp` automatically creates `~/.dolphin/kb_api_key`
+- The key is a 64-character hex string with `0600` permissions (user-only)
+- The key is automatically sent in the `X-API-Key` header for all KB requests
+
+**Manual Override (Advanced):**
+
+For CI/CD, testing, or remote deployments, you can override the auto-provisioned key:
+
+```bash
+export DOLPHIN_API_KEY="your-custom-key-here"
+# OR
+export DOLPHIN_KB_API_KEY="your-custom-key-here"
+```
+
+Environment variables take precedence over the file-based key.
+
 ### Parallel Snippet Fetching Configuration
 
 These variables control the performance optimization for parallel snippet fetching in `search_knowledge`:
