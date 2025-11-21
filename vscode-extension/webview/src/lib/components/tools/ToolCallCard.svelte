@@ -10,6 +10,7 @@
 	import { slide } from 'svelte/transition';
 	import DiffViewer from './DiffViewer.svelte';
 	import type { FileDiff } from '@shared/types/events';
+	import { vscode } from '$lib/api/vscode';
 
 	export let tool: string;
 	export let input: Record<string, any>;
@@ -34,8 +35,10 @@
 		e.stopPropagation();
 		const filePath = getFilePath();
 		if (filePath) {
-			// TODO: Send message to extension to open file
-			console.log('[ToolCallCard] Peek file:', filePath);
+			vscode.postMessage({
+				type: 'open_file',
+				path: filePath
+			});
 		}
 	}
 

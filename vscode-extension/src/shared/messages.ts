@@ -136,6 +136,11 @@ export interface SecretCommand {
   provider: ProviderId;
 }
 
+export interface OpenFileCommand {
+  type: "open_file";
+  path: string;
+}
+
 export type WebviewToExtensionMessage =
   | { type: "webview_loaded" }
   | SendMessageCommand
@@ -154,4 +159,5 @@ export type WebviewToExtensionMessage =
   | { type: "check_dolphin_config" }
   | { type: "dolphin_init" }
   | SecretCommand
-  | SettingsSaveMessage;
+  | SettingsSaveMessage
+  | OpenFileCommand;

@@ -690,6 +690,22 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
           }
           break;
 
+        case "open_file":
+          this.outputChannel.appendLine(
+            `[DolphinViewProvider] Processing open_file: ${message.path}`
+          );
+          try {
+            const doc = await vscode.workspace.openTextDocument(message.path);
+            await vscode.window.showTextDocument(doc);
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.outputChannel.appendLine(
+              `[DolphinViewProvider] Error opening file: ${errorMessage}`
+            );
+            vscode.window.showErrorMessage(`Failed to open file: ${errorMessage}`);
+          }
+          break;
+
         default:
           this.outputChannel.appendLine(
             `[DolphinViewProvider] Unknown message type: ${message.type}`
