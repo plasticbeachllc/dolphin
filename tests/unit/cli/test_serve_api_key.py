@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import os
+import sys
+import types
 from pathlib import Path
 from typing import Any
-import types
-import sys
 
 import pytest
 
 from kb import cli
-from kb.api_key import get_kb_key_path, load_kb_api_key
+from kb.api_key import get_kb_key_path
 
 
 @pytest.fixture()

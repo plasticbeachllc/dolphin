@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Annotated
 
 import typer
+import uvicorn
 
 # Import kb CLI functions for top-level commands
 # Import subcommand apps
@@ -25,8 +27,6 @@ from kb.ingest.cli import (
     status as kb_status,
 )
 from kb.observability import StructuredLogger
-import uvicorn
-from typing import Annotated
 
 
 def get_version() -> str:

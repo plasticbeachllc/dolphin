@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime
-import os
 import re
 from collections.abc import Awaitable, Iterable, Sequence
 from inspect import isawaitable
