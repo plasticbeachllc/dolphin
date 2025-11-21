@@ -121,6 +121,7 @@ test-e2e-all:
 	@just test-python e2e
 	@just test-agent-core e2e
 	@just test-extension e2e
+	@just test-playwright
 	@echo ""
 	@echo "✅ All E2E tests passed!"
 
@@ -254,6 +255,12 @@ test-webview:
 	@echo "🎨 Running Webview tests..."
 	@cd vscode-extension/webview && bun test || (echo "   ❌ Webview tests failed"; exit 1)
 	@echo "   ✅ Webview tests passed"
+
+# Run Playwright UI/E2E tests for the webview/extension shell
+test-playwright:
+	@echo "🎭 Running Playwright UI tests..."
+	@cd vscode-extension/playwright && npm test || (echo "   ❌ Playwright tests failed"; exit 1)
+	@echo "   ✅ Playwright tests passed"
 
 # ==============================================================================
 # Testing - Utility Commands

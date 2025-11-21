@@ -409,7 +409,9 @@ export class IPCTransport {
   }
 
   private isRequestMessage(message: Message): message is RequestMessage {
-    return typeof (message as any).id !== "undefined" && typeof (message as any).method === "string";
+    return (
+      typeof (message as any).id !== "undefined" && typeof (message as any).method === "string"
+    );
   }
 
   private isNotificationMessage(message: Message): message is NotificationMessage {
