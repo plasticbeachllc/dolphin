@@ -1,6 +1,6 @@
 import type { AgentEvent } from "../types/events";
 import type { AgentAuthStatusResponse } from "../types/auth";
-import type { ProviderId } from "../config/provider-options";
+import type { ProviderId, ProviderModelOption } from "../config/provider-options";
 
 export interface ThemeUpdateMessage {
   type: "theme_update";
@@ -56,6 +56,29 @@ export interface SettingsErrorMessage {
   message: string;
 }
 
+export interface GetProviderSettingsCommand {
+  type: "get_provider_settings";
+}
+
+export interface ProviderSettingsMessage {
+  type: "provider_settings";
+  currentProvider: ProviderId;
+  currentModel: string;
+  availableProviders: {
+    id: ProviderId;
+    label: string;
+    description: string;
+    models: ProviderModelOption[];
+  }[];
+}
+
+export interface SaveProviderSettingsCommand {
+  type: "save_provider_settings";
+  provider: ProviderId;
+  model: string;
+}
+
+
 export type ExtensionToWebviewMessage =
   | AgentEvent
   | ThemeUpdateMessage
@@ -63,7 +86,8 @@ export type ExtensionToWebviewMessage =
   | KbResponseMessage
   | SecretStatusMessage
   | SettingsSavedMessage
-  | SettingsErrorMessage;
+  | SettingsErrorMessage
+  | ProviderSettingsMessage;
 
 export interface SendMessageCommand {
   type: "send_message";
@@ -160,4 +184,6 @@ export type WebviewToExtensionMessage =
   | { type: "dolphin_init" }
   | SecretCommand
   | SettingsSaveMessage
-  | OpenFileCommand;
+  | OpenFileCommand
+  | GetProviderSettingsCommand
+  | SaveProviderSettingsCommand;

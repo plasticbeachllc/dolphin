@@ -20,7 +20,7 @@ export interface ProviderModelOption {
   default?: boolean;
 }
 
-const PROVIDER_OPTIONS: ProviderOption[] = [
+export const PROVIDER_OPTIONS: ProviderOption[] = [
   {
     id: "anthropic",
     label: "Anthropic (Claude 4.5)",

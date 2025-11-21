@@ -1,3 +1,4 @@
+import * as vscode from "vscode";
 import {
   DEFAULT_MODEL_BY_PROVIDER,
   MODEL_IDS_BY_PROVIDER,
@@ -54,3 +55,13 @@ function normalizeModel(
 
   return DEFAULT_MODELS[provider];
 }
+
+export function getCurrentProviderSettings(): ProviderSettingsResult {
+  const config = vscode.workspace.getConfiguration("dolphin.llm");
+  return resolveProviderSettings({
+    provider: config.get<string>("provider"),
+    anthropicModel: config.get<string>("model.anthropic"),
+    openaiModel: config.get<string>("model.openai"),
+  });
+}
+

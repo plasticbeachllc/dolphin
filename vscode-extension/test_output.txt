@@ -1,0 +1,166 @@
+
+> dolphin@0.1.0 test:integration
+> vscode-test --label integration
+
+- Resolving version...
+✔ Validated version: 1.106.0
+✔ Found existing install in /Users/tdc/worktable/dolphin/vscode-extension/.vscode-test/vscode-darwin-arm64-1.106.0
+Warning: 'disable-gpu-compositing' is not in the list of known options, but still passed to Electron/Chromium.
+Warning: 'disable-renderer-backgrounding' is not in the list of known options, but still passed to Electron/Chromium.
+Warning: 'disable-software-rasterizer' is not in the list of known options, but still passed to Electron/Chromium.
+Warning: 'disable-features' is not in the list of known options, but still passed to Electron/Chromium.
+[90m[main 2025-11-21T19:11:27.498Z][0m update#setState disabled
+[90m[main 2025-11-21T19:11:27.498Z][0m update#ctor - updates are disabled by the environment
+ChatSessionStore: Migrating 0 chat sessions from storage service to file system
+Started local extension host with pid 34051.
+Loading development extension at /Users/tdc/worktable/dolphin/vscode-extension
+MCP Registry configured: https://api.mcp.github.com
+Settings Sync: Account status changed from uninitialized to unavailable
+
+  Conversation Workflow (integration)
+Mock KB API server started on port 7778
+    ✔ Registers conversation commands
+    ✔ Streams mock agent responses (173ms)
+    ✔ Emits tool call lifecycle events (210ms)
+    ✔ Surfaces agent errors to callers
+Mock KB API server stopped
+  Webview Tests
+    ✔ Should be able to focus Dolphin chat view
+    ✔ Should have Dolphin activity bar contribution
+    ✔ Should have chat view contribution
+    ✔ Should have correct keybindings
+  DolphinViewProvider Unit Tests
+    postMessage
+      ✔ Should log when webview is not ready
+      ✔ Should send message when webview is ready
+    clearConversation
+      ✔ Should send clear_conversation message to webview
+      ✔ Should handle missing webview gracefully
+    focusInput
+      ✔ Should send focus_input message to webview
+      ✔ Should handle missing webview gracefully
+    prefillInput (Phase 2)
+      ✔ Should send prefill_input message with text to webview
+      ✔ Should handle empty string
+      ✔ Should handle multi-line text with code blocks
+      ✔ Should handle special characters
+      ✔ Should handle missing webview gracefully
+    getNonce
+      ✔ Should generate unique nonces
+      ✔ Should generate base64 encoded strings
+      ✔ Should generate nonces of expected length
+    CSP Integration
+      ✔ Should include nonce in CSP when generating HTML
+    Event Forwarding
+      ✔ Should forward agent events to webview when ready (52ms)
+      ✔ Should forward events with requestId for correlation (55ms)
+      ✔ Should log correlation ID when forwarding events (51ms)
+      ✔ Should handle events without requestId gracefully (51ms)
+    auth status requests
+      ✔ forwards provider-aware payloads to the webview
+    secret command bridging
+      ✔ invokes provider-specific command and emits success status
+      ✔ returns failure metadata when the command throws
+  KB Lifecycle (integration)
+Mock KB API server started on port 7778
+    KB Server Health
+      ✔ Mock KB server should be running
+      ✔ KB server should respond to health checks
+      ✔ KB server should report unhealthy state when configured
+    KB Commands
+      ✔ KB status command should be registered
+      ✔ KB restart command should be registered
+      ✔ KB status command should execute
+      ✔ KB restart command should execute (1002ms)
+    KB API Operations
+      ✔ KB should handle search requests
+      ✔ KB should return metadata
+      ✔ KB should log request history
+    KB Configuration
+      ✔ KB configuration keys should be readable via get()
+      ✔ KB configuration should have valid default types from package.json
+    KB Performance
+      ✔ KB status checks should be fast
+      ✔ KB search should be reasonably fast
+Mock KB API server stopped
+  KB HTTP Integration
+Mock KB API server started on port 7778
+    ✔ Starts mock KB server and responds to health checks
+    ✔ Serves configured search results
+    ✔ Registers extension commands before invoking KB
+    ✔ Logs KB requests when commands interact with the API
+Mock KB API server stopped
+  Extension Activation
+    ✔ Extension should be present
+    ✔ Extension should activate successfully
+    ✔ Extension should provide exports
+    ✔ Extension should have correct package metadata
+    ✔ Extension should register activity bar view
+    ✔ Extension should register chat view
+  Architect Mode E2E Tests
+Mock KB API server started on port 7778
+    ✔ Emits discovery results for architect prompts (179ms)
+    ✔ Includes tool call events during architect runs (203ms)
+Mock KB API server stopped
+  AgentBridge Unit Tests
+    clearConversation
+      ✔ Should send clear_conversation notification via JSON-RPC connection
+      ✔ Should throw error when JSON-RPC connection is not established
+    abortGeneration
+      ✔ Should send abort_generation notification via JSON-RPC connection
+    sendMessage
+      ✔ Should send send_message notification with content via JSON-RPC connection
+    getAuthStatus
+      ✔ Should send get_auth_status request and resolve with result
+      ✔ Should reject on timeout (3000ms)
+      ✔ Should reject when connection not established
+    Event Handling
+      ✔ Should emit events received from agent via connection
+      ✔ Should include requestId in event logs
+    Auto-recovery and Backoff
+      ✔ Should not auto-restart when isShuttingDown is true
+      ✔ Should increment restart attempts and use exponential backoff (1103ms)
+      ✔ Should stop auto-restart after max attempts
+    Cross-platform Bun Detection
+      ✔ Should use "which bun" on Unix platforms
+      ✔ Should use "where bun" on Windows platforms
+      ✔ Should check platform-specific paths
+    Connection Cleanup on Shutdown
+      ✔ Should dispose connection and clear pending requests on shutdown
+      ✔ Should reject all pending requests with shutdown error on shutdown
+      ✔ Should clear timeout for pending requests on shutdown
+    Request Timeout Handling
+      ✔ Should timeout long-running requests (1005ms)
+      ✔ Should clean up pending request on timeout (609ms)
+    listConversations
+      ✔ Should send list_conversations request and return conversations
+      ✔ Should return empty array when no conversations exist
+      ✔ Should handle missing conversations field in response
+      ✔ Should timeout after 5 seconds (3001ms)
+    loadConversation
+      ✔ Should send load_conversation request with conversationId
+      ✔ Should handle conversation with branch info
+      ✔ Should timeout after 5 seconds (5002ms)
+    deleteConversation
+      ✔ Should send delete_conversation request with conversationId
+      ✔ Should handle deletion errors
+      ✔ Should timeout after 5 seconds (3000ms)
+    renameConversation
+      ✔ Should send rename_conversation request with conversationId and newTitle
+      ✔ Should handle empty title
+      ✔ Should handle special characters in title
+      ✔ Should handle rename errors
+      ✔ Should timeout after 5 seconds (3002ms)
+    start
+      ✔ merges env vars with correct precedence
+    mergeAgentEnvironment
+      ✔ applies overrides after defaults
+  Command Tests
+    ✔ Registers all Phase 1 commands
+    ✔ Registers all Phase 2 editor commands
+    ✔ Registers KB commands
+    ✔ Executes smoke-test friendly commands (1014ms)
+    ✔ Exposes all Dolphin commands via VS Code registry
+  98 passing (24s)
+[90m[main 2025-11-21T19:11:52.484Z][0m Extension host with pid 34051 exited with code: 0, signal: unknown.
+Exit code:   0

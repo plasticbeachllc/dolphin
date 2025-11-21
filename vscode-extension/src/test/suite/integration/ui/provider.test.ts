@@ -615,4 +615,84 @@ describe("DolphinViewProvider Unit Tests", () => {
       assert.ok(payload.message?.includes("Command failed"));
     });
   });
+
+  describe("provider settings messages", () => {
+    it("handles get_provider_settings request", async () => {
+      const posted: unknown[] = [];
+      let messageHandler: ((message: unknown) => Thenable<void> | void) | undefined;
+
+      const mockWebviewView = {
+        webview: {
+          options: {},
+          postMessage: (message: unknown) => {
+            posted.push(message);
+            return Promise.resolve(true);
+          },
+          onDidReceiveMessage: (callback: (message: unknown) => Thenable<void> | void) => {
+            messageHandler = callback;
+            return { dispose: () => {} };
+          },
+          asWebviewUri: (resource: vscode.Uri) => resource,
+        },
+      } as unknown as vscode.WebviewView;
+
+      (provider as unknown as { getHtml: () => string }).getHtml = () =>
+        "<!doctype html><html></html>";
+      (provider as unknown as { sendTheme: () => void }).sendTheme = () => {};
+      provider.resolveWebviewView(mockWebviewView);
+
+      await (messageHandler as (message: unknown) => Promise<void>)({
+        type: "get_provider_settings",
+      });
+
+      const payload = posted[posted.length - 1] as {
+        type: string;
+        currentProvider: string;
+        availableProviders: unknown[];
+      };
+      assert.strictEqual(payload.type, "provider_settings");
+      assert.ok(payload.currentProvider, "Should return current provider");
+      assert.ok(payload.availableProviders.length > 0, "Should return available providers");
+    });
+
+    it("handles save_provider_settings request", async () => {
+      const posted: unknown[] = [];
+      let messageHandler: ((message: unknown) => Thenable<void> | void) | undefined;
+
+      const mockWebviewView = {
+        webview: {
+          options: {},
+          postMessage: (message: unknown) => {
+            posted.push(message);
+            return Promise.resolve(true);
+          },
+          onDidReceiveMessage: (callback: (message: unknown) => Thenable<void> | void) => {
+            messageHandler = callback;
+            return { dispose: () => {} };
+          },
+          asWebviewUri: (resource: vscode.Uri) => resource,
+        },
+      } as unknown as vscode.WebviewView;
+
+      (provider as unknown as { getHtml: () => string }).getHtml = () =>
+        "<!doctype html><html></html>";
+      (provider as unknown as { sendTheme: () => void }).sendTheme = () => {};
+      provider.resolveWebviewView(mockWebviewView);
+
+      await (messageHandler as (message: unknown) => Promise<void>)({
+        type: "save_provider_settings",
+        provider: "openai",
+        model: "gpt-5.1",
+      });
+
+      const payload = posted[posted.length - 1] as {
+        type: string;
+        currentProvider: string;
+        currentModel: string;
+      };
+      assert.strictEqual(payload.type, "provider_settings");
+      assert.strictEqual(payload.currentProvider, "openai");
+      assert.strictEqual(payload.currentModel, "gpt-5.1");
+    });
+  });
 });
