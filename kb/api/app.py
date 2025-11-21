@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from ..api_key import load_kb_api_key
 from ..store.sqlite_meta import generate_fts_content_id
 from .task_queue import TaskStatus, get_task_queue
 from .utils import GitRepository, validate_path_within_repo
@@ -46,13 +47,16 @@ async def validate_api_key(request: Request, call_next):
     """Validate API key for protected endpoints.
 
     All /v1/ endpoints require authentication via X-API-Key header.
-    The API key must match the DOLPHIN_API_KEY environment variable.
+    The API key must match the configured KB key, which may come from:
+    - DOLPHIN_API_KEY environment variable (primary)
+    - DOLPHIN_KB_API_KEY environment variable (legacy / override)
+    - Managed key file (~/.dolphin/kb_api_key)
     Health check endpoint (/health) remains public for monitoring.
     """
     # Protect all /v1/ endpoints with API key authentication
     if request.url.path.startswith("/v1/"):
         api_key = request.headers.get("X-API-Key")
-        expected_key = os.environ.get("DOLPHIN_API_KEY")
+        expected_key = load_kb_api_key()
 
         if not api_key or api_key != expected_key:
             return JSONResponse({"error": "Unauthorized", "detail": "Valid API key required"}, status_code=401)

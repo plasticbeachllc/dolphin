@@ -2,9 +2,11 @@
 
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from kb.api.app import SearchRequest, app, reset_search_backend, reset_stores, set_search_backend, set_stores
+from kb.api_key import get_kb_key_path
 
 
 class MockSearchBackend:
@@ -173,6 +175,59 @@ class TestMCPEndpoints:
 
 class TestAPIModels:
     """Test API request/response models."""
+
+
+class TestApiKeyMiddleware:
+    """Tests for API key authentication on /v1 endpoints."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_env(self, monkeypatch):
+        """Ensure env keys are cleared before each test."""
+        for name in ("DOLPHIN_API_KEY", "DOLPHIN_KB_API_KEY"):
+            monkeypatch.delenv(name, raising=False)
+
+    def test_rejects_missing_key(self, monkeypatch):
+        """Requests without a key should be unauthorized."""
+        monkeypatch.setenv("DOLPHIN_API_KEY", "primary-key")
+
+        client = TestClient(app)
+        response = client.get("/v1/index/tasks")
+
+        assert response.status_code == 401
+
+    def test_accepts_primary_env_key(self, monkeypatch):
+        """Primary env var should be accepted."""
+        monkeypatch.setenv("DOLPHIN_API_KEY", "primary-key")
+
+        client = TestClient(app)
+        response = client.get("/v1/index/tasks", headers={"X-API-Key": "primary-key"})
+
+        assert response.status_code == 200
+
+    def test_accepts_legacy_env_key(self, monkeypatch):
+        """Legacy env var should still be accepted."""
+        monkeypatch.setenv("DOLPHIN_KB_API_KEY", "legacy-key")
+
+        client = TestClient(app)
+        response = client.get("/v1/index/tasks", headers={"X-API-Key": "legacy-key"})
+
+        assert response.status_code == 200
+
+    def test_falls_back_to_managed_key_file(self, monkeypatch, tmp_path: Path):
+        """If no env vars are set, use the managed key file."""
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setenv("USERPROFILE", str(home))
+
+        key_path = get_kb_key_path()
+        key_path.parent.mkdir(parents=True, exist_ok=True)
+        key_path.write_text("file-key\n", encoding="utf-8")
+
+        client = TestClient(app)
+        response = client.get("/v1/index/tasks", headers={"X-API-Key": "file-key"})
+
+        assert response.status_code == 200
 
     def test_search_request_defaults(self):
         """Test SearchRequest default values."""
