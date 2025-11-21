@@ -1,0 +1,6 @@
+have_fun: false
+memory_config:
+  disabled: false
+code_review:
+  comment_severity_threshold: LOW
+  max_review_comments: -1
