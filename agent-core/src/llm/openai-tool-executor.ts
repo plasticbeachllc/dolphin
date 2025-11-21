@@ -42,7 +42,6 @@ class OpenAIAdapter
         return hasName;
       })
       .map((tool) => ({
-        name: tool.name,
         type: "function",
         function: {
           name: tool.name,
@@ -159,15 +158,7 @@ class OpenAIAdapter
     role: "user" | "assistant",
     content: OpenAIMessageContent
   ): OpenAIMessageContent {
-    return content.map((block) => {
-      if (block.type === "text") {
-        return {
-          ...block,
-          type: role === "assistant" ? "output_text" : "input_text",
-        };
-      }
-      return block;
-    });
+    return content;
   }
 }
 

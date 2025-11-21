@@ -9,7 +9,7 @@
 import { existsSync } from "fs";
 import { readFile } from "fs/promises";
 import { PathValidator } from "../../../shared/security/path-validator";
-import type { TokenCounterLike } from "../utils/token-counter.js";
+import type { TokenCountOptions, TokenCounterLike } from "../utils/token-counter.js";
 import { getTokenCounter } from "../utils/token-counter.js";
 import type {
   Context,
@@ -61,6 +61,14 @@ export class ContextBuilder {
       truncated: false,
     };
 
+    const tokenOptions = params.tokenContext
+      ? {
+          model: params.tokenContext.model,
+          provider: params.tokenContext.provider,
+          baseUrl: params.tokenContext.baseUrl,
+        }
+      : undefined;
+
     // 1. Semantic search via KB (if query provided)
     if (params.searchQuery) {
       try {
@@ -95,7 +103,7 @@ export class ContextBuilder {
       context.truncated = true;
     }
 
-    await this.reconcileTokenCounts(context);
+    await this.reconcileTokenCounts(context, tokenOptions);
 
     return context;
   }
@@ -112,7 +120,7 @@ export class ContextBuilder {
     const timeoutHandle = setTimeout(() => controller.abort(), this.kbTimeoutMs);
 
     try {
-      const response = await fetch(`${this.kbUrl.replace(/\/$/, "")}/search`, {
+      const response = await fetch(`${this.kbUrl.replace(/\/$/, "")}/v1/search`, {
         method: "POST",
         headers: this.buildHeaders(),
         body: JSON.stringify({
@@ -363,14 +371,17 @@ export class ContextBuilder {
     return fitted;
   }
 
-  private async reconcileTokenCounts(context: Context): Promise<void> {
+  private async reconcileTokenCounts(
+    context: Context,
+    tokenOptions?: TokenCountOptions
+  ): Promise<void> {
     const fileContents = context.files.map((file) => file.content);
     const kbContents = context.kbResults.map((result) => result.content);
     let totalTokens = 0;
 
     try {
       if (fileContents.length) {
-        const result = await this.tokenCounter.countExact(fileContents);
+        const result = await this.tokenCounter.countExact(fileContents, tokenOptions);
         context.files = context.files.map((file, index) => ({
           ...file,
           tokens: result.perInput[index] ?? file.tokens ?? this.estimateFileTokens(file.content),
@@ -379,7 +390,7 @@ export class ContextBuilder {
       }
 
       if (kbContents.length) {
-        const result = await this.tokenCounter.countExact(kbContents);
+        const result = await this.tokenCounter.countExact(kbContents, tokenOptions);
         context.kbResults = context.kbResults.map((kbResult, index) => ({
           ...kbResult,
           tokens:

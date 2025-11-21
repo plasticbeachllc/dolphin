@@ -174,12 +174,14 @@ export class ArchitectWorkflow implements IWorkflow {
 
     // Build context with KB search
     const contextStart = Date.now();
+    const providerInfo = this.config.chatProvider.getProviderMetadata();
     const context = await this.config.contextBuilder.build({
       searchQuery: input.message,
       files: input.context.files,
       maxTokens: 12000,
       includeRepoMap: false,
       scope: "architect",
+      tokenContext: providerInfo,
     });
     console.error(
       `${logPrefix} Research phase: KB context ready in ${Date.now() - contextStart}ms (results=${
@@ -231,8 +233,6 @@ export class ArchitectWorkflow implements IWorkflow {
 
     const findings = researchCall.text;
     const usageTokens = this.getUsageTotal(researchCall.usage);
-    const providerInfo = this.config.chatProvider.getProviderMetadata();
-
     const result: ResearchResult = {
       completedAt: new Date().toISOString(),
       model: providerInfo.model,
@@ -335,6 +335,9 @@ export class ArchitectWorkflow implements IWorkflow {
         content: llmResponse,
       });
 
+      // Parse questions from LLM response
+      let parsedQuestions = this.parseQuestionsFromResponse(llmResponse);
+
       // Check if LLM is ready to plan
       // Signal: LLM includes [READY_TO_PLAN] marker or reaches max turns
       if (
@@ -359,9 +362,6 @@ export class ArchitectWorkflow implements IWorkflow {
 
         break;
       }
-
-      // Parse questions from LLM response
-      let parsedQuestions = this.parseQuestionsFromResponse(llmResponse);
       if (parsedQuestions.length === 0 && llmResponse.includes("?")) {
         parsedQuestions = [
           {
@@ -450,6 +450,7 @@ export class ArchitectWorkflow implements IWorkflow {
     console.error(`${logPrefix} Planning phase: building context + prompt`);
 
     // Build context for planning
+    const providerInfo = this.config.chatProvider.getProviderMetadata();
     const context = await this.config.contextBuilder.build({
       searchQuery: input.message,
       files: research.relevantFiles,
@@ -457,6 +458,7 @@ export class ArchitectWorkflow implements IWorkflow {
       includeRepoMap: true,
       scope: "architect",
       researchFindings: research,
+      tokenContext: providerInfo,
     });
 
     // Generate planning prompt

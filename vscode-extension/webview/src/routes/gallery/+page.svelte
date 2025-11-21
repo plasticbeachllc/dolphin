@@ -6,6 +6,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import * as Collapsible from '$lib/components/ui/collapsible';
+	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { ChevronDown, ChevronRight, FileCode, Info, MessageSquare, ArrowRight, Palette, Loader, Code, Target, Clock, User, Settings as SettingsIcon, Database, Zap, Bell, Mail, Calendar, Book } from 'lucide-svelte';
 	import MessageCard from '$lib/components/chat/MessageCard.svelte';
 	import ChatInput from '$lib/components/chat/ChatInput.svelte';
@@ -505,6 +506,39 @@
 						</CardHeader>
 						<CardContent>
 							<ChatInput onSend={handleSend} />
+						</CardContent>
+					</Card>
+				</div>
+			</section>
+
+			<Separator />
+
+			<!-- UI Components Section -->
+			<section>
+				<h2 class="text-2xl font-bold mb-6">UI Components</h2>
+				
+				<div class="space-y-6">
+					<Card>
+						<CardHeader>
+							<CardTitle>Tooltip</CardTitle>
+							<CardDescription>Informative popup on hover</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<div class="flex items-center gap-4">
+								<Tooltip.Provider>
+									<Tooltip.Root>
+										<Tooltip.Trigger>
+											<Button variant="outline" size="icon">
+												<Info class="h-4 w-4" />
+											</Button>
+										</Tooltip.Trigger>
+										<Tooltip.Content>
+											<p>This is a helpful tooltip!</p>
+										</Tooltip.Content>
+									</Tooltip.Root>
+								</Tooltip.Provider>
+								<span class="text-sm text-muted-foreground">Hover over the icon</span>
+							</div>
 						</CardContent>
 					</Card>
 				</div>

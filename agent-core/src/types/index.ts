@@ -300,6 +300,13 @@ export interface ContextBuildParams {
   includeRepoMap?: boolean;
   scope?: string;
   researchFindings?: ResearchResult;
+  tokenContext?: TokenContextInfo;
+}
+
+export interface TokenContextInfo {
+  provider: string;
+  model: string;
+  baseUrl?: string;
 }
 
 // =============================================================================

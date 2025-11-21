@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { encoding_for_model, get_encoding, type Tiktoken } from "tiktoken";
 import { createHash } from "node:crypto";
 
 export type TokenCountMode = "exact" | "estimate";
@@ -15,12 +16,20 @@ export interface TokenCountResult {
   estimationError?: number;
 }
 
+export interface TokenCountOptions {
+  model?: string;
+  provider?: string;
+  baseUrl?: string;
+}
+
 export interface TokenCounterMetrics {
   cacheSize: number;
   cacheHits: number;
   cacheMisses: number;
   anthropicCalls: number;
   anthropicErrors: number;
+  openaiCounts: number;
+  openaiErrors: number;
   estimationCharsPerToken: number;
   averageEstimationError: number;
   calibrationSamples: number;
@@ -56,8 +65,8 @@ function isCountTokensResponse(value: unknown): value is CountTokensResponse {
 }
 
 export interface TokenCounterLike {
-  countExact(texts: string[], model?: string): Promise<TokenCountResult>;
-  estimate(texts: string[], model?: string): TokenCountResult;
+  countExact(texts: string[], options?: TokenCountOptions): Promise<TokenCountResult>;
+  estimate(texts: string[], options?: TokenCountOptions): TokenCountResult;
   collectMetrics(): TokenCounterMetrics;
 }
 
@@ -110,9 +119,51 @@ export class AnthropicTokenClient {
   }
 }
 
+export class OpenAITokenClient {
+  private readonly encodings = new Map<string, Tiktoken>();
+
+  isReady(): boolean {
+    return true;
+  }
+
+  countTokens(text: string, model?: string): number {
+    if (!text.trim()) {
+      return 0;
+    }
+
+    if (!model) {
+      throw new Error("OpenAI token counting requires a model name");
+    }
+
+    const encoder = this.getEncoding(model);
+    const tokens = encoder.encode(text).length;
+    return tokens;
+  }
+
+  private getEncoding(model: string): Tiktoken {
+    const cached = this.encodings.get(model);
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      const encoding = encoding_for_model(model);
+      this.encodings.set(model, encoding);
+      return encoding;
+    } catch (error) {
+      // Fallback: use the general-purpose cl100k_base encoding for unrecognized models
+      const fallbackModelId = "cl100k_base";
+      const fallback = get_encoding(fallbackModelId);
+      this.encodings.set(model, fallback);
+      return fallback;
+    }
+  }
+}
+
 export class TokenCounter implements TokenCounterLike {
   private readonly config: TokenCounterConfig;
   private readonly client: AnthropicTokenClient;
+  private readonly openaiClient: OpenAITokenClient;
   private readonly cache = new Map<string, CacheEntry>();
   private calibrationSamples: number[] = [];
   private estimationErrorSamples: number[] = [];
@@ -123,6 +174,8 @@ export class TokenCounter implements TokenCounterLike {
     cacheMisses: 0,
     anthropicCalls: 0,
     anthropicErrors: 0,
+    openaiCounts: 0,
+    openaiErrors: 0,
     estimationCharsPerToken: DEFAULT_CONFIG.estimationCharsPerToken,
     averageEstimationError: 0,
     calibrationSamples: 0,
@@ -130,22 +183,29 @@ export class TokenCounter implements TokenCounterLike {
     lastMode: "estimate",
   };
 
-  constructor(config?: Partial<TokenCounterConfig>, client?: AnthropicTokenClient) {
+  constructor(
+    config?: Partial<TokenCounterConfig>,
+    client?: AnthropicTokenClient,
+    openaiClient?: OpenAITokenClient
+  ) {
     this.config = { ...DEFAULT_CONFIG, ...(config || {}) };
     this.client = client || new AnthropicTokenClient(this.config.defaultModel);
+    this.openaiClient = openaiClient || new OpenAITokenClient();
     this.estimationCharsPerToken = this.config.estimationCharsPerToken;
   }
 
-  async countExact(texts: string[], model?: string): Promise<TokenCountResult> {
+  async countExact(texts: string[], options?: TokenCountOptions): Promise<TokenCountResult> {
     const perInput: number[] = [];
-    const resolvedModel = model || this.config.defaultModel;
+    const resolvedModel = options?.model || this.config.defaultModel;
+    const provider = options?.provider || "unknown";
     let cacheHits = 0;
     let cacheMisses = 0;
     let usedExactAPI = false;
+    let usedOpenAI = false;
 
     for (const text of texts) {
       const normalized = text || "";
-      const cacheKey = this.buildCacheKey(resolvedModel, normalized);
+      const cacheKey = this.buildCacheKey(provider, resolvedModel, options?.baseUrl, normalized);
       const cached = this.readFromCache(cacheKey);
       if (cached !== null) {
         cacheHits++;
@@ -156,18 +216,45 @@ export class TokenCounter implements TokenCounterLike {
       cacheMisses++;
 
       try {
-        if (!this.client.isReady()) {
-          throw new Error("Anthropic client unavailable");
+        if (provider === "anthropic") {
+          if (!this.client.isReady()) {
+            throw new Error("Anthropic client unavailable");
+          }
+
+          const tokens = await this.client.countTokens(normalized, resolvedModel);
+          usedExactAPI = true;
+          perInput.push(tokens);
+          this.metrics.anthropicCalls++;
+          this.writeToCache(cacheKey, tokens);
+          this.updateCalibration(normalized, tokens);
+          continue;
         }
 
-        const tokens = await this.client.countTokens(normalized, resolvedModel);
-        usedExactAPI = true;
-        perInput.push(tokens);
-        this.metrics.anthropicCalls++;
-        this.writeToCache(cacheKey, tokens);
-        this.updateCalibration(normalized, tokens);
+        if (provider === "openai") {
+          if (options?.baseUrl && !options.baseUrl.includes("api.openai.com")) {
+            throw new Error("Custom OpenAI-compatible base URL detected; using heuristic counter");
+          }
+
+          if (!options?.model) {
+            throw new Error("OpenAI token counting requires the model name");
+          }
+          const tokens = this.openaiClient.countTokens(normalized, resolvedModel);
+          usedOpenAI = true;
+          perInput.push(tokens);
+          this.metrics.openaiCounts++;
+          this.writeToCache(cacheKey, tokens);
+          this.updateCalibration(normalized, tokens);
+          continue;
+        }
+
+        // Unknown provider: force heuristic fallback
+        throw new Error(`Unsupported provider for exact token counting: ${provider}`);
       } catch (error) {
-        this.metrics.anthropicErrors++;
+        if (provider === "anthropic") {
+          this.metrics.anthropicErrors++;
+        } else if (provider === "openai") {
+          this.metrics.openaiErrors++;
+        }
         const estimate = this.estimateSingle(normalized);
         perInput.push(estimate);
         console.warn(
@@ -181,7 +268,12 @@ export class TokenCounter implements TokenCounterLike {
     this.metrics.cacheHits += cacheHits;
     this.metrics.cacheMisses += cacheMisses;
     this.metrics.cacheSize = this.cache.size;
-    const mode: TokenCountMode = usedExactAPI && this.client.isReady() ? "exact" : "estimate";
+    const mode: TokenCountMode =
+      usedExactAPI && this.client.isReady()
+        ? "exact"
+        : usedOpenAI
+          ? "exact"
+          : "estimate";
     this.metrics.lastMode = mode;
 
     return {
@@ -197,14 +289,14 @@ export class TokenCounter implements TokenCounterLike {
     };
   }
 
-  estimate(texts: string[], model?: string): TokenCountResult {
+  estimate(texts: string[], options?: TokenCountOptions): TokenCountResult {
     const perInput = texts.map((text) => this.estimateSingle(text || ""));
     const totalTokens = perInput.reduce((sum, tokens) => sum + tokens, 0);
     this.metrics.lastMode = "estimate";
 
     return {
       mode: "estimate",
-      model: model || this.config.defaultModel,
+      model: options?.model || this.config.defaultModel,
       totalTokens,
       perInput,
       cacheHits: 0,
@@ -230,9 +322,10 @@ export class TokenCounter implements TokenCounterLike {
     return Math.max(0, Math.ceil(text.length / this.estimationCharsPerToken));
   }
 
-  private buildCacheKey(model: string, text: string): string {
+  private buildCacheKey(provider: string, model: string, baseUrl: string | undefined, text: string): string {
     const hash = createHash("sha1").update(text).digest("hex");
-    return `${model}:${hash}`;
+    const endpoint = baseUrl || "default";
+    return `${provider}:${endpoint}:${model}:${hash}`;
   }
 
   private readFromCache(key: string): number | null {

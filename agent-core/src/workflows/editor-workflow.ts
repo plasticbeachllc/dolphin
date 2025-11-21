@@ -52,10 +52,13 @@ export class EditorWorkflow implements IWorkflow {
       // Step 1: Build context (lightweight for editor mode)
       console.error("[EditorWorkflow] Building context...");
 
+      const providerInfo = this.config.chatProvider.getProviderMetadata();
+
       const context = await this.config.contextBuilder.build({
         files: input.context.files || [],
         searchQuery: this.extractSearchIntent(input.message),
         maxTokens: 8000, // Smaller context for fast execution
+        tokenContext: providerInfo,
       });
 
       yield {

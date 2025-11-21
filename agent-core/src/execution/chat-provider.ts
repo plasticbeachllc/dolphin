@@ -29,5 +29,5 @@ export interface ChatProvider {
   detectAuthStatus(): Promise<AuthStatus>;
   ensureAuthenticated(): Promise<void>;
   getUsage(): UsageStats;
-  getProviderMetadata(): { provider: string; model: string };
+  getProviderMetadata(): { provider: string; model: string; baseUrl?: string };
 }

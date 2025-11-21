@@ -121,7 +121,7 @@ export class OpenAIProvider implements ChatProvider {
   }
 
   getProviderMetadata() {
-    return { provider: "openai", model: this.model };
+    return { provider: "openai", model: this.model, baseUrl: this.baseUrl };
   }
 
   private mapHistory(
