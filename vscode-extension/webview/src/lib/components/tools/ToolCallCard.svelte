@@ -16,7 +16,6 @@
 	export let result: Record<string, any> | null = null;
 	export let error: string | null = null;
 	export let status: 'running' | 'success' | 'error' = 'running';
-	export let executionTime: number | null = null;
 	export let collapsed = true;
 	export let diff: FileDiff | undefined = undefined;
 
@@ -109,7 +108,7 @@
 						<div>
 							<div class="text-xs font-semibold mb-0.5 text-muted-foreground">Result</div>
 							<pre
-								class="text-xs bg-muted p-1.5 rounded overflow-x-auto">{JSON.stringify(
+								class="text-xs bg-muted p-3 rounded overflow-x-auto leading-relaxed">{JSON.stringify(
 									result,
 									null,
 									2
@@ -139,24 +138,5 @@
 		border-left-color: var(--vscode-charts-red, hsl(0 84% 60%));
 	}
 
-	.peek-button {
-		padding: 0.25rem 0.5rem;
-		border-radius: 0.25rem;
-		background: hsl(var(--muted));
-		color: hsl(var(--foreground));
-		border: 1px solid hsl(var(--border));
-		cursor: pointer;
-		transition: all 0.2s;
-		font-family: inherit;
-	}
 
-	.peek-button:hover {
-		background: hsl(var(--accent));
-		border-color: hsl(var(--primary));
-	}
-
-	.peek-button:focus-visible {
-		outline: 2px solid hsl(var(--primary));
-		outline-offset: 2px;
-	}
 </style>

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '$lib/assets/favicon.svg';
 	import '../app.css';
+	import 'highlight.js/styles/github-dark.css';
 	import AppNavigation from '$lib/components/navigation/AppNavigation.svelte';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';

@@ -11,6 +11,7 @@
 	import MessageCard from '$lib/components/chat/MessageCard.svelte';
 	import ChatInput from '$lib/components/chat/ChatInput.svelte';
 	import ToolCallCard from '$lib/components/tools/ToolCallCard.svelte';
+	import DiffViewer from '$lib/components/tools/DiffViewer.svelte';
 	import PlanTimeline from '$lib/components/PlanTimeline.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import ErrorAlert from '$lib/components/ErrorAlert.svelte';
@@ -602,8 +603,8 @@
 
 					<Card>
 						<CardHeader>
-							<CardTitle>ToolCallCard - With Diff</CardTitle>
-							<CardDescription>Tool execution with file diff</CardDescription>
+							<CardTitle>ToolCallCard - Failed Edit</CardTitle>
+							<CardDescription>Tool execution with error state</CardDescription>
 						</CardHeader>
 						<CardContent>
 							<ToolCallCard
@@ -612,32 +613,10 @@
 									path: "src/routes/+page.svelte",
 									diff: "@@ -1,5 +1,5 @@\n-const hello = \"world\";\n+const hello = \"dolphin\";"
 								}}
-								status="success"
+								status="error"
+								error="Failed to apply diff: Hunk #1 FAILED."
 								executionTime={150}
 								collapsed={false}
-								diff={{
-									oldFileName: 'src/utils/math.ts',
-									newFileName: 'src/utils/math.ts',
-									additions: 4,
-									deletions: 3,
-									hunks: [
-										{
-											oldStart: 10,
-											oldLines: 3,
-											newStart: 10,
-											newLines: 4,
-											content: '@@ -10,3 +10,4 @@',
-											lines: [
-												' function calculateTotal(items: Item[]) {',
-												'-  return items.reduce((acc, item) => acc + item.price, 0);',
-												'+  return items.reduce((acc, item) => {',
-												'+    return acc + (item.price * item.quantity);',
-												'+  }, 0);',
-												' }'
-											]
-										}
-									]
-								}}
 							/>
 						</CardContent>
 					</Card>
@@ -658,122 +637,39 @@
 						</CardHeader>
 						<CardContent>
 							<div class="diff-container">
-								<Collapsible.Root bind:open={diffExpanded}>
-									<div class="rounded-lg border border-border bg-card overflow-hidden">
-										<!-- Collapsible Header -->
-										<Collapsible.Trigger>
-											{#snippet child({ props })}
-												<button
-													{...props}
-													class="w-full px-4 py-3 flex items-center justify-between hover:bg-muted/50 transition-colors"
-												>
-												<div class="flex items-center gap-3">
-													<div class="flex items-center gap-2">
-														{#if diffExpanded}
-															<ChevronDown class="h-4 w-4 text-muted-foreground" />
-														{:else}
-															<ChevronRight class="h-4 w-4 text-muted-foreground" />
-														{/if}
-														<FileCode class="h-5 w-5 text-primary" />
-													</div>
-													<div class="flex flex-col items-start">
-														<span class="font-mono text-sm font-semibold text-foreground">
-															{patch.newFileName}
-														</span>
-														<span class="text-xs text-muted-foreground">
-															Modified • {fileChanges} file{fileChanges !== 1 ? 's' : ''} changed
-														</span>
-													</div>
-												</div>
-												
-												<div class="flex items-center gap-4">
-													<!-- Diff Stats -->
-													<div class="flex items-center gap-3 text-xs font-mono">
-														<div class="flex items-center gap-1">
-															<div class="w-2 h-2 rounded-full bg-emerald-500/40 border border-emerald-500/60"></div>
-															<span class="text-emerald-600 dark:text-emerald-400 font-semibold">+{additions}</span>
-														</div>
-														<div class="flex items-center gap-1">
-															<div class="w-2 h-2 rounded-full bg-rose-500/40 border border-rose-500/60"></div>
-															<span class="text-rose-600 dark:text-rose-400 font-semibold">-{deletions}</span>
-														</div>
-													</div>
-													
-													<!-- Visual diff bar -->
-													<div class="h-2 w-32 rounded-full overflow-hidden border border-border bg-background flex">
-														<div class="bg-emerald-500/50 transition-all" style="width: {additions / (additions + deletions) * 100}%"></div>
-														<div class="bg-rose-500/50 transition-all" style="width: {deletions / (additions + deletions) * 100}%"></div>
-													</div>
-												</div>
-												</button>
-											{/snippet}
-										</Collapsible.Trigger>
-	
-										<!-- Collapsible Content -->
-										<Collapsible.Content>
-											<div class="border-t border-border">
-												<!-- Info Banner -->
-												<!-- <div class="px-4 py-2 bg-muted/30 border-b border-border flex items-center gap-2">
-													<Info class="h-4 w-4 text-primary" />
-													<span class="text-xs text-muted-foreground">
-														Preview of changes
-													</span>
-												</div> -->
-	
-												<!-- Diff Content -->
-												<div class="bg-muted/20 font-mono text-xs max-h-96 overflow-auto">
-													{#if patch}
-														{#each patch.hunks as hunk, hunkIdx}
-															<div class="hunk">
-																<!-- Hunk Header -->
-																<div class="sticky top-0 px-4 py-1.5 bg-primary/10 border-y border-border/50 text-primary font-semibold">
-																	@@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@
-																</div>
-																
-																<!-- Diff Lines -->
-																{#each hunk.lines as line, lineIdx}
-																	{@const lineType = line[0] === '+' ? 'add' : line[0] === '-' ? 'del' : 'ctx'}
-																	<div class="diff-line {lineType}">
-																		<!-- Line Number Gutter -->
-																		<div class="line-numbers select-none flex">
-																			<span class="line-num old-line {lineType === 'add' ? 'opacity-30' : ''}">
-																				{lineType !== 'add' ? (hunk.oldStart + lineIdx) : ''}
-																			</span>
-																			<span class="line-num new-line {lineType === 'del' ? 'opacity-30' : ''}">
-																				{lineType !== 'del' ? (hunk.newStart + lineIdx) : ''}
-																			</span>
-																		</div>
-																		
-																		<!-- Change Marker -->
-																		<span class="marker select-none font-bold">
-																			{line[0]}
-																		</span>
-																		
-																		<!-- Code Content -->
-																		<span class="code-content flex-1">
-																			{line.slice(1)}
-																		</span>
-																	</div>
-																{/each}
-															</div>
-														{/each}
-													{/if}
-												</div>
-	
-												<!-- Metadata Footer -->
-												<div class="px-4 py-3 bg-card border-t border-border flex items-center gap-2">
-													<Badge variant="outline" class="text-xs">
-														<FileCode class="h-3 w-3 mr-1" />
-														TypeScript
-													</Badge>
-													<Badge variant="outline" class="text-xs">
-														{additions + deletions} lines changed
-													</Badge>
-												</div>
-											</div>
-										</Collapsible.Content>
-									</div>
-								</Collapsible.Root>
+								<DiffViewer
+									diff={{
+										oldFileName: 'src/components/utils.ts',
+										newFileName: 'src/components/utils.ts',
+										additions: 6,
+										deletions: 1,
+										hunks: [
+											{
+												oldStart: 1,
+												oldLines: 8,
+												newStart: 1,
+												newLines: 13,
+												content: '@@ -1,8 +1,13 @@',
+												lines: [
+													' export function formatNumber(num: number): string {',
+													'-  return num.toLocaleString();',
+													'+  return new Intl.NumberFormat("en-US").format(num);',
+													' }',
+													' ',
+													' export function cn(...inputs: string[]) {',
+													'   return inputs.filter(Boolean).join(" ");',
+													'+ }',
+													'+',
+													'+ export function debounce(func: Function, wait: number) {',
+													'+   let timeout: NodeJS.Timeout;',
+													'+   return (...args: any[]) => clearTimeout(timeout);',
+													' }'
+												]
+											}
+										]
+									}}
+									defaultExpanded={true}
+								/>
 							</div>
 							
 							<!-- Features List -->

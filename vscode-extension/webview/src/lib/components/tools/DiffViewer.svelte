@@ -62,26 +62,47 @@
 		}
 	});
 
-	// Pre-calculate highlighted lines
+	// Pre-calculate highlighted lines with correct line numbers
 	const highlightedHunks = $derived.by(() => {
-		return diff.hunks.map(hunk => ({
-			...hunk,
-			lines: hunk.lines.map(line => {
+		return diff.hunks.map(hunk => {
+			let oldLine = hunk.oldStart;
+			let newLine = hunk.newStart;
+
+			const lines = hunk.lines.map(line => {
 				const marker = line[0];
 				const content = line.slice(1);
+				const type = marker === '+' ? 'add' : marker === '-' ? 'del' : 'ctx';
+				
+				let currentOld = null;
+				let currentNew = null;
+
+				if (type === 'ctx') {
+					currentOld = oldLine++;
+					currentNew = newLine++;
+				} else if (type === 'del') {
+					currentOld = oldLine++;
+				} else if (type === 'add') {
+					currentNew = newLine++;
+				}
+
 				let highlighted = content;
 				try {
 					highlighted = hljs.highlight(content, { language, ignoreIllegals: true }).value;
 				} catch (e) {
 					// Fallback to plain text
 				}
+
 				return {
 					marker,
 					content: highlighted,
-					type: marker === '+' ? 'add' : marker === '-' ? 'del' : 'ctx'
+					type,
+					oldLineNumber: currentOld,
+					newLineNumber: currentNew
 				};
-			})
-		}));
+			});
+
+			return { ...hunk, lines };
+		});
 	});
 </script>
 
@@ -147,14 +168,11 @@
 										@@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@
 									</div>
 									
-									{#each hunk.lines as line, lineIdx}
+									{#each hunk.lines as line}
 										<div class="diff-line {line.type}">
-											<div class="line-numbers select-none flex">
-												<span class="line-num old-line {line.type === 'add' ? 'opacity-30' : ''}">
-													{line.type !== 'add' ? (hunk.oldStart + lineIdx) : ''}
-												</span>
-												<span class="line-num new-line {line.type === 'del' ? 'opacity-30' : ''}">
-													{line.type !== 'del' ? (hunk.newStart + lineIdx) : ''}
+											<div class="line-numbers select-none">
+												<span class="line-num">
+													{line.newLineNumber || ''}
 												</span>
 											</div>
 											
@@ -192,7 +210,7 @@
 	.diff-line {
 		display: flex;
 		align-items: center;
-		padding: 0.125rem 1rem;
+		padding: 0.125rem 1rem 0.125rem 0.0rem;
 		line-height: 1.5;
 		min-height: 1.5rem;
 	}
@@ -220,29 +238,30 @@
 	
 	.line-numbers {
 		display: flex;
-		gap: 0.75rem;
-		margin-right: 1rem;
-		min-width: 4rem;
+		justify-content: flex-end;
+		margin-right: 0.75rem;
+		min-width: 2rem;
 	}
 	
 	.line-num {
 		display: inline-block;
-		width: 2rem;
+		width: 100%;
 		text-align: right;
 		color: var(--muted-foreground);
 		user-select: none;
+		font-size: 0.7rem;
 	}
 	
 	.marker {
 		display: inline-block;
 		width: 1ch;
-		margin-right: 1ch;
+		margin-right: 0.5ch;
 		text-align: center;
 	}
 	
 	.code-content {
 		white-space: pre;
-		overflow-x: auto;
+		font-family: var(--vscode-editor-font-family, monospace);
 	}
 	
 	/* Scrollbar styling */

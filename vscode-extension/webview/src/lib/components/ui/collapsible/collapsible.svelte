@@ -1,13 +1,8 @@
-<script lang="ts" module>
-	import { Collapsible as CollapsiblePrimitive } from "bits-ui";
-	
-	const Root = CollapsiblePrimitive.Root;
-	const Trigger = CollapsiblePrimitive.Trigger;
-	const Content = CollapsiblePrimitive.Content;
-</script>
+
 
 <script lang="ts">
 	import type { Snippet } from "svelte";
+	import { Collapsible as CollapsiblePrimitive } from "bits-ui";
 	
 	let {
 		open = $bindable(false),
