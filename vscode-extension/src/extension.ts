@@ -69,7 +69,10 @@ function setKbApiKeyValue(value: string | undefined, source: "env" | "secret" | 
   }
 }
 
-async function initializeKbApiKey(context: vscode.ExtensionContext): Promise<void> {
+async function initializeKbApiKey(
+  context: vscode.ExtensionContext,
+  homeDir?: string
+): Promise<void> {
   const envKey = process.env.DOLPHIN_API_KEY || process.env.DOLPHIN_KB_API_KEY;
   if (envKey) {
     setKbApiKeyValue(envKey, "env");
@@ -84,7 +87,7 @@ async function initializeKbApiKey(context: vscode.ExtensionContext): Promise<voi
 
   // Auto-generate per-user key (official entry point for VS Code users)
   try {
-    const key = getOrCreateKbApiKey();
+    const key = getOrCreateKbApiKey({ homeDir });
     setKbApiKeyValue(key, "env");
     await context.secrets.store(KB_API_KEY_SECRET_ID, key);
     try {
@@ -106,10 +109,13 @@ async function initializeKbApiKey(context: vscode.ExtensionContext): Promise<voi
 }
 
 // Exported for tests to exercise the activation bootstrap without duplicating logic.
-export async function initializeKbApiKeyForTests(context: vscode.ExtensionContext): Promise<void> {
+export async function initializeKbApiKeyForTests(
+  context: vscode.ExtensionContext,
+  homeDir?: string
+): Promise<void> {
   // Reset default in case previous tests mutated it
   defaultKbApiKey = undefined;
-  await initializeKbApiKey(context);
+  await initializeKbApiKey(context, homeDir);
 }
 
 export function resetKbApiKeyForTests(): void {

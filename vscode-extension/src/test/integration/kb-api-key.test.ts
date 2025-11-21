@@ -150,7 +150,7 @@ describe("VS Code Extension - KB API Key Integration", () => {
     it("auto-provisions and stores KB key when env and SecretStorage are empty", async () => {
       const ctx = makeMockContext();
 
-      await initializeKbApiKeyForTests(ctx);
+      await initializeKbApiKeyForTests(ctx, testHomeDir);
 
       const keyPath = getKbKeyPath({ homeDir: testHomeDir });
       assert.ok(fs.existsSync(keyPath), "key file should be created");
@@ -165,7 +165,7 @@ describe("VS Code Extension - KB API Key Integration", () => {
     it("uses SecretStorage value when present and avoids touching filesystem", async () => {
       const ctx = makeMockContext("secret-stored-key");
 
-      await initializeKbApiKeyForTests(ctx);
+      await initializeKbApiKeyForTests(ctx, testHomeDir);
 
       const keyPath = getKbKeyPath({ homeDir: testHomeDir });
       assert.ok(!fs.existsSync(keyPath), "should not create key file when secret is present");
