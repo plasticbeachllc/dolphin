@@ -76,10 +76,8 @@ bun install
 # apt update
 # apt install code --assume-yes
 # apt install code-insiders --assume-yes
-
 sudo apt-get update
 sudo apt-get install -y just
 sudo apt-get install -y xvfb
-
 
 echo "✅ Dolphin environment setup complete!"
