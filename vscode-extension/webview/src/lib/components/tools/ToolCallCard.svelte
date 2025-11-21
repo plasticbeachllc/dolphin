@@ -10,7 +10,7 @@
 	import { slide } from 'svelte/transition';
 	import DiffViewer from './DiffViewer.svelte';
 	import type { FileDiff } from '@shared/types/events';
-	import { vscode } from '$lib/api/vscode';
+	import { getVSCodeAPI } from '$lib/api/vscode';
 
 	export let tool: string;
 	export let input: Record<string, any>;
@@ -35,6 +35,7 @@
 		e.stopPropagation();
 		const filePath = getFilePath();
 		if (filePath) {
+			const vscode = getVSCodeAPI();
 			vscode.postMessage({
 				type: 'open_file',
 				path: filePath
