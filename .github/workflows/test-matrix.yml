@@ -26,12 +26,9 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
-          cache: "uv"
 
       - name: Install bun
         uses: oven-sh/setup-bun@v1
-        with:
-          cache: "bun"
 
       - name: Install just
         run: sudo apt-get update && sudo apt-get install -y just
@@ -45,8 +42,12 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --dev
 
-      - name: Run consolidated unit suite (no VSCode host)
-        run: just test-unit-all
+      - name: Run consolidated unit suite
+        run: |
+          just test-python unit
+          just test-agent-core unit
+          just test-shared
+          just test-webview
 
   integration-tests:
     name: Integration Tests
@@ -87,7 +88,6 @@ jobs:
         run: |
           just test-python integration
           just test-agent-core integration
-          just test-extension integration
           just test-mcp-bridge
 
   e2e-tests:
@@ -142,5 +142,5 @@ jobs:
           sleep 3
           just test-python e2e
           just test-agent-core e2e
-          just test-extension e2e
+          just test-extension all
           just test-playwright
