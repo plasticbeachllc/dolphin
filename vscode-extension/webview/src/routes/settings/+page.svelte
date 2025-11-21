@@ -1,13 +1,9 @@
 <script lang="ts">
 	import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import { Settings, Zap, Database, Bell } from 'lucide-svelte';
+	import { Database, Bell } from 'lucide-svelte';
 	import AuthStatus from '$lib/components/AuthStatus.svelte';
-	
-	let apiKey = $state('');
-	let model = $state('claude-sonnet-4');
-	let temperature = $state(0.7);
+	import ProviderSelection from '$lib/components/ProviderSelection.svelte';
 </script>
 
 <div class="h-full overflow-auto p-6">
@@ -20,64 +16,11 @@
 		</div>
 
 		<div class="space-y-6">
+			<!-- Provider Selection -->
+			<ProviderSelection />
+
 			<!-- Authentication Status -->
 			<AuthStatus />
-			
-			<Card>
-				<CardHeader>
-					<CardTitle class="flex items-center gap-2">
-						<Zap class="h-5 w-5" />
-						AI Model Configuration
-					</CardTitle>
-					<CardDescription>
-						Configure your AI model preferences and API credentials
-					</CardDescription>
-				</CardHeader>
-				<CardContent class="space-y-4">
-					<div>
-						<label for="api-key" class="text-sm font-medium mb-2 block">
-							API Key
-						</label>
-						<Input
-							id="api-key"
-							type="password"
-							bind:value={apiKey}
-							placeholder="Enter your Anthropic API key"
-						/>
-					</div>
-					
-					<div>
-						<label for="model" class="text-sm font-medium mb-2 block">
-							Model
-						</label>
-						<Input
-							id="model"
-							bind:value={model}
-							placeholder="claude-sonnet-4"
-						/>
-					</div>
-					
-					<div>
-						<label for="temperature" class="text-sm font-medium mb-2 block">
-							Temperature: {temperature}
-						</label>
-						<input
-							id="temperature"
-							type="range"
-							min="0"
-							max="1"
-							step="0.1"
-							bind:value={temperature}
-							class="w-full"
-						/>
-						<p class="text-xs text-muted-foreground mt-1">
-							Lower values make responses more focused, higher values more creative
-						</p>
-					</div>
-					
-					<Button class="w-full">Save Configuration</Button>
-				</CardContent>
-			</Card>
 
 			<Card>
 				<CardHeader>
