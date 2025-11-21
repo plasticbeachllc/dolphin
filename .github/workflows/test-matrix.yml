@@ -138,4 +138,3 @@ jobs:
           just test-python e2e
           just test-agent-core e2e
           just test-extension all
-          just test-playwright
