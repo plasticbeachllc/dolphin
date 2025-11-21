@@ -18,11 +18,7 @@ function getEnvKey(): string | undefined {
 
 export function getKbKeyPath(opts?: KbAuthOptions): string {
   // Prefer explicit overrides, then environment variables, and finally OS fallback.
-  const home =
-    opts?.homeDir ||
-    process.env.HOME ||
-    process.env.USERPROFILE ||
-    os.homedir();
+  const home = opts?.homeDir || process.env.HOME || process.env.USERPROFILE || os.homedir();
   return path.join(home, ".dolphin", "kb_api_key");
 }
 
