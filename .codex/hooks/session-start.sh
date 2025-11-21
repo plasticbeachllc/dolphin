@@ -13,11 +13,11 @@ CODEX_WORKSPACE_DIR="$(git rev-parse --show-toplevel)"
 if ! command -v uv &> /dev/null; then
   echo "📦 Installing uv..."
   curl -LsSf https://astral.sh/uv/install.sh | sh
-  export PATH="$HOME/.local/bin:$PATH"
-  echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$CLAUDE_ENV_FILE"
 else
   echo "✅ uv already installed"
 fi
+export PATH="$HOME/.local/bin:$PATH"
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$CLAUDE_ENV_FILE"
 
 # ============================================================================
 # Install bun (JavaScript runtime and package manager)
@@ -25,13 +25,13 @@ fi
 if ! command -v bun &> /dev/null; then
   echo "📦 Installing bun..."
   curl -fsSL https://bun.sh/install | bash
-  export BUN_INSTALL="$HOME/.bun"
-  export PATH="$BUN_INSTALL/bin:$PATH"
-  echo 'export BUN_INSTALL="$HOME/.bun"' >> "$CLAUDE_ENV_FILE"
-  echo 'export PATH="$BUN_INSTALL/bin:$PATH"' >> "$CLAUDE_ENV_FILE"
 else
   echo "✅ bun already installed"
 fi
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+echo 'export BUN_INSTALL="$HOME/.bun"' >> "$CLAUDE_ENV_FILE"
+echo 'export PATH="$BUN_INSTALL/bin:$PATH"' >> "$CLAUDE_ENV_FILE"
 
 # ============================================================================
 # Install Python dependencies

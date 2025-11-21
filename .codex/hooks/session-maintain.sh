@@ -11,8 +11,11 @@ cd "$CODEX_WORKSPACE_DIR"
 # ============================================================================
 echo "🔄 Updating git repo..."
 git fetch origin || true
-git checkout develop || true
-git pull --ff-only origin develop || true
+if [ "$(git rev-parse --abbrev-ref HEAD)" = "develop" ]; then
+  git pull --ff-only origin develop || true
+else
+  echo "⚠️  Not on develop branch, skipping pull."
+fi
 
 # ============================================================================
 # Tool self-updates
