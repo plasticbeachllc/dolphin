@@ -5,6 +5,7 @@ set -euo pipefail
 # Installs dependencies for Python backend and TypeScript/Bun components
 echo "🐬 Setting up Dolphin development environment..."
 CODEX_WORKSPACE_DIR="$(git rev-parse --show-toplevel)"
+ENV_FILE="${CLAUDE_ENV_FILE:-${CODEX_ENV_FILE:-}}"
 
 
 # ============================================================================
@@ -17,7 +18,9 @@ else
   echo "✅ uv already installed"
 fi
 export PATH="$HOME/.local/bin:$PATH"
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$CLAUDE_ENV_FILE"
+if [ -n "$ENV_FILE" ]; then
+  echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$ENV_FILE"
+fi
 
 # ============================================================================
 # Install bun (JavaScript runtime and package manager)
@@ -30,8 +33,10 @@ else
 fi
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
-echo 'export BUN_INSTALL="$HOME/.bun"' >> "$CLAUDE_ENV_FILE"
-echo 'export PATH="$BUN_INSTALL/bin:$PATH"' >> "$CLAUDE_ENV_FILE"
+if [ -n "$ENV_FILE" ]; then
+  echo 'export BUN_INSTALL="$HOME/.bun"' >> "$ENV_FILE"
+  echo 'export PATH="$BUN_INSTALL/bin:$PATH"' >> "$ENV_FILE"
+fi
 
 # ============================================================================
 # Install Python dependencies
