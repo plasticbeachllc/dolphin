@@ -128,7 +128,7 @@ export class DolphinViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async checkSecretExists(secretId: string): Promise<boolean> {
+  private async checkSecretExists(_secretId: string): Promise<boolean> {
     // This is a helper to check if a secret exists without retrieving the value if possible,
     // but VS Code SecretStorage only has get/store/delete.
     // So we get it and check if it's truthy.
