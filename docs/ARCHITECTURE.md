@@ -51,19 +51,19 @@ Dolphin is a full-stack AI enablement platform that combines semantic code retri
 │ (Svelte UI)  │ / OpenAI UX  │  (Python)    │  (curl/bun)     │
 └──────┬───────┴──────┬───────┴──────┬───────┴──────┬──────────┘
        │              │              │              │
-       │ JSON-RPC     │ MCP stdio    │              │ HTTP
-       ▼              ▼              ▼              ▼
-┌──────────────┐  ┌───────────────────────────────────────────┐
-│ Agent Core   │  │      MCP Bridge (TypeScript/Bun)          │
-│ (Bun/TS)     │  │  • 6 MCP Tools                            │
-│ • Provider-agnostic LLM API (Claude/OpenAI) │  │  • REST Client          │
-│ • KB Mgmt    │  │  • Content Truncation (50KB)              │
-│ • Task Plan  │  │  • Type-safe interfaces                   │
-│ • Storage    │  └──────────────────┬────────────────────────┘
-└──────┬───────┘                     │
-       │                             │ HTTP
-       │ HTTP                        │
-       └─────────────┬───────────────┘
+       │ JSON-RPC     │ MCP stdio    │ HTTP         │ HTTP
+       ▼              ▼              │              │
+┌──────────────┐  ┌───────────────┐  │              │
+│ Agent Core   │  │  MCP Bridge   │  │              │
+│ (Bun/TS)     │  │ (TypeScript)  │  │              │
+│ • LLM API    │  │ • 6 MCP Tools │  │              │
+│ • KB Mgmt    │  │ • REST Client │  │              │
+│ • Task Plan  │  │ • Truncation  │  │              │
+│ • Storage    │  │ • Type-safe   │  │              │
+└──────┬───────┘  └──────┬────────┘  │              │
+       │                 │ HTTP      │              │
+       │ HTTP            │           │              │
+       └─────────────┬───┴───────────┴──────────────┘
                      ▼
 ┌──────────────────────────────────────────────────────────────┐
 │              REST API (Python/FastAPI)                        │
