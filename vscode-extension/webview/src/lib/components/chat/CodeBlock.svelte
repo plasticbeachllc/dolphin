@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import hljs from "highlight.js";
   import { Copy, Check } from "lucide-svelte";
   
@@ -11,17 +12,23 @@
   
   let copied = $state(false);
   let announceMessage = $state('');
+  let codeElement: HTMLElement;
 
-  onMount(() => {
-    if (codeElement) {
-      hljs.highlightElement(codeElement);
-    }
-  });
-
-  $effect(() => {
-    // Re-highlight when code changes (streaming updates)
-    if (codeElement && code) {
-      hljs.highlightElement(codeElement);
+  // Generate highlighted HTML without DOM mutation
+  // This prevents the infinite loop caused by hljs.highlightElement()
+  let highlightedCode = $derived.by(() => {
+    try {
+      const result = hljs.highlight(code, { language, ignoreIllegals: true });
+      return result.value;
+    } catch (err) {
+      console.error("Failed to highlight code:", err);
+      // Fallback to plain code with HTML escaping
+      return code
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
   });
 
@@ -58,7 +65,6 @@
     <span class="language-label">{language}</span>
     <button
       type="button"
-      type="button"
       class="copy-button"
       onclick={copyCode}
       aria-label={copied ? 'Code copied to clipboard' : 'Copy code to clipboard'}
@@ -66,17 +72,13 @@
       {#if copied}
         <Check size={16} aria-hidden="true" />
         <span class="sr-only">Copied</span>
-        <Check size={16} aria-hidden="true" />
-        <span class="sr-only">Copied</span>
       {:else}
-        <Copy size={16} aria-hidden="true" />
-        <span class="sr-only">Copy</span>
         <Copy size={16} aria-hidden="true" />
         <span class="sr-only">Copy</span>
       {/if}
     </button>
   </div>
-  <pre class="code-content"><code bind:this={codeElement} class="language-{language} hljs">{code}</code></pre>
+  <pre class="code-content"><code bind:this={codeElement} class="language-{language} hljs">{@html highlightedCode}</code></pre>
 
   <!-- Live region for copy announcements -->
   <div role="status" aria-live="polite" aria-atomic="true" class="sr-only">
@@ -143,6 +145,18 @@
     white-space: pre;
     word-break: normal;
     overflow-wrap: normal;
+  }
+  
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
   }
   
   /* VSCode theme compatibility */

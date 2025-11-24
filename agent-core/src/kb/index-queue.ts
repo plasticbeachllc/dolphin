@@ -20,22 +20,24 @@ export class IndexQueue extends EventEmitter {
   private repoName: string;
   private activeTasks: Set<string> = new Set();
   private pollInterval: NodeJS.Timeout | null = null;
+  private kbApiKey?: string;
 
-  constructor(kbApiUrl: string, repoName: string) {
+  constructor(kbApiUrl: string, repoName: string, kbApiKey?: string) {
     super();
     this.kbApiUrl = kbApiUrl;
     this.repoName = repoName;
+    this.kbApiKey = kbApiKey || process.env.DOLPHIN_API_KEY || process.env.DOLPHIN_KB_API_KEY;
   }
 
   /**
    * Queue files for indexing. Returns immediately with task ID.
    */
-  async enqueueBatch(files: string[], priority = 0): Promise<string> {
+  async enqueueBatch(files: string[], _priority = 0): Promise<string> {
     console.error(`[IndexQueue] Queueing ${files.length} files for indexing`);
 
     const response = await fetch(`${this.kbApiUrl}/v1/index`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: this.buildHeaders(),
       body: JSON.stringify({
         repo: this.repoName,
         files,
@@ -48,7 +50,7 @@ export class IndexQueue extends EventEmitter {
       throw new Error(`Index queue failed (${response.status}): ${errorText}`);
     }
 
-    const result = await response.json();
+    const result = (await response.json()) as { task_id: string };
     const taskId = result.task_id;
 
     console.error(`[IndexQueue] Created task ${taskId} for ${files.length} files`);
@@ -90,14 +92,16 @@ export class IndexQueue extends EventEmitter {
 
     for (const taskId of this.activeTasks) {
       try {
-        const response = await fetch(`${this.kbApiUrl}/v1/index/status/${taskId}`);
+        const response = await fetch(`${this.kbApiUrl}/v1/index/status/${taskId}`, {
+          headers: this.buildHeaders(),
+        });
 
         if (!response.ok) {
           console.error(`[IndexQueue] Failed to get status for task ${taskId}`);
           continue;
         }
 
-        const status: IndexProgress = await response.json();
+        const status = (await response.json()) as IndexProgress;
 
         // Emit progress event
         this.emit("progress", status.progress);
@@ -114,8 +118,9 @@ export class IndexQueue extends EventEmitter {
           this.emit("error", new Error(status.error || "Unknown error"));
           tasksToRemove.push(taskId);
         }
-      } catch (error: any) {
-        console.error(`[IndexQueue] Error polling task ${taskId}:`, error.message);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[IndexQueue] Error polling task ${taskId}:`, message);
       }
     }
 
@@ -148,5 +153,13 @@ export class IndexQueue extends EventEmitter {
       this.pollInterval = null;
     }
     this.activeTasks.clear();
+  }
+
+  private buildHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (this.kbApiKey) {
+      headers["X-API-Key"] = this.kbApiKey;
+    }
+    return headers;
   }
 }

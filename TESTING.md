@@ -1,123 +1,98 @@
 # Testing Guide
 
-This document describes the test structure and available test commands for the Dolphin project. Tests are extensive and can take a while to complete; default to running only the tests about which you are concerned.
+**Version**: 2.1.0  
+**Last Updated**: 2025-11-21
 
-## Test Organization
+This repository has a single, canonical testing reference. Use this file for all suites (Python backend, Agent Core, VS Code extension, MCP bridge, shared packages, and observability).
 
-Tests are organized into three categories:
+## Post-merge verification checklist
 
-### 1. Unit Tests (Fast)
+1. **Sync tooling**: `uv sync` for Python, `npm install`/`bun install` per workspace if dependencies changed.
+2. **Lint everything**: `npm run lint:all` for TypeScript/JavaScript; `uv run ruff check` for Python.
+3. **Run the test matrix** (at minimum before tagging or publishing):
+   - Python backend: `uv run pytest tests/unit/` and `uv run pytest tests/integration/` (use `uv run pytest tests/e2e/workflows/` for release candidates).
+   - Agent Core: `cd agent-core && bun test`.
+   - VS Code extension: `cd vscode-extension && bun test` (runs unit + integration) and `npm run test --workspace vscode-extension/playwright` for UX automation when CI resources allow.
+   - MCP bridge: `cd mcp-bridge && bun test`.
+4. **Update docs and changelog**: Reflect coverage/behavior changes here and in `CHANGELOG.md`.
+5. **Archive results**: Attach failing logs to the PR if anything is unstable; do not merge with red checks.
 
-Fast, isolated tests with no external dependencies. Use these for rapid feedback during development.
-
-**Run all unit tests:**
-
-```bash
-just test-unit-all
-```
-
-**Run unit tests by domain:**
-
-```bash
-just test-unit-python          # Python unit tests
-just test-unit-agent-core      # Agent Core unit tests
-just test-unit-agent-core-v2   # Agent Core V2 unit tests
-just test-unit-extension       # VSCode Extension unit tests
-just test-unit-webview         # Webview unit tests
-```
-
-### 2. Integration Tests (Medium)
-
-Tests that integrate components within a single domain. These may interact with external services or multiple modules.
-
-**Run all integration tests:**
+## Quick commands
 
 ```bash
-just test-integration-all
+just test-all                    # All tests across all projects
+just test-unit-all               # All unit tests
+just test-integration-all        # All integration tests
+just test-e2e-all                # All E2E tests
+
+just test-python [TYPE]          # Python tests (TYPE: unit, integration, e2e, or all)
+just test-agent-core [TYPE]      # Agent Core tests
+just test-extension [TYPE]       # VSCode Extension tests
+just test-mcp-bridge             # MCP Bridge tests (integration)
+just test-webview                # Webview tests (unit)
 ```
 
-**Run integration tests by domain:**
+## Suite map
 
-```bash
-just test-integration-python          # Python integration tests
-just test-integration-agent-core      # Agent Core integration tests
-just test-integration-agent-core-v2   # Agent Core V2 integration tests
-just test-integration-extension       # VSCode Extension integration tests
-just test-integration-mcp-bridge      # MCP Bridge integration tests
-```
+### Python backend
 
-### 3. End-to-End Tests (Slow)
-
-Full cross-domain integration tests that verify complete workflows.
-
-**Run all e2e tests:**
-
-```bash
-just test-e2e-all
-```
-
-**Run e2e tests by domain:**
-
-```bash
-just test-e2e-extension-full   # VSCode Extension full E2E tests
-just test-e2e-agent-core-v2    # Agent Core V2 E2E tests
-```
-
-## Legacy Commands
-
-For backwards compatibility, the following commands are still available:
-
-```bash
-just test-e2e          # Run ALL tests (unit + integration + e2e) - SLOW!
-just test-e2e-lenient  # Run tests with lenient mode (skip flaky tests)
-```
-
-**Note:** `just test-e2e` runs the comprehensive test suite (all tests). For faster testing, use the specific test category commands above.
-
-## Test Structure by Domain
-
-### Python Backend
-
-- **Unit tests:** `tests/unit/` - Fast tests for individual modules
-- **Integration tests:** `tests/integration/` - Tests for search, indexing, API endpoints
+- **Unit**: `tests/unit/` (domains: api, cache, chunkers, cli, config, embeddings, graph, ingest, logging, pipeline, retrieval, search, store, constants)
+- **Integration**: `tests/integration/` (domains: cache, cli, graph_intelligence, ingest, kb, pipeline, search)
+- **End-to-end**: `tests/e2e/workflows/` (indexing and search workflows)
+- **Run**: `uv run pytest tests/unit/ -v`, `uv run pytest tests/integration/ -v`, `uv run pytest tests/e2e/workflows/ -v`
 
 ### TypeScript Agent Core
 
-- **Unit tests:** Individual test files for storage, stores, diff generation, etc.
-- **Integration tests:** Tests for Claude client, MCP client, KB manager
+- **Unit**: `agent-core/tests/unit/` (architect, orchestrator, rpc, state)
+- **Integration/E2E**: `agent-core/tests/integration/` and `agent-core/tests/integration/e2e/`
+- **Run**: `cd agent-core && bun test`
 
-### TypeScript Agent Core V2
+### VS Code extension
 
-- **Unit tests:** `agent-core-v2/tests/unit/`
-- **Integration tests:** `agent-core-v2/tests/integration/` (excluding E2E)
-- **E2E tests:** `orchestrator-e2e.test.ts`, `editor-workflow.test.ts`
+- **Unit**: `vscode-extension/src/test/suite/unit/`
+- **Integration**: `vscode-extension/src/test/suite/integration/`
+- **E2E (Mocha + Playwright)**: `vscode-extension/src/test/suite/e2e/` then `vscode-extension/playwright/tests/`
+- **Run**: `cd vscode-extension && bun test` (Mocha suites) then `npm run test --workspace vscode-extension/playwright`
 
-### VSCode Extension
+### MCP bridge
 
-- **Unit tests:** logger, configuration, diff handler, code actions, drift detector
-- **Integration tests:** agent bridge, provider, commands, webview
-- **E2E tests:** phase1/phase2 integration, conversations E2E, KB lifecycle
-
-### MCP Bridge
-
-- **Integration tests:** All tests in `mcp-bridge/src/tests/`
+- **Integration**: `mcp-bridge/src/tests/`
+- **Run**: `cd mcp-bridge && bun test`
 
 ### Webview UI
 
-- **Unit tests:** All tests in `vscode-extension/webview/src/`
+- **Unit**: `vscode-extension/webview/src/`
+- **Run**: `cd vscode-extension/webview && bun test`
 
-## Recommended Workflow
+### Shared packages
 
-1. **During development:** Run `just test-unit-all` for fast feedback
-2. **Before committing:** Run `just test-integration-all` to catch integration issues
-3. **Before merging:** Run `just test-e2e-all` for full E2E validation
-4. **CI/CD:** Run `just test-e2e` for comprehensive validation
+- **Unit**: `shared/tests/`
+- **Run**: `cd shared && bun test`
 
-## Coverage Reports
+## Python backend specifics
 
-Run tests with coverage:
+### Tokenization parity
 
-```bash
-just test-coverage       # Python tests with coverage
-just test-e2e-coverage   # All tests with coverage reports
-```
+- **Unit tests** always use `MockTiktokenEncoding` (`tests/conftest.py`) to keep runs offline and deterministic.
+- **Integration/e2e** suites require the real `cl100k_base` encoding. They will download once and then validate the cached copy. Failures indicate production would fail too—refresh with `TIKTOKEN_FORCE_REFRESH=1 uv run pytest tests/integration/`.
+
+### Cache validation quick hits
+
+- Cache correctness lives in `tests/unit/test_cache.py`; use `uv run pytest tests/unit/test_cache.py -v` to exercise embedding/result caches, key stability, stats, and invalidation.
+- Integration flows in `tests/integration/cache/` cover Redis/LanceDB interplay; run them when changing cache wiring.
+
+## Observability stack
+
+- Current status: configs are validated, but runtime is **untested**. Treat the steps below as required before enabling alerts or dashboards in production.
+- **Smoke flow**:
+  1. Start the stack: `cd observability && ./start-stack.sh` (expects Prometheus/Grafana/Jaeger/Loki healthy).
+  2. Boot the KB API with metrics: `cd kb && uv run python -m uvicorn api.server:app_with_lifespan --host 0.0.0.0 --port 8000`.
+  3. Verify `/metrics` and `/health` respond, then confirm Prometheus shows the `kb-api` target as `UP` at http://localhost:9090/targets.
+  4. Run Grafana queries/dashboards once data is flowing; fix scrape errors before merging.
+
+## Known gaps to close
+
+1. Search filtering E2Es remain skipped—re-enable the cases in `tests/e2e/workflows/test_search_workflow.py` once filter support lands.
+2. MCP bridge lacks stubbed unit coverage; extract HTTP adapters and test with Vitest so CI can validate tool payloads without a live KB.
+3. Playwright coverage only exercises API-key acquisition; add a “index repo → search → inspect chunk” happy path.
+4. Observability smoke tests are manual; convert the flow above into a `just observability-smoke` target when time permits.

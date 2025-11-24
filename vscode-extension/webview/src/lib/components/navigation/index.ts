@@ -1,1 +1,1 @@
-export { default as AppNavigation } from './AppNavigation.svelte';
+export { default as AppNavigation } from "./AppNavigation.svelte";

@@ -1,0 +1,50 @@
+name: TypeScript Lint
+on: [pull_request]
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: |
+      github.actor != 'pb-python-linter[bot]' &&
+      github.actor != 'pb-typescript-linter[bot]'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run Prettier
+        run: bun prettier --write "**/*.{ts,tsx,js,jsx,json,md}" --ignore-path .gitignore --ignore-unknown
+
+      - name: Run ESLint
+        run: bun run lint:all
+
+      - name: Configure Git
+        run: |
+          git config user.name "pb-typescript-linter[bot]"
+          git config user.email "pb-typescript-linter[bot]@users.noreply.github.com"
+
+      - name: Commit and push changes
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git add .
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "TypeScript linting bot makes changes"
+          git pull --rebase origin ${{ github.event.pull_request.head.ref }} || true
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+          git push origin ${{ github.event.pull_request.head.ref }}

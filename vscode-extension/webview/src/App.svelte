@@ -1,10 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { MessageList, ChatInput, ChatHeader } from '$lib/components/chat';
+  import { MessageList, ChatInput, ChatHeader, ModeSelector, ArchitectModeBanner } from '$lib/components/chat';
   import AppNavigation from '$lib/components/navigation/AppNavigation.svelte';
-  import { sendMessage, onMessage, abortGeneration, saveState, getState } from '$lib/api/vscode';
-  import type { AgentEvent } from '@shared/types/events';
+  import WelcomeCard from '$lib/components/WelcomeCard.svelte';
+  import {
+    sendMessage,
+    onMessage,
+    abortGeneration,
+    saveState,
+    getState,
+    getVSCodeAPI,
+  } from '$lib/api/vscode';
+  import type { ExtensionToWebviewMessage } from '@extension-shared/messages';
   import SettingsPage from './routes/settings/+page.svelte';
   import ProfilePage from './routes/profile/+page.svelte';
   import ConversationsGallery from './routes/gallery/conversations/+page.svelte';
@@ -79,9 +87,16 @@
   
   // Workspace status - conversations require a workspace
   let hasWorkspace = $state(false);
+  
+  // Dolphin config initialization status
+  let configExists = $state(true); // Assume exists until we check
+  let checkingConfig = $state(true);
+
+  // EP-11: Architect mode selection
+  let selectedMode = $state<'code' | 'architect'>('code');
 
   // Reference to ChatInput component to programmatically focus it
-  let chatInputRef: any = null;
+  let chatInputRef = $state<any>(null);
 
   // Live region for screen reader announcements
   let liveRegionMessage = $state<string>('');
@@ -100,6 +115,9 @@
     // Don't restore state - users should load conversations from gallery
     console.log('[App] Starting with blank slate - no auto-restore');
     hasRestoredState = true;
+    
+    // Check if config exists
+    checkConfigExists();
 
     // Start tracking startup time
     startupTimer = window.setInterval(() => {
@@ -108,7 +126,7 @@
       }
     }, 1000);
     
-    const unsubscribe = onMessage((event: AgentEvent) => {
+    const unsubscribe = onMessage((event: ExtensionToWebviewMessage) => {
       console.log('[App] Received event from extension:', event);
       
       switch (event.type) {
@@ -119,11 +137,18 @@
           agentVersion = event.version;
           const eventHasWorkspace = (event as any).hasWorkspace;
           const workspaceName = (event as any).workspaceName;
+          const workspacePath = (event as any).workspacePath;
           console.log('[App] Received hasWorkspace value:', eventHasWorkspace);
           console.log('[App] Received workspaceName:', workspaceName);
+          console.log('[App] Received workspacePath:', workspacePath);
           hasWorkspace = eventHasWorkspace ?? true; // Default to true to be safe
           console.log('[App] Final workspace status:', hasWorkspace ? 'Open' : 'None');
-          
+
+          // Store workspace path globally for KB operations
+          if (workspacePath) {
+            (window as any).workspacePath = workspacePath;
+          }
+
           // Initialize KB store with workspace name if available
           if (workspaceName) {
             kbActions.initialize(workspaceName, {});
@@ -247,23 +272,22 @@
           }
           break;
         
-        case 'workspace_changed':
+        case 'workspace_changed': {
           // Handle workspace changes (open/close folder)
-          const newWorkspaceStatus = (event as any).hasWorkspace;
-          const newWorkspaceName = (event as any).workspaceName;
+          const { hasWorkspace: workspaceOpen, workspaceName } = event;
           console.log('[App] Workspace changed event:', event);
-          console.log('[App] New workspace status:', newWorkspaceStatus ? 'Open' : 'Closed');
-          console.log('[App] New workspace name:', newWorkspaceName);
+          console.log('[App] New workspace status:', workspaceOpen ? 'Open' : 'Closed');
+          console.log('[App] New workspace name:', workspaceName);
           console.log('[App] Current workspace status before change:', hasWorkspace ? 'Open' : 'Closed');
           
           // Only update if the status actually changed
-          if (newWorkspaceStatus !== undefined && newWorkspaceStatus !== hasWorkspace) {
-            hasWorkspace = newWorkspaceStatus;
+          if (workspaceOpen !== undefined && workspaceOpen !== hasWorkspace) {
+            hasWorkspace = workspaceOpen;
             console.log('[App] Workspace status updated to:', hasWorkspace ? 'Open' : 'Closed');
             
             // Update KB store with new workspace name
-            if (newWorkspaceName) {
-              kbActions.initialize(newWorkspaceName, {});
+            if (workspaceName) {
+              kbActions.initialize(workspaceName, {});
             } else {
               kbActions.reset();
             }
@@ -275,6 +299,23 @@
             }
           } else {
             console.log('[App] Workspace status unchanged, ignoring event');
+          }
+          break;
+        }
+        
+        case 'dolphin_config_status':
+          // Response from config existence check
+          console.log('[App] Config status received:', event);
+          configExists = event.exists ?? true;
+          checkingConfig = false;
+          break;
+        
+        case 'dolphin_init_response':
+          // Response from initialization
+          console.log('[App] Init response received:', event);
+          if (event.success && !event.error) {
+            // Success - config now exists
+            configExists = true;
           }
           break;
       }
@@ -290,24 +331,24 @@
   
   async function handleSend(message: string) {
     if (isProcessing) return;
-    
+
     // Hide logo on first message send
     if (!hasUserSentMessage) {
       hasUserSentMessage = true;
       showLogo = false;
     }
-    
+
     // Add user message
     messages = [...messages, {
       role: "user" as const,
       content: message,
       timestamp: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
     }];
-    
+
     isProcessing = true;
-    
-    // Send to VS Code extension
-    sendMessage(message);
+
+    // Send to VS Code extension with selected mode
+    sendMessage(message, selectedMode);
   }
   
   function handleStop() {
@@ -324,6 +365,16 @@
       content: '⏹️ **Generation stopped by user**',
       timestamp: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
     }];
+  }
+  
+  function checkConfigExists() {
+    try {
+      const vscode = getVSCodeAPI();
+      vscode.postMessage({ type: 'check_dolphin_config' });
+    } catch (error) {
+      console.warn('[App] Unable to check config status:', error);
+      checkingConfig = false;
+    }
   }
 </script>
 
@@ -363,16 +414,28 @@
       {/if}
 
       {#if showLogo && messages.length === 0 && agentReady}
-        <div class="logo-container" transition:fade={{ duration: 600 }}>
-          <div class="dolphin-logo">🐬</div>
-        </div>
+        {#if !configExists && !checkingConfig}
+          <WelcomeCard />
+        {:else}
+          <div class="logo-container" transition:fade={{ duration: 600 }}>
+            <div class="dolphin-logo">🐬</div>
+          </div>
+        {/if}
       {/if}
 
       <div class="messages-container">
         <MessageList messages={displayMessages} />
       </div>
-      
+
       <div class="input-container">
+        {#if agentReady}
+          <ModeSelector bind:value={selectedMode} />
+
+          {#if selectedMode === 'architect'}
+            <ArchitectModeBanner />
+          {/if}
+        {/if}
+
         <ChatInput
           bind:this={chatInputRef}
           onSend={handleSend}

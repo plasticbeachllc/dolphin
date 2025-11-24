@@ -13,13 +13,11 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any
 
-from kb.chunkers.graph_types import GraphNode, GraphEdge
-
 
 class GraphStore:
     """Graph database store for code entities and relationships."""
 
-    def __init__(self, db_path: Path |str) -> None:
+    def __init__(self, db_path: Path | str) -> None:
         """Initialize graph store with database path.
 
         Args:
@@ -37,6 +35,7 @@ class GraphStore:
         """
         if self._db_engine is None:
             from sqlmodel import create_engine
+
             self._db_engine = create_engine(f"sqlite:///{self.db_path}")
         return self._db_engine
 
@@ -74,7 +73,7 @@ class GraphStore:
         is_generator: bool = False,
     ) -> str:
         """Insert or update a code node.
-        
+
         Args:
             node_id: Optional node ID (UUID). If None, a new one is generated.
             node_type: Type of node (function, class, method, etc.)
@@ -92,7 +91,7 @@ class GraphStore:
             visibility: Optional visibility (public, private, etc.)
             is_async: Whether the entity is async
             is_generator: Whether the entity is a generator
-            
+
         Returns:
             The node ID (UUID string)
         """
@@ -125,15 +124,28 @@ class GraphStore:
                     RETURNING id
                     """,
                     (
-                        node_id, node_type, name, qualified_name, repo_id, file_id,
-                        start_line, end_line, language, signature, docstring,
-                        visibility, is_async, is_generator, commit_sha, branch
+                        node_id,
+                        node_type,
+                        name,
+                        qualified_name,
+                        repo_id,
+                        file_id,
+                        start_line,
+                        end_line,
+                        language,
+                        signature,
+                        docstring,
+                        visibility,
+                        is_async,
+                        is_generator,
+                        commit_sha,
+                        branch,
                     ),
                 )
                 row = cur.fetchone()
                 if row:
                     node_id = str(row[0])
-                
+
                 # Update FTS5 index
                 cur.execute(
                     """
@@ -141,9 +153,9 @@ class GraphStore:
                     (node_id, qualified_name, name, signature, docstring)
                     VALUES (?, ?, ?, ?, ?)
                     """,
-                    (node_id, qualified_name, name, signature, docstring)
+                    (node_id, qualified_name, name, signature, docstring),
                 )
-                
+
                 conn.commit()
                 return node_id
             except Exception:
@@ -152,10 +164,10 @@ class GraphStore:
 
     def get_node_by_id(self, node_id: str) -> dict[str, Any] | None:
         """Get a node by its ID.
-        
+
         Args:
             node_id: Node UUID
-            
+
         Returns:
             Node data as dict or None if not found
         """
@@ -168,12 +180,12 @@ class GraphStore:
                        first_seen_at, last_seen_at
                 FROM code_nodes WHERE id = ?
                 """,
-                (node_id,)
+                (node_id,),
             )
             row = cur.fetchone()
             if not row:
                 return None
-            
+
             return {
                 "id": str(row[0]),
                 "node_type": str(row[1]),
@@ -195,15 +207,13 @@ class GraphStore:
                 "last_seen_at": row[17],
             }
 
-    def find_node_by_qualified_name(
-        self, qualified_name: str, repo_id: int | None = None
-    ) -> dict[str, Any] | None:
+    def find_node_by_qualified_name(self, qualified_name: str, repo_id: int | None = None) -> dict[str, Any] | None:
         """Find a node by its qualified name.
-        
+
         Args:
             qualified_name: Fully qualified name
             repo_id: Optional repository filter
-            
+
         Returns:
             Node data as dict or None if not found
         """
@@ -220,7 +230,7 @@ class GraphStore:
                     ORDER BY last_seen_at DESC
                     LIMIT 1
                     """,
-                    (qualified_name, repo_id)
+                    (qualified_name, repo_id),
                 )
             else:
                 cur.execute(
@@ -234,13 +244,13 @@ class GraphStore:
                     ORDER BY last_seen_at DESC
                     LIMIT 1
                     """,
-                    (qualified_name,)
+                    (qualified_name,),
                 )
-            
+
             row = cur.fetchone()
             if not row:
                 return None
-            
+
             return {
                 "id": str(row[0]),
                 "node_type": str(row[1]),
@@ -264,10 +274,10 @@ class GraphStore:
 
     def get_nodes_for_file(self, file_id: int) -> list[dict[str, Any]]:
         """Get all nodes for a file.
-        
+
         Args:
             file_id: File ID
-            
+
         Returns:
             List of node dicts
         """
@@ -282,10 +292,10 @@ class GraphStore:
                 WHERE file_id = ?
                 ORDER BY start_line
                 """,
-                (file_id,)
+                (file_id,),
             )
             rows = cur.fetchall() or []
-            
+
             return [
                 {
                     "id": str(row[0]),
@@ -350,16 +360,13 @@ class GraphStore:
             try:
                 # If repo_id not provided, derive it from source node
                 if repo_id is None:
-                    cur.execute(
-                        "SELECT repo_id FROM code_nodes WHERE id = ?",
-                        (source_node_id,)
-                    )
+                    cur.execute("SELECT repo_id FROM code_nodes WHERE id = ?", (source_node_id,))
                     row = cur.fetchone()
                     if row:
                         repo_id = int(row[0])
                     else:
                         raise ValueError(f"Source node {source_node_id} not found")
-                
+
                 cur.execute(
                     """
                     INSERT INTO code_edges (
@@ -376,30 +383,35 @@ class GraphStore:
                     RETURNING id
                     """,
                     (
-                        edge_id, source_node_id, target_node_id, edge_type, repo_id,
-                        line_number, is_direct, relationship_metadata, commit_sha
+                        edge_id,
+                        source_node_id,
+                        target_node_id,
+                        edge_type,
+                        repo_id,
+                        line_number,
+                        is_direct,
+                        relationship_metadata,
+                        commit_sha,
                     ),
                 )
                 row = cur.fetchone()
                 if row:
                     edge_id = str(row[0])
-                
+
                 conn.commit()
                 return edge_id
             except Exception:
                 conn.rollback()
                 raise
 
-    def get_outgoing_edges(
-        self, node_id: str, edge_type: str | None = None, limit: int = 100
-    ) -> list[dict[str, Any]]:
+    def get_outgoing_edges(self, node_id: str, edge_type: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
         """Get outgoing edges from a node.
-        
+
         Args:
             node_id: Source node UUID
             edge_type: Optional filter by edge type
             limit: Maximum number of edges to return
-            
+
         Returns:
             List of edge dicts
         """
@@ -415,7 +427,7 @@ class GraphStore:
                     ORDER BY line_number
                     LIMIT ?
                     """,
-                    (node_id, edge_type, limit)
+                    (node_id, edge_type, limit),
                 )
             else:
                 cur.execute(
@@ -428,11 +440,11 @@ class GraphStore:
                     ORDER BY edge_type, line_number
                     LIMIT ?
                     """,
-                    (node_id, limit)
+                    (node_id, limit),
                 )
-            
+
             rows = cur.fetchall() or []
-            
+
             return [
                 {
                     "id": str(row[0]),
@@ -449,16 +461,14 @@ class GraphStore:
                 for row in rows
             ]
 
-    def get_incoming_edges(
-        self, node_id: str, edge_type: str | None = None, limit: int = 100
-    ) -> list[dict[str, Any]]:
+    def get_incoming_edges(self, node_id: str, edge_type: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
         """Get incoming edges to a node.
-        
+
         Args:
             node_id: Target node UUID
             edge_type: Optional filter by edge type
             limit: Maximum number of edges to return
-            
+
         Returns:
             List of edge dicts
         """
@@ -474,7 +484,7 @@ class GraphStore:
                     ORDER BY line_number
                     LIMIT ?
                     """,
-                    (node_id, edge_type, limit)
+                    (node_id, edge_type, limit),
                 )
             else:
                 cur.execute(
@@ -487,11 +497,11 @@ class GraphStore:
                     ORDER BY edge_type, line_number
                     LIMIT ?
                     """,
-                    (node_id, limit)
+                    (node_id, limit),
                 )
-            
+
             rows = cur.fetchall() or []
-            
+
             return [
                 {
                     "id": str(row[0]),
@@ -535,7 +545,7 @@ class GraphStore:
                         "WHERE source_node_id IN (SELECT id FROM nodes) "
                         "   OR target_node_id IN (SELECT id FROM nodes)"
                     ),
-                    (file_id,)
+                    (file_id,),
                 )
 
                 # Delete from FTS5
@@ -545,14 +555,11 @@ class GraphStore:
                         "DELETE FROM code_nodes_fts "
                         "WHERE node_id IN (SELECT id FROM nodes)"
                     ),
-                    (file_id,)
+                    (file_id,),
                 )
 
                 # Delete nodes
-                cur.execute(
-                    "DELETE FROM code_nodes WHERE file_id = ?",
-                    (file_id,)
-                )
+                cur.execute("DELETE FROM code_nodes WHERE file_id = ?", (file_id,))
                 deleted = cur.rowcount
 
                 conn.commit()
@@ -584,7 +591,7 @@ class GraphStore:
                         "WHERE source_node_id IN (SELECT id FROM nodes) "
                         "   OR target_node_id IN (SELECT id FROM nodes)"
                     ),
-                    (repo_id,)
+                    (repo_id,),
                 )
 
                 # Delete from FTS5
@@ -594,14 +601,11 @@ class GraphStore:
                         "DELETE FROM code_nodes_fts "
                         "WHERE node_id IN (SELECT id FROM nodes)"
                     ),
-                    (repo_id,)
+                    (repo_id,),
                 )
 
                 # Delete nodes
-                cur.execute(
-                    "DELETE FROM code_nodes WHERE repo_id = ?",
-                    (repo_id,)
-                )
+                cur.execute("DELETE FROM code_nodes WHERE repo_id = ?", (repo_id,))
                 deleted = cur.rowcount
 
                 conn.commit()
@@ -616,30 +620,27 @@ class GraphStore:
 
     def get_node_count(self, repo_id: int | None = None) -> int:
         """Get count of nodes, optionally filtered by repo.
-        
+
         Args:
             repo_id: Optional repository filter
-            
+
         Returns:
             Number of nodes
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
             if repo_id is not None:
-                cur.execute(
-                    "SELECT COUNT(*) FROM code_nodes WHERE repo_id = ?",
-                    (repo_id,)
-                )
+                cur.execute("SELECT COUNT(*) FROM code_nodes WHERE repo_id = ?", (repo_id,))
             else:
                 cur.execute("SELECT COUNT(*) FROM code_nodes")
-            
+
             return int(cur.fetchone()[0])
 
     def get_edge_count(self, repo_id: int | None = None) -> int:
         """Get count of edges, optionally filtered by repo.
-        
+
         Args:
             repo_id: Optional repository filter
-            
+
         Returns:
             Number of edges
         """
@@ -652,9 +653,9 @@ class GraphStore:
                         SELECT id FROM code_nodes WHERE repo_id = ?
                     )
                     """,
-                    (repo_id,)
+                    (repo_id,),
                 )
             else:
                 cur.execute("SELECT COUNT(*) FROM code_edges")
-            
+
             return int(cur.fetchone()[0])

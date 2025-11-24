@@ -1,0 +1,32 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "### Prompt Ready Response\nMultiple repositories returned code graph context."
+      },
+      {
+        "type": "text",
+        "text": "#### Code Graph Context\n- Node: GraphStore::search\n- Source: kb/graph/graph_store.py:12-60\n- Edges:\n  - search → _build_graph_context\n  - search → _rank_results\n"
+      },
+      {
+        "type": "text",
+        "text": "#### Code Graph Context\n- Node: AgentBridge::start\n- Source: agent-core/src/bridge.ts:25-90\n- Edges:\n  - start → waitForReady\n  - start → handleCrash\n"
+      },
+      {
+        "type": "resource",
+        "href": "file:///workspace/kb/graph/graph_store.py",
+        "mimeType": "text/x-python",
+        "text": "def search(...): pass"
+      },
+      {
+        "type": "resource",
+        "href": "file:///workspace/agent-core/src/bridge.ts",
+        "mimeType": "text/x-typescript",
+        "text": "export class AgentBridge { ... }"
+      }
+    ]
+  }
+}

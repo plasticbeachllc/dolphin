@@ -4,12 +4,19 @@
   import type { KBStatus } from '$lib/stores/kb-store';
   
   interface Props {
-    status: KBStatus['status'];
+    status: KBStatus;
   }
   
   let { status }: Props = $props();
   
-  const statusConfig = {
+  type StatusConfig = {
+    variant: 'default' | 'secondary' | 'destructive' | 'outline';
+    icon: typeof CheckCircle;
+    text: string;
+    class: string;
+  };
+
+  const statusConfig: Record<KBStatus, StatusConfig> = {
     ready: {
       variant: 'default' as const,
       icon: CheckCircle,
@@ -39,10 +46,16 @@
       icon: Clock,
       text: 'Needs Update',
       class: 'text-yellow-600 dark:text-yellow-400'
+    },
+    error: {
+      variant: 'destructive' as const,
+      icon: AlertCircle,
+      text: 'Error',
+      class: 'text-red-600 dark:text-red-400'
     }
   };
-  
-  const config = $derived(statusConfig[status] || statusConfig.offline);
+
+  const config = $derived(statusConfig[status]);
   const IconComponent = $derived(config.icon);
 </script>
 

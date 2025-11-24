@@ -5,10 +5,10 @@
   "workspaces": [
     "vscode-extension",
     "vscode-extension/webview",
+    "vscode-extension/playwright",
     "agent-core",
     "mcp-bridge",
-    "shared",
-    "golden-scenarios"
+    "shared"
   ],
   "scripts": {
     "setup": "npm install && cd vscode-extension/webview && bun install && cd ../.. && cd agent-core && bun install && cd .. && cd mcp-bridge && bun install",
@@ -16,16 +16,32 @@
     "build:webview": "cd vscode-extension/webview && bun run build",
     "build:agent": "cd agent-core && bun run build",
     "build:all": "npm run build:extension && npm run build:webview && npm run build:agent",
+    "lint:all": "cd mcp-bridge && bun run lint && cd ../agent-core && bun run lint && cd ../vscode-extension && bun run lint",
     "test:agent": "cd agent-core && bun test",
     "test:mcp": "cd mcp-bridge && npm run test:clean",
-    "test:kb": "cd kb && pytest tests/",
-    "test:e2e": "cd vscode-extension && npm run test",
-    "test:all": "npm run test:agent && npm run test:mcp && npm run test:kb && npm run test:e2e",
+    "test:unit": "bun run test:agent && bun run test:mcp && cd vscode-extension && bun run test:unit",
+    "test:integration": "cd vscode-extension && bun run test:integration",
+    "test:e2e": "cd vscode-extension && npm run test:e2e && npm run test --workspace vscode-extension/playwright",
+    "test:extension:playwright": "npm run test --workspace vscode-extension/playwright",
     "clean": "rm -rf vscode-extension/out vscode-extension/webview/build agent-core/dist",
     "dev:extension": "cd vscode-extension && npm run watch",
-    "dev:webview": "cd vscode-extension/webview && bun run dev"
+    "dev:webview": "cd vscode-extension/webview && bun run dev",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,svelte}\""
   },
   "devDependencies": {
-    "typescript": "^5.7.2"
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@tailwindcss/forms": "^0.5.10",
+    "@tailwindcss/typography": "^0.5.19",
+    "@tailwindcss/vite": "^4.1.17",
+    "diff": "^8.0.2",
+    "dompurify": "^3.3.0",
+    "highlight.js": "^11.11.1",
+    "marked": "^17.0.0",
+    "shiki": "^3.15.0",
+    "svelte-virtual-scroll-list": "^1.3.0",
+    "tailwind-merge": "^3.4.0"
   }
 }

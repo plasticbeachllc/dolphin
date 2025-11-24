@@ -3,14 +3,14 @@
 DOCUMENT_FIXTURES = [
     {
         "path": "src/main.py",
-        "content": "def hello_world():\n    print(\"Hello, Python!\")"
+        "content": 'def hello_world():\n    print("Hello, Python!")',
     },
     {
         "path": "src/utils.py",
-        "content": "def goodbye():\n    print(\"Goodbye, Python!\")"
+        "content": 'def goodbye():\n    print("Goodbye, Python!")',
     },
     {
         "path": "src/script.js",
-        "content": "function hello() {\n    console.log(\"Hello, JavaScript!\");\n}"
-    }
+        "content": 'function hello() {\n    console.log("Hello, JavaScript!");\n}',
+    },
 ]

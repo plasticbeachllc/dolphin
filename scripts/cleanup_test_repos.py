@@ -18,17 +18,17 @@ from kb.store.sqlite_meta import SQLiteMetadataStore
 def cleanup_test_repos():
     """Remove all test repositories from the database."""
     db_path = CONFIG_ROOT / "metadata.db"
-    
+
     if not db_path.exists():
         print(f"No database found at {db_path}")
         return
-    
+
     print(f"Cleaning up test repositories from {db_path}")
-    
+
     try:
         store = SQLiteMetadataStore(db_path)
         store.initialize()
-        
+
         # Patterns to identify test repositories
         test_repo_patterns = [
             "test",
@@ -39,38 +39,35 @@ def cleanup_test_repos():
             "my-repo",
             "integration-test",
         ]
-        
-        with store._get_connection() as conn:
+
+        with store._get_connection() as conn:  # type: ignore[attr-defined]
             cursor = conn.execute("SELECT id, name FROM repos")
             repos = cursor.fetchall()
-            
+
             deleted_count = 0
             for repo_id, repo_name in repos:
                 # Check if this looks like a test repository
-                is_test_repo = any(
-                    pattern in repo_name.lower() 
-                    for pattern in test_repo_patterns
-                )
-                
+                is_test_repo = any(pattern in repo_name.lower() for pattern in test_repo_patterns)
+
                 if is_test_repo:
                     print(f"  Deleting test repository: {repo_name} (id={repo_id})")
-                    
+
                     # Delete all data associated with this repo
                     conn.execute("DELETE FROM chunks WHERE repo_id = ?", (repo_id,))
                     conn.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
                     conn.execute("DELETE FROM scan_sessions WHERE repo_id = ?", (repo_id,))
                     conn.execute("DELETE FROM repos WHERE id = ?", (repo_id,))
-                    
+
                     deleted_count += 1
-            
+
             conn.commit()
-            
+
         print(f"\nCleaned up {deleted_count} test repositories")
-        
+
     except Exception as e:
         print(f"Error during cleanup: {e}", file=sys.stderr)
         return 1
-    
+
     return 0
 
 

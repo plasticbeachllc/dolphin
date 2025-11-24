@@ -7,6 +7,7 @@ Conventions:
 - Line numbers in Chunk are 1-based to match existing consumers.
 - Overlap is specified as a fraction of the target token count and is clamped to [0, 1].
 """
+
 from __future__ import annotations
 
 import bisect
@@ -14,15 +15,14 @@ import logging
 import re
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import List, Optional, Tuple
 
 import tree_sitter_javascript as tsjs
 import tree_sitter_typescript as tsts
 from tree_sitter import Language, Parser
 
-from .token_utils import get_tokenizer, window_text_by_tokens, count_tokens
+from .graph_types import GraphEdge, GraphNode
+from .token_utils import count_tokens, get_tokenizer, window_text_by_tokens
 from .types import Chunk
-from .graph_types import GraphNode, GraphEdge
 
 _log = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ LINE_NUMBER_BASE = 1  # Maintain 1-based lines for compatibility
 @lru_cache(maxsize=8)
 def _get_parser(lang: str) -> Parser:
     """Return a cached Tree-sitter parser for TypeScript/TSX/JavaScript.
-    
+
     Uses tree-sitter 0.25+ API with Language wrapper.
     TypeScript files use the TypeScript parser, JavaScript files use JavaScript parser.
     """
@@ -52,8 +52,8 @@ def _get_parser(lang: str) -> Parser:
 @dataclass(frozen=True)
 class Symbol:
     kind: str
-    name: Optional[str]
-    path: Optional[str]
+    name: str | None
+    path: str | None
     start_byte: int
     end_byte: int
     start_row: int
@@ -99,7 +99,11 @@ def chunk_source(
             tree = parser.parse_bytes(source_bytes)  # type: ignore[attr-defined]
         root = tree.root_node
     except Exception as e:  # noqa: BLE001
-        _log.warning("Tree-sitter parse failed for %s; falling back to token windows: %s", lang, e)
+        _log.warning(
+            "Tree-sitter parse failed for %s; falling back to token windows: %s",
+            lang,
+            e,
+        )
         return _fallback_token_windows(source, model=model, token_target=token_target, overlap_pct=overlap_pct)
 
     # Extract symbols
@@ -113,7 +117,7 @@ def chunk_source(
     # Build chunks per symbol
     for sym in symbols:
         try:
-            symbol_text = source_bytes[sym.start_byte:sym.end_byte].decode("utf-8")
+            symbol_text = source_bytes[sym.start_byte : sym.end_byte].decode("utf-8")
         except Exception as e:  # noqa: BLE001
             _log.debug("Skipping symbol %s due to decode error: %s", sym.name, e)
             continue
@@ -143,9 +147,9 @@ def _build_chunks_for_text(
     model: str,
     token_target: int,
     overlap_tokens: int,
-    symbol_kind: Optional[str],
-    symbol_name: Optional[str],
-    symbol_path: Optional[str],
+    symbol_kind: str | None,
+    symbol_name: str | None,
+    symbol_path: str | None,
 ) -> list[Chunk]:
     """Window text by tokens and convert to Chunk objects.
 
@@ -156,8 +160,6 @@ def _build_chunks_for_text(
     line_offsets = _build_line_offsets(text)
 
     chunks: list[Chunk] = []
-    search_from = 0
-    pos = 0  # expected start position of the next window in text
     for raw_text, start_char, end_char in windows:
         if not raw_text:
             continue
@@ -191,7 +193,7 @@ def _fallback_token_windows(
     model: str,
     token_target: int,
     overlap_pct: float,
-) -> List[Chunk]:
+) -> list[Chunk]:
     """Fallback chunking using token windows across the entire source."""
     tokenizer = get_tokenizer(model)
     if not (0.0 <= overlap_pct <= 1.0):
@@ -211,16 +213,16 @@ def _fallback_token_windows(
     )
 
 
-def _build_line_offsets(text: str) -> List[int]:
+def _build_line_offsets(text: str) -> list[int]:
     """Return character offsets where each line starts (0-based)."""
-    offsets: List[int] = [0]
+    offsets: list[int] = [0]
     for idx, ch in enumerate(text):
         if ch == "\n":
             offsets.append(idx + 1)
     return offsets
 
 
-def _offset_to_abs_line(start_row: int, line_offsets: List[int], offset: int) -> int:
+def _offset_to_abs_line(start_row: int, line_offsets: list[int], offset: int) -> int:
     """Convert a character offset within text to an absolute 1-based line number.
 
     start_row is 0-based row of the text's first line within the full source.
@@ -229,7 +231,7 @@ def _offset_to_abs_line(start_row: int, line_offsets: List[int], offset: int) ->
     return (start_row + LINE_NUMBER_BASE) + max(0, line_idx)
 
 
-def _trim_and_tokenize(raw_text: str, tokenizer) -> Tuple[str, int, int, int]:
+def _trim_and_tokenize(raw_text: str, tokenizer) -> tuple[str, int, int, int]:
     """Trim leading and trailing newlines and count tokens.
 
     Returns (trimmed_text, token_count, leading_newlines, trailing_newlines).
@@ -243,7 +245,7 @@ def _trim_and_tokenize(raw_text: str, tokenizer) -> Tuple[str, int, int, int]:
     return trimmed, token_count, lead_trim, trail_trim
 
 
-def _extract_symbols(root, source: str) -> List[Symbol]:
+def _extract_symbols(root, source: str) -> list[Symbol]:
     """Extract TS/TSX/JS symbols.
 
     Captures:
@@ -257,16 +259,16 @@ def _extract_symbols(root, source: str) -> List[Symbol]:
     - type_alias_declaration → kind='type_alias', name='Alias'
     - enum_declaration → kind='enum', name='Enum'
     """
-    results: List[Symbol] = []
+    results: list[Symbol] = []
 
-    class_stack: List[str] = []
+    class_stack: list[str] = []
 
     def node_text(n) -> str:
         if n is None:
             return ""
-        return source[n.start_byte:n.end_byte]
+        return source[n.start_byte : n.end_byte]
 
-    def simple_name_from_path(path_text: str) -> Optional[str]:
+    def simple_name_from_path(path_text: str) -> str | None:
         # Best-effort: take last identifier in a dotted path or plain identifier
         m = re.search(r"([A-Za-z_$][A-Za-z0-9_$]*)$", path_text)
         return m.group(1) if m else None
@@ -296,10 +298,17 @@ def _extract_symbols(root, source: str) -> List[Symbol]:
             return
 
         # Class fields that are initialized with arrow/function expressions (TS/JS)
-        if ntype in ("public_field_definition", "field_definition", "property_declaration"):
+        if ntype in (
+            "public_field_definition",
+            "field_definition",
+            "property_declaration",
+        ):
             name_node = node.child_by_field_name("name")
             init_node = node.child_by_field_name("value") or node.child_by_field_name("initializer")
-            if init_node is not None and init_node.type in ("arrow_function", "function"):
+            if init_node is not None and init_node.type in (
+                "arrow_function",
+                "function",
+            ):
                 fld_name = node_text(name_node) or None
                 symbol_path = f"{class_stack[-1]}.{fld_name or '<field>'}" if class_stack else fld_name
                 results.append(
@@ -425,7 +434,10 @@ def _extract_symbols(root, source: str) -> List[Symbol]:
                     # variable_declarator (TS/JS) → name & initializer
                     name_node = child.child_by_field_name("name")
                     init_node = child.child_by_field_name("value") or child.child_by_field_name("initializer")
-                    if init_node is not None and init_node.type in ("arrow_function", "function"):
+                    if init_node is not None and init_node.type in (
+                        "arrow_function",
+                        "function",
+                    ):
                         const_name = node_text(name_node) or None
                         results.append(
                             Symbol(
@@ -467,7 +479,11 @@ def _extract_symbols(root, source: str) -> List[Symbol]:
             return
 
         # Export default class/function (TS/JS)
-        if ntype in ("export_statement", "export_declaration", "export_default_declaration"):
+        if ntype in (
+            "export_statement",
+            "export_declaration",
+            "export_default_declaration",
+        ):
             for ch in node.children:
                 visit(ch)
             return
@@ -480,34 +496,33 @@ def _extract_symbols(root, source: str) -> List[Symbol]:
     return results
 
 
-
-def extract_graph_data(source: str, *, lang: str = "typescript") -> Tuple[List[GraphNode], List[GraphEdge]]:
+def extract_graph_data(source: str, *, lang: str = "typescript") -> tuple[list[GraphNode], list[GraphEdge]]:
     """Extract graph nodes and edges from TypeScript/JavaScript source for code graph.
-    
+
     Nodes:
     - Classes, interfaces, functions, type aliases, enums
-    
+
     Edges:
     - Imports/exports
     - Function calls
     - Class inheritance/implements
     - Type dependencies
-    
+
     Args:
         source: TypeScript/JavaScript source code
         lang: Language variant ("typescript", "tsx", "javascript")
-        
+
     Returns:
         Tuple of (nodes, edges) for graph database insertion
     """
-    nodes = []
-    edges = []
-    
+    nodes: list[GraphNode] = []
+    edges: list[GraphEdge] = []
+
     lang_key = lang.lower()
     if lang_key not in SUPPORTED_LANGUAGES:
         _log.warning("Unsupported language '%s' for graph extraction", lang)
         return [], []
-    
+
     try:
         source_bytes = source.encode("utf-8")
         parser = _get_parser(lang_key)
@@ -520,49 +535,51 @@ def extract_graph_data(source: str, *, lang: str = "typescript") -> Tuple[List[G
     except Exception as e:  # noqa: BLE001
         _log.warning("Tree-sitter parse failed for graph extraction: %s", e)
         return [], []
-    
+
     # Extract symbols as nodes
     symbols = list(_extract_symbols(root, source))
     for sym in symbols:
-        nodes.append(GraphNode(
-            node_type=sym.kind,
-            name=sym.name or "",
-            qualified_name=sym.path or sym.name or "",
-            start_line=sym.start_row + 1,
-            end_line=sym.end_row + 1
-        ))
-    
+        nodes.append(
+            GraphNode(
+                node_type=sym.kind,
+                name=sym.name or "",
+                qualified_name=sym.path or sym.name or "",
+                start_line=sym.start_row + 1,
+                end_line=sym.end_row + 1,
+            )
+        )
+
     # Extract edges (imports, calls, inheritance, type deps)
     _extract_ts_edges(root, source, edges)
-    
+
     _log.debug("Extracted %d graph nodes and %d edges from %s", len(nodes), len(edges), lang)
     return nodes, edges
 
 
-def _extract_ts_edges(root, source: str, edges: List[GraphEdge]):
+def _extract_ts_edges(root, source: str, edges: list[GraphEdge]):
     """Extract graph edges (imports, calls, inheritance, type deps) from TS/JS AST."""
-    
+
     def node_text(n) -> str:
         if n is None:
             return ""
-        return source[n.start_byte:n.end_byte]
-    
-    def visit(node, current_context: Optional[str] = None):
+        return source[n.start_byte : n.end_byte]
+
+    def visit(node, current_context: str | None = None):
         """Visit nodes and extract edges."""
         ntype = node.type
-        
+
         # Track current class context
         if ntype == "class_declaration":
             name_node = node.child_by_field_name("name")
             class_name = node_text(name_node) if name_node else None
-            
+
             # Extract heritage (extends/implements)
             heritage = None
             for child in node.children:
                 if child.type == "class_heritage":
                     heritage = child
                     break
-            
+
             if heritage:
                 for child in heritage.children:
                     if child.type == "extends_clause":
@@ -571,106 +588,116 @@ def _extract_ts_edges(root, source: str, edges: List[GraphEdge]):
                             if subchild.type in ("identifier", "member_expression"):
                                 base_class = node_text(subchild)
                                 if base_class and class_name:
-                                    edges.append(GraphEdge(
-                                        source_name=class_name,
-                                        target_name=base_class,
-                                        edge_type="extends",
-                                        line_number=child.start_point[0] + 1
-                                    ))
+                                    edges.append(
+                                        GraphEdge(
+                                            source_name=class_name,
+                                            target_name=base_class,
+                                            edge_type="extends",
+                                            line_number=child.start_point[0] + 1,
+                                        )
+                                    )
                     elif child.type == "implements_clause":
                         # Get the interfaces being implemented
                         for subchild in child.children:
                             if subchild.type in ("type_identifier", "identifier"):
                                 interface_name = node_text(subchild)
                                 if interface_name and class_name:
-                                    edges.append(GraphEdge(
-                                        source_name=class_name,
-                                        target_name=interface_name,
-                                        edge_type="implements",
-                                        line_number=child.start_point[0] + 1
-                                    ))
-            
+                                    edges.append(
+                                        GraphEdge(
+                                            source_name=class_name,
+                                            target_name=interface_name,
+                                            edge_type="implements",
+                                            line_number=child.start_point[0] + 1,
+                                        )
+                                    )
+
             # Recurse with new context
             for child in node.children:
                 visit(child, class_name)
             return
-        
+
         # Function/method definitions
         if ntype in ("function_declaration", "method_definition"):
             name_node = node.child_by_field_name("name")
             func_name = node_text(name_node) if name_node else None
-            
+
             if current_context:
-                qualified = f"{current_context}.{func_name}" if func_name else current_context
+                qualified: str | None = f"{current_context}.{func_name}" if func_name else current_context
             else:
                 qualified = func_name
-            
+
             # Recurse to find calls within function
             for child in node.children:
                 visit(child, qualified)
             return
-        
+
         # Import statements
         if ntype == "import_statement":
             # import X from "module"
             # import { Y, Z } from "module"
             source_node = node.child_by_field_name("source")
             if source_node:
-                module_name = node_text(source_node).strip('"\'')
-                
+                module_name = node_text(source_node).strip("\"'")
+
                 # Extract imported names
                 for child in node.children:
                     if child.type == "import_clause":
                         for subchild in child.children:
                             if subchild.type in ("identifier", "named_imports"):
                                 imported = node_text(subchild)
-                                edges.append(GraphEdge(
-                                    source_name="<module>",
-                                    target_name=f"{module_name}/{imported}",
-                                    edge_type="imports",
-                                    line_number=node.start_point[0] + 1
-                                ))
-            
+                                edges.append(
+                                    GraphEdge(
+                                        source_name="<module>",
+                                        target_name=f"{module_name}/{imported}",
+                                        edge_type="imports",
+                                        line_number=node.start_point[0] + 1,
+                                    )
+                                )
+
             for child in node.children:
                 visit(child, current_context)
             return
-        
+
         # Export statements
         if ntype in ("export_statement", "export_declaration"):
             for child in node.children:
                 if child.type == "string":
-                    module_name = node_text(child).strip('"\'')
-                    edges.append(GraphEdge(
-                        source_name="<module>",
-                        target_name=module_name,
-                        edge_type="exports_from",
-                        line_number=node.start_point[0] + 1
-                    ))
+                    module_name = node_text(child).strip("\"'")
+                    edges.append(
+                        GraphEdge(
+                            source_name="<module>",
+                            target_name=module_name,
+                            edge_type="exports_from",
+                            line_number=node.start_point[0] + 1,
+                        )
+                    )
             for child in node.children:
                 visit(child, current_context)
             return
-        
+
         # Function/method calls
         if ntype == "call_expression":
             func_node = node.child_by_field_name("function")
             if func_node:
                 called_name = node_text(func_node)
                 if called_name and current_context:
-                    edges.append(GraphEdge(
-                        source_name=current_context,
-                        target_name=called_name,
-                        edge_type="calls",
-                        line_number=node.start_point[0] + 1
-                    ))
+                    edges.append(
+                        GraphEdge(
+                            source_name=current_context,
+                            target_name=called_name,
+                            edge_type="calls",
+                            line_number=node.start_point[0] + 1,
+                        )
+                    )
             for child in node.children:
                 visit(child, current_context)
             return
-        
+
         # Interface extends
         if ntype == "interface_declaration":
             name_node = node.child_by_field_name("name")
-            interface_name = node_text(name_node) if name_node else None
-            
+            interface_name: str | None = node_text(name_node) if name_node else None
+
             # Check for extends clause
             for child in node.children:
                 if child.type == "extends_clause":
@@ -678,52 +705,57 @@ def _extract_ts_edges(root, source: str, edges: List[GraphEdge]):
                         if subchild.type in ("type_identifier", "identifier"):
                             base_interface = node_text(subchild)
                             if base_interface and interface_name:
-                                edges.append(GraphEdge(
-                                    source_name=interface_name,
-                                    target_name=base_interface,
-                                    edge_type="extends",
-                                    line_number=child.start_point[0] + 1
-                                ))
-            
+                                edges.append(
+                                    GraphEdge(
+                                        source_name=interface_name,
+                                        target_name=base_interface,
+                                        edge_type="extends",
+                                        line_number=child.start_point[0] + 1,
+                                    )
+                                )
+
             for child in node.children:
                 visit(child, current_context)
             return
-        
+
         # Type alias with type references
         if ntype == "type_alias_declaration":
             name_node = node.child_by_field_name("name")
             alias_name = node_text(name_node) if name_node else None
-            
+
             # Extract type references
             value_node = node.child_by_field_name("value")
             if value_node and alias_name:
                 _extract_type_references(value_node, alias_name, edges, node.start_point[0] + 1)
-            
+
             for child in node.children:
                 visit(child, current_context)
             return
-        
+
         # Generic recursion
         for child in node.children:
             visit(child, current_context)
-    
+
     visit(root)
 
 
-def _extract_type_references(type_node, source_name: str, edges: List[GraphEdge], line_number: int):
+def _extract_type_references(type_node, source_name: str, edges: list[GraphEdge], line_number: int):
     """Extract type references from a type annotation node."""
+
     def extract_from_node(node):
         if node.type == "type_identifier":
             type_name = node.text.decode("utf-8") if hasattr(node.text, "decode") else str(node.text)
             if type_name:
-                edges.append(GraphEdge(
-                    source_name=source_name,
-                    target_name=type_name,
-                    edge_type="uses_type",
-                    line_number=line_number
-                ))
-        
+                edges.append(
+                    GraphEdge(
+                        source_name=source_name,
+                        target_name=type_name,
+                        edge_type="uses_type",
+                        line_number=line_number,
+                    )
+                )
+
         for child in node.children:
             extract_from_node(child)
-    
+
     extract_from_node(type_node)

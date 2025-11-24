@@ -35,6 +35,9 @@ uv run python -m black kb/ tests/
 uv run python -m mypy kb/
 uv run dolphin init
 uv run python script.py
+uv run ruff check --fix
+uv run ruff format
+uv run ty check
 
 # ❌ INCORRECT - Do not run Python commands directly
 pytest tests/unit/ -v
@@ -43,19 +46,6 @@ python -m mypy kb/
 dolphin init
 python script.py
 ```
-
-**Why this matters:**
-
-- Ensures correct Python version and dependencies
-- Avoids "module not found" errors
-- Maintains consistency across development environments
-- Required for all pytest, Python module execution, and CLI commands
-
-**When NOT to use `uv run`:**
-
-- TypeScript/JavaScript commands (bun, npm, node)
-- System utilities (curl, git, ls, etc.)
-- Shell commands that don't invoke Python
 
 ### 1. Documentation Management
 
@@ -78,25 +68,20 @@ Dolphin has a mature documentation structure. Instead of creating new files:
 
 **Keep existing specs and implementation plans current.**
 
-The `docs/` directory contains detailed implementation plans and specifications:
-
-- `docs/phase5-implementation-plan.md`
-- `docs/phase3-test-coverage.md`
-- `docs/conversations-test-suite.md`
-- `docs/kb-index/*.md`
+The `docs/` directory contains detailed implementation plans and specifications.
 
 **When making changes:**
 
 - Update the relevant plan/spec with completion status
 - Mark completed items with ✅
-- Update the ARCHITECTURE.md implementation status section
+- Update the ARCHITECTURE.md document
 - Document any deviations from the original plan
 
 ### 3. Test Coverage Requirements
 
 **Ensure comprehensive test coverage for all code changes.**
 
-Dolphin maintains 243+ passing tests across Python and TypeScript:
+Dolphin maintains hundreds of passing tests across Python and TypeScript:
 
 **Python Tests** (`tests/`):
 
@@ -127,7 +112,11 @@ uv run pytest tests/unit/ -v              # Python unit tests
 uv run pytest tests/integration/ -v       # Python integration tests
 cd mcp-bridge && bun test                 # MCP tests
 cd agent-core && bun test                 # Agent tests
+just test-all-headless                    # Standard full-suite command for agents (avoids VS Code host)
+# Do NOT run `just test-all` in headless/Codex sessions; it requires a VS Code/Electron host.
 ```
+
+Consider only running relevant test sections in order to take time -- the entire suite is quite lengthy.
 
 ### 4. Code Quality Standards
 
@@ -136,6 +125,7 @@ cd agent-core && bun test                 # Agent tests
 **Python** (`kb/`, test files):
 
 - Use type hints (SQLModel, Pydantic)
+- Use uv for runtime and package management
 - Follow PEP 8 style guidelines
 - Use pytest for testing with fixtures
 - Document complex functions with docstrings
@@ -179,13 +169,13 @@ cd agent-core && bun test                 # Agent tests
 
 ```bash
 # Run tests
-uv run pytest tests/ -v
+uv run pytest tests/ -vx
 cd mcp-bridge && bun test
 cd agent-core && bun test
 
 # Check code quality
-uv run python -m black kb/ tests/          # Format Python
-uv run python -m mypy kb/                  # Type check
+uv run ruff check --fix                    # Format Python
+uv run ty check                            # Type check
 ```
 
 ### 6. Architecture Awareness
@@ -756,7 +746,7 @@ uv run dolphin kb status my-repo
 
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) - System design and status
 - [README.md](README.md) - Project overview and quick start
-- [TESTING-GUIDE.md](docs/TESTING-GUIDE.md) - Testing procedures
+- [TESTING.md](TESTING.md) - Testing procedures
 
 **For issues:**
 
@@ -766,4 +756,4 @@ uv run dolphin kb status my-repo
 
 ---
 
-**Remember:** Quality over speed. Take time to understand the architecture, write tests, update documentation, and follow established patterns. The codebase is well-structured—maintain that quality.
+**Remember:** Quality over speed. Take time to understand the architecture, write tests, update documentation, and follow established patterns. The codebase is well-structured - maintain that quality.

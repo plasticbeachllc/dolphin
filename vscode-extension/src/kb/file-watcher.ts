@@ -13,6 +13,7 @@ export interface WatcherConfig {
   excludePatterns: string[];
   apiBaseUrl?: string;
   repoName?: string;
+  apiKey?: string;
 }
 
 export class FileWatcher {
@@ -20,11 +21,18 @@ export class FileWatcher {
   private debounceTimers = new Map<string, NodeJS.Timeout>();
   private pendingChanges = new Map<string, ChangeEvent>();
   private batchTimer: NodeJS.Timeout | null = null;
+  private apiKey?: string;
 
   constructor(
     private config: WatcherConfig,
     private onBatch: (changes: ChangeEvent[]) => Promise<void>
-  ) {}
+  ) {
+    this.apiKey = config.apiKey;
+  }
+
+  public setApiKey(apiKey?: string): void {
+    this.apiKey = apiKey;
+  }
 
   async startWatching(workspaceFolder: vscode.WorkspaceFolder) {
     console.log("[FileWatcher] Starting for:", workspaceFolder.uri.fsPath);
@@ -125,9 +133,7 @@ export class FileWatcher {
 
     // Convert changes to API format
     const changes = batch.map((event) => ({
-      file_path: vscode.workspace
-        .asRelativePath(event.uri)
-        .replace(/\\/g, "/"),
+      file_path: vscode.workspace.asRelativePath(event.uri).replace(/\\/g, "/"),
       change_type: event.type,
     }));
 
@@ -137,6 +143,7 @@ export class FileWatcher {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(this.apiKey ? { "X-API-Key": this.apiKey } : {}),
         },
         body: JSON.stringify({ changes }),
       }

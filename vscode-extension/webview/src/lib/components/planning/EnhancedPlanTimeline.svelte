@@ -1,8 +1,11 @@
 <script lang="ts">
 	import * as Accordion from '$lib/components/ui/accordion';
+	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
-	import { Play, Clock, CheckCircle2, Circle, Loader2 } from 'lucide-svelte';
+	import { Play, Clock, CheckCircle2, Circle, Loader2, AlertTriangle } from 'lucide-svelte';
+	import { Chart, Svg, Rect } from 'layerchart';
+	import { scaleLinear } from 'd3-scale';
 	
 	interface PlanStep {
 		id: string;
@@ -64,6 +67,7 @@
 </script>
 
 <div class="enhanced-timeline w-full">
+<div class="enhanced-timeline w-full">
 	<Accordion.Root type="multiple" class="w-full space-y-2">
 		{#each phases as phase}
 			{@const progress = getPhaseProgress(phase)}
@@ -95,11 +99,26 @@
 					
 					<!-- Progress Bar -->
 					<div class="flex items-center gap-3">
-						<div class="h-2 w-32 bg-secondary rounded-full overflow-hidden">
-							<div
-								class="h-full bg-primary transition-all duration-500"
-								style="width: {(progress.completed / progress.total) * 100}%"
-							></div>
+						<div class="h-2 w-32 bg-secondary rounded-full overflow-hidden relative">
+							<Chart
+								data={[{ value: progress.completed }]}
+								x="value"
+								xDomain={[0, Math.max(progress.total, 1)]}
+								xScale={scaleLinear()}
+								padding={{ top: 0, bottom: 0, left: 0, right: 0 }}
+								let:xScale
+								let:height
+							>
+								<Svg>
+									<Rect
+										x={0}
+										y={0}
+										width={xScale(progress.completed)}
+										height={height}
+										class="fill-primary transition-all duration-500"
+									/>
+								</Svg>
+							</Chart>
 						</div>
 					</div>
 				</Accordion.Trigger>
@@ -113,15 +132,14 @@
 								<div class="relative pb-8 last:pb-0">
 									<!-- Step Node -->
 									<div class="flex items-start gap-4">
-										<!-- Status Circle - properly positioned -->
+										<!-- Status Circle -->
 										<div
 											class="relative size-3 rounded-full border-2 border-background {statusBgColors[step.status]} shrink-0"
 											class:animate-pulse={step.status === 'running'}
-											title={step.status}
 											style="margin-top: 2px;"
 										></div>
 										
-										<!-- Connector Line - properly aligned from center of circle -->
+										<!-- Connector Line -->
 										{#if i < phase.steps.length - 1}
 											<div
 												class="absolute left-[5px] top-2 w-0.5 h-[calc(100%-8px)] {step.status === 'completed' ? 'bg-green-500' : 'bg-border'}"
@@ -149,6 +167,25 @@
 													{step.context}
 												</p>
 											{/if}
+
+											<!-- Time Comparison -->
+											{#if step.estimatedTime && step.actualTime}
+												{@const isOver = isTimeOverestimated(step.estimatedTime, step.actualTime)}
+												<div class="flex items-center gap-1.5 text-xs mt-1 {isOver ? 'text-red-500' : 'text-muted-foreground'}">
+													{#if isOver}
+														<AlertTriangle class="size-3" />
+													{:else}
+														<Clock class="size-3" />
+													{/if}
+													<span class="font-mono">
+														{formatDuration(step.actualTime)}
+													</span>
+													<span class="text-muted-foreground/50">/</span>
+													<span class="text-muted-foreground">
+														{formatDuration(step.estimatedTime)}
+													</span>
+												</div>
+											{/if}
 										</div>
 									</div>
 								</div>
@@ -159,6 +196,7 @@
 			</Accordion.Item>
 		{/each}
 	</Accordion.Root>
+</div>
 </div>
 
 <style>

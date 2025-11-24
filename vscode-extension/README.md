@@ -8,11 +8,11 @@ The Dolphin VSCode Extension brings AI-powered code assistance directly into you
 
 ### Key Features
 
-- **AI Chat Interface**: Natural language conversations with Claude AI
+- **AI Chat Interface**: Natural language conversations with Claude or OpenAI models
 - **Semantic Code Search**: Automatically searches your indexed codebase for relevant context
 - **Dual Authentication**:
   - Claude CLI (subscription mode - no API costs)
-  - Anthropic API key (direct API access)
+  - Anthropic or OpenAI API keys (direct API access)
 - **Real-time Streaming**: See AI responses as they're generated
 - **Tool Call Visualization**: Monitor Knowledge Bank searches and tool executions
 - **Beautiful UI**: Modern Svelte-based interface with shadcn/ui components
@@ -47,16 +47,19 @@ The Dolphin VSCode Extension brings AI-powered code assistance directly into you
 ### Components
 
 **Extension** (`src/extension.ts`)
+
 - VSCode extension entry point
 - Manages webview lifecycle
 - Spawns Agent Core subprocess
 
 **AgentBridge** (`src/agent/bridge.ts`)
+
 - JSON-RPC communication with Agent Core
 - Request/response handling
 - Event stream management
 
 **Webview** (`webview/`)
+
 - SvelteKit-based UI
 - Chat interface with message history
 - Tool call visualization
@@ -64,6 +67,7 @@ The Dolphin VSCode Extension brings AI-powered code assistance directly into you
 - Component gallery for testing
 
 **Agent Core** (`../agent-core/`)
+
 - Separate Bun-based process
 - Handles Claude AI interactions
 - Manages Knowledge Bank queries
@@ -136,13 +140,29 @@ claude
 # Select: "1. Claude account with subscription"
 ```
 
-**Option B: Anthropic API Key**
+**Option B: Anthropic or OpenAI API Keys**
 
-For production or if you prefer direct API access:
+For production or if you prefer direct API access run the commands below from VS Code:
 
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-```
+- `Dolphin: Set Claude API Key` (`dolphin.setClaudeApiKey`)
+- `Dolphin: Set OpenAI API Key` (`dolphin.setOpenAIApiKey`)
+
+Both commands store secrets in VS Code SecretStorage; the legacy `Dolphin: Set API Key` command now delegates to the Claude handler for compatibility. Environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DOLPHIN_OPENAI_API_KEY`) are still honored if you prefer exporting them manually.
+
+The Auth Status panel mirrors the inline provider warnings and exposes a **Refresh status** button so you can poll the latest auth info after running the secret commands or editing environment variables. The existing “Test Connection” workflow remains available for deeper end-to-end verification.
+
+### Provider & Model Selection
+
+The custom Svelte settings view owns provider/model selection while keeping the
+underlying VS Code settings authoritative:
+
+- **Provider dropdown** – Anthropic (Claude 4.5) or OpenAI (GPT‑5.1 family) rendered from the shared `provider-options.ts` enum. Each option shows an inline status pill (✅ Ready / ⚠️ Key missing) derived from the latest `auth_status` payload the extension forwards.
+- **Model dropdowns** – Separate pickers for Anthropic and OpenAI so you can preconfigure both paths before switching. Selections map to `dolphin.llm.model.anthropic` / `dolphin.llm.model.openai`.
+- **Set API Key buttons** – Trigger `dolphin.setClaudeApiKey` / `dolphin.setOpenAIApiKey` without leaving the panel. Success/fail is acknowledged via `{ type: "secretStatus", provider }`.
+- **Save workflow** – The Save button emits `settings.save`, shows a spinner, and disables until the extension replies with `{ type: "settings.saved" }`. If the active provider is missing a stored secret the extension returns `{ code: "missingSecret" }` and the panel highlights the warning inline plus inside the Auth Status card.
+- **Agent Core restart** – After settings persist, the extension compares the previous `{ provider, activeModel }` tuple and restarts Agent Core (stop → start) when either field changes. The webview simply keeps the spinner visible until a fresh `auth_status` arrives post-restart.
+
+You can still edit the backing settings via `settings.json` or VS Code’s GUI (`dolphin.llm.*`), but the webview is designed to be the canonical UX.
 
 ### Knowledge Bank Setup
 
@@ -150,14 +170,50 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ```bash
 # In dolphin root directory
+export DOLPHIN_API_KEY=kb-local-secret
 uv run dolphin serve
 ```
 
-The KB server runs on `http://localhost:8000` by default.
+The KB server runs on `http://127.0.0.1:7777` by default. If you are running the
+Knowledge Bank elsewhere (containers, remote host, etc.) override the endpoint
+with the VS Code setting **`dolphin.kb.apiBaseUrl`** so the extension and its
+tests can talk to the correct server without environment variables.
 
-**Production Mode** (planned): KB server will auto-start with the extension.
+### KB API Authentication
 
-See [KB Lifecycle Management Plan](../docs/KB-LIFECYCLE-MANAGEMENT.md) for details.
+**Auto-Provisioning (Recommended):**
+
+The VS Code extension automatically provisions a KB API key on first activation. **No manual configuration is required for typical usage.**
+
+- The extension creates `~/.dolphin/kb_api_key` automatically
+- The key is a 64-character hex string with `0600` permissions (user-only)
+- The key is stored in VS Code SecretStorage and propagated to all KB consumers
+
+**Manual Override (Advanced):**
+
+For CI/CD, testing, or custom deployments, you can override the auto-provisioned key:
+
+1. **Environment Variable** (highest precedence):
+
+   ```bash
+   export DOLPHIN_API_KEY="your-custom-key-here"
+   # OR
+   export DOLPHIN_KB_API_KEY="your-custom-key-here"
+   ```
+
+2. **VS Code Command**:
+   - Run **Dolphin: Set KB API Key** (`dolphin.kb.setApiKey`)
+   - This stores the key in SecretStorage
+
+**Development Mode:**
+
+When running the KB server manually for development:
+
+```bash
+# In dolphin root directory
+uv run dolphin serve
+# The server will use the auto-provisioned key from ~/.dolphin/kb_api_key
+```
 
 ## Project Structure
 
@@ -233,12 +289,21 @@ See [TESTING-GUIDE.md](../docs/TESTING-GUIDE.md) for complete testing instructio
 ### Extension Tests
 
 ```bash
-# Run extension tests
+# Run the full VS Code test suite headlessly
 npm test
+
+# Filter by label (unit, integration, e2e)
+npm test -- --label unit
+npm test -- --label integration
+npm test -- --label e2e
 
 # Compile and watch
 npm run watch
 ```
+
+The `.vscode-test.mjs` config pins a VS Code build and launches Electron with
+headless-friendly flags, so no additional environment variables or xvfb setup is
+required in CI.
 
 ### Integration Testing
 
@@ -299,7 +364,7 @@ See [Implementation Status](../docs/IMPLEMENTATION-STATUS.md) for roadmap.
 
 ```bash
 # Check if KB is running
-curl http://localhost:8000/health
+curl http://127.0.0.1:7777/health
 
 # If not, start it
 uv run dolphin serve
@@ -358,16 +423,19 @@ cd .. && uv run dolphin serve
 ### Making Changes
 
 **Extension Code** (`src/`):
+
 1. Edit TypeScript files
 2. Changes auto-compile if `npm run watch` is running
 3. Reload extension: Cmd+R / Ctrl+R in Extension Development Host
 
 **Webview UI** (`webview/`):
+
 1. Edit Svelte components
 2. Run `bun run build` to rebuild
 3. Reload extension to see changes
 
 **Agent Core** (`../agent-core/`):
+
 1. Edit TypeScript files
 2. Restart extension to pick up changes
 3. See [agent-core README](../agent-core/README.md)
@@ -384,18 +452,21 @@ cd .. && uv run dolphin serve
 ## Roadmap
 
 ### Current (Week 1)
+
 - ✅ Basic chat interface
 - ✅ Claude CLI integration
 - ✅ KB search integration
 - ✅ Auth status UI
 
 ### Near-term (Week 2-6)
+
 - ⏳ KB auto-start (lifecycle management)
 - ⏳ Extension packaging
 - ⏳ Production hardening
 - ⏳ Marketplace publication
 
 ### Future
+
 - Multi-file editing
 - Diff preview and apply
 - Code generation

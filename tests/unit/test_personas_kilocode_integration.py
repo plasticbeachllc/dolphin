@@ -4,22 +4,21 @@ Tests the integration between personas system and KiloCode Custom Modes,
 including provider mapping, configuration generation, and validation.
 """
 
-import tempfile
 import json
+import tempfile
+import tomllib
 from pathlib import Path
-from unittest.mock import patch, mock_open
+from unittest.mock import patch
+
 import pytest
 
 from personas.src.kilocode_utils import (
     KiloCodeError,
-    map_provider_to_kilocode,
     build_kilocode_mode_config,
-    write_kilocode_config,
+    map_provider_to_kilocode,
     validate_kilocode_config,
+    write_kilocode_config,
 )
-from personas.src.persona_utils import PersonaError
-from personas.src.personas import main as personas_main
-import tomllib
 
 
 class TestProviderMapping:
@@ -34,9 +33,9 @@ class TestProviderMapping:
             "temperature": 0.7,
             "max_tokens": 4000,
         }
-        
+
         config = map_provider_to_kilocode("test-persona", persona_config)
-        
+
         assert config["provider"] == "anthropic"
         assert config["apiKey"] == "sk-ant-test123"  # Direct value now
         assert config["apiModelId"] == "claude-3-5-sonnet-20241022"
@@ -53,9 +52,9 @@ class TestProviderMapping:
             "temperature": 0.7,
             "max_tokens": 4000,
         }
-        
+
         config = map_provider_to_kilocode("test-persona", persona_config)
-        
+
         assert config["provider"] == "openai-native"
         assert config["openAiNativeApiKey"] == "sk-test123"  # Direct value now
         assert config["apiModelId"] == "gpt-4o"
@@ -70,9 +69,9 @@ class TestProviderMapping:
             "model": "gpt-4o",
             "base_url": "https://custom.openai.ai/v1",
         }
-        
+
         config = map_provider_to_kilocode("test-persona", persona_config)
-        
+
         assert config["provider"] == "openai-native"
         assert config["openAiNativeApiKey"] == "sk-test123"
         assert config["apiModelId"] == "gpt-4o"
@@ -85,9 +84,9 @@ class TestProviderMapping:
             "api_key": "gsk_test123",
             "model": "llama-3.3-70b-versatile",
         }
-        
+
         config = map_provider_to_kilocode("test-persona", persona_config)
-        
+
         assert config["provider"] == "groq"
         assert config["groqApiKey"] == "gsk_test123"
         assert config["apiModelId"] == "llama-3.3-70b-versatile"
@@ -99,9 +98,9 @@ class TestProviderMapping:
             "api_key": "sk-deepseek123",
             "model": "deepseek-chat",
         }
-        
+
         config = map_provider_to_kilocode("test-persona", persona_config)
-        
+
         assert config["provider"] == "deepseek"
         assert config["deepSeekApiKey"] == "sk-deepseek123"
         assert config["apiModelId"] == "deepseek-chat"
@@ -113,9 +112,9 @@ class TestProviderMapping:
             "api_key": "AIza_test123",
             "model": "gemini-2.5-flash-preview-04-17",
         }
-        
+
         config = map_provider_to_kilocode("test-persona", persona_config)
-        
+
         assert config["provider"] == "gemini"
         assert config["geminiApiKey"] == "AIza_test123"
         assert config["apiModelId"] == "gemini-2.5-flash-preview-04-17"
@@ -128,9 +127,9 @@ class TestProviderMapping:
             "model": "llama3.2",
             "base_url": "http://localhost:11434",
         }
-        
+
         config = map_provider_to_kilocode("test-persona", persona_config)
-        
+
         assert config["provider"] == "ollama"
         assert config["ollamaModelId"] == "llama3.2"
         assert config["ollamaBaseUrl"] == "http://localhost:11434"
@@ -142,9 +141,9 @@ class TestProviderMapping:
             "api_key": "test-key",
             "model": "test-model",
         }
-        
+
         config = map_provider_to_kilocode("test-persona", persona_config)
-        
+
         assert config["provider"] == "unknown_provider"
         assert config["apiKey"] == "test-key"
         assert config["apiModelId"] == "test-model"
@@ -156,10 +155,10 @@ class TestProviderMapping:
             "api_key": "${ANTHROPIC_API_KEY}",
             "model": "claude-3-5-sonnet-20241022",
         }
-        
+
         with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "env-sk-ant-123"}):
             config = map_provider_to_kilocode("test-persona", persona_config)
-            
+
             assert config["apiKey"] == "env-sk-ant-123"
 
     def test_missing_environment_variable(self):
@@ -169,10 +168,10 @@ class TestProviderMapping:
             "api_key": "${MISSING_API_KEY}",
             "model": "claude-3-5-sonnet-20241022",
         }
-        
+
         with patch.dict("os.environ", {}, clear=True):
             config = map_provider_to_kilocode("test-persona", persona_config)
-            
+
             # Should keep the placeholder if env var is missing
             assert config["apiKey"] == "${MISSING_API_KEY}"
 
@@ -182,6 +181,7 @@ class TestConfigurationGeneration:
 
     def test_build_minimal_config(self):
         """Test building minimal KiloCode configuration."""
+
         # Create a mock persona object
         class MockPersona:
             def __init__(self):
@@ -193,12 +193,12 @@ class TestConfigurationGeneration:
                 self.params = {}
                 self.provider_options = {}
                 self.path = Path("/mock/path")
-        
+
         persona = MockPersona()
         instructions = "Test instructions"
-        
-        config = build_kilocode_mode_config(persona, instructions)
-        
+
+        config = build_kilocode_mode_config(persona, instructions)  # type: ignore[arg-type]
+
         assert config["slug"] == "test-persona"
         assert config["name"] == "Test Persona"
         assert config["instructions"] == "Test instructions"
@@ -207,6 +207,7 @@ class TestConfigurationGeneration:
 
     def test_build_config_with_parameters(self):
         """Test building config with temperature and max_tokens."""
+
         class MockPersona:
             def __init__(self):
                 self.id = "test-persona"
@@ -217,17 +218,18 @@ class TestConfigurationGeneration:
                 self.params = {"temperature": 0.8, "max_tokens": 6000}
                 self.provider_options = {}
                 self.path = Path("/mock/path")
-        
+
         persona = MockPersona()
         instructions = "Test instructions"
-        
-        config = build_kilocode_mode_config(persona, instructions)
-        
+
+        config = build_kilocode_mode_config(persona, instructions)  # type: ignore[arg-type]
+
         assert config["temperature"] == 0.8
         assert config["max_tokens"] == 6000
 
     def test_build_config_with_system_prompt(self):
         """Test building config with system prompt content."""
+
         class MockPersona:
             def __init__(self):
                 self.id = "test-persona"
@@ -238,12 +240,12 @@ class TestConfigurationGeneration:
                 self.params = {}
                 self.provider_options = {}
                 self.path = Path("/mock/path")
-        
+
         persona = MockPersona()
         system_content = "You are a helpful coding assistant."
-        
-        config = build_kilocode_mode_config(persona, system_content)
-        
+
+        config = build_kilocode_mode_config(persona, system_content)  # type: ignore[arg-type]
+
         assert config["instructions"] == "You are a helpful coding assistant."
 
     def test_slug_validation(self):
@@ -264,7 +266,7 @@ class TestConfigurationValidation:
             "apiKey": "sk-ant-test123",
             "apiModelId": "claude-3-5-sonnet-20241022",
         }
-        
+
         validate_kilocode_config(config)  # Should not raise
 
     def test_missing_required_fields(self):
@@ -275,7 +277,7 @@ class TestConfigurationValidation:
             # Missing apiKey
             "apiModelId": "claude-3-5-sonnet-20241022",
         }
-        
+
         with pytest.raises(KiloCodeError, match="Missing required field"):
             validate_kilocode_config(config)
 
@@ -289,7 +291,7 @@ class TestConfigurationValidation:
                 # Missing apiModelId
             },
         }
-        
+
         with pytest.raises(KiloCodeError, match="Missing required provider field"):
             validate_kilocode_config(config)
 
@@ -312,30 +314,30 @@ class TestConfigurationWriting:
                     self.provider_options = {}
                     self.path = Path("/mock/path")
                     self.token_budget = 4000
-            
+
             personas = [MockPersona()]
             compiled_messages = {"test-persona": "Test instructions"}
-            
-            result = write_kilocode_config(
-                personas=personas,
+
+            write_kilocode_config(
+                personas=personas,  # type: ignore[arg-type]
                 compiled_messages=compiled_messages,
                 guardrails="Be helpful",
                 target_dir=Path(tmpdir),
-                dry_run=False
+                dry_run=False,
             )
-            
+
             # Check that .kilocode-config directory was created
             config_dir = Path(tmpdir) / ".kilocode-config"
             assert config_dir.exists()
             assert config_dir.is_dir()
-            
+
             # Check that files were created
             modes_dir = config_dir / "modes"
             assert modes_dir.exists()
-            
+
             persona_file = modes_dir / "test-persona.json"
             assert persona_file.exists()
-            
+
             # Verify file content
             with open(persona_file) as f:
                 written_config = json.load(f)
@@ -345,6 +347,7 @@ class TestConfigurationWriting:
     def test_dry_run_mode(self):
         """Test that dry run mode doesn't create files."""
         with tempfile.TemporaryDirectory() as tmpdir:
+
             class MockPersona:
                 def __init__(self):
                     self.id = "test-persona"
@@ -356,22 +359,22 @@ class TestConfigurationWriting:
                     self.provider_options = {}
                     self.path = Path("/mock/path")
                     self.token_budget = 4000
-            
+
             personas = [MockPersona()]
             compiled_messages = {"test-persona": "Test instructions"}
-            
+
             result = write_kilocode_config(
-                personas=personas,
+                personas=personas,  # type: ignore[arg-type]
                 compiled_messages=compiled_messages,
                 guardrails="Be helpful",
                 target_dir=Path(tmpdir),
-                dry_run=True  # Dry run mode
+                dry_run=True,  # Dry run mode
             )
-            
+
             # Check that no directories were created
             config_dir = Path(tmpdir) / ".kilocode-config"
             assert not config_dir.exists()
-            
+
             # But result should still be returned
             assert result["modes_count"] == 1
             assert result["config_type"] == "repository"
@@ -379,6 +382,7 @@ class TestConfigurationWriting:
     def test_directory_creation(self):
         """Test that directories are created if they don't exist."""
         with tempfile.TemporaryDirectory() as tmpdir:
+
             class MockPersona:
                 def __init__(self):
                     self.id = "test-persona"
@@ -390,22 +394,22 @@ class TestConfigurationWriting:
                     self.provider_options = {}
                     self.path = Path("/mock/path")
                     self.token_budget = 4000
-            
+
             personas = [MockPersona()]
             compiled_messages = {"test-persona": "Test instructions"}
-            
+
             # Directory doesn't exist initially
             config_dir = Path(tmpdir) / ".kilocode-config"
             assert not config_dir.exists()
-            
-            result = write_kilocode_config(
-                personas=personas,
+
+            write_kilocode_config(
+                personas=personas,  # type: ignore[arg-type]
                 compiled_messages=compiled_messages,
                 guardrails="Be helpful",
                 target_dir=Path(tmpdir),
-                dry_run=False
+                dry_run=False,
             )
-            
+
             assert config_dir.exists()
             assert config_dir.is_dir()
             assert (config_dir / "modes").exists()
@@ -438,7 +442,7 @@ class TestLegacyMigrationCompatibility:
         with tempfile.TemporaryDirectory() as tmpdir:
             persona_path = Path(tmpdir) / "test-persona" / "persona.toml"
             persona_path.parent.mkdir()
-            
+
             # Write old format
             persona_content = """
 [persona]
@@ -455,11 +459,11 @@ content = "You are a test persona."
 file = "prompt.md"
 """
             persona_path.write_text(persona_content)
-            
+
             # Read and parse
             with open(persona_path, "rb") as f:
                 data = tomllib.load(f)
-            
+
             # Should have both persona and system sections
             assert "persona" in data
             assert "system" in data
@@ -471,7 +475,7 @@ file = "prompt.md"
         with tempfile.TemporaryDirectory() as tmpdir:
             persona_path = Path(tmpdir) / "test-persona" / "persona.toml"
             persona_path.parent.mkdir()
-            
+
             # Write new format
             persona_content = """
 name = "Test Persona"
@@ -481,11 +485,11 @@ model = "claude-3-5-sonnet-20241022"
 system_content = "You are a test persona."
 """
             persona_path.write_text(persona_content)
-            
+
             # Read and parse
             with open(persona_path, "rb") as f:
                 data = tomllib.load(f)
-            
+
             # Should be flat structure
             assert "name" in data
             assert data["name"] == "Test Persona"
@@ -512,10 +516,10 @@ class TestErrorHandling:
             # Missing api_key
             "model": "claude-3-5-sonnet-20241022",
         }
-        
+
         # Should not raise during mapping
         config = map_provider_to_kilocode("test-persona", persona_config)
-        
+
         # Should raise during validation
         with pytest.raises(KiloCodeError, match="Missing"):
             validate_kilocode_config(config)
@@ -527,7 +531,7 @@ class TestErrorHandling:
             "api_key": "${malformed",
             "model": "claude-3-5-sonnet-20241022",
         }
-        
+
         # Should not crash, just pass through the malformed value
         config = map_provider_to_kilocode("test-persona", persona_config)
         assert config["apiKey"] == "${malformed"

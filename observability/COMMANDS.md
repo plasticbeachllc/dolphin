@@ -45,12 +45,12 @@ docker compose exec prometheus sh
 
 ## Service Access
 
-| Service | URL | Purpose |
-|---------|-----|---------|
-| **Grafana** | http://localhost:3000 | Main debugging dashboard (admin/admin) |
-| **Jaeger** | http://localhost:16686 | View distributed traces |
-| **Prometheus** | http://localhost:9090 | Query metrics directly |
-| **Loki** | http://localhost:3100 | Log aggregation API |
+| Service        | URL                    | Purpose                                |
+| -------------- | ---------------------- | -------------------------------------- |
+| **Grafana**    | http://localhost:3000  | Main debugging dashboard (admin/admin) |
+| **Jaeger**     | http://localhost:16686 | View distributed traces                |
+| **Prometheus** | http://localhost:9090  | Query metrics directly                 |
+| **Loki**       | http://localhost:3100  | Log aggregation API                    |
 
 ## KB API Commands
 
@@ -73,6 +73,7 @@ curl -X POST http://localhost:8000/search \
 ## Debugging Workflows
 
 ### View Request Latency
+
 ```bash
 # 1. Start stack
 ./manage.sh start
@@ -88,6 +89,7 @@ curl http://localhost:8000/health
 ```
 
 ### Debug Errors
+
 ```bash
 # 1. Check error logs in Grafana dashboard
 # 2. Or query Loki directly
@@ -99,6 +101,7 @@ curl -G http://localhost:3100/loki/api/v1/query_range \
 ```
 
 ### Trace a Request
+
 ```bash
 # 1. Make a request to KB API
 curl -X POST http://localhost:8000/search \
@@ -146,6 +149,7 @@ Or use quick search: `Ctrl+K` → type "debugging"
 ## Troubleshooting
 
 ### Services won't start
+
 ```bash
 # Check Docker is running
 docker ps
@@ -160,6 +164,7 @@ lsof -i :16686 # Jaeger
 ```
 
 ### Dashboard not showing in Grafana
+
 ```bash
 # Restart Grafana to reload dashboards
 docker compose restart grafana
@@ -172,6 +177,7 @@ docker compose logs -f grafana
 ```
 
 ### No metrics in Prometheus
+
 ```bash
 # Check Prometheus targets
 open http://localhost:9090/targets
@@ -182,6 +188,7 @@ curl http://localhost:8000/metrics
 ```
 
 ### No traces in Jaeger
+
 ```bash
 # Verify Jaeger is running
 curl http://localhost:16686/api/services
@@ -207,6 +214,7 @@ docker compose exec grafana \
 ## Common Tasks
 
 ### Daily Development
+
 ```bash
 # 1. Start stack once
 ./manage.sh start
@@ -223,6 +231,7 @@ open http://localhost:3000
 ```
 
 ### Performance Testing
+
 ```bash
 # 1. Start stack
 ./manage.sh start
@@ -238,6 +247,7 @@ open http://localhost:9090
 ```
 
 ### Debugging Production Issue
+
 ```bash
 # 1. Start stack with same config
 ./manage.sh start

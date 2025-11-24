@@ -4,7 +4,7 @@ Technical architecture and implementation status for the Dolphin AI enablement p
 
 **Version**: 0.1.13
 **Status**: Beta (Production Ready for Core Components)
-**Last Updated**: 2025-11-10
+**Last Updated**: 2025-11-13 (WP2 Agent-Core V2 Consolidation Complete)
 
 ---
 
@@ -24,7 +24,7 @@ Technical architecture and implementation status for the Dolphin AI enablement p
 
 ## Overview
 
-Dolphin is a full-stack AI enablement platform that combines semantic code retrieval with multiple AI interfaces. The system decomposes repositories into language-aware chunks, embeds them using OpenAI, stores them in LanceDB, and provides semantic search via REST API, MCP protocol, and VSCode extension. The platform includes an intelligent agent orchestrator (agent-core) that manages Claude AI interactions and coordinates knowledge base searches.
+Dolphin is a full-stack AI enablement platform that combines semantic code retrieval with multiple AI interfaces. The system decomposes repositories into language-aware chunks, embeds them using OpenAI, stores them in LanceDB, and provides semantic search via REST API, MCP protocol, and VSCode extension. The platform includes an intelligent agent orchestrator (agent-core) that now manages Anthropic Claude **and** OpenAI GPT interactions through a shared provider abstraction, coordinating knowledge base searches for both ecosystems.
 
 ### Design Goals
 
@@ -34,7 +34,7 @@ Dolphin is a full-stack AI enablement platform that combines semantic code retri
 4. **Multiple Interfaces**: Support CLI, REST API, MCP, VSCode extension, and Continue IDE
 5. **Cost Control**: Deduplication and session spend caps
 6. **Local-First**: Run on MacBook Pro M4 (24GB RAM)
-7. **AI-Powered Assistance**: Intelligent agent orchestration with Claude integration
+7. **AI-Powered Assistance**: Intelligent agent orchestration with multi-provider Anthropic/OpenAI integration
 8. **Rich UI Experience**: Beautiful SvelteKit-based webview with real-time streaming
 
 ---
@@ -48,7 +48,7 @@ Dolphin is a full-stack AI enablement platform that combines semantic code retri
 │                      User Interfaces                          │
 ├──────────────┬──────────────┬──────────────┬─────────────────┤
 │ VSCode Ext   │Claude Desktop│  CLI (kb)    │  Direct REST    │
-│ (Svelte UI)  │   (MCP)      │  (Python)    │  (curl/bun)     │
+│ (Svelte UI)  │ / OpenAI UX  │  (Python)    │  (curl/bun)     │
 └──────┬───────┴──────┬───────┴──────┬───────┴──────┬──────────┘
        │              │              │              │
        │ JSON-RPC     │ MCP stdio    │              │ HTTP
@@ -56,7 +56,7 @@ Dolphin is a full-stack AI enablement platform that combines semantic code retri
 ┌──────────────┐  ┌───────────────────────────────────────────┐
 │ Agent Core   │  │      MCP Bridge (TypeScript/Bun)          │
 │ (Bun/TS)     │  │  • 6 MCP Tools                            │
-│ • Claude API │  │  • REST Client                            │
+│ • Provider-agnostic LLM API (Claude/OpenAI) │  │  • REST Client          │
 │ • KB Mgmt    │  │  • Content Truncation (50KB)              │
 │ • Task Plan  │  │  • Type-safe interfaces                   │
 │ • Storage    │  └──────────────────┬────────────────────────┘
@@ -108,11 +108,13 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 ### Production Deployment Strategy
 
 **Current State (Development):**
+
 - KB server runs separately (`uv run dolphin serve`)
 - Extension connects to existing KB on localhost:8000
 - Manual two-step startup process
 
 **Target State (Production):**
+
 - KB server auto-starts when extension activates
 - Zero-configuration user experience
 - Automatic process lifecycle management
@@ -124,12 +126,14 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 **Location:** [`agent-core/src/kb/manager.ts`](../agent-core/src/kb/manager.ts)
 
 **New Capabilities:**
+
 - **Health Check:** Detect KB server on localhost:8000
 - **Auto-Start:** Spawn KB subprocess if not running
 - **Lifecycle Management:** Track and cleanup KB process
 - **Error Recovery:** Graceful degradation and restart logic
 
 **Startup Flow:**
+
 ```
 Extension Activation
   ↓
@@ -154,15 +158,16 @@ Check localhost:8000/health
 
 **Endpoints**:
 
-| Endpoint | Method | Purpose | Status |
-|----------|--------|---------|--------|
-| `/v1/health` | GET | Health check (shallow/deep) | ✅ |
-| `/v1/repos` | GET | List indexed repositories | ✅ |
-| `/v1/search` | POST | Semantic code search with MMR | ✅ |
-| `/v1/chunks/{id}` | GET | Fetch chunk by ID | ✅ |
-| `/v1/file` | GET | Fetch file slice by line range | ✅ |
+| Endpoint          | Method | Purpose                        | Status |
+| ----------------- | ------ | ------------------------------ | ------ |
+| `/v1/health`      | GET    | Health check (shallow/deep)    | ✅     |
+| `/v1/repos`       | GET    | List indexed repositories      | ✅     |
+| `/v1/search`      | POST   | Semantic code search with MMR  | ✅     |
+| `/v1/chunks/{id}` | GET    | Fetch chunk by ID              | ✅     |
+| `/v1/file`        | GET    | Fetch file slice by line range | ✅     |
 
 **Key Features**:
+
 - Automatic backend initialization on startup
 - OpenAI + Stub embedding providers
 - LanceDB vector search with fixed-size vectors
@@ -173,6 +178,7 @@ Check localhost:8000/health
 - Session spend cap enforcement
 
 **Files**:
+
 - `kb/api/app.py` - FastAPI endpoints
 - `kb/api/server.py` - Server initialization
 - `kb/api/search_backend.py` - Search pipeline with MMR integration
@@ -183,16 +189,17 @@ Check localhost:8000/health
 
 **Tools Implemented**:
 
-| Tool | Purpose | Status |
-|------|---------|--------|
-| `search_knowledge` | Semantic code search with citations | ✅ |
-| `fetch_chunk` | Retrieve chunk by ID | ✅ |
-| `fetch_lines` | Retrieve file slice by line range | ✅ |
-| `get_vector_store_info` | Get store metadata and stats | ✅ |
-| `get_metadata` | Get chunk metadata without content | ✅ |
-| `open_in_editor` | Open file in user's editor | ✅ |
+| Tool                    | Purpose                             | Status |
+| ----------------------- | ----------------------------------- | ------ |
+| `search_knowledge`      | Semantic code search with citations | ✅     |
+| `fetch_chunk`           | Retrieve chunk by ID                | ✅     |
+| `fetch_lines`           | Retrieve file slice by line range   | ✅     |
+| `get_vector_store_info` | Get store metadata and stats        | ✅     |
+| `get_metadata`          | Get chunk metadata without content  | ✅     |
+| `open_in_editor`        | Open file in user's editor          | ✅     |
 
 **Key Features**:
+
 - MCP Protocol 2025-06-18 compliance
 - 50KB content budget with multi-stage trimming
 - Structured error responses with remediation hints
@@ -201,6 +208,7 @@ Check localhost:8000/health
 - AbortSignal support for cancellation
 
 **Files**:
+
 - `mcp-bridge/src/index.ts` - MCP server entry point
 - `mcp-bridge/src/mcp/tools/` - Tool implementations
 - `mcp-bridge/src/rest/client.ts` - REST API client
@@ -208,48 +216,153 @@ Check localhost:8000/health
 
 ### 3. Agent Core (TypeScript/Bun)
 
-**Location**: `agent-core/`
+**Location**: `agent-core/` _(V2 Architecture - Consolidated as of WP2)_
 
-**Purpose**: Intelligent agent orchestrator that manages Claude AI interactions, coordinates knowledge base searches, and handles conversation persistence.
+**Purpose**: Intelligent agent orchestrator that manages Anthropic Claude **and** OpenAI GPT interactions through a shared provider abstraction, coordinates knowledge base searches, and handles conversation persistence with dual-workflow architecture.
+
+**V2 Architecture Overview**:
+Agent-core has been fully consolidated from V1/V2 split into a unified module with:
+
+- Research → Clarification → Planning workflow for complex tasks
+- Single-phase fast-path workflow for simple edits
+- PathValidator security (WP1) throughout all file operations
+- JSON-RPC stdio communication with VSCode extension
+- State machine orchestrator coordinating workflow execution
 
 **Key Features**:
-- Dual authentication support (Claude CLI subscription or API key)
+
+- Dual authentication support (Claude CLI subscription or API key) plus OpenAI / OpenAI-compatible API keys
+- Provider factory that selects Anthropic or OpenAI based on VS Code settings + environment overrides
 - JSON-RPC communication with VSCode extension
 - Automatic KB server lifecycle management (health checks, auto-start)
-- Conversation persistence in TOML format
-- Task planning and execution
+- Session and plan persistence in TOML format with PathValidator security
+- Two workflow modes: Editor (fast) and Architect (comprehensive)
 - Tool execution with MCP integration
 - Robust message framing with Content-Length headers
-- Write queue to prevent message interleaving
+- Background async event streaming
 
-**Components**:
-- `src/main.ts` - Entry point, JSON-RPC IPC handler
-- `src/llm/` - Claude API/CLI integration and tool execution
-- `src/planner/` - Task planning and orchestration
-- `src/kb/manager.ts` - KB lifecycle management (health checks, auto-start)
-- `src/storage/` - Conversation persistence (TOML format)
-- `src/mcp/` - MCP protocol client for tool calls
+**Core Components**:
+
+- `src/main.ts` - JSON-RPC stdio entry point, component initialization
+- `src/workflows/` - Dual workflow architecture (Editor + Architect)
+- `src/orchestrator/orchestrator.ts` - State machine coordinator
+- `src/execution/anthropic-provider.ts` / `src/execution/openai-provider.ts` - ChatProvider implementations
+- `src/execution/provider-factory.ts` - Provider selection + auth surface
+- `src/llm/` - Anthropic + OpenAI client/tool executors and shared agentic loops
+- `src/context/context-builder.ts` - KB + file context aggregation
+- `src/prompts/prompt-builder.ts` - System prompt generation
+- `src/state/state-store.ts` - TOML session persistence with PathValidator
+- `src/kb/kb-manager.ts` - KB lifecycle with process locking
+- `src/storage/` - Conversation and plan persistence (TOML with PathValidator)
+- `src/mcp/mcp-client.ts` - MCP protocol client for tool calls
 
 **Technologies**:
-- **Bun** - Fast JavaScript runtime
-- **Anthropic SDK** - Claude API integration
-- **Zod** - Schema validation
-- **@iarna/toml** - TOML persistence for conversations
-- **diff** - Diff generation for code changes
 
-**Conversation Storage**:
-- Format: TOML with metadata and messages
-- Location: `.dolphin/conversations/`
-- Features: Branching, metadata tracking, full history
+- **Bun** - Fast JavaScript runtime
+- **Anthropic SDK & OpenAI SDK** - Provider integrations
+- **Zod** - Schema validation for state
+- **@iarna/toml** - TOML persistence for conversations and state
+- **diff** - Diff generation for code changes
+- **vscode-jsonrpc** - JSON-RPC protocol implementation
+
+**Dual Workflow Architecture**:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                      Orchestrator                        │
+│                   (State Machine)                        │
+└──────────┬────────────────────────────┬─────────────────┘
+           │                            │
+           ▼                            ▼
+  ┌──────────────────┐        ┌──────────────────────┐
+  │ EditorWorkflow   │        │ ArchitectWorkflow    │
+  │   (Fast Path)    │        │  (Complex Tasks)     │
+  └──────────────────┘        └──────────────────────┘
+           │                            │
+     Single Phase              Research → Clarification
+     8K tokens                      → Planning
+     <1s latency                    16K+ tokens
+                                    Interactive Q&A
+```
+
+**EditorWorkflow (Fast Path)** - 195 lines:
+
+```
+Input → Context (8K tokens) → Prompt → Execute → Save → Done
+```
+
+- For simple edits and quick tasks
+- Direct execution without planning phase
+- Optimized for low latency
+
+**ArchitectWorkflow (Complex Tasks)** - 1,093 lines:
+
+```
+Phase 1: RESEARCH
+  ├─ KB search for relevant context
+  ├─ File discovery
+  └─ Findings summarization
+
+Phase 2: CLARIFICATION (Interactive Q&A)
+  ├─ LLM generates clarifying questions
+  ├─ User provides answers
+  ├─ Iterative refinement (max 3 turns)
+  └─ Signal [READY_TO_PLAN] when complete
+
+Phase 3: PLANNING
+  ├─ TOML-based plan generation
+  ├─ Markdown fallback parser
+  ├─ Files to modify/create
+  ├─ Step-by-step implementation
+  └─ Complexity estimate
+```
+
+**Workflow Components**:
+
+- `workflows/architect-workflow.ts` - Multi-phase research/clarification/planning
+- `workflows/editor-workflow.ts` - Single-phase fast execution
+- `workflows/constants.ts` - Model configs, token ratios, defaults
+- `workflows/plan-parser.ts` - TOML and markdown plan parsing
+
+**Session Storage**:
+
+- Format: TOML with Zod validation
+- Location: `.dolphin/state/sessions/`
+- Security: PathValidator prevents directory traversal
+- Features: Research results, clarification history, plans
+
+**Plan Storage**:
+
+- Format: Markdown with TOML metadata
+- Location: `.dolphin/state/plans/`
+- Security: PathValidator on all file operations
+- Features: Versioning, approval workflow
+
+**Security (WP1 Integration)**:
+All file operations use PathValidator to prevent:
+
+- Directory traversal attacks (`../`)
+- Absolute paths outside workspace
+- Null byte injection
+- Symlink attacks
+- Prefix attacks (repoA vs repoA2)
+
+**Performance Targets**:
+
+- EditorWorkflow: <1s (p95)
+- ArchitectWorkflow Research: <3s (p95)
+- Clarification turn: <2s per Q&A
+- Planning phase: <5s (p95)
 
 ### 4. VSCode Extension (TypeScript/Svelte)
 
 **Location**: `vscode-extension/`
 
-**Purpose**: Rich AI coding assistant integrated into VSCode with beautiful UI and seamless Claude integration.
+**Purpose**: Rich AI coding assistant integrated into VSCode with beautiful UI and seamless Anthropic + OpenAI integration.
 
 **Key Features**:
-- Real-time streaming Claude responses
+
+- Real-time streaming LLM responses (Claude/OpenAI)
 - SvelteKit-based webview with shadcn/ui components
 - Tool call visualization cards
 - Message persistence across sessions
@@ -259,12 +372,14 @@ Check localhost:8000/health
 - Beautiful, responsive UI with Tailwind CSS
 
 **Extension Architecture**:
+
 - `src/extension.ts` - Extension entry point and lifecycle
 - `src/agent/bridge.ts` - JSON-RPC communication with Agent Core
 - `src/views/` - Webview provider and panel management
 - `src/kb/` - Knowledge Base integration helpers
 
 **Webview Architecture** (SvelteKit):
+
 - **Routes**:
   - `/` - Main chat interface with message history
   - `/settings` - Authentication and configuration
@@ -273,6 +388,7 @@ Check localhost:8000/health
 - **Styling**: Tailwind CSS with custom theme
 
 **Technologies**:
+
 - **VSCode API** - Extension framework
 - **SvelteKit** - Full-stack web framework
 - **Svelte** - Reactive components
@@ -281,6 +397,7 @@ Check localhost:8000/health
 - **vscode-jsonrpc** - JSON-RPC communication
 
 **Key Capabilities**:
+
 - Streaming responses with token-by-token display
 - Tool call visualization (Knowledge Bank searches, file operations)
 - Conversation branching and history
@@ -294,12 +411,14 @@ Check localhost:8000/health
 **Components**:
 
 #### Scanner (`ingest/scanner.py`)
+
 - Discovers files respecting `.gitignore`
 - Security patterns (`.env`, `.pem`, `.aws/`, etc.)
 - Language detection via file extension
 - Returns `FileCandidate` objects
 
 #### Chunkers (`chunkers/`)
+
 - **Python** (`py_chunker.py`): Tree-sitter AST extraction (classes, functions, methods)
 - **TypeScript** (`ts_chunker.py`): Tree-sitter AST extraction
 - **Markdown** (`md_chunker.py`): Heading-based chunking
@@ -308,6 +427,7 @@ Check localhost:8000/health
 - Token utils (`token_utils.py`): tiktoken integration
 
 #### Embeddings (`embeddings/provider.py`)
+
 - OpenAI `text-embedding-3-small` (1536 dims) - default
 - OpenAI `text-embedding-3-large` (3072 dims) - per-repo override
 - Stub provider for testing (zero vectors)
@@ -316,6 +436,7 @@ Check localhost:8000/health
 - Per-session spend cap
 
 #### Storage (`store/`)
+
 - **SQLite** (`sqlite_meta.py`): Metadata store
   - Tables: `repos`, `sessions`, `files`, `chunk_content`, `chunk_locations`
   - SQLModel-based schema with migrations
@@ -325,6 +446,7 @@ Check localhost:8000/health
   - Upsert via delete-then-append
 
 #### Ingestion Pipeline (`ingest/pipeline.py`)
+
 - Orchestrates scanning → chunking → embedding → storage
 - Git-aware incremental indexing
 - Content deduplication via SHA256 hashing
@@ -333,6 +455,7 @@ Check localhost:8000/health
 - Dry-run mode for cost estimation
 
 #### CLI (`ingest/cli.py`)
+
 - `kb init` - Initialize knowledge store
 - `kb add-repo` - Register repository
 - `kb index` - Index/reindex repository
@@ -343,6 +466,7 @@ Check localhost:8000/health
 ### 6. CLI Tools
 
 **Unified Dolphin CLI** (`dolphin`):
+
 - Python-based CLI using Typer framework
 - High-level commands (init, add-repo, index, search, serve)
 - Knowledge base management (status, prune, list-files)
@@ -350,6 +474,7 @@ Check localhost:8000/health
 - Environment variable support (OPENAI_API_KEY, KB_TOP_K, KB_REPOS)
 
 **Legacy kb CLI**:
+
 - Standalone `kb` command for backward compatibility
 - Direct access to knowledge base operations
 
@@ -360,6 +485,7 @@ Check localhost:8000/health
 ### SQLite Schema
 
 #### repos
+
 ```sql
 CREATE TABLE repos (
   id INTEGER PRIMARY KEY,
@@ -372,6 +498,7 @@ CREATE TABLE repos (
 ```
 
 #### sessions
+
 ```sql
 CREATE TABLE sessions (
   id INTEGER PRIMARY KEY,
@@ -391,6 +518,7 @@ CREATE TABLE sessions (
 ```
 
 #### files
+
 ```sql
 CREATE TABLE files (
   id INTEGER PRIMARY KEY,
@@ -406,6 +534,7 @@ CREATE TABLE files (
 ```
 
 #### chunk_content
+
 ```sql
 CREATE TABLE chunk_content (
   id INTEGER PRIMARY KEY,
@@ -421,6 +550,7 @@ CREATE TABLE chunk_content (
 ```
 
 #### chunk_locations
+
 ```sql
 CREATE TABLE chunk_locations (
   id INTEGER PRIMARY KEY,
@@ -438,10 +568,12 @@ CREATE TABLE chunk_locations (
 ### LanceDB Schema
 
 Collections per embedding model:
+
 - `chunks_small` - 1536 dimensions (text-embedding-3-small)
 - `chunks_large` - 3072 dimensions (text-embedding-3-large)
 
 Columns:
+
 ```python
 {
   "id": str,              # Unique chunk location ID
@@ -568,6 +700,9 @@ Columns:
 - ✅ Health checks (shallow + deep)
 - ✅ Repository listing with stats
 - ✅ Hybrid search (BM25 + Vector with RRF scoring)
+- ✅ Stats-driven BM25 normalization with ingest-time collectors and min/max/quantile strategies
+- ✅ SQLiteMetadataStore reuses a WAL-enabled connection pool for every query path
+- ✅ Search backend applies repo/path filtering + config penalties in a single pass
 - ✅ Maximal Marginal Relevance (MMR) for diverse results
 - ✅ Cross-encoder reranking (optional)
 - ✅ Chunk and file retrieval
@@ -586,15 +721,45 @@ Columns:
 ### ✅ Phase 8 Complete: VSCode Extension & Agent Core
 
 - ✅ VSCode extension with SvelteKit webview
-- ✅ Agent Core with Claude integration
+- ✅ Agent Core with Anthropic/OpenAI integration
 - ✅ JSON-RPC IPC communication
 - ✅ Conversation persistence (TOML format)
-- ✅ Dual authentication (Claude CLI / API key)
+- ✅ Dual authentication (Claude CLI / API key) + OpenAI / custom endpoint keys
 - ✅ Real-time streaming responses
 - ✅ Tool call visualization
 - ✅ KB lifecycle management (auto-start)
 - ✅ Conversation history panel
 - ✅ Context menu commands
+
+### 🚧 EP-11 In Progress: Architect Mode KB Discovery
+
+> For the unified KB API key design and status, see `docs/API_KEY_PLAN.md` (covers auto-provisioning, env overrides, and client behavior across CLI, Agent Core, VS Code, and MCP bridge).
+
+**Phase 1 (Foundation) - Completed ✅:**
+
+- ✅ Orchestration module structure
+- ✅ Discovery phase implementation
+- ✅ LLM-powered query planner (provider-neutral prompts)
+- ✅ Graph-aware context enricher
+- ✅ Result validator with confidence scoring
+- ✅ Integration with main.ts
+- ✅ Unit tests (10+ tests covering all components)
+- ✅ Integration tests (full discovery workflow)
+- ✅ Documentation updates
+
+**Phase 2-4 - Planned:**
+
+- 🔜 Synthesis phase (analysis & questions)
+- 🔜 Planning phase (implementation plans)
+- 🔜 UI enhancements for architect mode
+- 🔜 Streaming progress indicators
+
+**Test Coverage:**
+
+- `kb-query-planner.test.ts` - Query generation tests
+- `kb-result-validator.test.ts` - Validation and scoring tests
+- `kb-context-enricher.test.ts` - Graph enrichment tests
+- `discovery-orchestrator.test.ts` - Full workflow integration tests
 
 ### 🔜 Future Enhancements
 
@@ -612,6 +777,7 @@ Columns:
 ### Python Tests: 191+ Passing ✅
 
 **Unit Tests**:
+
 - Chunkers (Python, TypeScript, Markdown, SQL, Svelte, fallback): 45+ tests
 - Embeddings (OpenAI provider, retry, stub): 15 tests
 - Storage (SQLite, LanceDB): 29 tests
@@ -620,6 +786,7 @@ Columns:
 - Token utilities: 8 tests
 
 **Integration Tests**:
+
 - Search API: 11 tests
 - Search backend: 10 tests
 - MCP endpoints: 12 tests
@@ -630,23 +797,27 @@ Columns:
 ### TypeScript Tests: 52+ Passing ✅
 
 **MCP Bridge Tests**:
+
 - Tool implementations: 36 tests
 - REST client: 8 tests
 - Logging and concurrency: 4 tests
 - Security and connectivity: 4 tests
 
 **Agent Core Tests**:
+
 - Conversation persistence: Multiple tests
 - IPC communication: Multiple tests
 - KB lifecycle management: Multiple tests
 
 **VSCode Extension Tests**:
+
 - E2E tests: Multiple scenarios
 - Webview integration: Multiple tests
 
 ### Total: 243+ Tests Passing ✅
 
 **Test Commands**:
+
 ```bash
 # Python tests
 pytest tests/unit/ -v                    # Unit tests
@@ -666,13 +837,13 @@ cd mcp-bridge && bun run test-integration.ts
 
 ### Latency Targets
 
-| Metric | Target | Current |
-|--------|--------|---------|
-| Search p50 | ≤ 600ms | ~300ms |
-| Search p95 | ≤ 2s | ~800ms |
-| Search p99 | ≤ 5s | ~2s |
-| Embedding | - | ~150ms |
-| Vector search | - | ~50ms |
+| Metric        | Target  | Current |
+| ------------- | ------- | ------- |
+| Search p50    | ≤ 600ms | ~300ms  |
+| Search p95    | ≤ 2s    | ~800ms  |
+| Search p99    | ≤ 5s    | ~2s     |
+| Embedding     | -       | ~150ms  |
+| Vector search | -       | ~50ms   |
 
 ### Throughput
 
@@ -681,11 +852,11 @@ cd mcp-bridge && bun run test-integration.ts
 
 ### Index Size
 
-| Repo Size | Files | Chunks | LanceDB | SQLite |
-|-----------|-------|--------|---------|--------|
-| Small | 1K | 50K | ~100 MB | ~5 MB |
-| Medium | 10K | 500K | ~1 GB | ~50 MB |
-| Large | 100K | 5M | ~10 GB | ~500 MB |
+| Repo Size | Files | Chunks | LanceDB | SQLite  |
+| --------- | ----- | ------ | ------- | ------- |
+| Small     | 1K    | 50K    | ~100 MB | ~5 MB   |
+| Medium    | 10K   | 500K   | ~1 GB   | ~50 MB  |
+| Large     | 100K  | 5M     | ~10 GB  | ~500 MB |
 
 ### Memory Usage
 
@@ -774,6 +945,7 @@ cd mcp-bridge && bun run test-integration.ts
 **Problem**: Large search results exceed MCP response limits.
 
 **Solution**: Multi-stage trimming:
+
 1. Trim prompt-ready text (10% iteratively)
 2. Shrink snippet windows (500 → 300 → 200 chars)
 3. Remove snippet text from lowest-scoring hits
@@ -819,13 +991,15 @@ cd mcp-bridge && bun run test-integration.ts
 
 - [README](../README.md) - Project overview and user documentation
 - [AGENTS.md](../AGENTS.md) - Developer guidelines and troubleshooting
-- [TESTING-GUIDE.md](TESTING-GUIDE.md) - Testing procedures
+- [TESTING.md](../TESTING.md) - Testing procedures
+- [ACCESSIBILITY.md](ACCESSIBILITY.md) - Accessibility compliance guide
+- [PROFILING.md](PROFILING.md) - Performance profiling guide
 - [Main codebase](../kb/src/) - Python implementation
 - [MCP Bridge](../mcp-bridge/) - TypeScript implementation
 
 ---
 
-**Status**: ✅ Beta (Production Ready for Core Components)
+**Status**: ✅ Production Ready
 **Test Coverage**: 243+ tests passing
-**Version**: 0.1.13
-**Date**: 2025-11-10
+**Version**: 1.0.0
+**Date**: 2025-11-12

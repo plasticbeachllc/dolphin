@@ -4,7 +4,10 @@
 
 # user configs
 .continue/
-.claude/
+.claude/*
+# Allow SessionStart hooks for Claude Code on the web
+!.claude/hooks/
+!.claude/settings.json
 
 # private dirs
 docs/private/
@@ -15,7 +18,13 @@ scratch/
 # generated configs
 continue-config/
 kilocode-config/
+vscode-extension/.tmp/
 
+# cache artifacts
+.mypy_cache
+.ruff_cache
+.uv-cache
+.venv
 
 # Python cache
 __pycache__/
@@ -27,8 +36,7 @@ tests/**/coverage.xml
 tests/reports/*
 .coverage
 coverage.xml
-
-profiling_results/
+vscode-extension/playwright/test-results
 
 # profiling artifacts
 profiling_results/

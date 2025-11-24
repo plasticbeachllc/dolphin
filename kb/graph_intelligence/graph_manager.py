@@ -1,12 +1,12 @@
 """Manage NetworkX graph with lazy loading and cache validation."""
 
-import networkx as nx
-from datetime import datetime
-from typing import Optional
 import logging
 import time
+from datetime import datetime
 
+import networkx as nx  # type: ignore[import-untyped]
 from sqlmodel import Session, select
+
 from kb.store.sql_models import CodeEdge, CodeNode, GraphMetrics
 
 from .cache_validator import GraphCacheValidator
@@ -22,7 +22,7 @@ class GraphManager:
         db,
         repo_id: int,
         edge_change_threshold: int = 5,
-        cache_ttl_minutes: int = 10
+        cache_ttl_minutes: int = 10,
     ):
         """Initialize graph manager.
 
@@ -36,8 +36,8 @@ class GraphManager:
         self.repo_id = repo_id
 
         # In-memory cache
-        self._graph: Optional[nx.DiGraph] = None
-        self._last_rebuild: Optional[datetime] = None
+        self._graph: nx.DiGraph | None = None
+        self._last_rebuild: datetime | None = None
 
         # Validator
         self.validator = GraphCacheValidator(
@@ -57,14 +57,13 @@ class GraphManager:
             NetworkX directed graph
         """
         # Check if rebuild needed
-        if (
-            force_rebuild
-            or self._graph is None
-            or not self.validator.is_cache_valid()
-        ):
+        if force_rebuild or self._graph is None or not self.validator.is_cache_valid():
             logger.info(f"Rebuilding graph for repo {self.repo_id}")
             self._rebuild_graph()
 
+        # Type narrowing: _rebuild_graph always sets self._graph
+        if self._graph is None:
+            raise RuntimeError(f"Failed to build graph for repo {self.repo_id}")
         return self._graph
 
     def _rebuild_graph(self):
@@ -161,15 +160,17 @@ class GraphManager:
             results = session.exec(statement).all()
 
             for edge in results:
-                edges.append({
-                    "source_node_id": edge.source_node_id,
-                    "target_node_id": edge.target_node_id,
-                    "edge_type": edge.edge_type,
-                    "commit_sha": edge.commit_sha,
-                    "line_number": edge.line_number,
-                    "is_direct": edge.is_direct,
-                    "relationship_metadata": edge.relationship_metadata,
-                })
+                edges.append(
+                    {
+                        "source_node_id": edge.source_node_id,
+                        "target_node_id": edge.target_node_id,
+                        "edge_type": edge.edge_type,
+                        "commit_sha": edge.commit_sha,
+                        "line_number": edge.line_number,
+                        "is_direct": edge.is_direct,
+                        "relationship_metadata": edge.relationship_metadata,
+                    }
+                )
 
         return edges
 
@@ -200,7 +201,7 @@ class GraphManager:
             "repo_id": self.repo_id,
             "is_loaded": self._graph is not None,
             "is_valid": self.validator.is_cache_valid() if self._graph else False,
-            "last_rebuild": self._last_rebuild.isoformat() if self._last_rebuild else None,
+            "last_rebuild": (self._last_rebuild.isoformat() if self._last_rebuild else None),
             "node_count": self._graph.number_of_nodes() if self._graph else 0,
             "edge_count": self._graph.number_of_edges() if self._graph else 0,
             "cache_state": cache_state,
@@ -257,6 +258,7 @@ class GraphManager:
         # Community detection (if python-louvain available)
         try:
             import community as community_louvain
+
             # Convert to undirected for community detection
             undirected = graph.to_undirected()
             partition = community_louvain.best_partition(undirected)

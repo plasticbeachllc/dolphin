@@ -2,6 +2,7 @@
 	import * as Collapsible from '$lib/components/ui/collapsible';
 	import { Badge } from '$lib/components/ui/badge';
 	import { ChevronDown, ChevronRight, FileCode } from 'lucide-svelte';
+	import hljs from 'highlight.js';
 	
 	interface DiffHunk {
 		oldStart: number;
@@ -31,6 +32,78 @@
 	const additions = diff.additions;
 	const deletions = diff.deletions;
 	const fileChanges = 1;
+
+	// Detect language from filename
+	const language = $derived.by(() => {
+		const ext = diff.newFileName.split('.').pop()?.toLowerCase();
+		switch (ext) {
+			case 'ts':
+			case 'tsx':
+				return 'typescript';
+			case 'js':
+			case 'jsx':
+				return 'javascript';
+			case 'svelte':
+				return 'html'; // highlight.js doesn't have svelte by default, html is close enough
+			case 'css':
+				return 'css';
+			case 'json':
+				return 'json';
+			case 'md':
+				return 'markdown';
+			case 'py':
+				return 'python';
+			case 'go':
+				return 'go';
+			case 'rs':
+				return 'rust';
+			default:
+				return 'plaintext';
+		}
+	});
+
+	// Pre-calculate highlighted lines with correct line numbers
+	const highlightedHunks = $derived.by(() => {
+		return diff.hunks.map(hunk => {
+			let oldLine = hunk.oldStart;
+			let newLine = hunk.newStart;
+
+			const lines = hunk.lines.map(line => {
+				const marker = line[0];
+				const content = line.slice(1);
+				const type = marker === '+' ? 'add' : marker === '-' ? 'del' : 'ctx';
+				
+				let currentOld = null;
+				let currentNew = null;
+
+				if (type === 'ctx') {
+					currentOld = oldLine++;
+					currentNew = newLine++;
+				} else if (type === 'del') {
+					currentOld = oldLine++;
+				} else if (type === 'add') {
+					currentNew = newLine++;
+				}
+
+				let highlighted = content;
+				try {
+					highlighted = hljs.highlight(content, { language, ignoreIllegals: true }).value;
+				} catch (e) {
+					// Fallback to plain text
+				}
+
+				return {
+					marker,
+					content: highlighted,
+					type,
+					oldLineNumber: currentOld,
+					newLineNumber: currentNew
+				};
+			});
+
+			return { ...hunk, lines };
+		});
+	});
 </script>
 
 <div class="diff-container">
@@ -89,30 +162,26 @@
 					<!-- Diff Content -->
 					<div class="bg-muted/20 font-mono text-xs max-h-96 overflow-auto">
 						{#if diff}
-							{#each diff.hunks as hunk}
+							{#each highlightedHunks as hunk}
 								<div class="hunk">
 									<div class="sticky top-0 px-4 py-1.5 bg-primary/10 border-y border-border/50 text-primary font-semibold">
 										@@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@
 									</div>
 									
-									{#each hunk.lines as line, lineIdx}
-										{@const lineType = line[0] === '+' ? 'add' : line[0] === '-' ? 'del' : 'ctx'}
-										<div class="diff-line {lineType}">
-											<div class="line-numbers select-none flex">
-												<span class="line-num old-line {lineType === 'add' ? 'opacity-30' : ''}">
-													{lineType !== 'add' ? (hunk.oldStart + lineIdx) : ''}
-												</span>
-												<span class="line-num new-line {lineType === 'del' ? 'opacity-30' : ''}">
-													{lineType !== 'del' ? (hunk.newStart + lineIdx) : ''}
+									{#each hunk.lines as line}
+										<div class="diff-line {line.type}">
+											<div class="line-numbers select-none">
+												<span class="line-num">
+													{line.newLineNumber || ''}
 												</span>
 											</div>
 											
 											<span class="marker select-none font-bold">
-												{line[0]}
+												{line.marker}
 											</span>
 											
 											<span class="code-content flex-1">
-												{line.slice(1)}
+												{@html line.content}
 											</span>
 										</div>
 									{/each}
@@ -141,7 +210,7 @@
 	.diff-line {
 		display: flex;
 		align-items: center;
-		padding: 0.125rem 1rem;
+		padding: 0.125rem 1rem 0.125rem 0.0rem;
 		line-height: 1.5;
 		min-height: 1.5rem;
 	}
@@ -169,29 +238,30 @@
 	
 	.line-numbers {
 		display: flex;
-		gap: 0.75rem;
-		margin-right: 1rem;
-		min-width: 4rem;
+		justify-content: flex-end;
+		margin-right: 0.75rem;
+		min-width: 2rem;
 	}
 	
 	.line-num {
 		display: inline-block;
-		width: 2rem;
+		width: 100%;
 		text-align: right;
 		color: var(--muted-foreground);
 		user-select: none;
+		font-size: 0.7rem;
 	}
 	
 	.marker {
 		display: inline-block;
 		width: 1ch;
-		margin-right: 1ch;
+		margin-right: 0.5ch;
 		text-align: center;
 	}
 	
 	.code-content {
 		white-space: pre;
-		overflow-x: auto;
+		font-family: var(--vscode-editor-font-family, monospace);
 	}
 	
 	/* Scrollbar styling */

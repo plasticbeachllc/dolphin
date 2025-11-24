@@ -3,28 +3,29 @@ from __future__ import annotations
 import json
 import math
 import re
-import os
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any
 
 try:  # Python 3.11+
     import tomllib as _toml_module  # type: ignore[attr-defined]
 
-    def toml_loads(data: str) -> Dict[str, Any]:
+    def toml_loads(data: str) -> dict[str, Any]:
         return _toml_module.loads(data)
 
 except ModuleNotFoundError:  # pragma: no cover - fallback for <3.11
     try:
         import tomli as _toml_module  # type: ignore
 
-        def toml_loads(data: str) -> Dict[str, Any]:
+        def toml_loads(data: str) -> dict[str, Any]:
             return _toml_module.loads(data)
 
     except ModuleNotFoundError:
 
-        def toml_loads(data: str) -> Dict[str, Any]:  # type: ignore[misc]
+        def toml_loads(data: str) -> dict[str, Any]:  # type: ignore[misc]
             return _minimal_toml_loads(data)
+
 
 try:
     import tiktoken  # type: ignore
@@ -54,18 +55,18 @@ class Persona:
     version: str
     provider_kind: str
     provider_model: str
-    params: Dict[str, Any]
+    params: dict[str, Any]
     token_budget: int
     trim_policy: str
     system_text: str
-    provider_options: Dict[str, Any]
-    continue_extra: Dict[str, Any]
-    raw: Dict[str, Any]
-    warnings: List[str]
+    provider_options: dict[str, Any]
+    continue_extra: dict[str, Any]
+    raw: dict[str, Any]
+    warnings: list[str]
 
 
 def _strip_inline_comment(value: str) -> str:
-    result: List[str] = []
+    result: list[str] = []
     in_quote = False
     escape = False
     for ch in value:
@@ -107,9 +108,9 @@ def _parse_simple_value(value: str) -> Any:
         return value
 
 
-def _minimal_toml_loads(text: str) -> Dict[str, Any]:
-    result: Dict[str, Any] = {}
-    current_table: Dict[str, Any] = result
+def _minimal_toml_loads(text: str) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    current_table: dict[str, Any] = result
 
     lines = text.splitlines()
     idx = 0
@@ -141,7 +142,7 @@ def _minimal_toml_loads(text: str) -> Dict[str, Any]:
 
         if value.startswith('"""'):
             multiline = value[3:]
-            lines_buffer: List[str] = []
+            lines_buffer: list[str] = []
             terminator = '"""'
 
             if multiline.endswith(terminator) and not multiline.endswith("\\" + terminator):
@@ -172,7 +173,7 @@ def _minimal_toml_loads(text: str) -> Dict[str, Any]:
     return result
 
 
-def count_tokens(text: str, model: Optional[str] = None) -> int:
+def count_tokens(text: str, model: str | None = None) -> int:
     """Estimate token count for the given text and optional model identifier."""
 
     if not text:
@@ -203,7 +204,7 @@ def _normalize_block(text: str) -> str:
 
 
 def _join_sections(system: str, guardrails: str = "", overlay: str = "") -> str:
-    parts: List[str] = []
+    parts: list[str] = []
     if system:
         parts.append(system.strip())
     if guardrails:
@@ -226,7 +227,7 @@ def _guardrails_skeleton(guardrails: str) -> str:
 
     header = lines[0]
     bullet_lines = [ln for ln in lines[1:] if ln.lstrip().startswith("-")]
-    skeleton: List[str] = [header]
+    skeleton: list[str] = [header]
 
     if bullet_lines:
         skeleton.append(bullet_lines[0])
@@ -242,9 +243,9 @@ def _truncate_system_to_budget(
     system: str,
     guardrails: str,
     overlay: str,
-    model: Optional[str],
+    model: str | None,
     budget: int,
-) -> Tuple[str, int]:
+) -> tuple[str, int]:
     """Binary search over character count to fit within the budget."""
 
     low, high = 0, len(system)
@@ -271,9 +272,9 @@ def compile_system_message(
     system: str,
     guardrails: str,
     overlay: str,
-    model: Optional[str],
+    model: str | None,
     budget: int,
-) -> Tuple[str, Dict[str, Any]]:
+) -> tuple[str, dict[str, Any]]:
     """Compile the final systemMessage applying trim tiers as needed."""
 
     system_norm = _normalize_block(system)
@@ -283,7 +284,7 @@ def compile_system_message(
     compiled = _join_sections(system_norm, guardrails_norm, overlay_norm)
     tokens = count_tokens(compiled, model)
 
-    info: Dict[str, Any] = {
+    info: dict[str, Any] = {
         "initial_tokens": tokens,
         "final_tokens": tokens,
         "trimmed": False,
@@ -348,13 +349,11 @@ def load_persona(persona_dir: Path) -> Persona:
     except Exception as exc:
         raise PersonaError(f"Failed to parse {persona_path}: {exc}") from exc
 
-    warnings: List[str] = []
+    warnings: list[str] = []
 
     unknown_keys = set(data.keys()) - ALLOWED_TOP_LEVEL_KEYS
     if unknown_keys:
-        warnings.append(
-            f"Unknown top-level keys in {persona_path.name}: {', '.join(sorted(unknown_keys))}"
-        )
+        warnings.append(f"Unknown top-level keys in {persona_path.name}: {', '.join(sorted(unknown_keys))}")
 
     persona_meta = data.get("persona") or {}
     persona_id = persona_meta.get("id")
@@ -363,9 +362,7 @@ def load_persona(persona_dir: Path) -> Persona:
     if not SLUG_RE.fullmatch(persona_id):
         raise PersonaError(f"[persona] id '{persona_id}' must match slug pattern {SLUG_RE.pattern}")
     if persona_dir.name != persona_id:
-        raise PersonaError(
-            f"Persona directory '{persona_dir.name}' must match persona id '{persona_id}'"
-        )
+        raise PersonaError(f"Persona directory '{persona_dir.name}' must match persona id '{persona_id}'")
 
     name = persona_meta.get("name")
     if not name:
@@ -393,23 +390,19 @@ def load_persona(persona_dir: Path) -> Persona:
     token_budget = system_table.get("token_budget", 1200)
     trim_policy = system_table.get("trim_policy", "tiered")
     if token_budget < 200 or token_budget > 8000:
-        warnings.append(
-            f"token_budget {token_budget} for persona '{persona_id}' is outside 200-8000"
-        )
+        warnings.append(f"token_budget {token_budget} for persona '{persona_id}' is outside 200-8000")
 
     files = data.get("files") or {}
     system_inline = system_table.get("systemMessage")
 
     if system_inline and files.get("system"):
-        warnings.append(
-            f"Persona '{persona_id}' defines both systemMessage and files.system; using inline text"
-        )
+        warnings.append(f"Persona '{persona_id}' defines both systemMessage and files.system; using inline text")
 
     if system_inline:
         system_text = str(system_inline)
     else:
         system_file = files.get("system")
-        
+
         # If no specific system file specified, check for common variants
         if not system_file:
             # Try system.md first, then prompt.md
@@ -425,15 +418,13 @@ def load_persona(persona_dir: Path) -> Persona:
                         f"Persona '{persona_id}' system file not found in {persona_dir}. "
                         f"Expected 'system.md' or 'prompt.md'"
                     )
-        
+
     system_path = persona_dir / system_file
-    
+
     # If the explicitly specified file doesn't exist, raise error
     if not system_path.exists():
-        raise PersonaError(
-            f"Persona '{persona_id}' system file '{system_file}' not found in {persona_dir}"
-        )
-    
+        raise PersonaError(f"Persona '{persona_id}' system file '{system_file}' not found in {persona_dir}")
+
     system_text = system_path.read_text(encoding="utf-8")
 
     continue_table = data.get("continue") or {}
@@ -471,14 +462,14 @@ def iter_persona_dirs(personas_root: Path) -> Iterable[Path]:
             continue
         yield candidate
 
+
 def ensure_unique_models(personas: Iterable[Persona]) -> None:
-    seen: Dict[Tuple[str, str, str], Persona] = {}
+    seen: dict[tuple[str, str, str], Persona] = {}
     for persona in personas:
         key = (persona.provider_kind, persona.provider_model, persona.id)
         if key in seen:
             raise PersonaError(
-                "Duplicate provider/model/id combination for personas "
-                f"'{persona.id}' and '{seen[key].id}'"
+                f"Duplicate provider/model/id combination for personas '{persona.id}' and '{seen[key].id}'"
             )
         seen[key] = persona
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Textarea } from "$lib/components/ui/textarea";
   import { Button } from "$lib/components/ui/button";
-  import { SendHorizontal, Square, Plus } from "lucide-svelte";
+  import { SendHorizontal, Square, MessageCirclePlus } from "lucide-svelte";
 
   interface Props {
     onSend?: (message: string) => void;
@@ -24,8 +24,10 @@
   let message = $state("");
   let textareaRef: HTMLTextAreaElement | null = $state(null);
   
-  // Determine if we should show "New Conversation" button
-  let showNewConversationButton = $derived(!hasActiveConversation && !message.trim());
+  // Determine if we are in a new conversation state
+  let isNewConversation = $derived(!hasActiveConversation);
+  // Button is disabled if processing is false AND (explicitly disabled OR message is empty)
+  let isButtonDisabled = $derived(!isProcessing && (disabled || !message.trim()));
 
   function handleKeyDown(event: KeyboardEvent) {
     // Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux) to send
@@ -81,16 +83,15 @@
   <Button
     type="button"
     onclick={handleAction}
-    disabled={disabled && !isProcessing}
+    disabled={isButtonDisabled}
     variant={isProcessing ? "destructive" : "default"}
-    size="icon"
-    class="shrink-0 self-end"
-    aria-label={isProcessing ? "Stop processing" : showNewConversationButton ? "Start new conversation" : "Send message"}
+    class="shrink-0 w-10 h-auto"
+    aria-label={isProcessing ? "Stop processing" : "Send message"}
   >
     {#if isProcessing}
       <Square class="h-4 w-4" aria-hidden="true" />
-    {:else if showNewConversationButton}
-      <Plus class="h-4 w-4" aria-hidden="true" />
+    {:else if isNewConversation}
+      <MessageCirclePlus class="h-4 w-4" aria-hidden="true" />
     {:else}
       <SendHorizontal class="h-4 w-4" aria-hidden="true" />
     {/if}
@@ -102,6 +103,6 @@
     display: flex;
     gap: 0.75rem;
     width: 100%;
-    align-items: flex-end;
+    align-items: stretch;
   }
 </style>

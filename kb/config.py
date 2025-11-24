@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import logging
+import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any
 
 try:
     import tomllib
 except ImportError:
-    import tomli as tomllib
+    import tomli as tomllib  # type: ignore[import-not-found,no-redef]
 
 from .ignores import DEFAULT_IGNORE_PATTERNS
 
@@ -38,11 +40,11 @@ def _read_template() -> str:
 
 def _ensure_user_config() -> Path:
     """Ensure user config exists, creating it from template if needed.
-    
+
     Returns the path to the user config file.
     """
     config_path = USER_CONFIG_PATH
-    
+
     if not config_path.exists():
         _log.info("Creating user config at %s", config_path)
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -52,7 +54,7 @@ def _ensure_user_config() -> Path:
             _log.info("User config created successfully")
         else:
             _log.warning("Could not create user config: template not available")
-    
+
     return config_path
 
 
@@ -60,10 +62,11 @@ def _ensure_user_config() -> Path:
 class RerankingConfig:
     enabled: bool = False
     model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-    device: Optional[str] = None
+    device: str | None = None
     batch_size: int = 32
     candidate_multiplier: int = 4
     score_threshold: float = 0.3
+
 
 @dataclass
 class HybridSearchConfig:
@@ -71,12 +74,22 @@ class HybridSearchConfig:
     fusion_method: str = "rrf"
     fusion_k: int = 60
 
+
+@dataclass
+class BM25NormalizationRuntimeConfig:
+    strategy: str = "sigmoid"
+    stats_path: str | None = None
+    fallback_strategy: str = "sigmoid"
+    ab_variant_probability: float = 0.0
+
+
 @dataclass
 class ANNConfig:
     strategy: str = "adaptive"
     metric: str = "cosine"
     estimated_dataset_size: int = 100000
     default_query_type: str = "concept"
+
 
 @dataclass
 class RetrievalConfig:
@@ -88,6 +101,8 @@ class RetrievalConfig:
     max_snippet_tokens: int = 240
     mmr_enabled: bool = True
     mmr_lambda: float = 0.7
+    bm25_normalization: BM25NormalizationRuntimeConfig = field(default_factory=BM25NormalizationRuntimeConfig)
+
 
 @dataclass
 class KBConfig:
@@ -100,9 +115,9 @@ class KBConfig:
     per_session_spend_cap_usd: float = 10.0
     ignore: list[str] = field(default_factory=lambda: list(DEFAULT_IGNORE_PATTERNS))
     ignore_exceptions: list[str] = field(default_factory=list)
-    
+
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
-    
+
     embedding_provider: str = "stub"
     embedding_batch_size: int = 100
     openai_api_key_env: str = "OPENAI_API_KEY"
@@ -180,16 +195,36 @@ class KBConfig:
         return config
 
     @classmethod
+    def _build_bm25_normalization_config(cls, data: dict) -> BM25NormalizationRuntimeConfig:
+        """Build BM25 normalization configuration from mapping."""
+        config = BM25NormalizationRuntimeConfig()
+        if not data:
+            return config
+
+        if "strategy" in data:
+            config.strategy = str(data["strategy"]).lower()
+        if data.get("stats_path"):
+            config.stats_path = str(data["stats_path"])
+        if "fallback_strategy" in data:
+            config.fallback_strategy = str(data["fallback_strategy"]).lower()
+        if "ab_variant_probability" in data:
+            config.ab_variant_probability = cls._coerce_optional(data["ab_variant_probability"], float)
+
+        return config
+
+    @classmethod
     def _build_retrieval_config(cls, data: dict) -> RetrievalConfig:
         """Build retrieval configuration from mapping."""
         reranking_data = data.get("reranking", {}) if isinstance(data, dict) else {}
         hybrid_search_data = data.get("hybrid_search", {}) if isinstance(data, dict) else {}
         ann_data = data.get("ann", {}) if isinstance(data, dict) else {}
+        bm25_data = data.get("bm25_normalization", {}) if isinstance(data, dict) else {}
 
         config = RetrievalConfig(
             reranking=cls._build_reranking_config(reranking_data),
             hybrid_search=cls._build_hybrid_search_config(hybrid_search_data),
-            ann=cls._build_ann_config(ann_data)
+            ann=cls._build_ann_config(ann_data),
+            bm25_normalization=cls._build_bm25_normalization_config(bm25_data),
         )
 
         if "score_cutoff" in data:
@@ -206,7 +241,7 @@ class KBConfig:
         return config
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any]) -> "KBConfig":
+    def from_mapping(cls, data: Mapping[str, Any]) -> KBConfig:
         """Create a configuration object from a mapping, handling nested sections."""
 
         # Extract nested sections
@@ -220,56 +255,64 @@ class KBConfig:
         retrieval_config = cls._build_retrieval_config(retrieval_data)
 
         # Build top-level config
-        config_kwargs = {'retrieval': retrieval_config}
+        config_kwargs = {"retrieval": retrieval_config}
 
         # Handle storage settings
         if storage_data and storage_data.get("store_root"):
-            config_kwargs['store_root'] = _to_path(storage_data.get("store_root"))
+            store_root_value = storage_data.get("store_root")
+            if store_root_value is not None:
+                config_kwargs["store_root"] = _to_path(store_root_value)
 
         # Handle server settings
         if server_data and server_data.get("endpoint"):
-            config_kwargs['endpoint'] = server_data.get("endpoint")
+            config_kwargs["endpoint"] = server_data.get("endpoint")
 
         # Handle embedding settings
         if embedding_data:
             if embedding_data.get("default_embed_model"):
-                config_kwargs['default_embed_model'] = embedding_data.get("default_embed_model")
+                config_kwargs["default_embed_model"] = embedding_data.get("default_embed_model")
             if embedding_data.get("concurrency") is not None:
-                config_kwargs['concurrency'] = cls._coerce_optional(embedding_data.get("concurrency"), int)
+                config_kwargs["concurrency"] = cls._coerce_optional(embedding_data.get("concurrency"), int)
             if embedding_data.get("provider"):
-                config_kwargs['embedding_provider'] = embedding_data.get("provider")
+                config_kwargs["embedding_provider"] = embedding_data.get("provider")
             if embedding_data.get("batch_size") is not None:
-                config_kwargs['embedding_batch_size'] = cls._coerce_optional(embedding_data.get("batch_size"), int)
+                config_kwargs["embedding_batch_size"] = cls._coerce_optional(embedding_data.get("batch_size"), int)
             if embedding_data.get("api_key_env"):
-                config_kwargs['openai_api_key_env'] = embedding_data.get("api_key_env")
+                config_kwargs["openai_api_key_env"] = embedding_data.get("api_key_env")
 
         # Handle top-level settings
         if data.get("per_session_spend_cap_usd") is not None:
-            config_kwargs['per_session_spend_cap_usd'] = cls._coerce_optional(data.get("per_session_spend_cap_usd"), float)
+            config_kwargs["per_session_spend_cap_usd"] = cls._coerce_optional(
+                data.get("per_session_spend_cap_usd"), float
+            )
         if data.get("ignore"):
-            config_kwargs['ignore'] = data.get("ignore")
+            ignore_value = data.get("ignore")
+            if isinstance(ignore_value, list):
+                config_kwargs["ignore"] = ignore_value
         if data.get("exceptions") or data.get("ignore_exceptions"):
-            config_kwargs['ignore_exceptions'] = data.get("exceptions", data.get("ignore_exceptions", []))
-            
+            config_kwargs["ignore_exceptions"] = data.get("exceptions", data.get("ignore_exceptions", []))
+
         # Always override retrieval config with our constructed one
-        config_kwargs['retrieval'] = retrieval_config
-        
+        config_kwargs["retrieval"] = retrieval_config
+
         # Handle cache settings (support both nested and top-level)
         if cache_data:
             if cache_data.get("enabled") is not None:
-                config_kwargs['cache_enabled'] = cls._coerce_optional(cache_data.get("enabled"), bool)
+                config_kwargs["cache_enabled"] = cls._coerce_optional(cache_data.get("enabled"), bool)
             if cache_data.get("redis_url"):
-                config_kwargs['redis_url'] = cache_data.get("redis_url")
+                config_kwargs["redis_url"] = cache_data.get("redis_url")
             if cache_data.get("embedding_ttl") is not None:
-                config_kwargs['embedding_cache_ttl'] = cls._coerce_optional(cache_data.get("embedding_ttl"), int)
+                config_kwargs["embedding_cache_ttl"] = cls._coerce_optional(cache_data.get("embedding_ttl"), int)
             if cache_data.get("result_ttl") is not None:
-                config_kwargs['result_cache_ttl'] = _coerce_optional(cache_data.get("result_ttl"), int)
-        
+                config_kwargs["result_cache_ttl"] = cls._coerce_optional(cache_data.get("result_ttl"), int)
+
         # Also support top-level cache_enabled parameter (for backward compatibility)
         if "cache_enabled" in data:
-            config_kwargs['cache_enabled'] = _coerce_optional(data.get("cache_enabled"), bool)
+            config_kwargs["cache_enabled"] = cls._coerce_optional(data.get("cache_enabled"), bool)
         if "redis_url" in data:
-            config_kwargs['redis_url'] = data.get("redis_url")
+            redis_url_value = data.get("redis_url")
+            if redis_url_value is not None:
+                config_kwargs["redis_url"] = redis_url_value
 
         return cls(**config_kwargs)
 
@@ -308,7 +351,20 @@ def load_config(path: Path | None = None, repo_path: Path | None = None) -> KBCo
             with repo_config_path.open("rb") as f:
                 config_data = tomllib.load(f) or {}
 
-    # 3) User config
+    # 3) Environment override (
+    if not config_data and path is None:
+        env_config_path = os.environ.get("DOLPHIN_CONFIG_PATH")
+        if env_config_path:
+            env_path = _to_path(env_config_path)
+            if not env_path.exists():
+                raise FileNotFoundError(
+                    f"Config not found at {env_path}. Create one with 'dolphin init' or unset DOLPHIN_CONFIG_PATH."
+                )
+            _log.debug("Loading config from DOLPHIN_CONFIG_PATH: %s", env_path)
+            with env_path.open("rb") as f:
+                config_data = tomllib.load(f) or {}
+
+    # 4) User config fallback
     if not config_data and path is None:
         user_config = USER_CONFIG_PATH
         if not user_config.exists():

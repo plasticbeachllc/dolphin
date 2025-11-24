@@ -1,4 +1,5 @@
 """Compatibility shim exposing the legacy KBPipeline interface."""
+
 from __future__ import annotations
 
 from pathlib import Path

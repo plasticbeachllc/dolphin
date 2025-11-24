@@ -1,7 +1,7 @@
 """Unit tests for file sync metadata store methods."""
 
-import pytest
 from pathlib import Path
+
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
@@ -17,14 +17,11 @@ class TestPendingChanges:
         repo_path = Path("/tmp/test_repo")
         store.record_repo(name="test-repo", path=repo_path, default_embed_model="large")
         repo = store.get_repo_by_name("test-repo")
-        repo_id = repo["id"]
+        assert repo is not None
+        repo_id = int(repo["id"])
 
         # Record a change
-        change_id = store.record_pending_change(
-            repo_id=repo_id,
-            file_path="src/main.py",
-            change_type="modified"
-        )
+        change_id = store.record_pending_change(repo_id=repo_id, file_path="src/main.py", change_type="modified")
 
         assert change_id is not None
         assert change_id > 0
@@ -37,14 +34,15 @@ class TestPendingChanges:
         repo_path = Path("/tmp/test_repo")
         store.record_repo(name="test-repo", path=repo_path, default_embed_model="large")
         repo = store.get_repo_by_name("test-repo")
-        repo_id = repo["id"]
+        assert repo is not None
+        repo_id = int(repo["id"])
 
         # Record a rename change
         change_id = store.record_pending_change(
             repo_id=repo_id,
             file_path="src/new_name.py",
             change_type="renamed",
-            old_path="src/old_name.py"
+            old_path="src/old_name.py",
         )
 
         assert change_id is not None
@@ -65,7 +63,8 @@ class TestPendingChanges:
         repo_path = Path("/tmp/test_repo")
         store.record_repo(name="test-repo", path=repo_path, default_embed_model="large")
         repo = store.get_repo_by_name("test-repo")
-        repo_id = repo["id"]
+        assert repo is not None
+        repo_id = int(repo["id"])
 
         # Record multiple changes
         store.record_pending_change(repo_id, "file1.py", "created")
@@ -96,18 +95,22 @@ class TestPendingChanges:
         store.record_repo(name="repo2", path=repo2_path, default_embed_model="large")
 
         repo1 = store.get_repo_by_name("repo1")
+        assert repo1 is not None
+        repo1_id = int(repo1["id"])
         repo2 = store.get_repo_by_name("repo2")
+        assert repo2 is not None
+        repo2_id = int(repo2["id"])
 
         # Record changes for both repos
-        store.record_pending_change(repo1["id"], "file1.py", "created")
-        store.record_pending_change(repo1["id"], "file2.py", "modified")
-        store.record_pending_change(repo2["id"], "file3.py", "created")
+        store.record_pending_change(repo1_id, "file1.py", "created")
+        store.record_pending_change(repo1_id, "file2.py", "modified")
+        store.record_pending_change(repo2_id, "file3.py", "created")
 
         # Get changes for repo1 only
-        changes = store.get_pending_changes(repo_id=repo1["id"])
+        changes = store.get_pending_changes(repo_id=repo1_id)
         assert len(changes) == 2
         for change in changes:
-            assert change["repo_id"] == repo1["id"]
+            assert change["repo_id"] == repo1_id
 
     def test_get_pending_changes_with_limit(self, temp_db_path):
         """Test getting pending changes with limit."""
@@ -117,7 +120,8 @@ class TestPendingChanges:
         repo_path = Path("/tmp/test_repo")
         store.record_repo(name="test-repo", path=repo_path, default_embed_model="large")
         repo = store.get_repo_by_name("test-repo")
-        repo_id = repo["id"]
+        assert repo is not None
+        repo_id = int(repo["id"])
 
         # Record 10 changes
         for i in range(10):
@@ -135,7 +139,8 @@ class TestPendingChanges:
         repo_path = Path("/tmp/test_repo")
         store.record_repo(name="test-repo", path=repo_path, default_embed_model="large")
         repo = store.get_repo_by_name("test-repo")
-        repo_id = repo["id"]
+        assert repo is not None
+        repo_id = int(repo["id"])
 
         # Record changes
         id1 = store.record_pending_change(repo_id, "file1.py", "created")
@@ -165,12 +170,13 @@ class TestPendingChanges:
         repo_path = Path("/tmp/test_repo")
         store.record_repo(name="test-repo", path=repo_path, default_embed_model="large")
         repo = store.get_repo_by_name("test-repo")
-        repo_id = repo["id"]
+        assert repo is not None
+        repo_id = int(repo["id"])
 
         # Record multiple changes for same file
-        id1 = store.record_pending_change(repo_id, "important.py", "modified")
-        id2 = store.record_pending_change(repo_id, "important.py", "modified")
-        id3 = store.record_pending_change(repo_id, "other.py", "created")
+        store.record_pending_change(repo_id, "important.py", "modified")
+        store.record_pending_change(repo_id, "important.py", "modified")
+        store.record_pending_change(repo_id, "other.py", "created")
 
         # Mark all changes for specific file as processed
         processed_count = store.mark_changes_for_file_processed(repo_id, "important.py")
@@ -189,7 +195,8 @@ class TestPendingChanges:
         repo_path = Path("/tmp/test_repo")
         store.record_repo(name="test-repo", path=repo_path, default_embed_model="large")
         repo = store.get_repo_by_name("test-repo")
-        repo_id = repo["id"]
+        assert repo is not None
+        repo_id = int(repo["id"])
 
         # No changes recorded
         processed_count = store.mark_changes_for_file_processed(repo_id, "nonexistent.py")
@@ -203,7 +210,8 @@ class TestPendingChanges:
         repo_path = Path("/tmp/test_repo")
         store.record_repo(name="test-repo", path=repo_path, default_embed_model="large")
         repo = store.get_repo_by_name("test-repo")
-        repo_id = repo["id"]
+        assert repo is not None
+        repo_id = int(repo["id"])
 
         # Record and process changes
         id1 = store.record_pending_change(repo_id, "file1.py", "created")
@@ -230,24 +238,27 @@ class TestFileSnapshots:
         workspace.mkdir()
         store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = store.get_repo_by_name("test-repo")
+        assert repo is not None
+
+        repo_id = int(repo["id"])
 
         file_id = store.upsert_file(
-            repo_id=repo["id"],
+            repo_id=repo_id,
             path="test.py",
             ext=".py",
             language="python",
             is_binary=False,
-            size_bytes=100
+            size_bytes=100,
         )
 
         # Upsert snapshot
         store.upsert_file_snapshot(
             file_id=file_id,
-            repo_id=repo["id"],
+            repo_id=repo_id,
             path="test.py",
             mtime_ns=1234567890,
             size_bytes=100,
-            content_hash="abc123"
+            content_hash="abc123",
         )
 
         # Verify snapshot was created
@@ -268,38 +279,41 @@ class TestFileSnapshots:
         workspace.mkdir()
         store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = store.get_repo_by_name("test-repo")
+        assert repo is not None
+        repo_id = int(repo["id"])
 
         file_id = store.upsert_file(
-            repo_id=repo["id"],
+            repo_id=repo_id,
             path="test.py",
             ext=".py",
             language="python",
             is_binary=False,
-            size_bytes=100
+            size_bytes=100,
         )
 
         # First snapshot
         store.upsert_file_snapshot(
             file_id=file_id,
-            repo_id=repo["id"],
+            repo_id=repo_id,
             path="test.py",
             mtime_ns=111,
             size_bytes=100,
-            content_hash="hash1"
+            content_hash="hash1",
         )
 
         # Update snapshot
         store.upsert_file_snapshot(
             file_id=file_id,
-            repo_id=repo["id"],
+            repo_id=repo_id,
             path="test.py",
             mtime_ns=222,
             size_bytes=200,
-            content_hash="hash2"
+            content_hash="hash2",
         )
 
         # Should have updated values
         snapshot = store.get_file_snapshot(file_id)
+        assert snapshot is not None
         assert snapshot["mtime_ns"] == 222
         assert snapshot["size_bytes"] == 200
         assert snapshot["content_hash"] == "hash2"
@@ -325,32 +339,35 @@ class TestFileSnapshots:
 
         store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = store.get_repo_by_name("test-repo")
+        assert repo is not None
+        repo_id = int(repo["id"])
 
         file_id = store.upsert_file(
-            repo_id=repo["id"],
+            repo_id=repo_id,
             path="test.py",
             ext=".py",
             language="python",
             is_binary=False,
-            size_bytes=test_file.stat().st_size
+            size_bytes=test_file.stat().st_size,
         )
 
         # Create snapshot matching current state
         import hashlib
+
         stat = test_file.stat()
         content_hash = hashlib.sha256(test_file.read_bytes()).hexdigest()
 
         store.upsert_file_snapshot(
             file_id=file_id,
-            repo_id=repo["id"],
+            repo_id=repo_id,
             path="test.py",
             mtime_ns=stat.st_mtime_ns,
             size_bytes=stat.st_size,
-            content_hash=content_hash
+            content_hash=content_hash,
         )
 
         # Detect drift
-        drift_events = store.detect_drift(repo["id"])
+        drift_events = store.detect_drift(repo_id)
         assert len(drift_events) == 0
 
     def test_detect_drift_modified_file(self, temp_db_path, temp_dir):
@@ -366,33 +383,36 @@ class TestFileSnapshots:
 
         store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = store.get_repo_by_name("test-repo")
+        assert repo is not None
+        repo_id = int(repo["id"])
 
         file_id = store.upsert_file(
-            repo_id=repo["id"],
+            repo_id=repo_id,
             path="test.py",
             ext=".py",
             language="python",
             is_binary=False,
-            size_bytes=test_file.stat().st_size
+            size_bytes=test_file.stat().st_size,
         )
 
         # Create snapshot with old state
         store.upsert_file_snapshot(
             file_id=file_id,
-            repo_id=repo["id"],
+            repo_id=repo_id,
             path="test.py",
             mtime_ns=123,  # Old timestamp
             size_bytes=50,  # Old size
-            content_hash="old_hash"
+            content_hash="old_hash",
         )
 
         # Modify file
         import time
+
         time.sleep(0.1)
         test_file.write_text("def test(): return 42")
 
         # Detect drift
-        drift_events = store.detect_drift(repo["id"])
+        drift_events = store.detect_drift(repo_id)
         assert len(drift_events) == 1
         assert drift_events[0]["path"] == "test.py"
         assert drift_events[0]["drift_type"] == "modified"
@@ -410,35 +430,38 @@ class TestFileSnapshots:
 
         store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = store.get_repo_by_name("test-repo")
+        assert repo is not None
+        repo_id = int(repo["id"])
 
         file_id = store.upsert_file(
-            repo_id=repo["id"],
+            repo_id=repo_id,
             path="test.py",
             ext=".py",
             language="python",
             is_binary=False,
-            size_bytes=test_file.stat().st_size
+            size_bytes=test_file.stat().st_size,
         )
 
         # Create snapshot
         import hashlib
+
         stat = test_file.stat()
         content_hash = hashlib.sha256(test_file.read_bytes()).hexdigest()
 
         store.upsert_file_snapshot(
             file_id=file_id,
-            repo_id=repo["id"],
+            repo_id=repo_id,
             path="test.py",
             mtime_ns=stat.st_mtime_ns,
             size_bytes=stat.st_size,
-            content_hash=content_hash
+            content_hash=content_hash,
         )
 
         # Delete file
         test_file.unlink()
 
         # Detect drift
-        drift_events = store.detect_drift(repo["id"])
+        drift_events = store.detect_drift(repo_id)
         assert len(drift_events) == 1
         assert drift_events[0]["path"] == "test.py"
         assert drift_events[0]["drift_type"] == "deleted"
@@ -460,17 +483,20 @@ class TestFileSnapshots:
 
         store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
         repo = store.get_repo_by_name("test-repo")
+        assert repo is not None
+        repo_id = int(repo["id"])
 
         import hashlib
+
         # Create snapshots for all files
         for i, f in enumerate(files):
             file_id = store.upsert_file(
-                repo_id=repo["id"],
+                repo_id=repo_id,
                 path=f"file{i}.py",
                 ext=".py",
                 language="python",
                 is_binary=False,
-                size_bytes=f.stat().st_size
+                size_bytes=f.stat().st_size,
             )
 
             stat = f.stat()
@@ -478,11 +504,11 @@ class TestFileSnapshots:
 
             store.upsert_file_snapshot(
                 file_id=file_id,
-                repo_id=repo["id"],
+                repo_id=repo_id,
                 path=f"file{i}.py",
                 mtime_ns=stat.st_mtime_ns,
                 size_bytes=stat.st_size,
-                content_hash=content_hash
+                content_hash=content_hash,
             )
 
         # Modify one file, delete another
@@ -490,7 +516,7 @@ class TestFileSnapshots:
         files[1].unlink()
 
         # Detect drift
-        drift_events = store.detect_drift(repo["id"])
+        drift_events = store.detect_drift(repo_id)
         assert len(drift_events) == 2
 
         # Check both types are present

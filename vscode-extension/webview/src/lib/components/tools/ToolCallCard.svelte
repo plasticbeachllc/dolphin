@@ -10,13 +10,13 @@
 	import { slide } from 'svelte/transition';
 	import DiffViewer from './DiffViewer.svelte';
 	import type { FileDiff } from '@shared/types/events';
+	import { vscode } from '$lib/api/vscode';
 
 	export let tool: string;
 	export let input: Record<string, any>;
 	export let result: Record<string, any> | null = null;
 	export let error: string | null = null;
 	export let status: 'running' | 'success' | 'error' = 'running';
-	export let executionTime: number | null = null;
 	export let collapsed = true;
 	export let diff: FileDiff | undefined = undefined;
 
@@ -35,8 +35,10 @@
 		e.stopPropagation();
 		const filePath = getFilePath();
 		if (filePath) {
-			// TODO: Send message to extension to open file
-			console.log('[ToolCallCard] Peek file:', filePath);
+			vscode.postMessage({
+				type: 'open_file',
+				path: filePath
+			});
 		}
 	}
 
@@ -69,7 +71,7 @@
 		onclick={toggleExpanded}
 		onkeypress={handleKeypress}
 		role="button"
-		tabindex="0"
+			tabindex={0}
 		aria-expanded={expanded}
 		data-status={status}
 	>
@@ -86,34 +88,12 @@
 			</div>
 
 			<div class="flex items-center gap-2 shrink-0">
-				{#if isFileEditTool && getFilePath() && status === 'success'}
-					<button
-						class="peek-button text-xs"
-						onclick={handlePeekFile}
-						aria-label="View file {getFilePath()}"
-						title="View file"
-					>
-						👁️ View
-					</button>
-				{/if}
-
-				{#if executionTime}
-					<Badge variant="outline" class="text-xs">{executionTime}ms</Badge>
-				{/if}
-
-				{#if status === 'running'}
-					<Loader2 class="h-4 w-4 animate-spin text-blue-500" />
-				{:else if status === 'success'}
-					<Check class="h-4 w-4 text-green-500" />
-				{:else}
-					<X class="h-4 w-4 text-red-500" />
-				{/if}
 			</div>
 		</div>
 	</CardHeader>
 
 	{#if expanded}
-		<div transition:slide={{ duration: 200 }}>
+		<div>
 			<CardContent class="px-2! pb-2! pt-0!">
 				<div class="space-y-2">
 					<!-- Show diff viewer for file editing tools if diff data is available -->
@@ -122,16 +102,6 @@
 							<DiffViewer {diff} defaultExpanded={true} />
 						</div>
 					{/if}
-					
-					<div>
-						<div class="text-xs font-semibold mb-0.5 text-muted-foreground">Input</div>
-						<pre
-							class="text-xs bg-muted p-1.5 rounded overflow-x-auto">{JSON.stringify(
-								input,
-								null,
-								2
-							)}</pre>
-					</div>
 
 					{#if error}
 						<div class="bg-destructive/10 p-1.5 rounded text-xs text-destructive">
@@ -141,7 +111,7 @@
 						<div>
 							<div class="text-xs font-semibold mb-0.5 text-muted-foreground">Result</div>
 							<pre
-								class="text-xs bg-muted p-1.5 rounded overflow-x-auto">{JSON.stringify(
+								class="text-xs bg-muted p-3 rounded overflow-x-auto leading-relaxed">{JSON.stringify(
 									result,
 									null,
 									2
@@ -171,24 +141,5 @@
 		border-left-color: var(--vscode-charts-red, hsl(0 84% 60%));
 	}
 
-	.peek-button {
-		padding: 0.25rem 0.5rem;
-		border-radius: 0.25rem;
-		background: hsl(var(--muted));
-		color: hsl(var(--foreground));
-		border: 1px solid hsl(var(--border));
-		cursor: pointer;
-		transition: all 0.2s;
-		font-family: inherit;
-	}
 
-	.peek-button:hover {
-		background: hsl(var(--accent));
-		border-color: hsl(var(--primary));
-	}
-
-	.peek-button:focus-visible {
-		outline: 2px solid hsl(var(--primary));
-		outline-offset: 2px;
-	}
 </style>

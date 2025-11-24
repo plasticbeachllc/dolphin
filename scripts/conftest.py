@@ -1,8 +1,10 @@
 """Pytest configuration and fixtures for end-to-end tests."""
-import pytest
-from pathlib import Path
-import tempfile
+
 import socket
+import tempfile
+from pathlib import Path
+
+import pytest
 
 
 @pytest.fixture
@@ -27,7 +29,7 @@ def repo_path():
 def port():
     """Provide a free port for API server testing."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('', 0))
+        s.bind(("", 0))
         s.listen(1)
         port_num = s.getsockname()[1]
     yield port_num

@@ -3,10 +3,10 @@
  * Provides helper functions for recording metrics consistently.
  */
 
-import { register, Counter, Histogram, Gauge } from 'prom-client';
-import { createLogger } from './logger';
+import { register, Counter, Histogram, Gauge } from "prom-client";
+import { createLogger } from "./logger";
 
-const logger = createLogger('metrics');
+const logger = createLogger("metrics");
 
 /**
  * Helper to record a tool invocation with automatic timing and error handling.
@@ -23,10 +23,10 @@ export async function recordToolInvocation<T>(
 
   try {
     const result = await fn();
-    metricsCounters.total.inc({ tool_name: toolName, status: 'success' });
+    metricsCounters.total.inc({ tool_name: toolName, status: "success" });
     return result;
   } catch (error) {
-    metricsCounters.total.inc({ tool_name: toolName, status: 'error' });
+    metricsCounters.total.inc({ tool_name: toolName, status: "error" });
     throw error;
   } finally {
     timer();
@@ -54,8 +54,10 @@ export function clearMetrics(): void {
  */
 export function createMetricsServer(port: number = 9091): void {
   // Check if Bun is available (runtime check)
-  if (typeof (globalThis as any).Bun === 'undefined') {
-    throw new Error('createMetricsServer requires Bun runtime. Use an HTTP framework like Express for Node.js.');
+  if (typeof (globalThis as any).Bun === "undefined") {
+    throw new Error(
+      "createMetricsServer requires Bun runtime. Use an HTTP framework like Express for Node.js."
+    );
   }
 
   const BunRuntime = (globalThis as any).Bun;
@@ -66,36 +68,36 @@ export function createMetricsServer(port: number = 9091): void {
       try {
         const url = new URL(req.url);
 
-        if (url.pathname === '/metrics') {
+        if (url.pathname === "/metrics") {
           const metrics = await getMetrics();
           return new Response(metrics, {
             headers: {
-              'Content-Type': 'text/plain; version=0.0.4',
+              "Content-Type": "text/plain; version=0.0.4",
             },
           });
         }
 
-        if (url.pathname === '/health') {
+        if (url.pathname === "/health") {
           return new Response(
             JSON.stringify({
-              status: 'healthy',
+              status: "healthy",
               timestamp: new Date().toISOString(),
             }),
             {
               headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
               },
             }
           );
         }
 
-        return new Response('Not Found', { status: 404 });
+        return new Response("Not Found", { status: 404 });
       } catch (error) {
-        logger.error('Metrics endpoint error', error instanceof Error ? error : undefined);
-        return new Response('Internal Server Error', { status: 500 });
+        logger.error("Metrics endpoint error", error instanceof Error ? error : undefined);
+        return new Response("Internal Server Error", { status: 500 });
       }
     },
   });
 
-  logger.info('Metrics server started', { port });
+  logger.info("Metrics server started", { port });
 }

@@ -13,10 +13,10 @@ Canonicalization Rules:
 
 Usage:
     from kb.hashing import hash_text, canonicalize_text
-    
+
     # Hash a chunk directly
     chunk_hash = hash_text(chunk.text)
-    
+
     # Or canonicalize then hash separately
     canonical = canonicalize_text(chunk.text)
     chunk_hash = hashlib.sha256(canonical.encode('utf-8')).hexdigest()
@@ -34,26 +34,26 @@ _log = logging.getLogger(__name__)
 
 def canonicalize_text(text: str) -> str:
     """Normalize text for stable hashing.
-    
+
     Applies the following transformations:
     1. Normalize line endings to \\n (Unix-style)
     2. Strip trailing whitespace from each line
     3. Remove leading/trailing blank lines
     4. Ensure exactly one trailing newline
-    
+
     Indentation is preserved as it's semantically significant in many languages
     (Python, YAML, Makefile, etc.).
-    
+
     Args:
         text: Raw chunk text with potentially inconsistent formatting
-        
+
     Returns:
         Canonicalized text ready for hashing
-        
+
     Examples:
         >>> canonicalize_text("hello\\r\\n  world  \\r\\n")
         'hello\\n  world\\n'
-        
+
         >>> canonicalize_text("  def foo():\\n    pass  ")
         '  def foo():\\n    pass'
     """
@@ -89,20 +89,20 @@ def canonicalize_text(text: str) -> str:
 
 def hash_text(text: str) -> str:
     """Generate SHA256 hash of canonicalized text.
-    
+
     The text is canonicalized before hashing to ensure consistent fingerprints
     regardless of platform-specific line endings or trailing whitespace.
-    
+
     Args:
         text: Chunk text (will be canonicalized automatically)
-        
+
     Returns:
         64-character lowercase hexadecimal SHA256 digest
-        
+
     Examples:
         >>> hash_text("hello world")
         'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9'
-        
+
         >>> hash_text("hello world\\r\\n") == hash_text("hello world\\n")
         True
     """
@@ -113,11 +113,11 @@ def hash_text(text: str) -> str:
 
 def verify_hash(text: str, expected_hash: str) -> bool:
     """Verify that text matches expected hash.
-    
+
     Args:
         text: Content to verify
         expected_hash: Expected SHA256 hex digest (64 chars)
-        
+
     Returns:
         True if hash matches, False otherwise
     """

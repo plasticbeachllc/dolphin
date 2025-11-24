@@ -53,20 +53,20 @@ export const ConversationMessageSchema = z.object({
 export const ConversationMetadataSchema = z.object({
   // Core metadata
   title: z.string().default("Untitled Conversation"),
-  
+
   // File tracking
   files: z.array(z.string()).default([]),
-  
+
   // Token tracking
   token_count: z.number().default(0),
-  
+
   // UI state
   pinned: z.boolean().default(false),
-  
+
   // Parent conversation (for branching)
   parent_conversation_id: z.string().optional(),
   branch_point_message_id: z.string().optional(),
-  
+
   // Last active timestamp
   last_active_at: z.string().optional(),
 });
@@ -80,10 +80,10 @@ export const ConversationSchema = z.object({
     updated_at: z.string(),
     workspace_root: z.string(),
   }),
-  
+
   // NEW: Metadata section (Phase 5)
   metadata: ConversationMetadataSchema.optional().default({}),
-  
+
   messages: z.array(ConversationMessageSchema),
   summaries: z
     .array(

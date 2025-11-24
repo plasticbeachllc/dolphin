@@ -1,8 +1,9 @@
 """Unit tests for LanceDBStore operations with mocks."""
 
 import types
-import pytest
 from pathlib import Path
+
+import pytest
 
 from kb.store.lancedb_store import LanceDBStore
 
@@ -21,16 +22,16 @@ class _MockTable:
             self.deleted_ids.extend(ids)
             self.rows = [r for r in self.rows if r.get("id") not in ids]
 
-    def add(self, rows, mode='append'):
+    def add(self, rows, mode="append"):
         # Accept mode parameter for compatibility
         # Handle PyArrow tables by converting to list of dicts
-        if hasattr(rows, 'to_pylist'):
+        if hasattr(rows, "to_pylist"):
             # PyArrow Table
             self.rows.extend(rows.to_pylist())
         else:
             # Regular list
             self.rows.extend(list(rows))
-    
+
     def count_rows(self):
         return len(self.rows)
 
@@ -42,15 +43,15 @@ class _MockDB:
     def table_names(self):
         return list(self._tables.keys())
 
-    def create_table(self, name, data=None, schema=None, mode='create'):
+    def create_table(self, name, data=None, schema=None, mode="create"):
         # Accept mode parameter for compatibility
         self._tables[name] = _MockTable(name)
         if data is not None:
             # Handle PyArrow tables by converting to list of dicts
-            if hasattr(data, 'to_pylist'):
+            if hasattr(data, "to_pylist"):
                 # PyArrow Table
                 self._tables[name].rows = data.to_pylist()
-            elif hasattr(data, '__iter__'):
+            elif hasattr(data, "__iter__"):
                 self._tables[name].rows = list(data)
             else:
                 self._tables[name].rows = []
@@ -60,7 +61,7 @@ class _MockDB:
         if name not in self._tables:
             raise RuntimeError(f"Table {name} not found")
         return self._tables[name]
-    
+
     def drop_table(self, name):
         if name in self._tables:
             del self._tables[name]
@@ -69,6 +70,7 @@ class _MockDB:
 @pytest.fixture
 def mocked_lancedb(monkeypatch):
     import sys
+
     mock_mod = types.SimpleNamespace()
     db = _MockDB()
 
@@ -92,13 +94,13 @@ def test_initialize_collections_creates_tables(monkeypatch, mocked_lancedb, tmp_
 
     # Mock pyarrow presence without heavy import
     import sys
-    
+
     # Mock Table class with from_batches method
     class MockTable:
         @staticmethod
         def from_batches(batches, schema):
             return []  # Return empty list to simulate empty table
-    
+
     fake_pa = types.SimpleNamespace(
         field=lambda *args, **kwargs: object(),
         schema=lambda fields: object(),

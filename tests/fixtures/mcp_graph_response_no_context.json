@@ -1,0 +1,18 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "### Prompt Ready Response\nNo graph entities matched this query."
+      },
+      {
+        "type": "resource",
+        "href": "file:///workspace/README.md",
+        "mimeType": "text/markdown",
+        "text": "# Dolphin\nFixture response without graph context."
+      }
+    ]
+  }
+}

@@ -6,12 +6,19 @@
     "lib": ["ES2020"],
     "sourceMap": true,
     "strict": true,
-    "rootDir": "src",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["mocha", "node", "vscode"]
+    "types": ["mocha", "node", "vscode"],
+    "resolveJsonModule": true
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "webview", ".vscode-test"]
+  "include": ["src", "../shared"],
+  "exclude": [
+    "node_modules",
+    "webview",
+    ".vscode-test",
+    "../shared/__tests__",
+    "../shared/tests",
+    "../shared/**/*.test.ts"
+  ]
 }

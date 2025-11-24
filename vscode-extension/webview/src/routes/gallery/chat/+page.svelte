@@ -4,10 +4,16 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import MessageCard from '$lib/components/chat/MessageCard.svelte';
 	import ToolCallCard from '$lib/components/tools/ToolCallCard.svelte';
-	import { MessageSquare, Code, Wrench, FileCode } from 'lucide-svelte';
+import { MessageSquare, Code, Wrench, FileCode } from 'lucide-svelte';
+
+	type GalleryMessage = {
+		role: 'user' | 'assistant';
+		content: string;
+		timestamp?: string;
+	};
 
 	// Comprehensive mock conversation data showcasing all formatting scenarios
-	const mockConversation = [
+	const mockConversation: GalleryMessage[] = [
 		{
 			role: 'user',
 			content: 'Can you help me understand how to implement authentication in a React app?',
@@ -295,7 +301,7 @@ Would you like me to search the codebase for any existing authentication pattern
 	];
 
 	// Additional complex formatting examples
-	const complexFormatting = {
+	const complexFormatting: GalleryMessage = {
 		role: 'assistant',
 		content: `Here are some advanced patterns and edge cases:
 
@@ -561,7 +567,7 @@ Arrows: => -> <-
 		timestamp: '2:35 PM'
 	};
 
-	const edgeCaseMessage = {
+	const edgeCaseMessage: GalleryMessage = {
 		role: 'assistant',
 		content: `## Edge Case Testing
 

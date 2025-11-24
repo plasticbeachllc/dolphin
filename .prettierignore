@@ -1,0 +1,12 @@
+# Prettier-specific ignores
+# (Base ignores inherited from .gitignore via the "ignorePath" list in .prettierrc)
+
+# Lock files - should not be formatted but may be committed
+bun.lock
+**/bun.lock
+package-lock.json
+uv.lock
+
+# Generated/compiled outputs that might occasionally be committed
+*.pyc
+*.tsbuildinfo

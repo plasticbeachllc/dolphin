@@ -45,12 +45,14 @@ The caching system operates at two levels:
 ```
 
 **L1: Embedding Cache**
+
 - **Purpose**: Cache embedding vectors to avoid redundant API calls
 - **Key**: `embed:{model}:{hash(query)}`
 - **Value**: JSON-encoded embedding vector
 - **TTL**: 1 hour (embeddings are stable)
 
 **L2: Result Cache**
+
 - **Purpose**: Cache complete search results
 - **Key**: `results:{hash(query + params)}`
 - **Value**: JSON-encoded search results
@@ -60,10 +62,10 @@ The caching system operates at two levels:
 
 The cache supports two storage backends:
 
-| Backend | Use Case | Persistence | Shared | Performance |
-|---------|----------|-------------|--------|-------------|
-| **In-Memory** | Development, testing | No | No | Fastest |
-| **Redis** | Production, multi-process | Yes | Yes | Fast |
+| Backend       | Use Case                  | Persistence | Shared | Performance |
+| ------------- | ------------------------- | ----------- | ------ | ----------- |
+| **In-Memory** | Development, testing      | No          | No     | Fastest     |
+| **Redis**     | Production, multi-process | Yes         | Yes    | Fast        |
 
 ---
 
@@ -226,20 +228,20 @@ key = f"results:{hash(query + json.dumps(params, sort_keys=True))}"
 
 ### Latency
 
-| Operation | In-Memory | Redis | No Cache |
-|-----------|-----------|-------|----------|
-| Embedding lookup | <1ms | 1-3ms | 50-200ms |
-| Result lookup | <1ms | 2-5ms | 100-500ms |
+| Operation        | In-Memory | Redis | No Cache  |
+| ---------------- | --------- | ----- | --------- |
+| Embedding lookup | <1ms      | 1-3ms | 50-200ms  |
+| Result lookup    | <1ms      | 2-5ms | 100-500ms |
 
 ### Hit Rates
 
 Expected hit rates vary by usage pattern:
 
-| Scenario | Expected Hit Rate |
-|----------|-------------------|
-| Development (repeated queries) | 80-95% |
-| Production API (mixed queries) | 50-70% |
-| First-time queries | 0% |
+| Scenario                       | Expected Hit Rate |
+| ------------------------------ | ----------------- |
+| Development (repeated queries) | 80-95%            |
+| Production API (mixed queries) | 50-70%            |
+| First-time queries             | 0%                |
 
 ### Memory Usage
 
@@ -318,12 +320,15 @@ embedding = cache.get_embedding("query", "small")  # Returns None, continues
 **Symptom**: No performance improvement from caching
 
 **Solutions**:
+
 1. Verify cache is enabled:
+
    ```python
    assert cache.enabled is True
    ```
 
 2. Check Redis connection:
+
    ```python
    if cache.redis:
        cache.redis.ping()  # Should not raise exception
@@ -340,13 +345,16 @@ embedding = cache.get_embedding("query", "small")  # Returns None, continues
 **Symptom**: `ConnectionError: Error connecting to Redis`
 
 **Solutions**:
+
 1. Verify Redis is running:
+
    ```bash
    redis-cli ping
    # Should return: PONG
    ```
 
 2. Check connection URL:
+
    ```python
    cache = create_cache(redis_url="redis://localhost:6379/0")
    ```
@@ -363,12 +371,15 @@ embedding = cache.get_embedding("query", "small")  # Returns None, continues
 **Symptom**: Hit rate <30% in production
 
 **Possible Causes**:
+
 1. Queries are too diverse (expected for new systems)
 2. TTL is too short
 3. Cache is being cleared too frequently
 
 **Solutions**:
+
 1. Increase TTL for stable data:
+
    ```python
    cache = create_cache(embedding_ttl=7200)  # 2 hours
    ```
@@ -406,6 +417,7 @@ QueryCache(
 Retrieve cached embedding.
 
 **Parameters:**
+
 - `query`: Query text
 - `model`: Model name (`"small"` or `"large"`)
 
@@ -420,6 +432,7 @@ Cache an embedding.
 Retrieve cached search results.
 
 **Parameters:**
+
 - `query`: Query text
 - `**params`: Search parameters (repo, top_k, etc.)
 
@@ -440,6 +453,7 @@ Clear all cached data.
 Get cache statistics.
 
 **Returns:**
+
 ```python
 {
     "embedding_hits": int,
@@ -466,6 +480,7 @@ create_cache(
 ```
 
 **Parameters:**
+
 - `redis_url`: Redis connection URL (e.g., `"redis://localhost:6379/0"`)
 - `embedding_ttl`: TTL for embeddings in seconds
 - `result_ttl`: TTL for results in seconds
@@ -501,21 +516,23 @@ See [`tests/CACHE_TESTING_GUIDE.md`](../tests/CACHE_TESTING_GUIDE.md) for compre
 ### Upgrading from No Cache
 
 1. Install Redis (optional but recommended):
+
    ```bash
    # macOS
    brew install redis
    brew services start redis
-   
+
    # Ubuntu/Debian
    sudo apt-get install redis-server
    sudo systemctl start redis
    ```
 
 2. Update configuration:
+
    ```python
    # Before
    backend = create_search_backend(store_root=path)
-   
+
    # After
    backend = create_search_backend(
        store_root=path,
@@ -543,4 +560,5 @@ See [`tests/CACHE_TESTING_GUIDE.md`](../tests/CACHE_TESTING_GUIDE.md) for compre
 ## Support
 
 For issues or questions:
+
 - Documentation: [docs/](./README.md)

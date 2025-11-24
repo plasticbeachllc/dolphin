@@ -8,23 +8,22 @@ sequential scanning.
 from __future__ import annotations
 
 import multiprocessing as mp
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterable, List
+from collections.abc import Iterable
 from functools import partial
+from pathlib import Path
 
 from pathspec import PathSpec
 
-from .scanner import FileCandidate, _is_binary, ScannerError
 from .lang import classify_language
+from .scanner import FileCandidate, ScannerError, _is_binary
 
 
 def _process_file_batch(
-    file_paths: List[str],
+    file_paths: list[str],
     root: Path,
-    submods: List[str],
-    ignore_patterns: List[str],
-) -> List[FileCandidate]:
+    submods: list[str],
+    ignore_patterns: list[str],
+) -> list[FileCandidate]:
     """Process a batch of files in a worker process.
 
     Args:
@@ -37,7 +36,7 @@ def _process_file_batch(
         List of FileCandidate objects for valid files
     """
     spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
-    candidates: List[FileCandidate] = []
+    candidates: list[FileCandidate] = []
 
     for rel in file_paths:
         # Skip submodules
@@ -91,7 +90,7 @@ def scan_repo_parallel(
     ignores: Iterable[str],
     num_workers: int | None = None,
     batch_size: int = 100,
-) -> List[FileCandidate]:
+) -> list[FileCandidate]:
     """Scan a git repo for candidate files using parallel processing.
 
     This is a drop-in replacement for scan_repo() that uses multiprocessing
@@ -131,12 +130,13 @@ def scan_repo_parallel(
     # For small repos, use sequential processing
     if len(rel_paths) < batch_size * 2:
         from .scanner import scan_repo
+
         return scan_repo(root, ignores)
 
     # Split files into batches
     batches = []
     for i in range(0, len(rel_paths), batch_size):
-        batch = rel_paths[i:i + batch_size]
+        batch = rel_paths[i : i + batch_size]
         batches.append(batch)
 
     # Process batches in parallel
@@ -147,7 +147,7 @@ def scan_repo_parallel(
         ignore_patterns=ignore_patterns,
     )
 
-    all_candidates: List[FileCandidate] = []
+    all_candidates: list[FileCandidate] = []
 
     try:
         with mp.Pool(processes=num_workers) as pool:
@@ -157,8 +157,10 @@ def scan_repo_parallel(
     except Exception as e:
         # Fall back to sequential processing on error
         import logging
+
         logging.warning(f"Parallel scanning failed: {e}. Falling back to sequential.")
         from .scanner import scan_repo
+
         return scan_repo(root, ignores)
 
     return all_candidates

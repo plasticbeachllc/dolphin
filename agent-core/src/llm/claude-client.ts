@@ -55,7 +55,7 @@ export class ClaudeClient {
     // Initialize API client if API key provided or in environment
     if (config.apiKey || process.env.ANTHROPIC_API_KEY) {
       this.apiClient = new Anthropic({
-        apiKey: config.apiKey || process.env.ANTHROPIC_API_KEY
+        apiKey: config.apiKey || process.env.ANTHROPIC_API_KEY,
       });
     }
   }
@@ -107,9 +107,7 @@ export class ClaudeClient {
       return "api_key";
     }
 
-    throw new Error(
-      "No authentication configured. Install Claude CLI or set ANTHROPIC_API_KEY."
-    );
+    throw new Error("No authentication configured. Install Claude CLI or set ANTHROPIC_API_KEY.");
   }
 
   /**
@@ -128,11 +126,9 @@ export class ClaudeClient {
   /**
    * Complete using Claude CLI
    */
-  private async completeCLI(
-    request: CompletionRequest
-  ): Promise<CompletionResult> {
+  private async completeCLI(request: CompletionRequest): Promise<CompletionResult> {
     // Convert messages to Anthropic format
-    const anthropicMessages: Anthropic.Messages.MessageParam[] = request.messages.map(m => ({
+    const anthropicMessages: Anthropic.Messages.MessageParam[] = request.messages.map((m) => ({
       role: m.role,
       content: m.content,
     }));
@@ -162,9 +158,7 @@ export class ClaudeClient {
   /**
    * Complete using Anthropic API
    */
-  private async completeAPI(
-    request: CompletionRequest
-  ): Promise<CompletionResult> {
+  private async completeAPI(request: CompletionRequest): Promise<CompletionResult> {
     if (!this.apiClient) {
       throw new Error("API client not initialized");
     }
@@ -182,14 +176,14 @@ export class ClaudeClient {
 
     return {
       content: response.content
-        .filter((c) => c.type === "text")
-        .map((c) => (c as any).text)
+        .filter((c): c is Anthropic.TextBlock => c.type === "text")
+        .map((c) => c.text)
         .join(""),
       usage: {
         input_tokens: response.usage.input_tokens,
         output_tokens: response.usage.output_tokens,
       },
-      stop_reason: response.stop_reason,
+      stop_reason: response.stop_reason || undefined,
     };
   }
 
@@ -214,7 +208,7 @@ export class ClaudeClient {
       throw new Error("API client not initialized");
     }
 
-    const stream = await this.apiClient.messages.stream({
+    const stream = this.apiClient.messages.stream({
       model: this.config.model,
       max_tokens: request.maxTokens || this.config.maxTokens,
       temperature: request.temperature || this.config.temperature || 1.0,
@@ -236,7 +230,6 @@ export class ClaudeClient {
     }
   }
 
-
   /**
    * Get current auth status (doesn't throw errors)
    */
@@ -248,19 +241,15 @@ export class ClaudeClient {
     willUseSubscription: boolean;
   }> {
     const cliInstalled = await this.cliDetector.isInstalled();
-    const cliAuthenticated = cliInstalled
-      ? await this.cliDetector.isAuthenticated()
-      : false;
+    const cliAuthenticated = cliInstalled ? await this.cliDetector.isAuthenticated() : false;
     const apiKeySet = !!(this.config.apiKey || process.env.ANTHROPIC_API_KEY);
-    const willUseAPIKey = cliInstalled
-      ? await this.cliDetector.willUseAPIKey()
-      : false;
+    const willUseAPIKey = cliInstalled ? await this.cliDetector.willUseAPIKey() : false;
 
     // Try to detect auth mode, but don't throw if none available
     let mode: AuthMode = "auto";
     try {
       mode = await this.detectAuthMode();
-    } catch (error) {
+    } catch {
       // No auth configured - return "auto" as mode
       mode = "auto";
     }
@@ -272,5 +261,9 @@ export class ClaudeClient {
       apiKeySet,
       willUseSubscription: cliAuthenticated && !willUseAPIKey,
     };
+  }
+
+  getModel(): string {
+    return this.config.model;
   }
 }

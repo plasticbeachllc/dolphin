@@ -1,17 +1,18 @@
-import { createServer } from './mcp/server.js'
-import { initLogger, logError } from './util/logger.js'
+import { createServer } from "./mcp/server.js";
+import { initLogger, logError } from "./util/logger.js";
 
 // Entry point for dev (bun run src/index.ts)
-createServer().catch(async (err: any) => {
+createServer().catch(async (err: unknown) => {
   try {
-    await initLogger()
-    await logError('server_start', 'Failed to start MCP server', {
-      message: err?.message ?? String(err),
-      stack: err?.stack
-    })
+    await initLogger();
+    const error = err instanceof Error ? err : new Error(String(err));
+    await logError("server_start", "Failed to start MCP server", {
+      message: error.message,
+      stack: error.stack,
+    });
   } catch {
     // ignore logging failures
   }
   // Avoid stdout so MCP clients don't misinterpret the output
-  process.exitCode = 1
-})
+  process.exitCode = 1;
+});

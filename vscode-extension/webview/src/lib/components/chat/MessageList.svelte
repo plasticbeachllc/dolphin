@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import { MessageCard } from "$lib/components/chat";
-  import { ToolCallCard } from "$lib/components/tools";
+  import { ToolCallCard, DiffViewer } from "$lib/components/tools";
   import { Loader2 } from "lucide-svelte";
   
   interface Message {
@@ -26,6 +26,8 @@
   let { messages, autoScroll = true }: Props = $props();
   let messagesEndRef = $state<HTMLDivElement>();
   
+  const FILE_EDIT_TOOLS = ['apply_diff', 'write_to_file', 'file_write', 'search_and_replace', 'insert_content'];
+
   console.log(`[MessageList] Rendering with ${messages.length} messages`);
   
   $effect(() => {
@@ -49,15 +51,21 @@
   <div class="p-2 space-y-2">
     {#each messages as message, i (i)}
       {#if message.type === "tool_call"}
-        <ToolCallCard
-          tool={message.tool!}
-          input={message.input!}
-          result={message.result}
-          error={message.error}
-          status={message.status || "running"}
-          executionTime={message.executionTime}
-          diff={message.diff}
-        />
+        {#if message.status === 'success' && FILE_EDIT_TOOLS.includes(message.tool!) && message.diff}
+          <div class="mb-2">
+            <DiffViewer diff={message.diff} defaultExpanded={true} />
+          </div>
+        {:else}
+          <ToolCallCard
+            tool={message.tool!}
+            input={message.input!}
+            result={message.result}
+            error={message.error}
+            status={message.status || "running"}
+            executionTime={message.executionTime}
+            diff={message.diff}
+          />
+        {/if}
       {:else if message.type === "thinking"}
         <!-- Thinking indicator -->
         <div class="flex items-center gap-3 text-muted-foreground py-2 px-3" role="status" aria-live="polite" aria-label="AI is thinking">

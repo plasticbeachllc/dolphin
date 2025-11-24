@@ -1,17 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, Sequence
 
-from kb.api.app import (
-    SearchRequest,
-    reset_search_backend,
-    set_search_backend,
-)
+from kb.api.app import SearchRequest, reset_search_backend, set_search_backend
 from kb.hashing import hash_text
-
 
 FIXTURE_REPO_ROOT = Path(__file__).resolve().parent / "fixtures" / "kb_sample_repo"
 
@@ -162,9 +157,7 @@ def kb_backend_context(
     commit_sha: str = "fixture-main",
 ) -> Iterator[InMemoryKBBackend]:
     """Context manager that installs the in-memory backend for tests."""
-    backend = InMemoryKBBackend(
-        FIXTURE_REPO_ROOT, repo_name=repo_name, commit_sha=commit_sha
-    )
+    backend = InMemoryKBBackend(FIXTURE_REPO_ROOT, repo_name=repo_name, commit_sha=commit_sha)
     set_search_backend(backend)
     try:
         yield backend

@@ -1,116 +1,111 @@
 #!/usr/bin/env python3
-"""
-Simple test to verify vector search is working with populated data.
-"""
+"""Self-contained regression tests for vector and hybrid search flows."""
+
+from __future__ import annotations
 
 from pathlib import Path
-from kb.api.search_backend import create_search_backend
+
+import pytest
+
 from kb.api.app import SearchRequest
+from kb.api.search_backend import create_search_backend
+from kb.hashing import hash_text
 
 
-def test_vector_search_with_populated_data():
-    """Test that vector search actually works with data."""
-    
-    store_root = Path.home() / '.dolphin' / 'knowledge_store'
-    print(f"Testing vector search with store root: {store_root}")
-    
-    if not store_root.exists():
-        print("❌ Knowledge store doesn't exist. Index a repository first.")
-        raise AssertionError("Knowledge store doesn't exist")
-    
-    # Check if we can find the metadata store and see if there's any data
-    from kb.store.sqlite_meta import SQLiteMetadataStore
-    sql_store = SQLiteMetadataStore(store_root / "metadata.db")
-    
-    # Check chunk counts
-    try:
-        counts = sql_store.summarize()
-        print(f"Database summary: {counts}")
-        
-        assert counts['chunks'] > 0, "No chunks found in database"
-        print(f"✅ Found {counts['chunks']} chunks in database")
-        
-        print(f"✅ Found {counts['chunks']} chunks in database")
-    except Exception as e:
-        print(f"❌ Error checking database: {e}")
-        raise AssertionError(f"Database check failed: {e}")
-    
-    # Test backend creation
-    try:
-        backend = create_search_backend(store_root=store_root, hybrid_search_enabled=False)
-        print("✅ SearchBackend created successfully")
-    except Exception as e:
-        print(f"❌ Error creating search backend: {e}")
-        raise AssertionError(f"Search backend creation failed: {e}")
-    
-    # Test with a simple query
-    try:
-        request = SearchRequest(query="test", top_k=3)
-        results = backend.search(request)
-        
-        print(f"Vector search returned {len(results)} results")
-        
-        assert len(results) > 0, "Vector search returned no results"
-        print(f"✅ Vector search working! Sample result: {results[0]}")
-            
-    except Exception as e:
-        print(f"❌ Error during vector search: {e}")
-        raise AssertionError(f"Vector search failed: {e}")
+def _seed_test_data(backend, embed_model: str = "small") -> tuple[str, str]:
+    """Populate SQLite and LanceDB stores with a single deterministic chunk."""
+
+    backend.sql_store.initialize()
+
+    content = "Authentication middleware validates JWT tokens before routing."
+    text_hash = hash_text(content)
+    chunk_id = f"1:1:{embed_model}:{text_hash}:1:3"
+
+    vector_dim = backend.embedding_provider.model_dimensions[embed_model]
+    backend.lance_store.upsert_chunks(
+        "test-repo",
+        [
+            {
+                "id": chunk_id,
+                "vector": [0.1] * vector_dim,
+                "repo": "test-repo",
+                "path": "src/auth.py",
+                "start_line": 1,
+                "end_line": 3,
+                "text_hash": text_hash,
+                "commit": "",
+                "branch": "",
+                "embed_model": embed_model,
+            }
+        ],
+        model=embed_model,
+    )
+
+    backend.sql_store.index_chunk_for_fts(
+        content_id=chunk_id,
+        repo="test-repo",
+        path="src/auth.py",
+        text_hash=text_hash,
+        content=content,
+    )
+
+    return chunk_id, content
 
 
-def test_hybrid_search_comparison():
-    """Test hybrid vs vector-only search on the same data."""
-    
-    store_root = Path.home() / '.dolphin' / 'knowledge_store'
-    
-    try:
-        # Create both backends
-        vector_backend = create_search_backend(store_root=store_root, hybrid_search_enabled=False)
-        hybrid_backend = create_search_backend(store_root=store_root, hybrid_search_enabled=True)
-        
-        # Test query
-        request = SearchRequest(query="authentication", top_k=5)
-        
-        # Time both searches
-        import time
-        
-        # Vector-only search
-        start = time.time()
-        vector_results = vector_backend.search(request)
-        vector_time = (time.time() - start) * 1000
-        
-        # Hybrid search
-        start = time.time()
-        hybrid_results = hybrid_backend.search(request)
-        hybrid_time = (time.time() - start) * 1000
-        
-        print(f"\nPerformance Comparison:")
-        print(f"Vector-only: {vector_time:.1f}ms ({len(vector_results)} results)")
-        print(f"Hybrid:      {hybrid_time:.1f}ms ({len(hybrid_results)} results)")
-        print(f"Overhead:    {hybrid_time - vector_time:.1f}ms")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ Error during comparison test: {e}")
-        return False
+@pytest.fixture()
+def populated_backend(tmp_path: Path):
+    """Create a fully initialized backend with vector data ready for search."""
+
+    backend = create_search_backend(
+        store_root=tmp_path,
+        embedding_provider_type="stub",
+        hybrid_search_enabled=False,
+    )
+
+    chunk_id, _ = _seed_test_data(backend)
+    return backend, chunk_id
 
 
-def main():
-    """Main test function."""
-    
-    print("Vector Search Performance Test")
-    print("=" * 40)
-    
-    # First check if we have populated data
-    if test_vector_search_with_populated_data():
-        print("\n✅ Vector search is working correctly")
-        test_hybrid_search_comparison()
-    else:
-        print("\n❌ Vector search test failed")
-        print("\nTo populate the database, run:")
-        print("python -m kb.cli index --repo test-repo /path/to/your/repo")
+@pytest.fixture()
+def populated_hybrid_backend(tmp_path: Path):
+    """Create a backend configured for hybrid search with test data."""
+
+    backend = create_search_backend(
+        store_root=tmp_path,
+        embedding_provider_type="stub",
+        hybrid_search_enabled=True,
+    )
+
+    chunk_id, _ = _seed_test_data(backend)
+    return backend, chunk_id
 
 
-if __name__ == '__main__':
-    main()
+def test_vector_search_with_populated_data(populated_backend):
+    """Verify vector search returns the seeded chunk without external state."""
+
+    backend, chunk_id = populated_backend
+    request = SearchRequest(query="authentication", top_k=3, embed_model="small")
+
+    results = backend.search(request)
+
+    assert results, "Vector search returned no results"
+    assert results[0]["chunk_id"] == chunk_id
+
+
+def test_hybrid_search_comparison(populated_hybrid_backend):
+    """Ensure hybrid search executes alongside vector-only search on the same data."""
+
+    backend, chunk_id = populated_hybrid_backend
+
+    request = SearchRequest(query="authentication", top_k=5, embed_model="small")
+
+    vector_only = backend
+    vector_only.hybrid_search_enabled = False
+
+    vector_results = vector_only.search(request)
+    hybrid_results = backend.search(request)
+
+    assert vector_results, "Vector-only search should return results"
+    assert hybrid_results, "Hybrid search should return results"
+    assert vector_results[0]["chunk_id"] == chunk_id
+    assert hybrid_results[0]["chunk_id"] == chunk_id
