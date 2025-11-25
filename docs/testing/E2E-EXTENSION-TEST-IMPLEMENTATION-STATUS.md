@@ -10,6 +10,8 @@
 
 All **Immediate Actions (IA-1 through IA-5)** from the E2E Extension Test Refactoring Plan have been successfully implemented and tested. The test suite has been transformed from a state of 3.5/10 quality to a robust, maintainable foundation.
 
+**Follow-up (2025-11-25):** The integration UI/command suites now run fully against the shared mock infrastructure. `provider.test.ts` uses the mock AgentBridge adapter, `webview.test.ts` and `commands.test.ts` bootstrap the mock environment, and the legacy `conversations-e2e.test.ts` has been superseded by the mock-driven `integration/workflows/conversation-workflow.test.ts`.
+
 ---
 
 ## Completed Work

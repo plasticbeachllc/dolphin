@@ -1,46 +1,62 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { DolphinViewProvider } from "../../../../views/provider";
-import { AgentBridge } from "../../../../agent/bridge";
 import { createMockOutputChannel } from "../../../helpers/mock-output-channel";
+import type { AgentEvent } from "../../../../types/events";
+import {
+  createMockAgentBridgeAdapter,
+  getMockEnvironment,
+  resetMocks,
+  setupMockEnvironment,
+  teardownMockEnvironment,
+} from "../../../helpers/mock-manager";
 
 describe("DolphinViewProvider Unit Tests", () => {
   let provider: DolphinViewProvider;
   let outputChannel: vscode.OutputChannel;
-  let mockAgentBridge: AgentBridge;
+  let mockAgentBridge: ReturnType<typeof createMockAgentBridgeAdapter>;
+
+  suiteSetup(async () => {
+    await setupMockEnvironment();
+  });
+
+  suiteTeardown(async () => {
+    await teardownMockEnvironment();
+  });
 
   beforeEach(() => {
     outputChannel = createMockOutputChannel("Test");
-    mockAgentBridge = new AgentBridge(outputChannel);
+    resetMocks();
+    mockAgentBridge = createMockAgentBridgeAdapter();
     const extensionUri = vscode.Uri.file("/test/path");
     provider = new DolphinViewProvider(extensionUri, outputChannel, mockAgentBridge);
   });
 
   afterEach(async () => {
-    // CRITICAL: Dispose provider FIRST to stop event forwarding
     if (provider) {
       provider.dispose();
     }
-
-    // Then shutdown agent bridge to stop async operations
-    if (mockAgentBridge) {
-      const process = (mockAgentBridge as unknown as Record<string, unknown>).process as
-        | Record<string, unknown>
-        | undefined;
-      if (process && !process.kill) {
-        process.kill = () => true;
-      }
-      await mockAgentBridge.shutdown();
-    }
-
-    // Wait for shutdown to complete before disposing output channel
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    // Finally dispose output channel
     if (outputChannel) {
       outputChannel.dispose();
     }
   });
+
+  const createMockWebviewView = (collector?: (message: unknown) => void): vscode.WebviewView => {
+    return {
+      webview: {
+        options: {},
+        postMessage: (message: unknown) => {
+          collector?.(message);
+          return Promise.resolve(true);
+        },
+        onDidReceiveMessage: (callback: (message: unknown) => Thenable<void> | void) => {
+          collector && collector({ type: "onDidReceiveMessage_registered" });
+          return { dispose: () => {} } as vscode.Disposable;
+        },
+        asWebviewUri: (resource: vscode.Uri) => resource,
+      },
+    } as unknown as vscode.WebviewView;
+  };
 
   describe("postMessage", () => {
     it("Should log when webview is not ready", () => {
@@ -62,18 +78,10 @@ describe("DolphinViewProvider Unit Tests", () => {
     it("Should send message when webview is ready", () => {
       let sentMessage: unknown = null;
 
-      // Mock webview view
-      const mockWebviewView = {
-        webview: {
-          postMessage: (message: unknown) => {
-            sentMessage = message;
-            return Promise.resolve(true);
-          },
-        },
-      } as unknown as vscode.WebviewView;
+      const mockWebviewView = createMockWebviewView((message) => {
+        sentMessage = message;
+      });
 
-      // Set the webview view by calling resolveWebviewView
-      // We can't call it directly due to missing dependencies, so we'll inject it
       (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
       provider.postMessage({
@@ -95,14 +103,9 @@ describe("DolphinViewProvider Unit Tests", () => {
     it("Should send clear_conversation message to webview", () => {
       let sentMessage: unknown = null;
 
-      const mockWebviewView = {
-        webview: {
-          postMessage: (message: unknown) => {
-            sentMessage = message;
-            return Promise.resolve(true);
-          },
-        },
-      } as unknown as vscode.WebviewView;
+      const mockWebviewView = createMockWebviewView((message) => {
+        sentMessage = message;
+      });
 
       (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
@@ -129,14 +132,9 @@ describe("DolphinViewProvider Unit Tests", () => {
     it("Should send focus_input message to webview", () => {
       let sentMessage: unknown = null;
 
-      const mockWebviewView = {
-        webview: {
-          postMessage: (message: unknown) => {
-            sentMessage = message;
-            return Promise.resolve(true);
-          },
-        },
-      } as unknown as vscode.WebviewView;
+      const mockWebviewView = createMockWebviewView((message) => {
+        sentMessage = message;
+      });
 
       (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
@@ -157,15 +155,9 @@ describe("DolphinViewProvider Unit Tests", () => {
   describe("prefillInput (Phase 2)", () => {
     it("Should send prefill_input message with text to webview", () => {
       let sentMessage: unknown = null;
-
-      const mockWebviewView = {
-        webview: {
-          postMessage: (message: unknown) => {
-            sentMessage = message;
-            return Promise.resolve(true);
-          },
-        },
-      } as unknown as vscode.WebviewView;
+      const mockWebviewView = createMockWebviewView((message) => {
+        sentMessage = message;
+      });
 
       (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
@@ -180,15 +172,9 @@ describe("DolphinViewProvider Unit Tests", () => {
 
     it("Should handle empty string", () => {
       let sentMessage: unknown = null;
-
-      const mockWebviewView = {
-        webview: {
-          postMessage: (message: unknown) => {
-            sentMessage = message;
-            return Promise.resolve(true);
-          },
-        },
-      } as unknown as vscode.WebviewView;
+      const mockWebviewView = createMockWebviewView((message) => {
+        sentMessage = message;
+      });
 
       (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
@@ -201,15 +187,9 @@ describe("DolphinViewProvider Unit Tests", () => {
 
     it("Should handle multi-line text with code blocks", () => {
       let sentMessage: unknown = null;
-
-      const mockWebviewView = {
-        webview: {
-          postMessage: (message: unknown) => {
-            sentMessage = message;
-            return Promise.resolve(true);
-          },
-        },
-      } as unknown as vscode.WebviewView;
+      const mockWebviewView = createMockWebviewView((message) => {
+        sentMessage = message;
+      });
 
       (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
@@ -223,15 +203,9 @@ describe("DolphinViewProvider Unit Tests", () => {
 
     it("Should handle special characters", () => {
       let sentMessage: unknown = null;
-
-      const mockWebviewView = {
-        webview: {
-          postMessage: (message: unknown) => {
-            sentMessage = message;
-            return Promise.resolve(true);
-          },
-        },
-      } as unknown as vscode.WebviewView;
+      const mockWebviewView = createMockWebviewView((message) => {
+        sentMessage = message;
+      });
 
       (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
@@ -315,13 +289,9 @@ describe("DolphinViewProvider Unit Tests", () => {
 
       // The provider sets up event forwarding in the constructor
       // We need to trigger an event from the mock agent bridge
-      const mockEvent = { type: "content_delta", delta: "Hello" };
+      const mockEvent: AgentEvent = { type: "content_delta", delta: "Hello" };
 
-      // Access the event emitter from the agent bridge
-      type AgentBridgeWithEmitter = {
-        eventEmitter: { fire: (event: Record<string, unknown>) => void };
-      };
-      (mockAgentBridge as unknown as AgentBridgeWithEmitter).eventEmitter.fire(mockEvent);
+      getMockEnvironment().agentBridge.emit(mockEvent);
 
       // Give it a moment to process
       setTimeout(() => {
@@ -355,18 +325,15 @@ describe("DolphinViewProvider Unit Tests", () => {
 
       (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
-      const mockEvent = {
+      const mockEvent: AgentEvent = {
         type: "tool_call_started",
         toolId: "tool-1",
         tool: "test_tool",
         input: {},
         requestId: "req-1234567890-1",
-      };
+      } as AgentEvent;
 
-      type AgentBridgeWithEmitter = {
-        eventEmitter: { fire: (event: Record<string, unknown>) => void };
-      };
-      (mockAgentBridge as unknown as AgentBridgeWithEmitter).eventEmitter.fire(mockEvent);
+      getMockEnvironment().agentBridge.emit(mockEvent);
 
       setTimeout(() => {
         assert.ok(forwardedEvent, "Event should have been forwarded");
@@ -403,17 +370,14 @@ describe("DolphinViewProvider Unit Tests", () => {
 
       (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
-      const mockEvent = {
+      const mockEvent: AgentEvent = {
         type: "agent_ready",
         version: "0.1.0",
         capabilities: [],
         requestId: "req-9999-42",
-      };
+      } as AgentEvent;
 
-      type AgentBridgeWithEmitter = {
-        eventEmitter: { fire: (event: Record<string, unknown>) => void };
-      };
-      (mockAgentBridge as unknown as AgentBridgeWithEmitter).eventEmitter.fire(mockEvent);
+      getMockEnvironment().agentBridge.emit(mockEvent);
 
       setTimeout(() => {
         // Check logs include requestId
@@ -452,15 +416,12 @@ describe("DolphinViewProvider Unit Tests", () => {
       (provider as unknown as Record<string, unknown>).webviewView = mockWebviewView;
 
       // Event without requestId
-      const mockEvent = {
+      const mockEvent: AgentEvent = {
         type: "content_delta",
         delta: "test",
       };
 
-      type AgentBridgeWithEmitter = {
-        eventEmitter: { fire: (event: Record<string, unknown>) => void };
-      };
-      (mockAgentBridge as unknown as AgentBridgeWithEmitter).eventEmitter.fire(mockEvent);
+      getMockEnvironment().agentBridge.emit(mockEvent);
 
       setTimeout(() => {
         assert.ok(forwardedEvent, "Event should still be forwarded");

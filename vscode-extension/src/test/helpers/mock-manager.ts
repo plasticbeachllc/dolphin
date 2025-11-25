@@ -6,6 +6,9 @@
 import { MockKBServer, MockAgentBridge } from "./mock-services";
 import { MOCK_KB_CONFIG } from "./test-constants";
 import { MockSearchResult, MockMetadataResponse, ToolCall } from "./mock-types";
+import type { AgentBridgeAdapter } from "../../agent/types";
+import type { AgentEvent, ConversationListItem, LoadConversationResult } from "../../types/events";
+import * as vscode from "vscode";
 
 export interface MockEnvironment {
   kbServer: MockKBServer;
@@ -39,6 +42,64 @@ export async function setupMockEnvironment(): Promise<MockEnvironment> {
 
   mockEnvironment = { kbServer, agentBridge };
   return mockEnvironment;
+}
+
+/**
+ * Provide an AgentBridgeAdapter-compatible wrapper around the MockAgentBridge
+ * so integration tests can use the shared mock infrastructure without spinning
+ * up real processes.
+ */
+export function createMockAgentBridgeAdapter(
+  overrides: Partial<AgentBridgeAdapter> = {}
+): AgentBridgeAdapter {
+  const { agentBridge } = getMockEnvironment();
+
+  const onEvent: vscode.Event<AgentEvent> = ((listener, thisArgs, disposables) => {
+    const disposable = agentBridge.onEvent(listener);
+    if (disposables) {
+      disposables.push(disposable);
+    }
+    return disposable;
+  }) as vscode.Event<AgentEvent>;
+
+  const baseAdapter: AgentBridgeAdapter = {
+    start: async () => {},
+    stop: async () => {
+      agentBridge.shutdown();
+    },
+    shutdown: async () => {
+      agentBridge.shutdown();
+    },
+    onEvent,
+    sendMessage: (content: string, mode?: "code" | "architect") =>
+      agentBridge.sendMessage(content, mode),
+    getAuthStatus: async () => ({
+      providers: [
+        {
+          provider: "mock",
+          authenticated: true,
+          mode: "test",
+        },
+      ],
+    }),
+    abortGeneration: async () => Promise.resolve(),
+    clearConversation: async () => Promise.resolve(),
+    listConversations: async (): Promise<ConversationListItem[]> => [],
+    loadConversation: async (conversationId: string): Promise<LoadConversationResult> => ({
+      conversation: {
+        id: conversationId,
+        messages: [],
+        title: "Mock conversation",
+      },
+    }),
+    deleteConversation: async () => Promise.resolve(),
+    renameConversation: async () => Promise.resolve(),
+  };
+
+  return {
+    ...baseAdapter,
+    ...overrides,
+  };
 }
 
 /**

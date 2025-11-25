@@ -8,10 +8,20 @@ import {
   waitForCondition,
   waitForWebviewReady,
 } from "../../../helpers/shared-fixtures";
+import { resetMocks, setupMockEnvironment, teardownMockEnvironment } from "../../../helpers/mock-manager";
 
 describe("Webview Tests", () => {
+  suiteSetup(async () => {
+    await setupMockEnvironment();
+  });
+
+  suiteTeardown(async () => {
+    await teardownMockEnvironment();
+  });
+
   before(async function () {
     this.timeout(15000);
+    resetMocks();
     await activateExtension();
     await waitForWebviewReady(TEST_TIMEOUTS.WEBVIEW_READY);
   });

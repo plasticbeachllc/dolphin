@@ -475,4 +475,12 @@ export class MockAgentBridge {
     this.handlers.clear();
     this.messageHistory = [];
   }
+
+  /**
+   * Emit a raw AgentEvent to all registered handlers (utility for tests).
+   */
+  emit(event: Record<string, unknown>): void {
+    const { type, ...rest } = event as Record<string, unknown>;
+    this.emitToHandlers(type, rest);
+  }
 }
