@@ -16,7 +16,8 @@ Dolphin is a semantic code search and knowledge management system for AI interfa
 
 - [README.md](README.md) - Project overview, quick start, and user guide
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - Technical architecture and implementation status
-- [TESTING.md](TESTING.md) - Testing setup and procedures
+- [docs/TESTING.md](docs/TESTING.md) - Testing setup and procedures (canonical test reference)
+- [docs/BENCHMARKING.md](docs/BENCHMARKING.md) - Benchmarking procedures and performance targets
 
 ## Core Principles for Agents
 
@@ -746,7 +747,8 @@ uv run dolphin kb status my-repo
 
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) - System design and status
 - [README.md](README.md) - Project overview and quick start
-- [TESTING.md](TESTING.md) - Testing procedures
+- [docs/TESTING.md](docs/TESTING.md) - Testing procedures (canonical test reference)
+- [BENCHMARKING.md](docs/BENCHMARKING.md) - Benchmarking guide
 
 **For issues:**
 

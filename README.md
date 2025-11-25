@@ -5,6 +5,31 @@
 
 A semantic code search and knowledge management system for AI interface. This repository contains an indexing program (Python), an MCP server (TypeScript/Bun), an agent controller for LLM inference (TypeScript/Bun), and a VSCode extension (NodeJs/Svelte).
 
+## Repository Layout & Tooling
+
+- **Python backend** (`kb/`)
+  - Tooling: `uv` (`pyproject.toml`, `uv.lock`)
+  - Commands: `uv run dolphin ...`, `uv run pytest ...`
+- **MCP bridge** (`mcp-bridge/`)
+  - Tooling: Bun (`package.json`, `bun.lock`)
+  - Commands: `cd mcp-bridge && bun install && bun test`
+- **Agent core** (`agent-core/`)
+  - Tooling: Bun (`package.json`, `bun.lockb`)
+  - Commands: `cd agent-core && bun install && bun test`
+- **VS Code extension** (`vscode-extension/`)
+  - Tooling: npm for the extension, Bun for the webview
+  - Commands:
+    - `cd vscode-extension && npm install && npm run compile`
+    - `cd vscode-extension/webview && bun install && bun run build`
+- **Shared telemetry/IPC** (`shared/`)
+  - Tooling: npm (`package.json`, `node_modules/`)
+  - Commands: `cd shared && npm install && npm test`
+
+At the repo root:
+
+- `package.json` acts as a workspace aggregator with convenience scripts (`npm run build:all`, `npm run lint:all`, `npm run format`).
+- Use `just` targets (`just test-all`, `just check`) for the canonical, cross-project workflows.
+
 ## Quick Start
 
 ### Installation
@@ -321,7 +346,14 @@ uv run pytest tests/unit/
 uv run pytest tests/integration/
 ```
 
-See [TESTING.md](TESTING.md) for complete testing procedures.
+See [docs/TESTING.md](docs/TESTING.md) for complete testing procedures.
+
+## Documentation
+
+- High-level architecture: `docs/ARCHITECTURE.md`
+- Testing guide: `docs/TESTING.md`
+- Benchmarking: `docs/BENCHMARKING.md`
+- Profiling: `docs/PROFILING.md`
 
 ## Troubleshooting
 
