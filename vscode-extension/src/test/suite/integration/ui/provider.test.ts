@@ -1,7 +1,4 @@
-// Ensure Mocha globals (suiteSetup) are available when run via vscode-test
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const _mochaSetup = require("../../setup");
-void _mochaSetup;
+import "../../setup";
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { DolphinViewProvider } from "../../../../views/provider";
@@ -53,7 +50,7 @@ describe("DolphinViewProvider Unit Tests", () => {
           collector?.(message);
           return Promise.resolve(true);
         },
-        onDidReceiveMessage: (callback: (message: unknown) => Thenable<void> | void) => {
+        onDidReceiveMessage: (_callback: (message: unknown) => Thenable<void> | void) => {
           collector && collector({ type: "onDidReceiveMessage_registered" });
           return { dispose: () => {} } as vscode.Disposable;
         },

@@ -5,7 +5,12 @@
 
 import { MockKBServer, MockAgentBridge } from "./mock-services";
 import { MOCK_KB_CONFIG } from "./test-constants";
-import { MockSearchResult, MockMetadataResponse, ToolCall, AgentEvent as MockAgentEvent } from "./mock-types";
+import {
+  MockSearchResult,
+  MockMetadataResponse,
+  ToolCall,
+  AgentEvent as MockAgentEvent,
+} from "./mock-types";
 import type { AgentBridgeAdapter } from "../../agent/types";
 import type { AgentEvent, ConversationListItem, LoadConversationResult } from "../../types/events";
 import * as vscode from "vscode";

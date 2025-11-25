@@ -345,15 +345,15 @@ just compare-eval
 
 **Total**: ~40GB allocated
 
-| Component                | Size    | Description                           |
-| ------------------------ | ------- | ------------------------------------- |
-| SWE-Bench source repos   | ~5GB    | 10 repos (django, scikit-learn, etc.) |
-| Vector index (small)     | ~10GB   | 10 repos with 1536-dim embeddings     |
-| Vector index (large)     | ~3GB    | 3 repos with 3072-dim embeddings      |
-| Metadata (SQLite)        | ~2GB    | Chunk metadata and FTS                |
-| Graph store              | ~2GB    | Code relationships                    |
-| Flask test repo          | ~300MB  | Source + large model index            |
-| Buffer                   | ~17.7GB | Remaining headroom                    |
+| Component              | Size    | Description                           |
+| ---------------------- | ------- | ------------------------------------- |
+| SWE-Bench source repos | ~5GB    | 10 repos (django, scikit-learn, etc.) |
+| Vector index (small)   | ~10GB   | 10 repos with 1536-dim embeddings     |
+| Vector index (large)   | ~3GB    | 3 repos with 3072-dim embeddings      |
+| Metadata (SQLite)      | ~2GB    | Chunk metadata and FTS                |
+| Graph store            | ~2GB    | Code relationships                    |
+| Flask test repo        | ~300MB  | Source + large model index            |
+| Buffer                 | ~17.7GB | Remaining headroom                    |
 
 ### SWE-Bench Lite Evaluation
 
@@ -361,18 +361,18 @@ just compare-eval
 
 **10 repos selected** (includes largest SWE-Bench repos):
 
-| Repo                        | Size       | Model     | Instances | Priority          |
-| --------------------------- | ---------- | --------- | --------- | ----------------- |
-| `django/django`             | Very Large | small     | 45        | Include largest   |
-| `scikit-learn/scikit-learn` | Large      | small     | 40        | ML library        |
-| `matplotlib/matplotlib`     | Large      | small     | 23        | Plotting          |
-| `sympy/sympy`               | Very Large | small     | 35        | Largest codebase  |
-| `pytest-dev/pytest`         | Medium     | small     | 18        | Testing framework |
-| `sphinx-doc/sphinx`         | Medium     | small     | 16        | Documentation     |
-| `pydata/xarray`             | Medium     | small     | 12        | Data arrays       |
-| `psf/requests`              | Small      | large     | 15        | HTTP library      |
-| `pallets/flask`             | Small      | large     | 10        | Web framework     |
-| `mwaskom/seaborn`           | Small      | large     | 8         | Visualization     |
+| Repo                        | Size       | Model | Instances | Priority          |
+| --------------------------- | ---------- | ----- | --------- | ----------------- |
+| `django/django`             | Very Large | small | 45        | Include largest   |
+| `scikit-learn/scikit-learn` | Large      | small | 40        | ML library        |
+| `matplotlib/matplotlib`     | Large      | small | 23        | Plotting          |
+| `sympy/sympy`               | Very Large | small | 35        | Largest codebase  |
+| `pytest-dev/pytest`         | Medium     | small | 18        | Testing framework |
+| `sphinx-doc/sphinx`         | Medium     | small | 16        | Documentation     |
+| `pydata/xarray`             | Medium     | small | 12        | Data arrays       |
+| `psf/requests`              | Small      | large | 15        | HTTP library      |
+| `pallets/flask`             | Small      | large | 10        | Web framework     |
+| `mwaskom/seaborn`           | Small      | large | 8         | Visualization     |
 
 **Coverage**: 222/300 instances (~74%).
 
@@ -431,13 +431,13 @@ Average MRR: 0.65
 
 Scenario distribution (15 total):
 
-| Category               | Count | Difficulty  | Examples                        |
-| ---------------------- | ----- | ----------- | ------------------------------- |
-| Exact Match            | 5     | Easy        | `Flask`, `route`, `Blueprint`   |
-| Description-Based      | 4     | Medium      | "request context management"    |
-| Semantic               | 3     | Medium/Hard | "error handler registration"    |
-| Framework-Specific     | 2     | Medium      | Werkzeug integration, Click CLI |
-| Navigation             | 1     | Hard        | Blueprint registration flow     |
+| Category           | Count | Difficulty  | Examples                        |
+| ------------------ | ----- | ----------- | ------------------------------- |
+| Exact Match        | 5     | Easy        | `Flask`, `route`, `Blueprint`   |
+| Description-Based  | 4     | Medium      | "request context management"    |
+| Semantic           | 3     | Medium/Hard | "error handler registration"    |
+| Framework-Specific | 2     | Medium      | Werkzeug integration, Click CLI |
+| Navigation         | 1     | Hard        | Blueprint registration flow     |
 
 Setup:
 

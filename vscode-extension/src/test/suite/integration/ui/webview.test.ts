@@ -1,7 +1,4 @@
-// Ensure Mocha globals (suiteSetup) are available when run via vscode-test
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const _mochaSetup = require("../../setup");
-void _mochaSetup;
+import "../../setup";
 import * as assert from "assert";
 import * as fs from "fs";
 import * as path from "path";
@@ -12,7 +9,11 @@ import {
   waitForCondition,
   waitForWebviewReady,
 } from "../../../helpers/shared-fixtures";
-import { resetMocks, setupMockEnvironment, teardownMockEnvironment } from "../../../helpers/mock-manager";
+import {
+  resetMocks,
+  setupMockEnvironment,
+  teardownMockEnvironment,
+} from "../../../helpers/mock-manager";
 
 describe("Webview Tests", () => {
   before(async function () {

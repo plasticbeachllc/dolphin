@@ -1,8 +1,5 @@
 import * as assert from "assert";
-// Ensure Mocha globals (suiteSetup) are available when run via vscode-test
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const _mochaSetup = require("../../setup");
-void _mochaSetup;
+import "../../setup";
 import * as vscode from "vscode";
 import {
   assertCommandExists,
@@ -65,13 +62,10 @@ describe("Command Tests", () => {
 
     await assertCommandExists(TEST_COMMANDS.KB_SHOW_STATUS, true);
 
-    await waitForCondition(
-      () => kbServer.getRequestHistory().length > initialRequests,
-      {
-        timeout: 4000,
-        timeoutMessage: "KB status command did not hit mock server",
-      }
-    );
+    await waitForCondition(() => kbServer.getRequestHistory().length > initialRequests, {
+      timeout: 4000,
+      timeoutMessage: "KB status command did not hit mock server",
+    });
 
     const history = kbServer.getRequestHistory();
     const hitHealth = history.some((req) => (req.url || "").includes("/health"));
