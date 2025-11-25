@@ -27,10 +27,10 @@ uv run python -m kb.cli index test-repos/flask --embed-model large
 
 ```bash
 # Evaluate all Flask scenarios
-just eval-golden --scenarios golden-scenarios-flask/
+just eval-golden --scenarios benchmarks/golden-scenarios/evals/flask/
 
 # Verbose mode
-just eval-golden --scenarios golden-scenarios-flask/ --verbose
+just eval-golden --scenarios benchmarks/golden-scenarios/evals/flask/ --verbose
 ```
 
 ## Scenario Distribution

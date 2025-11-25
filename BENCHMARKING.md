@@ -156,7 +156,7 @@ Per-Repo Breakdown:
   scikit-learn/scikit-learn                P@5: 0.68, R@5: 0.65, MRR: 0.62
   psf/requests                             P@5: 0.80, R@5: 0.75, MRR: 0.72
 
-✅ Results saved to: results/swe_bench_eval.json
+✅ Results saved to: artifacts/benchmarks/swe_bench_eval.json
 ```
 
 ---
@@ -213,7 +213,7 @@ just eval-golden SCENARIOS="path/to/scenarios"
 RETRIEVAL EVALUATION
 ================================================================================
 
-Loading scenarios: golden-scenarios-flask/
+Loading scenarios: benchmarks/golden-scenarios/evals/flask/
 Found 15 scenarios across 5 categories
 
 Running evaluation...
@@ -298,7 +298,7 @@ just save-baseline
 just compare-eval
 
 # Compare specific files
-just compare-eval BASELINE=results/old.json CURRENT=results/new.json
+just compare-eval BASELINE=artifacts/benchmarks/old.json CURRENT=artifacts/benchmarks/new.json
 ```
 
 ### Expected Output
@@ -308,10 +308,10 @@ just compare-eval BASELINE=results/old.json CURRENT=results/new.json
 EVALUATION COMPARISON
 ================================================================================
 
-Baseline: results/baseline_eval.json
+Baseline: artifacts/benchmarks/baseline_eval.json
   Timestamp: 2025-11-10 14:30:00
 
-Current:  results/golden_eval.json
+Current:  artifacts/benchmarks/golden_eval.json
   Timestamp: 2025-11-12 10:15:00
 
 Threshold: 3.0%
@@ -356,23 +356,25 @@ dolphin/
 │   ├── eval_retrieval.py          # Golden scenario evaluation
 │   ├── compare_eval.py            # Regression detection
 │   └── benchmark_ann.py           # ANN parameter tuning
-├── golden-scenarios-flask/        # Flask test scenarios (15)
-│   ├── exact-match/
-│   ├── description-based/
-│   ├── semantic/
-│   ├── framework-specific/
-│   └── navigation/
+├── benchmarks/
+│   ├── golden-scenarios/          # Golden scenarios (all suites)
+│   │   └── evals/flask/           # Flask test scenarios (15)
+│   │       ├── exact-match/
+│   │       ├── description-based/
+│   │       ├── semantic/
+│   │       ├── framework-specific/
+│   │       └── navigation/
+│   └── test-data/
+│       ├── swe_bench_repos.json       # Repo configuration
+│       ├── swe_bench_state.json       # Orchestration state
+│       └── swe_bench_instances.json   # Evaluation instances
 ├── test-repos/                    # Test repositories
 │   ├── swe-bench/                 # SWE-Bench repos
 │   │   ├── django__django/
 │   │   ├── scikit-learn__scikit-learn/
 │   │   └── ...
 │   └── flask/                     # Flask 2.3.0
-├── test-data/
-│   ├── swe_bench_repos.json       # Repo configuration
-│   ├── swe_bench_state.json       # Orchestration state
-│   └── swe_bench_instances.json   # Evaluation instances
-├── results/                       # Benchmark outputs
+├── artifacts/benchmarks/          # Benchmark outputs (gitignored)
 │   ├── swe_bench_eval.json
 │   ├── golden_eval.json
 │   ├── ann_benchmark.json
@@ -388,7 +390,7 @@ dolphin/
 
 ```bash
 # 1. Create JSON file in appropriate category
-cat > golden-scenarios-flask/exact-match/new-scenario.json <<EOF
+cat > benchmarks/golden-scenarios/evals/flask/exact-match/new-scenario.json <<EOF
 {
   "id": "flask-exact-new-function",
   "query": "new_function",
@@ -418,10 +420,10 @@ python scripts/orchestrate_swe_bench.py index django/django --model small
 rm -rf test-repos/
 
 # Remove results
-rm -rf results/
+rm -rf artifacts/benchmarks/
 
 # Remove state tracking
-rm test-data/swe_bench_state.json
+rm benchmarks/test-data/swe_bench_state.json
 ```
 
 ---

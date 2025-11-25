@@ -68,8 +68,8 @@ agent-core/.dolphin/
 shared/node_modules/
 
 # Golden Scenarios
-golden-scenarios/node_modules/
-golden-scenarios/results/
+benchmarks/golden-scenarios/node_modules/
+benchmarks/golden-scenarios/results/
 
 # State files
 .dolphin/state/
@@ -83,7 +83,7 @@ node_modules/
 
 # Benchmarking & Evaluation
 test-repos/                     # Large test repositories
-test-data/swe_bench_state.json  # Orchestration state (local only)
-test-data/swe_bench_instances.json  # Downloaded instances
+benchmarks/test-data/swe_bench_state.json  # Orchestration state (local only)
+benchmarks/test-data/swe_bench_instances.json  # Downloaded instances
 results/                        # Benchmark results
 !results/.gitkeep               # Keep results directory

@@ -5,7 +5,7 @@ This directory contains curated test cases for evaluating Dolphin's retrieval qu
 ## Structure
 
 ```
-golden-scenarios/
+benchmarks/golden-scenarios/
 ├── code-search/           # Find specific code elements
 │   ├── exact-match/      # Simple name lookups
 │   └── description-based/# Natural language queries
@@ -21,13 +21,13 @@ golden-scenarios/
 
 ```bash
 # Evaluate all scenarios
-python scripts/eval_retrieval.py --scenarios golden-scenarios/
+python scripts/eval_retrieval.py --scenarios benchmarks/golden-scenarios/
 
 # Evaluate specific category
-python scripts/eval_retrieval.py --scenarios golden-scenarios/code-search/
+python scripts/eval_retrieval.py --scenarios benchmarks/golden-scenarios/code-search/
 
 # Single scenario
-python scripts/eval_retrieval.py --scenario golden-scenarios/code-search/exact-match/lancedb-store.json
+python scripts/eval_retrieval.py --scenario benchmarks/golden-scenarios/code-search/exact-match/lancedb-store.json
 ```
 
 ## Adding Scenarios

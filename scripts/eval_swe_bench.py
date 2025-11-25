@@ -206,7 +206,7 @@ def main():
     parser.add_argument(
         "--dataset",
         type=Path,
-        default=Path("test-data/swe_bench_instances.json"),
+        default=Path("benchmarks/test-data/swe_bench_instances.json"),
         help="Path to SWE-Bench instances",
     )
     parser.add_argument("--repos", nargs="+", help="Filter to specific repos (e.g., django/django)")
@@ -257,7 +257,7 @@ def main():
     )
 
     # Load repo configuration to get embed models
-    repo_config_path = Path("test-data/swe_bench_repos.json")
+    repo_config_path = Path("benchmarks/test-data/swe_bench_repos.json")
     repo_models = {}
     if repo_config_path.exists():
         with open(repo_config_path) as f:
