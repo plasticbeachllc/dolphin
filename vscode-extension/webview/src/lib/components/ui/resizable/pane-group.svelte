@@ -1,17 +1,22 @@
 <script lang="ts">
-	import { PaneGroup as PaneGroupPrimitive } from "paneforge";
+	import { PaneGroup, type PaneGroupProps } from "paneforge";
 	import { cn } from "$lib/utils.js";
 
-	type $$Props = PaneGroupPrimitive.Props;
+	type $$Props = PaneGroupProps & { direction: PaneGroupProps["direction"] };
 
 	let className: $$Props["class"] = undefined;
 	export { className as class };
+	export let direction: $$Props["direction"] = "horizontal";
+
+	// Relax typing to avoid svelte2tsx constructor constraints
+	const PaneGroupComponent: any = PaneGroup;
 </script>
 
-<PaneGroupPrimitive.Root
+<PaneGroupComponent
 	class={cn("flex h-full w-full data-[direction=vertical]:flex-col", className)}
+	{direction}
 	{...$$restProps}
 	let:isDragging
 >
 	<slot {isDragging} />
-</PaneGroupPrimitive.Root>
+</PaneGroupComponent>

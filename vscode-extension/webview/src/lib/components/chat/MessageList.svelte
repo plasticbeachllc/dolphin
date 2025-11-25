@@ -10,9 +10,9 @@
     content?: string;
     timestamp?: string;
     tool?: string;
-    input?: Record<string, any>;
-    result?: Record<string, any>;
-    error?: string;
+    input?: Record<string, unknown>;
+    result?: unknown;
+    error?: unknown;
     status?: "running" | "success" | "error";
     executionTime?: number;
     diff?: any;

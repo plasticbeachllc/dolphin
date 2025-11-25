@@ -14,11 +14,12 @@
 
 	export let tool: string;
 	export let input: Record<string, any>;
-	export let result: Record<string, any> | null = null;
-	export let error: string | null = null;
+	export let result: unknown | null = null;
+	export let error: unknown = null;
 	export let status: 'running' | 'success' | 'error' = 'running';
 	export let collapsed = true;
 	export let diff: FileDiff | undefined = undefined;
+	export let executionTime: number | undefined = undefined;
 
 	let expanded = !collapsed;
 
@@ -88,6 +89,11 @@
 			</div>
 
 			<div class="flex items-center gap-2 shrink-0">
+				{#if executionTime !== undefined}
+					<span class="text-[11px] text-muted-foreground font-mono">
+						{executionTime} ms
+					</span>
+				{/if}
 			</div>
 		</div>
 	</CardHeader>

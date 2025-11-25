@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { Pane as PanePrimitive } from "paneforge";
+	import { Pane, type PaneProps } from "paneforge";
 
-	type $$Props = PanePrimitive.Props;
+	type $$Props = PaneProps;
 </script>
 
-<PanePrimitive.Root {...$$restProps}>
+<Pane {...$$restProps}>
 	<slot />
-</PanePrimitive.Root>
+</Pane>

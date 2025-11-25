@@ -649,7 +649,6 @@
 												oldLines: 8,
 												newStart: 1,
 												newLines: 13,
-												content: '@@ -1,8 +1,13 @@',
 												lines: [
 													' export function formatNumber(num: number): string {',
 													'-  return num.toLocaleString();',
@@ -809,87 +808,4 @@
 				</Card>
 			</section>
 		</div>
-	{/snippet}
-
-<style>
-	.diff-line {
-		display: flex;
-		align-items: center;
-		padding: 0.125rem 1rem;
-		line-height: 1.5;
-		min-height: 1.5rem;
-	}
-	
-	.diff-line.add {
-		background: rgba(34, 197, 94, 0.12);
-	}
-	
-	.diff-line.add .marker {
-		color: rgb(34, 197, 94);
-	}
-	
-	.diff-line.del {
-		background: rgba(239, 68, 68, 0.12);
-	}
-	
-	.diff-line.del .marker {
-		color: rgb(239, 68, 68);
-	}
-	
-	.diff-line.ctx {
-		color: var(--foreground);
-		opacity: 0.8;
-	}
-	
-	.line-numbers {
-		display: flex;
-		gap: 0.75rem;
-		margin-right: 1rem;
-		min-width: 4rem;
-	}
-	
-	.line-num {
-		display: inline-block;
-		width: 2rem;
-		text-align: right;
-		color: var(--muted-foreground);
-		user-select: none;
-	}
-	
-	.marker {
-		display: inline-block;
-		width: 1ch;
-		margin-right: 1ch;
-		text-align: center;
-	}
-	
-	.code-content {
-		white-space: pre;
-		overflow-x: auto;
-	}
-	
-	.line-actions {
-		margin-left: auto;
-		padding-left: 0.5rem;
-	}
-	
-	/* Scrollbar styling */
-	.diff-container ::-webkit-scrollbar {
-		width: 8px;
-		height: 8px;
-	}
-	
-	.diff-container ::-webkit-scrollbar-track {
-		background: var(--muted);
-		border-radius: 4px;
-	}
-	
-	.diff-container ::-webkit-scrollbar-thumb {
-		background: var(--muted-foreground);
-		border-radius: 4px;
-	}
-	
-	.diff-container ::-webkit-scrollbar-thumb:hover {
-		background: var(--foreground);
-	}
-</style>
+{/snippet}
