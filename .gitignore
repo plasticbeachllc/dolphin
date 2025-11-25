@@ -20,6 +20,9 @@ continue-config/
 kilocode-config/
 vscode-extension/.tmp/
 
+# artifacts
+artifacts/
+
 # cache artifacts
 .mypy_cache
 .ruff_cache

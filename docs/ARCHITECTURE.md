@@ -47,8 +47,8 @@ Dolphin is a full-stack AI enablement platform that combines semantic code retri
 ┌───────────────────────────────────────────────────────────────┐
 │                      User Interfaces                          │
 ├──────────────┬──────────────┬──────────────┬─────────────────┤
-│ VSCode Ext   │Claude Desktop│  CLI (kb)    │  Direct REST    │
-│ (Svelte UI)  │ / OpenAI UX  │  (Python)    │  (curl/bun)     │
+│ VSCode Ext   │ Claude Code  |  CLI (kb)    │  Direct REST    │
+│ (Svelte UI)  │ / Codex UX   │  (Python)    │  (curl/bun)     │
 └──────┬───────┴──────┬───────┴──────┬───────┴──────┬──────────┘
        │              │              │              │
        │ JSON-RPC     │ MCP stdio    │ HTTP         │ HTTP
@@ -56,22 +56,19 @@ Dolphin is a full-stack AI enablement platform that combines semantic code retri
 ┌──────────────┐  ┌───────────────┐  │              │
 │ Agent Core   │  │  MCP Bridge   │  │              │
 │ (Bun/TS)     │  │ (TypeScript)  │  │              │
-│ • LLM API    │  │ • 6 MCP Tools │  │              │
-│ • KB Mgmt    │  │ • REST Client │  │              │
+│ • LLM APIs   │  │ • MCP Tools   │  |              |
+│ • KB Mgmt    │->│ • Context     │  |              │
 │ • Task Plan  │  │ • Truncation  │  │              │
 │ • Storage    │  │ • Type-safe   │  │              │
 └──────┬───────┘  └──────┬────────┘  │              │
-       │                 │ HTTP      │              │
-       │ HTTP            │           │              │
-       └─────────────┬───┴───────────┴──────────────┘
-                     ▼
+       │ HTTP            │ HTTP      │              │
+       ▼                 ▼           ▼              ▼
 ┌──────────────────────────────────────────────────────────────┐
-│              REST API (Python/FastAPI)                        │
-│  • 5 Endpoints                                                │
-│  • Search Backend (Hybrid BM25 + Vector)                      │
-│  • Embedding Pipeline                                         │
-│  • Rank Fusion & MMR                                          │
-│  • Cross-Encoder Reranking (optional)                         │
+│              REST API (Python/FastAPI)                       │
+│  • Search Backend (Hybrid BM25 + Vector)                     │
+│  • Embedding Pipeline                                        │
+│  • Rank Fusion & MMR                                         │
+│  • Cross-Encoder Reranking (optional)                        │
 └──────────────────────────┬───────────────────────────────────┘
                            │
         ┌──────────────────┼──────────────────┐
@@ -98,54 +95,7 @@ Repository → Scanner → Chunker → Deduplicator → Embedder → Storage
 ```
 Query → Embed → Vector Search → Re-rank → Snippet → Response
          │          │              │          │         │
-     OpenAI    LanceDB KNN    Fusion     Truncate   JSON/MCP
-```
-
----
-
-## KB Lifecycle Management
-
-### Production Deployment Strategy
-
-**Current State (Development):**
-
-- KB server runs separately (`uv run dolphin serve`)
-- Extension connects to existing KB on localhost:8000
-- Manual two-step startup process
-
-**Target State (Production):**
-
-- KB server auto-starts when extension activates
-- Zero-configuration user experience
-- Automatic process lifecycle management
-
-**Implementation:** See [`KB-LIFECYCLE-MANAGEMENT.md`](KB-LIFECYCLE-MANAGEMENT.md) for detailed implementation plan.
-
-### KBManager Enhancement
-
-**Location:** [`agent-core/src/kb/manager.ts`](../agent-core/src/kb/manager.ts)
-
-**New Capabilities:**
-
-- **Health Check:** Detect KB server on localhost:8000
-- **Auto-Start:** Spawn KB subprocess if not running
-- **Lifecycle Management:** Track and cleanup KB process
-- **Error Recovery:** Graceful degradation and restart logic
-
-**Startup Flow:**
-
-```
-Extension Activation
-  ↓
-KBManager.start()
-  ↓
-Check localhost:8000/health
-  ├─ Running? → Use existing
-  └─ Not running? → Spawn subprocess
-      ↓
-  Poll /health (500ms, max 30s)
-      ↓
-  KB Ready ✅
+     OpenAI    LanceDB KNN       Fusion   Truncate   JSON/MCP
 ```
 
 ---
