@@ -5,7 +5,7 @@
 
 import { MockKBServer, MockAgentBridge } from "./mock-services";
 import { MOCK_KB_CONFIG } from "./test-constants";
-import { MockSearchResult, MockMetadataResponse, ToolCall } from "./mock-types";
+import { MockSearchResult, MockMetadataResponse, ToolCall, AgentEvent as MockAgentEvent } from "./mock-types";
 import type { AgentBridgeAdapter } from "../../agent/types";
 import type { AgentEvent, ConversationListItem, LoadConversationResult } from "../../types/events";
 import * as vscode from "vscode";
@@ -55,7 +55,12 @@ export function createMockAgentBridgeAdapter(
   const { agentBridge } = getMockEnvironment();
 
   const onEvent: vscode.Event<AgentEvent> = ((listener, thisArgs, disposables) => {
-    const disposable = agentBridge.onEvent(listener);
+    // Adapt mock AgentEvent shape to extension AgentEvent shape for listeners
+    const wrapped = (event: MockAgentEvent) => {
+      listener.call(thisArgs, event as unknown as AgentEvent);
+    };
+
+    const disposable = agentBridge.onEvent(wrapped);
     if (disposables) {
       disposables.push(disposable);
     }

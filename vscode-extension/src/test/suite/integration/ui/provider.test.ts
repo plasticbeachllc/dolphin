@@ -1,3 +1,7 @@
+// Ensure Mocha globals (suiteSetup) are available when run via vscode-test
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const _mochaSetup = require("../../setup");
+void _mochaSetup;
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { DolphinViewProvider } from "../../../../views/provider";
@@ -16,20 +20,20 @@ describe("DolphinViewProvider Unit Tests", () => {
   let outputChannel: vscode.OutputChannel;
   let mockAgentBridge: ReturnType<typeof createMockAgentBridgeAdapter>;
 
-  suiteSetup(async () => {
-    await setupMockEnvironment();
-  });
-
-  suiteTeardown(async () => {
-    await teardownMockEnvironment();
-  });
-
   beforeEach(() => {
     outputChannel = createMockOutputChannel("Test");
     resetMocks();
     mockAgentBridge = createMockAgentBridgeAdapter();
     const extensionUri = vscode.Uri.file("/test/path");
     provider = new DolphinViewProvider(extensionUri, outputChannel, mockAgentBridge);
+  });
+
+  before(async () => {
+    await setupMockEnvironment();
+  });
+
+  after(async () => {
+    await teardownMockEnvironment();
   });
 
   afterEach(async () => {

@@ -481,6 +481,8 @@ export class MockAgentBridge {
    */
   emit(event: Record<string, unknown>): void {
     const { type, ...rest } = event as Record<string, unknown>;
-    this.emitToHandlers(type, rest);
+    const eventType = type ? String(type) : "";
+    if (!eventType) return;
+    this.emitToHandlers(eventType, rest);
   }
 }

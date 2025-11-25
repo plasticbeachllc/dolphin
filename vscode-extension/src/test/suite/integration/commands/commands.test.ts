@@ -1,4 +1,8 @@
 import * as assert from "assert";
+// Ensure Mocha globals (suiteSetup) are available when run via vscode-test
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const _mochaSetup = require("../../setup");
+void _mochaSetup;
 import * as vscode from "vscode";
 import {
   assertCommandExists,
@@ -15,18 +19,15 @@ import {
 } from "../../../helpers/mock-manager";
 
 describe("Command Tests", () => {
-  suiteSetup(async () => {
-    await setupMockEnvironment();
-  });
-
-  suiteTeardown(async () => {
-    await teardownMockEnvironment();
-  });
-
   before(async function () {
     this.timeout(15000);
     resetMocks();
+    await setupMockEnvironment();
     await activateExtension();
+  });
+
+  after(async () => {
+    await teardownMockEnvironment();
   });
 
   it("Executes smoke-test friendly commands", async function () {
