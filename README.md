@@ -3,7 +3,7 @@
 [![PyPi Version](https://img.shields.io/pypi/v/pb-dolphin.svg)](https://pypi.org/project/pb-dolphin/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A semantic code search and knowledge management system for AI interface. This repository contains an indexing program (Python), an MCP server (TypeScript/Bun), an agent controller for LLM inference (TypeScript/Bun), and a VSCode extension (NodeJs/Svelte).
+A semantic code indexing, search, and retrieval system for AI interface. This repository contains an indexing program (Python), an MCP server (TypeScript/Bun), an agent controller for LLM inference (TypeScript/Bun), and a VSCode extension (NodeJs/Svelte).
 
 ## Quick Start
 
