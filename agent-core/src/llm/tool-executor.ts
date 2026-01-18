@@ -7,7 +7,6 @@ import {
   type ToolCall,
   type ToolResult,
 } from "./tool-utils";
-import { generateFileWriteDiff } from "./diff-generator";
 
 export interface ToolExecutorMessage<TContent = unknown> {
   role: "user" | "assistant";
@@ -182,25 +181,6 @@ export class ToolExecutorEngine<TContent, TTool, TResponse> {
           const mcpResult = await this.mcpClient.callTool(toolName, processedInput);
           const executionTime = Date.now() - startTime;
 
-          let diff: string | undefined;
-          if (toolName === "file_write" && mcpResult && !mcpResult.isError) {
-            try {
-              const content = mcpResult.content as Array<{ text?: string }> | undefined;
-              const resultText = content && content[0] ? content[0].text : undefined;
-              if (resultText) {
-                const parsedResult = JSON.parse(resultText) as Record<string, unknown>;
-                const generatedDiff = await generateFileWriteDiff(
-                  processedInput,
-                  parsedResult,
-                  process.cwd()
-                );
-                diff = generatedDiff ?? undefined;
-              }
-            } catch (error) {
-              console.warn("[ToolExecutor] Failed to generate diff:", error);
-            }
-          }
-
           if (mcpResult.isError) {
             const content = mcpResult.content as Array<{ text?: string }> | undefined;
             const errorMessage =
@@ -222,7 +202,6 @@ export class ToolExecutorEngine<TContent, TTool, TResponse> {
             toolId: toolCall.id,
             result: mcpResult,
             executionTime,
-            diff,
           });
 
           return createToolResult(toolCall.id, mcpResult, false);

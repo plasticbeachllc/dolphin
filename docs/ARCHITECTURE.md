@@ -148,8 +148,6 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 | `get_vector_store_info` | Get store metadata and stats        | ✅     |
 | `get_metadata`          | Get chunk metadata without content  | ✅     |
 | `open_in_editor`        | Open file in user's editor          | ✅     |
-| `file_write`            | Write file content safely           | ✅     |
-| `read_files`            | Read multiple files in batch        | ✅     |
 
 **Key Features**:
 
