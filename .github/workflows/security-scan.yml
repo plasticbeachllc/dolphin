@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
       - name: Run pip-audit
-        run: uv run pip-audit --skip pb-dolphin --progress-spinner=off
+        run: uv run pip-audit --local --skip-editable --progress-spinner=off
 
 
   node-audit:
