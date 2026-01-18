@@ -3,20 +3,20 @@
 [![PyPi Version](https://img.shields.io/pypi/v/pb-dolphin.svg)](https://pypi.org/project/pb-dolphin/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A semantic code search and knowledge management system for AI interface. This repository contains an indexing program (Python), an MCP server (TypeScript/Bun), an agent controller for LLM inference (TypeScript/Bun), and a VSCode extension (NodeJs/Svelte).
+A semantic code search and knowledge management system for AI interfaces. This repository ships the Knowledge Bank (Python) and MCP server (TypeScript/Bun) as the stable, release-targeted components. The agent core and VSCode extension are experimental, under active development, and not part of the stable release scope.
 
 ## Repository Layout & Tooling
 
-- **Python backend** (`kb/`)
+- **Python backend (Knowledge Bank)** (`kb/`)
   - Tooling: `uv` (`pyproject.toml`, `uv.lock`)
   - Commands: `uv run dolphin ...`, `uv run pytest ...`
 - **MCP bridge** (`mcp-bridge/`)
   - Tooling: Bun (`package.json`, `bun.lock`)
   - Commands: `cd mcp-bridge && bun install && bun test`
-- **Agent core** (`agent-core/`)
+- **Experimental: Agent core** (`agent-core/`)
   - Tooling: Bun (`package.json`, `bun.lockb`)
   - Commands: `cd agent-core && bun install && bun test`
-- **VS Code extension** (`vscode-extension/`)
+- **Experimental: VS Code extension** (`vscode-extension/`)
   - Tooling: npm for the extension, Bun for the webview
   - Commands:
     - `cd vscode-extension && npm install && npm run compile`
@@ -200,15 +200,19 @@ The small companion MCP interface can be run via `bun` without install. Add to y
 }
 ```
 
+Set `DOLPHIN_API_URL` if your KB server is not running at `http://127.0.0.1:7777`.
+
 **Note:** In development, make sure you are running the HTTP retrieval server: `uv run dolphin serve`
 
-In production deployments (e.g., VSCode extension), the KB server lifecycle is managed automatically.
+MCP uses the `/v1` KB endpoints and includes the `X-API-Key` header automatically when the key is available. The key is auto-provisioned to `~/.dolphin/kb_api_key` by `dolphin init`, `dolphin serve`, and `bunx dolphin-mcp`.
 
-Available MCP tools: `search_knowledge`, `fetch_chunk`, `fetch_lines`, `get_vector_store_info`
+In experimental components (e.g., the VSCode extension), the KB server lifecycle is managed automatically.
 
-## VSCode Extension
+Available MCP tools: `search_knowledge`, `fetch_chunk`, `fetch_lines`, `get_vector_store_info`, `get_metadata`, `open_in_editor`, `file_write`, `read_files`
 
-Dolphin includes a VSCode extension that provides an AI coding assistant with semantic code search integration.
+## VSCode Extension (Experimental)
+
+Dolphin includes a VSCode extension that provides an AI coding assistant with semantic code search integration. It is experimental and not part of the stable release scope.
 
 ### Features
 
@@ -260,15 +264,19 @@ export ANTHROPIC_API_KEY=sk-ant-...
 # Start server
 dolphin serve
 
-# Health check
+# Health check (unauthenticated)
 curl http://127.0.0.1:7777/health
 
+# v1 endpoints require an API key
+export DOLPHIN_API_KEY="$(cat ~/.dolphin/kb_api_key)"
+
 # List repositories
-curl http://127.0.0.1:7777/repos
+curl -H "X-API-Key: $DOLPHIN_API_KEY" http://127.0.0.1:7777/v1/repos
 
 # Search "authentication"
-curl -X POST http://127.0.0.1:7777/search \
+curl -X POST http://127.0.0.1:7777/v1/search \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $DOLPHIN_API_KEY" \
   -d '{"query": "authentication", "top_k": 5}'
 ```
 
@@ -311,15 +319,14 @@ uv run dolphin serve
 
 ## Development Status
 
-**Current**: Beta (v0.2.0)
+**Current**: Release candidate (v0.2.0) for Knowledge Bank + MCP
 
 - ✅ Core indexing and search pipeline
 - ✅ Language-aware chunking (Python, TS, JS, Markdown)
 - ✅ REST API with MCP bridge available at `bunx dolphin-mcp`
-- ✅ VSCode extension with AI coding assistant
 - ✅ Cross-encoder reranking support
 - ✅ Hybrid search (BM25 + Vector)
-- ⚠️ Developmental stage
+- ⚠️ Agent core and VSCode extension are experimental and under active development
 
 **Upcoming**:
 
@@ -404,8 +411,8 @@ For detailed troubleshooting, performance tips, and development workflows, see [
 Current versions:
 
 - **Python Package (PyPI)**: [`0.2.0`](pyproject.toml:7) - `pb-dolphin`
-- **VSCode Extension**: [`0.1.0`](vscode-extension/package.json:5) - `dolphin`
-- **MCP Bridge (npm)**: [`0.1.3`](mcp-bridge/package.json:3) - `dolphin-mcp`
+- **MCP Bridge (npm)**: [`0.2.0`](mcp-bridge/package.json:3) - `dolphin-mcp`
+- **Experimental: VSCode Extension**: [`0.1.0`](vscode-extension/package.json:5) - `dolphin`
 
 ### License
 
@@ -417,4 +424,4 @@ Built with [LanceDB](https://lancedb.com/), [OpenAI](https://openai.com/), [Fast
 
 ---
 
-**⚠️ Remember**: This is experimental software under active development. Use at your own risk.
+**⚠️ Remember**: Knowledge Bank + MCP are release-candidate quality; experimental components remain under active development. Use at your own risk.

@@ -1684,7 +1684,7 @@ test("KB search contract", async () => {
     uponReceiving: "a search request",
     withRequest: {
       method: "POST",
-      path: "/search",
+      path: "/v1/search",
       body: { query: "test" },
     },
     willRespondWith: {

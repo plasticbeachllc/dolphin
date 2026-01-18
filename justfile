@@ -67,6 +67,16 @@ check-typescript:
 # Testing - Main Commands
 # ==============================================================================
 
+# Run tests for CORE modules
+test-core:
+	@echo "Testing core dolphin functions..."
+	echo ""
+	@just test-python all
+	@just test-mcp-bridge
+	@just test-shared
+	@echo ""
+	@echo "✅ Core tests passed!"
+
 # Run ALL tests across all projects
 test-all:
 	@echo "🚀 Running ALL tests across all projects..."
@@ -376,7 +386,7 @@ api:
 
 # Health check for API server
 health:
-	curl -s http://127.0.0.1:7777/v1/health || echo "API server not running"
+	curl -s http://127.0.0.1:7777/health || echo "API server not running"
 
 # ==============================================================================
 # Logs & Development

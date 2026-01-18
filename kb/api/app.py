@@ -23,7 +23,7 @@ EMBEDDING_BATCH_SIZE = 128
 ESTIMATED_TOKENS_PER_CHUNK = 200
 CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
-app = FastAPI(title="Unified Knowledge Store", version="0.1.0")
+app = FastAPI(title="Unified Knowledge Store", version="0.2.0")
 
 # Add CORS middleware to allow requests from VSCode webviews
 # Note: CORSMiddleware is a class, not a factory function, but FastAPI's add_middleware
@@ -185,6 +185,12 @@ async def health(check: str = Query(default="shallow")) -> dict[str, object]:
     return {"status": "ok", "checks": checks}
 
 
+@app.get("/v1/health")
+async def health_v1(check: str = Query(default="shallow")) -> dict[str, object]:
+    """Health check endpoint (v1, requires API key)."""
+    return await health(check)
+
+
 @app.post("/search")
 async def search(request: SearchRequest) -> dict[str, object]:
     """Dispatch the search request to the configured backend."""
@@ -239,6 +245,12 @@ async def search(request: SearchRequest) -> dict[str, object]:
     }
 
 
+@app.post("/v1/search")
+async def search_v1(request: SearchRequest) -> dict[str, object]:
+    """Dispatch the search request to the configured backend (v1)."""
+    return await search(request)
+
+
 @app.get("/repos")
 async def list_repos() -> dict[str, list[dict[str, object]]]:
     """List all registered repositories with metadata."""
@@ -283,6 +295,12 @@ async def list_repos() -> dict[str, list[dict[str, object]]]:
 
         logging.error("Failed to list repositories", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@app.get("/v1/repos")
+async def list_repos_v1() -> dict[str, list[dict[str, object]]]:
+    """List all registered repositories with metadata (v1)."""
+    return await list_repos()
 
 
 @app.get("/chunks/{chunk_id}")
@@ -347,6 +365,12 @@ async def fetch_chunk(chunk_id: str) -> dict[str, object]:
 
         logging.error(f"Error fetching chunk {chunk_id}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error fetching chunk: {str(e)}")
+
+
+@app.get("/v1/chunks/{chunk_id}")
+async def fetch_chunk_v1(chunk_id: str) -> dict[str, object]:
+    """Fetch a specific chunk by ID (v1)."""
+    return await fetch_chunk(chunk_id)
 
 
 @app.get("/file")
@@ -423,6 +447,17 @@ async def fetch_file_slice(
 
         logging.error(f"Error reading file: {full_path}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
+
+
+@app.get("/v1/file")
+async def fetch_file_slice_v1(
+    repo: str = Query(..., description="Repository name"),
+    path: str = Query(..., description="File path relative to repo root"),
+    start: int = Query(1, description="Start line (1-indexed, inclusive)"),
+    end: int = Query(..., description="End line (1-indexed, inclusive)"),
+) -> dict[str, object]:
+    """Fetch a slice of a file by line range (v1)."""
+    return await fetch_file_slice(repo=repo, path=path, start=start, end=end)
 
 
 class RegisterRepoRequest(BaseModel):

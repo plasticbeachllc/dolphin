@@ -3,7 +3,7 @@
 [![NPM Version](https://img.shields.io/npm/v/dolphin-mcp.svg)](https://www.npmjs.com/package/dolphin-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-MCP server for Dolphin semantic code search. Conforms to [MCP spec](https://modelcontextprotocol.io/).
+MCP server for Dolphin semantic code search. Conforms to [MCP spec](https://modelcontextprotocol.io/) and targets the `/v1` KB API endpoints.
 
 ## Quick Start
 
@@ -56,10 +56,11 @@ Add to `claude_desktop_config.json`:
 
 ## Environment Variables
 
-| Variable          | Default                 | Description                              |
-| ----------------- | ----------------------- | ---------------------------------------- |
-| `DOLPHIN_API_URL` | `http://127.0.0.1:7777` | Dolphin API endpoint                     |
-| `LOG_LEVEL`       | `info`                  | Logging level (debug, info, warn, error) |
+| Variable            | Default                 | Description                              |
+| ------------------- | ----------------------- | ---------------------------------------- |
+| `DOLPHIN_API_URL`   | `http://127.0.0.1:7777` | Dolphin API base URL                     |
+| `KB_REST_BASE_URL`  | unset                   | Alias for `DOLPHIN_API_URL` (tests/CI)   |
+| `LOG_LEVEL`         | `info`                  | Logging level (debug, info, warn, error) |
 
 ### API Key Authentication
 
@@ -134,8 +135,18 @@ Semantically query code and docs across indexed repositories and return ranked s
   "exclude_patterns": ["string"],
   "top_k": "number (1-100)",
   "max_snippets": "number",
+  "deadline_ms": "number",
   "embed_model": "small | large",
-  "score_cutoff": "number"
+  "score_cutoff": "number",
+  "mmr_enabled": "boolean",
+  "mmr_lambda": "number (0-1)",
+  "context_lines_before": "number (0-10)",
+  "context_lines_after": "number (0-10)",
+  "include_graph_context": "boolean",
+  "include_prompt_ready": "boolean",
+  "ann_strategy": "speed | accuracy | adaptive | custom",
+  "ann_nprobes": "number",
+  "ann_refine_factor": "number"
 }
 ```
 
@@ -161,6 +172,16 @@ Semantically query code and docs across indexed repositories and return ranked s
 ### `fetch_chunk`
 
 Fetch a chunk by chunk_id and return fenced code with citation.
+
+```json
+{
+  "chunk_id": "string (required)"
+}
+```
+
+### `get_metadata`
+
+Fetch chunk metadata without returning the full content.
 
 ```json
 {
@@ -199,6 +220,31 @@ Compute a vscode://file URI for a repo path and optional position.
   "path": "string (required)",
   "line": "number (1-indexed)",
   "column": "number (1-indexed)"
+}
+```
+
+### `file_write`
+
+Write content to a file relative to the workspace with an atomic write and optional backup.
+
+```json
+{
+  "path": "string (required)",
+  "content": "string (required)",
+  "create_backup": "boolean",
+  "create_directories": "boolean"
+}
+```
+
+### `read_files`
+
+Read multiple files in one request with optional partial failure handling.
+
+```json
+{
+  "paths": ["string"],
+  "max_size_bytes": "number",
+  "fail_on_error": "boolean"
 }
 ```
 

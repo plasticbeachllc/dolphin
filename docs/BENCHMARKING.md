@@ -137,14 +137,19 @@ uv run dolphin serve
 Run benchmark queries:
 
 ```bash
+# v1 endpoints require an API key
+export DOLPHIN_API_KEY="$(cat ~/.dolphin/kb_api_key)"
+
 # Cold cache (first-time search)
-curl -w "\nTime: %{time_total}s\n" -X POST http://127.0.0.1:7777/search \
+curl -w "\nTime: %{time_total}s\n" -X POST http://127.0.0.1:7777/v1/search \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $DOLPHIN_API_KEY" \
   -d '{"query": "authentication logic", "top_k": 10}'
 
 # Warm cache (repeated search)
-curl -w "\nTime: %{time_total}s\n" -X POST http://127.0.0.1:7777/search \
+curl -w "\nTime: %{time_total}s\n" -X POST http://127.0.0.1:7777/v1/search \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $DOLPHIN_API_KEY" \
   -d '{"query": "authentication logic", "top_k": 10}'
 ```
 
@@ -158,8 +163,9 @@ curl -w "\nTime: %{time_total}s\n" -X POST http://127.0.0.1:7777/search \
 ```bash
 # Simulate 8 concurrent users
 for i in {1..8}; do
-  curl -X POST http://127.0.0.1:7777/search \
+  curl -X POST http://127.0.0.1:7777/v1/search \
     -H "Content-Type: application/json" \
+    -H "X-API-Key: $DOLPHIN_API_KEY" \
     -d "{\"query\": \"test query $i\", \"top_k\": 5}" &
 done
 wait
@@ -275,7 +281,10 @@ Filter searches to reduce latency:
 KB_REPOS=api-server uv run dolphin search "auth"
 
 # Filter by path prefix (API)
-curl -X POST http://127.0.0.1:7777/search \
+export DOLPHIN_API_KEY="$(cat ~/.dolphin/kb_api_key)"
+curl -X POST http://127.0.0.1:7777/v1/search \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $DOLPHIN_API_KEY" \
   -d '{"query": "auth", "repos": ["api-server"], "path_prefix": ["src/"]}'
 ```
 

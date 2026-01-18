@@ -2,8 +2,8 @@
 
 Technical architecture and implementation status for the Dolphin AI enablement platform.
 
-**Version**: 0.1.13
-**Status**: Beta (Production Ready for Core Components)
+**Version**: 0.2.0
+**Status**: Beta (KB + MCP Release Candidate; Experimental Components in Progress)
 **Last Updated**: 2025-11-13 (WP2 Agent-Core V2 Consolidation Complete)
 
 ---
@@ -121,6 +121,7 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 - Automatic backend initialization on startup
 - OpenAI + Stub embedding providers
 - LanceDB vector search with fixed-size vectors
+- `/v1/*` endpoints require `X-API-Key`; `/health` remains unauthenticated for quick checks
 - **Maximal Marginal Relevance (MMR)** for result diversity
 - Multi-level caching (Redis + in-memory) for performance
 - Path traversal security protection
@@ -147,6 +148,8 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 | `get_vector_store_info` | Get store metadata and stats        | ✅     |
 | `get_metadata`          | Get chunk metadata without content  | ✅     |
 | `open_in_editor`        | Open file in user's editor          | ✅     |
+| `file_write`            | Write file content safely           | ✅     |
+| `read_files`            | Read multiple files in batch        | ✅     |
 
 **Key Features**:
 
@@ -949,7 +952,7 @@ cd mcp-bridge && bun run test-integration.ts
 
 ---
 
-**Status**: ✅ Production Ready
+**Status**: Release Candidate (KB + MCP)
 **Test Coverage**: 243+ tests passing
-**Version**: 1.0.0
+**Version**: 0.2.0
 **Date**: 2025-11-12

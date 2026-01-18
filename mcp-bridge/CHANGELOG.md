@@ -68,10 +68,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Breaking**: Minimum required kb API version is now 1.0.0
+- **Breaking**: Minimum required kb API version is now 0.2.0
 - **Tool response format** now includes graph context when available
 - **Search results** enriched with entity relationships
 - **Error messages** more detailed with actionable remediation steps
+- **REST client** now targets `/v1` KB endpoints for search, repos, chunks, and file slices
 
 ### Improved
 

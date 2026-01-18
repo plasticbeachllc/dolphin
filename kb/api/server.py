@@ -131,7 +131,7 @@ async def health_check():
     """Enhanced health check with component status."""
     return {
         "status": "healthy",
-        "version": "1.0.0",
+        "version": "0.2.0",
         "timestamp": datetime.now(UTC).isoformat(),
         "components": {"api": "healthy"},
     }

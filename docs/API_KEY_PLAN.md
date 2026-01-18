@@ -670,7 +670,7 @@ Integration tests:
 
 - Start the KB server using `uv run dolphin serve` within a temporary HOME:
   - Assert that `~/.dolphin/kb_api_key` is created.
-  - Assert that `/v1/health` is public and `/v1/search` requires `X-API-Key`.
+  - Assert that `/health` is public and `/v1/search` requires `X-API-Key`.
 
 ### 5.2 Node / TypeScript Tests
 

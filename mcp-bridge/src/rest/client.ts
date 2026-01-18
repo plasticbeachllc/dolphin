@@ -152,7 +152,7 @@ async function doFetch<T>(path: string, init?: RequestInit, signal?: AbortSignal
           code: "upstream_error",
           message: `HTTP ${res.status} ${res.statusText}`,
           remediation:
-            "Check repo names with /repos, adjust filters, or increase deadline_ms/top_k. See server logs.",
+            "Check repo names with /v1/repos, adjust filters, or increase deadline_ms/top_k. See server logs.",
           details: { body_snippet: (text || "").slice(0, 200) },
         },
       };
@@ -169,7 +169,7 @@ export async function restSearch(
   signal?: AbortSignal
 ): Promise<SearchResponse> {
   return await doFetch<SearchResponse>(
-    "/search",
+    "/v1/search",
     {
       method: "POST",
       body: JSON.stringify(body),
@@ -180,7 +180,7 @@ export async function restSearch(
 
 export async function restGetChunk(id: string, signal?: AbortSignal): Promise<ChunkResponse> {
   return await doFetch<ChunkResponse>(
-    `/chunks/${encodeURIComponent(id)}`,
+    `/v1/chunks/${encodeURIComponent(id)}`,
     { method: "GET" },
     signal
   );
@@ -194,7 +194,7 @@ export async function restGetFileSlice(
   signal?: AbortSignal
 ): Promise<FileSliceResponse> {
   const q = new URLSearchParams({ repo, path, start: String(start), end: String(end) });
-  return await doFetch<FileSliceResponse>(`/file?${q.toString()}`, { method: "GET" }, signal);
+  return await doFetch<FileSliceResponse>(`/v1/file?${q.toString()}`, { method: "GET" }, signal);
 }
 
 export interface RepoInfo {
@@ -205,5 +205,5 @@ export interface RepoInfo {
   chunks?: number;
 }
 export async function restListRepos(signal?: AbortSignal): Promise<{ repos: RepoInfo[] }> {
-  return await doFetch<{ repos: RepoInfo[] }>("/repos", { method: "GET" }, signal);
+  return await doFetch<{ repos: RepoInfo[] }>("/v1/repos", { method: "GET" }, signal);
 }

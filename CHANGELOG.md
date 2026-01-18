@@ -122,6 +122,7 @@ Version 0.2.0 represents a complete Python backend.
   - Structured error responses with remediation hints
   - Request validation with Pydantic models
   - JSONL logging with automatic rotation
+  - `/v1` aliases added for core read endpoints (search, repos, chunks, file); `/health` remains unauthenticated
 
 #### 🔧 Configuration & CLI Management
 

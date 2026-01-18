@@ -1,5 +1,6 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "pb-dolphin",
@@ -35,7 +36,7 @@
     },
     "mcp-bridge": {
       "name": "dolphin-mcp",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "bin": {
         "dolphin-mcp": "./dist/cli.js",
       },

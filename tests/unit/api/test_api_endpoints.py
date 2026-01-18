@@ -61,6 +61,13 @@ class TestHealthEndpoint:
         # Should have status and checks
         assert "status" in data or "lancedb" in data
 
+    def test_health_v1_shallow_check(self, kb_api_client):
+        """Test /v1/health with API key."""
+        response = kb_api_client.get("/v1/health")
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
+
 
 class TestSearchEndpoint:
     """Test /v1/search endpoint."""
@@ -78,6 +85,15 @@ class TestSearchEndpoint:
         """Test basic search query."""
         client = TestClient(app)
         response = client.post("/search", json={"query": "test function"})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "hits" in data
+        assert len(data["hits"]) > 0
+
+    def test_search_v1_basic_query(self, kb_api_client):
+        """Test /v1/search with API key."""
+        response = kb_api_client.post("/v1/search", json={"query": "test function"})
 
         assert response.status_code == 200
         data = response.json()

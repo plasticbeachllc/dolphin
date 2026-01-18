@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Codex session start: minimal setup"
+echo "Initializing 🐬 dolphin development environment..."
 CODEX_WORKSPACE_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$CODEX_WORKSPACE_DIR"
 

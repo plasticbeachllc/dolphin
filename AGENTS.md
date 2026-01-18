@@ -420,8 +420,10 @@ uv run dolphin search "query"
 KB_REPOS=my-repo uv run dolphin search "query"  # Filter by repo
 
 # REST API
-curl -X POST http://127.0.0.1:7777/search \
+export DOLPHIN_API_KEY="$(cat ~/.dolphin/kb_api_key)"
+curl -X POST http://127.0.0.1:7777/v1/search \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $DOLPHIN_API_KEY" \
   -d '{"query": "test", "top_k": 5}'
 
 # Using Justfile
@@ -519,8 +521,10 @@ uv run dolphin kb status
 uv run dolphin kb index my-repo --full --force
 
 # Try with lower score cutoff
-curl -X POST http://127.0.0.1:7777/search \
+export DOLPHIN_API_KEY="$(cat ~/.dolphin/kb_api_key)"
+curl -X POST http://127.0.0.1:7777/v1/search \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $DOLPHIN_API_KEY" \
   -d '{"query": "test", "score_cutoff": 0.0, "top_k": 10}'
 ```
 
@@ -695,7 +699,10 @@ overlap_tokens = 64     # Balance between context and duplication
 KB_REPOS=api-server uv run dolphin search "auth"
 
 # Filter by path prefix in API call
-curl -X POST http://127.0.0.1:7777/search \
+export DOLPHIN_API_KEY="$(cat ~/.dolphin/kb_api_key)"
+curl -X POST http://127.0.0.1:7777/v1/search \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $DOLPHIN_API_KEY" \
   -d '{"query": "auth", "repos": ["api-server"], "path_prefix": ["src/"]}'
 ```
 
