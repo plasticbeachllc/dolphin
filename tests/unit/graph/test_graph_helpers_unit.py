@@ -49,6 +49,25 @@ class TestExtractGraphFromFile:
         assert nodes == []
         assert edges == []
 
+    def test_extract_graph_from_svelte_passes_component_name(self, monkeypatch):
+        """Test Svelte extraction passes component name to chunker."""
+        import kb.chunkers.svelte_chunker as svelte_chunker
+
+        captured = {}
+
+        def fake_extract(source: str, component_name: str):
+            captured["source"] = source
+            captured["component_name"] = component_name
+            return [], []
+
+        monkeypatch.setattr(svelte_chunker, "extract_graph_data", fake_extract)
+
+        nodes, edges = extract_graph_from_file(Path("/repo/MyWidget.svelte"), "svelte", "<script></script>")
+
+        assert nodes == []
+        assert edges == []
+        assert captured["component_name"] == "MyWidget"
+
 
 class TestStoreGraphData:
     """Test storing graph data in the graph store."""

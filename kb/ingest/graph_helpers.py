@@ -72,7 +72,11 @@ def extract_graph_from_file(
     try:
         # Type narrowing: we've checked hasattr for extract_graph_data
         extract_fn = getattr(chunker_module, "extract_graph_data")
-        nodes, edges = extract_fn(text)
+        if lang_key == "svelte":
+            component_name = file_path.stem or file_path.name
+            nodes, edges = extract_fn(text, component_name)
+        else:
+            nodes, edges = extract_fn(text)
         return nodes, edges
     except Exception as e:
         # Log but don't fail - graph extraction is optional
