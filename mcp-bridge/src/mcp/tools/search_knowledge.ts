@@ -455,7 +455,7 @@ export function makeSearchKnowledge(): {
         },
       };
 
-      // Enforce ~50KB total cap by trimming in specified order
+      // Enforce ~70KB total cap by trimming in specified order
       let size = jsonSizeBytes(result);
 
       // Step 1: Trim prompt_ready text to fit budget
@@ -539,7 +539,7 @@ export function makeSearchKnowledge(): {
         }
         // Mark as partial page when trimming occurred
         result._meta = { ...result._meta, complete: false };
-        await logWarn("search", "trimmed content to respect 50KB cap", { trimmed: true });
+        await logWarn("search", "trimmed content to respect 70KB cap", { trimmed: true });
       }
 
       // Calculate snippet fetch specific metrics
@@ -590,7 +590,7 @@ export function makeSearchKnowledge(): {
         err.error?.remediation ??
         (err.error?.code === "invalid_json"
           ? 'Upstream returned non-JSON (e.g., "Internal Server Error"). Inspect server logs, verify endpoints and filters, or increase deadline_ms/top_k.'
-          : "Check repo names with /repos, adjust filters, or increase deadline_ms/top_k.");
+          : "Check repo names with /v1/repos, adjust filters, or increase deadline_ms/top_k.");
       const message = `${err.error.message}${remediation ? " Remediation: " + remediation : ""}`;
       const content: CallToolResult["content"] = [{ type: "text", text: message }];
       return { content, isError: true, _meta: { upstream: err } };

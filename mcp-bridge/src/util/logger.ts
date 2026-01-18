@@ -2,6 +2,7 @@ import { mkdir, appendFile, stat, rename, access } from "node:fs/promises";
 import { constants as FS_CONST } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createLogger, LogMetadata } from "../../../shared/observability/logger.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LOG_DIR = join(__dirname, "../../logs");
@@ -11,16 +12,7 @@ const LOG_FILE = join(LOG_DIR, "mcp.log");
 const MAX_LOG_BYTES = 5 * 1024 * 1024; // 5 MB
 const MAX_ROTATIONS = 3;
 
-type Level = "debug" | "info" | "warn" | "error";
-
-interface LogLine {
-  ts: string;
-  level: Level;
-  event: string;
-  context?: Record<string, unknown>;
-  message: string;
-  meta?: Record<string, unknown>;
-}
+let logDirReady = false;
 
 async function exists(p: string): Promise<boolean> {
   try {
@@ -62,31 +54,40 @@ async function rotateIfNeeded(): Promise<void> {
   }
 }
 
-async function writeLine(line: LogLine): Promise<void> {
+async function ensureLogDir(): Promise<void> {
+  if (logDirReady) {
+    return;
+  }
+  await mkdir(LOG_DIR, { recursive: true });
+  logDirReady = true;
+}
+
+async function writeLine(line: string): Promise<void> {
+  await ensureLogDir();
   await rotateIfNeeded();
-  const payload = JSON.stringify(line) + "\n";
-  await appendFile(LOG_FILE, payload, { encoding: "utf8" });
+  await appendFile(LOG_FILE, `${line}\n`, { encoding: "utf8" });
 }
 
 export async function initLogger(): Promise<void> {
-  await mkdir(LOG_DIR, { recursive: true });
+  await ensureLogDir();
 }
 
-function baseLine(
-  level: Level,
+const logger = createLogger("mcp-bridge", {
+  sink: (line) => {
+    void writeLine(line).catch(() => undefined);
+  },
+});
+
+function buildContext(
   event: string,
-  message: string,
   meta?: Record<string, unknown>,
   context?: Record<string, unknown>
-): LogLine {
+): LogMetadata {
   return {
-    ts: new Date().toISOString(),
-    level,
     event,
-    message,
-    context,
-    meta,
-  };
+    ...(context ?? {}),
+    ...(meta ? { meta } : {}),
+  } as LogMetadata;
 }
 
 export async function logInfo(
@@ -95,7 +96,16 @@ export async function logInfo(
   meta?: Record<string, unknown>,
   context?: Record<string, unknown>
 ): Promise<void> {
-  await writeLine(baseLine("info", event, message, meta, context));
+  logger.info(message, buildContext(event, meta, context));
+}
+
+export async function logDebug(
+  event: string,
+  message: string,
+  meta?: Record<string, unknown>,
+  context?: Record<string, unknown>
+): Promise<void> {
+  logger.debug(message, buildContext(event, meta, context));
 }
 
 export async function logWarn(
@@ -104,7 +114,7 @@ export async function logWarn(
   meta?: Record<string, unknown>,
   context?: Record<string, unknown>
 ): Promise<void> {
-  await writeLine(baseLine("warn", event, message, meta, context));
+  logger.warn(message, buildContext(event, meta, context));
 }
 
 export async function logError(
@@ -113,5 +123,7 @@ export async function logError(
   meta?: Record<string, unknown>,
   context?: Record<string, unknown>
 ): Promise<void> {
-  await writeLine(baseLine("error", event, message, meta, context));
+  const errorCandidate = meta && "error" in meta ? meta.error : undefined;
+  const error = errorCandidate instanceof Error ? errorCandidate : undefined;
+  logger.error(message, error, buildContext(event, meta, context));
 }

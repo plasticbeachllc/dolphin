@@ -133,7 +133,7 @@ describe("search_knowledge", () => {
     });
   });
 
-  it("50 KB cap trimming: Case A - large prompt-ready triggers trimming", async () => {
+  it("70 KB cap trimming: Case A - large prompt-ready triggers trimming", async () => {
     // This test would require a mock that returns very large prompt-ready content
     // For now, we verify the truncation logic exists in the implementation
     const { handler } = makeSearchKnowledge();
@@ -193,14 +193,14 @@ describe("search_knowledge", () => {
     }
   });
 
-  it("payload size validation: end result size ≤ 50 KB", async () => {
+  it("payload size validation: end result size ≤ 70 KB", async () => {
     const { handler } = makeSearchKnowledge();
     const res = await handler({ input: { query: "test" } });
 
     // Convert result to JSON and check size
     const resultJson = JSON.stringify(res);
     const sizeInBytes = new TextEncoder().encode(resultJson).length;
-    expect(sizeInBytes).toBeLessThanOrEqual(50 * 1024);
+    expect(sizeInBytes).toBeLessThanOrEqual(70 * 1024);
   });
 
   it("tool definition includes valid JSON Schema", async () => {

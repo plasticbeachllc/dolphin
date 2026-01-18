@@ -23,7 +23,11 @@ export function makeGetVectorStoreInfo(): {
       const data = {
         namespaces: ["chunks_small", "chunks_large"],
         dims: { chunks_small: 1536, chunks_large: 3072 },
-        limits: { top_k_max: 20, snippet_tokens_cap: 500 },
+        limits: {
+          top_k_max: 100,
+          snippet_char_cap: 1000,
+          payload_cap_bytes: 70 * 1024,
+        },
         counts: { approx_chunks_total: totalChunks },
         latency: { search_p50_ms: null as number | null, search_p95_ms: null as number | null },
       };

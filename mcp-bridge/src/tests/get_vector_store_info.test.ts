@@ -25,7 +25,7 @@ describe("get_vector_store_info", () => {
     expect(res.data.dims.chunks_small).toBe(1536);
     expect(res.data.dims.chunks_large).toBe(3072);
     expect(res.data.limits).toBeDefined();
-    expect(res.data.limits.top_k_max).toBe(20);
+    expect(res.data.limits.top_k_max).toBe(100);
     expect(res.data.counts).toBeDefined();
     expect(res.data.counts.approx_chunks_total).toBe(7); // 2 + 5 from mock repos
     expect(res.data.latency).toBeDefined();

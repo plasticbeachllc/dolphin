@@ -1,6 +1,6 @@
 import { restGetFileSlice } from "../../rest/client.js";
 import { mapWithConcurrency } from "../../util/concurrency.js";
-import { logWarn, logError, logInfo } from "../../util/logger.js";
+import { logWarn, logError, logInfo, logDebug } from "../../util/logger.js";
 
 /**
  * Request for fetching a snippet from a specific file location
@@ -93,7 +93,7 @@ export async function fetchSnippetsInParallel(
 
           try {
             // DEBUG: Log exact parameters being sent to /file endpoint
-            await logInfo("snippet_fetch_debug", "Attempting to fetch snippet", {
+            await logDebug("snippet_fetch_debug", "Attempting to fetch snippet", {
               repo: request.repo.trim(),
               repo_raw: request.repo,
               repo_length: request.repo.length,
@@ -127,7 +127,7 @@ export async function fetchSnippetsInParallel(
             };
 
             // DEBUG: Log successful fetch
-            await logInfo("snippet_fetch_debug", "Successfully fetched snippet", {
+            await logDebug("snippet_fetch_debug", "Successfully fetched snippet", {
               repo: request.repo.trim(),
               path: request.path,
               content_length: result.content?.length || 0,
@@ -143,7 +143,7 @@ export async function fetchSnippetsInParallel(
 
           // DEBUG: Log fetch errors
           const err = error instanceof Error ? error : new Error(String(error));
-          await logError("snippet_fetch_debug", "Failed to fetch snippet", {
+          await logDebug("snippet_fetch_debug", "Failed to fetch snippet", {
             repo: request.repo.trim(),
             path: request.path,
             error_name: err.name,

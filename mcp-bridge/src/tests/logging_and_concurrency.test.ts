@@ -56,13 +56,13 @@ describe("logging", () => {
     expect(() => JSON.parse(firstLine)).not.toThrow();
 
     const logEntry = JSON.parse(firstLine);
-    expect(logEntry.event).toBeDefined();
+    expect(logEntry.context?.event).toBeDefined();
     expect(logEntry.level).toBeDefined();
     expect(logEntry.message).toBeDefined();
-    expect(logEntry.ts).toBeDefined();
+    expect(logEntry.timestamp).toBeDefined();
   });
 
-  it("warns when MCP applies local truncation due to 50 KB cap", async () => {
+  it("warns when MCP applies local truncation due to 70 KB cap", async () => {
     // This would require a test that triggers truncation
     // For now, we test the logging function exists
     const { handler } = makeSearchKnowledge();
@@ -90,10 +90,10 @@ describe("logging", () => {
 
       lines.forEach((line) => {
         const entry = JSON.parse(line);
-        expect(entry.event).toBeDefined();
+        expect(entry.context?.event).toBeDefined();
         expect(entry.level).toBeDefined();
         expect(entry.message).toBeDefined();
-        expect(entry.ts).toBeDefined();
+        expect(entry.timestamp).toBeDefined();
         // Context and meta are optional in current implementation
       });
     }
@@ -155,7 +155,7 @@ describe("concurrency and stability", () => {
 });
 
 describe("payload and schema validation", () => {
-  it("jsonSizeBytes used to enforce cap; end result size ≤ 50 KB", async () => {
+  it("jsonSizeBytes used to enforce cap; end result size ≤ 70 KB", async () => {
     const { handler } = makeSearchKnowledge();
     const res = await handler({ input: { query: "test" } });
 
@@ -164,7 +164,7 @@ describe("payload and schema validation", () => {
     // Convert result to JSON and check size
     const resultJson = JSON.stringify(res);
     const sizeInBytes = new TextEncoder().encode(resultJson).length;
-    expect(sizeInBytes).toBeLessThanOrEqual(50 * 1024);
+    expect(sizeInBytes).toBeLessThanOrEqual(70 * 1024);
   });
 
   it("all tool definitions include valid JSON Schema", async () => {
