@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { createServer } from "./mcp/server.js";
-import { getOrCreateKbApiKey } from "../../../shared/kb-auth";
+import { getOrCreateKbApiKey } from "../../shared/kb-auth";
 
 // Environment variable configuration
 const DOLPHIN_API_URL =
