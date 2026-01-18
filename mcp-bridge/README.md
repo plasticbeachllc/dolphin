@@ -56,11 +56,11 @@ Add to `claude_desktop_config.json`:
 
 ## Environment Variables
 
-| Variable            | Default                 | Description                              |
-| ------------------- | ----------------------- | ---------------------------------------- |
-| `DOLPHIN_API_URL`   | `http://127.0.0.1:7777` | Dolphin API base URL                     |
-| `KB_REST_BASE_URL`  | unset                   | Alias for `DOLPHIN_API_URL` (tests/CI)   |
-| `LOG_LEVEL`         | `info`                  | Logging level (debug, info, warn, error) |
+| Variable           | Default                 | Description                              |
+| ------------------ | ----------------------- | ---------------------------------------- |
+| `DOLPHIN_API_URL`  | `http://127.0.0.1:7777` | Dolphin API base URL                     |
+| `KB_REST_BASE_URL` | unset                   | Alias for `DOLPHIN_API_URL` (tests/CI)   |
+| `LOG_LEVEL`        | `info`                  | Logging level (debug, info, warn, error) |
 
 ### API Key Authentication
 
