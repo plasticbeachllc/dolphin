@@ -1,64 +1,27 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
-echo "🧹 Running Dolphin maintenance..."
-
-CODEX_WORKSPACE_DIR="$(git rev-parse --show-toplevel)"
+echo "Codex maintenance: minimal refresh"
+CODEX_WORKSPACE_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$CODEX_WORKSPACE_DIR"
 
-# ============================================================================
-# Keep local clone fresh (if applicable)
-# ============================================================================
-echo "🔄 Updating git repo..."
-git fetch origin || true
-if [ "$(git rev-parse --abbrev-ref HEAD)" = "develop" ]; then
-  git pull --ff-only origin develop || true
+if command -v uv >/dev/null 2>&1; then
+  if [ -f "pyproject.toml" ]; then
+    uv sync --group dev --group test
+  fi
 else
-  echo "⚠️  Not on develop branch, skipping pull."
+  echo "uv not found; skipping Python refresh."
 fi
 
-# ============================================================================
-# Tool self-updates
-# ============================================================================
-echo "⬆️ Updating uv..."
-uv self update || true
+if command -v bun >/dev/null 2>&1; then
+  if [ -f "agent-core/package.json" ]; then
+    (cd "agent-core" && bun install --no-save)
+  fi
+  if [ -f "mcp-bridge/package.json" ]; then
+    (cd "mcp-bridge" && bun install --no-save)
+  fi
+else
+  echo "bun not found; skipping JS refresh."
+fi
 
-echo "⬆️ Updating bun..."
-bun upgrade || true
-
-# ============================================================================
-# Dependency refresh (lockfile-respecting)
-# ============================================================================
-echo "🐍 Refreshing Python dependencies..."
-uv sync --group dev --group test
-
-echo "📦 Refreshing JS/Bun dependencies..."
-cd "$CODEX_WORKSPACE_DIR/agent-core"
-bun install --no-save
-
-cd "$CODEX_WORKSPACE_DIR/mcp-bridge"
-bun install --no-save
-
-cd "$CODEX_WORKSPACE_DIR/shared"
-bun install --no-save
-
-cd "$CODEX_WORKSPACE_DIR/vscode-extension"
-npm install --no-fund --no-audit
-
-cd "$CODEX_WORKSPACE_DIR/vscode-extension/webview"
-bun install --no-save
-
-# ============================================================================
-# Cleanup caches & build artifacts
-# ============================================================================
-echo "🧽 Cleaning caches and build artifacts..."
-cd "$CODEX_WORKSPACE_DIR"
-
-find . -name "__pycache__" -type d -prune -exec rm -rf {} +
-find . -name ".pytest_cache" -type d -prune -exec rm -rf {} +
-
-uv cache prune || true
-bun pm cache rm || true
-npm cache clean --force || true
-
-echo "🎯 Dolphin maintenance complete."
+echo "Codex maintenance complete."

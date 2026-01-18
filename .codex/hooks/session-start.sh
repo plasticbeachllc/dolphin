@@ -1,83 +1,46 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
-# SessionStart hook for Dolphin project
-# Installs dependencies for Python backend and TypeScript/Bun components
-echo "🐬 Setting up Dolphin development environment..."
-CODEX_WORKSPACE_DIR="$(git rev-parse --show-toplevel)"
-
-
-# ============================================================================
-# Install uv (Python package manager)
-# ============================================================================
-if ! command -v uv &> /dev/null; then
-  echo "📦 Installing uv..."
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-else
-  echo "✅ uv already installed"
-fi
-export PATH="$HOME/.local/bin:$PATH"
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$CLAUDE_ENV_FILE"
-
-# ============================================================================
-# Install bun (JavaScript runtime and package manager)
-# ============================================================================
-if ! command -v bun &> /dev/null; then
-  echo "📦 Installing bun..."
-  curl -fsSL https://bun.sh/install | bash
-else
-  echo "✅ bun already installed"
-fi
-export BUN_INSTALL="$HOME/.bun"
-export PATH="$BUN_INSTALL/bin:$PATH"
-echo 'export BUN_INSTALL="$HOME/.bun"' >> "$CLAUDE_ENV_FILE"
-echo 'export PATH="$BUN_INSTALL/bin:$PATH"' >> "$CLAUDE_ENV_FILE"
-
-# ============================================================================
-# Install Python dependencies
-# ============================================================================
-echo "🐍 Installing Python dependencies with uv..."
+echo "Codex session start: minimal setup"
+CODEX_WORKSPACE_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$CODEX_WORKSPACE_DIR"
-uv sync --group test --group dev
 
-# ============================================================================
-# Install TypeScript/Bun dependencies
-# ============================================================================
-echo "📦 Installing agent-core dependencies..."
-cd "$CODEX_WORKSPACE_DIR/agent-core"
-bun install
+ENV_FILE="${CODEX_ENV_FILE:-${CLAUDE_ENV_FILE:-}}"
+append_env() {
+  if [ -n "${ENV_FILE}" ]; then
+    echo "$1" >> "$ENV_FILE"
+  fi
+}
 
-echo "📦 Installing mcp-bridge dependencies..."
-cd "$CODEX_WORKSPACE_DIR/mcp-bridge"
-bun install
+if [ -d "$HOME/.local/bin" ]; then
+  export PATH="$HOME/.local/bin:$PATH"
+  append_env 'export PATH="$HOME/.local/bin:$PATH"'
+fi
 
-echo "📦 Installing shared dependencies..."
-cd "$CODEX_WORKSPACE_DIR/shared"
-bun install
+if [ -d "$HOME/.bun/bin" ]; then
+  export BUN_INSTALL="$HOME/.bun"
+  export PATH="$BUN_INSTALL/bin:$PATH"
+  append_env 'export BUN_INSTALL="$HOME/.bun"'
+  append_env 'export PATH="$BUN_INSTALL/bin:$PATH"'
+fi
 
-echo "📦 Installing VSCode extension dependencies..."
-cd "$CODEX_WORKSPACE_DIR/vscode-extension"
-npm install
+if command -v uv >/dev/null 2>&1; then
+  if [ -f "pyproject.toml" ]; then
+    uv sync --group dev --group test
+  fi
+else
+  echo "uv not found; skipping Python deps."
+fi
 
-echo "📦 Installing webview dependencies..."
-cd "$CODEX_WORKSPACE_DIR/vscode-extension/webview"
-bun install
+if command -v bun >/dev/null 2>&1; then
+  if [ -f "agent-core/package.json" ]; then
+    (cd "agent-core" && bun install)
+  fi
+  if [ -f "mcp-bridge/package.json" ]; then
+    (cd "mcp-bridge" && bun install)
+  fi
+else
+  echo "bun not found; skipping JS deps."
+fi
 
-# ============================================================================
-# Install VSCode dependencies (code.visualstudio.com/docs/setup/linux) -- not useful
-# ============================================================================
-# echo "code code/add-microsoft-repo boolean true" | debconf-set-selections
-# apt-get install wget gpg
-# wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg
-# install -D -o root -g root -m 644 microsoft.gpg /usr/share/keyrings/microsoft.gpg
-# rm -f microsoft.gpg
-# cat "$CODEX_WORKSPACE_DIR/.codex/assets/apt-vscode-source.txt" > /etc/apt/sources.list.d/vscode.sources
-# apt install apt-transport-https
-# apt update
-# apt install code --assume-yes
-# apt install code-insiders --assume-yes
-sudo apt-get update
-sudo apt-get install -y just
-sudo apt-get install -y xvfb
-
-echo "✅ Dolphin environment setup complete!"
+echo "Codex session start complete."
