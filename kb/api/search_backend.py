@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from ..cache import QueryCache, create_cache
-from ..config import KBConfig
+from ..config import KBConfig, GraphConfig
 from ..constants.retrieval_config import RETRIEVAL_PARAMS
 from ..embeddings.provider import EmbeddingProvider, create_provider, set_default_provider
 from ..observability.structured_logger import StructuredLogger
@@ -55,11 +55,12 @@ class KnowledgeSearchBackend:
         # Initialize graph enricher if graph store is available
         self.graph_enricher = None
         if self.graph_store:
+            graph_config = self.config.graph if self.config else GraphConfig()
             self.graph_enricher = GraphContextEnricher(
                 graph_store=self.graph_store,
                 sql_store=self.sql_store,
-                max_related_nodes=10,
-                max_edges_per_node=5,
+                max_related_nodes=graph_config.max_related_nodes,
+                max_edges_per_node=graph_config.max_edges_per_node,
             )
         self._bm25_stats_path = self._resolve_bm25_stats_path()
         self._bm25_normalizer: ScoreNormalizer | None = None

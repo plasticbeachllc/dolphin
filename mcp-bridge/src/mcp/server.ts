@@ -2,14 +2,14 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { tools } from "./tools/index.js";
 import { initLogger, logInfo } from "../util/logger.js";
+import { CONFIG } from "../util/config.js";
 
 export async function createServer(): Promise<void> {
   // Initialize file logger (no stdout pollution)
   await initLogger();
 
-  // Get server info from environment or package defaults
-  const SERVER_NAME = process.env.SERVER_NAME || "dolphin-mcp";
-  const SERVER_VERSION = process.env.SERVER_VERSION || "1.0.0";
+  const SERVER_NAME = CONFIG.SERVER_NAME;
+  const SERVER_VERSION = CONFIG.SERVER_VERSION;
 
   const server = new McpServer(
     {

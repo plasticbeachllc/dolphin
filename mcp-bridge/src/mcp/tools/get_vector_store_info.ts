@@ -1,6 +1,7 @@
 import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { restListRepos } from "../../rest/client.js";
 import { logInfo, logError } from "../../util/logger.js";
+import { CONFIG } from "../../util/config.js";
 
 export function makeGetVectorStoreInfo(): {
   definition: Tool;
@@ -24,9 +25,9 @@ export function makeGetVectorStoreInfo(): {
         namespaces: ["chunks_small", "chunks_large"],
         dims: { chunks_small: 1536, chunks_large: 3072 },
         limits: {
-          top_k_max: 100,
-          snippet_char_cap: 1000,
-          payload_cap_bytes: 70 * 1024,
+          top_k_max: CONFIG.MCP_LIMITS.TOP_K_MAX,
+          snippet_char_cap: CONFIG.MCP_LIMITS.SNIPPET_CHAR_CAP,
+          payload_cap_bytes: CONFIG.MCP_LIMITS.PAYLOAD_CAP_BYTES,
         },
         counts: { approx_chunks_total: totalChunks },
         latency: { search_p50_ms: null as number | null, search_p95_ms: null as number | null },

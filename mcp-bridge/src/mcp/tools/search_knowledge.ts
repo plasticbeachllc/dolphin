@@ -1,7 +1,6 @@
 import type { Tool, CallToolResult, TextContent } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { restSearch, type SearchResponse } from "../../rest/client.js";
-import { fetchSnippetsInParallel, type SnippetFetchRequest } from "./snippet_fetcher.js";
 import { CONFIG } from "../../util/config.js";
 import { mimeFromLangOrPath } from "../../util/mime.js";
 import { jsonSizeBytes } from "../../util/payloadCap.js";
@@ -43,7 +42,7 @@ const INPUT_SHAPE = {
   path_prefix: z.array(z.string()).optional(),
   exclude_paths: z.array(z.string()).optional(),
   exclude_patterns: z.array(z.string()).optional(),
-  top_k: z.number().int().min(1).max(100).optional(),
+  top_k: z.number().int().min(1).max(CONFIG.MCP_LIMITS.TOP_K_MAX).optional(),
   max_snippets: z.number().int().min(1).optional(),
   deadline_ms: z.number().int().min(50).optional(),
   embed_model: z.enum(["small", "large"]).optional().default("large"),
@@ -57,6 +56,9 @@ const INPUT_SHAPE = {
   include_graph_context: z.boolean().optional(),
   context_lines_before: z.number().int().min(0).max(10).optional(),
   context_lines_after: z.number().int().min(0).max(10).optional(),
+  output_mode: z.enum(["prompt_ready", "resources", "both"]).optional(),
+  include_prompt_ready: z.boolean().optional(),
+  include_resource_text: z.boolean().optional(),
 };
 
 const INPUT = z.object(INPUT_SHAPE);
@@ -69,7 +71,7 @@ const SEARCH_KNOWLEDGE_JSON_SCHEMA: Tool["inputSchema"] = {
     path_prefix: { type: "array", items: { type: "string" } },
     exclude_paths: { type: "array", items: { type: "string" } },
     exclude_patterns: { type: "array", items: { type: "string" } },
-    top_k: { type: "integer", minimum: 1, maximum: 100 },
+    top_k: { type: "integer", minimum: 1, maximum: CONFIG.MCP_LIMITS.TOP_K_MAX },
     max_snippets: { type: "integer", minimum: 1 },
     deadline_ms: { type: "integer", minimum: 50 },
     embed_model: { type: "string", enum: ["small", "large"] },
@@ -86,16 +88,19 @@ const SEARCH_KNOWLEDGE_JSON_SCHEMA: Tool["inputSchema"] = {
     include_graph_context: { type: "boolean" },
     context_lines_before: { type: "integer", minimum: 0, maximum: 10 },
     context_lines_after: { type: "integer", minimum: 0, maximum: 10 },
+    output_mode: { type: "string", enum: ["prompt_ready", "resources", "both"] },
+    include_prompt_ready: { type: "boolean" },
+    include_resource_text: { type: "boolean" },
   },
   required: ["query"],
 };
 
 type _Input = z.infer<typeof INPUT>;
 
-const CAP_BYTES = 70 * 1024;
-const _PER_SNIPPET_CHAR_CAP = 1000;
-const SHRUNK_SNIPPET_CHAR_CAP = 600;
-const MIN_SNIPPET_CHAR_FLOOR = 300;
+const CAP_BYTES = CONFIG.MCP_LIMITS.PAYLOAD_CAP_BYTES;
+const _PER_SNIPPET_CHAR_CAP = CONFIG.MCP_LIMITS.SNIPPET_CHAR_CAP;
+const SHRUNK_SNIPPET_CHAR_CAP = CONFIG.RESPONSE_LIMITS.SHRUNK_SNIPPET_CHAR_CAP;
+const MIN_SNIPPET_CHAR_FLOOR = CONFIG.RESPONSE_LIMITS.MIN_SNIPPET_CHAR_FLOOR;
 
 import { fenceLang } from "../../util/language.js";
 
@@ -303,6 +308,17 @@ export function makeSearchKnowledge(): {
       // Trim repo names only
       const repos = input.repos?.map((r) => r.trim());
 
+      let includePromptReady = input.include_prompt_ready ?? CONFIG.SEARCH_DEFAULTS.INCLUDE_PROMPT_READY;
+      let includeResourceText =
+        input.include_resource_text ?? CONFIG.SEARCH_DEFAULTS.INCLUDE_RESOURCE_TEXT;
+
+      if (input.output_mode) {
+        includePromptReady = input.output_mode === "prompt_ready" || input.output_mode === "both";
+        includeResourceText = input.output_mode === "resources" || input.output_mode === "both";
+      }
+
+      const includeSnippets = includePromptReady || includeResourceText;
+
       const body = {
         query: input.query,
         repos,
@@ -321,12 +337,18 @@ export function makeSearchKnowledge(): {
         ann_strategy: input.ann_strategy,
         ann_nprobes: input.ann_nprobes,
         ann_refine_factor: input.ann_refine_factor,
-        include_graph_context: input.include_graph_context ?? true, // Enabled by default for richer context
+        include_graph_context:
+          input.include_graph_context ?? CONFIG.SEARCH_DEFAULTS.INCLUDE_GRAPH_CONTEXT,
+        include_snippets: includeSnippets,
+        context_lines_before:
+          input.context_lines_before ?? CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_BEFORE,
+        context_lines_after:
+          input.context_lines_after ?? CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_AFTER,
       };
 
       const res: SearchResponse = await restSearch(body, signal);
 
-      // Transform API response to match expected format using parallel snippet fetching
+      // Transform API response to match expected format
       interface ApiHit {
         repo: string;
         path: string;
@@ -337,54 +359,25 @@ export function makeSearchKnowledge(): {
         chunk_id: string;
         score: number;
         graph_context?: unknown;
+        snippet?: string;
+        snippet_start_line?: number;
+        snippet_end_line?: number;
       }
       const hits = res.hits as unknown as ApiHit[];
-
-      // Log search completion and snippet fetch start
-      await logInfo("snippet_fetch_start", "search_knowledge: Starting parallel snippet fetch", {
-        query: input.query,
-        hits_count: hits.length,
-        concurrency: CONFIG.MAX_CONCURRENT_SNIPPET_FETCH,
-        timeout: CONFIG.SNIPPET_FETCH_TIMEOUT_MS,
-        retry_attempts: CONFIG.SNIPPET_FETCH_RETRY_ATTEMPTS,
-      });
-
-      // Prepare all snippet fetch requests with context lines if specified
-      const contextBefore = input.context_lines_before || 0;
-      const contextAfter = input.context_lines_after || 0;
-
-      const snippetRequests: SnippetFetchRequest[] = hits.map((hit) => ({
-        repo: hit.repo.trim(),
-        path: hit.path,
-        startLine: hit.start_line,
-        endLine: hit.end_line,
-        contextLinesBefore: contextBefore,
-        contextLinesAfter: contextAfter,
-      }));
-
-      // Fetch all snippets in parallel with configuration-based settings
-      const snippetResults = await fetchSnippetsInParallel(snippetRequests, {
-        maxConcurrent: CONFIG.MAX_CONCURRENT_SNIPPET_FETCH,
-        requestTimeoutMs: CONFIG.SNIPPET_FETCH_TIMEOUT_MS,
-        retryAttempts: CONFIG.SNIPPET_FETCH_RETRY_ATTEMPTS,
-        signal,
-      });
-
-      // Transform results with snippet content and metadata
-      const transformedHits = hits.map((hit, index: number) => {
-        const snippetResult = snippetResults[index];
+      const transformedHits = hits.map((hit) => {
+        const snippetStart = hit.snippet_start_line ?? hit.start_line;
+        const snippetEnd = hit.snippet_end_line ?? hit.end_line;
         return {
           ...hit,
           lang: hit.language || hit.lang,
-          snippet: snippetResult?.content ?? "",
+          snippet: hit.snippet ?? "",
           resource_link: `kb://${hit.repo}/${hit.path}#L${hit.start_line}-L${hit.end_line}`,
-          _snippet_warnings: snippetResult?.warnings,
           graph_context: hit.graph_context, // Preserve graph context if present
           // Context metadata for visual formatting
-          _context_start_line: snippetResult?.actualStartLine,
-          _context_end_line: snippetResult?.actualEndLine,
-          _chunk_start_line: snippetResult?.chunkStartLine || hit.start_line,
-          _chunk_end_line: snippetResult?.chunkEndLine || hit.end_line,
+          _context_start_line: snippetStart,
+          _context_end_line: snippetEnd,
+          _chunk_start_line: hit.start_line,
+          _chunk_end_line: hit.end_line,
         };
       });
 
@@ -408,7 +401,7 @@ export function makeSearchKnowledge(): {
       const summary = summaryParts.join(" ");
 
       // Build prompt-ready text
-      let promptReady = buildPromptReady(transformedRes);
+      let promptReady = includePromptReady ? buildPromptReady(transformedRes) : "";
 
       // Build content blocks: one text summary + prompt-ready + resource blocks for each hit
       const content: CallToolResult["content"] = [];
@@ -424,7 +417,7 @@ export function makeSearchKnowledge(): {
             uri: hit.resource_link,
             mimeType: mimeFromLangOrPath(hit.lang, hit.path),
             // Always include snippet text initially - payload trimming logic will reduce if needed
-            text: hit.snippet ?? "",
+            text: includeResourceText ? (hit.snippet ?? "").slice(0, _PER_SNIPPET_CHAR_CAP) : "",
           },
         };
         content.push(resourceBlock);
@@ -509,10 +502,12 @@ export function makeSearchKnowledge(): {
         }
       }
 
+      const resourceOffset = promptReady.length > 0 ? 2 : 1;
+
       // Step 3: Minimize snippet text from lowest-scoring hits first (keep citations present)
       if (size > CAP_BYTES) {
         for (let i = transformedRes.hits.length - 1; i >= 0 && size > CAP_BYTES; i--) {
-          const blockIdx = i + 2; // +2 to skip summary and promptReady
+          const blockIdx = i + resourceOffset;
           const block = result.content[blockIdx];
           if (
             block?.type === "resource" &&
@@ -542,38 +537,13 @@ export function makeSearchKnowledge(): {
         await logWarn("search", "trimmed content to respect 70KB cap", { trimmed: true });
       }
 
-      // Calculate snippet fetch specific metrics
-      const snippet_warnings_count = transformedRes.hits.filter(
-        (h) => h._snippet_warnings && h._snippet_warnings.length > 0
-      ).length;
-
-      await logInfo(
-        "snippet_fetch_complete",
-        "search_knowledge: Completed parallel snippet fetch",
-        {
-          query: input.query,
-          hits_count: transformedRes.hits.length,
-          successful_snippets: transformedRes.hits.length - snippet_warnings_count,
-          failed_snippets: snippet_warnings_count,
-          snippet_warnings_count,
-          latency_ms: transformedRes.meta.latency_ms,
-          mcp_latency_ms: Date.now() - started,
-          parallel_snippet_fetch: true,
-          snippet_fetch_config: {
-            max_concurrent: CONFIG.MAX_CONCURRENT_SNIPPET_FETCH,
-            timeout_ms: CONFIG.SNIPPET_FETCH_TIMEOUT_MS,
-            retry_attempts: CONFIG.SNIPPET_FETCH_RETRY_ATTEMPTS,
-          },
-        }
-      );
-
       await logInfo("search", "search_knowledge success", {
         hits_count: transformedRes.hits.length,
         warnings: transformedRes.meta.warnings,
         latency_ms: transformedRes.meta.latency_ms,
         mcp_latency_ms: Date.now() - started,
-        parallel_snippet_fetch: true,
-        snippet_warnings_count,
+        include_prompt_ready: includePromptReady,
+        include_resource_text: includeResourceText,
       });
 
       return result;

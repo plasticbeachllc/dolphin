@@ -96,6 +96,33 @@ class TestKBConfig:
         assert config.default_embed_model == "large"
         assert config.concurrency == 5
 
+    def test_from_mapping_api_and_graph(self):
+        """Test API and graph config parsing from mapping."""
+        data = {
+            "storage": {"store_root": "/tmp/test"},
+            "server": {"endpoint": "127.0.0.1:7777"},
+            "api": {
+                "max_top_k": 64,
+                "max_snippet_tokens": 500,
+                "max_context_lines": 8,
+                "include_graph_context": False,
+                "context_lines_before": 1,
+                "context_lines_after": 2,
+            },
+            "graph": {"max_related_nodes": 3, "max_edges_per_node": 2},
+        }
+
+        config = KBConfig.from_mapping(data)
+
+        assert config.api.max_top_k == 64
+        assert config.api.max_snippet_tokens == 500
+        assert config.api.max_context_lines == 8
+        assert config.api.include_graph_context is False
+        assert config.api.context_lines_before == 1
+        assert config.api.context_lines_after == 2
+        assert config.graph.max_related_nodes == 3
+        assert config.graph.max_edges_per_node == 2
+
     def test_from_mapping_type_coercion(self):
         """Test that from_mapping coerces types correctly."""
         data = {
@@ -242,3 +269,38 @@ default_query_type = "concept"
         assert config.concurrency == 8
         assert config.retrieval.score_cutoff == 0.3
         assert config.retrieval.top_k == 20
+
+    def test_load_config_merges_repo_over_global(self, tmp_path, monkeypatch):
+        """Test repo config overrides are merged over global config."""
+        base_config = tmp_path / "global.toml"
+        base_config.write_text(
+            """
+[storage]
+store_root = "/tmp/test"
+
+[retrieval]
+score_cutoff = 0.2
+top_k = 7
+
+[api]
+max_top_k = 50
+include_graph_context = true
+"""
+        )
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        repo_cfg_dir = repo_dir / ".dolphin"
+        repo_cfg_dir.mkdir()
+        (repo_cfg_dir / "config.toml").write_text(
+            """
+ignore = ["node_modules/**"]
+"""
+        )
+
+        monkeypatch.setenv("DOLPHIN_CONFIG_PATH", str(base_config))
+
+        config = load_config(repo_path=repo_dir)
+
+        assert config.retrieval.top_k == 7
+        assert config.api.max_top_k == 50
+        assert "node_modules/**" in config.ignore

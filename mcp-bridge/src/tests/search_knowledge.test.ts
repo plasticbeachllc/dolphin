@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, mock 
 import { startMockRest } from "./mockServer.js";
 import { makeSearchKnowledge } from "../mcp/tools/search_knowledge.js";
 import { initLogger } from "../util/logger.js";
+import { CONFIG } from "../util/config.js";
 
 let stop: () => Promise<void>;
 
@@ -37,6 +38,26 @@ describe("search_knowledge", () => {
     expect(res._meta.model).toBeDefined();
     expect(res._meta.top_k).toBeDefined();
     expect(res._meta.mcp_latency_ms).toBeDefined();
+  });
+
+  it("output_mode=resources omits prompt-ready text block", async () => {
+    const { handler } = makeSearchKnowledge();
+    const res = await handler({ input: { query: "test", output_mode: "resources" } });
+
+    expect(res.isError).toBe(false);
+    const textBlocks = res.content.filter((c) => c.type === "text");
+    expect(textBlocks.length).toBe(1); // summary only
+  });
+
+  it("include_resource_text=false returns empty resource text", async () => {
+    const { handler } = makeSearchKnowledge();
+    const res = await handler({ input: { query: "test", include_resource_text: false } });
+
+    expect(res.isError).toBe(false);
+    const resourceBlocks = res.content.filter((c) => c.type === "resource");
+    resourceBlocks.forEach((block) => {
+      expect(block.resource?.text ?? "").toBe("");
+    });
   });
 
   it("filters: repos with whitespace trimmed, case preserved", async () => {
@@ -119,7 +140,7 @@ describe("search_knowledge", () => {
     // so we're testing the structure and behavior pattern
   });
 
-  it("500-char per-snippet cap: resource blocks never include text > 500 chars", async () => {
+  it("per-snippet cap: resource blocks never include text above configured cap", async () => {
     const { handler } = makeSearchKnowledge();
     const res = await handler({ input: { query: "test" } });
 
@@ -128,7 +149,7 @@ describe("search_knowledge", () => {
     const resourceBlocks = res.content.filter((c) => c.type === "resource");
     resourceBlocks.forEach((block) => {
       if (block.resource?.text) {
-        expect(block.resource.text.length).toBeLessThanOrEqual(500);
+        expect(block.resource.text.length).toBeLessThanOrEqual(CONFIG.MCP_LIMITS.SNIPPET_CHAR_CAP);
       }
     });
   });

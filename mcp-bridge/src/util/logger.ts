@@ -2,15 +2,16 @@ import { mkdir, appendFile, stat, rename, access } from "node:fs/promises";
 import { constants as FS_CONST } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createLogger, LogMetadata } from "../../../shared/observability/logger.js";
+import { createLogger, LogMetadata, LogLevel } from "../../../shared/observability/logger.js";
+import { CONFIG } from "./config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LOG_DIR = join(__dirname, "../../logs");
 const LOG_FILE = join(LOG_DIR, "mcp.log");
 
 // Simple size-based rotation
-const MAX_LOG_BYTES = 5 * 1024 * 1024; // 5 MB
-const MAX_ROTATIONS = 3;
+const MAX_LOG_BYTES = CONFIG.LOG_MAX_BYTES;
+const MAX_ROTATIONS = CONFIG.LOG_MAX_ROTATIONS;
 
 let logDirReady = false;
 
@@ -72,10 +73,24 @@ export async function initLogger(): Promise<void> {
   await ensureLogDir();
 }
 
+function toLogLevel(raw: string | undefined): LogLevel {
+  switch ((raw || "info").toLowerCase()) {
+    case "debug":
+      return LogLevel.DEBUG;
+    case "warn":
+      return LogLevel.WARN;
+    case "error":
+      return LogLevel.ERROR;
+    default:
+      return LogLevel.INFO;
+  }
+}
+
 const logger = createLogger("mcp-bridge", {
   sink: (line) => {
     void writeLine(line).catch(() => undefined);
   },
+  minLevel: toLogLevel(CONFIG.LOG_LEVEL),
 });
 
 function buildContext(

@@ -25,10 +25,13 @@ export interface SearchRequestBody {
   mmr_lambda?: number;
   cursor?: string;
   include_prompt_ready?: boolean;
+  include_snippets?: boolean;
   ann_strategy?: "speed" | "accuracy" | "adaptive" | "custom";
   ann_nprobes?: number;
   ann_refine_factor?: number;
   include_graph_context?: boolean;
+  context_lines_before?: number;
+  context_lines_after?: number;
 }
 
 export interface SearchHit {

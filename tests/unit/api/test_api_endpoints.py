@@ -128,6 +128,58 @@ class TestSearchEndpoint:
 
         assert response.status_code == 422  # Validation error
 
+    def test_search_v1_include_snippets_with_context(self, mock_kb_stores, tmp_path, monkeypatch):
+        """Test v1 search snippet enrichment with context lines."""
+        sql_store, lance_store = mock_kb_stores
+        set_stores(sql_store, lance_store)
+
+        repo_root = tmp_path / "repo"
+        repo_root.mkdir()
+        file_path = repo_root / "test.py"
+        file_path.write_text("line1\nline2\nline3\nline4\n", encoding="utf-8")
+
+        sql_store.record_repo(name="test-repo", path=repo_root, default_embed_model="large")
+
+        class BackendNoSnippet:
+            def search(self, request: SearchRequest):
+                return [
+                    {
+                        "repo": "test-repo",
+                        "path": "test.py",
+                        "start_line": 2,
+                        "end_line": 3,
+                        "score": 0.9,
+                        "chunk_id": "c1",
+                    }
+                ]
+
+        set_search_backend(BackendNoSnippet())
+
+        test_key = "test-api-key-12345"
+        monkeypatch.setenv("DOLPHIN_API_KEY", test_key)
+        client = TestClient(app)
+        client.headers = {"X-API-Key": test_key}
+
+        response = client.post(
+            "/v1/search",
+            json={
+                "query": "test",
+                "include_snippets": True,
+                "context_lines_before": 1,
+                "context_lines_after": 1,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        hit = data["hits"][0]
+        assert hit["snippet"] == "line1\nline2\nline3\nline4\n"
+        assert hit["snippet_start_line"] == 1
+        assert hit["snippet_end_line"] == 4
+
+        reset_search_backend()
+        reset_stores()
+
 
 class TestReposEndpoint:
     """Test /v1/repos endpoint."""

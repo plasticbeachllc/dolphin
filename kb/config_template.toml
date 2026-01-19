@@ -214,3 +214,58 @@ php = "php"
 cs = "csharp"
 swift = "swift"
 kt = "kotlin"
+
+# ======================================================================
+# API DEFAULTS AND LIMITS
+# ======================================================================
+[api]
+# Hard guardrails for requests
+max_top_k = 100
+max_snippet_tokens = 1000
+max_context_lines = 10
+
+# Default behavior for API requests (when callers omit fields)
+include_graph_context = true
+context_lines_before = 0
+context_lines_after = 0
+
+# ======================================================================
+# GRAPH CONTEXT LIMITS
+# ======================================================================
+[graph]
+max_related_nodes = 10
+max_edges_per_node = 5
+
+# ======================================================================
+# MCP BRIDGE CONFIGURATION
+# ======================================================================
+[mcp]
+api_url = "http://127.0.0.1:7777"
+server_name = "dolphin-mcp"
+server_version = "1.0.0"
+log_level = "info"
+
+[mcp.limits]
+top_k_max = 100
+snippet_char_cap = 1000
+payload_cap_bytes = 71680
+
+[mcp.snippet_fetch]
+max_concurrent = 8
+timeout_ms = 1500
+retry_attempts = 1
+
+[mcp.logging]
+max_log_bytes = 5242880
+max_rotations = 3
+
+[mcp.response]
+shrunk_snippet_char_cap = 600
+min_snippet_char_floor = 300
+
+[mcp.search]
+include_graph_context_default = true
+context_lines_before_default = 0
+context_lines_after_default = 0
+include_prompt_ready_default = true
+include_resource_text_default = false

@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -216,6 +216,27 @@ class TestKnowledgeSearchBackend:
         expected = SigmoidNormalizer().normalize(value)
 
         assert normalized == pytest.approx(expected, rel=1e-6)
+
+    def test_graph_config_applied_to_enricher(self, mock_providers):
+        embedding_provider, lance_store, sql_store = mock_providers
+        graph_store = MagicMock()
+        config = KBConfig.from_mapping({"graph": {"max_related_nodes": 2, "max_edges_per_node": 1}})
+
+        with patch("kb.api.search_backend.GraphContextEnricher") as mock_enricher:
+            KnowledgeSearchBackend(
+                embedding_provider,
+                lance_store,
+                sql_store,
+                config=config,
+                graph_store=graph_store,
+            )
+
+            mock_enricher.assert_called_once_with(
+                graph_store=graph_store,
+                sql_store=sql_store,
+                max_related_nodes=2,
+                max_edges_per_node=1,
+            )
 
 
 @pytest.fixture
