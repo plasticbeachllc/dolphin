@@ -124,7 +124,7 @@ SNIPPET_FETCH_RETRY_ATTEMPTS=2
 
 ### `search_knowledge`
 
-Semantically query code and docs across indexed repositories and return ranked snippets with citations.
+Semantically query code and docs across indexed repositories and return many ranked candidates with follow-up-ready identifiers and citations.
 
 ```json
 {
@@ -134,8 +134,10 @@ Semantically query code and docs across indexed repositories and return ranked s
   "exclude_paths": ["string"],
   "exclude_patterns": ["string"],
   "top_k": "number (1-100)",
-  "max_snippets": "number",
+  "max_snippets": "number (top-N results to include snippet text for)",
+  "top_context_n": "number (top-N snippet results to include extra context for)",
   "deadline_ms": "number",
+  "cursor": "string",
   "embed_model": "small | large",
   "score_cutoff": "number",
   "mmr_enabled": "boolean",
@@ -143,7 +145,13 @@ Semantically query code and docs across indexed repositories and return ranked s
   "context_lines_before": "number (0-10)",
   "context_lines_after": "number (0-10)",
   "include_graph_context": "boolean",
+  "output_mode": "prompt_ready | resources | both",
   "include_prompt_ready": "boolean",
+  "include_resource_text": "boolean",
+  "include_hits_json": "boolean",
+  "include_warnings_in_text": "boolean",
+  "include_abs_paths": "boolean",
+  "include_vscode_uris": "boolean",
   "ann_strategy": "speed | accuracy | adaptive | custom",
   "ann_nprobes": "number",
   "ann_refine_factor": "number"
@@ -210,41 +218,21 @@ Report namespaces, dims, limits, and approximate counts.
 {}
 ```
 
-### `open_in_editor`
+### `list_repos`
 
-Compute a vscode://file URI for a repo path and optional position.
+List indexed repositories with their absolute root paths and approximate file/chunk counts.
 
 ```json
-{
-  "repo": "string (required)",
-  "path": "string (required)",
-  "line": "number (1-indexed)",
-  "column": "number (1-indexed)"
-}
+{}
 ```
 
-### `file_write`
+### `kb_health`
 
-Write content to a file relative to the workspace with an atomic write and optional backup.
-
-```json
-{
-  "path": "string (required)",
-  "content": "string (required)",
-  "create_backup": "boolean",
-  "create_directories": "boolean"
-}
-```
-
-### `read_files`
-
-Read multiple files in one request with optional partial failure handling.
+Check Knowledge Base REST API health (`/v1/health`).
 
 ```json
 {
-  "paths": ["string"],
-  "max_size_bytes": "number",
-  "fail_on_error": "boolean"
+  "check": "shallow | deep"
 }
 ```
 

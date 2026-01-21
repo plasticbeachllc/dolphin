@@ -1,11 +1,40 @@
 """Pytest configuration and shared fixtures for KB pipeline tests."""
 
+import os
 import tempfile
 from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+_TEST_CONFIG_ENV = "DOLPHIN_CONFIG_PATH"
+# Keep tests deterministic by avoiding user-level configs.
+if _TEST_CONFIG_ENV not in os.environ:
+    _test_config_dir = Path(tempfile.mkdtemp(prefix="dolphin-test-config-"))
+    _test_config_path = _test_config_dir / "config.toml"
+    _test_config_path.write_text(
+        """
+[storage]
+store_root = "/tmp/dolphin-test-store"
+
+[server]
+endpoint = "127.0.0.1:7777"
+
+[embedding]
+provider = "stub"
+default_embed_model = "large"
+
+[retrieval]
+score_cutoff = 0.005
+top_k = 8
+max_snippet_tokens = 240
+mmr_enabled = true
+mmr_lambda = 0.7
+""".lstrip(),
+        encoding="utf-8",
+    )
+    os.environ[_TEST_CONFIG_ENV] = str(_test_config_path)
 
 from tests.kb_utils import FIXTURE_REPO_ROOT, InMemoryKBBackend
 

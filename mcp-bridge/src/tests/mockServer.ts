@@ -187,7 +187,21 @@ export function startMockRest(port = 7777): Promise<() => Promise<void>> {
 
       let hits: any[] = [];
       if (query) {
-        if (typeof query === "string" && query.toLowerCase().includes("ingestion")) {
+        if (query === "snippet-failure") {
+          hits = [
+            attachSnippet({
+              repo: "repoa",
+              path: "nonexistent.ts",
+              lang: "typescript",
+              start_line: 1,
+              end_line: 10,
+              score: 0.9,
+              snippet: "export const a = 1",
+              chunk_id: "1",
+              resource_link: "kb://repoa/nonexistent.ts#L1-L10",
+            }),
+          ];
+        } else if (typeof query === "string" && query.toLowerCase().includes("ingestion")) {
           hits = [
             attachSnippet({
               repo: "repoa",

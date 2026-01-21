@@ -149,7 +149,7 @@ describe("concurrency and stability", () => {
     // Verify each result has unique content based on query
     results.forEach((result, index) => {
       expect(result._meta).toBeDefined();
-      expect(result._meta.top_k).toBe(5); // Default top_k
+      expect(result._meta.top_k).toBe(20); // Default top_k
     });
   });
 });

@@ -180,6 +180,21 @@ describe("Config Utilities", () => {
         CONFIG.RESPONSE_LIMITS.SHRUNK_SNIPPET_CHAR_CAP
       );
       expect(summary.mcp_min_snippet_char_floor).toBe(CONFIG.RESPONSE_LIMITS.MIN_SNIPPET_CHAR_FLOOR);
+      expect(summary.mcp_search_top_k_default).toBe(CONFIG.SEARCH_DEFAULTS.TOP_K);
+      expect(summary.mcp_search_snippets_top_n_default).toBe(CONFIG.SEARCH_DEFAULTS.SNIPPETS_TOP_N);
+      expect(summary.mcp_search_top_context_n_default).toBe(CONFIG.SEARCH_DEFAULTS.TOP_CONTEXT_N);
+      expect(summary.mcp_search_include_hits_json_default).toBe(
+        CONFIG.SEARCH_DEFAULTS.INCLUDE_HITS_JSON
+      );
+      expect(summary.mcp_search_include_warnings_in_text_default).toBe(
+        CONFIG.SEARCH_DEFAULTS.INCLUDE_WARNINGS_IN_TEXT
+      );
+      expect(summary.mcp_search_include_abs_paths_default).toBe(
+        CONFIG.SEARCH_DEFAULTS.INCLUDE_ABS_PATHS
+      );
+      expect(summary.mcp_search_include_vscode_uris_default).toBe(
+        CONFIG.SEARCH_DEFAULTS.INCLUDE_VSCODE_URIS
+      );
       expect(summary.mcp_include_graph_context_default).toBe(
         CONFIG.SEARCH_DEFAULTS.INCLUDE_GRAPH_CONTEXT
       );
@@ -214,6 +229,13 @@ describe("Config Utilities", () => {
       expect(typeof summary.mcp_log_max_rotations).toBe("number");
       expect(typeof summary.mcp_shrunk_snippet_char_cap).toBe("number");
       expect(typeof summary.mcp_min_snippet_char_floor).toBe("number");
+      expect(typeof summary.mcp_search_top_k_default).toBe("number");
+      expect(typeof summary.mcp_search_snippets_top_n_default).toBe("number");
+      expect(typeof summary.mcp_search_top_context_n_default).toBe("number");
+      expect(typeof summary.mcp_search_include_hits_json_default).toBe("boolean");
+      expect(typeof summary.mcp_search_include_warnings_in_text_default).toBe("boolean");
+      expect(typeof summary.mcp_search_include_abs_paths_default).toBe("boolean");
+      expect(typeof summary.mcp_search_include_vscode_uris_default).toBe("boolean");
       expect(typeof summary.mcp_include_graph_context_default).toBe("boolean");
       expect(typeof summary.mcp_context_lines_before_default).toBe("number");
       expect(typeof summary.mcp_context_lines_after_default).toBe("number");

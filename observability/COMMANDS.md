@@ -70,6 +70,21 @@ curl -X POST http://localhost:8000/search \
   -d '{"query": "test", "repo_name": "test-repo"}'
 ```
 
+## MCP Bridge Commands
+
+```bash
+# Start MCP bridge (from repo root)
+cd mcp-bridge
+bun run --hot src/index.ts
+```
+
+## Indexing Commands
+
+```bash
+# Index a repository (from repo root)
+uv run dolphin kb index <repo-name>
+```
+
 ## Debugging Workflows
 
 ### View Request Latency

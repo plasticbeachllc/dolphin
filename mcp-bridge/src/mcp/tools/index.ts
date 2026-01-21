@@ -3,9 +3,10 @@ import type { ZodRawShape } from "zod";
 import { makeSearchKnowledge } from "./search_knowledge.js";
 import { makeFetchChunk } from "./fetch_chunk.js";
 import { makeFetchLines } from "./fetch_lines.js";
-import { makeOpenInEditor } from "./open_in_editor.js";
 import { makeGetVectorStoreInfo } from "./get_vector_store_info.js";
 import { makeGetMetadata } from "./get_metadata.js";
+import { makeListRepos } from "./list_repos.js";
+import { makeKbHealth } from "./kb_health.js";
 
 export interface ToolRegistration {
   definition: Tool;
@@ -18,7 +19,8 @@ export const tools: ToolRegistration[] = [
   makeSearchKnowledge(),
   makeFetchChunk(),
   makeFetchLines(),
-  makeOpenInEditor(),
+  makeListRepos(),
+  makeKbHealth(),
   makeGetVectorStoreInfo(),
   makeGetMetadata(),
 ];

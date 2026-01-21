@@ -36,7 +36,7 @@ export const CONFIG_LIMITS = {
 const DEFAULTS = {
   API_URL: "http://127.0.0.1:7777",
   SERVER_NAME: "dolphin-mcp",
-  SERVER_VERSION: "1.0.0",
+  SERVER_VERSION: "0.2.0",
   LOG_LEVEL: "info",
   MCP_LIMITS: {
     TOP_K_MAX: 100,
@@ -57,9 +57,16 @@ const DEFAULTS = {
     MIN_SNIPPET_CHAR_FLOOR: 300,
   },
   SEARCH_DEFAULTS: {
+    TOP_K: 20,
+    SNIPPETS_TOP_N: 8,
+    TOP_CONTEXT_N: 3,
+    INCLUDE_HITS_JSON: true,
+    INCLUDE_WARNINGS_IN_TEXT: true,
+    INCLUDE_ABS_PATHS: true,
+    INCLUDE_VSCODE_URIS: true,
     INCLUDE_GRAPH_CONTEXT: true,
-    CONTEXT_LINES_BEFORE: 0,
-    CONTEXT_LINES_AFTER: 0,
+    CONTEXT_LINES_BEFORE: 2,
+    CONTEXT_LINES_AFTER: 2,
     INCLUDE_PROMPT_READY: true,
     INCLUDE_RESOURCE_TEXT: false,
   },
@@ -89,6 +96,13 @@ type McpConfig = {
     min_snippet_char_floor?: number;
   };
   search?: {
+    top_k_default?: number;
+    snippets_top_n_default?: number;
+    top_context_n_default?: number;
+    include_hits_json_default?: boolean;
+    include_warnings_in_text_default?: boolean;
+    include_abs_paths_default?: boolean;
+    include_vscode_uris_default?: boolean;
     include_graph_context_default?: boolean;
     context_lines_before_default?: number;
     context_lines_after_default?: number;
@@ -198,21 +212,21 @@ const MCP_LIMITS = {
 
 const SNIPPET_FETCH = {
   MAX_CONCURRENT: resolveInt(
-    undefined,
+    process.env.MAX_CONCURRENT_SNIPPET_FETCH,
     MCP_CONFIG.snippet_fetch?.max_concurrent,
     DEFAULTS.SNIPPET_FETCH.MAX_CONCURRENT,
     CONFIG_LIMITS.MIN_CONCURRENT,
     CONFIG_LIMITS.MAX_CONCURRENT
   ),
   TIMEOUT_MS: resolveInt(
-    undefined,
+    process.env.SNIPPET_FETCH_TIMEOUT_MS,
     MCP_CONFIG.snippet_fetch?.timeout_ms,
     DEFAULTS.SNIPPET_FETCH.TIMEOUT_MS,
     CONFIG_LIMITS.MIN_TIMEOUT,
     CONFIG_LIMITS.MAX_TIMEOUT
   ),
   RETRY_ATTEMPTS: resolveInt(
-    undefined,
+    process.env.SNIPPET_FETCH_RETRY_ATTEMPTS,
     MCP_CONFIG.snippet_fetch?.retry_attempts,
     DEFAULTS.SNIPPET_FETCH.RETRY_ATTEMPTS,
     CONFIG_LIMITS.MIN_RETRIES,
@@ -256,6 +270,47 @@ const RESPONSE_LIMITS = {
 } as const;
 
 const SEARCH_DEFAULTS = {
+  TOP_K: resolveInt(
+    undefined,
+    MCP_CONFIG.search?.top_k_default,
+    DEFAULTS.SEARCH_DEFAULTS.TOP_K,
+    1,
+    MCP_LIMITS.TOP_K_MAX
+  ),
+  SNIPPETS_TOP_N: resolveInt(
+    undefined,
+    MCP_CONFIG.search?.snippets_top_n_default,
+    DEFAULTS.SEARCH_DEFAULTS.SNIPPETS_TOP_N,
+    0,
+    MCP_LIMITS.TOP_K_MAX
+  ),
+  TOP_CONTEXT_N: resolveInt(
+    undefined,
+    MCP_CONFIG.search?.top_context_n_default,
+    DEFAULTS.SEARCH_DEFAULTS.TOP_CONTEXT_N,
+    0,
+    MCP_LIMITS.TOP_K_MAX
+  ),
+  INCLUDE_HITS_JSON: resolveBoolean(
+    undefined,
+    MCP_CONFIG.search?.include_hits_json_default,
+    DEFAULTS.SEARCH_DEFAULTS.INCLUDE_HITS_JSON
+  ),
+  INCLUDE_WARNINGS_IN_TEXT: resolveBoolean(
+    undefined,
+    MCP_CONFIG.search?.include_warnings_in_text_default,
+    DEFAULTS.SEARCH_DEFAULTS.INCLUDE_WARNINGS_IN_TEXT
+  ),
+  INCLUDE_ABS_PATHS: resolveBoolean(
+    undefined,
+    MCP_CONFIG.search?.include_abs_paths_default,
+    DEFAULTS.SEARCH_DEFAULTS.INCLUDE_ABS_PATHS
+  ),
+  INCLUDE_VSCODE_URIS: resolveBoolean(
+    undefined,
+    MCP_CONFIG.search?.include_vscode_uris_default,
+    DEFAULTS.SEARCH_DEFAULTS.INCLUDE_VSCODE_URIS
+  ),
   INCLUDE_GRAPH_CONTEXT: resolveBoolean(
     undefined,
     MCP_CONFIG.search?.include_graph_context_default,
@@ -469,6 +524,13 @@ export function getConfigSummary(): Record<string, unknown> {
     mcp_log_max_rotations: CONFIG.LOG_MAX_ROTATIONS,
     mcp_shrunk_snippet_char_cap: CONFIG.RESPONSE_LIMITS.SHRUNK_SNIPPET_CHAR_CAP,
     mcp_min_snippet_char_floor: CONFIG.RESPONSE_LIMITS.MIN_SNIPPET_CHAR_FLOOR,
+    mcp_search_top_k_default: CONFIG.SEARCH_DEFAULTS.TOP_K,
+    mcp_search_snippets_top_n_default: CONFIG.SEARCH_DEFAULTS.SNIPPETS_TOP_N,
+    mcp_search_top_context_n_default: CONFIG.SEARCH_DEFAULTS.TOP_CONTEXT_N,
+    mcp_search_include_hits_json_default: CONFIG.SEARCH_DEFAULTS.INCLUDE_HITS_JSON,
+    mcp_search_include_warnings_in_text_default: CONFIG.SEARCH_DEFAULTS.INCLUDE_WARNINGS_IN_TEXT,
+    mcp_search_include_abs_paths_default: CONFIG.SEARCH_DEFAULTS.INCLUDE_ABS_PATHS,
+    mcp_search_include_vscode_uris_default: CONFIG.SEARCH_DEFAULTS.INCLUDE_VSCODE_URIS,
     mcp_include_graph_context_default: CONFIG.SEARCH_DEFAULTS.INCLUDE_GRAPH_CONTEXT,
     mcp_context_lines_before_default: CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_BEFORE,
     mcp_context_lines_after_default: CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_AFTER,

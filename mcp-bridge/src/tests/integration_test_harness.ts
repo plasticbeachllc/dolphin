@@ -6,9 +6,10 @@
 import { makeSearchKnowledge } from "../mcp/tools/search_knowledge.js";
 import { makeFetchChunk } from "../mcp/tools/fetch_chunk.js";
 import { makeFetchLines } from "../mcp/tools/fetch_lines.js";
-import { makeOpenInEditor } from "../mcp/tools/open_in_editor.js";
 import { makeGetVectorStoreInfo } from "../mcp/tools/get_vector_store_info.js";
 import { makeGetMetadata } from "../mcp/tools/get_metadata.js";
+import { makeListRepos } from "../mcp/tools/list_repos.js";
+import { makeKbHealth } from "../mcp/tools/kb_health.js";
 import { initLogger } from "../util/logger.js";
 
 async function runIntegrationTests() {
@@ -33,14 +34,19 @@ async function runIntegrationTests() {
       input: { repo: "repoa", path: "src/a.ts", start: 1, end: 10 },
     },
     {
-      name: "open_in_editor - smoke test",
-      tool: makeOpenInEditor(),
-      input: { repo: "repoa", path: "src/a.ts" },
-    },
-    {
       name: "get_vector_store_info - smoke test",
       tool: makeGetVectorStoreInfo(),
       input: {},
+    },
+    {
+      name: "list_repos - smoke test",
+      tool: makeListRepos(),
+      input: {},
+    },
+    {
+      name: "kb_health - smoke test",
+      tool: makeKbHealth(),
+      input: { check: "shallow" },
     },
     {
       name: "get_metadata - smoke test",
@@ -71,8 +77,6 @@ async function runIntegrationTests() {
           console.log(`    Found ${result._meta?.hits?.length || 0} hits`);
         } else if (test.name.includes("fetch_chunk") || test.name.includes("fetch_lines")) {
           console.log(`    Content length: ${result.content[0]?.text?.length || 0} chars`);
-        } else if (test.name.includes("open_in_editor")) {
-          console.log(`    URI: ${result.data?.uri}`);
         }
 
         passed++;

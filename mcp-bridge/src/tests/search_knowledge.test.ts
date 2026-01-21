@@ -19,14 +19,32 @@ describe("search_knowledge", () => {
     // Reset any mocks if needed
   });
 
+  function parseHitsJson(text: string): {
+    schema_version?: string;
+    hits: Array<{
+      chunk_id: string;
+      uris?: { abs_path?: string | null; vscode?: string | null };
+    }>;
+    meta?: { warnings?: Array<{ code: string }> };
+  } {
+    const match = text.match(/```json\n([\s\S]*?)\n```/);
+    if (!match) {
+      throw new Error("hits_json block not found");
+    }
+    return JSON.parse(match[1]);
+  }
+
   it("happy path: returns summary, prompt-ready, and citation blocks within caps", async () => {
     const { definition, handler } = makeSearchKnowledge();
     const res = await handler({ input: { query: "test" } });
 
     expect(res.isError).toBe(false);
     expect(Array.isArray(res.content)).toBe(true);
-    expect(res.content.length).toBeGreaterThanOrEqual(2); // summary + prompt-ready
-    expect(res.content[0].type).toBe("text");
+    expect(res.content.length).toBeGreaterThanOrEqual(2); // summary + hits_json (prompt-ready optional)
+    expect(res.content[0].type).toBe("text"); // summary
+    expect(res.content[1].type).toBe("text"); // hits_json
+    expect(String(res.content[1].text)).toContain("```json");
+    expect(String(res.content[1].text)).toContain("chunk_id");
 
     // Check _meta includes required fields
     expect(res._meta).toBeDefined();
@@ -46,18 +64,65 @@ describe("search_knowledge", () => {
 
     expect(res.isError).toBe(false);
     const textBlocks = res.content.filter((c) => c.type === "text");
-    expect(textBlocks.length).toBe(1); // summary only
+    expect(textBlocks.length).toBe(2); // summary + hits_json
   });
 
-  it("include_resource_text=false returns empty resource text", async () => {
+  it("include_resource_text=false returns no resource blocks", async () => {
     const { handler } = makeSearchKnowledge();
     const res = await handler({ input: { query: "test", include_resource_text: false } });
 
     expect(res.isError).toBe(false);
     const resourceBlocks = res.content.filter((c) => c.type === "resource");
-    resourceBlocks.forEach((block) => {
-      expect(block.resource?.text ?? "").toBe("");
+    expect(resourceBlocks.length).toBe(0);
+  });
+
+  it("hits_json includes follow-up identifiers and paths by default", async () => {
+    const { handler } = makeSearchKnowledge();
+    const res = await handler({ input: { query: "test" } });
+
+    expect(res.isError).toBe(false);
+    const hitsJson = parseHitsJson(String(res.content[1].text));
+    expect(hitsJson.schema_version).toBeDefined();
+    expect(hitsJson.hits.length).toBeGreaterThan(0);
+    expect(hitsJson.hits[0].chunk_id).toBeDefined();
+    expect(hitsJson.hits[0].uris.abs_path).toContain("/abs/");
+    expect(hitsJson.hits[0].uris.vscode).toContain("vscode://file/");
+  });
+
+  it("include_hits_json=false omits JSON block", async () => {
+    const { handler } = makeSearchKnowledge();
+    const res = await handler({ input: { query: "test", include_hits_json: false } });
+
+    expect(res.isError).toBe(false);
+    const textBlocks = res.content.filter((c) => c.type === "text");
+    textBlocks.forEach((block) => {
+      expect(String(block.text)).not.toContain("```json");
     });
+  });
+
+  it("include_abs_paths=false removes absolute paths and vscode URIs", async () => {
+    const { handler } = makeSearchKnowledge();
+    const res = await handler({
+      input: { query: "test", include_abs_paths: false, include_vscode_uris: false },
+    });
+
+    expect(res.isError).toBe(false);
+    const hitsJson = parseHitsJson(String(res.content[1].text));
+    expect(hitsJson.hits[0].uris.abs_path).toBeNull();
+    expect(hitsJson.hits[0].uris.vscode).toBeNull();
+  });
+
+  it("max_snippets limits prompt-ready candidates", async () => {
+    const { handler } = makeSearchKnowledge();
+    const res = await handler({ input: { query: "test", max_snippets: 1 } });
+
+    expect(res.isError).toBe(false);
+    const promptReadyBlock = res.content.find(
+      (c) => c.type === "text" && !String(c.text).includes("```json")
+    );
+    const promptReadyText = promptReadyBlock ? String(promptReadyBlock.text) : "";
+    const occurrences = (promptReadyText.match(/chunk_id=/g) || []).length;
+    expect(occurrences).toBeLessThanOrEqual(1);
   });
 
   it("filters: repos with whitespace trimmed, case preserved", async () => {
@@ -112,37 +177,45 @@ describe("search_knowledge", () => {
     expect(res._meta.cursor).toBeDefined();
   });
 
-  it("server warnings: ensure warnings appear only in _meta.warnings; not in text blocks", async () => {
+  it("server warnings are model-visible in summary text by default", async () => {
     const { handler } = makeSearchKnowledge();
     const res = await handler({
       input: {
-        query: "test",
-        top_k: 50, // Use a valid value that doesn't trigger warnings
+        query: "snippet-failure",
       },
     });
 
     expect(res.isError).toBe(false);
-
-    // For now, we test that the _meta structure exists and doesn't contain
-    // warning messages in text content when warnings are present
     expect(res._meta).toBeDefined();
+    expect(Array.isArray(res._meta.warnings)).toBe(true);
+    expect(res._meta.warnings.length).toBeGreaterThan(0);
 
-    // If there are warnings in _meta, ensure they don't appear in text content
-    if (res._meta.warnings && res._meta.warnings.length > 0) {
-      const textBlocks = res.content.filter((c) => c.type === "text");
-      textBlocks.forEach((block) => {
-        // No warning messages should appear in text content
-        expect(block.text).not.toMatch(/warning/i);
-      });
-    }
+    const summaryText = String(res.content[0]?.type === "text" ? res.content[0].text : "");
+    expect(summaryText).toContain("Warnings:");
+    const hitsJson = parseHitsJson(String(res.content[1].text));
+    expect(hitsJson.meta?.warnings?.some((entry) => entry.code === "snippet_fetch_failed")).toBe(
+      true
+    );
+  });
 
-    // The mock server currently doesn't generate warnings for normal queries,
-    // so we're testing the structure and behavior pattern
+  it("include_warnings_in_text=false keeps warnings out of summary", async () => {
+    const { handler } = makeSearchKnowledge();
+    const res = await handler({
+      input: {
+        query: "snippet-failure",
+        include_warnings_in_text: false,
+      },
+    });
+
+    expect(res.isError).toBe(false);
+    expect(Array.isArray(res._meta.warnings)).toBe(true);
+    const summaryText = String(res.content[0]?.type === "text" ? res.content[0].text : "");
+    expect(summaryText).not.toContain("Warnings:");
   });
 
   it("per-snippet cap: resource blocks never include text above configured cap", async () => {
     const { handler } = makeSearchKnowledge();
-    const res = await handler({ input: { query: "test" } });
+    const res = await handler({ input: { query: "test", output_mode: "resources" } });
 
     expect(res.isError).toBe(false);
 

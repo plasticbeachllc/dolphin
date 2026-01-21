@@ -48,6 +48,13 @@ snippet_char_cap = 123
 payload_cap_bytes = 2048
 
 [mcp.search]
+top_k_default = 25
+snippets_top_n_default = 9
+top_context_n_default = 4
+include_hits_json_default = false
+include_warnings_in_text_default = false
+include_abs_paths_default = false
+include_vscode_uris_default = false
 include_prompt_ready_default = false
 include_resource_text_default = true
 context_lines_before_default = 2
@@ -68,6 +75,13 @@ context_lines_after_default = 3
     expect(CONFIG.MCP_LIMITS.TOP_K_MAX).toBe(42);
     expect(CONFIG.MCP_LIMITS.SNIPPET_CHAR_CAP).toBe(123);
     expect(CONFIG.MCP_LIMITS.PAYLOAD_CAP_BYTES).toBe(2048);
+    expect(CONFIG.SEARCH_DEFAULTS.TOP_K).toBe(25);
+    expect(CONFIG.SEARCH_DEFAULTS.SNIPPETS_TOP_N).toBe(9);
+    expect(CONFIG.SEARCH_DEFAULTS.TOP_CONTEXT_N).toBe(4);
+    expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_HITS_JSON).toBe(false);
+    expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_WARNINGS_IN_TEXT).toBe(false);
+    expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_ABS_PATHS).toBe(false);
+    expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_VSCODE_URIS).toBe(false);
     expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_PROMPT_READY).toBe(false);
     expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_RESOURCE_TEXT).toBe(true);
     expect(CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_BEFORE).toBe(2);
@@ -116,7 +130,7 @@ log_level = "debug"
 
     expect(CONFIG.DOLPHIN_API_URL).toBe("http://127.0.0.1:7777");
     expect(CONFIG.SERVER_NAME).toBe("dolphin-mcp");
-    expect(CONFIG.SERVER_VERSION).toBe("1.0.0");
+    expect(CONFIG.SERVER_VERSION).toBe("0.2.0");
     expect(CONFIG.LOG_LEVEL).toBe("info");
   });
 
@@ -155,6 +169,13 @@ context_lines_after_default = 5
     expect(CONFIG.MCP_LIMITS.PAYLOAD_CAP_BYTES).toBe(4096);
     expect(CONFIG.RESPONSE_LIMITS.SHRUNK_SNIPPET_CHAR_CAP).toBe(444);
     expect(CONFIG.RESPONSE_LIMITS.MIN_SNIPPET_CHAR_FLOOR).toBe(222);
+    expect(CONFIG.SEARCH_DEFAULTS.TOP_K).toBeGreaterThan(0);
+    expect(CONFIG.SEARCH_DEFAULTS.SNIPPETS_TOP_N).toBeGreaterThan(0);
+    expect(CONFIG.SEARCH_DEFAULTS.TOP_CONTEXT_N).toBeGreaterThanOrEqual(0);
+    expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_HITS_JSON).toBe(true);
+    expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_WARNINGS_IN_TEXT).toBe(true);
+    expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_ABS_PATHS).toBe(true);
+    expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_VSCODE_URIS).toBe(true);
     expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_PROMPT_READY).toBe(false);
     expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_RESOURCE_TEXT).toBe(true);
     expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_GRAPH_CONTEXT).toBe(false);
@@ -176,11 +197,18 @@ context_lines_after_default = 5
     expect(CONFIG.MCP_LIMITS.PAYLOAD_CAP_BYTES).toBe(70 * 1024);
     expect(CONFIG.RESPONSE_LIMITS.SHRUNK_SNIPPET_CHAR_CAP).toBe(600);
     expect(CONFIG.RESPONSE_LIMITS.MIN_SNIPPET_CHAR_FLOOR).toBe(300);
+    expect(CONFIG.SEARCH_DEFAULTS.TOP_K).toBe(20);
+    expect(CONFIG.SEARCH_DEFAULTS.SNIPPETS_TOP_N).toBe(8);
+    expect(CONFIG.SEARCH_DEFAULTS.TOP_CONTEXT_N).toBe(3);
+    expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_HITS_JSON).toBe(true);
+    expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_WARNINGS_IN_TEXT).toBe(true);
+    expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_ABS_PATHS).toBe(true);
+    expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_VSCODE_URIS).toBe(true);
     expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_PROMPT_READY).toBe(true);
     expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_RESOURCE_TEXT).toBe(false);
     expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_GRAPH_CONTEXT).toBe(true);
-    expect(CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_BEFORE).toBe(0);
-    expect(CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_AFTER).toBe(0);
+    expect(CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_BEFORE).toBe(2);
+    expect(CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_AFTER).toBe(2);
   });
 
   it("clamps out-of-range TOML values to limits", async () => {
@@ -197,6 +225,13 @@ payload_cap_bytes = 512
 [mcp.search]
 context_lines_before_default = -5
 context_lines_after_default = 99
+top_k_default = 0
+snippets_top_n_default = -1
+top_context_n_default = 9999
+include_hits_json_default = "maybe"
+include_warnings_in_text_default = "nope"
+include_abs_paths_default = "nope"
+include_vscode_uris_default = "nope"
 
 [mcp.response]
 min_snippet_char_floor = -20
@@ -213,6 +248,13 @@ shrunk_snippet_char_cap = -1
     expect(CONFIG.MCP_LIMITS.TOP_K_MAX).toBe(1);
     expect(CONFIG.MCP_LIMITS.SNIPPET_CHAR_CAP).toBe(0);
     expect(CONFIG.MCP_LIMITS.PAYLOAD_CAP_BYTES).toBe(1024);
+    expect(CONFIG.SEARCH_DEFAULTS.TOP_K).toBe(1);
+    expect(CONFIG.SEARCH_DEFAULTS.SNIPPETS_TOP_N).toBe(0);
+    expect(CONFIG.SEARCH_DEFAULTS.TOP_CONTEXT_N).toBeLessThanOrEqual(CONFIG.MCP_LIMITS.TOP_K_MAX);
+    expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_HITS_JSON).toBe(true);
+    expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_WARNINGS_IN_TEXT).toBe(true);
+    expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_ABS_PATHS).toBe(true);
+    expect(CONFIG.SEARCH_DEFAULTS.INCLUDE_VSCODE_URIS).toBe(true);
     expect(CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_BEFORE).toBe(0);
     expect(CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_AFTER).toBe(10);
     expect(CONFIG.RESPONSE_LIMITS.MIN_SNIPPET_CHAR_FLOOR).toBe(0);
