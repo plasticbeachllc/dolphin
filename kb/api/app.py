@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from ..api_key import load_kb_api_key
 from ..config import KBConfig, load_config
-from ..store.sqlite_meta import generate_fts_content_id
+from ..store.sqlite_meta import SQLiteMetadataStore, generate_fts_content_id
 from .task_queue import TaskStatus, get_task_queue
 from .utils import GitRepository, validate_path_within_repo
 
@@ -106,6 +106,67 @@ def reset_stores():
     _sql_store = None
     _lance_store = None
     _pipeline = None
+
+
+def _enrich_hits_with_snippets(
+    hits: list[dict[str, object]],
+    request: SearchRequest,
+    sql_store: SQLiteMetadataStore,
+) -> list[dict[str, object]]:
+    repo_root_cache: dict[str, Path] = {}
+    file_lines_cache: dict[tuple[str, str], list[str]] = {}
+
+    for hit in hits:
+        repo = hit.get("repo")
+        path = hit.get("path")
+        start_line = hit.get("start_line")
+        end_line = hit.get("end_line")
+
+        if not repo or not path or start_line is None or end_line is None:
+            continue
+
+        repo_name = str(repo)
+        path_str = str(path)
+
+        if repo_name not in repo_root_cache:
+            repo_info = sql_store.get_repo_by_name(repo_name)
+            if not repo_info:
+                continue
+            repo_root_cache[repo_name] = Path(repo_info["root_path"])
+
+        repo_root = repo_root_cache[repo_name]
+        full_path = validate_path_within_repo(repo_root / path_str, repo_root)
+
+        if not full_path.exists() or not full_path.is_file():
+            continue
+
+        cache_key = (repo_name, path_str)
+        if cache_key not in file_lines_cache:
+            try:
+                with open(full_path, encoding="utf-8") as fh:
+                    file_lines_cache[cache_key] = fh.readlines()
+            except UnicodeDecodeError:
+                continue
+
+        lines = file_lines_cache.get(cache_key, [])
+        if not lines:
+            continue
+
+        total_lines = len(lines)
+        start_int = int(start_line)
+        end_int = int(end_line)
+        context_before = request.context_lines_before or 0
+        context_after = request.context_lines_after or 0
+
+        snippet_start = max(1, start_int - context_before)
+        snippet_end = min(total_lines, end_int + context_after)
+
+        snippet = "".join(lines[snippet_start - 1 : snippet_end])
+        hit["snippet"] = snippet
+        hit["snippet_start_line"] = snippet_start
+        hit["snippet_end_line"] = snippet_end
+
+    return hits
 
 
 class SearchRequest(BaseModel):
@@ -247,58 +308,7 @@ async def search(request: SearchRequest) -> dict[str, object]:
     latency_ms = int((perf_counter() - started) * 1000)
 
     if request.include_snippets and _sql_store is not None:
-        repo_root_cache: dict[str, Path] = {}
-        file_lines_cache: dict[tuple[str, str], list[str]] = {}
-
-        for hit in hits_list:
-            repo = hit.get("repo")
-            path = hit.get("path")
-            start_line = hit.get("start_line")
-            end_line = hit.get("end_line")
-
-            if not repo or not path or start_line is None or end_line is None:
-                continue
-
-            repo_name = str(repo)
-            path_str = str(path)
-
-            if repo_name not in repo_root_cache:
-                repo_info = _sql_store.get_repo_by_name(repo_name)
-                if not repo_info:
-                    continue
-                repo_root_cache[repo_name] = Path(repo_info["root_path"])
-
-            repo_root = repo_root_cache[repo_name]
-            full_path = validate_path_within_repo(repo_root / path_str, repo_root)
-
-            if not full_path.exists() or not full_path.is_file():
-                continue
-
-            cache_key = (repo_name, path_str)
-            if cache_key not in file_lines_cache:
-                try:
-                    with open(full_path, encoding="utf-8") as fh:
-                        file_lines_cache[cache_key] = fh.readlines()
-                except UnicodeDecodeError:
-                    continue
-
-            lines = file_lines_cache.get(cache_key, [])
-            if not lines:
-                continue
-
-            total_lines = len(lines)
-            start_int = int(start_line)
-            end_int = int(end_line)
-            context_before = request.context_lines_before or 0
-            context_after = request.context_lines_after or 0
-
-            snippet_start = max(1, start_int - context_before)
-            snippet_end = min(total_lines, end_int + context_after)
-
-            snippet = "".join(lines[snippet_start - 1 : snippet_end])
-            hit["snippet"] = snippet
-            hit["snippet_start_line"] = snippet_start
-            hit["snippet_end_line"] = snippet_end
+        hits_list = _enrich_hits_with_snippets(hits_list, request, _sql_store)
 
     # Include ANN config in response meta if it was used
     meta = {

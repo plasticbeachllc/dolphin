@@ -11,6 +11,7 @@ Key security features:
 - URL-encoding attack prevention
 """
 
+import os
 import re
 import unicodedata
 from pathlib import Path
@@ -56,7 +57,8 @@ class PathValidator:
             disallowed_patterns: Disallowed filename patterns (regex strings)
             error_prefix: Custom error message prefix
         """
-        self.base_dir = Path(base_dir).resolve()
+        self.base_dir = Path(base_dir).expanduser().absolute()
+        self._resolved_base_dir = self.base_dir.resolve()
         self.allow_symlinks = allow_symlinks
         self.must_exist = must_exist
         self.allowed_extensions = [ext.lower() for ext in allowed_extensions] if allowed_extensions else None
@@ -131,22 +133,34 @@ class PathValidator:
 
         # Convert to Path object
         path_obj = Path(decoded_path)
+        input_is_absolute = path_obj.is_absolute()
 
-        # Reject absolute paths that don't start with base_dir
-        if path_obj.is_absolute():
+        if input_is_absolute:
+            candidate_path = Path(os.path.normpath(str(path_obj)))
             try:
-                # Check if absolute path is within workspace
-                path_obj.relative_to(self.base_dir)
+                candidate_path.relative_to(self.base_dir)
             except ValueError:
                 raise PathValidationError(
                     f"{self.error_prefix}: absolute paths outside workspace not allowed",
                     input_str,
                     "absolute_path_outside_workspace",
                 )
+        else:
+            candidate_path = Path(os.path.normpath(str(self.base_dir / path_obj)))
 
-        # Resolve path relative to base_dir
+        # Critical: Check if resolved path escapes base_dir
         try:
-            resolved_path = (self.base_dir / path_obj).resolve()
+            candidate_path.relative_to(self.base_dir)
+        except ValueError:
+            raise PathValidationError(
+                f"{self.error_prefix}: path resolves outside workspace (attempted: {input_str})",
+                input_str,
+                "path_traversal",
+            )
+
+        # Resolve path for traversal checks that involve symlinks.
+        try:
+            resolved_path = candidate_path.resolve(strict=False)
         except (OSError, RuntimeError) as e:
             raise PathValidationError(
                 f"{self.error_prefix}: failed to resolve path: {e}",
@@ -154,9 +168,8 @@ class PathValidator:
                 "resolution_failed",
             )
 
-        # Critical: Check if resolved path escapes base_dir
         try:
-            resolved_path.relative_to(self.base_dir)
+            resolved_path.relative_to(self._resolved_base_dir)
         except ValueError:
             raise PathValidationError(
                 f"{self.error_prefix}: path resolves outside workspace (attempted: {input_str})",
@@ -165,7 +178,7 @@ class PathValidator:
             )
 
         # Check if path exists (if required)
-        if self.must_exist and not resolved_path.exists():
+        if self.must_exist and not candidate_path.exists():
             raise PathValidationError(
                 f"{self.error_prefix}: path does not exist",
                 input_str,
@@ -173,8 +186,8 @@ class PathValidator:
             )
 
         # Check for symlinks (if not allowed)
-        if not self.allow_symlinks and resolved_path.exists():
-            if resolved_path.is_symlink():
+        if not self.allow_symlinks and candidate_path.exists():
+            if candidate_path.is_symlink():
                 raise PathValidationError(
                     f"{self.error_prefix}: symlinks not allowed",
                     input_str,
@@ -183,7 +196,7 @@ class PathValidator:
 
         # Check file extension (if specified)
         if self.allowed_extensions:
-            ext = resolved_path.suffix.lower()
+            ext = candidate_path.suffix.lower()
             if ext not in self.allowed_extensions:
                 raise PathValidationError(
                     f"{self.error_prefix}: file extension '{ext}' not allowed",
@@ -193,7 +206,7 @@ class PathValidator:
 
         # Check disallowed patterns (if specified)
         if self.disallowed_patterns:
-            filename = resolved_path.name
+            filename = candidate_path.name
             for pattern in self.disallowed_patterns:
                 if re.match(pattern, filename):
                     raise PathValidationError(
@@ -202,7 +215,7 @@ class PathValidator:
                         "disallowed_pattern",
                     )
 
-        return resolved_path
+        return candidate_path
 
     def validate_batch(self, paths: list[str | Path]) -> list[Path]:
         """

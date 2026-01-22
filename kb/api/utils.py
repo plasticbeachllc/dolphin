@@ -24,10 +24,10 @@ def validate_path_within_repo(file_path: Path, repo_root: Path) -> Path:
         HTTPException: If path is outside repository or invalid
     """
     try:
-        # Use PathValidator for secure path validation
-        validator = PathValidator(base_dir=repo_root)
+        # Allow symlinks that resolve within the repo root.
+        validator = PathValidator(base_dir=repo_root, allow_symlinks=True)
         resolved_path = validator.validate(file_path)
-        return resolved_path
+        return resolved_path.resolve(strict=False)
     except PathValidationError as e:
         raise HTTPException(status_code=403, detail=f"Path validation failed: {e.reason} - {file_path}")
     except Exception:
