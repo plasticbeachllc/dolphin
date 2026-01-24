@@ -466,9 +466,7 @@ class LanceDBStore:
         except Exception:
             return None
 
-    def get_vectors_by_hashes(
-        self, repo: str, hashes: Iterable[str], *, model: str
-    ) -> dict[str, list[float]]:
+    def get_vectors_by_hashes(self, repo: str, hashes: Iterable[str], *, model: str) -> dict[str, list[float]]:
         """Retrieve vectors for specific text hashes in a repository.
 
         Args:
