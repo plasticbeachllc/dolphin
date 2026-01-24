@@ -21,7 +21,12 @@ export function makeKbHealth(): {
     name: "health",
     description: "Check Knowledge Base REST API health (/v1/health).",
     inputSchema: INPUT_SCHEMA,
-    annotations: { title: "KB Health", readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "KB Health",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   };
 
   const handler = async (args: unknown, signal?: AbortSignal): Promise<CallToolResult> => {

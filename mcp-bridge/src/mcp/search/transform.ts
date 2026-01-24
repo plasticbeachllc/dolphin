@@ -53,9 +53,13 @@ export function transformHits(params: {
     const chunkEnd = hit.end_line;
     const snippetInfo = snippetsByHitIndex.get(idx);
     const snippetStart =
-      snippetInfo?.start ?? hit.snippet_start_line ?? (typeof chunkStart === "number" ? chunkStart : 1);
+      snippetInfo?.start ??
+      hit.snippet_start_line ??
+      (typeof chunkStart === "number" ? chunkStart : 1);
     const snippetEnd =
-      snippetInfo?.end ?? hit.snippet_end_line ?? (typeof chunkEnd === "number" ? chunkEnd : snippetStart);
+      snippetInfo?.end ??
+      hit.snippet_end_line ??
+      (typeof chunkEnd === "number" ? chunkEnd : snippetStart);
 
     const lang = hit.language || hit.lang;
     const chunkUri =

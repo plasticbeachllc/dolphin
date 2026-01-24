@@ -140,15 +140,15 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 
 **Tools Implemented**:
 
-| Tool                    | Purpose                             | Status |
-| ----------------------- | ----------------------------------- | ------ |
-| `search`                | Semantic code search with citations | ✅     |
-| `chunk.get`             | Retrieve chunk by ID                | ✅     |
-| `file.lines`            | Retrieve file slice by line range   | ✅     |
-| `store.info`            | Get store metadata and stats        | ✅     |
-| `metadata.get`          | Get chunk metadata without content  | ✅     |
-| `repos.list`            | List indexed repositories           | ✅     |
-| `health`                | Check KB REST API health            | ✅     |
+| Tool           | Purpose                             | Status |
+| -------------- | ----------------------------------- | ------ |
+| `search`       | Semantic code search with citations | ✅     |
+| `chunk.get`    | Retrieve chunk by ID                | ✅     |
+| `file.lines`   | Retrieve file slice by line range   | ✅     |
+| `store.info`   | Get store metadata and stats        | ✅     |
+| `metadata.get` | Get chunk metadata without content  | ✅     |
+| `repos.list`   | List indexed repositories           | ✅     |
+| `health`       | Check KB REST API health            | ✅     |
 
 **Key Features**:
 

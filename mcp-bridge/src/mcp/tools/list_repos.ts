@@ -19,7 +19,12 @@ export function makeListRepos(): {
     description:
       "List indexed repositories with their absolute root paths and approximate file/chunk counts.",
     inputSchema: INPUT_SCHEMA,
-    annotations: { title: "List Repositories", readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "List Repositories",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   };
 
   const handler = async (_args: unknown, signal?: AbortSignal): Promise<CallToolResult> => {

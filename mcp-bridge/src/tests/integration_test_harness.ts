@@ -12,8 +12,12 @@ import { makeListRepos } from "../mcp/tools/list_repos.js";
 import { makeKbHealth } from "../mcp/tools/kb_health.js";
 import { initLogger } from "../util/logger.js";
 
-function parseHitsJson(content: Array<{ type: string; text?: string }>): { hits?: unknown[] } | null {
-  const jsonBlock = content.find((block) => block.type === "text" && String(block.text).includes("```json"));
+function parseHitsJson(
+  content: Array<{ type: string; text?: string }>
+): { hits?: unknown[] } | null {
+  const jsonBlock = content.find(
+    (block) => block.type === "text" && String(block.text).includes("```json")
+  );
   if (!jsonBlock?.text) return null;
   const match = String(jsonBlock.text).match(/```json\n([\s\S]*?)\n```/);
   if (!match) return null;

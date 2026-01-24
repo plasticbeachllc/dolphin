@@ -179,7 +179,9 @@ describe("Config Utilities", () => {
       expect(summary.mcp_shrunk_snippet_char_cap).toBe(
         CONFIG.RESPONSE_LIMITS.SHRUNK_SNIPPET_CHAR_CAP
       );
-      expect(summary.mcp_min_snippet_char_floor).toBe(CONFIG.RESPONSE_LIMITS.MIN_SNIPPET_CHAR_FLOOR);
+      expect(summary.mcp_min_snippet_char_floor).toBe(
+        CONFIG.RESPONSE_LIMITS.MIN_SNIPPET_CHAR_FLOOR
+      );
       expect(summary.mcp_search_top_k_default).toBe(CONFIG.SEARCH_DEFAULTS.TOP_K);
       expect(summary.mcp_search_snippets_top_n_default).toBe(CONFIG.SEARCH_DEFAULTS.SNIPPETS_TOP_N);
       expect(summary.mcp_search_top_context_n_default).toBe(CONFIG.SEARCH_DEFAULTS.TOP_CONTEXT_N);

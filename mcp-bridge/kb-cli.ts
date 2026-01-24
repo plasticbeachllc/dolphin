@@ -18,7 +18,9 @@ import { restListRepos } from "./src/rest/client.js";
 const [, , command, ...args] = process.argv;
 
 function parseHitsJson(content: Array<{ type: string; text?: string }>): { hits?: any[] } | null {
-  const jsonBlock = content.find((block) => block.type === "text" && String(block.text).includes("```json"));
+  const jsonBlock = content.find(
+    (block) => block.type === "text" && String(block.text).includes("```json")
+  );
   if (!jsonBlock?.text) return null;
   const match = String(jsonBlock.text).match(/```json\n([\s\S]*?)\n```/);
   if (!match) return null;

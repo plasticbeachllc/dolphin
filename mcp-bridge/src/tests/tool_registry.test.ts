@@ -7,7 +7,12 @@ function makeTool(overrides?: Partial<Tool>): Tool {
     name: "example",
     description: "example tool",
     inputSchema: { type: "object", properties: {} },
-    annotations: { title: "Example", readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Example",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     ...overrides,
   };
 }

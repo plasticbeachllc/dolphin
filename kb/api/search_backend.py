@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from ..cache import QueryCache, create_cache
-from ..config import KBConfig, GraphConfig
+from ..config import GraphConfig, KBConfig
 from ..constants.retrieval_config import RETRIEVAL_PARAMS
 from ..embeddings.provider import EmbeddingProvider, create_provider, set_default_provider
 from ..observability.structured_logger import StructuredLogger

@@ -115,7 +115,9 @@ export function buildPromptReady(res: SearchResponse, maxHits: number): string {
       ? `L${hit._context_start_line}-L${hit._context_end_line}`
       : `L${h.start_line}-L${h.end_line}`;
     const scoreText =
-      typeof h.score === "number" ? ` score=${Number.isFinite(h.score) ? h.score.toFixed(3) : h.score}` : "";
+      typeof h.score === "number"
+        ? ` score=${Number.isFinite(h.score) ? h.score.toFixed(3) : h.score}`
+        : "";
     parts.push(`[${h.repo}] ${h.path}#${lineRange} (chunk_id=${h.chunk_id})${scoreText}`);
 
     if (hit.graph_context) {
@@ -217,7 +219,8 @@ export function buildSummary(params: {
     `Found ${k} result${k === 1 ? "" : "s"}${rcount > 0 ? ` across ${rcount} repo${rcount === 1 ? "" : "s"}` : ""}.`,
     `Showing snippets for top ${params.snippetsIncluded}/${k} results.`,
   ];
-  if (typeof params.estimatedTotal === "number") summaryParts.push(`~${params.estimatedTotal} estimated results.`);
+  if (typeof params.estimatedTotal === "number")
+    summaryParts.push(`~${params.estimatedTotal} estimated results.`);
   if (params.moreAvailable) summaryParts.push("More available — call search again with cursor.");
   if (params.includeWarningsInText && params.warningEntries.length > 0) {
     const warningText = params.warningEntries
@@ -292,7 +295,11 @@ export function buildHitsJsonObject(params: {
         path: hit.path,
         lang: hit.lang,
         chunk_range: { start_line: chunkStart, end_line: chunkEnd },
-        snippet_range: { start_line: snippetStart, end_line: snippetEnd, included: Boolean(hit.snippet) },
+        snippet_range: {
+          start_line: snippetStart,
+          end_line: snippetEnd,
+          included: Boolean(hit.snippet),
+        },
         uris: {
           chunk: hit.chunk_resource_link ?? hit.resource_link,
           snippet: hit.resource_link,

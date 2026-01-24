@@ -33,7 +33,12 @@ export function makeOpenInEditor(): {
     name: "open_in_editor",
     description: "Compute a vscode://file URI for a repo path and optional position.",
     inputSchema: INPUT_SCHEMA,
-    annotations: { title: "Open in VS Code", readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Open in VS Code",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   };
 
   const handler = async (args: unknown, signal?: AbortSignal): Promise<CallToolResult> => {

@@ -60,7 +60,7 @@ include_prompt_ready_default = false
 include_resource_text_default = true
 context_lines_before_default = 2
 context_lines_after_default = 3
-`,
+`
     );
 
     process.env.HOME = home;

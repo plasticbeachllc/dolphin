@@ -4,9 +4,13 @@ import os
 import tempfile
 from collections.abc import Generator
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+if TYPE_CHECKING:
+    from tests.kb_utils import InMemoryKBBackend
 
 _TEST_CONFIG_ENV = "DOLPHIN_CONFIG_PATH"
 # Keep tests deterministic by avoiding user-level configs.
@@ -36,12 +40,12 @@ mmr_lambda = 0.7
     )
     os.environ[_TEST_CONFIG_ENV] = str(_test_config_path)
 
-from tests.kb_utils import FIXTURE_REPO_ROOT, InMemoryKBBackend
-
 
 @pytest.fixture(scope="session")
 def sample_repo_path() -> Path:
     """Path to the sample repository fixture."""
+    from tests.kb_utils import FIXTURE_REPO_ROOT
+
     return FIXTURE_REPO_ROOT
 
 
@@ -62,8 +66,10 @@ def temp_db_path(temp_dir: Path) -> Generator[Path, None, None]:
 
 
 @pytest.fixture
-def in_memory_backend(sample_repo_path: Path) -> InMemoryKBBackend:
+def in_memory_backend(sample_repo_path: Path) -> "InMemoryKBBackend":
     """In-memory backend for fast testing."""
+    from tests.kb_utils import InMemoryKBBackend
+
     return InMemoryKBBackend(sample_repo_path)
 
 

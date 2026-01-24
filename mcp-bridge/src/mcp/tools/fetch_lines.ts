@@ -35,7 +35,12 @@ export function makeFetchLines(): {
     description:
       "Fetch a file slice [start, end] inclusive from disk and return fenced code with citation.",
     inputSchema: INPUT_SCHEMA,
-    annotations: { title: "Get File Lines", readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Get File Lines",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   };
 
   const handler = async (args: unknown, signal?: AbortSignal): Promise<CallToolResult> => {

@@ -86,7 +86,8 @@ export function makeSearchKnowledge(): {
         hits: transformedRes.hits,
         snippetsIncluded: snippetsByHitIndex.size,
         estimatedTotal: transformedRes.meta.estimated_total,
-        moreAvailable: transformedRes.meta.complete === false && Boolean(transformedRes.meta.cursor),
+        moreAvailable:
+          transformedRes.meta.complete === false && Boolean(transformedRes.meta.cursor),
         includeWarningsInText: options.includeWarningsInText,
         warningEntries,
       });

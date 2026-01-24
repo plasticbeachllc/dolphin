@@ -224,5 +224,9 @@ export async function restHealthV1(
   const q = new URLSearchParams();
   if (check) q.set("check", check);
   const suffix = q.toString();
-  return await doFetch<HealthResponse>(`/v1/health${suffix ? `?${suffix}` : ""}`, { method: "GET" }, signal);
+  return await doFetch<HealthResponse>(
+    `/v1/health${suffix ? `?${suffix}` : ""}`,
+    { method: "GET" },
+    signal
+  );
 }

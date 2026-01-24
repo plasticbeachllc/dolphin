@@ -67,7 +67,8 @@ export function resolveSearchOptions(input: SearchInput): SearchOptions {
   const topContextNRequested = input.top_context_n ?? CONFIG.SEARCH_DEFAULTS.TOP_CONTEXT_N;
   const topContextN = Math.max(0, Math.min(snippetsTopN, topContextNRequested));
 
-  let includePromptReady = input.include_prompt_ready ?? CONFIG.SEARCH_DEFAULTS.INCLUDE_PROMPT_READY;
+  let includePromptReady =
+    input.include_prompt_ready ?? CONFIG.SEARCH_DEFAULTS.INCLUDE_PROMPT_READY;
   let includeResourceText =
     input.include_resource_text ?? CONFIG.SEARCH_DEFAULTS.INCLUDE_RESOURCE_TEXT;
   const includeHitsJson = input.include_hits_json ?? CONFIG.SEARCH_DEFAULTS.INCLUDE_HITS_JSON;
@@ -87,8 +88,7 @@ export function resolveSearchOptions(input: SearchInput): SearchOptions {
 
   const contextLinesBefore =
     input.context_lines_before ?? CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_BEFORE;
-  const contextLinesAfter =
-    input.context_lines_after ?? CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_AFTER;
+  const contextLinesAfter = input.context_lines_after ?? CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_AFTER;
 
   return {
     repos,

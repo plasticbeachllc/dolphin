@@ -1,7 +1,7 @@
 import { restGetFileSlice } from "../../rest/client.js";
 import { CONFIG } from "../../util/config.js";
 import { mapWithConcurrency } from "../../util/concurrency.js";
-import { logWarn, logError, logInfo, logDebug } from "../../util/logger.js";
+import { logWarn, logInfo, logDebug } from "../../util/logger.js";
 
 /**
  * Request for fetching a snippet from a specific file location

@@ -19,7 +19,12 @@ export function makeGetVectorStoreInfo(): {
     name: "store.info",
     description: "Report vector store dims, namespaces, and counts.",
     inputSchema: INPUT_SCHEMA,
-    annotations: { title: "Get Vector Store Info", readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Get Vector Store Info",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   };
 
   const handler = async (_args: unknown, signal?: AbortSignal): Promise<CallToolResult> => {

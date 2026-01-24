@@ -46,9 +46,7 @@ function isTextBlock(
 }
 
 function parseHitsJson(content: CallToolResult["content"]): { hits?: SearchHitSummary[] } | null {
-  const jsonBlock = content?.find(
-    (block) => isTextBlock(block) && block.text.includes("```json")
-  );
+  const jsonBlock = content?.find((block) => isTextBlock(block) && block.text.includes("```json"));
   if (!jsonBlock?.text) return null;
   const match = jsonBlock.text.match(/```json\n([\s\S]*?)\n```/);
   if (!match) return null;

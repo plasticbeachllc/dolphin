@@ -27,7 +27,12 @@ export function makeGetMetadata(): {
     name: "metadata.get",
     description: "Fetch chunk metadata without content.",
     inputSchema: INPUT_SCHEMA,
-    annotations: { title: "Get Chunk Metadata", readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Get Chunk Metadata",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   };
 
   const handler = async (args: unknown, signal?: AbortSignal): Promise<CallToolResult> => {

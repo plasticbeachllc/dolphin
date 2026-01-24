@@ -28,7 +28,12 @@ export function makeFetchChunk(): {
     name: "chunk.get",
     description: "Fetch a chunk by chunk_id and return fenced code with citation.",
     inputSchema: INPUT_SCHEMA,
-    annotations: { title: "Get Chunk", readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      title: "Get Chunk",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   };
 
   const handler = async (args: unknown, signal?: AbortSignal): Promise<CallToolResult> => {

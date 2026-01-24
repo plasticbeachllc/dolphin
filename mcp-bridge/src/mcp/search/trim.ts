@@ -56,9 +56,13 @@ export async function applyPayloadTrimming(params: {
       size = jsonSizeBytes(result);
     }
     if (size > capBytes && hitsJson.hits.length === 1) {
-      (hitsJson.hits[0] as any).uris = {
-        chunk: (hitsJson.hits[0] as any).uris.chunk,
-        snippet: (hitsJson.hits[0] as any).uris.snippet,
+      const { chunk, snippet } = hitsJson.hits[0].uris;
+      hitsJson.hits[0].uris = {
+        chunk,
+        snippet,
+        vscode: null,
+        abs_path: null,
+        repo_root: null,
       };
       (content[hitsJsonIndex] as TextContent).text =
         "```json\n" + JSON.stringify(hitsJson) + "\n```";
