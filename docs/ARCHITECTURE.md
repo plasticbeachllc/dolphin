@@ -946,9 +946,8 @@ cd mcp-bridge && bun run test-integration.ts
 - [README](../README.md) - Project overview and user documentation
 - [AGENTS.md](../AGENTS.md) - Developer guidelines and troubleshooting
 - [TESTING.md](TESTING.md) - Testing procedures
-- [ACCESSIBILITY.md](ACCESSIBILITY.md) - Accessibility compliance guide
 - [PROFILING.md](PROFILING.md) - Performance profiling guide
-- [Main codebase](../kb/src/) - Python implementation
+- [Main codebase](../kb/) - Python implementation
 - [MCP Bridge](../mcp-bridge/) - TypeScript implementation
 
 ---

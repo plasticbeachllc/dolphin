@@ -336,6 +336,11 @@ class KnowledgeSearchBackend:
                 # Fall back gracefully if MMR fails for any reason
                 request_logger.warning("MMR diversification failed", error=e)
 
+        if hits:
+            for h in hits:
+                if "vector" in h:
+                    h.pop("vector", None)
+
         request_logger.debug(
             "Applying score cutoff",
             {
@@ -437,7 +442,8 @@ class KnowledgeSearchBackend:
                     "score": score,
                 },
             )
-            formatted.append({**r, "chunk_id": r.get("id"), "score": score})
+            result = {**r, "chunk_id": r.get("id"), "score": score}
+            formatted.append(result)
         return formatted
 
     def _filter_and_score_results(

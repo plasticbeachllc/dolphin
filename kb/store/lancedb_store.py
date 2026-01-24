@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
@@ -87,6 +88,25 @@ class LanceDBStore:
         ]
         return pa.schema(fields)
 
+    def _collect_table_names(self, db: Any) -> set[str]:
+        try:
+            table_list = db.list_tables()
+        except Exception:
+            table_list = getattr(db, "table_names", lambda: [])()
+        names: set[str] = set()
+        for entry in table_list or []:
+            if isinstance(entry, str):
+                names.add(entry)
+            elif isinstance(entry, dict):
+                name = entry.get("name")
+                if isinstance(name, str):
+                    names.add(name)
+            elif isinstance(entry, (list, tuple)) and entry:
+                name = entry[0]
+                if isinstance(name, str):
+                    names.add(name)
+        return names
+
     def initialize_collections(self) -> None:
         """Create (or open) the global collections per the authoritative schema.
 
@@ -100,7 +120,7 @@ class LanceDBStore:
         db = self.connect()
 
         collections = [("chunks_small", "small"), ("chunks_large", "large")]
-        existing = set(getattr(db, "table_names", lambda: [])())
+        existing = self._collect_table_names(db)
         for name, model in collections:
             self._get_schema_for_model(model)
             dim = 1536 if model == "small" else 3072
@@ -141,11 +161,15 @@ class LanceDBStore:
                 table.delete("id = '__init_placeholder__'")
             except Exception as e:
                 # If table creation fails, check if it now exists (race condition)
-                existing_after = set(getattr(db, "table_names", lambda: [])())
-                if name not in existing_after:
-                    # Table truly doesn't exist and creation failed
-                    raise RuntimeError(f"Failed to create table {name}: {e}") from e
-                # Otherwise table exists now (likely race condition), continue
+                try:
+                    db.open_table(name)
+                    continue
+                except Exception:
+                    existing_after = self._collect_table_names(db)
+                    if name not in existing_after:
+                        # Table truly doesn't exist and creation failed
+                        raise RuntimeError(f"Failed to create table {name}: {e}") from e
+                    # Otherwise table exists now (likely race condition), continue
 
     def upsert_chunks(self, repo: str, chunks: Iterable[Any], *, model: str) -> None:
         """Persist chunk data using delete-then-append strategy.
@@ -465,3 +489,55 @@ class LanceDBStore:
             return results[0] if results else None
         except Exception:
             return None
+
+    def get_vectors_by_hashes(self, repo: str, hashes: Iterable[str], *, model: str) -> dict[str, list[float]]:
+        """Retrieve vectors for specific text hashes in a repository.
+
+        Args:
+            repo: Repository name
+            hashes: List/Set of text hashes to look up
+            model: Embedding model ('small' or 'large')
+
+        Returns:
+            Dictionary mapping text_hash -> vector
+        """
+        model_to_table = {"small": "chunks_small", "large": "chunks_large"}
+
+        if model not in model_to_table:
+            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
+
+        hash_list = list(hashes)
+        if not hash_list:
+            return {}
+
+        # Use cached connection
+        db = self.connect()
+        try:
+            table = db.open_table(model_to_table[model])
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "Failed to open table '%s'",
+                model_to_table[model],
+                exc_info=e,
+            )
+            return {}
+
+        repo_expr = repr(repo)
+
+        # Build filter expression
+        # Note: If hash_list is very large, this might hit SQL parser limits.
+        # But for incremental updates, it's typically manageable.
+        quoted_hashes = [repr(h) for h in hash_list]
+        hash_expr = ", ".join(quoted_hashes)
+        filter_expr = f"repo = {repo_expr} AND text_hash IN ({hash_expr})"
+
+        try:
+            # Select only text_hash and vector
+            results = table.search().where(filter_expr).select(["text_hash", "vector"]).to_list()
+
+            return {r["text_hash"]: r["vector"] for r in results}
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.warning("Failed to get vectors by hashes", exc_info=e)
+            return {}
