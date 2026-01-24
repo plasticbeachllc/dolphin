@@ -516,5 +516,8 @@ class LanceDBStore:
             )
 
             return {r["text_hash"]: r["vector"] for r in results}
-        except Exception:
+        except Exception as e:
+            import logging
+
+            logging.warning(f"Failed to get vectors by hashes: {e}")
             return {}
