@@ -88,6 +88,25 @@ class LanceDBStore:
         ]
         return pa.schema(fields)
 
+    def _collect_table_names(self, db: Any) -> set[str]:
+        try:
+            table_list = db.list_tables()
+        except Exception:
+            table_list = getattr(db, "table_names", lambda: [])()
+        names: set[str] = set()
+        for entry in table_list or []:
+            if isinstance(entry, str):
+                names.add(entry)
+            elif isinstance(entry, dict):
+                name = entry.get("name")
+                if isinstance(name, str):
+                    names.add(name)
+            elif isinstance(entry, (list, tuple)) and entry:
+                name = entry[0]
+                if isinstance(name, str):
+                    names.add(name)
+        return names
+
     def initialize_collections(self) -> None:
         """Create (or open) the global collections per the authoritative schema.
 
@@ -101,22 +120,7 @@ class LanceDBStore:
         db = self.connect()
 
         collections = [("chunks_small", "small"), ("chunks_large", "large")]
-        existing: set[str] = set()
-        try:
-            table_list = db.list_tables()
-        except Exception:
-            table_list = getattr(db, "table_names", lambda: [])()
-        for entry in table_list or []:
-            if isinstance(entry, str):
-                existing.add(entry)
-            elif isinstance(entry, dict):
-                name = entry.get("name")
-                if isinstance(name, str):
-                    existing.add(name)
-            elif isinstance(entry, (list, tuple)) and entry:
-                name = entry[0]
-                if isinstance(name, str):
-                    existing.add(name)
+        existing = self._collect_table_names(db)
         for name, model in collections:
             self._get_schema_for_model(model)
             dim = 1536 if model == "small" else 3072
@@ -157,11 +161,15 @@ class LanceDBStore:
                 table.delete("id = '__init_placeholder__'")
             except Exception as e:
                 # If table creation fails, check if it now exists (race condition)
-                existing_after = set(db.list_tables())
-                if name not in existing_after:
-                    # Table truly doesn't exist and creation failed
-                    raise RuntimeError(f"Failed to create table {name}: {e}") from e
-                # Otherwise table exists now (likely race condition), continue
+                try:
+                    db.open_table(name)
+                    continue
+                except Exception:
+                    existing_after = self._collect_table_names(db)
+                    if name not in existing_after:
+                        # Table truly doesn't exist and creation failed
+                        raise RuntimeError(f"Failed to create table {name}: {e}") from e
+                    # Otherwise table exists now (likely race condition), continue
 
     def upsert_chunks(self, repo: str, chunks: Iterable[Any], *, model: str) -> None:
         """Persist chunk data using delete-then-append strategy.
