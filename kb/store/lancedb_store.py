@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
 import logging
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -526,12 +526,7 @@ class LanceDBStore:
 
         try:
             # Select only text_hash and vector
-            results = (
-                table.search()
-                .where(filter_expr)
-                .select(["text_hash", "vector"])
-                .to_list()
-            )
+            results = table.search().where(filter_expr).select(["text_hash", "vector"]).to_list()
 
             return {r["text_hash"]: r["vector"] for r in results}
         except Exception as e:
