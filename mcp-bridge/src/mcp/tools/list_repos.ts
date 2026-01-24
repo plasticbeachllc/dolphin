@@ -11,6 +11,7 @@ const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
 export function makeListRepos(): {
   definition: Tool;
+  inputSchema: typeof INPUT;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: any;
 } {
@@ -77,5 +78,5 @@ export function makeListRepos(): {
     }
   };
 
-  return { definition, handler };
+  return { definition, inputSchema: INPUT, handler };
 }

@@ -12,6 +12,7 @@ const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
 export function makeStoreInfo(): {
   definition: Tool;
+  inputSchema: typeof INPUT;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: any;
 } {
@@ -90,5 +91,5 @@ export function makeStoreInfo(): {
     }
   };
 
-  return { definition, handler };
+  return { definition, inputSchema: INPUT, handler };
 }
