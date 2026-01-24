@@ -336,6 +336,11 @@ class KnowledgeSearchBackend:
                 # Fall back gracefully if MMR fails for any reason
                 request_logger.warning("MMR diversification failed", error=e)
 
+        if hits:
+            for h in hits:
+                if "vector" in h:
+                    h.pop("vector", None)
+
         request_logger.debug(
             "Applying score cutoff",
             {
@@ -437,9 +442,7 @@ class KnowledgeSearchBackend:
                     "score": score,
                 },
             )
-            # Create a copy without the raw vector to save bandwidth
             result = {**r, "chunk_id": r.get("id"), "score": score}
-            result.pop("vector", None)
             formatted.append(result)
         return formatted
 

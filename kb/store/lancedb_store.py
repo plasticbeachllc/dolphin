@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -100,7 +101,22 @@ class LanceDBStore:
         db = self.connect()
 
         collections = [("chunks_small", "small"), ("chunks_large", "large")]
-        existing = set(db.list_tables())
+        existing: set[str] = set()
+        try:
+            table_list = db.list_tables()
+        except Exception:
+            table_list = getattr(db, "table_names", lambda: [])()
+        for entry in table_list or []:
+            if isinstance(entry, str):
+                existing.add(entry)
+            elif isinstance(entry, dict):
+                name = entry.get("name")
+                if isinstance(name, str):
+                    existing.add(name)
+            elif isinstance(entry, (list, tuple)) and entry:
+                name = entry[0]
+                if isinstance(name, str):
+                    existing.add(name)
         for name, model in collections:
             self._get_schema_for_model(model)
             dim = 1536 if model == "small" else 3072
@@ -491,9 +507,12 @@ class LanceDBStore:
         try:
             table = db.open_table(model_to_table[model])
         except Exception as e:
-            import logging
-
-            logging.warning(f"Failed to open table '{model_to_table[model]}': {e}")
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "Failed to open table '%s'",
+                model_to_table[model],
+                exc_info=e,
+            )
             return {}
 
         repo_expr = repr(repo)
@@ -511,13 +530,11 @@ class LanceDBStore:
                 table.search()
                 .where(filter_expr)
                 .select(["text_hash", "vector"])
-                .limit(len(hash_list) * 2)  # Limit to reasonable upper bound
                 .to_list()
             )
 
             return {r["text_hash"]: r["vector"] for r in results}
         except Exception as e:
-            import logging
-
-            logging.warning(f"Failed to get vectors by hashes: {e}")
+            logger = logging.getLogger(__name__)
+            logger.warning("Failed to get vectors by hashes", exc_info=e)
             return {}
