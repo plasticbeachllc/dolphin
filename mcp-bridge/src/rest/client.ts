@@ -25,10 +25,13 @@ export interface SearchRequestBody {
   mmr_lambda?: number;
   cursor?: string;
   include_prompt_ready?: boolean;
+  include_snippets?: boolean;
   ann_strategy?: "speed" | "accuracy" | "adaptive" | "custom";
   ann_nprobes?: number;
   ann_refine_factor?: number;
   include_graph_context?: boolean;
+  context_lines_before?: number;
+  context_lines_after?: number;
 }
 
 export interface SearchHit {
@@ -206,4 +209,24 @@ export interface RepoInfo {
 }
 export async function restListRepos(signal?: AbortSignal): Promise<{ repos: RepoInfo[] }> {
   return await doFetch<{ repos: RepoInfo[] }>("/v1/repos", { method: "GET" }, signal);
+}
+
+export interface HealthResponse {
+  status?: string;
+  version?: string;
+  [key: string]: unknown;
+}
+
+export async function restHealthV1(
+  check?: "shallow" | "deep",
+  signal?: AbortSignal
+): Promise<HealthResponse> {
+  const q = new URLSearchParams();
+  if (check) q.set("check", check);
+  const suffix = q.toString();
+  return await doFetch<HealthResponse>(
+    `/v1/health${suffix ? `?${suffix}` : ""}`,
+    { method: "GET" },
+    signal
+  );
 }

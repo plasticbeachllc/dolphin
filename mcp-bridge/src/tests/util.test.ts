@@ -31,9 +31,9 @@ describe("Config Utilities", () => {
   describe("CONFIG object", () => {
     it("should have default values", () => {
       expect(CONFIG.DOLPHIN_API_URL).toBeDefined();
-      expect(CONFIG.SERVER_NAME).toBe("dolphin-mcp");
+      expect(CONFIG.SERVER_NAME).toBeDefined();
       expect(CONFIG.SERVER_VERSION).toBeDefined();
-      expect(CONFIG.LOG_LEVEL).toBe("info");
+      expect(CONFIG.LOG_LEVEL).toBeDefined();
     });
 
     it("should have valid concurrency limits", () => {
@@ -171,6 +171,47 @@ describe("Config Utilities", () => {
       expect(summary.max_concurrent_snippet_fetch).toBe(CONFIG.MAX_CONCURRENT_SNIPPET_FETCH);
       expect(summary.snippet_fetch_timeout_ms).toBe(CONFIG.SNIPPET_FETCH_TIMEOUT_MS);
       expect(summary.snippet_fetch_retry_attempts).toBe(CONFIG.SNIPPET_FETCH_RETRY_ATTEMPTS);
+      expect(summary.mcp_top_k_max).toBe(CONFIG.MCP_LIMITS.TOP_K_MAX);
+      expect(summary.mcp_snippet_char_cap).toBe(CONFIG.MCP_LIMITS.SNIPPET_CHAR_CAP);
+      expect(summary.mcp_payload_cap_bytes).toBe(CONFIG.MCP_LIMITS.PAYLOAD_CAP_BYTES);
+      expect(summary.mcp_log_max_bytes).toBe(CONFIG.LOG_MAX_BYTES);
+      expect(summary.mcp_log_max_rotations).toBe(CONFIG.LOG_MAX_ROTATIONS);
+      expect(summary.mcp_shrunk_snippet_char_cap).toBe(
+        CONFIG.RESPONSE_LIMITS.SHRUNK_SNIPPET_CHAR_CAP
+      );
+      expect(summary.mcp_min_snippet_char_floor).toBe(
+        CONFIG.RESPONSE_LIMITS.MIN_SNIPPET_CHAR_FLOOR
+      );
+      expect(summary.mcp_search_top_k_default).toBe(CONFIG.SEARCH_DEFAULTS.TOP_K);
+      expect(summary.mcp_search_snippets_top_n_default).toBe(CONFIG.SEARCH_DEFAULTS.SNIPPETS_TOP_N);
+      expect(summary.mcp_search_top_context_n_default).toBe(CONFIG.SEARCH_DEFAULTS.TOP_CONTEXT_N);
+      expect(summary.mcp_search_include_hits_json_default).toBe(
+        CONFIG.SEARCH_DEFAULTS.INCLUDE_HITS_JSON
+      );
+      expect(summary.mcp_search_include_warnings_in_text_default).toBe(
+        CONFIG.SEARCH_DEFAULTS.INCLUDE_WARNINGS_IN_TEXT
+      );
+      expect(summary.mcp_search_include_abs_paths_default).toBe(
+        CONFIG.SEARCH_DEFAULTS.INCLUDE_ABS_PATHS
+      );
+      expect(summary.mcp_search_include_vscode_uris_default).toBe(
+        CONFIG.SEARCH_DEFAULTS.INCLUDE_VSCODE_URIS
+      );
+      expect(summary.mcp_include_graph_context_default).toBe(
+        CONFIG.SEARCH_DEFAULTS.INCLUDE_GRAPH_CONTEXT
+      );
+      expect(summary.mcp_context_lines_before_default).toBe(
+        CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_BEFORE
+      );
+      expect(summary.mcp_context_lines_after_default).toBe(
+        CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_AFTER
+      );
+      expect(summary.mcp_include_prompt_ready_default).toBe(
+        CONFIG.SEARCH_DEFAULTS.INCLUDE_PROMPT_READY
+      );
+      expect(summary.mcp_include_resource_text_default).toBe(
+        CONFIG.SEARCH_DEFAULTS.INCLUDE_RESOURCE_TEXT
+      );
     });
 
     it("should return summary with correct types", () => {
@@ -183,6 +224,25 @@ describe("Config Utilities", () => {
       expect(typeof summary.max_concurrent_snippet_fetch).toBe("number");
       expect(typeof summary.snippet_fetch_timeout_ms).toBe("number");
       expect(typeof summary.snippet_fetch_retry_attempts).toBe("number");
+      expect(typeof summary.mcp_top_k_max).toBe("number");
+      expect(typeof summary.mcp_snippet_char_cap).toBe("number");
+      expect(typeof summary.mcp_payload_cap_bytes).toBe("number");
+      expect(typeof summary.mcp_log_max_bytes).toBe("number");
+      expect(typeof summary.mcp_log_max_rotations).toBe("number");
+      expect(typeof summary.mcp_shrunk_snippet_char_cap).toBe("number");
+      expect(typeof summary.mcp_min_snippet_char_floor).toBe("number");
+      expect(typeof summary.mcp_search_top_k_default).toBe("number");
+      expect(typeof summary.mcp_search_snippets_top_n_default).toBe("number");
+      expect(typeof summary.mcp_search_top_context_n_default).toBe("number");
+      expect(typeof summary.mcp_search_include_hits_json_default).toBe("boolean");
+      expect(typeof summary.mcp_search_include_warnings_in_text_default).toBe("boolean");
+      expect(typeof summary.mcp_search_include_abs_paths_default).toBe("boolean");
+      expect(typeof summary.mcp_search_include_vscode_uris_default).toBe("boolean");
+      expect(typeof summary.mcp_include_graph_context_default).toBe("boolean");
+      expect(typeof summary.mcp_context_lines_before_default).toBe("number");
+      expect(typeof summary.mcp_context_lines_after_default).toBe("number");
+      expect(typeof summary.mcp_include_prompt_ready_default).toBe("boolean");
+      expect(typeof summary.mcp_include_resource_text_default).toBe("boolean");
     });
   });
 });

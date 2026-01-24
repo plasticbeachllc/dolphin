@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { startMockRest } from "./mockServer.js";
-import { makeFetchLines } from "../mcp/tools/fetch_lines.js";
+import { makeFileLines } from "../mcp/tools/file_lines.js";
 import { initLogger } from "../util/logger.js";
 
 let stop: () => Promise<void>;
@@ -13,15 +13,15 @@ afterAll(async () => {
   await stop?.();
 });
 
-describe("fetch_lines", () => {
+describe("file.lines", () => {
   it("happy path: returns file slice with inclusive end-line semantics, citation and resource text", async () => {
-    const { handler } = makeFetchLines();
+    const { handler } = makeFileLines();
     const res = await handler({ input: { repo: "repoa", path: "src/a.ts", start: 1, end: 10 } });
 
     expect(res.isError).toBe(false);
-    expect(res.data.start_line).toBe(1);
-    expect(res.data.end_line).toBe(10);
-    expect(res.data.content).toBeDefined();
+    expect(res._meta).toBeDefined();
+    expect(res._meta.tool_version).toBeDefined();
+    expect(res._meta.latency_ms).toBeDefined();
 
     // Check content structure
     expect(Array.isArray(res.content)).toBe(true);
@@ -38,7 +38,7 @@ describe("fetch_lines", () => {
   });
 
   it("MIME type derived from language/path", async () => {
-    const { handler } = makeFetchLines();
+    const { handler } = makeFileLines();
     const res = await handler({ input: { repo: "repoa", path: "src/a.ts", start: 1, end: 10 } });
 
     expect(res.isError).toBe(false);
@@ -48,16 +48,17 @@ describe("fetch_lines", () => {
   });
 
   it("invalid_range → isError=true with remediation", async () => {
-    const { handler } = makeFetchLines();
+    const { handler } = makeFileLines();
     const res = await handler({ input: { repo: "repoa", path: "src/a.ts", start: 10, end: 1 } });
 
     expect(res.isError).toBe(true);
     expect(res.content[0].text).toMatch(/remediation/i);
     expect(res.content[0].text).toMatch(/range/i);
+    expect(res._meta?.error?.code).toBe("invalid_range");
   });
 
   it("file_not_found → isError=true with remediation", async () => {
-    const { handler } = makeFetchLines();
+    const { handler } = makeFileLines();
     const res = await handler({
       input: { repo: "repoa", path: "nonexistent.ts", start: 1, end: 10 },
     });
@@ -68,7 +69,7 @@ describe("fetch_lines", () => {
   });
 
   it("tool definition includes valid JSON Schema", async () => {
-    const { definition } = makeFetchLines();
+    const { definition } = makeFileLines();
 
     expect(definition.inputSchema).toBeDefined();
     expect(definition.inputSchema.type).toBe("object");

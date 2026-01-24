@@ -63,6 +63,28 @@ class BM25Statistics:
 
     @classmethod
     def from_dict(cls, payload: dict[str, object]) -> BM25Statistics:
+        def _coerce_float(value: object, default: float = 0.0) -> float:
+            if isinstance(value, (int, float)):
+                return float(value)
+            if isinstance(value, str):
+                try:
+                    return float(value)
+                except ValueError:
+                    return default
+            return default
+
+        def _coerce_int(value: object, default: int = 0) -> int:
+            if isinstance(value, bool):
+                return int(value)
+            if isinstance(value, (int, float)):
+                return int(value)
+            if isinstance(value, str):
+                try:
+                    return int(value)
+                except ValueError:
+                    return default
+            return default
+
         percentiles_payload = payload.get("percentiles")
         percentiles: dict[str, object]
         if isinstance(percentiles_payload, dict):
@@ -70,17 +92,17 @@ class BM25Statistics:
         else:
             percentiles = {}
         return cls(
-            min_score=float(payload["min_score"]),
-            max_score=float(payload["max_score"]),
-            mean=float(payload["mean"]),
-            median=float(payload["median"]),
-            std=float(payload["std"]),
-            p05=float(percentiles.get("p05", payload.get("p05", 0.0))),
-            p25=float(percentiles.get("p25", payload.get("p25", 0.0))),
-            p75=float(percentiles.get("p75", payload.get("p75", 0.0))),
-            p95=float(percentiles.get("p95", payload.get("p95", 0.0))),
-            p99=float(percentiles.get("p99", payload.get("p99", 0.0))),
-            sample_size=int(payload["sample_size"]),
+            min_score=_coerce_float(payload.get("min_score", 0.0)),
+            max_score=_coerce_float(payload.get("max_score", 0.0)),
+            mean=_coerce_float(payload.get("mean", 0.0)),
+            median=_coerce_float(payload.get("median", 0.0)),
+            std=_coerce_float(payload.get("std", 0.0)),
+            p05=_coerce_float(percentiles.get("p05", payload.get("p05", 0.0))),
+            p25=_coerce_float(percentiles.get("p25", payload.get("p25", 0.0))),
+            p75=_coerce_float(percentiles.get("p75", payload.get("p75", 0.0))),
+            p95=_coerce_float(percentiles.get("p95", payload.get("p95", 0.0))),
+            p99=_coerce_float(percentiles.get("p99", payload.get("p99", 0.0))),
+            sample_size=_coerce_int(payload.get("sample_size", 0)),
         )
 
     @classmethod

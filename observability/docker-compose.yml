@@ -63,6 +63,7 @@ services:
       - ./loki/promtail-config.yml:/etc/promtail/config.yml
       - /var/log:/var/log:ro
       - ./logs:/dolphin/logs:ro
+      - ../mcp-bridge/logs:/dolphin/mcp-bridge/logs:ro
     command: -config.file=/etc/promtail/config.yml
     restart: unless-stopped
     networks:

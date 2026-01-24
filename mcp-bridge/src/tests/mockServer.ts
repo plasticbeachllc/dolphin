@@ -124,7 +124,7 @@ export function startMockRest(port = 7777): Promise<() => Promise<void>> {
     // POST /search
     if (method === "POST" && (pathname === "/v1/search" || pathname === "/search")) {
       const body = await readJsonBody();
-      const { query, repos, path_prefix, top_k, cursor, deadline_ms } = body;
+      const { query, repos, path_prefix, top_k, cursor, deadline_ms, include_snippets } = body;
 
       if (query === "trigger-500") {
         return jsonResponse(
@@ -144,10 +144,18 @@ export function startMockRest(port = 7777): Promise<() => Promise<void>> {
         );
       }
 
+      const attachSnippet = (hit: any) => {
+        if (!include_snippets) {
+          const { snippet, ...rest } = hit;
+          return rest;
+        }
+        return hit;
+      };
+
       if (deadline_ms === 1) {
         return jsonResponse({
           hits: [
-            {
+            attachSnippet({
               repo: "repoa",
               path: "src/a.ts",
               lang: "typescript",
@@ -157,7 +165,7 @@ export function startMockRest(port = 7777): Promise<() => Promise<void>> {
               snippet: "export const a = 1",
               chunk_id: "1",
               resource_link: "kb://repoa/src/a.ts#L1-L20",
-            },
+            }),
           ],
           meta: {
             top_k: top_k || 5,
@@ -179,9 +187,23 @@ export function startMockRest(port = 7777): Promise<() => Promise<void>> {
 
       let hits: any[] = [];
       if (query) {
-        if (typeof query === "string" && query.toLowerCase().includes("ingestion")) {
+        if (query === "snippet-failure") {
           hits = [
-            {
+            attachSnippet({
+              repo: "repoa",
+              path: "nonexistent.ts",
+              lang: "typescript",
+              start_line: 1,
+              end_line: 10,
+              score: 0.9,
+              snippet: "export const a = 1",
+              chunk_id: "1",
+              resource_link: "kb://repoa/nonexistent.ts#L1-L10",
+            }),
+          ];
+        } else if (typeof query === "string" && query.toLowerCase().includes("ingestion")) {
+          hits = [
+            attachSnippet({
               repo: "repoa",
               path: "kb/ingest/pipeline.py",
               lang: "python",
@@ -191,8 +213,8 @@ export function startMockRest(port = 7777): Promise<() => Promise<void>> {
               snippet: "def run_pipeline(...):\n    pass",
               chunk_id: "ing-1",
               resource_link: "kb://repoa/kb/ingest/pipeline.py#L1-L40",
-            },
-            {
+            }),
+            attachSnippet({
               repo: "repoa",
               path: "kb/chunkers/md_chunker.py",
               lang: "python",
@@ -202,8 +224,8 @@ export function startMockRest(port = 7777): Promise<() => Promise<void>> {
               snippet: "class MdChunker:\n    pass",
               chunk_id: "ing-2",
               resource_link: "kb://repoa/kb/chunkers/md_chunker.py#L10-L80",
-            },
-            {
+            }),
+            attachSnippet({
               repo: "repoa",
               path: ".continue/agents/personas_config.yaml",
               lang: "yaml",
@@ -214,11 +236,11 @@ export function startMockRest(port = 7777): Promise<() => Promise<void>> {
                 "name: Dolphin Personas\nversion: 0.1.1\nschema: v1\nmodels:\n- name: Chief of Staff",
               chunk_id: "noise-1",
               resource_link: "kb://repoa/.continue/agents/personas_config.yaml#L1-L200",
-            },
+            }),
           ];
         } else if (query === "large-snippet") {
           hits = [
-            {
+            attachSnippet({
               repo: "repoa",
               path: "src/a.ts",
               lang: "typescript",
@@ -228,11 +250,11 @@ export function startMockRest(port = 7777): Promise<() => Promise<void>> {
               snippet: "x".repeat(600),
               chunk_id: "1",
               resource_link: "kb://repoa/src/a.ts#L1-L20",
-            },
+            }),
           ];
         } else {
           hits = [
-            {
+            attachSnippet({
               repo: "repoa",
               path: "src/a.ts",
               lang: "typescript",
@@ -242,8 +264,8 @@ export function startMockRest(port = 7777): Promise<() => Promise<void>> {
               snippet: "export const a = 1",
               chunk_id: "1",
               resource_link: "kb://repoa/src/a.ts#L1-L20",
-            },
-            {
+            }),
+            attachSnippet({
               repo: "repob",
               path: "src/b.py",
               lang: "python",
@@ -253,7 +275,7 @@ export function startMockRest(port = 7777): Promise<() => Promise<void>> {
               snippet: "def test_function():\n    return True",
               chunk_id: "2",
               resource_link: "kb://repob/src/b.py#L5-L15",
-            },
+            }),
           ];
         }
       }

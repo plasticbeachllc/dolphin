@@ -3,9 +3,12 @@ import { z } from "zod";
 import { restGetChunk } from "../../rest/client.js";
 import { mimeFromLangOrPath } from "../../util/mime.js";
 import { logInfo, logError } from "../../util/logger.js";
+import { buildToolInputSchema } from "./schema.js";
+import { TOOL_VERSION } from "./version.js";
+import { normalizeToolError, formatToolErrorText } from "./error.js";
 
 /**
- * fetch_chunk tool analysis:
+ * chunk.get tool analysis:
  * - Single request tool: fetches one chunk by chunk_id
  * - No parallelization needed: only makes one restGetChunk() call
  * - Performance is optimal: one request = one response
@@ -14,26 +17,23 @@ import { logInfo, logError } from "../../util/logger.js";
 
 const INPUT_SHAPE = { chunk_id: z.string() };
 const INPUT = z.object(INPUT_SHAPE);
+const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
-const FETCH_CHUNK_JSON_SCHEMA: Tool["inputSchema"] = {
-  type: "object",
-  properties: {
-    chunk_id: { type: "string" },
-  },
-  required: ["chunk_id"],
-};
-
-export function makeFetchChunk(): {
+export function makeChunkGet(): {
   definition: Tool;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: any;
-  inputSchema: typeof INPUT_SHAPE;
 } {
   const definition: Tool = {
-    name: "fetch_chunk",
+    name: "chunk.get",
     description: "Fetch a chunk by chunk_id and return fenced code with citation.",
-    inputSchema: FETCH_CHUNK_JSON_SCHEMA,
-    annotations: { title: "Fetch Chunk", readOnlyHint: true, idempotentHint: true },
+    inputSchema: INPUT_SCHEMA,
+    annotations: {
+      title: "Get Chunk",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   };
 
   const handler = async (args: unknown, signal?: AbortSignal): Promise<CallToolResult> => {
@@ -54,26 +54,44 @@ export function makeFetchChunk(): {
         { type: "resource", resource: { uri: chunk.resource_link, mimeType: mime, text: code } },
       ];
 
-      await logInfo("fetch_chunk", "fetch_chunk success", { latency_ms: Date.now() - started });
-      return { content, isError: false, data: chunk };
+      await logInfo("chunk.get", "chunk.get success", { latency_ms: Date.now() - started });
+      return {
+        content,
+        isError: false,
+        _meta: {
+          tool_version: TOOL_VERSION,
+          latency_ms: Date.now() - started,
+          warnings: [],
+        },
+      };
     } catch (e: unknown) {
-      const error = e instanceof Error ? e : new Error(String(e));
-      const err = (e as { error?: { code: string; message: string } })?.error
-        ? (e as { error: { code: string; message: string } })
-        : { error: { code: "unexpected_error", message: error.message } };
-      await logError("fetch_chunk", "fetch_chunk error", {
-        error_code: err.error.code,
-        message: err.error.message,
+      const { error: toolError, upstream } = normalizeToolError(
+        e,
+        "Verify chunk_id or re-run search."
+      );
+      await logError("chunk.get", "chunk.get error", {
+        error_code: toolError.code,
+        message: toolError.message,
       });
       const content: CallToolResult["content"] = [
         {
           type: "text",
-          text: `${err.error.message} Remediation: verify chunk_id or re-run search.`,
+          text: formatToolErrorText(toolError),
         },
       ];
-      return { content, isError: true, _meta: { upstream: err } };
+      return {
+        content,
+        isError: true,
+        _meta: {
+          error: toolError,
+          upstream,
+          tool_version: TOOL_VERSION,
+          latency_ms: Date.now() - started,
+          warnings: [],
+        },
+      };
     }
   };
 
-  return { definition, handler, inputSchema: INPUT_SHAPE };
+  return { definition, handler };
 }

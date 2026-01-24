@@ -400,3 +400,6 @@ class TestConfigTemplate:
         assert len(template) > 0
         # Should have some expected config keys
         assert any(key in template for key in ["store_root", "endpoint", "embedding"])
+        assert "[api]" in template
+        assert "[graph]" in template
+        assert "[mcp]" in template

@@ -81,10 +81,10 @@ def _load_global_extension_map() -> dict[str, str]:
     try:
         # Import TOML library (Python 3.11+ has tomllib, else use tomli)
         try:
-            import tomllib  # type: ignore[import-untyped, import-not-found]
+            import tomllib
         except ImportError:
             try:
-                import tomli as tomllib  # type: ignore[import-not-found, no-redef]
+                import tomli as tomllib
             except ImportError:
                 _log.warning("No TOML library (tomli) available. Language detection will be disabled.")
                 return {}

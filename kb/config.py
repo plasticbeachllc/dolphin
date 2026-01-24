@@ -10,7 +10,7 @@ from typing import Any
 try:
     import tomllib
 except ImportError:
-    import tomli as tomllib  # type: ignore[import-not-found,no-redef]
+    import tomli as tomllib
 
 from .ignores import DEFAULT_IGNORE_PATTERNS
 
@@ -105,6 +105,22 @@ class RetrievalConfig:
 
 
 @dataclass
+class ApiConfig:
+    max_top_k: int = 100
+    max_snippet_tokens: int = 1000
+    max_context_lines: int = 10
+    include_graph_context: bool = True
+    context_lines_before: int = 0
+    context_lines_after: int = 0
+
+
+@dataclass
+class GraphConfig:
+    max_related_nodes: int = 10
+    max_edges_per_node: int = 5
+
+
+@dataclass
 class KBConfig:
     """Runtime configuration for the knowledge store components."""
 
@@ -117,6 +133,8 @@ class KBConfig:
     ignore_exceptions: list[str] = field(default_factory=list)
 
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
+    api: ApiConfig = field(default_factory=ApiConfig)
+    graph: GraphConfig = field(default_factory=GraphConfig)
 
     embedding_provider: str = "stub"
     embedding_batch_size: int = 100
@@ -213,6 +231,42 @@ class KBConfig:
         return config
 
     @classmethod
+    def _build_api_config(cls, data: dict) -> ApiConfig:
+        """Build API configuration from mapping."""
+        config = ApiConfig()
+        if not data:
+            return config
+
+        if "max_top_k" in data:
+            config.max_top_k = cls._coerce_optional(data["max_top_k"], int)
+        if "max_snippet_tokens" in data:
+            config.max_snippet_tokens = cls._coerce_optional(data["max_snippet_tokens"], int)
+        if "max_context_lines" in data:
+            config.max_context_lines = cls._coerce_optional(data["max_context_lines"], int)
+        if "include_graph_context" in data:
+            config.include_graph_context = cls._coerce_optional(data["include_graph_context"], bool)
+        if "context_lines_before" in data:
+            config.context_lines_before = cls._coerce_optional(data["context_lines_before"], int)
+        if "context_lines_after" in data:
+            config.context_lines_after = cls._coerce_optional(data["context_lines_after"], int)
+
+        return config
+
+    @classmethod
+    def _build_graph_config(cls, data: dict) -> GraphConfig:
+        """Build graph configuration from mapping."""
+        config = GraphConfig()
+        if not data:
+            return config
+
+        if "max_related_nodes" in data:
+            config.max_related_nodes = cls._coerce_optional(data["max_related_nodes"], int)
+        if "max_edges_per_node" in data:
+            config.max_edges_per_node = cls._coerce_optional(data["max_edges_per_node"], int)
+
+        return config
+
+    @classmethod
     def _build_retrieval_config(cls, data: dict) -> RetrievalConfig:
         """Build retrieval configuration from mapping."""
         reranking_data = data.get("reranking", {}) if isinstance(data, dict) else {}
@@ -250,12 +304,20 @@ class KBConfig:
         cache_data = data.get("cache", {})
         storage_data = data.get("storage", {})
         server_data = data.get("server", {})
+        api_data = data.get("api", {})
+        graph_data = data.get("graph", {})
 
         # Build retrieval config using helper methods
         retrieval_config = cls._build_retrieval_config(retrieval_data)
+        api_config = cls._build_api_config(api_data if isinstance(api_data, dict) else {})
+        graph_config = cls._build_graph_config(graph_data if isinstance(graph_data, dict) else {})
 
         # Build top-level config
-        config_kwargs = {"retrieval": retrieval_config}
+        config_kwargs: dict[str, Any] = {
+            "retrieval": retrieval_config,
+            "api": api_config,
+            "graph": graph_config,
+        }
 
         # Handle storage settings
         if storage_data and storage_data.get("store_root"):
@@ -294,6 +356,8 @@ class KBConfig:
 
         # Always override retrieval config with our constructed one
         config_kwargs["retrieval"] = retrieval_config
+        config_kwargs["api"] = api_config
+        config_kwargs["graph"] = graph_config
 
         # Handle cache settings (support both nested and top-level)
         if cache_data:
@@ -325,55 +389,77 @@ def load_config(path: Path | None = None, repo_path: Path | None = None) -> KBCo
     """Load configuration strictly from file (no in-code fallbacks or env overrides).
 
     Resolution order (highest to lowest):
-    1. Explicit path (must exist)
-    2. Repo-specific config at ./.dolphin/config.toml (when repo_path is provided)
-    3. User config at ~/.dolphin/config.toml (must exist)
+    1. Explicit path (must exist, no merge)
+    2. Repo-specific config at ./.dolphin/config.toml (overrides globals)
+    3. DOLPHIN_CONFIG_PATH (optional override for global config)
+    4. User config at ~/.dolphin/config.toml (must exist if no repo config)
+
+    Repo config is merged on top of the global config to keep repo overrides
+    focused on per-repo settings (e.g., ignores), while inheriting global defaults.
 
     Raises:
         FileNotFoundError: when no configuration file is found.
         ValueError: when the loaded file is not a TOML mapping.
     """
-    config_data: dict[str, Any] = {}
 
-    # 1) Explicit path
+    def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+        merged = dict(base)
+        for key, value in override.items():
+            base_value = merged.get(key)
+            if isinstance(base_value, Mapping) and isinstance(value, Mapping):
+                merged[key] = _deep_merge(dict(base_value), dict(value))
+            else:
+                merged[key] = value
+        return merged
+
+    # 1) Explicit path (no merge)
     if path is not None:
         if not path.exists():
             raise FileNotFoundError(f"Config not found at {path}. Run 'dolphin init' to create one.")
         _log.debug("Loading config from explicit path: %s", path)
         with path.open("rb") as f:
             config_data = tomllib.load(f) or {}
+        if not isinstance(config_data, Mapping):
+            raise ValueError("Config must contain a mapping at the top level")
+        return KBConfig.from_mapping(config_data)
 
-    # 2) Repo-specific config
-    elif repo_path:
+    repo_config: dict[str, Any] = {}
+    base_config: dict[str, Any] = {}
+
+    # 2) Repo-specific config (optional)
+    if repo_path:
         repo_config_path = repo_path / ".dolphin" / "config.toml"
         if repo_config_path.exists():
             _log.debug("Loading repo config: %s", repo_config_path)
             with repo_config_path.open("rb") as f:
-                config_data = tomllib.load(f) or {}
+                repo_config = tomllib.load(f) or {}
 
-    # 3) Environment override (
-    if not config_data and path is None:
-        env_config_path = os.environ.get("DOLPHIN_CONFIG_PATH")
-        if env_config_path:
-            env_path = _to_path(env_config_path)
-            if not env_path.exists():
-                raise FileNotFoundError(
-                    f"Config not found at {env_path}. Create one with 'dolphin init' or unset DOLPHIN_CONFIG_PATH."
-                )
-            _log.debug("Loading config from DOLPHIN_CONFIG_PATH: %s", env_path)
-            with env_path.open("rb") as f:
-                config_data = tomllib.load(f) or {}
-
-    # 4) User config fallback
-    if not config_data and path is None:
+    # 3) Environment override for global config
+    env_config_path = os.environ.get("DOLPHIN_CONFIG_PATH")
+    if env_config_path:
+        env_path = _to_path(env_config_path)
+        if not env_path.exists():
+            raise FileNotFoundError(
+                f"Config not found at {env_path}. Create one with 'dolphin init' or unset DOLPHIN_CONFIG_PATH."
+            )
+        _log.debug("Loading config from DOLPHIN_CONFIG_PATH: %s", env_path)
+        with env_path.open("rb") as f:
+            base_config = tomllib.load(f) or {}
+    else:
+        # 4) User config fallback
         user_config = USER_CONFIG_PATH
-        if not user_config.exists():
-            raise FileNotFoundError("No configuration found. Create one with 'dolphin init' or provide --config path.")
-        _log.debug("Loading user config: %s", user_config)
-        with user_config.open("rb") as f:
-            config_data = tomllib.load(f) or {}
+        if user_config.exists():
+            _log.debug("Loading user config: %s", user_config)
+            with user_config.open("rb") as f:
+                base_config = tomllib.load(f) or {}
 
-    if not isinstance(config_data, Mapping):
+    if not base_config and not repo_config:
+        raise FileNotFoundError("No configuration found. Create one with 'dolphin init' or provide --config path.")
+
+    if base_config and not isinstance(base_config, Mapping):
         raise ValueError("Config must contain a mapping at the top level")
+    if repo_config and not isinstance(repo_config, Mapping):
+        raise ValueError("Repo config must contain a mapping at the top level")
 
+    config_data = _deep_merge(base_config, repo_config) if base_config else repo_config
     return KBConfig.from_mapping(config_data)

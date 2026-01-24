@@ -1,16 +1,16 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { restListRepos } from "../rest/client.js";
 import type { makeSearchKnowledge } from "../mcp/tools/search_knowledge.js";
-import type { makeFetchChunk } from "../mcp/tools/fetch_chunk.js";
-import type { makeFetchLines } from "../mcp/tools/fetch_lines.js";
-import type { makeGetVectorStoreInfo } from "../mcp/tools/get_vector_store_info.js";
+import type { makeChunkGet } from "../mcp/tools/chunk_get.js";
+import type { makeFileLines } from "../mcp/tools/file_lines.js";
+import type { makeStoreInfo } from "../mcp/tools/store_info.js";
 
 export interface BridgeSmokeDeps {
   listRepos: typeof restListRepos;
   makeSearchKnowledge: typeof makeSearchKnowledge;
-  makeFetchChunk: typeof makeFetchChunk;
-  makeFetchLines: typeof makeFetchLines;
-  makeGetVectorStoreInfo: typeof makeGetVectorStoreInfo;
+  makeChunkGet: typeof makeChunkGet;
+  makeFileLines: typeof makeFileLines;
+  makeStoreInfo: typeof makeStoreInfo;
 }
 
 export interface BridgeSmokeOptions {
@@ -37,6 +37,20 @@ interface SearchHitSummary {
   path: string;
   start_line: number;
   end_line: number;
+}
+
+function isTextBlock(
+  block: CallToolResult["content"][number]
+): block is CallToolResult["content"][number] & { type: "text"; text: string } {
+  return block.type === "text";
+}
+
+function parseHitsJson(content: CallToolResult["content"]): { hits?: SearchHitSummary[] } | null {
+  const jsonBlock = content?.find((block) => isTextBlock(block) && block.text.includes("```json"));
+  if (!jsonBlock?.text) return null;
+  const match = jsonBlock.text.match(/```json\n([\s\S]*?)\n```/);
+  if (!match) return null;
+  return JSON.parse(match[1]) as { hits?: SearchHitSummary[] };
 }
 
 function formatError(err: unknown): string {
@@ -76,57 +90,57 @@ export async function runBridgeSmokeSuite(
       },
     },
     {
-      name: "get_vector_store_info",
+      name: "store.info",
       run: async () => {
-        const { handler } = deps.makeGetVectorStoreInfo();
+        const { handler } = deps.makeStoreInfo();
         const result = (await handler({}, undefined)) as CallToolResult;
         if (result.isError) {
-          throw new Error(result.content?.[0]?.text ?? "get_vector_store_info returned an error");
+          throw new Error(result.content?.[0]?.text ?? "store.info returned an error");
         }
       },
     },
     {
-      name: "search_knowledge",
+      name: "search",
       run: async () => {
         const { handler } = deps.makeSearchKnowledge();
         const result = (await handler({
           input: { query: options?.query ?? "function", top_k: 3 },
-        })) as CallToolResult & { _meta?: { hits?: SearchHitSummary[] } };
+        })) as CallToolResult;
 
         if (result.isError) {
-          throw new Error(result.content?.[0]?.text ?? "search_knowledge returned an error");
+          throw new Error(result.content?.[0]?.text ?? "search returned an error");
         }
 
-        const hits = result._meta?.hits ?? [];
+        const hits = parseHitsJson(result.content)?.hits ?? [];
         if (hits.length === 0) {
-          throw new Error("search_knowledge returned no hits to follow up on");
+          throw new Error("search returned no hits to follow up on");
         }
         firstHit = hits[0];
       },
     },
     {
-      name: "fetch_chunk",
+      name: "chunk.get",
       run: async () => {
         if (!firstHit) {
-          throw new Error("Cannot fetch chunk before search_knowledge returns hits");
+          throw new Error("Cannot fetch chunk before search returns hits");
         }
-        const { handler } = deps.makeFetchChunk();
+        const { handler } = deps.makeChunkGet();
         const result = (await handler({
           input: { chunk_id: firstHit.chunk_id },
         })) as CallToolResult;
 
         if (result.isError) {
-          throw new Error(result.content?.[0]?.text ?? "fetch_chunk returned an error");
+          throw new Error(result.content?.[0]?.text ?? "chunk.get returned an error");
         }
       },
     },
     {
-      name: "fetch_lines",
+      name: "file.lines",
       run: async () => {
         if (!firstHit) {
-          throw new Error("Cannot fetch lines before search_knowledge returns hits");
+          throw new Error("Cannot fetch lines before search returns hits");
         }
-        const { handler } = deps.makeFetchLines();
+        const { handler } = deps.makeFileLines();
         const result = (await handler({
           input: {
             repo: firstHit.repo,
@@ -137,7 +151,7 @@ export async function runBridgeSmokeSuite(
         })) as CallToolResult;
 
         if (result.isError) {
-          throw new Error(result.content?.[0]?.text ?? "fetch_lines returned an error");
+          throw new Error(result.content?.[0]?.text ?? "file.lines returned an error");
         }
       },
     },

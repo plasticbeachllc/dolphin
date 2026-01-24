@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
 import { startMockRest } from "./mockServer.js";
 import { makeSearchKnowledge } from "../mcp/tools/search_knowledge.js";
-import { makeFetchChunk } from "../mcp/tools/fetch_chunk.js";
-import { makeFetchLines } from "../mcp/tools/fetch_lines.js";
+import { makeChunkGet } from "../mcp/tools/chunk_get.js";
+import { makeFileLines } from "../mcp/tools/file_lines.js";
 import { initLogger, logInfo, logWarn, logError } from "../util/logger.js";
 import { readFileSync, existsSync, unlinkSync } from "fs";
 import { join } from "path";
@@ -56,13 +56,13 @@ describe("logging", () => {
     expect(() => JSON.parse(firstLine)).not.toThrow();
 
     const logEntry = JSON.parse(firstLine);
-    expect(logEntry.event).toBeDefined();
+    expect(logEntry.context?.event).toBeDefined();
     expect(logEntry.level).toBeDefined();
     expect(logEntry.message).toBeDefined();
-    expect(logEntry.ts).toBeDefined();
+    expect(logEntry.timestamp).toBeDefined();
   });
 
-  it("warns when MCP applies local truncation due to 50 KB cap", async () => {
+  it("warns when MCP applies local truncation due to 70 KB cap", async () => {
     // This would require a test that triggers truncation
     // For now, we test the logging function exists
     const { handler } = makeSearchKnowledge();
@@ -90,10 +90,10 @@ describe("logging", () => {
 
       lines.forEach((line) => {
         const entry = JSON.parse(line);
-        expect(entry.event).toBeDefined();
+        expect(entry.context?.event).toBeDefined();
         expect(entry.level).toBeDefined();
         expect(entry.message).toBeDefined();
-        expect(entry.ts).toBeDefined();
+        expect(entry.timestamp).toBeDefined();
         // Context and meta are optional in current implementation
       });
     }
@@ -103,8 +103,8 @@ describe("logging", () => {
 describe("concurrency and stability", () => {
   it("parallel calls to multiple tools execute without race conditions", async () => {
     const { handler: searchHandler } = makeSearchKnowledge();
-    const { handler: fetchChunkHandler } = makeFetchChunk();
-    const { handler: fetchLinesHandler } = makeFetchLines();
+    const { handler: fetchChunkHandler } = makeChunkGet();
+    const { handler: fetchLinesHandler } = makeFileLines();
 
     // Make multiple concurrent calls
     const promises = [
@@ -132,7 +132,7 @@ describe("concurrency and stability", () => {
     });
   });
 
-  it("8 concurrent search_knowledge calls execute without shared-state corruption", async () => {
+  it("8 concurrent search calls execute without shared-state corruption", async () => {
     const { handler } = makeSearchKnowledge();
 
     // Create 8 concurrent search requests with different queries
@@ -149,13 +149,13 @@ describe("concurrency and stability", () => {
     // Verify each result has unique content based on query
     results.forEach((result, index) => {
       expect(result._meta).toBeDefined();
-      expect(result._meta.top_k).toBe(5); // Default top_k
+      expect(result._meta.top_k).toBe(20); // Default top_k
     });
   });
 });
 
 describe("payload and schema validation", () => {
-  it("jsonSizeBytes used to enforce cap; end result size ≤ 50 KB", async () => {
+  it("jsonSizeBytes used to enforce cap; end result size ≤ 70 KB", async () => {
     const { handler } = makeSearchKnowledge();
     const res = await handler({ input: { query: "test" } });
 
@@ -164,11 +164,11 @@ describe("payload and schema validation", () => {
     // Convert result to JSON and check size
     const resultJson = JSON.stringify(res);
     const sizeInBytes = new TextEncoder().encode(resultJson).length;
-    expect(sizeInBytes).toBeLessThanOrEqual(50 * 1024);
+    expect(sizeInBytes).toBeLessThanOrEqual(70 * 1024);
   });
 
   it("all tool definitions include valid JSON Schema", async () => {
-    const tools = [makeSearchKnowledge(), makeFetchChunk(), makeFetchLines()];
+    const tools = [makeSearchKnowledge(), makeChunkGet(), makeFileLines()];
 
     tools.forEach(({ definition }) => {
       expect(definition.inputSchema).toBeDefined();

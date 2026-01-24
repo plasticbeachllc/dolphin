@@ -140,19 +140,20 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 
 **Tools Implemented**:
 
-| Tool                    | Purpose                             | Status |
-| ----------------------- | ----------------------------------- | ------ |
-| `search_knowledge`      | Semantic code search with citations | ✅     |
-| `fetch_chunk`           | Retrieve chunk by ID                | ✅     |
-| `fetch_lines`           | Retrieve file slice by line range   | ✅     |
-| `get_vector_store_info` | Get store metadata and stats        | ✅     |
-| `get_metadata`          | Get chunk metadata without content  | ✅     |
-| `open_in_editor`        | Open file in user's editor          | ✅     |
+| Tool           | Purpose                             | Status |
+| -------------- | ----------------------------------- | ------ |
+| `search`       | Semantic code search with citations | ✅     |
+| `chunk.get`    | Retrieve chunk by ID                | ✅     |
+| `file.lines`   | Retrieve file slice by line range   | ✅     |
+| `store.info`   | Get store metadata and stats        | ✅     |
+| `metadata.get` | Get chunk metadata without content  | ✅     |
+| `repos.list`   | List indexed repositories           | ✅     |
+| `health`       | Check KB REST API health            | ✅     |
 
 **Key Features**:
 
-- MCP Protocol 2025-06-18 compliance
-- 50KB content budget with multi-stage trimming
+- MCP Protocol 2025-11-25 compliance
+- ~70KB content budget with multi-stage trimming
 - Structured error responses with remediation hints
 - JSONL logging to `mcp-bridge/logs/mcp.log`
 - Full TypeScript types with Zod validation
@@ -162,6 +163,8 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 
 - `mcp-bridge/src/index.ts` - MCP server entry point
 - `mcp-bridge/src/mcp/tools/` - Tool implementations
+- `mcp-bridge/src/mcp/tools/registry.ts` - Tool registry + validation
+- `mcp-bridge/src/mcp/tools/schema.ts` - Zod-to-JSON schema builder
 - `mcp-bridge/src/rest/client.ts` - REST API client
 - `mcp-bridge/kb-cli.ts` - CLI wrapper
 
@@ -665,7 +668,7 @@ Columns:
 - ✅ All 6 MCP tools implemented
 - ✅ Unit test framework with mock REST server
 - ✅ JSONL logging with rotation
-- ✅ Content truncation (50KB budget)
+- ✅ Content truncation (~70KB budget)
 - ✅ Error handling with remediation hints
 - ✅ Published to npm as `dolphin-mcp`
 

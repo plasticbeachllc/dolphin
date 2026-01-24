@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { startMockRest } from "./mockServer.js";
-import { makeFetchChunk } from "../mcp/tools/fetch_chunk.js";
+import { makeChunkGet } from "../mcp/tools/chunk_get.js";
 import { initLogger } from "../util/logger.js";
 
 let stop: () => Promise<void>;
@@ -13,15 +13,15 @@ afterAll(async () => {
   await stop?.();
 });
 
-describe("fetch_chunk", () => {
-  it("happy path: returns chunk info with citation and data payload", async () => {
-    const { handler } = makeFetchChunk();
+describe("chunk.get", () => {
+  it("happy path: returns chunk info with citation and resource payload", async () => {
+    const { handler } = makeChunkGet();
     const res = await handler({ input: { chunk_id: "1" } });
 
     expect(res.isError).toBe(false);
-    expect(res.data).toBeDefined();
-    expect(res.data.chunk_id).toBe("1");
-    expect(res.data.resource_link).toContain("kb://");
+    expect(res._meta).toBeDefined();
+    expect(res._meta.tool_version).toBeDefined();
+    expect(res._meta.latency_ms).toBeDefined();
 
     // Check content structure
     expect(Array.isArray(res.content)).toBe(true);
@@ -38,7 +38,7 @@ describe("fetch_chunk", () => {
   });
 
   it("chunk_not_found → isError=true with remediation", async () => {
-    const { handler } = makeFetchChunk();
+    const { handler } = makeChunkGet();
     const res = await handler({ input: { chunk_id: "not-found" } });
 
     expect(res.isError).toBe(true);
@@ -47,7 +47,7 @@ describe("fetch_chunk", () => {
   });
 
   it("includes citation URI in resource block", async () => {
-    const { handler } = makeFetchChunk();
+    const { handler } = makeChunkGet();
     const res = await handler({ input: { chunk_id: "1" } });
 
     expect(res.isError).toBe(false);
@@ -57,7 +57,7 @@ describe("fetch_chunk", () => {
   });
 
   it("tool definition includes valid JSON Schema", async () => {
-    const { definition } = makeFetchChunk();
+    const { definition } = makeChunkGet();
 
     expect(definition.inputSchema).toBeDefined();
     expect(definition.inputSchema.type).toBe("object");

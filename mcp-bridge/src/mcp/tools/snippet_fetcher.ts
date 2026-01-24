@@ -1,6 +1,7 @@
 import { restGetFileSlice } from "../../rest/client.js";
+import { CONFIG } from "../../util/config.js";
 import { mapWithConcurrency } from "../../util/concurrency.js";
-import { logWarn, logError, logInfo } from "../../util/logger.js";
+import { logWarn, logInfo, logDebug } from "../../util/logger.js";
 
 /**
  * Request for fetching a snippet from a specific file location
@@ -66,10 +67,10 @@ export async function fetchSnippetsInParallel(
   options: SnippetFetchOptions = {}
 ): Promise<{ [key: number]: SnippetFetchResult | undefined }> {
   const {
-    maxConcurrent = 8,
-    requestTimeoutMs = 1500,
-    retryAttempts = 1,
-    signal: _signal,
+    maxConcurrent = CONFIG.MAX_CONCURRENT_SNIPPET_FETCH,
+    requestTimeoutMs = CONFIG.SNIPPET_FETCH_TIMEOUT_MS,
+    retryAttempts = CONFIG.SNIPPET_FETCH_RETRY_ATTEMPTS,
+    signal,
   } = options;
 
   const startTime = Date.now();
@@ -90,10 +91,19 @@ export async function fetchSnippetsInParallel(
           // Create timeout-based abort controller
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
+          const abortFromSignal = () => controller.abort();
+
+          if (signal) {
+            if (signal.aborted) {
+              controller.abort();
+            } else {
+              signal.addEventListener("abort", abortFromSignal);
+            }
+          }
 
           try {
             // DEBUG: Log exact parameters being sent to /file endpoint
-            await logInfo("snippet_fetch_debug", "Attempting to fetch snippet", {
+            await logDebug("snippet_fetch_debug", "Attempting to fetch snippet", {
               repo: request.repo.trim(),
               repo_raw: request.repo,
               repo_length: request.repo.length,
@@ -127,7 +137,7 @@ export async function fetchSnippetsInParallel(
             };
 
             // DEBUG: Log successful fetch
-            await logInfo("snippet_fetch_debug", "Successfully fetched snippet", {
+            await logDebug("snippet_fetch_debug", "Successfully fetched snippet", {
               repo: request.repo.trim(),
               path: request.path,
               content_length: result.content?.length || 0,
@@ -136,6 +146,9 @@ export async function fetchSnippetsInParallel(
             clearTimeout(timeoutId);
             return { result, metadata };
           } finally {
+            if (signal) {
+              signal.removeEventListener("abort", abortFromSignal);
+            }
             clearTimeout(timeoutId);
           }
         } catch (error) {
@@ -143,7 +156,7 @@ export async function fetchSnippetsInParallel(
 
           // DEBUG: Log fetch errors
           const err = error instanceof Error ? error : new Error(String(error));
-          await logError("snippet_fetch_debug", "Failed to fetch snippet", {
+          await logDebug("snippet_fetch_debug", "Failed to fetch snippet", {
             repo: request.repo.trim(),
             path: request.path,
             error_name: err.name,

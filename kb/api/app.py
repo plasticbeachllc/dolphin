@@ -11,10 +11,11 @@ from typing import Protocol, cast
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..api_key import load_kb_api_key
-from ..store.sqlite_meta import generate_fts_content_id
+from ..config import KBConfig, load_config
+from ..store.sqlite_meta import SQLiteMetadataStore, generate_fts_content_id
 from .task_queue import TaskStatus, get_task_queue
 from .utils import GitRepository, validate_path_within_repo
 
@@ -25,11 +26,22 @@ CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 app = FastAPI(title="Unified Knowledge Store", version="0.2.0")
 
+
+def _load_default_config() -> KBConfig:
+    try:
+        return load_config()
+    except Exception:
+        return KBConfig()
+
+
+_DEFAULT_CONFIG = _load_default_config()
+_API_LIMITS = _DEFAULT_CONFIG.api
+
 # Add CORS middleware to allow requests from VSCode webviews
 # Note: CORSMiddleware is a class, not a factory function, but FastAPI's add_middleware
 # accepts both. We need to help the type checker by explicitly typing this.
 app.add_middleware(
-    cast(type, CORSMiddleware),  # type: ignore[arg-type]
+    cast(type, CORSMiddleware),
     allow_origins=[
         "vscode-webview://*",
         "http://localhost:3000",  # Development only
@@ -96,27 +108,107 @@ def reset_stores():
     _pipeline = None
 
 
+def _enrich_hits_with_snippets(
+    hits: list[dict[str, object]],
+    request: SearchRequest,
+    sql_store: SQLiteMetadataStore,
+) -> list[dict[str, object]]:
+    repo_root_cache: dict[str, Path] = {}
+    file_lines_cache: dict[tuple[str, str], list[str]] = {}
+
+    for hit in hits:
+        repo = hit.get("repo")
+        path = hit.get("path")
+        start_line = hit.get("start_line")
+        end_line = hit.get("end_line")
+
+        if not repo or not path:
+            continue
+        if not isinstance(start_line, (int, float, str, bytes, bytearray)) or not isinstance(
+            end_line, (int, float, str, bytes, bytearray)
+        ):
+            continue
+
+        repo_name = str(repo)
+        path_str = str(path)
+
+        if repo_name not in repo_root_cache:
+            repo_info = sql_store.get_repo_by_name(repo_name)
+            if not repo_info:
+                continue
+            repo_root_cache[repo_name] = Path(repo_info["root_path"])
+
+        repo_root = repo_root_cache[repo_name]
+        full_path = validate_path_within_repo(repo_root / path_str, repo_root)
+
+        if not full_path.exists() or not full_path.is_file():
+            continue
+
+        cache_key = (repo_name, path_str)
+        if cache_key not in file_lines_cache:
+            try:
+                with open(full_path, encoding="utf-8") as fh:
+                    file_lines_cache[cache_key] = fh.readlines()
+            except UnicodeDecodeError:
+                continue
+
+        lines = file_lines_cache.get(cache_key, [])
+        if not lines:
+            continue
+
+        total_lines = len(lines)
+        try:
+            start_int = int(start_line)
+            end_int = int(end_line)
+        except (TypeError, ValueError):
+            continue
+        context_before = request.context_lines_before or 0
+        context_after = request.context_lines_after or 0
+
+        snippet_start = max(1, start_int - context_before)
+        snippet_end = min(total_lines, end_int + context_after)
+
+        snippet = "".join(lines[snippet_start - 1 : snippet_end])
+        hit["snippet"] = snippet
+        hit["snippet_start_line"] = snippet_start
+        hit["snippet_end_line"] = snippet_end
+
+    return hits
+
+
 class SearchRequest(BaseModel):
     query: str
     repos: list[str] | None = None
     path_prefix: list[str] | None = None
     exclude_paths: list[str] | None = None
     exclude_patterns: list[str] | None = None
-    top_k: int = 8
-    max_snippet_tokens: int = 240
-    embed_model: str = "large"
-    score_cutoff: float | None = 0.0
-    # Defaults set to None so backend can fall back to global config when unspecified
-    mmr_enabled: bool | None = None
-    mmr_lambda: float | None = None
+    top_k: int = Field(default=_DEFAULT_CONFIG.retrieval.top_k, ge=1, le=_API_LIMITS.max_top_k)
+    max_snippet_tokens: int = Field(
+        default=_DEFAULT_CONFIG.retrieval.max_snippet_tokens,
+        ge=1,
+        le=_API_LIMITS.max_snippet_tokens,
+    )
+    embed_model: str = _DEFAULT_CONFIG.default_embed_model
+    score_cutoff: float | None = _DEFAULT_CONFIG.retrieval.score_cutoff
+    mmr_enabled: bool | None = _DEFAULT_CONFIG.retrieval.mmr_enabled
+    mmr_lambda: float | None = _DEFAULT_CONFIG.retrieval.mmr_lambda
     ann_strategy: str | None = None
     ann_nprobes: int | None = None
     ann_refine_factor: int | None = None
+    include_snippets: bool = False
     # Graph context enrichment (enabled by default for better context)
-    include_graph_context: bool = True
+    include_graph_context: bool = _DEFAULT_CONFIG.api.include_graph_context
     # Leading/trailing line context (disabled by default for backwards compatibility)
-    context_lines_before: int = 0
-    context_lines_after: int = 0
+    context_lines_before: int = Field(
+        default=_DEFAULT_CONFIG.api.context_lines_before,
+        ge=0,
+        le=_API_LIMITS.max_context_lines,
+    )
+    context_lines_after: int = Field(
+        default=_DEFAULT_CONFIG.api.context_lines_after,
+        ge=0,
+        le=_API_LIMITS.max_context_lines,
+    )
 
 
 class SearchBackend(Protocol):
@@ -216,11 +308,14 @@ async def search(request: SearchRequest) -> dict[str, object]:
     raw_hits = backend.search(request)
     hits: Iterable[dict[str, object]]
     if isawaitable(raw_hits):
-        hits = await raw_hits  # type: ignore[assignment]
+        hits = await raw_hits
     else:
         hits = raw_hits
     hits_list = list(hits)
     latency_ms = int((perf_counter() - started) * 1000)
+
+    if request.include_snippets and _sql_store is not None:
+        hits_list = _enrich_hits_with_snippets(hits_list, request, _sql_store)
 
     # Include ANN config in response meta if it was used
     meta = {

@@ -36,7 +36,7 @@ class LanceDBStore:
             return self._db
 
         # Create new connection and cache it
-        import lancedb  # type: ignore[import-untyped]
+        import lancedb
 
         db_uri = self.root if isinstance(self.root, str) else self.root.as_posix()
         self._db = lancedb.connect(db_uri)
@@ -51,7 +51,7 @@ class LanceDBStore:
         Returns:
             PyArrow schema for the model's table
         """
-        import pyarrow as pa  # type: ignore[import-untyped]
+        import pyarrow as pa
 
         model_to_dim = {"small": 1536, "large": 3072}
 

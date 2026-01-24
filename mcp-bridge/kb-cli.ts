@@ -17,6 +17,16 @@ import { restListRepos } from "./src/rest/client.js";
 
 const [, , command, ...args] = process.argv;
 
+function parseHitsJson(content: Array<{ type: string; text?: string }>): { hits?: any[] } | null {
+  const jsonBlock = content.find(
+    (block) => block.type === "text" && String(block.text).includes("```json")
+  );
+  if (!jsonBlock?.text) return null;
+  const match = String(jsonBlock.text).match(/```json\n([\s\S]*?)\n```/);
+  if (!match) return null;
+  return JSON.parse(match[1]) as { hits?: any[] };
+}
+
 async function main() {
   try {
     switch (command) {
@@ -52,7 +62,7 @@ async function main() {
         console.log();
 
         // Show results
-        const hits = result._meta.hits;
+        const hits = parseHitsJson(result.content)?.hits ?? [];
         if (hits.length > 0) {
           console.log("Results:");
           hits.forEach((hit: any, i: number) => {

@@ -256,7 +256,7 @@ def cleanup_graph_for_file(graph_store: GraphStore, file_id: int) -> tuple[int, 
     edges_deleted = 0
 
     try:
-        with graph_store._connect() as conn, closing(conn.cursor()) as cur:  # type: ignore[attr-defined]
+        with graph_store._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 (
                     "WITH nodes AS (SELECT id FROM code_nodes WHERE file_id = ?) "

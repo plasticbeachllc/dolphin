@@ -4,12 +4,25 @@
 // Usage: Run the FastAPI retriever on 127.0.0.1:7777 first, then run this script
 
 import { makeSearchKnowledge } from "../mcp/tools/search_knowledge.js";
-import { makeFetchChunk } from "../mcp/tools/fetch_chunk.js";
-import { makeFetchLines } from "../mcp/tools/fetch_lines.js";
-import { makeOpenInEditor } from "../mcp/tools/open_in_editor.js";
-import { makeGetVectorStoreInfo } from "../mcp/tools/get_vector_store_info.js";
+import { makeChunkGet } from "../mcp/tools/chunk_get.js";
+import { makeFileLines } from "../mcp/tools/file_lines.js";
+import { makeStoreInfo } from "../mcp/tools/store_info.js";
 import { makeGetMetadata } from "../mcp/tools/get_metadata.js";
+import { makeListRepos } from "../mcp/tools/list_repos.js";
+import { makeKbHealth } from "../mcp/tools/kb_health.js";
 import { initLogger } from "../util/logger.js";
+
+function parseHitsJson(
+  content: Array<{ type: string; text?: string }>
+): { hits?: unknown[] } | null {
+  const jsonBlock = content.find(
+    (block) => block.type === "text" && String(block.text).includes("```json")
+  );
+  if (!jsonBlock?.text) return null;
+  const match = String(jsonBlock.text).match(/```json\n([\s\S]*?)\n```/);
+  if (!match) return null;
+  return JSON.parse(match[1]) as { hits?: unknown[] };
+}
 
 async function runIntegrationTests() {
   console.log("🚀 Starting MCP Bridge Integration Tests...\n");
@@ -18,32 +31,37 @@ async function runIntegrationTests() {
 
   const tests = [
     {
-      name: "search_knowledge - smoke test",
+      name: "search - smoke test",
       tool: makeSearchKnowledge(),
       input: { query: "test" },
     },
     {
-      name: "fetch_chunk - smoke test",
-      tool: makeFetchChunk(),
+      name: "chunk.get - smoke test",
+      tool: makeChunkGet(),
       input: { chunk_id: "1" },
     },
     {
-      name: "fetch_lines - smoke test",
-      tool: makeFetchLines(),
+      name: "file.lines - smoke test",
+      tool: makeFileLines(),
       input: { repo: "repoa", path: "src/a.ts", start: 1, end: 10 },
     },
     {
-      name: "open_in_editor - smoke test",
-      tool: makeOpenInEditor(),
-      input: { repo: "repoa", path: "src/a.ts" },
-    },
-    {
-      name: "get_vector_store_info - smoke test",
-      tool: makeGetVectorStoreInfo(),
+      name: "store.info - smoke test",
+      tool: makeStoreInfo(),
       input: {},
     },
     {
-      name: "get_metadata - smoke test",
+      name: "repos.list - smoke test",
+      tool: makeListRepos(),
+      input: {},
+    },
+    {
+      name: "health - smoke test",
+      tool: makeKbHealth(),
+      input: { check: "shallow" },
+    },
+    {
+      name: "metadata.get - smoke test",
       tool: makeGetMetadata(),
       input: { chunk_id: "1" },
     },
@@ -67,12 +85,11 @@ async function runIntegrationTests() {
         console.log(`  ✅ PASSED (${latency}ms)`);
 
         // Log some details for successful tests
-        if (test.name.includes("search_knowledge")) {
-          console.log(`    Found ${result._meta?.hits?.length || 0} hits`);
-        } else if (test.name.includes("fetch_chunk") || test.name.includes("fetch_lines")) {
+        if (test.name.includes("search")) {
+          const hits = parseHitsJson(result.content)?.hits ?? [];
+          console.log(`    Found ${hits.length} hits`);
+        } else if (test.name.includes("chunk.get") || test.name.includes("file.lines")) {
           console.log(`    Content length: ${result.content[0]?.text?.length || 0} chars`);
-        } else if (test.name.includes("open_in_editor")) {
-          console.log(`    URI: ${result.data?.uri}`);
         }
 
         passed++;
@@ -86,7 +103,7 @@ async function runIntegrationTests() {
   }
 
   // Test pagination with multiple calls
-  console.log("📋 Running: search_knowledge - pagination test");
+  console.log("📋 Running: search - pagination test");
   try {
     const { handler } = makeSearchKnowledge();
     const firstPage = await handler({ input: { query: "test", top_k: 2 } });

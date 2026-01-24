@@ -3,9 +3,12 @@ import { z } from "zod";
 import { restGetFileSlice } from "../../rest/client.js";
 import { mimeFromLangOrPath } from "../../util/mime.js";
 import { logInfo, logError } from "../../util/logger.js";
+import { buildToolInputSchema } from "./schema.js";
+import { TOOL_VERSION } from "./version.js";
+import { normalizeToolError, formatToolErrorText } from "./error.js";
 
 /**
- * fetch_lines tool analysis:
+ * file.lines tool analysis:
  * - Single request tool: fetches one file slice by repo/path/line range
  * - No parallelization needed: only makes one restGetFileSlice() call
  * - Performance is optimal: one request = one response
@@ -20,30 +23,24 @@ const INPUT_SHAPE = {
 };
 
 const INPUT = z.object(INPUT_SHAPE);
+const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
-const FETCH_LINES_JSON_SCHEMA: Tool["inputSchema"] = {
-  type: "object",
-  properties: {
-    repo: { type: "string" },
-    path: { type: "string" },
-    start: { type: "integer", minimum: 1 },
-    end: { type: "integer", minimum: 1 },
-  },
-  required: ["repo", "path", "start", "end"],
-};
-
-export function makeFetchLines(): {
+export function makeFileLines(): {
   definition: Tool;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: any;
-  inputSchema: typeof INPUT_SHAPE;
 } {
   const definition: Tool = {
-    name: "fetch_lines",
+    name: "file.lines",
     description:
       "Fetch a file slice [start, end] inclusive from disk and return fenced code with citation.",
-    inputSchema: FETCH_LINES_JSON_SCHEMA,
-    annotations: { title: "Fetch File Lines", readOnlyHint: true, idempotentHint: true },
+    inputSchema: INPUT_SCHEMA,
+    annotations: {
+      title: "Get File Lines",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   };
 
   const handler = async (args: unknown, signal?: AbortSignal): Promise<CallToolResult> => {
@@ -72,26 +69,44 @@ export function makeFetchLines(): {
         },
       ];
 
-      await logInfo("fetch_file", "fetch_lines success", { latency_ms: Date.now() - started });
-      return { content, isError: false, data: res };
+      await logInfo("file.lines", "file.lines success", { latency_ms: Date.now() - started });
+      return {
+        content,
+        isError: false,
+        _meta: {
+          tool_version: TOOL_VERSION,
+          latency_ms: Date.now() - started,
+          warnings: res._meta?.warnings ?? [],
+        },
+      };
     } catch (e: unknown) {
-      const error = e instanceof Error ? e : new Error(String(e));
-      const err = (e as { error?: { code: string; message: string } })?.error
-        ? (e as { error: { code: string; message: string } })
-        : { error: { code: "unexpected_error", message: error.message } };
-      await logError("fetch_file", "fetch_lines error", {
-        error_code: err.error.code,
-        message: err.error.message,
+      const { error: toolError, upstream } = normalizeToolError(
+        e,
+        "Verify repo/path and line range."
+      );
+      await logError("file.lines", "file.lines error", {
+        error_code: toolError.code,
+        message: toolError.message,
       });
       const content: CallToolResult["content"] = [
         {
           type: "text",
-          text: `${err.error.message} Remediation: verify repo/path and line range.`,
+          text: formatToolErrorText(toolError),
         },
       ];
-      return { content, isError: true, _meta: { upstream: err } };
+      return {
+        content,
+        isError: true,
+        _meta: {
+          error: toolError,
+          upstream,
+          tool_version: TOOL_VERSION,
+          latency_ms: Date.now() - started,
+          warnings: [],
+        },
+      };
     }
   };
 
-  return { definition, handler, inputSchema: INPUT_SHAPE };
+  return { definition, handler };
 }
