@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { startMockRest } from "./mockServer.js";
-import { makeFetchChunk } from "../mcp/tools/fetch_chunk.js";
+import { makeChunkGet } from "../mcp/tools/chunk_get.js";
 import { initLogger } from "../util/logger.js";
 
 let stop: () => Promise<void>;
@@ -15,7 +15,7 @@ afterAll(async () => {
 
 describe("chunk.get", () => {
   it("happy path: returns chunk info with citation and resource payload", async () => {
-    const { handler } = makeFetchChunk();
+    const { handler } = makeChunkGet();
     const res = await handler({ input: { chunk_id: "1" } });
 
     expect(res.isError).toBe(false);
@@ -38,7 +38,7 @@ describe("chunk.get", () => {
   });
 
   it("chunk_not_found → isError=true with remediation", async () => {
-    const { handler } = makeFetchChunk();
+    const { handler } = makeChunkGet();
     const res = await handler({ input: { chunk_id: "not-found" } });
 
     expect(res.isError).toBe(true);
@@ -47,7 +47,7 @@ describe("chunk.get", () => {
   });
 
   it("includes citation URI in resource block", async () => {
-    const { handler } = makeFetchChunk();
+    const { handler } = makeChunkGet();
     const res = await handler({ input: { chunk_id: "1" } });
 
     expect(res.isError).toBe(false);
@@ -57,7 +57,7 @@ describe("chunk.get", () => {
   });
 
   it("tool definition includes valid JSON Schema", async () => {
-    const { definition } = makeFetchChunk();
+    const { definition } = makeChunkGet();
 
     expect(definition.inputSchema).toBeDefined();
     expect(definition.inputSchema.type).toBe("object");

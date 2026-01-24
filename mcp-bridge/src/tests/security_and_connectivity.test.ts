@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
 import { startMockRest } from "./mockServer.js";
 import { makeSearchKnowledge } from "../mcp/tools/search_knowledge.js";
-import { makeFetchChunk } from "../mcp/tools/fetch_chunk.js";
-import { makeFetchLines } from "../mcp/tools/fetch_lines.js";
+import { makeChunkGet } from "../mcp/tools/chunk_get.js";
+import { makeFileLines } from "../mcp/tools/file_lines.js";
 import { initLogger } from "../util/logger.js";
 
 let stop: () => Promise<void>;
@@ -48,7 +48,7 @@ describe("security and connectivity", () => {
   it("handles REST service unavailability gracefully", async () => {
     // This would require testing with a stopped REST server
     // For now, we test error handling patterns with the mock server
-    const { handler } = makeFetchChunk();
+    const { handler } = makeChunkGet();
     const res = await handler({ input: { chunk_id: "not-found" } });
 
     // Even with errors, the response should be structured properly
@@ -97,7 +97,7 @@ describe("security and connectivity", () => {
   });
 
   it("prevents path traversal attacks", async () => {
-    const { handler } = makeFetchLines();
+    const { handler } = makeFileLines();
 
     // Test with potential path traversal attempts
     const maliciousPaths = [

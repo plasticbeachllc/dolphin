@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { startMockRest } from "./mockServer.js";
-import { makeFetchLines } from "../mcp/tools/fetch_lines.js";
+import { makeFileLines } from "../mcp/tools/file_lines.js";
 import { initLogger } from "../util/logger.js";
 
 let stop: () => Promise<void>;
@@ -15,7 +15,7 @@ afterAll(async () => {
 
 describe("file.lines", () => {
   it("happy path: returns file slice with inclusive end-line semantics, citation and resource text", async () => {
-    const { handler } = makeFetchLines();
+    const { handler } = makeFileLines();
     const res = await handler({ input: { repo: "repoa", path: "src/a.ts", start: 1, end: 10 } });
 
     expect(res.isError).toBe(false);
@@ -38,7 +38,7 @@ describe("file.lines", () => {
   });
 
   it("MIME type derived from language/path", async () => {
-    const { handler } = makeFetchLines();
+    const { handler } = makeFileLines();
     const res = await handler({ input: { repo: "repoa", path: "src/a.ts", start: 1, end: 10 } });
 
     expect(res.isError).toBe(false);
@@ -48,7 +48,7 @@ describe("file.lines", () => {
   });
 
   it("invalid_range → isError=true with remediation", async () => {
-    const { handler } = makeFetchLines();
+    const { handler } = makeFileLines();
     const res = await handler({ input: { repo: "repoa", path: "src/a.ts", start: 10, end: 1 } });
 
     expect(res.isError).toBe(true);
@@ -58,7 +58,7 @@ describe("file.lines", () => {
   });
 
   it("file_not_found → isError=true with remediation", async () => {
-    const { handler } = makeFetchLines();
+    const { handler } = makeFileLines();
     const res = await handler({
       input: { repo: "repoa", path: "nonexistent.ts", start: 1, end: 10 },
     });
@@ -69,7 +69,7 @@ describe("file.lines", () => {
   });
 
   it("tool definition includes valid JSON Schema", async () => {
-    const { definition } = makeFetchLines();
+    const { definition } = makeFileLines();
 
     expect(definition.inputSchema).toBeDefined();
     expect(definition.inputSchema.type).toBe("object");

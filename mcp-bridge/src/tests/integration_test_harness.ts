@@ -4,9 +4,9 @@
 // Usage: Run the FastAPI retriever on 127.0.0.1:7777 first, then run this script
 
 import { makeSearchKnowledge } from "../mcp/tools/search_knowledge.js";
-import { makeFetchChunk } from "../mcp/tools/fetch_chunk.js";
-import { makeFetchLines } from "../mcp/tools/fetch_lines.js";
-import { makeGetVectorStoreInfo } from "../mcp/tools/get_vector_store_info.js";
+import { makeChunkGet } from "../mcp/tools/chunk_get.js";
+import { makeFileLines } from "../mcp/tools/file_lines.js";
+import { makeStoreInfo } from "../mcp/tools/store_info.js";
 import { makeGetMetadata } from "../mcp/tools/get_metadata.js";
 import { makeListRepos } from "../mcp/tools/list_repos.js";
 import { makeKbHealth } from "../mcp/tools/kb_health.js";
@@ -37,17 +37,17 @@ async function runIntegrationTests() {
     },
     {
       name: "chunk.get - smoke test",
-      tool: makeFetchChunk(),
+      tool: makeChunkGet(),
       input: { chunk_id: "1" },
     },
     {
       name: "file.lines - smoke test",
-      tool: makeFetchLines(),
+      tool: makeFileLines(),
       input: { repo: "repoa", path: "src/a.ts", start: 1, end: 10 },
     },
     {
       name: "store.info - smoke test",
-      tool: makeGetVectorStoreInfo(),
+      tool: makeStoreInfo(),
       input: {},
     },
     {

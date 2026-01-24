@@ -1,8 +1,8 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { makeSearchKnowledge } from "./search_knowledge.js";
-import { makeFetchChunk } from "./fetch_chunk.js";
-import { makeFetchLines } from "./fetch_lines.js";
-import { makeGetVectorStoreInfo } from "./get_vector_store_info.js";
+import { makeChunkGet } from "./chunk_get.js";
+import { makeFileLines } from "./file_lines.js";
+import { makeStoreInfo } from "./store_info.js";
 import { makeGetMetadata } from "./get_metadata.js";
 import { makeListRepos } from "./list_repos.js";
 import { makeKbHealth } from "./kb_health.js";
@@ -50,10 +50,10 @@ export function validateTools(tools: ToolRegistration[]): ToolRegistration[] {
 
 export const tools: ToolRegistration[] = validateTools([
   { ...makeSearchKnowledge(), version: TOOL_VERSION },
-  { ...makeFetchChunk(), version: TOOL_VERSION },
-  { ...makeFetchLines(), version: TOOL_VERSION },
+  { ...makeChunkGet(), version: TOOL_VERSION },
+  { ...makeFileLines(), version: TOOL_VERSION },
   { ...makeListRepos(), version: TOOL_VERSION },
   { ...makeKbHealth(), version: TOOL_VERSION },
-  { ...makeGetVectorStoreInfo(), version: TOOL_VERSION },
+  { ...makeStoreInfo(), version: TOOL_VERSION },
   { ...makeGetMetadata(), version: TOOL_VERSION },
 ]);

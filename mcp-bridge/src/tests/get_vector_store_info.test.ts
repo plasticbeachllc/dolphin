@@ -3,7 +3,7 @@ import { startMockRest } from "./mockServer.js";
 import { initLogger } from "../util/logger.js";
 
 let stop: () => Promise<void>;
-let makeGetVectorStoreInfo: typeof import("../mcp/tools/get_vector_store_info.js").makeGetVectorStoreInfo;
+let makeStoreInfo: typeof import("../mcp/tools/store_info.js").makeStoreInfo;
 
 function parseJsonBlock(text: string): Record<string, unknown> {
   const match = text.match(/```json\n([\s\S]*?)\n```/);
@@ -17,7 +17,7 @@ beforeAll(async () => {
   await initLogger();
   process.env.KB_REST_BASE_URL = "http://127.0.0.1:7777";
   stop = await startMockRest(7777);
-  ({ makeGetVectorStoreInfo } = await import(`../mcp/tools/get_vector_store_info.js`));
+  ({ makeStoreInfo } = await import(`../mcp/tools/store_info.js`));
 });
 afterAll(async () => {
   await stop?.();
@@ -25,7 +25,7 @@ afterAll(async () => {
 
 describe("store.info", () => {
   it("returns namespaces, dims, limits, counts from /v1/repos sum; latency keys present", async () => {
-    const { handler } = makeGetVectorStoreInfo();
+    const { handler } = makeStoreInfo();
     const res = await handler({ input: {} });
 
     if (res.isError) {
@@ -59,7 +59,7 @@ describe("store.info", () => {
   it("works with empty repos list (counts=0)", async () => {
     // This would require a mock server that returns empty repos
     // For now, we test the current behavior
-    const { handler } = makeGetVectorStoreInfo();
+    const { handler } = makeStoreInfo();
     const res = await handler({ input: {} });
 
     if (res.isError) {
@@ -72,7 +72,7 @@ describe("store.info", () => {
   });
 
   it("tool definition includes valid JSON Schema", async () => {
-    const { definition } = makeGetVectorStoreInfo();
+    const { definition } = makeStoreInfo();
 
     expect(definition.inputSchema).toBeDefined();
     // This tool has no required inputs

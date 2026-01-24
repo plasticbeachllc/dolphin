@@ -1,16 +1,16 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { restListRepos } from "../rest/client.js";
 import type { makeSearchKnowledge } from "../mcp/tools/search_knowledge.js";
-import type { makeFetchChunk } from "../mcp/tools/fetch_chunk.js";
-import type { makeFetchLines } from "../mcp/tools/fetch_lines.js";
-import type { makeGetVectorStoreInfo } from "../mcp/tools/get_vector_store_info.js";
+import type { makeChunkGet } from "../mcp/tools/chunk_get.js";
+import type { makeFileLines } from "../mcp/tools/file_lines.js";
+import type { makeStoreInfo } from "../mcp/tools/store_info.js";
 
 export interface BridgeSmokeDeps {
   listRepos: typeof restListRepos;
   makeSearchKnowledge: typeof makeSearchKnowledge;
-  makeFetchChunk: typeof makeFetchChunk;
-  makeFetchLines: typeof makeFetchLines;
-  makeGetVectorStoreInfo: typeof makeGetVectorStoreInfo;
+  makeChunkGet: typeof makeChunkGet;
+  makeFileLines: typeof makeFileLines;
+  makeStoreInfo: typeof makeStoreInfo;
 }
 
 export interface BridgeSmokeOptions {
@@ -92,7 +92,7 @@ export async function runBridgeSmokeSuite(
     {
       name: "store.info",
       run: async () => {
-        const { handler } = deps.makeGetVectorStoreInfo();
+        const { handler } = deps.makeStoreInfo();
         const result = (await handler({}, undefined)) as CallToolResult;
         if (result.isError) {
           throw new Error(result.content?.[0]?.text ?? "store.info returned an error");
@@ -124,7 +124,7 @@ export async function runBridgeSmokeSuite(
         if (!firstHit) {
           throw new Error("Cannot fetch chunk before search returns hits");
         }
-        const { handler } = deps.makeFetchChunk();
+        const { handler } = deps.makeChunkGet();
         const result = (await handler({
           input: { chunk_id: firstHit.chunk_id },
         })) as CallToolResult;
@@ -140,7 +140,7 @@ export async function runBridgeSmokeSuite(
         if (!firstHit) {
           throw new Error("Cannot fetch lines before search returns hits");
         }
-        const { handler } = deps.makeFetchLines();
+        const { handler } = deps.makeFileLines();
         const result = (await handler({
           input: {
             repo: firstHit.repo,

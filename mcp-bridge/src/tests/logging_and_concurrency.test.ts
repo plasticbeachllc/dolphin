@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
 import { startMockRest } from "./mockServer.js";
 import { makeSearchKnowledge } from "../mcp/tools/search_knowledge.js";
-import { makeFetchChunk } from "../mcp/tools/fetch_chunk.js";
-import { makeFetchLines } from "../mcp/tools/fetch_lines.js";
+import { makeChunkGet } from "../mcp/tools/chunk_get.js";
+import { makeFileLines } from "../mcp/tools/file_lines.js";
 import { initLogger, logInfo, logWarn, logError } from "../util/logger.js";
 import { readFileSync, existsSync, unlinkSync } from "fs";
 import { join } from "path";
@@ -103,8 +103,8 @@ describe("logging", () => {
 describe("concurrency and stability", () => {
   it("parallel calls to multiple tools execute without race conditions", async () => {
     const { handler: searchHandler } = makeSearchKnowledge();
-    const { handler: fetchChunkHandler } = makeFetchChunk();
-    const { handler: fetchLinesHandler } = makeFetchLines();
+    const { handler: fetchChunkHandler } = makeChunkGet();
+    const { handler: fetchLinesHandler } = makeFileLines();
 
     // Make multiple concurrent calls
     const promises = [
@@ -168,7 +168,7 @@ describe("payload and schema validation", () => {
   });
 
   it("all tool definitions include valid JSON Schema", async () => {
-    const tools = [makeSearchKnowledge(), makeFetchChunk(), makeFetchLines()];
+    const tools = [makeSearchKnowledge(), makeChunkGet(), makeFileLines()];
 
     tools.forEach(({ definition }) => {
       expect(definition.inputSchema).toBeDefined();

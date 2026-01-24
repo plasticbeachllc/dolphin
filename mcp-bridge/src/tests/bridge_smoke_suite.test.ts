@@ -29,7 +29,7 @@ function createDeps(overrides: Partial<BridgeSmokeDeps> = {}): BridgeSmokeDeps {
         ],
       }),
     }),
-    makeFetchChunk: () => ({
+    makeChunkGet: () => ({
       definition: {
         name: "chunk.get",
         description: "",
@@ -46,7 +46,7 @@ function createDeps(overrides: Partial<BridgeSmokeDeps> = {}): BridgeSmokeDeps {
         ],
       }),
     }),
-    makeFetchLines: () => ({
+    makeFileLines: () => ({
       definition: {
         name: "file.lines",
         description: "",
@@ -57,7 +57,7 @@ function createDeps(overrides: Partial<BridgeSmokeDeps> = {}): BridgeSmokeDeps {
         content: [{ type: "text", text: "Lines" }],
       }),
     }),
-    makeGetVectorStoreInfo: () => ({
+    makeStoreInfo: () => ({
       definition: {
         name: "store.info",
         description: "",

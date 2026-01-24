@@ -10,7 +10,7 @@ import { normalizeToolError, formatToolErrorText } from "./error.js";
 const INPUT = z.object({});
 const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
-export function makeGetVectorStoreInfo(): {
+export function makeStoreInfo(): {
   definition: Tool;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: any;
