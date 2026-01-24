@@ -16,7 +16,7 @@ export function makeListRepos(): {
   handler: any;
 } {
   const definition: Tool = {
-    name: "repos.list",
+    name: "repos_list",
     description:
       "List indexed repositories with their absolute root paths and approximate file/chunk counts.",
     inputSchema: INPUT_SCHEMA,
@@ -39,7 +39,7 @@ export function makeListRepos(): {
         { type: "text", text: "```json\n" + JSON.stringify({ repos }) + "\n```" } as TextContent,
       ];
 
-      await logInfo("repos.list", "repos.list success", { latency_ms: Date.now() - started });
+      await logInfo("repos_list", "repos_list success", { latency_ms: Date.now() - started });
       return {
         content,
         isError: false,
@@ -54,7 +54,7 @@ export function makeListRepos(): {
         e,
         "Ensure REST service is running and the KB API key is configured."
       );
-      await logError("repos.list", "repos.list error", {
+      await logError("repos_list", "repos_list error", {
         error_code: toolError.code,
         message: toolError.message,
       });

@@ -36,12 +36,12 @@ async function runIntegrationTests() {
       input: { query: "test" },
     },
     {
-      name: "chunk.get - smoke test",
+      name: "chunk_get - smoke test",
       tool: makeChunkGet(),
       input: { chunk_id: "1" },
     },
     {
-      name: "file.lines - smoke test",
+      name: "file_lines - smoke test",
       tool: makeFileLines(),
       input: { repo: "repoa", path: "src/a.ts", start: 1, end: 10 },
     },
@@ -88,7 +88,7 @@ async function runIntegrationTests() {
         if (test.name.includes("search")) {
           const hits = parseHitsJson(result.content)?.hits ?? [];
           console.log(`    Found ${hits.length} hits`);
-        } else if (test.name.includes("chunk.get") || test.name.includes("file.lines")) {
+        } else if (test.name.includes("chunk_get") || test.name.includes("file_lines")) {
           console.log(`    Content length: ${result.content[0]?.text?.length || 0} chars`);
         }
 
