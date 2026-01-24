@@ -93,5 +93,5 @@ just test-webview                # Webview tests (unit)
 ## Known gaps to close
 
 1. MCP bridge lacks stubbed unit coverage; extract HTTP adapters and test with Vitest so CI can validate tool payloads without a live KB.
-3. Playwright coverage only exercises API-key acquisition; add a “index repo → search → inspect chunk” happy path.
-4. Observability smoke tests are manual; convert the flow above into a `just observability-smoke` target when time permits.
+2. Playwright coverage only exercises API-key acquisition; add a “index repo → search → inspect chunk” happy path.
+3. Observability smoke tests are manual; convert the flow above into a `just observability-smoke` target when time permits.

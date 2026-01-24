@@ -5,10 +5,12 @@ This document captures pre-release issues and recommended improvements for shipp
 ## Scope
 
 **In scope (release-targeted):**
+
 - **Knowledge Bank (Python)**: `kb/` (indexing, storage, REST API)
 - **MCP Bridge (TypeScript/Bun)**: `mcp-bridge/` (MCP tools + REST client)
 
 **Out of scope (experimental):**
+
 - `agent-core/`
 - `vscode-extension/`
 
@@ -41,11 +43,13 @@ This document captures pre-release issues and recommended improvements for shipp
 ### 1) `chunk_id` contract mismatch (KB ↔ MCP)
 
 **Why this blocks release**
+
 - The core MCP flow depends on `search` returning `chunk_id` values that `chunk.get` and `metadata.get` can fetch.
 - Today, indexers generate colon-delimited LanceDB row IDs (e.g. `repo_id:file_id:embed_model:text_hash:start:end`), while `/v1/chunks/{chunk_id}` rejects colons and then also can’t hydrate content for row IDs.
 - BM25 results return deterministic FTS IDs, so hybrid fusion cannot meaningfully fuse “the same” chunk across vector vs BM25 results.
 
 **Evidence**
+
 - Rejects colons: `kb/api/app.py` (`CHUNK_ID_PATTERN`)
 - Row IDs emitted by indexing:
   - `kb/ingest/pipeline.py` (row_id format)
@@ -56,6 +60,7 @@ This document captures pre-release issues and recommended improvements for shipp
   - `mcp-bridge/src/mcp/tools/get_metadata.ts`
 
 **Fix plan (recommended)**
+
 - Define and document **one canonical `chunk_id`** for tool followups.
   - Recommendation: treat `chunk_id` as the LanceDB row ID (it uniquely identifies an occurrence and matches start/end lines).
 - Update `/v1/chunks/{chunk_id}` to:
@@ -65,6 +70,7 @@ This document captures pre-release issues and recommended improvements for shipp
 - Make hybrid fusion use a consistent ID field (so BM25 and vector results can fuse/merge).
 
 **Acceptance tests**
+
 - End-to-end: take any `chunk_id` returned by `/v1/search` and call `/v1/chunks/{chunk_id}` → 200 with non-empty `content`.
 - MCP: `search` then `chunk.get` succeeds for returned `chunk_id` (no special casing).
 - Hybrid: ensure at least one test asserts fusion of a result appearing in both BM25 and vector lists (same identifier).
@@ -72,17 +78,20 @@ This document captures pre-release issues and recommended improvements for shipp
 ### 2) Incremental indexing can silently drop vectors when chunks move
 
 **Why this blocks release**
+
 - Dedup is text-hash-only; unchanged chunks are not re-embedded (good).
 - But row IDs include start/end lines; when a chunk moves, the row ID changes.
-- Current logic can prune the old row IDs and *not* write new rows for unchanged hashes, causing those chunks to disappear from vector search after an incremental index.
+- Current logic can prune the old row IDs and _not_ write new rows for unchanged hashes, causing those chunks to disappear from vector search after an incremental index.
 
 **Evidence**
+
 - Unchanged hashes skip vector writes, but pruning keeps only “desired” (new) row IDs:
   - `kb/ingest/pipeline.py` (vector persistence and pruning)
   - `kb/api/app.py` (same pattern in `/v1/index` file-sync path)
 - Dedup behavior: `kb/ingest/dedup.py`
 
 **Fix plan (recommended)**
+
 - When a hash is unchanged but its occurrences (row IDs) change, reconstitute vectors for the new row IDs:
   - Option A: query LanceDB for an existing vector for `(repo,path,embed_model,text_hash)` and reuse it for new occurrences.
   - Option B: change LanceDB schema/ID strategy so vectors are keyed by `text_hash` (or stable content id) and occurrences reference them separately.
@@ -91,13 +100,16 @@ This document captures pre-release issues and recommended improvements for shipp
 ### 3) Search API responses include raw embedding vectors
 
 **Why this blocks release**
+
 - LanceDB search results include a `vector` field; current formatting passes it through.
 - This bloats `/v1/search` responses and makes MCP payload trimming more frequent/expensive; it also increases cache size.
 
 **Evidence**
+
 - `kb/api/search_backend.py` formats vector results without stripping `vector`.
 
 **Fix plan (recommended)**
+
 - Remove `vector` from API responses after ranking is complete (MMR can use vectors internally, but they should not be returned/cached).
 - Add/adjust tests to assert no hit contains `vector`.
 
@@ -146,10 +158,11 @@ uv run python scripts/security-pentest.py
 ## Tagging / Publishing Notes
 
 Publishing is tag-driven per `PUBLISH.md`:
+
 - Python: `py-v0.2.0`
 - MCP: `mcp-v0.2.0`
 
 Confirm versions match:
+
 - `pyproject.toml` (`0.2.0`)
 - `mcp-bridge/package.json` (`0.2.0`)
-
