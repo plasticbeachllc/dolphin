@@ -40,6 +40,7 @@ describe("CONFIG TOML", () => {
 api_url = "http://127.0.0.1:9999"
 server_name = "test-mcp"
 server_version = "9.9.9"
+protocol_version = "2025-11-25"
 log_level = "debug"
 
 [mcp.limits]
@@ -71,6 +72,7 @@ context_lines_after_default = 3
     expect(CONFIG.DOLPHIN_API_URL).toBe("http://127.0.0.1:9999");
     expect(CONFIG.SERVER_NAME).toBe("test-mcp");
     expect(CONFIG.SERVER_VERSION).toBe("9.9.9");
+    expect(CONFIG.MCP_PROTOCOL_VERSION).toBe("2025-11-25");
     expect(CONFIG.LOG_LEVEL).toBe("debug");
     expect(CONFIG.MCP_LIMITS.TOP_K_MAX).toBe(42);
     expect(CONFIG.MCP_LIMITS.SNIPPET_CHAR_CAP).toBe(123);
@@ -98,6 +100,7 @@ context_lines_after_default = 3
 api_url = "http://127.0.0.1:9999"
 server_name = "toml-mcp"
 server_version = "9.9.9"
+protocol_version = "2025-11-25"
 log_level = "debug"
 `
     );
@@ -107,12 +110,14 @@ log_level = "debug"
     process.env.LOG_LEVEL = "error";
     process.env.SERVER_NAME = "env-mcp";
     process.env.SERVER_VERSION = "1.2.3";
+    process.env.MCP_PROTOCOL_VERSION = "2025-11-25";
 
     const { CONFIG } = await importConfig();
 
     expect(CONFIG.DOLPHIN_API_URL).toBe("http://127.0.0.1:7771");
     expect(CONFIG.SERVER_NAME).toBe("env-mcp");
     expect(CONFIG.SERVER_VERSION).toBe("1.2.3");
+    expect(CONFIG.MCP_PROTOCOL_VERSION).toBe("2025-11-25");
     expect(CONFIG.LOG_LEVEL).toBe("error");
   });
 
@@ -125,12 +130,14 @@ log_level = "debug"
     delete process.env.LOG_LEVEL;
     delete process.env.SERVER_NAME;
     delete process.env.SERVER_VERSION;
+    delete process.env.MCP_PROTOCOL_VERSION;
 
     const { CONFIG } = await importConfig();
 
     expect(CONFIG.DOLPHIN_API_URL).toBe("http://127.0.0.1:7777");
     expect(CONFIG.SERVER_NAME).toBe("dolphin-mcp");
     expect(CONFIG.SERVER_VERSION).toBe("0.2.0");
+    expect(CONFIG.MCP_PROTOCOL_VERSION).toBe("2025-11-25");
     expect(CONFIG.LOG_LEVEL).toBe("info");
   });
 

@@ -14,7 +14,7 @@ afterAll(async () => {
   await stop?.();
 });
 
-describe("search_knowledge", () => {
+describe("search", () => {
   beforeEach(() => {
     // Reset any mocks if needed
   });
@@ -48,14 +48,14 @@ describe("search_knowledge", () => {
 
     // Check _meta includes required fields
     expect(res._meta).toBeDefined();
-    expect(res._meta.hits).toBeDefined();
     expect(res._meta.cursor).toBeDefined();
     expect(res._meta.estimated_total).toBeDefined();
     expect(res._meta.complete).toBeDefined();
     expect(res._meta.warnings).toBeDefined();
     expect(res._meta.model).toBeDefined();
     expect(res._meta.top_k).toBeDefined();
-    expect(res._meta.mcp_latency_ms).toBeDefined();
+    expect(res._meta.tool_version).toBeDefined();
+    expect(res._meta.latency_ms).toBeDefined();
   });
 
   it("output_mode=resources omits prompt-ready text block", async () => {
@@ -82,7 +82,7 @@ describe("search_knowledge", () => {
 
     expect(res.isError).toBe(false);
     const hitsJson = parseHitsJson(String(res.content[1].text));
-    expect(hitsJson.schema_version).toBeDefined();
+    expect(hitsJson.schema_version).toBe("2025-11-25.1");
     expect(hitsJson.hits.length).toBeGreaterThan(0);
     expect(hitsJson.hits[0].chunk_id).toBeDefined();
     expect(hitsJson.hits[0].uris.abs_path).toContain("/abs/");
@@ -263,6 +263,9 @@ describe("search_knowledge", () => {
 
     expect(res.isError).toBe(true);
     expect(res.content[0].text).toMatch(/remediation/i);
+    expect(res._meta?.error?.code).toBe("invalid_input");
+    expect(res._meta?.error?.message).toBeDefined();
+    expect(res._meta?.error?.remediation).toBeDefined();
   });
 
   it("error mapping: deadline_exceeded with hits → success with complete=false", async () => {

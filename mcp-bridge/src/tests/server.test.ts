@@ -40,6 +40,7 @@ describe("createServer", () => {
       CONFIG: {
         SERVER_NAME: "test-server",
         SERVER_VERSION: "1.2.3",
+        MCP_PROTOCOL_VERSION: "2025-11-25",
         DOLPHIN_API_URL: "http://127.0.0.1:9999",
         LOG_LEVEL: "info",
         MCP_LIMITS: {
@@ -52,6 +53,8 @@ describe("createServer", () => {
           MIN_SNIPPET_CHAR_FLOOR: 300,
         },
       },
+      getConfigSummary: () => ({ mocked: true }),
+      validateConfig: () => [],
     }));
 
     mock.module("./tools/index.js", () => ({

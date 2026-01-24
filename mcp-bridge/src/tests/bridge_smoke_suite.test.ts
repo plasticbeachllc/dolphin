@@ -9,6 +9,7 @@ function createDeps(overrides: Partial<BridgeSmokeDeps> = {}): BridgeSmokeDeps {
     start_line: 10,
     end_line: 20,
   };
+  const hitsJson = "```json\n" + JSON.stringify({ hits: [baseHit] }) + "\n```";
 
   const defaultDeps: BridgeSmokeDeps = {
     listRepos: async () => ({
@@ -22,13 +23,15 @@ function createDeps(overrides: Partial<BridgeSmokeDeps> = {}): BridgeSmokeDeps {
       },
       handler: async () => ({
         isError: false,
-        content: [{ type: "text", text: "summary" }],
-        _meta: { hits: [baseHit] },
+        content: [
+          { type: "text", text: "summary" },
+          { type: "text", text: hitsJson },
+        ],
       }),
     }),
     makeFetchChunk: () => ({
       definition: {
-        name: "chunk",
+        name: "chunk.get",
         description: "",
         inputSchema: { type: "object", properties: {} },
       },
@@ -41,44 +44,28 @@ function createDeps(overrides: Partial<BridgeSmokeDeps> = {}): BridgeSmokeDeps {
             resource: { uri: "kb://chunk-1", mimeType: "text/plain", text: "code" },
           },
         ],
-        data: {
-          chunk_id: baseHit.chunk_id,
-          repo: baseHit.repo,
-          path: baseHit.path,
-          start_line: baseHit.start_line,
-          end_line: baseHit.end_line,
-          content: "code",
-          resource_link: "kb://chunk-1",
-        },
       }),
     }),
     makeFetchLines: () => ({
       definition: {
-        name: "lines",
+        name: "file.lines",
         description: "",
         inputSchema: { type: "object", properties: {} },
       },
       handler: async () => ({
         isError: false,
         content: [{ type: "text", text: "Lines" }],
-        data: {
-          repo: baseHit.repo,
-          path: baseHit.path,
-          start_line: baseHit.start_line,
-          end_line: baseHit.end_line,
-        },
       }),
     }),
     makeGetVectorStoreInfo: () => ({
       definition: {
-        name: "info",
+        name: "store.info",
         description: "",
         inputSchema: { type: "object", properties: {} },
       },
       handler: async () => ({
         isError: false,
         content: [{ type: "text", text: "info" }],
-        data: { namespaces: ["chunks_small"], dims: { chunks_small: 1536 } },
       }),
     }),
   };
@@ -128,7 +115,7 @@ describe("runBridgeSmokeSuite", () => {
     const report = await runBridgeSmokeSuite(deps);
     expect(report.failed).toBe(1);
     expect(report.entries).toHaveLength(3);
-    expect(report.entries.at(-1)?.name).toBe("search_knowledge");
+    expect(report.entries.at(-1)?.name).toBe("search");
     expect(report.entries.at(-1)?.status).toBe("failed");
     expect(report.entries.at(-1)?.error).toContain("Search failed");
   });

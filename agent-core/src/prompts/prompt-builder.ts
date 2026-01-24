@@ -35,7 +35,7 @@ Your task is to thoroughly research the codebase to understand how to complete t
 
 # Knowledge Bank Integration
 
-You have access to a semantic code search via the search_knowledge tool. This searches a vector database of the entire codebase.
+You have access to a semantic code search via the search tool. This searches a vector database of the entire codebase.
 
 **When to search:**
 - At the start of your research to find relevant code
@@ -203,7 +203,7 @@ ${this.formatContext(params.context)}
 # Instructions
 
 Complete the requested task directly and efficiently. Use the available tools to:
-- Search the codebase if needed (search_knowledge)
+- Search the codebase if needed (search)
 - Read or modify files
 - Execute commands
 

@@ -12,6 +12,14 @@ import { makeListRepos } from "../mcp/tools/list_repos.js";
 import { makeKbHealth } from "../mcp/tools/kb_health.js";
 import { initLogger } from "../util/logger.js";
 
+function parseHitsJson(content: Array<{ type: string; text?: string }>): { hits?: unknown[] } | null {
+  const jsonBlock = content.find((block) => block.type === "text" && String(block.text).includes("```json"));
+  if (!jsonBlock?.text) return null;
+  const match = String(jsonBlock.text).match(/```json\n([\s\S]*?)\n```/);
+  if (!match) return null;
+  return JSON.parse(match[1]) as { hits?: unknown[] };
+}
+
 async function runIntegrationTests() {
   console.log("🚀 Starting MCP Bridge Integration Tests...\n");
 
@@ -19,37 +27,37 @@ async function runIntegrationTests() {
 
   const tests = [
     {
-      name: "search_knowledge - smoke test",
+      name: "search - smoke test",
       tool: makeSearchKnowledge(),
       input: { query: "test" },
     },
     {
-      name: "fetch_chunk - smoke test",
+      name: "chunk.get - smoke test",
       tool: makeFetchChunk(),
       input: { chunk_id: "1" },
     },
     {
-      name: "fetch_lines - smoke test",
+      name: "file.lines - smoke test",
       tool: makeFetchLines(),
       input: { repo: "repoa", path: "src/a.ts", start: 1, end: 10 },
     },
     {
-      name: "get_vector_store_info - smoke test",
+      name: "store.info - smoke test",
       tool: makeGetVectorStoreInfo(),
       input: {},
     },
     {
-      name: "list_repos - smoke test",
+      name: "repos.list - smoke test",
       tool: makeListRepos(),
       input: {},
     },
     {
-      name: "kb_health - smoke test",
+      name: "health - smoke test",
       tool: makeKbHealth(),
       input: { check: "shallow" },
     },
     {
-      name: "get_metadata - smoke test",
+      name: "metadata.get - smoke test",
       tool: makeGetMetadata(),
       input: { chunk_id: "1" },
     },
@@ -73,9 +81,10 @@ async function runIntegrationTests() {
         console.log(`  ✅ PASSED (${latency}ms)`);
 
         // Log some details for successful tests
-        if (test.name.includes("search_knowledge")) {
-          console.log(`    Found ${result._meta?.hits?.length || 0} hits`);
-        } else if (test.name.includes("fetch_chunk") || test.name.includes("fetch_lines")) {
+        if (test.name.includes("search")) {
+          const hits = parseHitsJson(result.content)?.hits ?? [];
+          console.log(`    Found ${hits.length} hits`);
+        } else if (test.name.includes("chunk.get") || test.name.includes("file.lines")) {
           console.log(`    Content length: ${result.content[0]?.text?.length || 0} chars`);
         }
 
@@ -90,7 +99,7 @@ async function runIntegrationTests() {
   }
 
   // Test pagination with multiple calls
-  console.log("📋 Running: search_knowledge - pagination test");
+  console.log("📋 Running: search - pagination test");
   try {
     const { handler } = makeSearchKnowledge();
     const firstPage = await handler({ input: { query: "test", top_k: 2 } });

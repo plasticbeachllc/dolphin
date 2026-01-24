@@ -5,6 +5,14 @@ import { initLogger } from "../util/logger.js";
 
 let stop: () => Promise<void>;
 
+function parseJsonBlock(text: string): Record<string, unknown> {
+  const match = text.match(/```json\n([\s\S]*?)\n```/);
+  if (!match) {
+    throw new Error("JSON block not found");
+  }
+  return JSON.parse(match[1]);
+}
+
 beforeAll(async () => {
   await initLogger();
   stop = await startMockRest(7777);
@@ -13,7 +21,7 @@ afterAll(async () => {
   await stop?.();
 });
 
-describe("kb_health", () => {
+describe("health", () => {
   it("returns health JSON", async () => {
     const { handler } = makeKbHealth();
     const res = await handler({ input: { check: "shallow" } });
@@ -21,8 +29,9 @@ describe("kb_health", () => {
     expect(res.isError).toBe(false);
     expect(Array.isArray(res.content)).toBe(true);
     expect(res.content[0].type).toBe("text");
-    expect(String(res.content[1].text)).toContain("```json");
-    expect(res.data.status).toBe("healthy");
+    const jsonText = String(res.content[1].text);
+    expect(jsonText).toContain("```json");
+    const data = parseJsonBlock(jsonText) as { status?: string };
+    expect(data.status).toBe("healthy");
   });
 });
-

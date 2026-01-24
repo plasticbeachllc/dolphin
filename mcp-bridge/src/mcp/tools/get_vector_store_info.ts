@@ -1,7 +1,14 @@
 import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 import { restListRepos } from "../../rest/client.js";
 import { logInfo, logError } from "../../util/logger.js";
 import { CONFIG } from "../../util/config.js";
+import { buildToolInputSchema } from "./schema.js";
+import { TOOL_VERSION } from "./version.js";
+import { normalizeToolError, formatToolErrorText } from "./error.js";
+
+const INPUT = z.object({});
+const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
 export function makeGetVectorStoreInfo(): {
   definition: Tool;
@@ -9,10 +16,10 @@ export function makeGetVectorStoreInfo(): {
   handler: any;
 } {
   const definition: Tool = {
-    name: "get_vector_store_info",
-    description: "Report namespaces, dims, limits, and approximate counts.",
-    inputSchema: { type: "object", properties: {} },
-    annotations: { title: "Vector Store Info", readOnlyHint: true, idempotentHint: true },
+    name: "store.info",
+    description: "Report vector store dims, namespaces, and counts.",
+    inputSchema: INPUT_SCHEMA,
+    annotations: { title: "Get Vector Store Info", readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   };
 
   const handler = async (_args: unknown, signal?: AbortSignal): Promise<CallToolResult> => {
@@ -33,30 +40,48 @@ export function makeGetVectorStoreInfo(): {
         latency: { search_p50_ms: null as number | null, search_p95_ms: null as number | null },
       };
 
-      await logInfo("get_vector_store_info", "get_vector_store_info success", {
+      const infoJson = "```json\n" + JSON.stringify(data) + "\n```";
+      await logInfo("store.info", "store.info success", {
         latency_ms: Date.now() - started,
       });
       return {
-        content: [{ type: "text", text: "Vector store info ready." }],
+        content: [
+          { type: "text", text: "Vector store info ready." },
+          { type: "text", text: infoJson },
+        ],
         isError: false,
-        data,
+        _meta: {
+          tool_version: TOOL_VERSION,
+          latency_ms: Date.now() - started,
+          warnings: [],
+        },
       };
     } catch (e: unknown) {
-      const error = e instanceof Error ? e : new Error(String(e));
-      const err = (e as { error?: { code: string; message: string } })?.error
-        ? (e as { error: { code: string; message: string } })
-        : { error: { code: "unexpected_error", message: error.message } };
-      await logError("get_vector_store_info", "get_vector_store_info error", {
-        error_code: err.error.code,
-        message: err.error.message,
+      const { error: toolError, upstream } = normalizeToolError(
+        e,
+        "Ensure REST service is running on 127.0.0.1:7777."
+      );
+      await logError("store.info", "store.info error", {
+        error_code: toolError.code,
+        message: toolError.message,
       });
       const content: CallToolResult["content"] = [
         {
           type: "text",
-          text: `${err.error.message} Remediation: ensure REST service is running on 127.0.0.1:7777.`,
+          text: formatToolErrorText(toolError),
         },
       ];
-      return { content, isError: true, _meta: { upstream: err } };
+      return {
+        content,
+        isError: true,
+        _meta: {
+          error: toolError,
+          upstream,
+          tool_version: TOOL_VERSION,
+          latency_ms: Date.now() - started,
+          warnings: [],
+        },
+      };
     }
   };
 

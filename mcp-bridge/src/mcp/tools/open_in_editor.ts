@@ -2,6 +2,9 @@ import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { restListRepos, type RepoInfo } from "../../rest/client.js";
 import { logInfo, logError } from "../../util/logger.js";
+import { buildToolInputSchema } from "./schema.js";
+import { TOOL_VERSION } from "./version.js";
+import { normalizeToolError, formatToolErrorText } from "./error.js";
 
 const INPUT_SHAPE = {
   repo: z.string(),
@@ -11,17 +14,7 @@ const INPUT_SHAPE = {
 };
 
 const INPUT = z.object(INPUT_SHAPE);
-
-const OPEN_IN_EDITOR_JSON_SCHEMA: Tool["inputSchema"] = {
-  type: "object",
-  properties: {
-    repo: { type: "string" },
-    path: { type: "string" },
-    line: { type: "integer", minimum: 1 },
-    column: { type: "integer", minimum: 1 },
-  },
-  required: ["repo", "path"],
-};
+const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
 type CacheEntry = { ts: number; repos: RepoInfo[] };
 let cache: CacheEntry | null = null;
@@ -35,13 +28,12 @@ export function makeOpenInEditor(): {
   definition: Tool;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: any;
-  inputSchema: typeof INPUT_SHAPE;
 } {
   const definition: Tool = {
     name: "open_in_editor",
     description: "Compute a vscode://file URI for a repo path and optional position.",
-    inputSchema: OPEN_IN_EDITOR_JSON_SCHEMA,
-    annotations: { title: "Open in VS Code", readOnlyHint: false },
+    inputSchema: INPUT_SCHEMA,
+    annotations: { title: "Open in VS Code", readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   };
 
   const handler = async (args: unknown, signal?: AbortSignal): Promise<CallToolResult> => {
@@ -72,25 +64,43 @@ export function makeOpenInEditor(): {
       await logInfo("open_in_editor", "open_in_editor success", {
         latency_ms: Date.now() - started,
       });
-      return { content: [{ type: "text", text: uri }], isError: false, data: { uri } };
+      return {
+        content: [{ type: "text", text: uri }],
+        isError: false,
+        _meta: {
+          tool_version: TOOL_VERSION,
+          latency_ms: Date.now() - started,
+          warnings: [],
+        },
+      };
     } catch (e: unknown) {
-      const error = e instanceof Error ? e : new Error(String(e));
-      const err = (e as { error?: { code: string; message: string } })?.error
-        ? (e as { error: { code: string; message: string } })
-        : { error: { code: "unexpected_error", message: error.message } };
+      const { error: toolError, upstream } = normalizeToolError(
+        e,
+        "Call /v1/repos and use an exact repo name."
+      );
       await logError("open_in_editor", "open_in_editor error", {
-        error_code: err.error.code,
-        message: err.error.message,
+        error_code: toolError.code,
+        message: toolError.message,
       });
       const content: CallToolResult["content"] = [
         {
           type: "text",
-          text: `${err.error.message} Remediation: call /v1/repos and use an exact repo name.`,
+          text: formatToolErrorText(toolError),
         },
       ];
-      return { content, isError: true, _meta: { upstream: err } };
+      return {
+        content,
+        isError: true,
+        _meta: {
+          error: toolError,
+          upstream,
+          tool_version: TOOL_VERSION,
+          latency_ms: Date.now() - started,
+          warnings: [],
+        },
+      };
     }
   };
 
-  return { definition, handler, inputSchema: INPUT_SHAPE };
+  return { definition, handler };
 }

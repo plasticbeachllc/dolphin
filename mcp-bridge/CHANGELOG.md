@@ -120,7 +120,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Parallel snippet fetching** with configurable concurrency for `search_knowledge` tool
+- **Parallel snippet fetching** with configurable concurrency for `search` tool
 - Configuration options for concurrency control:
   - `MAX_CONCURRENT_SNIPPET_FETCH` (default: 8, range: 1-12)
   - `SNIPPET_FETCH_TIMEOUT_MS` (default: 2000ms, range: 500-10000ms)
@@ -140,11 +140,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release of dolphin-mcp
 - MCP server implementation for Dolphin semantic code search
 - Tools:
-  - `search_knowledge` - Semantic search across indexed repositories
-  - `fetch_chunk` - Fetch code chunks by ID
-  - `fetch_lines` - Fetch file slices by line range
-  - `get_vector_store_info` - Repository metadata
-  - `get_metadata` - Chunk metadata
+  - `search` - Semantic search across indexed repositories
+  - `chunk.get` - Fetch code chunks by ID
+  - `file.lines` - Fetch file slices by line range
+  - `store.info` - Repository metadata
+  - `metadata.get` - Chunk metadata
   - `open_in_editor` - Generate VS Code URIs
 - Support for Continue.dev and Claude Desktop
 - JSONL logging to `logs/mcp.log`

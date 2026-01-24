@@ -13,15 +13,15 @@ afterAll(async () => {
   await stop?.();
 });
 
-describe("fetch_lines", () => {
+describe("file.lines", () => {
   it("happy path: returns file slice with inclusive end-line semantics, citation and resource text", async () => {
     const { handler } = makeFetchLines();
     const res = await handler({ input: { repo: "repoa", path: "src/a.ts", start: 1, end: 10 } });
 
     expect(res.isError).toBe(false);
-    expect(res.data.start_line).toBe(1);
-    expect(res.data.end_line).toBe(10);
-    expect(res.data.content).toBeDefined();
+    expect(res._meta).toBeDefined();
+    expect(res._meta.tool_version).toBeDefined();
+    expect(res._meta.latency_ms).toBeDefined();
 
     // Check content structure
     expect(Array.isArray(res.content)).toBe(true);
@@ -54,6 +54,7 @@ describe("fetch_lines", () => {
     expect(res.isError).toBe(true);
     expect(res.content[0].text).toMatch(/remediation/i);
     expect(res.content[0].text).toMatch(/range/i);
+    expect(res._meta?.error?.code).toBe("invalid_range");
   });
 
   it("file_not_found → isError=true with remediation", async () => {

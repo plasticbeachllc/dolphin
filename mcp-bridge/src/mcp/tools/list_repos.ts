@@ -1,6 +1,13 @@
 import type { Tool, CallToolResult, TextContent } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 import { restListRepos } from "../../rest/client.js";
 import { logInfo, logError } from "../../util/logger.js";
+import { buildToolInputSchema } from "./schema.js";
+import { TOOL_VERSION } from "./version.js";
+import { normalizeToolError, formatToolErrorText } from "./error.js";
+
+const INPUT = z.object({});
+const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
 export function makeListRepos(): {
   definition: Tool;
@@ -8,11 +15,11 @@ export function makeListRepos(): {
   handler: any;
 } {
   const definition: Tool = {
-    name: "list_repos",
+    name: "repos.list",
     description:
       "List indexed repositories with their absolute root paths and approximate file/chunk counts.",
-    inputSchema: { type: "object", properties: {} },
-    annotations: { title: "List Repositories", readOnlyHint: true, idempotentHint: true },
+    inputSchema: INPUT_SCHEMA,
+    annotations: { title: "List Repositories", readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   };
 
   const handler = async (_args: unknown, signal?: AbortSignal): Promise<CallToolResult> => {
@@ -26,24 +33,42 @@ export function makeListRepos(): {
         { type: "text", text: "```json\n" + JSON.stringify({ repos }) + "\n```" } as TextContent,
       ];
 
-      await logInfo("list_repos", "list_repos success", { latency_ms: Date.now() - started });
-      return { content, isError: false, data: { repos } };
+      await logInfo("repos.list", "repos.list success", { latency_ms: Date.now() - started });
+      return {
+        content,
+        isError: false,
+        _meta: {
+          tool_version: TOOL_VERSION,
+          latency_ms: Date.now() - started,
+          warnings: [],
+        },
+      };
     } catch (e: unknown) {
-      const error = e instanceof Error ? e : new Error(String(e));
-      const err = (e as { error?: { code: string; message: string } })?.error
-        ? (e as { error: { code: string; message: string } })
-        : { error: { code: "unexpected_error", message: error.message } };
-      await logError("list_repos", "list_repos error", {
-        error_code: err.error.code,
-        message: err.error.message,
+      const { error: toolError, upstream } = normalizeToolError(
+        e,
+        "Ensure REST service is running and the KB API key is configured."
+      );
+      await logError("repos.list", "repos.list error", {
+        error_code: toolError.code,
+        message: toolError.message,
       });
       const content: CallToolResult["content"] = [
         {
           type: "text",
-          text: `${err.error.message} Remediation: ensure REST service is running and the KB API key is configured.`,
+          text: formatToolErrorText(toolError),
         },
       ];
-      return { content, isError: true, _meta: { upstream: err } };
+      return {
+        content,
+        isError: true,
+        _meta: {
+          error: toolError,
+          upstream,
+          tool_version: TOOL_VERSION,
+          latency_ms: Date.now() - started,
+          warnings: [],
+        },
+      };
     }
   };
 

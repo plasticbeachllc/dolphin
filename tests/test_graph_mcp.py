@@ -30,7 +30,7 @@ def _run_live_mcp_request() -> dict[str, Any] | None:
         "id": 1,
         "method": "tools/call",
         "params": {
-            "name": "search_knowledge",
+            "name": "search",
             "arguments": {
                 "query": "GraphStore",
                 "repos": ["dolphin"],

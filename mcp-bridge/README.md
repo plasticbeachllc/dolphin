@@ -86,7 +86,7 @@ Environment variables take precedence over the file-based key.
 
 ### Parallel Snippet Fetching Configuration
 
-These variables control the performance optimization for parallel snippet fetching in `search_knowledge`:
+These variables control the performance optimization for parallel snippet fetching in `search`:
 
 | Variable                       | Default | Description                        | Recommended Range |
 | ------------------------------ | ------- | ---------------------------------- | ----------------- |
@@ -122,7 +122,20 @@ SNIPPET_FETCH_RETRY_ATTEMPTS=2
 
 ## Available Tools
 
-### `search_knowledge`
+### Tool Output Shape
+
+All tools return MCP `content` blocks. Success responses include `_meta` with `tool_version`, `latency_ms`, and `warnings`. Errors set `isError: true` and include `_meta.error`:
+
+```json
+{
+  "code": "string",
+  "message": "string",
+  "remediation": "string",
+  "details": {}
+}
+```
+
+### `search`
 
 Semantically query code and docs across indexed repositories and return many ranked candidates with follow-up-ready identifiers and citations.
 
@@ -177,7 +190,7 @@ Semantically query code and docs across indexed repositories and return many ran
 }
 ```
 
-### `fetch_chunk`
+### `chunk.get`
 
 Fetch a chunk by chunk_id and return fenced code with citation.
 
@@ -187,7 +200,7 @@ Fetch a chunk by chunk_id and return fenced code with citation.
 }
 ```
 
-### `get_metadata`
+### `metadata.get`
 
 Fetch chunk metadata without returning the full content.
 
@@ -197,7 +210,7 @@ Fetch chunk metadata without returning the full content.
 }
 ```
 
-### `fetch_lines`
+### `file.lines`
 
 Fetch a file slice [start, end] inclusive from disk and return fenced code with citation.
 
@@ -210,7 +223,7 @@ Fetch a file slice [start, end] inclusive from disk and return fenced code with 
 }
 ```
 
-### `get_vector_store_info`
+### `store.info`
 
 Report namespaces, dims, limits, and approximate counts.
 
@@ -218,7 +231,7 @@ Report namespaces, dims, limits, and approximate counts.
 {}
 ```
 
-### `list_repos`
+### `repos.list`
 
 List indexed repositories with their absolute root paths and approximate file/chunk counts.
 
@@ -226,7 +239,7 @@ List indexed repositories with their absolute root paths and approximate file/ch
 {}
 ```
 
-### `kb_health`
+### `health`
 
 Check Knowledge Base REST API health (`/v1/health`).
 

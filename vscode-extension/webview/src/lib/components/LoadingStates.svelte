@@ -390,7 +390,7 @@
           <div class="flex items-center gap-2">
             <Badge variant="secondary" class="flex items-center gap-2">
               <div class="size-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-              <span>search_knowledge</span>
+              <span>search</span>
             </Badge>
           </div>
           <Skeleton class="h-4 w-[60px]" />

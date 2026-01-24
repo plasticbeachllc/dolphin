@@ -56,7 +56,7 @@ def migrate_graph_tables():
         print("     kb index --full-reindex dolphin")
         print()
         print("  2. Test graph-enriched search:")
-        print("     Use the search_knowledge MCP tool")
+        print("     Use the search MCP tool")
 
         return True
 

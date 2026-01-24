@@ -208,7 +208,7 @@ MCP uses the `/v1` KB endpoints and includes the `X-API-Key` header automaticall
 
 In experimental components (e.g., the VSCode extension), the KB server lifecycle is managed automatically.
 
-Available MCP tools: `search_knowledge`, `fetch_chunk`, `fetch_lines`, `get_vector_store_info`, `get_metadata`, `list_repos`, `kb_health`
+Available MCP tools: `search`, `chunk.get`, `file.lines`, `store.info`, `metadata.get`, `repos.list`, `health`
 
 ## VSCode Extension (Experimental)
 

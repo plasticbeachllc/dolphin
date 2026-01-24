@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Test the MCP server's search_knowledge tool with graph context
+# Test the MCP server's search tool with graph context
 
-echo '{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "test-client", "version": "1.0"}}}' | \
+echo '{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "test-client", "version": "1.0"}}}' | \
 bun run mcp-bridge/src/index.ts 2>/dev/null | head -1
 
-echo '{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "search_knowledge", "arguments": {"query": "pipeline index method", "top_k": 2, "include_graph_context": true}}}' | \
+echo '{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "search", "arguments": {"query": "pipeline index method", "top_k": 2, "include_graph_context": true}}}' | \
 bun run mcp-bridge/src/index.ts 2>/dev/null | \
 python3 -c "
 import sys, json

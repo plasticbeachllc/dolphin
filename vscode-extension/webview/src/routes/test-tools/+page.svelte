@@ -16,7 +16,7 @@
 
   // Test data for different tool scenarios
   let runningTool = $state<ToolCallState>({
-    tool: 'search_knowledge',
+    tool: 'search',
     input: { query: 'authentication patterns', top_k: 10 },
     status: 'running'
   });
@@ -45,7 +45,7 @@
 
   let allToolTypes = $state<ToolCallState[]>([
     {
-      tool: 'search_knowledge',
+      tool: 'search',
       input: { query: 'user authentication' },
       status: 'success',
       result: { hits: 5, total_time_ms: 156 },
@@ -59,14 +59,14 @@
       executionTime: 89
     },
     {
-      tool: 'fetch_chunk',
+      tool: 'chunk.get',
       input: { chunk_id: 'chunk-abc123' },
       status: 'success',
       result: { content: 'function authenticate(user) { ... }' },
       executionTime: 45
     },
     {
-      tool: 'fetch_lines',
+      tool: 'file.lines',
       input: { repo: 'main', path: 'src/app.ts', start: 1, end: 50 },
       status: 'success',
       result: { lines: 50 },
@@ -88,7 +88,7 @@
 
   function resetTests() {
     runningTool = {
-      tool: 'search_knowledge',
+      tool: 'search',
       input: { query: 'authentication patterns', top_k: 10 },
       status: 'running'
     };

@@ -37,6 +37,7 @@ const DEFAULTS = {
   API_URL: "http://127.0.0.1:7777",
   SERVER_NAME: "dolphin-mcp",
   SERVER_VERSION: "0.2.0",
+  MCP_PROTOCOL_VERSION: "2025-11-25",
   LOG_LEVEL: "info",
   MCP_LIMITS: {
     TOP_K_MAX: 100,
@@ -76,6 +77,7 @@ type McpConfig = {
   api_url?: string;
   server_name?: string;
   server_version?: string;
+  protocol_version?: string;
   log_level?: string;
   limits?: {
     top_k_max?: number;
@@ -360,6 +362,11 @@ export const CONFIG = {
     MCP_CONFIG.server_version,
     DEFAULTS.SERVER_VERSION
   ),
+  MCP_PROTOCOL_VERSION: resolveString(
+    process.env.MCP_PROTOCOL_VERSION,
+    MCP_CONFIG.protocol_version,
+    DEFAULTS.MCP_PROTOCOL_VERSION
+  ),
 
   // Logging Configuration
   LOG_LEVEL: resolveString(process.env.LOG_LEVEL, MCP_CONFIG.log_level, DEFAULTS.LOG_LEVEL),
@@ -513,6 +520,7 @@ export function getConfigSummary(): Record<string, unknown> {
     dolphin_api_url: CONFIG.DOLPHIN_API_URL,
     server_name: CONFIG.SERVER_NAME,
     server_version: CONFIG.SERVER_VERSION,
+    protocol_version: CONFIG.MCP_PROTOCOL_VERSION,
     log_level: CONFIG.LOG_LEVEL,
     max_concurrent_snippet_fetch: CONFIG.MAX_CONCURRENT_SNIPPET_FETCH,
     snippet_fetch_timeout_ms: CONFIG.SNIPPET_FETCH_TIMEOUT_MS,

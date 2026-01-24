@@ -32,10 +32,10 @@ mcpServers:
 # 3. Restart Continue.dev
 
 # Available Tools:
-# - search_knowledge: Semantic code search
-# - fetch_chunk: Get chunk content by ID
-# - fetch_lines: Get file lines by range
-# - get_vector_store_info: Get KB statistics
-# - get_metadata: Get chunk metadata by ID
-# - list_repos: List indexed repositories
-# - kb_health: Check KB REST API health
+# - search: Semantic code search
+# - chunk.get: Get chunk content by ID
+# - file.lines: Get file lines by range
+# - store.info: Get KB statistics
+# - metadata.get: Get chunk metadata by ID
+# - repos.list: List indexed repositories
+# - health: Check KB REST API health

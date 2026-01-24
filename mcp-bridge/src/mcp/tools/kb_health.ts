@@ -2,30 +2,26 @@ import type { Tool, CallToolResult, TextContent } from "@modelcontextprotocol/sd
 import { z } from "zod";
 import { restHealthV1 } from "../../rest/client.js";
 import { logInfo, logError } from "../../util/logger.js";
+import { buildToolInputSchema } from "./schema.js";
+import { TOOL_VERSION } from "./version.js";
+import { normalizeToolError, formatToolErrorText } from "./error.js";
 
 const INPUT_SHAPE = {
   check: z.enum(["shallow", "deep"]).optional(),
 };
 const INPUT = z.object(INPUT_SHAPE);
-
-const KB_HEALTH_JSON_SCHEMA: Tool["inputSchema"] = {
-  type: "object",
-  properties: {
-    check: { type: "string", enum: ["shallow", "deep"] },
-  },
-};
+const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
 export function makeKbHealth(): {
   definition: Tool;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: any;
-  inputSchema: typeof INPUT_SHAPE;
 } {
   const definition: Tool = {
-    name: "kb_health",
+    name: "health",
     description: "Check Knowledge Base REST API health (/v1/health).",
-    inputSchema: KB_HEALTH_JSON_SCHEMA,
-    annotations: { title: "KB Health", readOnlyHint: true, idempotentHint: true },
+    inputSchema: INPUT_SCHEMA,
+    annotations: { title: "KB Health", readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   };
 
   const handler = async (args: unknown, signal?: AbortSignal): Promise<CallToolResult> => {
@@ -40,27 +36,44 @@ export function makeKbHealth(): {
         { type: "text", text: "```json\n" + JSON.stringify(health) + "\n```" } as TextContent,
       ];
 
-      await logInfo("kb_health", "kb_health success", { latency_ms: Date.now() - started });
-      return { content, isError: false, data: health };
+      await logInfo("health", "health success", { latency_ms: Date.now() - started });
+      return {
+        content,
+        isError: false,
+        _meta: {
+          tool_version: TOOL_VERSION,
+          latency_ms: Date.now() - started,
+          warnings: [],
+        },
+      };
     } catch (e: unknown) {
-      const error = e instanceof Error ? e : new Error(String(e));
-      const err = (e as { error?: { code: string; message: string } })?.error
-        ? (e as { error: { code: string; message: string } })
-        : { error: { code: "unexpected_error", message: error.message } };
-      await logError("kb_health", "kb_health error", {
-        error_code: err.error.code,
-        message: err.error.message,
+      const { error: toolError, upstream } = normalizeToolError(
+        e,
+        "Ensure REST service is running on 127.0.0.1:7777 and the KB API key is configured."
+      );
+      await logError("health", "health error", {
+        error_code: toolError.code,
+        message: toolError.message,
       });
       const content: CallToolResult["content"] = [
         {
           type: "text",
-          text: `${err.error.message} Remediation: ensure REST service is running on 127.0.0.1:7777 and the KB API key is configured.`,
+          text: formatToolErrorText(toolError),
         },
       ];
-      return { content, isError: true, _meta: { upstream: err } };
+      return {
+        content,
+        isError: true,
+        _meta: {
+          error: toolError,
+          upstream,
+          tool_version: TOOL_VERSION,
+          latency_ms: Date.now() - started,
+          warnings: [],
+        },
+      };
     }
   };
 
-  return { definition, handler, inputSchema: INPUT_SHAPE };
+  return { definition, handler };
 }
-

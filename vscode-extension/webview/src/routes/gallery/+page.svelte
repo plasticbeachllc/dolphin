@@ -559,7 +559,7 @@
 						</CardHeader>
 						<CardContent>
 							<ToolCallCard
-								tool="search_knowledge"
+								tool="search"
 								input={{ query: "authentication implementation", top_k: 5 }}
 								status="running"
 								collapsed={false}

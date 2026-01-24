@@ -19,7 +19,7 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@modelcontextprotocol/sdk": "^1.25.3",
     "@iarna/toml": "^2.2.5",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.25.1"

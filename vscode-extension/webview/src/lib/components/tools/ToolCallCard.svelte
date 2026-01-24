@@ -44,14 +44,14 @@
 	}
 
 	const toolIcons: Record<string, string> = {
-		search_knowledge: '🔍',
+		search: '🔍',
 		kb_search: '🔍',
 		read_files: '📄',
 		file_write: '✍️',
 		apply_diff: '🔧',
 		run_command: '⚡',
-		fetch_chunk: '📦',
-		fetch_lines: '📝'
+		'chunk.get': '📦',
+		'file.lines': '📝'
 	};
 
 	function toggleExpanded() {

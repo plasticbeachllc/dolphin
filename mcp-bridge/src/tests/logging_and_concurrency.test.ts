@@ -132,7 +132,7 @@ describe("concurrency and stability", () => {
     });
   });
 
-  it("8 concurrent search_knowledge calls execute without shared-state corruption", async () => {
+  it("8 concurrent search calls execute without shared-state corruption", async () => {
     const { handler } = makeSearchKnowledge();
 
     // Create 8 concurrent search requests with different queries

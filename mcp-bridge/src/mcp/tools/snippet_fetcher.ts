@@ -1,4 +1,5 @@
 import { restGetFileSlice } from "../../rest/client.js";
+import { CONFIG } from "../../util/config.js";
 import { mapWithConcurrency } from "../../util/concurrency.js";
 import { logWarn, logError, logInfo, logDebug } from "../../util/logger.js";
 
@@ -66,10 +67,10 @@ export async function fetchSnippetsInParallel(
   options: SnippetFetchOptions = {}
 ): Promise<{ [key: number]: SnippetFetchResult | undefined }> {
   const {
-    maxConcurrent = 8,
-    requestTimeoutMs = 1500,
-    retryAttempts = 1,
-    signal: _signal,
+    maxConcurrent = CONFIG.MAX_CONCURRENT_SNIPPET_FETCH,
+    requestTimeoutMs = CONFIG.SNIPPET_FETCH_TIMEOUT_MS,
+    retryAttempts = CONFIG.SNIPPET_FETCH_RETRY_ATTEMPTS,
+    signal,
   } = options;
 
   const startTime = Date.now();
@@ -90,6 +91,15 @@ export async function fetchSnippetsInParallel(
           // Create timeout-based abort controller
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
+          const abortFromSignal = () => controller.abort();
+
+          if (signal) {
+            if (signal.aborted) {
+              controller.abort();
+            } else {
+              signal.addEventListener("abort", abortFromSignal);
+            }
+          }
 
           try {
             // DEBUG: Log exact parameters being sent to /file endpoint
@@ -136,6 +146,9 @@ export async function fetchSnippetsInParallel(
             clearTimeout(timeoutId);
             return { result, metadata };
           } finally {
+            if (signal) {
+              signal.removeEventListener("abort", abortFromSignal);
+            }
             clearTimeout(timeoutId);
           }
         } catch (error) {
