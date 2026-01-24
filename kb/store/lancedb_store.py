@@ -490,7 +490,10 @@ class LanceDBStore:
         db = self.connect()
         try:
             table = db.open_table(model_to_table[model])
-        except Exception:
+        except Exception as e:
+            import logging
+
+            logging.warning(f"Failed to open table '{model_to_table[model]}': {e}")
             return {}
 
         repo_expr = repr(repo)
