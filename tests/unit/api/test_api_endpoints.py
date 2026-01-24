@@ -100,6 +100,16 @@ class TestSearchEndpoint:
         assert "hits" in data
         assert len(data["hits"]) > 0
 
+    def test_search_v1_unknown_repo_returns_404(self, kb_api_client):
+        """Unknown repos should return a 404 with a helpful message."""
+        response = kb_api_client.post(
+            "/v1/search",
+            json={"query": "test", "repos": ["does-not-exist"]},
+        )
+
+        assert response.status_code == 404
+        assert "Repository not found" in response.json().get("detail", "")
+
     def test_search_with_repos_filter(self):
         """Test search with repos filter."""
         client = TestClient(app)

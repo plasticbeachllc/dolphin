@@ -288,6 +288,11 @@ async def search(request: SearchRequest) -> dict[str, object]:
     """Dispatch the search request to the configured backend."""
     backend = get_search_backend()
 
+    if request.repos and _sql_store is not None:
+        missing = [repo for repo in request.repos if not _sql_store.get_repo_by_name(repo)]
+        if missing:
+            raise HTTPException(status_code=404, detail=f"Repository not found: {', '.join(missing)}")
+
     # Extract ANN configuration from request if provided
     if hasattr(request, "ann_strategy") and request.ann_strategy:
         # Create temporary config for this request

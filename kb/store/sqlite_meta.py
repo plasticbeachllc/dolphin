@@ -492,11 +492,12 @@ class SQLiteMetadataStore:
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 """
-                INSERT INTO repos (name, root_path, default_embed_model)
-                VALUES (?, ?, ?)
+                INSERT INTO repos (name, root_path, default_embed_model, created_at, updated_at)
+                VALUES (?, ?, ?, datetime('now'), datetime('now'))
                 ON CONFLICT(name) DO UPDATE SET
                   root_path=excluded.root_path,
                   default_embed_model=excluded.default_embed_model,
+                  created_at=COALESCE(repos.created_at, datetime('now')),
                   updated_at=datetime('now')
                 """,
                 (name, str(resolved_path), default_embed_model),
@@ -574,7 +575,9 @@ class SQLiteMetadataStore:
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 """
-                SELECT id, name, root_path, default_embed_model, created_at, updated_at
+                SELECT id, name, root_path, default_embed_model,
+                       COALESCE(created_at, updated_at) as created_at,
+                       updated_at
                 FROM repos
                 ORDER BY name
             """
