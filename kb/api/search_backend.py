@@ -437,7 +437,10 @@ class KnowledgeSearchBackend:
                     "score": score,
                 },
             )
-            formatted.append({**r, "chunk_id": r.get("id"), "score": score})
+            # Create a copy without the raw vector to save bandwidth
+            result = {**r, "chunk_id": r.get("id"), "score": score}
+            result.pop("vector", None)
+            formatted.append(result)
         return formatted
 
     def _filter_and_score_results(

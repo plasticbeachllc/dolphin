@@ -100,7 +100,7 @@ class LanceDBStore:
         db = self.connect()
 
         collections = [("chunks_small", "small"), ("chunks_large", "large")]
-        existing = set(getattr(db, "table_names", lambda: [])())
+        existing = set(db.list_tables())
         for name, model in collections:
             self._get_schema_for_model(model)
             dim = 1536 if model == "small" else 3072
@@ -141,7 +141,7 @@ class LanceDBStore:
                 table.delete("id = '__init_placeholder__'")
             except Exception as e:
                 # If table creation fails, check if it now exists (race condition)
-                existing_after = set(getattr(db, "table_names", lambda: [])())
+                existing_after = set(db.list_tables())
                 if name not in existing_after:
                     # Table truly doesn't exist and creation failed
                     raise RuntimeError(f"Failed to create table {name}: {e}") from e
@@ -465,3 +465,55 @@ class LanceDBStore:
             return results[0] if results else None
         except Exception:
             return None
+
+    def get_vectors_by_hashes(
+        self, repo: str, hashes: Iterable[str], *, model: str
+    ) -> dict[str, list[float]]:
+        """Retrieve vectors for specific text hashes in a repository.
+
+        Args:
+            repo: Repository name
+            hashes: List/Set of text hashes to look up
+            model: Embedding model ('small' or 'large')
+
+        Returns:
+            Dictionary mapping text_hash -> vector
+        """
+        model_to_table = {"small": "chunks_small", "large": "chunks_large"}
+
+        if model not in model_to_table:
+            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
+
+        hash_list = list(hashes)
+        if not hash_list:
+            return {}
+
+        # Use cached connection
+        db = self.connect()
+        try:
+            table = db.open_table(model_to_table[model])
+        except Exception:
+            return {}
+
+        repo_expr = repr(repo)
+
+        # Build filter expression
+        # Note: If hash_list is very large, this might hit SQL parser limits.
+        # But for incremental updates, it's typically manageable.
+        quoted_hashes = [repr(h) for h in hash_list]
+        hash_expr = ", ".join(quoted_hashes)
+        filter_expr = f"repo = {repo_expr} AND text_hash IN ({hash_expr})"
+
+        try:
+            # Select only text_hash and vector
+            results = (
+                table.search()
+                .where(filter_expr)
+                .select(["text_hash", "vector"])
+                .limit(len(hash_list) * 2)  # Limit to reasonable upper bound
+                .to_list()
+            )
+
+            return {r["text_hash"]: r["vector"] for r in results}
+        except Exception:
+            return {}

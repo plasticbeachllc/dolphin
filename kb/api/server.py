@@ -125,18 +125,6 @@ app.middleware("http")(prometheus_middleware)
 app.get("/metrics")(metrics_endpoint)
 
 
-# Add health check endpoint to the app
-@app.get("/health")
-async def health_check():
-    """Enhanced health check with component status."""
-    return {
-        "status": "healthy",
-        "version": "0.2.0",
-        "timestamp": datetime.now(UTC).isoformat(),
-        "components": {"api": "healthy"},
-    }
-
-
 # Store embedding provider reference for cleanup
 _embedding_provider = None
 

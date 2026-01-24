@@ -22,7 +22,7 @@ from .utils import GitRepository, validate_path_within_repo
 # Constants
 EMBEDDING_BATCH_SIZE = 128
 ESTIMATED_TOKENS_PER_CHUNK = 200
-CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_:-]+$")
 
 app = FastAPI(title="Unified Knowledge Store", version="0.2.0")
 
@@ -409,31 +409,40 @@ async def fetch_chunk(chunk_id: str) -> dict[str, object]:
         raise HTTPException(status_code=400, detail="Invalid chunk_id format")
 
     try:
-        import lancedb
-
-        # Connect to LanceDB and search for the chunk by ID
-        db = lancedb.connect(_lance_store.root.as_posix())
-
-        # Try both small and large tables
         metadata = None
-        for table_name in ["chunks_small", "chunks_large"]:
-            try:
-                table = db.open_table(table_name)
-                # Query by ID
-                results = table.search().where(f"id = '{chunk_id}'").limit(1).to_list()
-
-                if results:
-                    metadata = results[0]
-                    break
-            except Exception:
-                continue
+        # Try finding the chunk in either model (small/large) using the store helper
+        for model_name in ["small", "large"]:
+            found = _lance_store.get_chunk_by_id(chunk_id, model=model_name)
+            if found:
+                metadata = found
+                break
 
         if not metadata:
             raise HTTPException(status_code=404, detail=f"Chunk not found: {chunk_id}")
 
-        # Fetch content from FTS table via SQL store
-        content_map = _sql_store.get_chunk_contents([chunk_id])
-        content = content_map.get(chunk_id, "")
+        # Fetch content.
+        # If we have metadata, we have text_hash, repo, path.
+        # We can construct the deterministic FTS content ID.
+        content = ""
+        text_hash = metadata.get("text_hash")
+        repo_name = metadata.get("repo")
+        path = metadata.get("path")
+
+        if text_hash and repo_name and path:
+            # Get repo_id and file_id
+            repo_info = _sql_store.get_repo_by_name(repo_name)
+            if repo_info:
+                repo_id = repo_info["id"]
+                file_id = _sql_store.get_file_id(repo_id, path)
+                if file_id:
+                    fts_content_id = generate_fts_content_id(repo_id, file_id, text_hash)
+                    content_map = _sql_store.get_chunk_contents([fts_content_id])
+                    content = content_map.get(fts_content_id, "")
+
+        # Fallback: if content logic above failed (e.g. repo not found), try using chunk_id directly
+        if not content:
+            content_map = _sql_store.get_chunk_contents([chunk_id])
+            content = content_map.get(chunk_id, "")
 
         return {
             "chunk_id": metadata.get("id"),
@@ -478,6 +487,9 @@ async def fetch_file_slice(
     """Fetch a slice of a file by line range."""
     if _sql_store is None:
         raise HTTPException(status_code=503, detail="SQL store not initialized")
+
+    if start > end:
+        raise HTTPException(status_code=400, detail=f"Invalid range: start ({start}) > end ({end})")
 
     try:
         # Get repo info
@@ -869,7 +881,6 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             import logging
 
             logger = logging.getLogger(__name__)
-            logger.info(f"[DEBUG] File {filepath}: extracted {len(chunks)} chunks")
 
             # Compute text_hash for each chunk
             for chunk in chunks:
@@ -877,7 +888,6 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
 
             # Build desired map
             desired = build_desired_map(chunks)
-            logger.info(f"[DEBUG] File {filepath}: desired map has {len(desired)} unique hashes")
             desired_row_ids: set[str] = set()
 
             # Deduplicate by text_hash
@@ -888,12 +898,25 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             new_hashes = {c.text_hash for c in changed_chunks}
             skipped_occurrences = len(unchanged_chunks)
             logger.info(
-                f"[DEBUG] File {filepath}: {len(changed_chunks)} changed, "
+                f"File {filepath}: {len(changed_chunks)} changed, "
                 f"{len(unchanged_chunks)} unchanged, {len(new_hashes)} new hashes"
             )
 
             # Embed only new hashes (batched to avoid redundant requests)
             text_hash_to_embedding: dict = {}
+
+            # For unchanged chunks, we need to recover their vectors from LanceDB
+            # to prevent them from being lost when row IDs change (due to location changes)
+            if unchanged_chunks:
+                unchanged_hashes = {c.text_hash for c in unchanged_chunks}
+                try:
+                    existing_vectors = _lance_store.get_vectors_by_hashes(
+                        repo_name, unchanged_hashes, model=embed_model
+                    )
+                    text_hash_to_embedding.update(existing_vectors)
+                except Exception as e:
+                    logger.warning(f"Failed to recover vectors for unchanged chunks: {e}")
+
             if new_hashes:
                 hashes_list = sorted(new_hashes)
                 for i in range(0, len(hashes_list), EMBEDDING_BATCH_SIZE):
@@ -908,10 +931,6 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
 
             # Upsert metadata and locations
             mapping = _sql_store.ensure_content_rows_for_file(repo_id, file_id, embed_model, list(desired.keys()))
-            logger.info(
-                f"[DEBUG] File {filepath}: ensure_content_rows_for_file returned mapping with {len(mapping)} entries"
-            )
-
             for h, occs in desired.items():
                 cid = mapping.get(h)
                 if cid:
@@ -984,17 +1003,12 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                         }
                     )
 
-            logger.info(
-                f"[DEBUG] File {filepath}: prepared {len(payload)} LanceDB vectors and {len(fts_chunks)} FTS5 chunks"
-            )
-
             if payload:
                 _lance_store.upsert_chunks(repo_name, payload, model=embed_model)
 
             # Index chunks in FTS5 for BM25 search
             if fts_chunks:
                 _sql_store.bulk_index_chunks_for_fts(fts_chunks)
-                logger.info(f"[DEBUG] File {filepath}: indexed {len(fts_chunks)} chunks in FTS5")
 
             # Prune any stale vectors for this file/model
             if desired_row_ids:

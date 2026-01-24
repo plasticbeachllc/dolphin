@@ -9,20 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-#### 🛠️ New File System Tools
-
-- **`file_write`** - Write content to files with atomic operation and optional backup
-  - Automatic parent directory creation
-  - Optional backup before overwriting
-  - Atomic write operations for data integrity
-  - Configurable backup behavior
-
-- **`read_files`** - Batch file reading with partial failure handling
-  - Read multiple files in a single request (up to 50 files)
-  - Configurable max file size (default: 1MB per file)
-  - Partial failure support (continue on error or fail-fast)
-  - Efficient bulk operations
-
 #### 🧠 Context Enrichment & Intelligence
 
 - **Graph-based code intelligence** integration
