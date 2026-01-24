@@ -96,7 +96,7 @@ def chunk_source(
         if callable(parse_fn):
             tree = parse_fn(source_bytes)
         else:
-            tree = parser.parse_bytes(source_bytes)  # type: ignore[attr-defined]
+            tree = parser.parse_bytes(source_bytes)
         root = tree.root_node
     except Exception as e:  # noqa: BLE001
         _log.warning(
@@ -530,7 +530,7 @@ def extract_graph_data(source: str, *, lang: str = "typescript") -> tuple[list[G
         if callable(parse_fn):
             tree = parse_fn(source_bytes)
         else:
-            tree = parser.parse_bytes(source_bytes)  # type: ignore[attr-defined]
+            tree = parser.parse_bytes(source_bytes)
         root = tree.root_node
     except Exception as e:  # noqa: BLE001
         _log.warning("Tree-sitter parse failed for graph extraction: %s", e)

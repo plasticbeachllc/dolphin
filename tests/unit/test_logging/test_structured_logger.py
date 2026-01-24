@@ -30,13 +30,16 @@ class TestStructuredLogger:
         logger.logger.setLevel(logging.DEBUG)
 
         # Attach output stream to logger for test access
-        logger._test_output = log_output  # type: ignore[attr-defined]
+        setattr(logger, "_test_output", log_output)
 
         return logger
 
     def _get_log_entry(self, logger):
         """Get the last log entry as a dict."""
-        output = logger._test_output.getvalue()
+        output_stream = getattr(logger, "_test_output", None)
+        if output_stream is None:
+            return None
+        output = output_stream.getvalue()
         lines = output.strip().split("\n")
         if lines and lines[-1]:
             return json.loads(lines[-1])
@@ -123,7 +126,7 @@ class TestStructuredLogger:
         logger.logger.handlers.clear()
         logger.logger.addHandler(handler)
         logger.logger.setLevel(logging.DEBUG)
-        logger._test_output = log_output  # type: ignore[attr-defined]
+        setattr(logger, "_test_output", log_output)
 
         logger.info("Test message")
 
@@ -143,7 +146,7 @@ class TestStructuredLogger:
         child.logger.handlers.clear()
         child.logger.addHandler(handler)
         child.logger.setLevel(logging.DEBUG)
-        child._test_output = log_output  # type: ignore[attr-defined]
+        setattr(child, "_test_output", log_output)
 
         child.info("Child message", {"extra": "data"})
 
@@ -164,12 +167,12 @@ class TestStructuredLogger:
         parent.logger.handlers.clear()
         parent.logger.addHandler(handler)
         parent.logger.setLevel(logging.DEBUG)
-        parent._test_output = log_output  # type: ignore[attr-defined]
+        setattr(parent, "_test_output", log_output)
 
         child = parent.create_child({"request_id": "xyz"})
         child.logger.handlers.clear()
         child.logger.addHandler(handler)
-        child._test_output = log_output  # type: ignore[attr-defined]
+        setattr(child, "_test_output", log_output)
 
         child.info("Test")
 
@@ -186,7 +189,7 @@ class TestStructuredLogger:
         logger.debug("Debug message")
         logger.info("Info message")
 
-        output = logger._test_output.getvalue()
+        output = getattr(logger, "_test_output", StringIO()).getvalue()
         assert output.strip() == ""
 
         # Warning should be logged
@@ -200,7 +203,7 @@ class TestStructuredLogger:
         """Test that output is valid JSON."""
         logger.info("Test message", {"key": "value"})
 
-        output = logger._test_output.getvalue().strip()
+        output = getattr(logger, "_test_output", StringIO()).getvalue().strip()
         # Should be parseable as JSON
         entry = json.loads(output)
 

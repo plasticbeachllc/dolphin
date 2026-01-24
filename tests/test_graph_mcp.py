@@ -102,7 +102,7 @@ def test_mcp_graph_fixture_coverage(
     response = _load_fixture_response(fixture_name)
 
     content = response.get("result", {}).get("content", [])
-    contexts = _extract_graph_context_blocks(content)  # type: ignore[arg-type]
+    contexts = _extract_graph_context_blocks(content)
 
     if expect_graph:
         assert contexts, f"{fixture_name} should include graph context"
@@ -140,7 +140,7 @@ def test_mcp_search_live_has_graph_context() -> None:
         return
 
     content = response.get("result", {}).get("content", [])
-    contexts = _extract_graph_context_blocks(content)  # type: ignore[arg-type]
+    contexts = _extract_graph_context_blocks(content)
 
     assert contexts, (
         "Live MCP search should include graph context. Ensure the repository is indexed before enabling this test."

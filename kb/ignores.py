@@ -7,7 +7,7 @@ from pathlib import Path
 try:
     import tomllib  # Python 3.11+
 except ImportError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore[import-not-found,no-redef]
+    import tomli as tomllib
 
 _log = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@ from typing import Any
 try:
     import tomllib
 except ImportError:
-    import tomli as tomllib  # type: ignore[import-not-found,no-redef]
+    import tomli as tomllib
 
 from .ignores import DEFAULT_IGNORE_PATTERNS
 
@@ -313,7 +313,11 @@ class KBConfig:
         graph_config = cls._build_graph_config(graph_data if isinstance(graph_data, dict) else {})
 
         # Build top-level config
-        config_kwargs = {"retrieval": retrieval_config, "api": api_config, "graph": graph_config}
+        config_kwargs: dict[str, Any] = {
+            "retrieval": retrieval_config,
+            "api": api_config,
+            "graph": graph_config,
+        }
 
         # Handle storage settings
         if storage_data and storage_data.get("store_root"):

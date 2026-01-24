@@ -141,7 +141,7 @@ class SQLiteMetadataStore:
         engine = create_engine(f"sqlite:///{self.db_path}")
 
         @event.listens_for(engine, "connect")
-        def _set_sqlite_pragma(dbapi_connection, connection_record):  # type: ignore[no-redef]
+        def _set_sqlite_pragma(dbapi_connection, connection_record):
             try:
                 dbapi_connection.execute("PRAGMA foreign_keys=ON")
             except Exception:
@@ -929,7 +929,18 @@ class SQLiteMetadataStore:
 
                 desired_map: dict[tuple[int, int], tuple[Any, Any, Any]] = {}
                 for d in desired_locations:
-                    desired_map[(int(d["start_line"]), int(d["end_line"]))] = (
+                    start_raw = d.get("start_line")
+                    end_raw = d.get("end_line")
+                    if not isinstance(start_raw, (int, float, str, bytes, bytearray)) or not isinstance(
+                        end_raw, (int, float, str, bytes, bytearray)
+                    ):
+                        continue
+                    try:
+                        start_line = int(start_raw)
+                        end_line = int(end_raw)
+                    except (TypeError, ValueError):
+                        continue
+                    desired_map[(start_line, end_line)] = (
                         d.get("symbol_kind"),
                         d.get("symbol_name"),
                         d.get("symbol_path"),

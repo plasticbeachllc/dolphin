@@ -913,7 +913,7 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
             "candidate_multiplier": reranker_data.get("candidate_multiplier", 4),
             "score_threshold": reranker_data.get("score_threshold", 0.3),
         }
-        retrieval_data["reranking"] = reranking_data  # type: ignore[index]
+        retrieval_data["reranking"] = reranking_data
         config_data["retrieval"] = retrieval_data
 
     # Handle ANN configuration (ann_config kwarg or default adaptive config)
@@ -925,7 +925,7 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
         "estimated_dataset_size": ann_config.get("estimated_dataset_size", 100000),
         "default_query_type": ann_config.get("default_query_type", "concept"),
     }
-    retrieval_data["ann"] = ann_data  # type: ignore[index]
+    retrieval_data["ann"] = ann_data
     config_data["retrieval"] = retrieval_data
 
     # Handle batch size for embedding provider (nested under "embedding")

@@ -41,7 +41,7 @@ _API_LIMITS = _DEFAULT_CONFIG.api
 # Note: CORSMiddleware is a class, not a factory function, but FastAPI's add_middleware
 # accepts both. We need to help the type checker by explicitly typing this.
 app.add_middleware(
-    cast(type, CORSMiddleware),  # type: ignore[arg-type]
+    cast(type, CORSMiddleware),
     allow_origins=[
         "vscode-webview://*",
         "http://localhost:3000",  # Development only
@@ -122,7 +122,11 @@ def _enrich_hits_with_snippets(
         start_line = hit.get("start_line")
         end_line = hit.get("end_line")
 
-        if not repo or not path or start_line is None or end_line is None:
+        if not repo or not path:
+            continue
+        if not isinstance(start_line, (int, float, str, bytes, bytearray)) or not isinstance(
+            end_line, (int, float, str, bytes, bytearray)
+        ):
             continue
 
         repo_name = str(repo)
@@ -153,8 +157,11 @@ def _enrich_hits_with_snippets(
             continue
 
         total_lines = len(lines)
-        start_int = int(start_line)
-        end_int = int(end_line)
+        try:
+            start_int = int(start_line)
+            end_int = int(end_line)
+        except (TypeError, ValueError):
+            continue
         context_before = request.context_lines_before or 0
         context_after = request.context_lines_after or 0
 
@@ -301,7 +308,7 @@ async def search(request: SearchRequest) -> dict[str, object]:
     raw_hits = backend.search(request)
     hits: Iterable[dict[str, object]]
     if isawaitable(raw_hits):
-        hits = await raw_hits  # type: ignore[assignment]
+        hits = await raw_hits
     else:
         hits = raw_hits
     hits_list = list(hits)

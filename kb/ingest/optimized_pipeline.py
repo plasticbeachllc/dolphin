@@ -83,7 +83,9 @@ class OptimizedIngestionPipeline:
 
         # Initialize caches
         if enable_ast_cache:
-            cache_path = Path(config.data_dir) / ".ast_cache.pkl" if hasattr(config, "data_dir") else None
+            data_dir = getattr(config, "data_dir", None)
+            cache_root = data_dir if data_dir is not None else config.store_root
+            cache_path = Path(str(cache_root)) / ".ast_cache.pkl"
             self.ast_cache = get_ast_cache(max_size=1000, persist_path=cache_path)
         else:
             self.ast_cache = None

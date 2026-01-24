@@ -17,7 +17,7 @@ def test_embed_texts_with_retry_success_after_retries(monkeypatch):
             return [[0.0] * dim for _ in range(n)]
 
         @with_retry(max_attempts=3, delays=(0.01, 0.01))
-        def embed_texts(self, model, texts):  # type: ignore[override]
+        def embed_texts(self, model, texts):
             self.calls += 1
             if self.calls < 3:
                 raise RuntimeError("temporary failure")
@@ -35,7 +35,7 @@ def test_embed_texts_with_retry_success_after_retries(monkeypatch):
 def test_embed_texts_with_retry_exhausts_attempts(monkeypatch):
     class AlwaysFailProvider(EmbeddingProvider):
         @with_retry(max_attempts=2, delays=(0.01,))
-        def embed_texts(self, model, texts):  # type: ignore[override]
+        def embed_texts(self, model, texts):
             raise RuntimeError("hard failure")
 
     set_default_provider(AlwaysFailProvider())
