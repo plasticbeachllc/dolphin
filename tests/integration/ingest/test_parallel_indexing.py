@@ -1,7 +1,7 @@
 """Integration tests for parallel indexing workflow."""
 
 import asyncio
-from typing import Generator
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest

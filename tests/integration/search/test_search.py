@@ -342,7 +342,7 @@ class TestSearchPerformance:
         # Register repos used in test
         metadata_store.initialize()
         for i in range(10):
-             metadata_store.record_repo(f"repo-{i}", str(sample_repo_path), default_embed_model="small")
+            metadata_store.record_repo(f"repo-{i}", str(sample_repo_path), default_embed_model="small")
 
         from kb.api.app import search
 

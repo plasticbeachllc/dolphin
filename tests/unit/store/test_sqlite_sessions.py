@@ -4,7 +4,6 @@ Additional tests for SQLiteMetadataStore - Session and file management
 Tests session lifecycle, file operations, and database queries
 """
 
-
 import pytest
 
 from kb.store.sqlite_meta import SQLiteMetadataStore
@@ -28,12 +27,7 @@ def test_begin_session(meta_store, tmp_path):
     repo = meta_store.get_repo_by_name("test-repo")
     repo_id = repo["id"]
 
-    session_id = meta_store.begin_session(
-        repo_id=repo_id,
-        commit_sha="abc123",
-        branch="main",
-        embed_model="small"
-    )
+    session_id = meta_store.begin_session(repo_id=repo_id, commit_sha="abc123", branch="main", embed_model="small")
 
     assert session_id > 0
 
@@ -47,12 +41,7 @@ def test_get_session(meta_store, tmp_path):
     repo = meta_store.get_repo_by_name("test-repo")
     repo_id = repo["id"]
 
-    session_id = meta_store.begin_session(
-        repo_id=repo_id,
-        commit_sha="abc123",
-        branch="main",
-        embed_model="small"
-    )
+    session_id = meta_store.begin_session(repo_id=repo_id, commit_sha="abc123", branch="main", embed_model="small")
 
     session = meta_store.get_session(session_id)
 
@@ -68,12 +57,7 @@ def test_set_session_status(meta_store, tmp_path):
     meta_store.record_repo("test-repo", repo_path)
 
     repo = meta_store.get_repo_by_name("test-repo")
-    session_id = meta_store.begin_session(
-        repo_id=repo["id"],
-        commit_sha="abc123",
-        branch="main",
-        embed_model="small"
-    )
+    session_id = meta_store.begin_session(repo_id=repo["id"], commit_sha="abc123", branch="main", embed_model="small")
 
     meta_store.set_session_status(session_id, "succeeded")
 
@@ -88,18 +72,9 @@ def test_bump_session_counters(meta_store, tmp_path):
     meta_store.record_repo("test-repo", repo_path)
 
     repo = meta_store.get_repo_by_name("test-repo")
-    session_id = meta_store.begin_session(
-        repo_id=repo["id"],
-        commit_sha="abc123",
-        branch="main",
-        embed_model="small"
-    )
+    session_id = meta_store.begin_session(repo_id=repo["id"], commit_sha="abc123", branch="main", embed_model="small")
 
-    meta_store.bump_session_counters(
-        session_id,
-        files_indexed=10,
-        chunks_indexed=50
-    )
+    meta_store.bump_session_counters(session_id, files_indexed=10, chunks_indexed=50)
 
     session = meta_store.get_session(session_id)
     assert session["files_indexed"] == 10
@@ -116,12 +91,7 @@ def test_get_file_id(meta_store, tmp_path):
     repo_id = repo["id"]
 
     file_id = meta_store.upsert_file(
-        repo_id=repo_id,
-        path="test.py",
-        ext=".py",
-        language="python",
-        is_binary=False,
-        size_bytes=100
+        repo_id=repo_id, path="test.py", ext=".py", language="python", is_binary=False, size_bytes=100
     )
 
     retrieved_id = meta_store.get_file_id(repo_id, "test.py")
@@ -150,12 +120,7 @@ def test_set_file_latest_commit(meta_store, tmp_path):
     repo_id = repo["id"]
 
     meta_store.upsert_file(
-        repo_id=repo_id,
-        path="test.py",
-        ext=".py",
-        language="python",
-        is_binary=False,
-        size_bytes=100
+        repo_id=repo_id, path="test.py", ext=".py", language="python", is_binary=False, size_bytes=100
     )
 
     meta_store.set_file_latest_commit(repo_id, "test.py", "new_commit_sha")
@@ -173,12 +138,7 @@ def test_get_last_successful_commit(meta_store, tmp_path):
     repo = meta_store.get_repo_by_name("test-repo")
     repo_id = repo["id"]
 
-    session_id = meta_store.begin_session(
-        repo_id=repo_id,
-        commit_sha="commit1",
-        branch="main",
-        embed_model="small"
-    )
+    session_id = meta_store.begin_session(repo_id=repo_id, commit_sha="commit1", branch="main", embed_model="small")
     meta_store.set_session_status(session_id, "succeeded")
 
     last_commit = meta_store.get_last_successful_commit(repo_id)

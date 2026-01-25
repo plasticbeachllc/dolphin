@@ -165,11 +165,7 @@ def test_get_vectors_by_hashes(memory_store):
     memory_store.upsert_chunks("test-repo", chunks, model="small")
 
     # Get vectors by hashes
-    vectors = memory_store.get_vectors_by_hashes(
-        "test-repo",
-        ["unique_hash_1"],
-        model="small"
-    )
+    vectors = memory_store.get_vectors_by_hashes("test-repo", ["unique_hash_1"], model="small")
 
     assert "unique_hash_1" in vectors
     assert len(vectors["unique_hash_1"]) == 1536

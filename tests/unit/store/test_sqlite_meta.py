@@ -4,7 +4,6 @@ Unit tests for SQLiteMetadataStore - Core operations
 Tests basic database operations using the correct API
 """
 
-
 import pytest
 
 from kb.store.sqlite_meta import SQLiteMetadataStore
@@ -66,12 +65,7 @@ def test_upsert_file(meta_store, tmp_path):
     repo_id = repo["id"]
 
     file_id = meta_store.upsert_file(
-        repo_id=repo_id,
-        path="src/test.py",
-        ext=".py",
-        language="python",
-        is_binary=False,
-        size_bytes=1024
+        repo_id=repo_id, path="src/test.py", ext=".py", language="python", is_binary=False, size_bytes=1024
     )
 
     assert file_id > 0
@@ -87,12 +81,7 @@ def test_get_file_by_path(meta_store, tmp_path):
     repo_id = repo["id"]
 
     file_id = meta_store.upsert_file(
-        repo_id=repo_id,
-        path="src/test.py",
-        ext=".py",
-        language="python",
-        is_binary=False,
-        size_bytes=1024
+        repo_id=repo_id, path="src/test.py", ext=".py", language="python", is_binary=False, size_bytes=1024
     )
 
     file = meta_store.get_file_by_path(repo_id, "src/test.py")
