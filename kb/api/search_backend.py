@@ -253,9 +253,7 @@ class KnowledgeSearchBackend:
                         "sample_score": (bm25_results[0].get("score") if bm25_results else None),
                     },
                 )
-                bm25_hydrated = self._hydrate_bm25_results(
-                    bm25_results, self.sql_store, request.embed_model
-                )
+                bm25_hydrated = self._hydrate_bm25_results(bm25_results, self.sql_store, request.embed_model)
                 request_logger.debug("BM25 results hydrated", {"hydrated_count": len(bm25_hydrated)})
             except Exception as e:
                 # Log error but continue with empty BM25 results
