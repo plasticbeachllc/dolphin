@@ -1517,7 +1517,7 @@ class SQLiteMetadataStore:
                 model = row[6]
                 if model not in locations_by_model:
                     locations_by_model[model] = []
-                
+
                 locations_by_model[model].append(
                     {
                         "content_id": str(row[0]),
@@ -1533,7 +1533,7 @@ class SQLiteMetadataStore:
             # Prefer the requested model, otherwise fall back to any available model
             if embed_model in locations_by_model:
                 return locations_by_model[embed_model]
-            
+
             # Fallback: return the first available model's locations
             # (sorting keys to be deterministic)
             sorted_models = sorted(locations_by_model.keys())
