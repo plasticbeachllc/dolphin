@@ -3,10 +3,8 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from pathspec import PathSpec
+from pathspec import PathSpec
 
 try:
     import tomllib  # Python 3.11+
@@ -176,8 +174,6 @@ def build_ignore_pathspec(config_ignore: Iterable[str], config_exceptions: Itera
     Returns:
         PathSpec object ready for matching files
     """
-    from pathspec import PathSpec
-
     # Extra security patterns to always ignore
     extra_security = {
         "**/id_rsa",

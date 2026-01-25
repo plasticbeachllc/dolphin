@@ -141,7 +141,8 @@ class RepoWatcher:
                     # Check if already pending
                     cur.execute(
                         """
-                        SELECT id, change_type FROM pending_changes
+                        SELECT id, change_type
+                        FROM pending_changes
                         WHERE repo_id = ? AND file_path = ? AND processed = 0
                         """,
                         (self.repo_id, path),

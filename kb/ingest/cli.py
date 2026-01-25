@@ -107,14 +107,18 @@ def add_repo(
 
     typer.echo(f"Repository registered: name='{name}', path='{repo_path}', default_embed_model='{model}'")
 
-    if typer.confirm(f"Do you want to index '{name}' now?", default=False):
-        typer.echo(f"Starting index for {name}...")
-        pipeline = _build_pipeline(config)
-        try:
-            pipeline.index(name, dry_run=False, force=False)
-            typer.echo(f"✅ Indexing complete for {name}")
-        except Exception as e:
-            typer.echo(f"❌ Indexing failed: {e}", err=True)
+    # Only prompt for indexing in interactive mode (skip in tests)
+    import sys
+
+    if sys.stdin is not None and sys.stdin.isatty():
+        if typer.confirm(f"Do you want to index '{name}' now?", default=False):
+            typer.echo(f"Starting index for {name}...")
+            pipeline = _build_pipeline(config)
+            try:
+                pipeline.index(name, dry_run=False, force=False)
+                typer.echo(f"✅ Indexing complete for {name}")
+            except Exception as e:
+                typer.echo(f"❌ Indexing failed: {e}", err=True)
 
 
 @app.command()
