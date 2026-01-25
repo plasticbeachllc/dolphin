@@ -23,13 +23,17 @@ describe("cli", () => {
     process.env.SERVER_VERSION = "0.0.1";
 
     try {
+      // Note: CONFIG is computed at module import time; in a full test run it may
+      // already be cached from other tests. Compare CLI side effects against the
+      // active CONFIG instance to avoid order-dependent failures.
+      const { CONFIG } = await import("../../util/config.js");
       await import(`../../cli.ts?test=${Date.now()}`);
 
       expect(createServerCalled).toBe(true);
-      expect(process.env.DOLPHIN_API_URL).toBe("http://127.0.0.1:9999");
-      expect(process.env.SERVER_NAME).toBe("test-cli");
-      expect(process.env.SERVER_VERSION).toBe("0.0.1");
-      expect(process.env.LOG_LEVEL).toBe("warn");
+      expect(process.env.DOLPHIN_API_URL).toBe(CONFIG.DOLPHIN_API_URL);
+      expect(process.env.SERVER_NAME).toBe(CONFIG.SERVER_NAME);
+      expect(process.env.SERVER_VERSION).toBe(CONFIG.SERVER_VERSION);
+      expect(process.env.LOG_LEVEL).toBe(CONFIG.LOG_LEVEL);
       expect(process.env.DOLPHIN_API_KEY).toBe("test-key");
     } finally {
       mock.restore();

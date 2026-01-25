@@ -4,11 +4,6 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 const originalEnv = { ...process.env };
-let mockedHomeDir = "";
-
-mock.module("node:os", () => ({
-  homedir: () => mockedHomeDir,
-}));
 
 function resetEnv() {
   process.env = { ...originalEnv };
@@ -27,13 +22,14 @@ describe("CONFIG TOML", () => {
   const writeConfig = (home: string, toml: string) => {
     const configDir = join(home, ".dolphin");
     mkdirSync(configDir, { recursive: true });
-    writeFileSync(join(configDir, "config.toml"), toml, "utf-8");
+    const configPath = join(configDir, "config.toml");
+    writeFileSync(configPath, toml, "utf-8");
+    return configPath;
   };
 
-  it("loads global MCP config from ~/.dolphin/config.toml", async () => {
+  it("loads MCP config from DOLPHIN_CONFIG_PATH", async () => {
     const home = mkdtempSync(join(tmpdir(), "dolphin-home-"));
-    mockedHomeDir = home;
-    writeConfig(
+    const configPath = writeConfig(
       home,
       `
 [mcp]
@@ -63,7 +59,7 @@ context_lines_after_default = 3
 `
     );
 
-    process.env.HOME = home;
+    process.env.DOLPHIN_CONFIG_PATH = configPath;
     delete process.env.DOLPHIN_API_URL;
     delete process.env.KB_REST_BASE_URL;
 
@@ -92,8 +88,7 @@ context_lines_after_default = 3
 
   it("prefers env vars over TOML for primary settings", async () => {
     const home = mkdtempSync(join(tmpdir(), "dolphin-home-"));
-    mockedHomeDir = home;
-    writeConfig(
+    const configPath = writeConfig(
       home,
       `
 [mcp]
@@ -105,7 +100,7 @@ log_level = "debug"
 `
     );
 
-    process.env.HOME = home;
+    process.env.DOLPHIN_CONFIG_PATH = configPath;
     process.env.DOLPHIN_API_URL = "http://127.0.0.1:7771";
     process.env.LOG_LEVEL = "error";
     process.env.SERVER_NAME = "env-mcp";
@@ -123,8 +118,7 @@ log_level = "debug"
 
   it("falls back to defaults when env and TOML are unset", async () => {
     const home = mkdtempSync(join(tmpdir(), "dolphin-home-"));
-    mockedHomeDir = home;
-    process.env.HOME = home;
+    process.env.DOLPHIN_CONFIG_PATH = join(home, ".dolphin", "missing-config.toml");
     delete process.env.DOLPHIN_API_URL;
     delete process.env.KB_REST_BASE_URL;
     delete process.env.LOG_LEVEL;
@@ -143,8 +137,7 @@ log_level = "debug"
 
   it("uses TOML overrides for nested limits and search defaults", async () => {
     const home = mkdtempSync(join(tmpdir(), "dolphin-home-"));
-    mockedHomeDir = home;
-    writeConfig(
+    const configPath = writeConfig(
       home,
       `
 [mcp.limits]
@@ -165,7 +158,7 @@ context_lines_after_default = 5
 `
     );
 
-    process.env.HOME = home;
+    process.env.DOLPHIN_CONFIG_PATH = configPath;
     delete process.env.DOLPHIN_API_URL;
     delete process.env.KB_REST_BASE_URL;
 
@@ -192,8 +185,7 @@ context_lines_after_default = 5
 
   it("uses defaults for nested limits and search defaults when TOML is missing", async () => {
     const home = mkdtempSync(join(tmpdir(), "dolphin-home-"));
-    mockedHomeDir = home;
-    process.env.HOME = home;
+    process.env.DOLPHIN_CONFIG_PATH = join(home, ".dolphin", "missing-config.toml");
     delete process.env.DOLPHIN_API_URL;
     delete process.env.KB_REST_BASE_URL;
 
@@ -220,8 +212,7 @@ context_lines_after_default = 5
 
   it("clamps out-of-range TOML values to limits", async () => {
     const home = mkdtempSync(join(tmpdir(), "dolphin-home-"));
-    mockedHomeDir = home;
-    writeConfig(
+    const configPath = writeConfig(
       home,
       `
 [mcp.limits]
@@ -246,7 +237,7 @@ shrunk_snippet_char_cap = -1
 `
     );
 
-    process.env.HOME = home;
+    process.env.DOLPHIN_CONFIG_PATH = configPath;
     delete process.env.DOLPHIN_API_URL;
     delete process.env.KB_REST_BASE_URL;
 
@@ -270,8 +261,7 @@ shrunk_snippet_char_cap = -1
 
   it("clamps to max limits and enforces shrunk floor", async () => {
     const home = mkdtempSync(join(tmpdir(), "dolphin-home-"));
-    mockedHomeDir = home;
-    writeConfig(
+    const configPath = writeConfig(
       home,
       `
 [mcp.limits]
@@ -285,7 +275,7 @@ shrunk_snippet_char_cap = 2000
 `
     );
 
-    process.env.HOME = home;
+    process.env.DOLPHIN_CONFIG_PATH = configPath;
     delete process.env.DOLPHIN_API_URL;
     delete process.env.KB_REST_BASE_URL;
 

@@ -184,7 +184,8 @@ function resolveInt(
   return Math.max(min, Math.min(max, intValue));
 }
 
-const GLOBAL_CONFIG_PATH = join(homedir(), ".dolphin", "config.toml");
+const DEFAULT_CONFIG_PATH = join(homedir(), ".dolphin", "config.toml");
+const GLOBAL_CONFIG_PATH = coerceString(process.env.DOLPHIN_CONFIG_PATH) ?? DEFAULT_CONFIG_PATH;
 const GLOBAL_CONFIG = readToml(GLOBAL_CONFIG_PATH);
 const MCP_CONFIG = GLOBAL_CONFIG?.mcp ?? {};
 
