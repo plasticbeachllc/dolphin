@@ -620,6 +620,7 @@ Columns:
 5. Post-process
    ├─ Apply score_cutoff filter
    ├─ Apply MMR reranking (if enabled)
+   ├─ Limit snippet payloads to max_snippets hits
    ├─ Truncate snippets to max_snippet_tokens
    ├─ Fetch metadata from SQLite
    └─ Build response

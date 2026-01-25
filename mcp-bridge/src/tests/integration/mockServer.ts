@@ -111,7 +111,7 @@ async function handleRequest(req: Request): Promise<Response> {
   // POST /search
   if (method === "POST" && (pathname === "/v1/search" || pathname === "/search")) {
     const body = await readJsonBody();
-    const { query, repos, path_prefix, top_k, max_snippets, include_snippets } = body;
+    const { query, repos, path_prefix, top_k, max_snippets } = body;
 
     if (query === "trigger-500") {
       return jsonResponse(
@@ -133,7 +133,7 @@ async function handleRequest(req: Request): Promise<Response> {
 
     const maxSnippets =
       typeof max_snippets === "number" && Number.isFinite(max_snippets) ? Math.max(0, max_snippets) : 0;
-    const snippetLimit = maxSnippets > 0 ? maxSnippets : include_snippets ? Number.POSITIVE_INFINITY : 0;
+    const snippetLimit = maxSnippets;
     const applySnippetLimit = (hits: any[]) =>
       hits.map((hit, idx) => {
         if (idx < snippetLimit) return hit;
@@ -249,7 +249,7 @@ async function handleRequest(req: Request): Promise<Response> {
         top_k: top_k || 5,
         model: body.embed_model || "text-embedding-3-small",
         estimated_total: hits.length,
-        max_snippets: snippetLimit === Number.POSITIVE_INFINITY ? hits.length : snippetLimit,
+        max_snippets: snippetLimit,
         warnings: top_k && top_k > 100 ? ["top_k clamped to 100"] : [],
       },
     });
