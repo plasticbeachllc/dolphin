@@ -57,15 +57,15 @@ app.add_middleware(
 async def validate_api_key(request: Request, call_next):
     """Validate API key for protected endpoints.
 
-    All /v1/ endpoints require authentication via X-API-Key header.
+    All /v1/ endpoints (except /v1/health) require authentication via X-API-Key header.
     The API key must match the configured KB key, which may come from:
     - DOLPHIN_API_KEY environment variable (primary)
     - DOLPHIN_KB_API_KEY environment variable (legacy / override)
     - Managed key file (~/.dolphin/kb_api_key)
-    Health check endpoint (/health) remains public for monitoring.
+    Health check endpoint (/v1/health) remains public for monitoring.
     """
     # Protect all /v1/ endpoints with API key authentication
-    if request.url.path.startswith("/v1/"):
+    if request.url.path.startswith("/v1/") and request.url.path != "/v1/health":
         api_key = request.headers.get("X-API-Key")
         expected_key = load_kb_api_key()
 
@@ -252,9 +252,8 @@ def reset_search_backend() -> None:
     set_search_backend(None)
 
 
-@app.get("/health")
 async def health(check: str = Query(default="shallow")) -> dict[str, object]:
-    """Health check endpoint with optional deep checks."""
+    """Health check logic with optional deep checks."""
     if check == "shallow":
         return {"status": "ok"}
 
@@ -284,13 +283,12 @@ async def health(check: str = Query(default="shallow")) -> dict[str, object]:
 
 @app.get("/v1/health")
 async def health_v1(check: str = Query(default="shallow")) -> dict[str, object]:
-    """Health check endpoint (v1, requires API key)."""
+    """Health check endpoint (v1)."""
     return await health(check)
 
 
-@app.post("/search")
 async def search(request: SearchRequest) -> dict[str, object]:
-    """Dispatch the search request to the configured backend."""
+    """Search implementation used by the versioned API."""
     backend = get_search_backend()
 
     if request.repos and _sql_store is not None:
@@ -356,7 +354,6 @@ async def search_v1(request: SearchRequest) -> dict[str, object]:
     return await search(request)
 
 
-@app.get("/repos")
 async def list_repos() -> dict[str, list[dict[str, object]]]:
     """List all registered repositories with metadata."""
     if _sql_store is None:
@@ -408,7 +405,6 @@ async def list_repos_v1() -> dict[str, list[dict[str, object]]]:
     return await list_repos()
 
 
-@app.get("/chunks/{chunk_id}")
 async def fetch_chunk(chunk_id: str) -> dict[str, object]:
     """Fetch a specific chunk by ID."""
     if _sql_store is None or _lance_store is None:
@@ -487,7 +483,6 @@ async def fetch_chunk_v1(chunk_id: str) -> dict[str, object]:
     return await fetch_chunk(chunk_id)
 
 
-@app.get("/file")
 async def fetch_file_slice(
     repo: str = Query(..., description="Repository name"),
     path: str = Query(..., description="File path relative to repo root"),

@@ -7,16 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Note**: This changelog covers only the Python package. For component-specific changes:
 
-- **VSCode Extension**: See [vscode-extension/CHANGELOG.md](vscode-extension/CHANGELOG.md)
 - **MCP Bridge**: See [mcp-bridge/CHANGELOG.md](mcp-bridge/CHANGELOG.md)
+- **VSCode Extension (Experimental)**: See [vscode-extension/CHANGELOG.md](vscode-extension/CHANGELOG.md)
 
 ---
 
 ## [Unreleased]
 
 ## [0.2.0] - 2026-01-25
-
-This release focuses the release-targeted surface on the Knowledge Bank (Python) and the versioned KB REST API.
 
 ### Added
 
@@ -26,7 +24,7 @@ This release focuses the release-targeted surface on the Knowledge Bank (Python)
   - Watches all registered repos unless `--no-watch` is set
   - Supports `--watch <repo>` to limit watching to specific repos
 - Standalone `dolphin watch <repo>` command.
-- Expanded versioned `/v1/*` REST API surface (while retaining legacy unversioned routes):
+- Expanded versioned `/v1/*` REST API surface:
   - `/v1/health`, `/v1/search`, `/v1/repos`, `/v1/chunks/{chunk_id}`, `/v1/file`
   - Indexing tasks: `/v1/index`, `/v1/index/status/{task_id}`, `/v1/index/tasks`
   - Repo operations: `/v1/repos/{repo_name}/stats`, `/v1/repos/{repo_name}/reindex`, `/v1/repos/{repo_name}/index`
@@ -37,8 +35,6 @@ This release focuses the release-targeted surface on the Knowledge Bank (Python)
 ### Changed
 
 - Ignore pattern handling standardized to `.gitignore` semantics.
-- OpenTelemetry exporter moved to `opentelemetry-exporter-otlp-proto-http` (collector/env configuration may need adjustment).
-- CI/testing regime consolidated (KB + MCP + shared suites are release-targeted; agent-core/VSCode extension are no longer in the default matrix).
 
 ### Fixed
 
@@ -46,13 +42,7 @@ This release focuses the release-targeted surface on the Knowledge Bank (Python)
 - Incremental indexing preserves vectors for unchanged chunks when Row IDs change (e.g., code moves).
 - `/v1/file` validates line ranges (rejects invalid `start > end`).
 - Search responses omit raw embedding vectors to reduce payload size.
-- Removed duplicate `/health` routing and noisy debug logs in the API/indexing path.
 - LanceDB table enumeration uses `list_tables()` to avoid deprecation warnings.
-
-### Breaking / Migration Notes
-
-- Ignore patterns are now `.gitignore`-style; existing repo configs may need updates.
-- If you run an OTLP collector, confirm your exporter/collector settings for the HTTP/proto exporter.
 
 ---
 

@@ -38,7 +38,7 @@ class TestHealthEndpoint:
     def test_health_shallow_check(self):
         """Test shallow health check returns ok."""
         client = TestClient(app)
-        response = client.get("/health")
+        response = client.get("/v1/health")
 
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
@@ -46,7 +46,7 @@ class TestHealthEndpoint:
     def test_health_shallow_check_explicit(self):
         """Test shallow check with explicit query param."""
         client = TestClient(app)
-        response = client.get("/health?check=shallow")
+        response = client.get("/v1/health?check=shallow")
 
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
@@ -54,7 +54,7 @@ class TestHealthEndpoint:
     def test_health_deep_check_no_stores(self):
         """Test deep health check without stores configured."""
         client = TestClient(app)
-        response = client.get("/health?check=deep")
+        response = client.get("/v1/health?check=deep")
 
         assert response.status_code == 200
         data = response.json()
@@ -81,15 +81,11 @@ class TestSearchEndpoint:
         """Clean up after each test."""
         reset_search_backend()
 
-    def test_search_basic_query(self):
-        """Test basic search query."""
+    def test_search_requires_api_key(self):
+        """All /v1 endpoints (except /v1/health) require an API key."""
         client = TestClient(app)
-        response = client.post("/search", json={"query": "test function"})
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "hits" in data
-        assert len(data["hits"]) > 0
+        response = client.post("/v1/search", json={"query": "test function"})
+        assert response.status_code == 401
 
     def test_search_v1_basic_query(self, kb_api_client):
         """Test /v1/search with API key."""
@@ -110,31 +106,30 @@ class TestSearchEndpoint:
         assert response.status_code == 404
         assert "Repository not found" in response.json().get("detail", "")
 
-    def test_search_with_repos_filter(self):
+    def test_search_with_repos_filter(self, kb_api_client, registered_test_repo):
         """Test search with repos filter."""
-        client = TestClient(app)
-        response = client.post("/search", json={"query": "test", "repos": ["repo1", "repo2"]})
+        response = kb_api_client.post(
+            "/v1/search",
+            json={"query": "test", "repos": [registered_test_repo["name"]]},
+        )
 
         assert response.status_code == 200
 
-    def test_search_with_top_k(self):
+    def test_search_with_top_k(self, kb_api_client):
         """Test search with custom top_k."""
-        client = TestClient(app)
-        response = client.post("/search", json={"query": "test", "top_k": 20})
+        response = kb_api_client.post("/v1/search", json={"query": "test", "top_k": 20})
 
         assert response.status_code == 200
 
-    def test_search_with_path_prefix(self):
+    def test_search_with_path_prefix(self, kb_api_client):
         """Test search with path_prefix filter."""
-        client = TestClient(app)
-        response = client.post("/search", json={"query": "test", "path_prefix": ["src/", "lib/"]})
+        response = kb_api_client.post("/v1/search", json={"query": "test", "path_prefix": ["src/", "lib/"]})
 
         assert response.status_code == 200
 
-    def test_search_missing_query_fails(self):
+    def test_search_missing_query_fails(self, kb_api_client):
         """Test that missing query field fails validation."""
-        client = TestClient(app)
-        response = client.post("/search", json={})
+        response = kb_api_client.post("/v1/search", json={})
 
         assert response.status_code == 422  # Validation error
 
@@ -198,10 +193,9 @@ class TestReposEndpoint:
         """Reset stores before each test."""
         reset_stores()
 
-    def test_repos_endpoint_exists(self):
+    def test_repos_endpoint_exists(self, kb_api_client):
         """Test /v1/repos endpoint exists."""
-        client = TestClient(app)
-        response = client.get("/repos")
+        response = kb_api_client.get("/v1/repos")
 
         # Should work even without stores, or return 404/503 if not configured
         assert response.status_code in [200, 404, 500, 503]
@@ -210,10 +204,9 @@ class TestReposEndpoint:
 class TestChunkEndpoint:
     """Test /v1/chunks/{id} endpoint."""
 
-    def test_chunk_endpoint_exists(self):
+    def test_chunk_endpoint_exists(self, kb_api_client):
         """Test /v1/chunks/{id} endpoint exists."""
-        client = TestClient(app)
-        response = client.get("/chunks/123")
+        response = kb_api_client.get("/v1/chunks/123")
 
         # Should exist, may error without data or return 404/503 if not configured
         assert response.status_code in [200, 404, 422, 500, 503]
@@ -222,10 +215,9 @@ class TestChunkEndpoint:
 class TestFileEndpoint:
     """Test /v1/file endpoint."""
 
-    def test_file_endpoint_requires_params(self):
+    def test_file_endpoint_requires_params(self, kb_api_client):
         """Test /v1/file endpoint requires parameters."""
-        client = TestClient(app)
-        response = client.get("/file")
+        response = kb_api_client.get("/v1/file")
 
         # Should require repo and path params
         assert response.status_code == 422

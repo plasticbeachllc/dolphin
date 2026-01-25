@@ -121,7 +121,7 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 - Automatic backend initialization on startup
 - OpenAI + Stub embedding providers
 - LanceDB vector search with fixed-size vectors
-- `/v1/*` endpoints require `X-API-Key`; `/health` remains unauthenticated for quick checks
+- `/v1/*` endpoints require `X-API-Key`; `/v1/health` remains unauthenticated for quick checks
 - **Maximal Marginal Relevance (MMR)** for result diversity
 - Multi-level caching (Redis + in-memory) for performance
 - Path traversal security protection

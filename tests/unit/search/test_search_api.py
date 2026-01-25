@@ -1,3 +1,4 @@
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -16,13 +17,23 @@ def client_with_backend():
         store_root = Path(tmpdir)
         backend = create_search_backend(store_root=store_root)
         set_search_backend(backend)
-        yield TestClient(app)
+        prev = os.environ.get("DOLPHIN_API_KEY")
+        os.environ["DOLPHIN_API_KEY"] = "test-api-key"
+        client = TestClient(app)
+        client.headers = {"X-API-Key": "test-api-key"}
+        try:
+            yield client
+        finally:
+            if prev is None:
+                os.environ.pop("DOLPHIN_API_KEY", None)
+            else:
+                os.environ["DOLPHIN_API_KEY"] = prev
         reset_search_backend()
 
 
 class TestSearchAPI:
     def test_health_endpoint(self, client_with_backend):
-        response = client_with_backend.get("/health")
+        response = client_with_backend.get("/v1/health")
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
 
@@ -32,7 +43,7 @@ class TestSearchAPI:
             mock_backend.search.return_value = [{"chunk_id": "1"}]
             mock_get_backend.return_value = mock_backend
 
-            response = client_with_backend.post("/search", json={"query": "test"})
+            response = client_with_backend.post("/v1/search", json={"query": "test"})
             assert response.status_code == 200
             response_data = response.json()
             assert "hits" in response_data
@@ -40,5 +51,5 @@ class TestSearchAPI:
             mock_backend.search.assert_called_once()
 
     def test_search_invalid_request(self, client_with_backend):
-        response = client_with_backend.post("/search", json={"top_k": 5})
+        response = client_with_backend.post("/v1/search", json={"top_k": 5})
         assert response.status_code == 422
