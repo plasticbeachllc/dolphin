@@ -55,7 +55,7 @@ class RateLimitedEmbedder:
         self.semaphore = asyncio.Semaphore(max_concurrent)
         self.last_request_time = 0.0
         self.request_times: list[float] = []  # Rolling window for RPM
-        self.token_usage: list[tuple[float, int]] = []  # Rolling window for TPM
+        self.token_usage: list[tuple[float, float]] = []  # Rolling window for TPM
         self.backoff_until = 0.0
         
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:

@@ -939,9 +939,20 @@ class IngestionPipeline:
             batch_size = 50 
             repo_config = None # Lazy loaded
             
-            # Create dynamic pool for parsing
-            with DynamicWorkerPool(max_workers=max_workers) as pool:
-                
+            # Create dynamic pool            
+            pool = DynamicWorkerPool(max_workers=max_workers)
+            estimator = WorkloadEstimator()
+            
+            # Determine optimal batch size based on worker count and file count
+            actual_workers = pool._optimal_workers
+            batch_size = estimator.estimate_batch_size(
+                total_items=len(changed_files),
+                worker_count=actual_workers,
+                min_batch=10,
+                max_batch=100
+            )
+            print(f"Using batch size: {batch_size} for {len(changed_files)} files and {actual_workers} workers")            
+            with pool:
                 # Process in batches to manage memory and flow
                 for i in range(0, len(changed_files), batch_size):
                     batch_paths = changed_files[i : i + batch_size]
@@ -1165,6 +1176,27 @@ class IngestionPipeline:
                                  self.lancedb.prune_file_rows(repo_name, path, model=embed_model, keep_ids=desired_row_ids)
                              else:
                                  self.lancedb.prune_file_rows(repo_name, path, model=embed_model)
+
+                             # Build FTS chunks for BM25 indexing
+                             fts_chunks = []
+                             for h, occs in desired.items():
+                                 chunk_text = representative_text_for_hash(h, chunks)
+                                 fts_content_id = content_mapping.get(h)
+                                 if fts_content_id:
+                                     for occ in occs:
+                                         fts_chunks.append({
+                                             "content_id": fts_content_id,
+                                             "repo": repo_name,
+                                             "path": path,
+                                             "text_hash": h,
+                                             "content": chunk_text,
+                                             "symbol_name": occ.get("symbol_name"),
+                                             "symbol_path": occ.get("symbol_path"),
+                                         })
+
+                             # Index chunks in FTS5 for BM25 search
+                             if fts_chunks and not dry_run:
+                                 self.metadata.bulk_index_chunks_for_fts(fts_chunks)
 
                         chunks_indexed += len(new_hashes)
                         files_done += 1
