@@ -746,7 +746,6 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to register repository: {str(e)}")
 
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to register repository: {str(e)}")
 
@@ -766,6 +765,7 @@ async def admin_reload_backend() -> dict[str, str]:
         return {"status": "ok", "message": "Search backend reloaded"}
     except Exception as e:
         import logging
+
         logging.error("Failed to reload backend", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Reload failed: {str(e)}")
 

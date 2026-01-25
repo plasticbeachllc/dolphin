@@ -106,7 +106,6 @@ def initialize_search_backend() -> None:
     set_pipeline(pipeline)
     print("✅ Ingestion pipeline ready", file=sys.stderr)
 
-
     print("✅ Ingestion pipeline ready", file=sys.stderr)
 
 

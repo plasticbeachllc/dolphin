@@ -165,14 +165,10 @@ def _notify_server_reload(config: KBConfig) -> None:
         return
 
     try:
-        response = requests.post(
-            endpoint,
-            headers={"X-API-Key": api_key},
-            timeout=2.0
-        )
+        response = requests.post(endpoint, headers={"X-API-Key": api_key}, timeout=2.0)
         if response.status_code == 200:
             typer.echo(f"🔄 Server notified: {response.json().get('message')}")
-        elif response.status_code != 404: # Ignore 404 if old server running
+        elif response.status_code != 404:  # Ignore 404 if old server running
             typer.echo(f"⚠️  Server reload failed: {response.status_code}", err=True)
     except requests.RequestException:
         # Server probably not running, which is fine
