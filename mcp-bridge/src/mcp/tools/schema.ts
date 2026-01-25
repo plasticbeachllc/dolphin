@@ -3,11 +3,18 @@ import type { ZodTypeAny } from "zod";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
-type JsonSchema = Tool["inputSchema"] & {
+/**
+ * Internal JSON Schema type for building nested property schemas.
+ * This is more permissive than Tool["inputSchema"] which requires type: "object".
+ */
+interface InternalJsonSchema {
   type?: string | string[];
-  properties?: Record<string, JsonSchema>;
+  properties?: Record<string, InternalJsonSchema>;
   required?: string[];
-};
+  items?: InternalJsonSchema;
+  enum?: readonly string[];
+  [key: string]: unknown;
+}
 
 function unwrapOptional(inner: ZodTypeAny): { schema: ZodTypeAny; optional: boolean } {
   let current = inner;
@@ -19,7 +26,7 @@ function unwrapOptional(inner: ZodTypeAny): { schema: ZodTypeAny; optional: bool
   return { schema: current, optional };
 }
 
-function buildFallbackSchema(schema: ZodTypeAny): JsonSchema {
+function buildFallbackSchema(schema: ZodTypeAny): InternalJsonSchema {
   if (!schema || typeof schema !== "object" || !("_def" in schema)) {
     return { type: "object", properties: {} };
   }
@@ -55,7 +62,7 @@ function buildFallbackSchema(schema: ZodTypeAny): JsonSchema {
 
   if (schema instanceof z.ZodObject) {
     const shape = typeof schema._def.shape === "function" ? schema._def.shape() : schema._def.shape;
-    const properties: Record<string, JsonSchema> = {};
+    const properties: Record<string, InternalJsonSchema> = {};
     const required: string[] = [];
 
     Object.entries(shape).forEach(([key, value]) => {
@@ -69,7 +76,7 @@ function buildFallbackSchema(schema: ZodTypeAny): JsonSchema {
       }
     });
 
-    const output: JsonSchema = { type: "object", properties };
+    const output: InternalJsonSchema = { type: "object", properties };
     if (required.length > 0) {
       output.required = required;
     }
@@ -84,23 +91,33 @@ function buildFallbackSchema(schema: ZodTypeAny): JsonSchema {
   return { type: "object", properties: {} };
 }
 
+// Helper to isolate type-heavy zodToJsonSchema call
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function convertZodToJsonSchema(schema: ZodTypeAny): any {
+  // Cast to any to prevent TypeScript from evaluating the complex recursive generics
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return zodToJsonSchema(schema as any);
+}
+
+type ExtendedJsonSchema = InternalJsonSchema & {
+  $ref?: string;
+  definitions?: Record<string, InternalJsonSchema>;
+};
+
 export function buildToolInputSchema(schema: ZodTypeAny): Tool["inputSchema"] {
-  const jsonSchema = zodToJsonSchema(schema) as JsonSchema & {
-    $ref?: string;
-    definitions?: Record<string, JsonSchema>;
-  };
+  const jsonSchema = convertZodToJsonSchema(schema) as ExtendedJsonSchema;
 
   if (jsonSchema.type) {
-    return jsonSchema;
+    return jsonSchema as Tool["inputSchema"];
   }
 
   if (jsonSchema.$ref && jsonSchema.definitions) {
     const refKey = jsonSchema.$ref.replace("#/definitions/", "");
     const resolved = jsonSchema.definitions[refKey];
     if (resolved?.type) {
-      return resolved;
+      return resolved as Tool["inputSchema"];
     }
   }
 
-  return buildFallbackSchema(schema);
+  return buildFallbackSchema(schema) as Tool["inputSchema"];
 }

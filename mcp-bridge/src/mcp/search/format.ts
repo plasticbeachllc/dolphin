@@ -1,4 +1,4 @@
-import type { SearchResponse } from "../../rest/client.js";
+// SearchResponse is imported indirectly via SearchResultWithHits in contracts
 import { fenceLang } from "../../util/language.js";
 import type {
   ExtendedSearchHit,
@@ -105,20 +105,18 @@ function formatGraphContext(graphContext: unknown): string {
   return lines.join("\n");
 }
 
-export function buildPromptReady(res: SearchResponse, maxHits: number): string {
+export function buildPromptReady(res: SearchResultWithHits, maxHits: number): string {
   const parts: string[] = [];
-  for (const h of res.hits.slice(0, maxHits)) {
-    const hit = h as unknown as ExtendedSearchHit;
-
+  for (const hit of res.hits.slice(0, maxHits)) {
     const hasContext = hit._context_start_line && hit._context_start_line !== hit.start_line;
     const lineRange = hasContext
       ? `L${hit._context_start_line}-L${hit._context_end_line}`
-      : `L${h.start_line}-L${h.end_line}`;
+      : `L${hit.start_line}-L${hit.end_line}`;
     const scoreText =
-      typeof h.score === "number"
-        ? ` score=${Number.isFinite(h.score) ? h.score.toFixed(3) : h.score}`
+      typeof hit.score === "number"
+        ? ` score=${Number.isFinite(hit.score) ? hit.score.toFixed(3) : hit.score}`
         : "";
-    parts.push(`[${h.repo}] ${h.path}#${lineRange} (chunk_id=${h.chunk_id})${scoreText}`);
+    parts.push(`[${hit.repo}] ${hit.path}#${lineRange} (chunk_id=${hit.chunk_id})${scoreText}`);
 
     if (hit.graph_context) {
       const graphText = formatGraphContext(hit.graph_context);
@@ -127,27 +125,28 @@ export function buildPromptReady(res: SearchResponse, maxHits: number): string {
       }
     }
 
-    const lang = fenceLang(h.lang, h.path);
-    let code = h.snippet ?? "";
+    const lang = fenceLang(hit.lang, hit.path);
+    const code = hit.snippet ?? "";
 
     if (!code) {
       parts.push(
-        `No snippet included for this result. Follow up with chunk_get({chunk_id: "${h.chunk_id}"}) or file_lines({repo:"${h.repo}", path:"${h.path}", start:${h.start_line}, end:${h.end_line}}).`
+        `No snippet included for this result. Follow up with chunk_get({chunk_id: "${hit.chunk_id}"}) or file_lines({repo:"${hit.repo}", path:"${hit.path}", start:${hit.start_line}, end:${hit.end_line}}).`
       );
       continue;
     }
 
+    let formattedCode = code;
     if (hasContext && code) {
       const lines = code.split("\n");
-      const chunkStart = hit._chunk_start_line;
-      const chunkEnd = hit._chunk_end_line;
-      const contextStart = hit._context_start_line;
+      const chunkStart = hit._chunk_start_line ?? hit.start_line;
+      const chunkEnd = hit._chunk_end_line ?? hit.end_line;
+      const contextStart = hit._context_start_line ?? hit.start_line;
 
       const formattedLines: string[] = [];
-      lines.forEach((line, idx) => {
-        const lineNum = (contextStart ?? hit.start_line) + idx;
+      lines.forEach((line: string, idx: number) => {
+        const lineNum = contextStart + idx;
 
-        if (lineNum === chunkStart && (contextStart ?? hit.start_line) < chunkStart) {
+        if (lineNum === chunkStart && contextStart < chunkStart) {
           formattedLines.push("# --- Result starts (line " + chunkStart + ") ---");
         }
 
@@ -157,16 +156,16 @@ export function buildPromptReady(res: SearchResponse, maxHits: number): string {
           formattedLines.push("# --- Result ends (line " + chunkEnd + ") ---");
         }
       });
-      code = formattedLines.join("\n");
+      formattedCode = formattedLines.join("\n");
     }
 
     if (lang) {
       parts.push("```" + lang);
-      parts.push(code);
+      parts.push(formattedCode);
       parts.push("```");
     } else {
       parts.push("```");
-      parts.push(code);
+      parts.push(formattedCode);
       parts.push("```");
     }
   }

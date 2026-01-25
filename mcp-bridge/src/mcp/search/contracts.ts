@@ -70,6 +70,6 @@ export type SnippetFailure = { repo: string; path: string; start: number; end: n
 
 export type SnippetInfo = { snippet: string; start: number; end: number };
 
-export type SearchResultWithHits = SearchResponse & { hits: ExtendedSearchHit[] };
+export type SearchResultWithHits = Omit<SearchResponse, "hits"> & { hits: ExtendedSearchHit[] };
 
 export const HITS_JSON_SCHEMA_VERSION = "2026-01-25.1";
