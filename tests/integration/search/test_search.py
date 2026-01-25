@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from kb.api.app import SearchRequest, reset_search_backend, set_search_backend
+from kb.api.app import SearchRequest, reset_search_backend, set_search_backend, reset_stores, set_stores
 from kb.store import LanceDBStore, SQLiteMetadataStore
 from tests.utils.mock_services import MockEmbeddingService
 
@@ -58,10 +58,12 @@ class TestSearchIntegration:
     def setup_method(self):
         """Set up test environment."""
         reset_search_backend()
+        reset_stores()
 
     def teardown_method(self):
         """Clean up test environment."""
         reset_search_backend()
+        reset_stores()
 
     @pytest.mark.asyncio
     async def test_search_basic_functionality(
@@ -78,6 +80,11 @@ class TestSearchIntegration:
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
+        set_stores(metadata_store, lancedb_store)
+
+        # Register repo used in test
+        metadata_store.initialize()
+        metadata_store.record_repo("test-repo", str(sample_repo_path), default_embed_model="small")
 
         # Test search with widget query
         request = SearchRequest(query="widget class", repos=["test-repo"], top_k=5, embed_model="small")
@@ -114,6 +121,11 @@ class TestSearchIntegration:
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
+        set_stores(metadata_store, lancedb_store)
+
+        # Register repo used in test
+        metadata_store.initialize()
+        metadata_store.record_repo("specific-repo", str(sample_repo_path), default_embed_model="small")
 
         # Test search with repository filter
         request = SearchRequest(
@@ -149,6 +161,11 @@ class TestSearchIntegration:
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
+        set_stores(metadata_store, lancedb_store)
+
+        # Register repo used in test
+        metadata_store.initialize()
+        metadata_store.record_repo("test-repo", str(sample_repo_path), default_embed_model="small")
 
         # Test search with no matches
         request = SearchRequest(query="nonexistent term", repos=["test-repo"], top_k=5, embed_model="small")
@@ -176,6 +193,11 @@ class TestSearchIntegration:
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
+        set_stores(metadata_store, lancedb_store)
+
+        # Register repo used in test
+        metadata_store.initialize()
+        metadata_store.record_repo("test-repo", str(sample_repo_path), default_embed_model="small")
 
         # Test search
         request = SearchRequest(query="widget", repos=["test-repo"], top_k=5, embed_model="small")
@@ -229,6 +251,13 @@ class TestSearchIntegration:
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
+        set_stores(metadata_store, lancedb_store)
+
+        # Register repos used in test
+        metadata_store.initialize()
+        metadata_store.record_repo("repo1", str(sample_repo_path / "repo1"), default_embed_model="small")
+        metadata_store.record_repo("repo2", str(sample_repo_path / "repo2"), default_embed_model="small")
+        metadata_store.record_repo("repo3", str(sample_repo_path / "repo3"), default_embed_model="small")
 
         # Test search with multiple repositories
         request = SearchRequest(
@@ -269,6 +298,11 @@ class TestSearchPerformance:
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
+        set_stores(metadata_store, lancedb_store)
+
+        # Register repo used in test
+        metadata_store.initialize()
+        metadata_store.record_repo("test-repo", str(sample_repo_path), default_embed_model="small")
 
         # Measure search performance
         request = SearchRequest(query="test query", repos=["test-repo"], top_k=5, embed_model="small")
@@ -303,6 +337,12 @@ class TestSearchPerformance:
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
+        set_stores(metadata_store, lancedb_store)
+
+        # Register repos used in test
+        metadata_store.initialize()
+        for i in range(10):
+             metadata_store.record_repo(f"repo-{i}", str(sample_repo_path), default_embed_model="small")
 
         from kb.api.app import search
 

@@ -1,6 +1,7 @@
 """Pytest configuration and shared fixtures for KB pipeline tests."""
 
 import os
+import shutil
 import tempfile
 from collections.abc import Generator
 from pathlib import Path
@@ -113,12 +114,30 @@ def init_test_git_repo(repo_path: Path) -> None:
     subprocess.run(["git", "-C", str(repo_path), "commit", "--allow-empty", "-m", "Initial commit"], check=True)
 
 
+@pytest.fixture(scope="session")
+def _git_template_dir(tmp_path_factory) -> Path:
+    """Create a template git repo once per session.
+
+    This optimization avoids running `git init` and `git config` (subprocess calls)
+    for every single test that needs a repo, reducing overhead significantly.
+    """
+    # Create valid path for template
+    template_dir = tmp_path_factory.mktemp("git_template")
+    # Initialize the repo in this persistent temp dir
+    init_test_git_repo(template_dir)
+    return template_dir
+
+
 @pytest.fixture
-def git_repo(temp_dir: Path) -> Generator[Path, None, None]:
-    """Create a git repository for testing with proper cleanup."""
+def git_repo(temp_dir: Path, _git_template_dir: Path) -> Generator[Path, None, None]:
+    """Create a git repository for testing with proper cleanup.
+
+    Implementation: Copies a pre-initialized template repo to the test's
+    temp dir instead of running slow git commands.
+    """
     repo_path = temp_dir / "test_repo"
-    repo_path.mkdir()
-    init_test_git_repo(repo_path)
+    # Copy from template is drastically faster than subprocess git calls
+    shutil.copytree(_git_template_dir, repo_path, dirs_exist_ok=True)
     yield repo_path
     # Cleanup is handled by temp_dir context manager
 
