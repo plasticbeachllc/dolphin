@@ -449,7 +449,8 @@ class TestSQLiteMetadataStore:
             cur.execute(
                 """
                 INSERT INTO graph_snapshots
-                (repo_id, commit_sha, commit_message, commit_timestamp, node_count, edge_count, snapshot_data, created_at)
+                (repo_id, commit_sha, commit_message, commit_timestamp,
+                 node_count, edge_count, snapshot_data, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (repo_id, "a" * 40, "msg", now, 2, 1, None, now),

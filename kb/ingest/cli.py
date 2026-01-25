@@ -154,6 +154,7 @@ def index(
 def _notify_server_reload(config: KBConfig) -> None:
     """Notify the running server to reload its backend."""
     import requests
+
     from ..api_key import load_kb_api_key
 
     endpoint = f"http://{config.endpoint}/v1/admin/reload"
@@ -165,9 +166,9 @@ def _notify_server_reload(config: KBConfig) -> None:
 
     try:
         response = requests.post(
-            endpoint, 
+            endpoint,
             headers={"X-API-Key": api_key},
-            timeout=2.0 
+            timeout=2.0
         )
         if response.status_code == 200:
             typer.echo(f"🔄 Server notified: {response.json().get('message')}")
