@@ -91,7 +91,7 @@ class TestSearchIntegration:
 
         from kb.api.app import search
 
-        response = await search(request)
+        response = cast(dict[str, Any], await search(request))
 
         # Verify response structure
         # Verify response structure
@@ -140,7 +140,7 @@ class TestSearchIntegration:
 
         from kb.api.app import search
 
-        response = await search(request)
+        response = cast(dict[str, Any], await search(request))
 
         # Verify response
         hits = cast(list[dict[str, Any]], response["hits"])
@@ -174,7 +174,7 @@ class TestSearchIntegration:
 
         from kb.api.app import search
 
-        response = await search(request)
+        response = cast(dict[str, Any], await search(request))
 
         # Verify empty results
         hits = cast(list[dict[str, Any]], response["hits"])
@@ -208,7 +208,7 @@ class TestSearchIntegration:
 
         from kb.api.app import search
 
-        response = await search(request)
+        response = cast(dict[str, Any], await search(request))
 
         # Verify latency measurement
         meta = cast(dict[str, Any], response["meta"])
@@ -314,7 +314,7 @@ class TestSearchPerformance:
         from kb.api.app import search
 
         start_time = time.time()
-        response = await search(request)
+        response = cast(dict[str, Any], await search(request))
         end_time = time.time()
 
         response_time_ms = (end_time - start_time) * 1000

@@ -32,7 +32,6 @@ This release focuses the release-targeted surface on the MCP bridge and its cont
 - Context line expansion via `context_lines_before` / `context_lines_after`.
 - JSON-RPC protocol support (in addition to MCP stdio).
 - Advanced search parameters: `exclude_paths`, `exclude_patterns`, `mmr_enabled`, `mmr_lambda`, `score_cutoff`.
-- Embedding model selection per query via `embed_model` ("small" or "large").
 - Enhanced logging and debugging with structured JSONL and correlation IDs.
 
 ### Changed

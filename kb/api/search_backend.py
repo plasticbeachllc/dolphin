@@ -943,15 +943,6 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     # Map default_embed_model if provided (CRITICAL FIX FOR OPTIONS B)
     if "default_embed_model" in kwargs:
         embedding_data["default_embed_model"] = kwargs["default_embed_model"]
-
-    # Map default_embed_model if provided (CRITICAL FIX FOR OPTIONS B)
-    if "default_embed_model" in kwargs:
-        embedding_data["default_embed_model"] = kwargs["default_embed_model"]
-
-    # Map default_embed_model if provided (CRITICAL FIX FOR OPTIONS B)
-    if "default_embed_model" in kwargs:
-        embedding_data["default_embed_model"] = kwargs["default_embed_model"]
-
     # Map cache_enabled
     if "cache_enabled" in kwargs:
         config_data["cache_enabled"] = kwargs["cache_enabled"]
