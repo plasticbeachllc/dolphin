@@ -7,6 +7,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from "bun:test";
 import {
+  KBClient,
   type SearchRequestBody,
   type SearchResponse,
   type ChunkResponse,
@@ -16,27 +17,7 @@ import {
   type RestError,
 } from "../../rest/client.js";
 
-import {
-  restSearch,
-  restGetChunk,
-  restGetFileSlice,
-  restListRepos,
-  restHealthV1,
-} from "../../rest/client.ts?bypass";
-
-// Store original fetch
-const originalFetch = globalThis.fetch;
-
-// Ensure we are testing the REAL client implementation
-// Using the ?bypass query param ensures we get a fresh module instance, ignoring mocks
-// pointing to .js or plain .ts
-
 describe("rest/client", () => {
-  // Reset fetch after each test
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
-
   describe("restSearch", () => {
     it("sends correct request to /v1/search", async () => {
       const mockResponse: SearchResponse = {
@@ -56,7 +37,7 @@ describe("rest/client", () => {
       };
 
       let capturedRequest: Request | undefined;
-      globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
         console.log("DEBUG: Mock fetch called");
         console.log("DEBUG: Mock Returning:", JSON.stringify(mockResponse));
         capturedRequest = new Request(input, init);
@@ -66,8 +47,9 @@ describe("rest/client", () => {
         });
       };
 
+      const client = new KBClient({ fetch: mockFetch });
       const body: SearchRequestBody = { query: "test query", repos: ["repo1"] };
-      const result = await restSearch(body);
+      const result = await client.search(body);
 
       expect(result.hits).toHaveLength(1);
       expect(result.hits[0].repo).toBe("test-repo");
@@ -77,7 +59,7 @@ describe("rest/client", () => {
 
     it("includes request body correctly", async () => {
       let capturedBody: string | undefined;
-      globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
         if (init?.body) {
           capturedBody = init.body as string;
         }
@@ -87,13 +69,14 @@ describe("rest/client", () => {
         });
       };
 
+      const client = new KBClient({ fetch: mockFetch });
       const body: SearchRequestBody = {
         query: "findme",
         repos: ["r1", "r2"],
         top_k: 50,
         embed_model: "small",
       };
-      await restSearch(body);
+      await client.search(body);
 
       expect(capturedBody).toBeDefined();
       const parsed = JSON.parse(capturedBody!);
@@ -110,15 +93,17 @@ describe("rest/client", () => {
         },
       };
 
-      globalThis.fetch = async () => {
+      const mockFetch = async () => {
         return new Response(JSON.stringify(errorResponse), {
           status: 400,
           headers: { "Content-Type": "application/json" },
         });
       };
 
+      const client = new KBClient({ fetch: mockFetch });
+
       try {
-        await restSearch({ query: "x" });
+        await client.search({ query: "x" });
         expect(true).toBe(false); // Should not reach here
       } catch (err) {
         const restError = err as RestError;
@@ -127,15 +112,17 @@ describe("rest/client", () => {
     });
 
     it("handles non-JSON error response", async () => {
-      globalThis.fetch = async () => {
+      const mockFetch = async () => {
         return new Response("Internal Server Error", {
           status: 500,
           headers: { "Content-Type": "text/plain" },
         });
       };
 
+      const client = new KBClient({ fetch: mockFetch });
+
       try {
-        await restSearch({ query: "test" });
+        await client.search({ query: "test" });
         expect(true).toBe(false);
       } catch (err) {
         const restError = err as RestError;
@@ -157,7 +144,7 @@ describe("rest/client", () => {
       };
 
       let capturedUrl: string | undefined;
-      globalThis.fetch = async (input: RequestInfo | URL) => {
+      const mockFetch = async (input: RequestInfo | URL) => {
         capturedUrl = input.toString();
         return new Response(JSON.stringify(mockResponse), {
           status: 200,
@@ -165,7 +152,8 @@ describe("rest/client", () => {
         });
       };
 
-      const result = await restGetChunk("chunk-abc");
+      const client = new KBClient({ fetch: mockFetch });
+      const result = await client.getChunk("chunk-abc");
 
       expect(result.chunk_id).toBe("chunk-abc");
       expect(result.content).toBe("const x = 1;");
@@ -174,7 +162,7 @@ describe("rest/client", () => {
 
     it("URL-encodes chunk ID", async () => {
       let capturedUrl: string | undefined;
-      globalThis.fetch = async (input: RequestInfo | URL) => {
+      const mockFetch = async (input: RequestInfo | URL) => {
         capturedUrl = input.toString();
         return new Response(
           JSON.stringify({
@@ -190,7 +178,8 @@ describe("rest/client", () => {
         );
       };
 
-      await restGetChunk("chunk/with/slashes");
+      const client = new KBClient({ fetch: mockFetch });
+      await client.getChunk("chunk/with/slashes");
 
       expect(capturedUrl).toContain(encodeURIComponent("chunk/with/slashes"));
     });
@@ -205,10 +194,11 @@ describe("rest/client", () => {
         end_line: 20,
         content: "function fn() {}",
         source: "file",
+        lang: "typescript"
       };
 
       let capturedUrl: string | undefined;
-      globalThis.fetch = async (input: RequestInfo | URL) => {
+      const mockFetch = async (input: RequestInfo | URL) => {
         capturedUrl = input.toString();
         return new Response(JSON.stringify(mockResponse), {
           status: 200,
@@ -216,7 +206,8 @@ describe("rest/client", () => {
         });
       };
 
-      const result = await restGetFileSlice("myrepo", "path/to/file.ts", 10, 20);
+      const client = new KBClient({ fetch: mockFetch });
+      const result = await client.getFileSlice("myrepo", "path/to/file.ts", 10, 20);
 
       expect(result.content).toBe("function fn() {}");
       expect(capturedUrl).toContain("/v1/file");
@@ -235,14 +226,15 @@ describe("rest/client", () => {
         ] as RepoInfo[],
       };
 
-      globalThis.fetch = async () => {
+      const mockFetch = async () => {
         return new Response(JSON.stringify(mockResponse), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
       };
 
-      const result = await restListRepos();
+      const client = new KBClient({ fetch: mockFetch });
+      const result = await client.listRepos();
 
       expect(result.repos).toHaveLength(2);
       expect(result.repos[0].name).toBe("repo1");
@@ -251,7 +243,7 @@ describe("rest/client", () => {
 
     it("sends GET to /v1/repos", async () => {
       let capturedRequest: Request | undefined;
-      globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
         capturedRequest = new Request(input, init);
         return new Response(JSON.stringify({ repos: [] }), {
           status: 200,
@@ -259,7 +251,8 @@ describe("rest/client", () => {
         });
       };
 
-      await restListRepos();
+      const client = new KBClient({ fetch: mockFetch });
+      await client.listRepos();
 
       expect(capturedRequest!.method).toBe("GET");
       expect(capturedRequest!.url).toContain("/v1/repos");
@@ -273,14 +266,15 @@ describe("rest/client", () => {
         version: "1.0.0",
       };
 
-      globalThis.fetch = async () => {
+      const mockFetch = async () => {
         return new Response(JSON.stringify(mockResponse), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
       };
 
-      const result = await restHealthV1();
+      const client = new KBClient({ fetch: mockFetch });
+      const result = await client.healthV1();
 
       expect(result.status).toBe("ok");
       expect(result.version).toBe("1.0.0");
@@ -288,7 +282,7 @@ describe("rest/client", () => {
 
     it("supports shallow check parameter", async () => {
       let capturedUrl: string | undefined;
-      globalThis.fetch = async (input: RequestInfo | URL) => {
+      const mockFetch = async (input: RequestInfo | URL) => {
         capturedUrl = input.toString();
         return new Response(JSON.stringify({ status: "ok" }), {
           status: 200,
@@ -296,14 +290,15 @@ describe("rest/client", () => {
         });
       };
 
-      await restHealthV1("shallow");
+      const client = new KBClient({ fetch: mockFetch });
+      await client.healthV1("shallow");
 
       expect(capturedUrl).toContain("check=shallow");
     });
 
     it("supports deep check parameter", async () => {
       let capturedUrl: string | undefined;
-      globalThis.fetch = async (input: RequestInfo | URL) => {
+      const mockFetch = async (input: RequestInfo | URL) => {
         capturedUrl = input.toString();
         return new Response(JSON.stringify({ status: "ok" }), {
           status: 200,
@@ -311,14 +306,15 @@ describe("rest/client", () => {
         });
       };
 
-      await restHealthV1("deep");
+      const client = new KBClient({ fetch: mockFetch });
+      await client.healthV1("deep");
 
       expect(capturedUrl).toContain("check=deep");
     });
 
     it("omits check param when not specified", async () => {
       let capturedUrl: string | undefined;
-      globalThis.fetch = async (input: RequestInfo | URL) => {
+      const mockFetch = async (input: RequestInfo | URL) => {
         capturedUrl = input.toString();
         return new Response(JSON.stringify({ status: "ok" }), {
           status: 200,
@@ -326,7 +322,8 @@ describe("rest/client", () => {
         });
       };
 
-      await restHealthV1();
+      const client = new KBClient({ fetch: mockFetch });
+      await client.healthV1();
 
       expect(capturedUrl).toContain("/v1/health");
       expect(capturedUrl).not.toContain("check=");
@@ -335,7 +332,7 @@ describe("rest/client", () => {
 
   describe("error handling", () => {
     it("throws structured error for HTTP errors without JSON body", async () => {
-      globalThis.fetch = async () => {
+      const mockFetch = async () => {
         return new Response("Gateway Timeout", {
           status: 504,
           statusText: "Gateway Timeout",
@@ -343,8 +340,10 @@ describe("rest/client", () => {
         });
       };
 
+      const client = new KBClient({ fetch: mockFetch });
+
       try {
-        await restListRepos();
+        await client.listRepos();
         expect(true).toBe(false);
       } catch (err) {
         const restError = err as RestError;
@@ -353,7 +352,7 @@ describe("rest/client", () => {
     });
 
     it("throws structured error for HTTP errors with plain text body", async () => {
-      globalThis.fetch = async () => {
+      const mockFetch = async () => {
         return new Response("Not Found", {
           status: 404,
           statusText: "Not Found",
@@ -361,8 +360,10 @@ describe("rest/client", () => {
         });
       };
 
+      const client = new KBClient({ fetch: mockFetch });
+
       try {
-        await restGetChunk("nonexistent");
+        await client.getChunk("nonexistent");
         expect(true).toBe(false);
       } catch (err) {
         const restError = err as RestError;
@@ -374,7 +375,7 @@ describe("rest/client", () => {
   describe("request headers", () => {
     it("sets required headers", async () => {
       let capturedHeaders: Headers | undefined;
-      globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
         capturedHeaders = new Headers(init?.headers);
         return new Response(JSON.stringify({ repos: [] }), {
           status: 200,
@@ -382,7 +383,8 @@ describe("rest/client", () => {
         });
       };
 
-      await restListRepos();
+      const client = new KBClient({ fetch: mockFetch });
+      await client.listRepos();
 
       expect(capturedHeaders!.get("Content-Type")).toBe("application/json");
       expect(capturedHeaders!.get("Accept")).toBe("application/json");

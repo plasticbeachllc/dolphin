@@ -64,7 +64,7 @@ test TYPE="all":
 	@echo "🧪 Running {{TYPE}} tests..."
 	@just _pytest {{TYPE}}
 	# @just _bun-test agent-core {{TYPE}}
-	@just test-mcp {{TYPE}}
+	@just _bun-test mcp-bridge {{TYPE}}
 	@just _bun-test shared all
 	@echo "✅ All {{TYPE}} tests passed!"
 
