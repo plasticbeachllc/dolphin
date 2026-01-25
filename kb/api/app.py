@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Iterable, Sequence
 from inspect import isawaitable
 from pathlib import Path
 from time import perf_counter
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -331,7 +331,7 @@ async def health_v1(check: str = Query(default="shallow")) -> dict[str, object]:
     return await health(check)
 
 
-async def search(request: SearchRequest) -> dict[str, object]:
+async def search(request: SearchRequest) -> dict[str, Any]:
     """Search implementation used by the versioned API."""
     backend = get_search_backend()
 
