@@ -23,7 +23,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
       - name: Run pip-audit
-        run: uv run pip-audit --local --skip-editable --progress-spinner=off
+        # protobuf has an upstream-reported DoS issue (CVE-2026-0994) with no published fix yet.
+        # We keep OTLP support (which depends on protobuf) and temporarily ignore this advisory.
+        run: uv run pip-audit --local --skip-editable --progress-spinner=off --ignore-vuln CVE-2026-0994 --ignore-vuln GHSA-7gcm-g887-7qv7
 
 
   node-audit:
