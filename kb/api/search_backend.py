@@ -1044,9 +1044,12 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     graph_store = None
     try:
         graph_store = GraphStore(config.resolved_store_root() / "metadata.db")
-    except Exception as e:
+    except Exception:
         # Graph store is optional - no logging needed for expected absence
-        print(f"ERROR: GraphStore init failed: {e}", flush=True)
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.error("GraphStore init failed", exc_info=True)
         pass
 
     # Create and return the search backend
