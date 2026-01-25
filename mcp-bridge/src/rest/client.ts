@@ -1,8 +1,6 @@
 import { CONFIG } from "../util/config.js";
 import { resolveKbApiKey } from "../../../shared/kb-auth";
-import type { SearchRequestBody } from "./schemas.js";
-
-export type { SearchRequestBody };
+export type { SearchRequestBody } from "./schemas.js";
 
 export interface RestError {
   error: {
