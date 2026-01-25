@@ -354,23 +354,30 @@ def serve(
     host: Annotated[str, typer.Option("--host", help="Host to bind to")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", help="Port to bind to")] = 7777,
     watch: Annotated[list[str] | None, typer.Option("--watch", help="Repositories to watch")] = None,
-    watch_all: bool = typer.Option(False, "--watch-all", help="Watch all registered repositories"),
+    no_watch: bool = typer.Option(False, "--no-watch", help="Disable automatic file watching"),
 ) -> None:
     """Start the dolphin API server."""
 
     # Configure watcher environment variables BEFORE starting uvicorn
-    repo_list = [r for r in (watch or []) if r.strip()]
+    # Default behavior: watch all repos unless disabled or specific repos requested
+    repo_list: list[str] = []
 
-    if watch_all:
+    if no_watch:
+        # Explicitly disabled
+        repo_list = []
+    elif watch:
+        # User specified specific repos
+        repo_list = [r for r in watch if r.strip()]
+    else:
+        # Default: watch all registered repos
         try:
             config = load_config()
             metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
             metadata.initialize()
             repos = metadata.list_all_repos()
-            for repo in repos:
-                repo_list.append(repo["name"])
+            repo_list = [repo["name"] for repo in repos]
         except Exception as e:
-            rprint(f"[yellow]Warning: Failed to list repos for watch-all: {e}[/yellow]")
+            rprint(f"[yellow]Warning: Failed to list repos for automatic watching: {e}[/yellow]")
 
     # Deduplicate
     repo_list = sorted(list(set(repo_list)))
