@@ -12,21 +12,21 @@ This document proposes an initial framework for expanding Dolphin's supported in
 
 ## Terminology
 
-| Term | Definition |
-| --- | --- |
-| Provider | Logical API backend (Anthropic, OpenAI, Vlaude, etc.). |
-| Plan | Billing plan or account type (Vlaude subscription, pay-as-you-go API). |
-| Model | Specific deployable model (claude-3.5-sonnet, gpt-4o, etc.). |
+| Term       | Definition                                                                        |
+| ---------- | --------------------------------------------------------------------------------- |
+| Provider   | Logical API backend (Anthropic, OpenAI, Vlaude, etc.).                            |
+| Plan       | Billing plan or account type (Vlaude subscription, pay-as-you-go API).            |
+| Model      | Specific deployable model (claude-3.5-sonnet, gpt-4o, etc.).                      |
 | Capability | Feature supported by a provider/model (function calling, streaming, image input). |
 
 ## Current State Snapshot
 
-| Surface Area | Current Behavior |
-| --- | --- |
-| **Agent Core** | Hard-coded Anthropic + Vlaude flows. Env vars: `ANTHROPIC_API_KEY`, Vlaude subscription token. |
-| **MCP Bridge** | Same as Agent Core. Provider logic lives inside handler modules, not abstracted. |
-| **VS Code Extension** | Assumes back-end providers exist but does not expose selection UI. |
-| **Docs/Onboarding** | Mentions only Anthropic/Vlaude flows. |
+| Surface Area          | Current Behavior                                                                               |
+| --------------------- | ---------------------------------------------------------------------------------------------- |
+| **Agent Core**        | Hard-coded Anthropic + Vlaude flows. Env vars: `ANTHROPIC_API_KEY`, Vlaude subscription token. |
+| **MCP Bridge**        | Same as Agent Core. Provider logic lives inside handler modules, not abstracted.               |
+| **VS Code Extension** | Assumes back-end providers exist but does not expose selection UI.                             |
+| **Docs/Onboarding**   | Mentions only Anthropic/Vlaude flows.                                                          |
 
 ## High-Level Architecture Changes
 
@@ -55,21 +55,21 @@ This document proposes an initial framework for expanding Dolphin's supported in
 
 ### Supported Endpoints
 
-| Endpoint | Purpose | Notes |
-| --- | --- | --- |
-| `POST /v1/chat/completions` | Chat + tool-calling | Support `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `o1`, `gpt-4o-audio-preview`. |
-| `POST /v1/responses` | Unified reasoning interface | Needed for o1-style models. |
-| `POST /v1/embeddings` | Embeddings | Map to Dolphin KB embedding pipeline. |
+| Endpoint                    | Purpose                     | Notes                                                                     |
+| --------------------------- | --------------------------- | ------------------------------------------------------------------------- |
+| `POST /v1/chat/completions` | Chat + tool-calling         | Support `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `o1`, `gpt-4o-audio-preview`. |
+| `POST /v1/responses`        | Unified reasoning interface | Needed for o1-style models.                                               |
+| `POST /v1/embeddings`       | Embeddings                  | Map to Dolphin KB embedding pipeline.                                     |
 
 ### Configuration
 
-| Variable | Example | Description |
-| --- | --- | --- |
-| `OPENAI_API_KEY` | `sk-...` | Required for all OpenAI calls. |
-| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Optional for Azure/on-prem proxies. |
-| `OPENAI_ORG_ID` | `org_...` | Optional header when needed. |
-| `OPENAI_PROJECT_ID` | `proj_...` | Optional; some enterprise orgs require it. |
-| `OPENAI_DEFAULT_MODEL` | `gpt-4o-mini` | Fallback if agent config does not specify. |
+| Variable               | Example                     | Description                                |
+| ---------------------- | --------------------------- | ------------------------------------------ |
+| `OPENAI_API_KEY`       | `sk-...`                    | Required for all OpenAI calls.             |
+| `OPENAI_BASE_URL`      | `https://api.openai.com/v1` | Optional for Azure/on-prem proxies.        |
+| `OPENAI_ORG_ID`        | `org_...`                   | Optional header when needed.               |
+| `OPENAI_PROJECT_ID`    | `proj_...`                  | Optional; some enterprise orgs require it. |
+| `OPENAI_DEFAULT_MODEL` | `gpt-4o-mini`               | Fallback if agent config does not specify. |
 
 **Secret Management**
 
@@ -79,14 +79,14 @@ This document proposes an initial framework for expanding Dolphin's supported in
 
 ### Capability Matrix (Initial)
 
-| Capability | `gpt-4o` | `gpt-4o-mini` | `gpt-4.1` | `o1` |
-| --- | --- | --- | --- | --- |
-| Tool Calling | ✅ | ✅ | ✅ | ⚠️ (limited) |
-| Streaming | ✅ | ✅ | ✅ | ⚠️ (currently no streaming) |
-| JSON Mode | ✅ | ✅ | ✅ | ❌ |
-| Vision | ✅ | ✅ | ✅ | ⚠️ (text only) |
-| Audio Input | ✅ | ✅ | ✅ | ❌ |
-| Audio Output | ✅ | ✅ | ✅ | ❌ |
+| Capability   | `gpt-4o` | `gpt-4o-mini` | `gpt-4.1` | `o1`                        |
+| ------------ | -------- | ------------- | --------- | --------------------------- |
+| Tool Calling | ✅       | ✅            | ✅        | ⚠️ (limited)                |
+| Streaming    | ✅       | ✅            | ✅        | ⚠️ (currently no streaming) |
+| JSON Mode    | ✅       | ✅            | ✅        | ❌                          |
+| Vision       | ✅       | ✅            | ✅        | ⚠️ (text only)              |
+| Audio Input  | ✅       | ✅            | ✅        | ❌                          |
+| Audio Output | ✅       | ✅            | ✅        | ❌                          |
 
 ## Migration Steps
 
@@ -150,4 +150,3 @@ This document proposes an initial framework for expanding Dolphin's supported in
 - [ ] Integrate provider selection into Agent Core orchestrator.
 - [ ] Add docs section covering provider selection UI/CLI flows.
 - [ ] Plan QA and smoke testing for OpenAI rollout.
-
