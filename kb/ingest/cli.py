@@ -83,6 +83,15 @@ def init(
         # Patch the template string before writing
         # We assume the template has `default_embed_model = "large"` or similar
         # A simple replace works for the template
+        if 'default_embed_model = "large"' in config_content:
+            config_content = config_content.replace(
+                'default_embed_model = "large"',
+                f'default_embed_model = "{model_choice}"',
+            )
+        elif 'default_embed_model = "small"' in config_content:
+            config_content = config_content.replace(
+                'default_embed_model = "small"',
+                f'default_embed_model = "{model_choice}"',
             )
 
         target.write_text(config_content, encoding="utf-8")
