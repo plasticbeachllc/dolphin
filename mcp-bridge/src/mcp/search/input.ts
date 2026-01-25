@@ -26,8 +26,7 @@ export const SEARCH_INPUT = SearchRequestSchema.omit({
   include_warnings_in_text: z.boolean().optional(),
   include_abs_paths: z.boolean().optional(),
   include_vscode_uris: z.boolean().optional(),
-});
-
+}).strict();
 export const SEARCH_INPUT_SCHEMA = buildToolInputSchema(SEARCH_INPUT);
 
 export type SearchInput = z.infer<typeof SEARCH_INPUT>;

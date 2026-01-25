@@ -12,7 +12,6 @@ export interface RestError {
     remediation?: string;
   };
 }
-
 export interface SearchHit {
   repo: string;
   path: string;
