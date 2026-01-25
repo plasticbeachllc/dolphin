@@ -317,9 +317,7 @@ def _get_system_stats() -> dict[str, Any]:
         import sys
 
         divisor = (1024 * 1024) if sys.platform == "darwin" else 1024
-        stats["memory"] = {
-            "rss_mb": round(usage.ru_maxrss / divisor, 2)
-        }
+        stats["memory"] = {"rss_mb": round(usage.ru_maxrss / divisor, 2)}
     except Exception as e:
         import logging
 
