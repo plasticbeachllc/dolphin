@@ -1,6 +1,6 @@
 /**
  * Unit tests for additional MCP tools
- * 
+ *
  * Tests get_metadata, list_repos, kb_health, and store_info tools
  */
 
@@ -38,13 +38,20 @@ mock.module("../../rest/client.js", () => ({
   restGetChunk: mockRestGetChunk,
   restListRepos: mockRestListRepos,
   restHealthV1: mockRestHealthV1,
-  restGetFileSlice: mock(async () => ({ repo: "", path: "", start_line: 1, end_line: 1, content: "", source: "file" })),
+  restGetFileSlice: mock(async () => ({
+    repo: "",
+    path: "",
+    start_line: 1,
+    end_line: 1,
+    content: "",
+    source: "file",
+  })),
 }));
 
 describe("get_metadata tool", () => {
   it("fetches chunk metadata successfully", async () => {
     const { handler } = makeGetMetadata();
-    
+
     const result = await handler({ chunk_id: "chunk-123" });
 
     expect(result.isError).toBe(false);
@@ -53,7 +60,7 @@ describe("get_metadata tool", () => {
 
   it("includes metadata in response", async () => {
     const { handler } = makeGetMetadata();
-    
+
     const result = await handler({ chunk_id: "chunk-123" });
 
     expect(result._meta).toBeDefined();
@@ -82,7 +89,7 @@ describe("get_metadata tool", () => {
 describe("list_repos tool", () => {
   it("returns list of repositories", async () => {
     const { handler } = makeListRepos();
-    
+
     const result = await handler({});
 
     expect(result.isError).toBe(false);
@@ -91,7 +98,7 @@ describe("list_repos tool", () => {
 
   it("includes repo information in text", async () => {
     const { handler } = makeListRepos();
-    
+
     const result = await handler({});
 
     const textContent = result.content[0];
@@ -121,7 +128,7 @@ describe("list_repos tool", () => {
 
   it("includes metadata", async () => {
     const { handler } = makeListRepos();
-    
+
     const result = await handler({});
 
     expect(result._meta?.tool_version).toBeDefined();
@@ -132,7 +139,7 @@ describe("list_repos tool", () => {
 describe("kb_health tool", () => {
   it("returns health status", async () => {
     const { handler } = makeKbHealth();
-    
+
     const result = await handler({});
 
     expect(result.isError).toBe(false);
@@ -140,7 +147,7 @@ describe("kb_health tool", () => {
 
   it("supports check parameter", async () => {
     const { handler } = makeKbHealth();
-    
+
     const result = await handler({ check: "deep" });
 
     expect(result.isError).toBe(false);
@@ -168,7 +175,7 @@ describe("kb_health tool", () => {
 describe("store_info tool", () => {
   it("returns store information", async () => {
     const { handler } = makeStoreInfo();
-    
+
     const result = await handler({});
 
     expect(result.isError).toBe(false);

@@ -1,6 +1,6 @@
 /**
  * Unit tests for search/trim.ts payload trimming
- * 
+ *
  * Tests applyPayloadTrimming function for size reduction strategies
  */
 
@@ -55,7 +55,7 @@ describe("applyPayloadTrimming", () => {
   it("does not trim if size is under cap", async () => {
     const result = createMockResult("small text");
     const hitsJson = createMockHitsJson(1);
-    
+
     await applyPayloadTrimming({
       result,
       hitsJson,

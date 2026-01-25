@@ -1,6 +1,6 @@
 /**
  * Unit tests for file_lines MCP tool
- * 
+ *
  * Tests file_lines tool handler for fetching file slices
  */
 
@@ -20,14 +20,22 @@ const mockRestGetFileSlice = mock(async () => ({
 
 mock.module("../../rest/client.js", () => ({
   restGetFileSlice: mockRestGetFileSlice,
-  restGetChunk: mock(async () => ({ chunk_id: "", repo: "", path: "", start_line: 1, end_line: 1, content: "", resource_link: "" })),
+  restGetChunk: mock(async () => ({
+    chunk_id: "",
+    repo: "",
+    path: "",
+    start_line: 1,
+    end_line: 1,
+    content: "",
+    resource_link: "",
+  })),
   restListRepos: mock(async () => ({ repos: [] })),
 }));
 
 describe("file_lines tool", () => {
   it("fetches file slice successfully", async () => {
     const { handler } = makeFileLines();
-    
+
     const result = await handler({
       repo: "test-repo",
       path: "src/test.ts",
@@ -41,7 +49,7 @@ describe("file_lines tool", () => {
 
   it("includes file citation", async () => {
     const { handler } = makeFileLines();
-    
+
     const result = await handler({
       repo: "test-repo",
       path: "src/test.ts",
@@ -59,7 +67,7 @@ describe("file_lines tool", () => {
 
   it("returns code as resource", async () => {
     const { handler } = makeFileLines();
-    
+
     const result = await handler({
       repo: "test-repo",
       path: "src/test.ts",
@@ -75,7 +83,7 @@ describe("file_lines tool", () => {
 
   it("validates required fields", async () => {
     const { handler } = makeFileLines();
-    
+
     try {
       await handler({ repo: "test-repo" }); // Missing path, start, end
       expect(true).toBe(false);
@@ -109,7 +117,7 @@ describe("file_lines tool", () => {
 
   it("accepts input wrapped in input field", async () => {
     const { handler } = makeFileLines();
-    
+
     const result = await handler({
       input: {
         repo: "test-repo",
@@ -124,7 +132,7 @@ describe("file_lines tool", () => {
 
   it("includes metadata", async () => {
     const { handler } = makeFileLines();
-    
+
     const result = await handler({
       repo: "test-repo",
       path: "src/test.ts",

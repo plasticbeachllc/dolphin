@@ -1,6 +1,6 @@
 /**
  * Unit tests for MCP tool handlers
- * 
+ *
  * Tests chunk_get, file_lines, and other MCP tool implementations
  */
 
@@ -36,7 +36,7 @@ mock.module("../../rest/client.js", () => ({
 describe("chunk_get tool", () => {
   it("returns chunk content successfully", async () => {
     const { handler } = makeChunkGet();
-    
+
     const result = await handler({ chunk_id: "chunk-123" });
 
     expect(result.isError).toBe(false);
@@ -47,7 +47,7 @@ describe("chunk_get tool", () => {
 
   it("includes chunk citation in text", async () => {
     const { handler } = makeChunkGet();
-    
+
     const result = await handler({ chunk_id: "chunk-123" });
 
     const textContent = result.content[0];
@@ -60,7 +60,7 @@ describe("chunk_get tool", () => {
 
   it("includes code content as resource", async () => {
     const { handler } = makeChunkGet();
-    
+
     const result = await handler({ chunk_id: "chunk-123" });
 
     const resourceContent = result.content[1];
@@ -72,7 +72,7 @@ describe("chunk_get tool", () => {
 
   it("sets correct MIME type for TypeScript", async () => {
     const { handler } = makeChunkGet();
-    
+
     const result = await handler({ chunk_id: "chunk-123" });
 
     const resourceContent = result.content[1];
@@ -95,7 +95,7 @@ describe("chunk_get tool", () => {
 
   it("includes metadata in response", async () => {
     const { handler } = makeChunkGet();
-    
+
     const result = await handler({ chunk_id: "chunk-123" });
 
     expect(result._meta).toBeDefined();
@@ -105,7 +105,7 @@ describe("chunk_get tool", () => {
 
   it("accepts input wrapped in input field", async () => {
     const { handler } = makeChunkGet();
-    
+
     const result = await handler({ input: { chunk_id: "chunk-123" } });
 
     expect(result.isError).toBe(false);
@@ -117,14 +117,14 @@ describe("chunk_get tool", () => {
 
     // Verify signal is passed through
     const resultPromise = handler({ chunk_id: "chunk-123" }, abortController.signal);
-    
+
     // Even if aborted, should handle gracefully
     expect(resultPromise).resolves.toBeDefined();
   });
 
   it("validates chunk_id is required", async () => {
     const { handler } = makeChunkGet();
-    
+
     try {
       await handler({});
       expect(true).toBe(false); // Should not reach here
@@ -151,7 +151,7 @@ describe("chunk_get tool", () => {
 
   it("includes latency tracking", async () => {
     const { handler } = makeChunkGet();
-    
+
     const result = await handler({ chunk_id: "chunk-123" });
 
     expect(result._meta?.latency_ms).toBeGreaterThanOrEqual(0);

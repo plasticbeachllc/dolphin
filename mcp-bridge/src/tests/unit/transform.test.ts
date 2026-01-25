@@ -1,6 +1,6 @@
 /**
  * Unit tests for search/transform.ts hit transformation
- * 
+ *
  * Tests transformHits, getReposByName, and helper functions
  */
 
@@ -121,9 +121,7 @@ describe("transformHits", () => {
   });
 
   it("tracks escaped path count", () => {
-    const hits: ApiHit[] = [
-      createMockHit({ repo: "repo1", path: "../../../etc/passwd" }),
-    ];
+    const hits: ApiHit[] = [createMockHit({ repo: "repo1", path: "../../../etc/passwd" })];
     const reposByName = new Map<string, RepoInfo>([
       ["repo1", { name: "repo1", path: "/home/user/repo1" }],
     ]);
@@ -167,9 +165,7 @@ describe("transformHits", () => {
   });
 
   it("handles hits without line numbers", () => {
-    const hits: ApiHit[] = [
-      createMockHit({ start_line: undefined, end_line: undefined }),
-    ];
+    const hits: ApiHit[] = [createMockHit({ start_line: undefined, end_line: undefined })];
 
     const result = transformHits({
       hits,

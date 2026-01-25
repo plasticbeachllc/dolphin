@@ -1,6 +1,6 @@
 /**
  * Unit tests for snippet_fetcher.ts
- * 
+ *
  * Tests fetchSnippetsInParallel and requestsFromHits with mocked REST client
  */
 
@@ -95,9 +95,7 @@ describe("fetchSnippetsInParallel", () => {
       source: "file",
     }));
 
-    const requests: SnippetFetchRequest[] = [
-      { repo: "r", path: "p.ts", startLine: 1, endLine: 5 },
-    ];
+    const requests: SnippetFetchRequest[] = [{ repo: "r", path: "p.ts", startLine: 1, endLine: 5 }];
 
     const results = await fetchSnippetsInParallel(requests);
 
@@ -116,10 +114,10 @@ describe("fetchSnippetsInParallel", () => {
     }));
 
     const requests: SnippetFetchRequest[] = [
-      { 
-        repo: "r", 
-        path: "p.ts", 
-        startLine: 10, 
+      {
+        repo: "r",
+        path: "p.ts",
+        startLine: 10,
         endLine: 20,
         contextLinesBefore: 2,
         contextLinesAfter: 3,
@@ -140,7 +138,7 @@ describe("fetchSnippetsInParallel", () => {
     mockRestGetFileSlice.mockImplementation(async () => {
       concurrentCalls++;
       maxConcurrent = Math.max(maxConcurrent, concurrentCalls);
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
       concurrentCalls--;
       return {
         repo: "r",
@@ -220,9 +218,9 @@ describe("fetchSnippetsInParallel", () => {
 
   it("respects abort signal", async () => {
     const abortController = new AbortController();
-    
+
     mockRestGetFileSlice.mockImplementation(async () => {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
       return {
         repo: "r",
         path: "p",
@@ -240,8 +238,8 @@ describe("fetchSnippetsInParallel", () => {
     // Abort immediately
     abortController.abort();
 
-    const results = await fetchSnippetsInParallel(requests, { 
-      signal: abortController.signal 
+    const results = await fetchSnippetsInParallel(requests, {
+      signal: abortController.signal,
     });
 
     // Abort signal is checked but may still process some results
@@ -252,7 +250,7 @@ describe("fetchSnippetsInParallel", () => {
   it("handles timeout correctly", async () => {
     mockRestGetFileSlice.mockImplementation(async () => {
       // Simulate slow response
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       return {
         repo: "r",
         path: "p",
@@ -267,8 +265,8 @@ describe("fetchSnippetsInParallel", () => {
       { repo: "r", path: "slow.ts", startLine: 1, endLine: 10 },
     ];
 
-    const results = await fetchSnippetsInParallel(requests, { 
-      requestTimeoutMs: 100 
+    const results = await fetchSnippetsInParallel(requests, {
+      requestTimeoutMs: 100,
     });
 
     // With short timeout, the request may complete or timeout

@@ -1,6 +1,6 @@
 /**
  * Unit tests for search/snippets.ts
- * 
+ *
  * Tests snippet fetching coordination for search results
  */
 
@@ -18,7 +18,15 @@ mock.module("../../mcp/tools/snippet_fetcher.js", () => ({
 describe("fetchSnippetsForHits", () => {
   it("returns empty when snippets disabled", async () => {
     const hits: ApiHit[] = [
-      { repo: "r", path: "p", start_line: 1, end_line: 10, score: 0.9, snippet: "code", chunk_id: "c" },
+      {
+        repo: "r",
+        path: "p",
+        start_line: 1,
+        end_line: 10,
+        score: 0.9,
+        snippet: "code",
+        chunk_id: "c",
+      },
     ];
 
     const result = await fetchSnippetsForHits({
@@ -40,7 +48,15 @@ describe("fetchSnippetsForHits", () => {
     }));
 
     const hits: ApiHit[] = [
-      { repo: "r", path: "p", start_line: 1, end_line: 10, score: 0.9, snippet: "code", chunk_id: "c" },
+      {
+        repo: "r",
+        path: "p",
+        start_line: 1,
+        end_line: 10,
+        score: 0.9,
+        snippet: "code",
+        chunk_id: "c",
+      },
     ];
 
     const result = await fetchSnippetsForHits({
@@ -89,7 +105,15 @@ describe("fetchSnippetsForHits", () => {
     }));
 
     const hits: ApiHit[] = [
-      { repo: "r", path: "p", start_line: 1, end_line: 10, score: 0.9, snippet: "code", chunk_id: "c" },
+      {
+        repo: "r",
+        path: "p",
+        start_line: 1,
+        end_line: 10,
+        score: 0.9,
+        snippet: "code",
+        chunk_id: "c",
+      },
     ];
 
     const result = await fetchSnippetsForHits({
@@ -108,9 +132,33 @@ describe("fetchSnippetsForHits", () => {
 
   it("skips hits with missing required fields", async () => {
     const hits: ApiHit[] = [
-      { repo: "r", path: "p", start_line: 1, end_line: 10, score: 0.9, snippet: "code", chunk_id: "c" },
-      { repo: "", path: "p", start_line: 1, end_line: 10, score: 0.9, snippet: "code", chunk_id: "c2" } as ApiHit,
-      { repo: "r", path: "", start_line: 1, end_line: 10, score: 0.9, snippet: "code", chunk_id: "c3" } as ApiHit,
+      {
+        repo: "r",
+        path: "p",
+        start_line: 1,
+        end_line: 10,
+        score: 0.9,
+        snippet: "code",
+        chunk_id: "c",
+      },
+      {
+        repo: "",
+        path: "p",
+        start_line: 1,
+        end_line: 10,
+        score: 0.9,
+        snippet: "code",
+        chunk_id: "c2",
+      } as ApiHit,
+      {
+        repo: "r",
+        path: "",
+        start_line: 1,
+        end_line: 10,
+        score: 0.9,
+        snippet: "code",
+        chunk_id: "c3",
+      } as ApiHit,
     ];
 
     await fetchSnippetsForHits({
@@ -152,13 +200,13 @@ describe("fetchSnippetsForHits", () => {
 
     const calls = mockFetchSnippetsInParallel.mock.calls;
     const requests = calls[calls.length - 1][0];
-    
+
     // First 3 should have context
     expect(requests[0].contextLinesBefore).toBe(5);
     expect(requests[0].contextLinesAfter).toBe(5);
     expect(requests[1].contextLinesBefore).toBe(5);
     expect(requests[2].contextLinesBefore).toBe(5);
-    
+
     // Rest should have no context
     if (requests[3]) {
       expect(requests[3].contextLinesBefore).toBe(0);
@@ -169,7 +217,15 @@ describe("fetchSnippetsForHits", () => {
   it("passes abort signal through", async () => {
     const abortController = new AbortController();
     const hits: ApiHit[] = [
-      { repo: "r", path: "p", start_line: 1, end_line: 10, score: 0.9, snippet: "code", chunk_id: "c" },
+      {
+        repo: "r",
+        path: "p",
+        start_line: 1,
+        end_line: 10,
+        score: 0.9,
+        snippet: "code",
+        chunk_id: "c",
+      },
     ];
 
     await fetchSnippetsForHits({

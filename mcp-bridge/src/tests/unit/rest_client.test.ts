@@ -1,6 +1,6 @@
 /**
  * Unit tests for rest/client.ts API functions
- * 
+ *
  * Tests restSearch, restGetChunk, restGetFileSlice, restListRepos, restHealthV1
  * Uses fetch mocking to test API clients without external dependencies
  */
@@ -167,15 +167,18 @@ describe("rest/client", () => {
       let capturedUrl: string | undefined;
       globalThis.fetch = async (input: RequestInfo | URL) => {
         capturedUrl = input.toString();
-        return new Response(JSON.stringify({
-          chunk_id: "test",
-          repo: "r",
-          path: "p",
-          start_line: 1,
-          end_line: 1,
-          content: "",
-          resource_link: "",
-        }), { status: 200, headers: { "Content-Type": "application/json" } });
+        return new Response(
+          JSON.stringify({
+            chunk_id: "test",
+            repo: "r",
+            path: "p",
+            start_line: 1,
+            end_line: 1,
+            content: "",
+            resource_link: "",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
       };
 
       await restGetChunk("chunk/with/slashes");

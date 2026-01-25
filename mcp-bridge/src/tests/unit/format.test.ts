@@ -1,6 +1,6 @@
 /**
  * Unit tests for search/format.ts functions
- * 
+ *
  * Tests buildPromptReady, buildWarnings, buildSummary, buildHitsJsonObject, buildHitsJsonText
  */
 
@@ -35,7 +35,7 @@ describe("buildPromptReady", () => {
   it("formats basic hit with snippet", () => {
     const hit = createMockHit();
     const result = buildPromptReady({ hits: [hit as any], meta: {} }, 10);
-    
+
     expect(result).toContain("[test-repo]");
     expect(result).toContain("src/example.ts");
     expect(result).toContain("L10-L20");
@@ -46,7 +46,7 @@ describe("buildPromptReady", () => {
   it("includes score in output", () => {
     const hit = createMockHit({ score: 0.9542 });
     const result = buildPromptReady({ hits: [hit as any], meta: {} }, 10);
-    
+
     expect(result).toContain("score=0.954");
   });
 
@@ -57,7 +57,7 @@ describe("buildPromptReady", () => {
       createMockHit({ chunk_id: "chunk-3" }),
     ];
     const result = buildPromptReady({ hits: hits as any, meta: {} }, 2);
-    
+
     expect(result).toContain("chunk-1");
     expect(result).toContain("chunk-2");
     expect(result).not.toContain("chunk-3");
@@ -66,7 +66,7 @@ describe("buildPromptReady", () => {
   it("shows followup hint when no snippet", () => {
     const hit = createMockHit({ snippet: undefined });
     const result = buildPromptReady({ hits: [hit as any], meta: {} }, 10);
-    
+
     expect(result).toContain("No snippet included");
     expect(result).toContain("chunk_get");
     expect(result).toContain("file_lines");
@@ -75,7 +75,7 @@ describe("buildPromptReady", () => {
   it("uses fenced code block with language", () => {
     const hit = createMockHit({ lang: "typescript" });
     const result = buildPromptReady({ hits: [hit as any], meta: {} }, 10);
-    
+
     // fenceLang returns short names like "ts" for typescript
     expect(result).toContain("```ts");
     expect(result).toContain("```");
@@ -89,7 +89,7 @@ describe("buildPromptReady", () => {
       _chunk_end_line: 20,
     });
     const result = buildPromptReady({ hits: [hit as any], meta: {} }, 10);
-    
+
     expect(result).toContain("L5-L25");
   });
 });
@@ -101,7 +101,7 @@ describe("buildWarnings", () => {
       snippetFailures: [],
       escapedPathCount: 0,
     });
-    
+
     expect(result.warnings).toEqual([]);
     expect(result.warningEntries).toEqual([]);
   });
@@ -112,7 +112,7 @@ describe("buildWarnings", () => {
       snippetFailures: [],
       escapedPathCount: 0,
     });
-    
+
     expect(result.warnings).toContain("low_confidence");
     expect(result.warnings).toContain("truncated");
     expect(result.warningEntries).toHaveLength(2);
@@ -127,7 +127,7 @@ describe("buildWarnings", () => {
       snippetFailures: failures,
       escapedPathCount: 0,
     });
-    
+
     expect(result.warnings).toContain("snippet_fetch_failed");
     expect(result.warningEntries[0].detail).toContain("2 snippet(s)");
   });
@@ -137,7 +137,7 @@ describe("buildWarnings", () => {
       snippetFailures: [],
       escapedPathCount: 3,
     });
-    
+
     expect(result.warnings).toContain("path_escaped_repo_root");
     expect(result.warningEntries[0].detail).toContain("3 path(s)");
   });
@@ -148,7 +148,7 @@ describe("buildWarnings", () => {
       snippetFailures: [{ repo: "r", path: "p", start: 1, end: 2 }],
       escapedPathCount: 1,
     });
-    
+
     expect(result.warnings).toHaveLength(3);
     expect(result.warningEntries).toHaveLength(3);
   });
@@ -175,7 +175,7 @@ describe("buildSummary", () => {
       includeWarningsInText: false,
       warningEntries: [],
     });
-    
+
     expect(result).toContain("Found 5 results");
     expect(result).toContain("across 2 repos");
   });
@@ -188,7 +188,7 @@ describe("buildSummary", () => {
       includeWarningsInText: false,
       warningEntries: [],
     });
-    
+
     expect(result).toContain("Found 1 result");
     expect(result).toContain("1 repo");
   });
@@ -201,7 +201,7 @@ describe("buildSummary", () => {
       includeWarningsInText: false,
       warningEntries: [],
     });
-    
+
     expect(result).toContain("top 5/10");
   });
 
@@ -214,7 +214,7 @@ describe("buildSummary", () => {
       includeWarningsInText: false,
       warningEntries: [],
     });
-    
+
     expect(result).toContain("~100 estimated");
   });
 
@@ -226,7 +226,7 @@ describe("buildSummary", () => {
       includeWarningsInText: false,
       warningEntries: [],
     });
-    
+
     expect(result).toContain("More available");
     expect(result).toContain("cursor");
   });
@@ -237,12 +237,9 @@ describe("buildSummary", () => {
       snippetsIncluded: 1,
       moreAvailable: false,
       includeWarningsInText: true,
-      warningEntries: [
-        { code: "low_confidence" },
-        { code: "snippet_failed", detail: "timeout" },
-      ],
+      warningEntries: [{ code: "low_confidence" }, { code: "snippet_failed", detail: "timeout" }],
     });
-    
+
     expect(result).toContain("Warnings:");
     expect(result).toContain("low_confidence");
     expect(result).toContain("snippet_failed(timeout)");
@@ -256,7 +253,7 @@ describe("buildSummary", () => {
       includeWarningsInText: false,
       warningEntries: [{ code: "test_warning" }],
     });
-    
+
     expect(result).not.toContain("Warnings:");
     expect(result).not.toContain("test_warning");
   });
@@ -283,7 +280,7 @@ describe("buildHitsJsonObject", () => {
       topK: 20,
       warningEntries: [],
     });
-    
+
     expect(result.schema_version).toBeDefined();
     expect(result.query).toBe("test query");
     expect(result.hits).toHaveLength(1);
@@ -298,7 +295,7 @@ describe("buildHitsJsonObject", () => {
       topK: 10,
       warningEntries: [],
     });
-    
+
     expect(result.hits[0].rank).toBe(1);
     expect(result.hits[1].rank).toBe(2);
   });
@@ -317,7 +314,7 @@ describe("buildHitsJsonObject", () => {
       topK: 10,
       warningEntries: [],
     });
-    
+
     expect(result.hits[0].chunk_range.start_line).toBe(12);
     expect(result.hits[0].chunk_range.end_line).toBe(18);
     expect(result.hits[0].snippet_range.start_line).toBe(8);
@@ -332,7 +329,7 @@ describe("buildHitsJsonObject", () => {
       topK: 10,
       warningEntries: [],
     });
-    
+
     const hit = result.hits[0];
     expect(hit.followups.chunk_get.chunk_id).toBe("chunk-123");
     expect(hit.followups.file_lines.repo).toBe("test-repo");
@@ -352,7 +349,7 @@ describe("buildHitsJsonObject", () => {
       topK: 10,
       warningEntries: [],
     });
-    
+
     expect(result.hits[0].uris.vscode).toBe("vscode://file/src/test.ts:10");
     expect(result.hits[0].uris.abs_path).toBe("/home/user/src/test.ts");
     expect(result.hits[0].uris.repo_root).toBe("/home/user");
@@ -366,7 +363,7 @@ describe("buildHitsJsonObject", () => {
       topK: 20,
       warningEntries: [{ code: "test_warning" }],
     });
-    
+
     expect(result.meta.cursor).toBe("next-page");
     expect(result.meta.estimated_total).toBe(50);
     expect(result.meta.model).toBe("large");
@@ -380,11 +377,18 @@ describe("buildHitsJsonText", () => {
       schema_version: "1.0",
       query: "test",
       hits: [],
-      meta: { cursor: null, estimated_total: null, complete: null, warnings: [], model: null, top_k: 20 },
+      meta: {
+        cursor: null,
+        estimated_total: null,
+        complete: null,
+        warnings: [],
+        model: null,
+        top_k: 20,
+      },
     };
-    
+
     const result = buildHitsJsonText(hitsJson);
-    
+
     expect(result).toStartWith("```json\n");
     expect(result).toEndWith("\n```");
   });
@@ -394,12 +398,19 @@ describe("buildHitsJsonText", () => {
       schema_version: "1.0",
       query: "search term",
       hits: [],
-      meta: { cursor: null, estimated_total: 10, complete: true, warnings: [], model: "small", top_k: 5 },
+      meta: {
+        cursor: null,
+        estimated_total: 10,
+        complete: true,
+        warnings: [],
+        model: "small",
+        top_k: 5,
+      },
     };
-    
+
     const result = buildHitsJsonText(hitsJson);
     const jsonPart = result.replace(/^```json\n/, "").replace(/\n```$/, "");
-    
+
     expect(() => JSON.parse(jsonPart)).not.toThrow();
     const parsed = JSON.parse(jsonPart);
     expect(parsed.query).toBe("search term");
