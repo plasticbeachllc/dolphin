@@ -252,6 +252,36 @@ def reset_search_backend() -> None:
     set_search_backend(None)
 
 
+def _get_system_stats() -> dict[str, Any]:
+    """Gather system resource statistics."""
+    stats = {}
+    try:
+        import resource
+        import shutil
+
+        # Disk usage
+        config = _load_default_config()
+        total, used, free = shutil.disk_usage(config.store_root)
+        stats["disk"] = {
+            "total_gb": round(total / (2**30), 2),
+            "free_gb": round(free / (2**30), 2),
+            "percent_free": round((free / total) * 100, 1)
+        }
+
+        # Memory usage (RSS)
+        usage = resource.getrusage(resource.RUSAGE_SELF)
+        stats["memory"] = {
+            "rss_mb": round(usage.ru_maxrss / 1024 / 1024, 2)  # Mac returns bytes, Linux returns kb.
+            # Actually on Mac ru_maxrss is in bytes, on Linux it is in kilobytes.
+            # Wait, python docs say: "ru_maxrss is in kilobytes on Linux... and bytes on OS X"
+            # We are on Mac. So div by 1024*1024 for MB.
+        }
+    except Exception:
+        stats["error"] = "failed_to_collect"
+
+    return stats
+
+
 async def health(check: str = Query(default="shallow")) -> dict[str, object]:
     """Health check logic with optional deep checks."""
     if check == "shallow":
@@ -277,6 +307,11 @@ async def health(check: str = Query(default="shallow")) -> dict[str, object]:
         checks["embeddings"] = "ok"
     else:
         checks["embeddings"] = "not_configured"
+
+        checks["embeddings"] = "not_configured"
+
+    # System stats
+    checks["system"] = _get_system_stats()
 
     return {"status": "ok", "checks": checks}
 

@@ -7,6 +7,9 @@ from typing import cast
 
 import typer
 from pathspec import PathSpec
+from rich import box
+from rich.console import Console
+from rich.table import Table
 
 from ..config import DEFAULT_CONFIG_PATH, KBConfig, load_config
 from ..embeddings.provider import create_provider, set_default_provider
@@ -57,8 +60,9 @@ def init(
     created = False
 
     # Load existing or template content
+    console = Console()
     if target.exists():
-        typer.echo(f"Config already exists at {target}")
+        console.print(f"[dim]Config already exists at {target}[/dim]")
         config_content = target.read_text(encoding="utf-8")
     else:
         config_content = _read_config_template()
@@ -76,7 +80,7 @@ def init(
 
         if model_choice not in ("small", "large"):
             model_choice = "large"
-            typer.echo("Invalid choice, defaulting to 'large'.")
+            console.print("[yellow]Invalid choice, defaulting to 'large'.[/yellow]")
 
         # Patch the template string before writing
         # We assume the template has `default_embed_model = "large"` or similar
@@ -91,11 +95,11 @@ def init(
             )
 
         target.write_text(config_content, encoding="utf-8")
-        typer.echo(f"Created knowledge store config at {target}")
+        console.print(f"Created knowledge store config at [bold green]{target}[/bold green]")
     elif created:
         # Non-interactive, write default
         target.write_text(config_content, encoding="utf-8")
-        typer.echo(f"Created knowledge store config at {target}")
+        console.print(f"Created knowledge store config at [bold green]{target}[/bold green]")
 
     # Load config and initialize storage backends.
     config = load_config(target)
@@ -104,16 +108,16 @@ def init(
 
     metadata = SQLiteMetadataStore(store_root / "metadata.db")
     metadata.initialize()
-    typer.echo(f"SQLite initialized at {metadata.db_path}")
+    console.print(f"SQLite initialized at [bold cyan]{metadata.db_path}[/bold cyan]")
 
     lancedb = LanceDBStore(store_root / "lancedb")
     lancedb.initialize_collections()
-    typer.echo(f"LanceDB root initialized at {lancedb.root}")
+    console.print(f"LanceDB root initialized at [bold cyan]{lancedb.root}[/bold cyan]")
 
     if created:
-        typer.echo("Initialization complete. You can now run 'kb add-repo' and 'kb index'.")
+        console.print("Initialization complete. You can now run [bold]kb add-repo[/bold] and [bold]kb index[/bold].")
     else:
-        typer.echo("Initialization verified. Nothing else to do.")
+        console.print("[green]Initialization verified. Nothing else to do.[/green]")
 
 
 @app.command("add-repo")
@@ -256,25 +260,43 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
     metadata.initialize()
 
     # Get aggregate counts
+    # Get aggregate counts
     summary = metadata.summarize()
-    typer.echo("\n📊 Knowledge Store Summary:")
-    typer.echo(f"  Total repositories: {summary['repos']}")
-    typer.echo(f"  Total files: {summary['files']}")
-    typer.echo(f"  Total chunks: {summary['chunks']}")
+
+    console = Console()
+
+    # Summary Table
+    console.print("\n[bold]📊 Knowledge Store Summary[/bold]")
+    summary_table = Table(show_header=False, box=box.SIMPLE)
+    summary_table.add_column("Metric", style="cyan")
+    summary_table.add_column("Value", style="bold white")
+    summary_table.add_row("Total Repositories", str(summary['repos']))
+    summary_table.add_row("Total Files", str(summary['files']))
+    summary_table.add_row("Total Chunks", str(summary['chunks']))
+    console.print(summary_table)
 
     # List all registered repositories
     repos = metadata.list_all_repos()
     if repos:
-        typer.echo("\n📚 Registered Repositories:")
-        for repo in repos:
-            typer.echo(f"\n  • {repo['name']}")
-            typer.echo(f"    Path: {repo['root_path']}")
-            typer.echo(f"    Embed Model: {repo['default_embed_model']}")
-            typer.echo(f"    Created: {repo['created_at']}")
-    else:
-        typer.echo("\n  No repositories registered.")
+        console.print("\n[bold]📚 Registered Repositories[/bold]")
+        repo_table = Table(box=box.ROUNDED)
+        repo_table.add_column("Name", style="green")
+        repo_table.add_column("Path", style="dim")
+        repo_table.add_column("Embed Model")
+        repo_table.add_column("Created", style="dim")
 
-    typer.echo()
+        for repo in repos:
+            repo_table.add_row(
+                repo['name'],
+                str(repo['root_path']),
+                repo['default_embed_model'],
+                str(repo['created_at'])
+            )
+        console.print(repo_table)
+    else:
+        console.print("\n[yellow]No repositories registered.[/yellow]")
+
+    console.print()
 
 
 @app.command("prune-ignored")
