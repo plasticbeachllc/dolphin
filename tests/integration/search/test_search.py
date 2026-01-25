@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from kb.api.app import SearchRequest, reset_search_backend, set_search_backend, reset_stores, set_stores
+from kb.api.app import SearchRequest, reset_search_backend, reset_stores, set_search_backend, set_stores
 from kb.store import LanceDBStore, SQLiteMetadataStore
 from tests.utils.mock_services import MockEmbeddingService
 
