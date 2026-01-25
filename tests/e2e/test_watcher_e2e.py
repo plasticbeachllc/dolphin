@@ -129,13 +129,22 @@ default_embed_model = "small"
         # Create a new branch, switch to it, add a file
         subprocess.run(["git", "-C", str(git_repo), "checkout", "-b", "feature-branch"], check=True)
 
+        # IMPORTANT: Wait for branch reconciliation to complete
+        # The watcher detects branch switches and triggers reconcile_branch_switch
+        # which can take time. We need to wait for that to finish before creating
+        # new files, otherwise we race with the reconciliation process.
+        time.sleep(3.0)  # Give reconciliation time to complete
+
         branch_file = git_repo / "branch_file.py"
         branch_file.write_text("x = 42")
 
-        # Wait for index
+        # Wait for index with more aggressive polling
         found_branch = False
         start_wait = time.time()
-        while time.time() - start_wait < 30:
+        poll_interval = 0.3  # Poll more frequently
+        max_wait = 30
+        
+        while time.time() - start_wait < max_wait:
             import sqlite3
 
             conn = sqlite3.connect(metadata_db)
@@ -145,11 +154,26 @@ default_embed_model = "small"
                 if cur.fetchone():
                     found_branch = True
                     break
-            except Exception:
-                pass
+            except Exception as e:
+                # Log exception for debugging
+                print(f"Warning: DB query failed: {e}")
             finally:
                 conn.close()
-            time.sleep(0.5)
+            time.sleep(poll_interval)
+
+        if not found_branch:
+            # Enhanced error message with more context
+            elapsed = time.time() - start_wait
+            print(f"Branch file not found after {elapsed:.1f}s of waiting")
+            # Check if the file exists on disk
+            print(f"File exists on disk: {branch_file.exists()}")
+            # Query all files in the DB for debugging
+            conn = sqlite3.connect(metadata_db)
+            cur = conn.cursor()
+            cur.execute("SELECT path FROM files ORDER BY path")
+            all_files = [row[0] for row in cur.fetchall()]
+            conn.close()
+            print(f"All files in DB ({len(all_files)}): {all_files[:20]}")  # Show first 20
 
         assert found_branch, "File 'branch_file.py' from new branch was not indexed"
 
