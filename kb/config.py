@@ -24,10 +24,18 @@ USER_CONFIG_PATH = Path.home() / ".dolphin" / "config.toml"
 _TEMPLATE_PATH = Path(__file__).parent / "config_template.toml"
 
 
-def _to_path(value: Any) -> Path:
+def _to_path(value: Any, base_dir: Path | None = None) -> Path:
     if isinstance(value, Path):
-        return value.expanduser().resolve()
-    return Path(str(value)).expanduser().resolve()
+        path = value
+    else:
+        path = Path(str(value))
+
+    path = path.expanduser()
+
+    if base_dir and not path.is_absolute():
+        path = base_dir / path
+
+    return path.resolve()
 
 
 def _read_template() -> str:
