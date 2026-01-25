@@ -87,7 +87,6 @@ export interface FileSliceResponse {
   _meta?: { warnings?: string[] };
 }
 
-
 let KB_API_KEY: string | undefined;
 
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;

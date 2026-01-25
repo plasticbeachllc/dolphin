@@ -194,7 +194,7 @@ describe("rest/client", () => {
         end_line: 20,
         content: "function fn() {}",
         source: "file",
-        lang: "typescript"
+        lang: "typescript",
       };
 
       let capturedUrl: string | undefined;
