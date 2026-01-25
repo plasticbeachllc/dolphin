@@ -103,3 +103,41 @@ def test_summarize(meta_store, tmp_path):
     assert "files" in summary
     assert "chunks" in summary
     assert summary["repos"] >= 1
+
+
+def test_get_chunk_locations_by_identity(meta_store, tmp_path):
+    """Test retrieving chunk locations by identity keys."""
+    repo_path = tmp_path / "test-repo"
+    repo_path.mkdir()
+    meta_store.record_repo("test-repo", repo_path)
+    repo = meta_store.get_repo_by_name("test-repo")
+    repo_id = repo["id"]
+
+    file_id = meta_store.upsert_file(
+        repo_id=repo_id, path="test.py", ext=".py", language="python", is_binary=False, size_bytes=100
+    )
+
+    # Insert test chunk content directly to setup state
+    text_hash = "hash123"
+    embed_model = "small"
+    with meta_store._connect() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO chunk_content (repo_id, file_id, text_hash, embed_model, id, first_indexed_at, last_indexed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (repo_id, file_id, text_hash, embed_model, "uuid-123", "2024-01-01", "2024-01-01"),
+        )
+        content_id = "uuid-123"
+        cur.execute(
+            "INSERT INTO chunk_locations (content_id, start_line, end_line, symbol_name, symbol_path, symbol_kind, id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (content_id, 1, 10, "test_func", "test.test_func", "function", "loc-123"),
+        )
+        conn.commit()
+
+    locations = meta_store.get_chunk_locations_by_identity(repo_id, file_id, text_hash, embed_model)
+
+    assert len(locations) == 1
+    assert locations[0]["content_id"] == str(content_id)
+    assert locations[0]["start_line"] == 1
+    assert locations[0]["end_line"] == 10
+    assert locations[0]["symbol_name"] == "test_func"
+

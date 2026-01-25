@@ -626,6 +626,16 @@ class KnowledgeSearchBackend:
                             "symbol_path": chunk_data.get("symbol_path"),
                         }
                     )
+                else:
+                    self.logger.warning(
+                        "Failed to hydrate BM25 result in fallback",
+                        {
+                            "chunk_id": chunk_id,
+                            "repo": repo_name,
+                            "path": path,
+                            "text_hash": text_hash,
+                        },
+                    )
 
                 hydrated.append(hydrated_result)
 
