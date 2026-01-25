@@ -836,28 +836,21 @@ class IngestionPipeline:
             "dry_run": dry_run,
         }
 
-    async def index_parallel(
+    def _setup_parallel_session(
         self,
         repo_name: str,
-        *,
-        dry_run: bool = False,
-        force: bool = False,
-        full_reindex: bool = False,
-        max_workers: int | None = None,
-    ) -> dict[str, Any]:
-        """Parallel indexing with dynamic worker scaling.
-
-        Args:
-            repo_name: Name of the repository to index
-            dry_run: If True, don't persist changes
-            force: If True, skip clean working tree check
-            full_reindex: If True, drop existing index and process all files
-            max_workers: Max concurrent workers (None = auto-scale)
-
+        force: bool,
+        full_reindex: bool,
+        dry_run: bool,
+        max_workers: int | None,
+    ) -> tuple[int, Path, str, str, str, int, ErrorLogger, set[str], list[str], list[str]]:
+        """Setup parallel indexing session and discover changed files.
+        
         Returns:
-            Dictionary with session summary and counters
+            Tuple of (repo_id, root, embed_model, commit_sha, branch, session_id,
+                     error_logger, ignore_patterns, changed_files, deleted_files)
         """
-        # Resolve repo and Git state (same as Sync)
+        # Resolve repo and Git state
         repo = self.metadata.get_repo_by_name(repo_name)
         if not repo:
             raise ValueError(f"Repository not registered: {repo_name}")
@@ -909,7 +902,6 @@ class IngestionPipeline:
         # Determine changed files
         if full_reindex or last_success is None:
             print(f"Full reindex mode: scanning all files for {repo_name}")
-            # Use parallel scanner for full reindex
             with DynamicWorkerPool(max_workers=max_workers) as pool:
                 candidates = scan_repo_parallel(root, ignore_patterns, pool=pool)
             changed_files = [c.rel_path for c in candidates]
@@ -922,6 +914,36 @@ class IngestionPipeline:
             # Filter ignored files from changed list
             ignore_spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
             changed_files = [f for f in changed_files if not ignore_spec.match_file(f)]
+
+        return (repo_id, root, embed_model, commit_sha, branch, session_id,
+                error_logger, ignore_patterns, changed_files, deleted_files)
+
+    async def index_parallel(
+        self,
+        repo_name: str,
+        *,
+        dry_run: bool = False,
+        force: bool = False,
+        full_reindex: bool = False,
+        max_workers: int | None = None,
+    ) -> dict[str, Any]:
+        """Parallel indexing with dynamic worker scaling.
+
+        Args:
+            repo_name: Name of the repository to index
+            dry_run: If True, don't persist changes
+            force: If True, skip clean working tree check
+            full_reindex: If True, drop existing index and process all files
+            max_workers: Max concurrent workers (None = auto-scale)
+
+        Returns:
+            Dictionary with session summary and counters
+        """
+        # Setup session, discover files, and initialize
+        (repo_id, root, embed_model, commit_sha, branch, session_id,
+         error_logger, ignore_patterns, changed_files, deleted_files) = self._setup_parallel_session(
+            repo_name, force, full_reindex, dry_run, max_workers
+        )
 
         # Counters
         files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
@@ -1009,6 +1031,7 @@ class IngestionPipeline:
 
                     # Sequential Processing of Results (dedup, graph, queuing)
                     files_db_batch = [] # batch DB updates if possible
+                    embedding_tasks = []  # Collect embedding futures for concurrent processing
                     
                     for res in parse_results:
                         if not res.success:
@@ -1087,120 +1110,129 @@ class IngestionPipeline:
                              texts = [c.text for c in unique_changed]
                              hashes = [c.text_hash for c in unique_changed]
                              
-                             # We need to persist results when they come back
-                             # We can await here (sequential file logic, parallel embedding)
-                             # or fire and forget if we handle persistence in callback?
-                             # For simplicity in this iteration: await the batch result
-                             # This still allows parallelism because other workers are parsing next batch!
-                             # Wait... if we await, we block main thread. 
-                             # But we want main thread to process other parse results.
-                             # Better: Collect all embedding futures for the batch/file and gather them?
+                             # Submit embedding request (non-blocking) and collect for batch processing
+                             embedding_future = embedding_queue.submit(texts, metadata={"path": path})
                              
-                             # Let's submit and get a future
-                             vectors_future = await embedding_queue.submit(texts, metadata={"path": path})
-                             
-                             # For now, let's await immediately to keep logic simple and safe (Phase 1)
-                             # The queue still manages rate limiting and concurrent dispatch if we had multiple
-                             # submission streams, but here we are linear in main thread.
-                             # To get true parallelism, we should submit ALL files in batch, then gather ALL.
-                             # BUT we need to associate vectors back to chunks for persistence.
-                             
-                             # Persistence logic requires:
-                             # 1. Vectors
-                             # 2. Metadata upsert
-                             # 3. LanceDB upsert
-                             
-                             # Let's execute persistence inline for now
-                             vectors = vectors_future # it's already awaited in submit() helper currently?
-                             mapping = dict(zip(hashes, vectors))
-                             
-                             # Persist (Existing Logic duplicated/adapted)
-                             desired = build_desired_map(chunks)
-                             
-                             content_mapping = self.metadata.ensure_content_rows_for_file(
-                                repo_id, file_id, embed_model, list(desired.keys())
-                             )
-                             
-                             for h, occs in desired.items():
-                                cid = content_mapping.get(h)
-                                if cid:
-                                    self.metadata.sync_locations_for_content_row(cid, occs)
-                                    
-                             self.metadata.prune_invalidated_content_for_file(repo_id, file_id, embed_model, set(desired.keys()))
-                             
-                             # LanceDB Payload
-                             payload = []
-                             occ_token_counts = {(c.start_line, c.end_line): getattr(c, "token_count", 0) for c in chunks}
-                             desired_row_ids = set()
-                             
-                             for h, occs in desired.items():
-                                 vec = mapping.get(h) 
-                                 # If not in mapping (unchanged), we don't need to re-insert vector usually,
-                                 # but ensure_content_rows handles location. LanceDB needs vector for new rows.
-                                 # If unchanged, we skip LanceDB upsert? 
-                                 # Existing logic: if vec is None continue (unchanged hash)
-                                 
-                                 for occ in occs:
-                                     row_id = f"{repo_id}:{file_id}:{embed_model}:{h}:{occ['start_line']}:{occ['end_line']}"
-                                     desired_row_ids.add(row_id)
-                                     if vec is None: continue
-                                     
-                                     payload.append({
-                                         "id": row_id,
-                                         "vector": vec,
-                                         "repo": repo_name,
-                                         "path": path,
-                                         "start_line": occ["start_line"],
-                                         "end_line": occ["end_line"],
-                                         "text_hash": h,
-                                         "commit": commit_sha,
-                                         "branch": branch,
-                                         "embed_model": embed_model,
-                                         "language": language,
-                                         "symbol_kind": occ.get("symbol_kind"),
-                                         "symbol_name": occ.get("symbol_name"),
-                                         "symbol_path": occ.get("symbol_path"),
-                                         "heading_h1": occ.get("heading_h1"),
-                                         "heading_h2": occ.get("heading_h2"),
-                                         "heading_h3": occ.get("heading_h3"),
-                                         "token_count": occ_token_counts.get((occ["start_line"], occ["end_line"]), 0),
-                                         "created_at": datetime.datetime.now(datetime.UTC),
-                                     })
-
-                             if payload:
-                                 self.lancedb.upsert_chunks(repo_name, payload, model=embed_model)
-                                 vectors_written += len(mapping)
+                             # Store task with associated data for concurrent processing
+                             embedding_tasks.append({
+                                  "future": embedding_future,
+                                  "hashes": hashes,
+                                  "chunks": chunks,
+                                  "path": path,
+                                  "file_id": file_id,
+                                  "new_hashes": new_hashes,
+                                  "repo_id": repo_id,
+                                  "embed_model": embed_model,
+                              })
+                        
+                    # Concurrent Embedding Processing - await all embedding tasks concurrently
+                    if embedding_tasks:
+                        print(f"Processing {len(embedding_tasks)} embedding requests concurrently...")
+                        
+                        # Await all futures concurrently
+                        results = await asyncio.gather(*[task["future"] for task in embedding_tasks], return_exceptions=True)
+                        
+                        # Process each result with its associated data
+                        for task_data, vectors in zip(embedding_tasks, results):
+                            if isinstance(vectors, Exception):
+                                error_logger.log_file_error(task_data["path"], vectors)
+                                continue
+                                
+                            # Extract task data
+                            hashes = task_data["hashes"]
+                            chunks = task_data["chunks"]
+                            path = task_data["path"]
+                            file_id = task_data["file_id"]
+                            new_hashes = task_data["new_hashes"]
+                            repo_id = task_data["repo_id"]
+                            embed_model = task_data["embed_model"]
                             
-                             # Prune LanceDB
-                             if desired_row_ids:
-                                 self.lancedb.prune_file_rows(repo_name, path, model=embed_model, keep_ids=desired_row_ids)
-                             else:
-                                 self.lancedb.prune_file_rows(repo_name, path, model=embed_model)
+                            # Build mapping
+                            mapping = dict(zip(hashes, vectors))
+                            
+                            # Persist (Existing Logic)
+                            desired = build_desired_map(chunks)
+                            
+                            content_mapping = self.metadata.ensure_content_rows_for_file(
+                               repo_id, file_id, embed_model, list(desired.keys())
+                            )
+                            
+                            for h, occs in desired.items():
+                               cid = content_mapping.get(h)
+                               if cid:
+                                   self.metadata.sync_locations_for_content_row(cid, occs)
+                                   
+                            self.metadata.prune_invalidated_content_for_file(repo_id, file_id, embed_model, set(desired.keys()))
+                            
+                            # LanceDB Payload
+                            payload = []
+                            occ_token_counts = {(c.start_line, c.end_line): getattr(c, "token_count", 0) for c in chunks}
+                            desired_row_ids = set()
+                            
+                            for h, occs in desired.items():
+                                vec = mapping.get(h) 
+                                
+                                for occ in occs:
+                                    row_id = f"{repo_id}:{file_id}:{embed_model}:{h}:{occ['start_line']}:{occ['end_line']}"
+                                    desired_row_ids.add(row_id)
+                                    if vec is None: continue
+                                    
+                                    payload.append({
+                                        "id": row_id,
+                                        "vector": vec,
+                                        "repo": repo_name,
+                                        "path": path,
+                                        "start_line": occ["start_line"],
+                                        "end_line": occ["end_line"],
+                                        "text_hash": h,
+                                        "commit": commit_sha,
+                                        "branch": branch,
+                                        "embed_model": embed_model,
+                                        "language": language,
+                                        "symbol_kind": occ.get("symbol_kind"),
+                                        "symbol_name": occ.get("symbol_name"),
+                                        "symbol_path": occ.get("symbol_path"),
+                                        "heading_h1": occ.get("heading_h1"),
+                                        "heading_h2": occ.get("heading_h2"),
+                                        "heading_h3": occ.get("heading_h3"),
+                                        "token_count": occ_token_counts.get((occ["start_line"], occ["end_line"]), 0),
+                                        "created_at": datetime.datetime.now(datetime.UTC),
+                                    })
 
-                             # Build FTS chunks for BM25 indexing
-                             fts_chunks = []
-                             for h, occs in desired.items():
-                                 chunk_text = representative_text_for_hash(h, chunks)
-                                 fts_content_id = content_mapping.get(h)
-                                 if fts_content_id:
-                                     for occ in occs:
-                                         fts_chunks.append({
-                                             "content_id": fts_content_id,
-                                             "repo": repo_name,
-                                             "path": path,
-                                             "text_hash": h,
-                                             "content": chunk_text,
-                                             "symbol_name": occ.get("symbol_name"),
-                                             "symbol_path": occ.get("symbol_path"),
-                                         })
+                            if payload:
+                                self.lancedb.upsert_chunks(repo_name, payload, model=embed_model)
+                                vectors_written += len(mapping)
+                           
+                            # Prune LanceDB
+                            if desired_row_ids:
+                                self.lancedb.prune_file_rows(repo_name, path, model=embed_model, keep_ids=desired_row_ids)
+                            else:
+                                self.lancedb.prune_file_rows(repo_name, path, model=embed_model)
 
-                             # Index chunks in FTS5 for BM25 search
-                             if fts_chunks and not dry_run:
-                                 self.metadata.bulk_index_chunks_for_fts(fts_chunks)
+                            # Build FTS chunks for BM25 indexing
+                            fts_chunks = []
+                            for h, occs in desired.items():
+                                chunk_text = representative_text_for_hash(h, chunks)
+                                fts_content_id = content_mapping.get(h)
+                                if fts_content_id:
+                                    for occ in occs:
+                                        fts_chunks.append({
+                                            "content_id": fts_content_id,
+                                            "repo": repo_name,
+                                            "path": path,
+                                            "text_hash": h,
+                                            "content": chunk_text,
+                                            "symbol_name": occ.get("symbol_name"),
+                                            "symbol_path": occ.get("symbol_path"),
+                                        })
 
-                        chunks_indexed += len(new_hashes)
-                        files_done += 1
-                        print(f"  {path}: {len(chunks)} chunks, {len(new_hashes)} new")
+                            # Index chunks in FTS5 for BM25 search
+                            if fts_chunks and not dry_run:
+                                self.metadata.bulk_index_chunks_for_fts(fts_chunks)
+
+                            chunks_indexed += len(new_hashes)
+                            files_done += 1
+                            print(f"  {path}: {len(chunks)} chunks, {len(new_hashes)} new")
 
             # Process deleted files (same as sync)
             for path in deleted_files:
