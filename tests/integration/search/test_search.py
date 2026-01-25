@@ -94,17 +94,20 @@ class TestSearchIntegration:
         response = cast(dict[str, Any], await search(request))
 
         # Verify response structure
+        # Verify response structure
         assert "hits" in response
         assert "meta" in response
-        assert response["meta"]["top_k"] == 5
-        assert response["meta"]["model"] == "small"
+
+        meta = cast(dict[str, Any], response["meta"])
+        assert meta["top_k"] == 5
+        assert meta["model"] == "small"
 
         # Verify search results
         hits = cast(list[dict[str, Any]], response["hits"])
         assert len(hits) == 1
         assert hits[0]["path"] == "src/widgets.py"
         assert hits[0]["language"] == "python"
-        assert "Widget" in hits[0]["text"]
+        assert "Widget" in str(hits[0]["text"])
 
     @pytest.mark.asyncio
     async def test_search_with_filters(
@@ -174,8 +177,10 @@ class TestSearchIntegration:
         response = cast(dict[str, Any], await search(request))
 
         # Verify empty results
-        assert len(response["hits"]) == 0
-        assert response["meta"]["top_k"] == 5
+        hits = cast(list[dict[str, Any]], response["hits"])
+        meta = cast(dict[str, Any], response["meta"])
+        assert len(hits) == 0
+        assert meta["top_k"] == 5
 
     @pytest.mark.asyncio
     async def test_search_latency_measurement(
@@ -206,8 +211,9 @@ class TestSearchIntegration:
         response = cast(dict[str, Any], await search(request))
 
         # Verify latency measurement
-        assert "latency_ms" in response["meta"]
-        latency = response["meta"]["latency_ms"]
+        meta = cast(dict[str, Any], response["meta"])
+        assert "latency_ms" in meta
+        latency = meta["latency_ms"]
         assert isinstance(latency, int)
         assert latency >= 0
 
@@ -315,7 +321,8 @@ class TestSearchPerformance:
 
         # Verify response time is reasonable (under 100ms for mock)
         assert response_time_ms < 100
-        assert response["meta"]["latency_ms"] < 100
+        meta = cast(dict[str, Any], response["meta"])
+        assert meta["latency_ms"] < 100
 
     @pytest.mark.asyncio
     async def test_search_concurrent_requests(

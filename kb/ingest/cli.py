@@ -123,6 +123,7 @@ def add_repo(
     default_embed_model: str = typer.Option(
         None, "--default-embed-model", help="Default embedding model (small|large)."
     ),
+    no_index: bool = typer.Option(False, "--no-index", help="Skip indexing prompt."),
 ) -> None:
     """Register or update a repository in the metadata store."""
     repo_path = path.expanduser().resolve()
@@ -150,10 +151,10 @@ def add_repo(
     # Note: We rely on 'kb index' to handle any model mismatch if this was an update
     # to an existing repo that had a different model.
 
-    # Only prompt for indexing in interactive mode (skip in tests)
+    # Only prompt for indexing in interactive mode (skip in tests or if --no-index)
     import sys
 
-    if sys.stdin is not None and sys.stdin.isatty():
+    if not no_index and sys.stdin is not None and sys.stdin.isatty():
         if typer.confirm(f"Do you want to index '{name}' now?", default=False):
             typer.echo(f"Starting index for {name}...")
             pipeline = _build_pipeline(config)
