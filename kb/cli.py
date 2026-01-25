@@ -480,11 +480,11 @@ def config(
                 rprint(f"✅ Store Root: [green]{store_root}[/green]")
                 # Check writable
                 if os.access(store_root, os.W_OK):
-                     rprint("   (Writable)")
+                    rprint("   (Writable)")
                 else:
-                     rprint("   [red](Not Writable)[/red]")
+                    rprint("   [red](Not Writable)[/red]")
             else:
-                 rprint(f"❌ Store Root: [red]{store_root} (Does not exist)[/red]")
+                rprint(f"❌ Store Root: [red]{store_root} (Does not exist)[/red]")
 
             # Check 2: API Keys
             if config.embedding_provider == "openai":
@@ -493,13 +493,13 @@ def config(
                 else:
                     rprint(f"❌ OpenAI API Key: [red]Missing ({config.openai_api_key_env})[/red]")
             else:
-                 rprint(f"ℹ️  Provider: {config.embedding_provider}")
+                rprint(f"ℹ️  Provider: {config.embedding_provider}")
 
             # Check 3: Dependencies (Simple check)
             if shutil.which("uv"):
-                 rprint("✅ 'uv' command: [green]Found[/green]")
+                rprint("✅ 'uv' command: [green]Found[/green]")
             else:
-                 rprint("⚠️  'uv' command: [yellow]Not found (Recommended)[/yellow]")
+                rprint("⚠️  'uv' command: [yellow]Not found (Recommended)[/yellow]")
 
         except Exception as e:
             rprint(f"[red]Validation failed: {e}[/red]")

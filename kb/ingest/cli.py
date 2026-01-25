@@ -269,9 +269,9 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
     summary_table = Table(show_header=False, box=box.SIMPLE)
     summary_table.add_column("Metric", style="cyan")
     summary_table.add_column("Value", style="bold white")
-    summary_table.add_row("Total Repositories", str(summary['repos']))
-    summary_table.add_row("Total Files", str(summary['files']))
-    summary_table.add_row("Total Chunks", str(summary['chunks']))
+    summary_table.add_row("Total Repositories", str(summary["repos"]))
+    summary_table.add_row("Total Files", str(summary["files"]))
+    summary_table.add_row("Total Chunks", str(summary["chunks"]))
     console.print(summary_table)
 
     # List all registered repositories
@@ -286,10 +286,7 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
 
         for repo in repos:
             repo_table.add_row(
-                repo['name'],
-                str(repo['root_path']),
-                repo['default_embed_model'],
-                str(repo['created_at'])
+                repo["name"], str(repo["root_path"]), repo["default_embed_model"], str(repo["created_at"])
             )
         console.print(repo_table)
     else:

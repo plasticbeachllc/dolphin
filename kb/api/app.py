@@ -308,7 +308,7 @@ def _get_system_stats() -> dict[str, Any]:
         stats["disk"] = {
             "total_gb": round(total / (2**30), 2),
             "free_gb": round(free / (2**30), 2),
-            "percent_free": round((free / total) * 100, 1)
+            "percent_free": round((free / total) * 100, 1),
         }
 
         # Memory usage (RSS)
