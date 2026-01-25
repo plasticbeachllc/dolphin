@@ -87,7 +87,7 @@ cleanup() {
   
   if [ "$KEEP_REPO" = false ]; then
     echo "Removing repository from Dolphin KB..."
-    uv run dolphin kb remove-repo "$REPO_NAME" &>/dev/null || true
+    uv run dolphin kb rm-repo "$REPO_NAME" &>/dev/null || true
     
     echo "Removing test repository directory..."
     rm -rf "$REPO_PATH"
@@ -109,7 +109,7 @@ fi
 
 # Remove from Dolphin KB if registered
 echo "  Removing from Dolphin KB (if registered)..."
-uv run dolphin kb remove-repo "$REPO_NAME" &>/dev/null || true
+uv run dolphin kb rm-repo "$REPO_NAME" &>/dev/null || true
 
 # Step 2: Clone the test repository
 echo ""
@@ -209,6 +209,6 @@ else
   echo "  Repository: $REPO_PATH"
   echo "  Dolphin KB name: $REPO_NAME"
   echo "  To manually clean up later:"
-  echo "    uv run dolphin kb remove-repo $REPO_NAME"
+  echo "    uv run dolphin kb rm-repo $REPO_NAME"
   echo "    rm -rf $REPO_PATH"
 fi
