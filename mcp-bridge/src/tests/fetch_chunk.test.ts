@@ -13,7 +13,7 @@ afterAll(async () => {
   await stop?.();
 });
 
-describe("chunk.get", () => {
+describe("chunk_get", () => {
   it("happy path: returns chunk info with citation and resource payload", async () => {
     const { handler } = makeChunkGet();
     const res = await handler({ input: { chunk_id: "1" } });

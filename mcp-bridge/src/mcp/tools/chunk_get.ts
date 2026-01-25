@@ -8,7 +8,7 @@ import { TOOL_VERSION } from "./version.js";
 import { normalizeToolError, formatToolErrorText } from "./error.js";
 
 /**
- * chunk.get tool analysis:
+ * chunk_get tool analysis:
  * - Single request tool: fetches one chunk by chunk_id
  * - No parallelization needed: only makes one restGetChunk() call
  * - Performance is optimal: one request = one response
@@ -21,11 +21,12 @@ const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
 export function makeChunkGet(): {
   definition: Tool;
+  inputSchema: typeof INPUT;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: any;
 } {
   const definition: Tool = {
-    name: "chunk.get",
+    name: "chunk_get",
     description: "Fetch a chunk by chunk_id and return fenced code with citation.",
     inputSchema: INPUT_SCHEMA,
     annotations: {
@@ -54,7 +55,7 @@ export function makeChunkGet(): {
         { type: "resource", resource: { uri: chunk.resource_link, mimeType: mime, text: code } },
       ];
 
-      await logInfo("chunk.get", "chunk.get success", { latency_ms: Date.now() - started });
+      await logInfo("chunk_get", "chunk_get success", { latency_ms: Date.now() - started });
       return {
         content,
         isError: false,
@@ -69,7 +70,7 @@ export function makeChunkGet(): {
         e,
         "Verify chunk_id or re-run search."
       );
-      await logError("chunk.get", "chunk.get error", {
+      await logError("chunk_get", "chunk_get error", {
         error_code: toolError.code,
         message: toolError.message,
       });
@@ -93,5 +94,5 @@ export function makeChunkGet(): {
     }
   };
 
-  return { definition, handler };
+  return { definition, inputSchema: INPUT, handler };
 }

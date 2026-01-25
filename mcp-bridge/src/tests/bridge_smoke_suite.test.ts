@@ -31,7 +31,7 @@ function createDeps(overrides: Partial<BridgeSmokeDeps> = {}): BridgeSmokeDeps {
     }),
     makeChunkGet: () => ({
       definition: {
-        name: "chunk.get",
+        name: "chunk_get",
         description: "",
         inputSchema: { type: "object", properties: {} },
       },

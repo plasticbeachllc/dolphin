@@ -109,6 +109,8 @@ def init_test_git_repo(repo_path: Path) -> None:
     subprocess.run(["git", "-C", str(repo_path), "config", "user.name", "Test User"], check=True)
     # Disable GPG signing for this repo only (not globally)
     subprocess.run(["git", "-C", str(repo_path), "config", "commit.gpgsign", "false"], check=True)
+    # Create initial commit so HEAD is valid
+    subprocess.run(["git", "-C", str(repo_path), "commit", "--allow-empty", "-m", "Initial commit"], check=True)
 
 
 @pytest.fixture

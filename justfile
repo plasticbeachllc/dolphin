@@ -15,19 +15,11 @@ list:
 # ==============================================================================
 
 # Set up the entire project
-setup: setup-env setup-python
+setup: setup-python
 
 # ==============================================================================
 # Environment Management
 # ==============================================================================
-
-# Check for .env file and required variables
-setup-env:
-	@# Check if .env file exists, if not, create it from the template
-	@[ -f .env ] || (echo "Creating .env from .env.template..."; cp .env.example .env)
-	@# Check if OPENAI_API_KEY is set and not empty
-	@test -n "${OPENAI_API_KEY}" || (echo "❌ Error: OPENAI_API_KEY is not set in .env file. Please add it and try again."; exit 1)
-	@echo "✅ Environment is configured."
 
 # Install Python dependencies from pyproject.toml
 setup-python:
@@ -86,30 +78,8 @@ test-all:
 	@just test-mcp-bridge
 	@just test-shared
 	@just test-webview
-	@just test-extension all
 	@echo ""
 	@echo "✅ All tests passed!"
-
-# Run the Codex-friendly test suite (skips VS Code host requirements)
-test-all-headless:
-	@echo "🚀 Running tests that do NOT require VS Code/Electron..."
-	@echo ""
-	@rm -f /tmp/.X99-lock
-	@export DISPLAY=":99.0"
-	@Xvfb :99 -screen 0 1024x768x24 &
-	@sleep 3
-	@just test-python all
-	@just test-agent-core all
-	@just test-mcp-bridge
-	@just test-shared
-	@just test-webview
-	@just test-extension-all
-	@echo ""
-	@echo "✅ All non-VSCode tests passed!"
-
-# Stub for VS Code extension tests (not available in headless CI)
-test-extension-all:
-	@echo "⚠️ VS Code extension tests are skipped in headless environments."
 
 # Run all unit tests across all projects
 test-unit-all:
@@ -119,7 +89,6 @@ test-unit-all:
 	@just test-agent-core unit
 	@just test-shared
 	@just test-webview
-	@just test-extension unit
 	@echo ""
 	@echo "✅ All unit tests passed!"
 
@@ -156,19 +125,6 @@ test-e2e-all:
 	@just test-agent-core e2e
 	@just test-extension e2e
 	@just test-playwright
-	@echo ""
-	@echo "✅ All E2E tests passed!"
-
-just test-e2e-headless:
-	@echo "🎯 Running all E2E tests..."
-	@echo ""
-	@rm -f /tmp/.X99-lock
-	@export DISPLAY=":99.0"
-	@Xvfb :99 -screen 0 1024x768x24 &
-	@sleep 3
-	@just test-python e2e
-	@just test-agent-core e2e
-	@just test-extension e2e
 	@echo ""
 	@echo "✅ All E2E tests passed!"
 
@@ -565,115 +521,6 @@ save-baseline:
 	@cp {{BENCHMARK_RESULTS_DIR}}/golden_eval.json {{BENCHMARK_RESULTS_DIR}}/baselines/baseline_$(shell date +%Y%m%d_%H%M%S).json
 	@cp {{BENCHMARK_RESULTS_DIR}}/golden_eval.json {{BENCHMARK_RESULTS_DIR}}/baseline_eval.json
 	@echo "✅ Baseline saved"
-
-# ==============================================================================
-# Cleanup Commands
-# ==============================================================================
-
-# Clean all repositories and data (preserves config)
-reset-all:
-	@echo "⚠️  This will remove ALL repositories and data from the knowledge store."
-	@echo "Configuration will be preserved."
-	@echo ""
-	uv run dolphin kb reset-all
-
-# Force reset without confirmation (dangerous!)
-reset-all-force:
-	@echo "🔥 Force resetting ALL repositories..."
-	uv run dolphin kb reset-all --force
-
-# Nuclear option: Delete entire knowledge store directory
-store-clean:
-	@echo "💣 This will DELETE ~/.dolphin/knowledge_store"
-	@echo "This removes EVERYTHING including configuration!"
-	@echo "Press Ctrl-C to abort or wait 5 seconds to continue..."
-	sleep 5
-	rm -rf ~/.dolphin/knowledge_store
-	@echo "✅ Knowledge store directory deleted."
-	@echo "Run 'just init' to reinitialize."
-
-# ==============================================================================
-# CLI Tool Development & Building
-# ==============================================================================
-
-# Install all CLI tools in development mode
-install-cli-tools:
-	@echo "Installing CLI tools in development mode..."
-	@uv pip install -e .
-
-# Build all CLI tools (creates standalone binaries/scripts)
-build-cli-tools: build
-	@echo "Building CLI tools for version {{VERSION}}..."
-	@echo "✅ Using existing build from dist/ directory"
-
-# Install MCP bridge dependencies
-install-mcp-bridge:
-	@echo "Installing MCP bridge dependencies..."
-	@cd mcp-bridge && bun install
-
-# Build MCP bridge
-build-mcp-bridge:
-	@echo "Building MCP bridge..."
-	@cd mcp-bridge && bun build
-
-# Reinstall all tools (full rebuild)
-reinstall-all: install-cli-tools install-mcp-bridge build-mcp-bridge
-	@echo "✅ All CLI tools and MCP bridge reinstalled"
-
-# ==============================================================================
-# VSCode Extension Building
-# ==============================================================================
-
-# Build webview UI
-ext-build-webview:
-	@echo "🎨 Building webview UI..."
-	@cd vscode-extension/webview && bun run build
-
-# Compile extension TypeScript
-ext-compile:
-	@echo "📦 Compiling extension TypeScript..."
-	@cd vscode-extension && npm run compile
-
-# Bundle uv binaries for all platforms
-ext-bundle-uv:
-	@echo "🐍 Bundling uv binaries..."
-	@bash scripts/bundle-uv.sh
-
-# Build extension (webview + compile)
-ext-build: ext-build-webview ext-compile
-	@echo "✅ Extension built successfully"
-
-# Build extension for production (includes bundled uv)
-ext-build-prod: ext-bundle-uv ext-build
-	@echo "✅ Extension built for production with bundled uv"
-
-# Package extension for all platforms
-ext-package: ext-build-prod
-	@echo "📦 Packaging extension for all platforms..."
-	@cd vscode-extension && npm run package
-
-# Package extension for specific platform (darwin-arm64, darwin-x64, linux-x64, win32-x64)
-ext-package-platform platform: ext-build-prod
-	@echo "📦 Packaging extension for {{platform}}..."
-	@cd vscode-extension && vsce package --target {{platform}}
-
-# Clean extension build artifacts
-ext-clean:
-	@echo "🧹 Cleaning extension build artifacts..."
-	@rm -rf vscode-extension/out
-	@rm -rf vscode-extension/webview/build
-	@rm -rf vscode-extension/dist/uv
-	@rm -f vscode-extension/*.vsix
-
-# Install extension dependencies
-ext-install:
-	@echo "📥 Installing extension dependencies..."
-	@cd vscode-extension && npm install
-	@cd vscode-extension/webview && bun install
-
-# Full extension setup (install + build)
-ext-setup: ext-install ext-build
-	@echo "✅ Extension setup complete"
 
 # ==============================================================================
 # Deployment

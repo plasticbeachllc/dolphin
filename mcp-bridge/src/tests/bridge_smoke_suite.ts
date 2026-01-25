@@ -119,7 +119,7 @@ export async function runBridgeSmokeSuite(
       },
     },
     {
-      name: "chunk.get",
+      name: "chunk_get",
       run: async () => {
         if (!firstHit) {
           throw new Error("Cannot fetch chunk before search returns hits");
@@ -130,12 +130,12 @@ export async function runBridgeSmokeSuite(
         })) as CallToolResult;
 
         if (result.isError) {
-          throw new Error(result.content?.[0]?.text ?? "chunk.get returned an error");
+          throw new Error(result.content?.[0]?.text ?? "chunk_get returned an error");
         }
       },
     },
     {
-      name: "file.lines",
+      name: "file_lines",
       run: async () => {
         if (!firstHit) {
           throw new Error("Cannot fetch lines before search returns hits");

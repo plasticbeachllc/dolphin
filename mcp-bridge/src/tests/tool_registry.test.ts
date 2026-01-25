@@ -1,4 +1,5 @@
 import { describe, it, expect } from "bun:test";
+import { z } from "zod";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { validateTools, type ToolRegistration } from "../mcp/tools/registry.js";
 
@@ -20,6 +21,7 @@ function makeTool(overrides?: Partial<Tool>): Tool {
 function makeRegistration(overrides?: Partial<ToolRegistration>): ToolRegistration {
   return {
     definition: makeTool(),
+    inputSchema: z.object({}),
     handler: async () => undefined,
     version: "1.0",
     ...overrides,

@@ -108,6 +108,19 @@ def add_repo(
 
     typer.echo(f"Repository registered: name='{name}', path='{repo_path}', default_embed_model='{model}'")
 
+    # Only prompt for indexing in interactive mode (skip in tests)
+    import sys
+
+    if sys.stdin is not None and sys.stdin.isatty():
+        if typer.confirm(f"Do you want to index '{name}' now?", default=False):
+            typer.echo(f"Starting index for {name}...")
+            pipeline = _build_pipeline(config)
+            try:
+                pipeline.index(name, dry_run=False, force=False)
+                typer.echo(f"✅ Indexing complete for {name}")
+            except Exception as e:
+                typer.echo(f"❌ Indexing failed: {e}", err=True)
+
 
 @app.command()
 def index(
@@ -167,6 +180,33 @@ def index(
     typer.echo(f"  chunks_indexed: {result.get('chunks_indexed')}")
     typer.echo(f"  chunks_skipped: {result.get('chunks_skipped')}")
     typer.echo(f"  vectors_written: {result.get('vectors_written')}")
+
+    # Notify server to reload
+    _notify_server_reload(config)
+
+
+def _notify_server_reload(config: KBConfig) -> None:
+    """Notify the running server to reload its backend."""
+    import requests
+
+    from ..api_key import load_kb_api_key
+
+    endpoint = f"http://{config.endpoint}/v1/admin/reload"
+    try:
+        api_key = load_kb_api_key()
+    except Exception:
+        # API key might not exist yet if only indexing
+        return
+
+    try:
+        response = requests.post(endpoint, headers={"X-API-Key": api_key}, timeout=2.0)
+        if response.status_code == 200:
+            typer.echo(f"🔄 Server notified: {response.json().get('message')}")
+        elif response.status_code != 404:  # Ignore 404 if old server running
+            typer.echo(f"⚠️  Server reload failed: {response.status_code}", err=True)
+    except requests.RequestException:
+        # Server probably not running, which is fine
+        pass
 
 
 @app.command()

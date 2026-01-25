@@ -33,7 +33,7 @@ export async function createServer(): Promise<void> {
   // Register tools
   for (const tool of tools) {
     // MCP SDK types can be extremely deep here; keep runtime behavior while avoiding TS instantiation blowups.
-    const registerTool = server.registerTool as unknown as (
+    const registerTool = server.registerTool.bind(server) as unknown as (
       name: string,
       meta: Record<string, unknown>,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,6 +45,7 @@ export async function createServer(): Promise<void> {
         title: tool.definition.annotations?.title,
         description: tool.definition.description,
         inputSchema: tool.definition.inputSchema ?? {},
+
         annotations: tool.definition.annotations,
       },
       tool.handler

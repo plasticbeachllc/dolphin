@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import sys
@@ -11,7 +12,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from ..config import KBConfig, load_config
-from .app import app, reset_search_backend, set_pipeline, set_search_backend, set_stores
+from .app import app, get_pipeline, reset_search_backend, set_pipeline, set_search_backend, set_stores
 from .middleware.metrics import metrics_endpoint, prometheus_middleware
 from .search_backend import create_search_backend
 
@@ -107,6 +108,19 @@ def initialize_search_backend() -> None:
     print("✅ Ingestion pipeline ready", file=sys.stderr)
 
 
+def reload_search_backend() -> None:
+    """Reload the search backend and stores to pick up index changes."""
+    print("🔄 Reloading search backend...", file=sys.stderr)
+    try:
+        # Reset existing backend first to force fresh connections
+        reset_search_backend()
+        initialize_search_backend()
+        print("✅ Search backend reloaded successfully", file=sys.stderr)
+    except Exception as e:
+        print(f"❌ Failed to reload search backend: {e}", file=sys.stderr)
+        raise
+
+
 # Initialize search backend when module loads (before uvicorn starts)
 print("🚀 Initializing KB server...", file=sys.stderr)
 try:
@@ -136,10 +150,47 @@ async def lifespan_handler(app_instance: FastAPI):
 
     # Startup is handled by module-level initialization (line 95-96)
     # This keeps existing behavior where backend is ready before uvicorn starts
+
+    # Start watchers if configured
+    watch_tasks = []
+    watch_repos = os.environ.get("DOLPHIN_WATCH_REPOS")
+    if watch_repos:
+        repo_names = [r.strip() for r in watch_repos.split(",") if r.strip()]
+        if repo_names:
+            print(f"👀 Starting watchers for repositories: {', '.join(repo_names)}", file=sys.stderr)
+            try:
+                from ..ingest.watcher import RepoWatcher
+
+                pipeline = get_pipeline()
+                if pipeline:
+                    config = load_config()
+                    for repo_name in repo_names:
+                        watcher = RepoWatcher(repo_name, config, pipeline)
+                        task = asyncio.create_task(watcher.watch())
+                        watch_tasks.append(task)
+                else:
+                    print("⚠️  Pipeline not initialized, cannot start watchers", file=sys.stderr)
+            except ImportError as e:
+                print(f"⚠️  Failed to import RepoWatcher: {e}", file=sys.stderr)
+            except Exception as e:
+                print(f"⚠️  Failed to start watchers: {e}", file=sys.stderr)
+
     yield  # Application is running
 
     # Shutdown: Clean up resources
     print("🛑 Shutting down KB server...", file=sys.stderr)
+
+    # Cancel watcher tasks
+    if watch_tasks:
+        print(f"🛑 Stopping {len(watch_tasks)} watchers...", file=sys.stderr)
+        for task in watch_tasks:
+            task.cancel()
+        try:
+            await asyncio.wait(watch_tasks, timeout=5.0)
+        except TimeoutError:
+            print("⚠️  Watchers did not stop gracefully", file=sys.stderr)
+        except Exception as e:
+            print(f"⚠️  Error stopping watchers: {e}", file=sys.stderr)
 
     # Close embedding provider if it has async client
     if _embedding_provider and hasattr(_embedding_provider, "close"):
