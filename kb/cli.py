@@ -19,6 +19,7 @@ from rich import print as rprint
 # Import kb CLI functions for top-level commands
 # Import subcommand apps
 from kb.api_key import get_or_create_kb_api_key
+from kb.config import load_config
 from kb.ingest.cli import (
     add_repo as kb_add_repo,
     app as kb_app,
@@ -30,6 +31,7 @@ from kb.ingest.cli import (
     status as kb_status,
 )
 from kb.observability import StructuredLogger
+from kb.store import SQLiteMetadataStore
 
 
 def get_version() -> str:
@@ -352,15 +354,30 @@ def serve(
     host: Annotated[str, typer.Option("--host", help="Host to bind to")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", help="Port to bind to")] = 7777,
     watch: Annotated[list[str] | None, typer.Option("--watch", help="Repositories to watch")] = None,
+    watch_all: bool = typer.Option(False, "--watch-all", help="Watch all registered repositories"),
 ) -> None:
     """Start the dolphin API server."""
 
     # Configure watcher environment variables BEFORE starting uvicorn
-    if watch:
-        repo_list = [r for r in watch if r.strip()]
-        if repo_list:
-            os.environ["DOLPHIN_WATCH_REPOS"] = ",".join(repo_list)
-            rprint(f"[green]Configured to watch repositories: {', '.join(repo_list)}[/green]")
+    repo_list = [r for r in (watch or []) if r.strip()]
+
+    if watch_all:
+        try:
+            config = load_config()
+            metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+            metadata.initialize()
+            repos = metadata.list_all_repos()
+            for repo in repos:
+                repo_list.append(repo["name"])
+        except Exception as e:
+            rprint(f"[yellow]Warning: Failed to list repos for watch-all: {e}[/yellow]")
+
+    # Deduplicate
+    repo_list = sorted(list(set(repo_list)))
+
+    if repo_list:
+        os.environ["DOLPHIN_WATCH_REPOS"] = ",".join(repo_list)
+        rprint(f"[green]Configured to watch repositories: {', '.join(repo_list)}[/green]")
 
     if not os.environ.get("DOLPHIN_API_KEY") and not os.environ.get("DOLPHIN_KB_API_KEY"):
         os.environ["DOLPHIN_API_KEY"] = get_or_create_kb_api_key()
