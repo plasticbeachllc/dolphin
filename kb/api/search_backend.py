@@ -254,7 +254,7 @@ class KnowledgeSearchBackend:
                     },
                 )
                 bm25_hydrated = self._hydrate_bm25_results(
-                    bm25_results, self.sql_store, self.config.default_embed_model
+                    bm25_results, self.sql_store, request.embed_model
                 )
                 request_logger.debug("BM25 results hydrated", {"hydrated_count": len(bm25_hydrated)})
             except Exception as e:
@@ -588,13 +588,11 @@ class KnowledgeSearchBackend:
                 for loc in locations:
                     start_line = loc.get("start_line")
                     end_line = loc.get("end_line")
-                    # Use the actual model from the location, or fallback to requested if missing (should be there now)
-                    actual_model = loc.get("embed_model", embed_model)
 
                     # Generate LanceDB-compatible row ID
                     # Format: {repo_id}:{file_id}:{embed_model}:{text_hash}:{start_line}:{end_line}
                     if start_line is not None and end_line is not None:
-                        row_id = f"{repo_id}:{file_id}:{actual_model}:{text_hash}:{start_line}:{end_line}"
+                        row_id = f"{repo_id}:{file_id}:{embed_model}:{text_hash}:{start_line}:{end_line}"
                     else:
                         row_id = chunk_id  # Fallback
 
@@ -605,7 +603,7 @@ class KnowledgeSearchBackend:
                         "score": normalized_score,
                         "id": row_id,
                         "text_hash": text_hash,
-                        "embed_model": actual_model,
+                        "embed_model": embed_model,
                         # We don't have language here easily without extra query,
                         # but hydration later might fill it if needed.
                         "start_line": start_line,
