@@ -183,7 +183,7 @@ class KnowledgeSearchBackend:
             cache_params = {
                 "top_k": request.top_k,
                 "score_cutoff": request.score_cutoff,
-                "embed_model": request.embed_model,
+                "embed_model": self.config.default_embed_model,
                 "repos": request.repos,
                 "path_prefix": request.path_prefix,
             }
@@ -198,7 +198,7 @@ class KnowledgeSearchBackend:
                 )
                 return cached_results
 
-        query_embedding = self.embedding_provider.embed_texts(request.embed_model, [request.query])[0]
+        query_embedding = self.embedding_provider.embed_texts(self.config.default_embed_model, [request.query])[0]
         num_candidates = request.top_k * RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER  # Fetch more candidates for reranking
 
         # Get ANN parameters from config or use defaults
@@ -209,7 +209,7 @@ class KnowledgeSearchBackend:
         try:
             vector_results = self.lance_store.query(
                 query_embedding,
-                model=request.embed_model,
+                model=self.config.default_embed_model,
                 top_k=num_candidates,
                 ann_params=ann_params,
             )
@@ -245,7 +245,7 @@ class KnowledgeSearchBackend:
                         "sample_score": (bm25_results[0].get("score") if bm25_results else None),
                     },
                 )
-                bm25_hydrated = self._hydrate_bm25_results(bm25_results, self.sql_store, request.embed_model)
+                bm25_hydrated = self._hydrate_bm25_results(bm25_results, self.sql_store, self.config.default_embed_model)
                 request_logger.debug("BM25 results hydrated", {"hydrated_count": len(bm25_hydrated)})
             except Exception as e:
                 # Log error but continue with empty BM25 results
@@ -923,9 +923,14 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     # Initialize embedding section for nested config
     embedding_data = {}
 
+    # Map grouping of provider settings
     # Map embedding_provider_type to embedding_provider (nested under "embedding")
     if "embedding_provider_type" in kwargs:
         embedding_data["provider"] = kwargs["embedding_provider_type"]
+    
+    # Map default_embed_model if provided (CRITICAL FIX FOR OPTIONS B)
+    if "default_embed_model" in kwargs:
+         embedding_data["default_embed_model"] = kwargs["default_embed_model"]
 
     # Map cache_enabled
     if "cache_enabled" in kwargs:
