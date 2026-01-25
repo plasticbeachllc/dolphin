@@ -193,7 +193,7 @@ class SearchRequest(BaseModel):
         ge=1,
         le=_API_LIMITS.max_snippet_tokens,
     )
-    embed_model: str = _DEFAULT_CONFIG.default_embed_model
+    # embed_model removed: always use global default
     score_cutoff: float | None = _DEFAULT_CONFIG.retrieval.score_cutoff
     mmr_enabled: bool | None = _DEFAULT_CONFIG.retrieval.mmr_enabled
     mmr_lambda: float | None = _DEFAULT_CONFIG.retrieval.mmr_lambda
@@ -330,7 +330,7 @@ async def search(request: SearchRequest) -> dict[str, object]:
     # Include ANN config in response meta if it was used
     meta = {
         "top_k": request.top_k,
-        "model": request.embed_model,
+        "model": _DEFAULT_CONFIG.default_embed_model,
         "latency_ms": latency_ms,
         "max_snippet_tokens": request.max_snippet_tokens,
         "mmr_enabled": request.mmr_enabled,

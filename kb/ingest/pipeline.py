@@ -733,7 +733,35 @@ class IngestionPipeline:
 
         repo_id = int(repo["id"])
         root = Path(repo["root_path"])
-        embed_model = str(repo.get("default_embed_model", self.config.default_embed_model))
+        
+        # Phase 2 Option B: Global Standardization
+        # Target model is ALWAYS the global config default
+        target_model = self.config.default_embed_model.strip().lower()
+        
+        # Check what the repo was last indexed with (or "large" if legacy/missing)
+        # We rely on the DB to tell us the "last state"
+        last_model = str(repo.get("default_embed_model", "large")).strip().lower()
+        
+        # If this is an existing repo (has successful commits) and models differ, we MUST migrate
+        last_success = self.metadata.get_last_successful_commit(repo_id)
+        is_fresh_index = last_success is None
+        
+        if not is_fresh_index and target_model != last_model:
+            print(f"⚠️  Global model '{target_model}' differs from repo model '{last_model}'.")
+            print(f"   Triggering full re-index and migration for {repo_name}...")
+            full_reindex = True
+            
+            # Update repo record to new model immediately so this session is recorded correctly
+            self.metadata.record_repo(repo_name, root, default_embed_model=target_model)
+            
+            # We also need to clean up the OLD model's vectors to avoid garbage
+            # The _drop_repo_index call below (if full_reindex) clears *everything* usually,
+            # but let's be explicit solely about the old model if we wanted to be granular.
+            # However, _drop_repo_index clears ALL models for the repo, which is perfect for a full re-index.
+            # So setting full_reindex=True is sufficient to trigger _drop_repo_index below.
+
+        embed_model = target_model
+
         # Validate embed model early
         from ..embeddings.provider import SUPPORTED_MODELS
 
