@@ -1,4 +1,4 @@
-'use strict'
+"use strict";
 
 // install redis first:
 // https://redis.io/
@@ -11,9 +11,9 @@
  * Module dependencies.
  */
 
-var express = require('../..');
-var path = require('node:path');
-var redis = require('redis');
+var express = require("../..");
+var path = require("node:path");
+var redis = require("redis");
 
 var db = redis.createClient();
 
@@ -21,23 +21,23 @@ var db = redis.createClient();
 
 var app = express();
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, "public")));
 
 // populate search
 
-db.sadd('ferret', 'tobi');
-db.sadd('ferret', 'loki');
-db.sadd('ferret', 'jane');
-db.sadd('cat', 'manny');
-db.sadd('cat', 'luna');
+db.sadd("ferret", "tobi");
+db.sadd("ferret", "loki");
+db.sadd("ferret", "jane");
+db.sadd("cat", "manny");
+db.sadd("cat", "luna");
 
 /**
  * GET search for :query.
  */
 
-app.get('/search/:query?', function(req, res, next){
+app.get("/search/:query?", function (req, res, next) {
   var query = req.params.query;
-  db.smembers(query, function(err, vals){
+  db.smembers(query, function (err, vals) {
     if (err) return next(err);
     res.send(vals);
   });
@@ -50,12 +50,12 @@ app.get('/search/:query?', function(req, res, next){
  * template.
  */
 
-app.get('/client.js', function(req, res){
-  res.sendFile(path.join(__dirname, 'client.js'));
+app.get("/client.js", function (req, res) {
+  res.sendFile(path.join(__dirname, "client.js"));
 });
 
 /* istanbul ignore next */
 if (!module.parent) {
   app.listen(3000);
-  console.log('Express started on port 3000');
+  console.log("Express started on port 3000");
 }

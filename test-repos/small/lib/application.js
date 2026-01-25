@@ -6,24 +6,24 @@
  * MIT Licensed
  */
 
-'use strict';
+"use strict";
 
 /**
  * Module dependencies.
  * @private
  */
 
-var finalhandler = require('finalhandler');
-var debug = require('debug')('express:application');
-var View = require('./view');
-var http = require('node:http');
-var methods = require('./utils').methods;
-var compileETag = require('./utils').compileETag;
-var compileQueryParser = require('./utils').compileQueryParser;
-var compileTrust = require('./utils').compileTrust;
-var resolve = require('node:path').resolve;
-var once = require('once')
-var Router = require('router');
+var finalhandler = require("finalhandler");
+var debug = require("debug")("express:application");
+var View = require("./view");
+var http = require("node:http");
+var methods = require("./utils").methods;
+var compileETag = require("./utils").compileETag;
+var compileQueryParser = require("./utils").compileQueryParser;
+var compileTrust = require("./utils").compileTrust;
+var resolve = require("node:path").resolve;
+var once = require("once");
+var Router = require("router");
 
 /**
  * Module variables.
@@ -37,14 +37,14 @@ var flatten = Array.prototype.flat;
  * Application prototype.
  */
 
-var app = exports = module.exports = {};
+var app = (exports = module.exports = {});
 
 /**
  * Variable for trust proxy inheritance back-compat
  * @private
  */
 
-var trustProxyDefaultSymbol = '@@symbol:trust_proxy_default';
+var trustProxyDefaultSymbol = "@@symbol:trust_proxy_default";
 
 /**
  * Initialize the server.
@@ -66,19 +66,19 @@ app.init = function init() {
   this.defaultConfiguration();
 
   // Setup getting to lazily add base router
-  Object.defineProperty(this, 'router', {
+  Object.defineProperty(this, "router", {
     configurable: true,
     enumerable: true,
     get: function getrouter() {
       if (router === null) {
         router = new Router({
-          caseSensitive: this.enabled('case sensitive routing'),
-          strict: this.enabled('strict routing')
+          caseSensitive: this.enabled("case sensitive routing"),
+          strict: this.enabled("strict routing"),
         });
       }
 
       return router;
-    }
+    },
   });
 };
 
@@ -88,55 +88,57 @@ app.init = function init() {
  */
 
 app.defaultConfiguration = function defaultConfiguration() {
-  var env = process.env.NODE_ENV || 'development';
+  var env = process.env.NODE_ENV || "development";
 
   // default settings
-  this.enable('x-powered-by');
-  this.set('etag', 'weak');
-  this.set('env', env);
-  this.set('query parser', 'simple')
-  this.set('subdomain offset', 2);
-  this.set('trust proxy', false);
+  this.enable("x-powered-by");
+  this.set("etag", "weak");
+  this.set("env", env);
+  this.set("query parser", "simple");
+  this.set("subdomain offset", 2);
+  this.set("trust proxy", false);
 
   // trust proxy inherit back-compat
   Object.defineProperty(this.settings, trustProxyDefaultSymbol, {
     configurable: true,
-    value: true
+    value: true,
   });
 
-  debug('booting in %s mode', env);
+  debug("booting in %s mode", env);
 
-  this.on('mount', function onmount(parent) {
+  this.on("mount", function onmount(parent) {
     // inherit trust proxy
-    if (this.settings[trustProxyDefaultSymbol] === true
-      && typeof parent.settings['trust proxy fn'] === 'function') {
-      delete this.settings['trust proxy'];
-      delete this.settings['trust proxy fn'];
+    if (
+      this.settings[trustProxyDefaultSymbol] === true &&
+      typeof parent.settings["trust proxy fn"] === "function"
+    ) {
+      delete this.settings["trust proxy"];
+      delete this.settings["trust proxy fn"];
     }
 
     // inherit protos
-    Object.setPrototypeOf(this.request, parent.request)
-    Object.setPrototypeOf(this.response, parent.response)
-    Object.setPrototypeOf(this.engines, parent.engines)
-    Object.setPrototypeOf(this.settings, parent.settings)
+    Object.setPrototypeOf(this.request, parent.request);
+    Object.setPrototypeOf(this.response, parent.response);
+    Object.setPrototypeOf(this.engines, parent.engines);
+    Object.setPrototypeOf(this.settings, parent.settings);
   });
 
   // setup locals
   this.locals = Object.create(null);
 
   // top-most app is mounted at /
-  this.mountpath = '/';
+  this.mountpath = "/";
 
   // default locals
   this.locals.settings = this.settings;
 
   // default configuration
-  this.set('view', View);
-  this.set('views', resolve('views'));
-  this.set('jsonp callback name', 'callback');
+  this.set("view", View);
+  this.set("views", resolve("views"));
+  this.set("jsonp callback name", "callback");
 
-  if (env === 'production') {
-    this.enable('view cache');
+  if (env === "production") {
+    this.enable("view cache");
   }
 };
 
@@ -151,14 +153,16 @@ app.defaultConfiguration = function defaultConfiguration() {
 
 app.handle = function handle(req, res, callback) {
   // final handler
-  var done = callback || finalhandler(req, res, {
-    env: this.get('env'),
-    onerror: logerror.bind(this)
-  });
+  var done =
+    callback ||
+    finalhandler(req, res, {
+      env: this.get("env"),
+      onerror: logerror.bind(this),
+    });
 
   // set powered by header
-  if (this.enabled('x-powered-by')) {
-    res.setHeader('X-Powered-By', 'Express');
+  if (this.enabled("x-powered-by")) {
+    res.setHeader("X-Powered-By", "Express");
   }
 
   // set circular references
@@ -166,8 +170,8 @@ app.handle = function handle(req, res, callback) {
   res.req = req;
 
   // alter the prototypes
-  Object.setPrototypeOf(req, this.request)
-  Object.setPrototypeOf(res, this.response)
+  Object.setPrototypeOf(req, this.request);
+  Object.setPrototypeOf(res, this.response);
 
   // setup locals
   if (!res.locals) {
@@ -189,11 +193,11 @@ app.handle = function handle(req, res, callback) {
 
 app.use = function use(fn) {
   var offset = 0;
-  var path = '/';
+  var path = "/";
 
   // default path to '/'
   // disambiguate app.use([fn])
-  if (typeof fn !== 'function') {
+  if (typeof fn !== "function") {
     var arg = fn;
 
     while (Array.isArray(arg) && arg.length !== 0) {
@@ -201,7 +205,7 @@ app.use = function use(fn) {
     }
 
     // first arg is the path
-    if (typeof arg !== 'function') {
+    if (typeof arg !== "function") {
       offset = 1;
       path = fn;
     }
@@ -210,7 +214,7 @@ app.use = function use(fn) {
   var fns = flatten.call(slice.call(arguments, offset), Infinity);
 
   if (fns.length === 0) {
-    throw new TypeError('app.use() requires a middleware function')
+    throw new TypeError("app.use() requires a middleware function");
   }
 
   // get router
@@ -222,7 +226,7 @@ app.use = function use(fn) {
       return router.use(path, fn);
     }
 
-    debug('.use app under %s', path);
+    debug(".use app under %s", path);
     fn.mountpath = path;
     fn.parent = this;
 
@@ -230,14 +234,14 @@ app.use = function use(fn) {
     router.use(path, function mounted_app(req, res, next) {
       var orig = req.app;
       fn.handle(req, res, function (err) {
-        Object.setPrototypeOf(req, orig.request)
-        Object.setPrototypeOf(res, orig.response)
+        Object.setPrototypeOf(req, orig.request);
+        Object.setPrototypeOf(res, orig.response);
         next(err);
       });
     });
 
     // mounted an app
-    fn.emit('mount', this);
+    fn.emit("mount", this);
   }, this);
 
   return this;
@@ -292,14 +296,12 @@ app.route = function route(path) {
  */
 
 app.engine = function engine(ext, fn) {
-  if (typeof fn !== 'function') {
-    throw new Error('callback function required');
+  if (typeof fn !== "function") {
+    throw new Error("callback function required");
   }
 
   // get file extension
-  var extension = ext[0] !== '.'
-    ? '.' + ext
-    : ext;
+  var extension = ext[0] !== "." ? "." + ext : ext;
 
   // store engine
   this.engines[extension] = fn;
@@ -361,19 +363,19 @@ app.set = function set(setting, val) {
 
   // trigger matched settings
   switch (setting) {
-    case 'etag':
-      this.set('etag fn', compileETag(val));
+    case "etag":
+      this.set("etag fn", compileETag(val));
       break;
-    case 'query parser':
-      this.set('query parser fn', compileQueryParser(val));
+    case "query parser":
+      this.set("query parser fn", compileQueryParser(val));
       break;
-    case 'trust proxy':
-      this.set('trust proxy fn', compileTrust(val));
+    case "trust proxy":
+      this.set("trust proxy fn", compileTrust(val));
 
       // trust proxy inherit back-compat
       Object.defineProperty(this.settings, trustProxyDefaultSymbol, {
         configurable: true,
-        value: false
+        value: false,
       });
 
       break;
@@ -397,9 +399,7 @@ app.set = function set(setting, val) {
  */
 
 app.path = function path() {
-  return this.parent
-    ? this.parent.path() + this.mountpath
-    : '';
+  return this.parent ? this.parent.path() + this.mountpath : "";
 };
 
 /**
@@ -470,7 +470,7 @@ app.disable = function disable(setting) {
 
 methods.forEach(function (method) {
   app[method] = function (path) {
-    if (method === 'get' && arguments.length === 1) {
+    if (method === "get" && arguments.length === 1) {
       // app.get(setting)
       return this.set(path);
     }
@@ -527,7 +527,7 @@ app.render = function render(name, options, callback) {
   var view;
 
   // support callback function as second arg
-  if (typeof options === 'function') {
+  if (typeof options === "function") {
     done = options;
     opts = {};
   }
@@ -537,7 +537,7 @@ app.render = function render(name, options, callback) {
 
   // set .cache unless explicitly provided
   if (renderOptions.cache == null) {
-    renderOptions.cache = this.enabled('view cache');
+    renderOptions.cache = this.enabled("view cache");
   }
 
   // primed cache
@@ -547,18 +547,23 @@ app.render = function render(name, options, callback) {
 
   // view
   if (!view) {
-    var View = this.get('view');
+    var View = this.get("view");
 
     view = new View(name, {
-      defaultEngine: this.get('view engine'),
-      root: this.get('views'),
-      engines: engines
+      defaultEngine: this.get("view engine"),
+      root: this.get("views"),
+      engines: engines,
     });
 
     if (!view.path) {
-      var dirs = Array.isArray(view.root) && view.root.length > 1
-        ? 'directories "' + view.root.slice(0, -1).join('", "') + '" or "' + view.root[view.root.length - 1] + '"'
-        : 'directory "' + view.root + '"'
+      var dirs =
+        Array.isArray(view.root) && view.root.length > 1
+          ? 'directories "' +
+            view.root.slice(0, -1).join('", "') +
+            '" or "' +
+            view.root[view.root.length - 1] +
+            '"'
+          : 'directory "' + view.root + '"';
       var err = new Error('Failed to lookup view "' + name + '" in views ' + dirs);
       err.view = view;
       return done(err);
@@ -596,14 +601,14 @@ app.render = function render(name, options, callback) {
  */
 
 app.listen = function listen() {
-  var server = http.createServer(this)
-  var args = slice.call(arguments)
-  if (typeof args[args.length - 1] === 'function') {
-    var done = args[args.length - 1] = once(args[args.length - 1])
-    server.once('error', done)
+  var server = http.createServer(this);
+  var args = slice.call(arguments);
+  if (typeof args[args.length - 1] === "function") {
+    var done = (args[args.length - 1] = once(args[args.length - 1]));
+    server.once("error", done);
   }
-  return server.listen.apply(server, args)
-}
+  return server.listen.apply(server, args);
+};
 
 /**
  * Log error using console.error.
@@ -614,7 +619,7 @@ app.listen = function listen() {
 
 function logerror(err) {
   /* istanbul ignore next */
-  if (this.get('env') !== 'test') console.error(err.stack || err.toString());
+  if (this.get("env") !== "test") console.error(err.stack || err.toString());
 }
 
 /**

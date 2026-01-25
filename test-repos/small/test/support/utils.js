@@ -1,22 +1,21 @@
-
 /**
  * Module dependencies.
  * @private
  */
 
-var assert = require('node:assert');
-const { Buffer } = require('node:buffer');
+var assert = require("node:assert");
+const { Buffer } = require("node:buffer");
 
 /**
  * Module exports.
  * @public
  */
 
-exports.shouldHaveBody = shouldHaveBody
-exports.shouldHaveHeader = shouldHaveHeader
-exports.shouldNotHaveBody = shouldNotHaveBody
+exports.shouldHaveBody = shouldHaveBody;
+exports.shouldHaveHeader = shouldHaveHeader;
+exports.shouldNotHaveBody = shouldNotHaveBody;
 exports.shouldNotHaveHeader = shouldNotHaveHeader;
-exports.shouldSkipQuery = shouldSkipQuery
+exports.shouldSkipQuery = shouldSkipQuery;
 
 /**
  * Assert that a supertest response has a specific body.
@@ -25,14 +24,12 @@ exports.shouldSkipQuery = shouldSkipQuery
  * @returns {function}
  */
 
-function shouldHaveBody (buf) {
+function shouldHaveBody(buf) {
   return function (res) {
-    var body = !Buffer.isBuffer(res.body)
-      ? Buffer.from(res.text)
-      : res.body
-    assert.ok(body, 'response has body')
-    assert.strictEqual(body.toString('hex'), buf.toString('hex'))
-  }
+    var body = !Buffer.isBuffer(res.body) ? Buffer.from(res.text) : res.body;
+    assert.ok(body, "response has body");
+    assert.strictEqual(body.toString("hex"), buf.toString("hex"));
+  };
 }
 
 /**
@@ -42,10 +39,10 @@ function shouldHaveBody (buf) {
  * @returns {function}
  */
 
-function shouldHaveHeader (header) {
+function shouldHaveHeader(header) {
   return function (res) {
-    assert.ok((header.toLowerCase() in res.headers), 'should have header ' + header)
-  }
+    assert.ok(header.toLowerCase() in res.headers, "should have header " + header);
+  };
 }
 
 /**
@@ -54,10 +51,10 @@ function shouldHaveHeader (header) {
  * @returns {function}
  */
 
-function shouldNotHaveBody () {
+function shouldNotHaveBody() {
   return function (res) {
-    assert.ok(res.text === '' || res.text === undefined)
-  }
+    assert.ok(res.text === "" || res.text === undefined);
+  };
 }
 
 /**
@@ -68,12 +65,12 @@ function shouldNotHaveBody () {
  */
 function shouldNotHaveHeader(header) {
   return function (res) {
-    assert.ok(!(header.toLowerCase() in res.headers), 'should not have header ' + header);
+    assert.ok(!(header.toLowerCase() in res.headers), "should not have header " + header);
   };
 }
 
 function getMajorVersion(versionString) {
-  return versionString.split('.')[0];
+  return versionString.split(".")[0];
 }
 
 function shouldSkipQuery(versionString) {
@@ -81,6 +78,5 @@ function shouldSkipQuery(versionString) {
   // we could update this implementation to run on supported versions of 21 once they exist
   // upstream tracking https://github.com/nodejs/node/issues/51562
   // express tracking issue: https://github.com/expressjs/express/issues/5615
-  return Number(getMajorVersion(versionString)) < 22
+  return Number(getMajorVersion(versionString)) < 22;
 }
-

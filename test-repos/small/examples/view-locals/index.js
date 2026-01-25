@@ -1,21 +1,21 @@
-'use strict'
+"use strict";
 
 /**
  * Module dependencies.
  */
 
-var express = require('../..');
-var path = require('node:path');
-var User = require('./user');
+var express = require("../..");
+var path = require("node:path");
+var User = require("./user");
 var app = express();
 
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'ejs');
+app.set("views", path.join(__dirname, "views"));
+app.set("view engine", "ejs");
 
 // filter ferrets only
 
 function ferrets(user) {
-  return user.species === 'ferret'
+  return user.species === "ferret";
 }
 
 // naive nesting approach,
@@ -23,22 +23,19 @@ function ferrets(user) {
 // in order to expose the "count"
 // and "users" locals
 
-app.get('/', function(req, res, next){
-  User.count(function(err, count){
+app.get("/", function (req, res, next) {
+  User.count(function (err, count) {
     if (err) return next(err);
-    User.all(function(err, users){
+    User.all(function (err, users) {
       if (err) return next(err);
-      res.render('index', {
-        title: 'Users',
+      res.render("index", {
+        title: "Users",
         count: count,
-        users: users.filter(ferrets)
+        users: users.filter(ferrets),
       });
-    })
-  })
+    });
+  });
 });
-
-
-
 
 // this approach is cleaner,
 // less nesting and we have
@@ -46,31 +43,28 @@ app.get('/', function(req, res, next){
 // on the request object
 
 function count(req, res, next) {
-  User.count(function(err, count){
+  User.count(function (err, count) {
     if (err) return next(err);
     req.count = count;
     next();
-  })
+  });
 }
 
 function users(req, res, next) {
-  User.all(function(err, users){
+  User.all(function (err, users) {
     if (err) return next(err);
     req.users = users;
     next();
-  })
+  });
 }
 
-app.get('/middleware', count, users, function (req, res) {
-  res.render('index', {
-    title: 'Users',
+app.get("/middleware", count, users, function (req, res) {
+  res.render("index", {
+    title: "Users",
     count: req.count,
-    users: req.users.filter(ferrets)
+    users: req.users.filter(ferrets),
   });
 });
-
-
-
 
 // this approach is much like the last
 // however we're explicitly exposing
@@ -84,27 +78,27 @@ app.get('/middleware', count, users, function (req, res) {
 // is more flexible with `req.users`.
 
 function count2(req, res, next) {
-  User.count(function(err, count){
+  User.count(function (err, count) {
     if (err) return next(err);
     res.locals.count = count;
     next();
-  })
+  });
 }
 
 function users2(req, res, next) {
-  User.all(function(err, users){
+  User.all(function (err, users) {
     if (err) return next(err);
     res.locals.users = users.filter(ferrets);
     next();
-  })
+  });
 }
 
-app.get('/middleware-locals', count2, users2, function (req, res) {
+app.get("/middleware-locals", count2, users2, function (req, res) {
   // you can see now how we have much less
   // to pass to res.render(). If we have
   // several routes related to users this
   // can be a great productivity booster
-  res.render('index', { title: 'Users' });
+  res.render("index", { title: "Users" });
 });
 
 // keep in mind that middleware may be placed anywhere
@@ -151,5 +145,5 @@ app.all('/api/*', function(req, res, next){
 /* istanbul ignore next */
 if (!module.parent) {
   app.listen(3000);
-  console.log('Express started on port 3000');
+  console.log("Express started on port 3000");
 }
