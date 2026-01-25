@@ -212,7 +212,7 @@ class RepoWatcher:
             branch_state = get_current_branch_state(self.root)
             commit_sha = branch_state.commit_sha
             branch = branch_state.branch
-        except:
+        except Exception:
             commit_sha = "unknown"
             branch = "unknown"
 
