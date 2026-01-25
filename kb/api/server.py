@@ -106,8 +106,6 @@ def initialize_search_backend() -> None:
     set_pipeline(pipeline)
     print("✅ Ingestion pipeline ready", file=sys.stderr)
 
-    print("✅ Ingestion pipeline ready", file=sys.stderr)
-
 
 def reload_search_backend() -> None:
     """Reload the search backend and stores to pick up index changes."""

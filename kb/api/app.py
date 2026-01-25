@@ -746,9 +746,6 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to register repository: {str(e)}")
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to register repository: {str(e)}")
-
 
 @app.post("/v1/admin/reload")
 async def admin_reload_backend() -> dict[str, str]:

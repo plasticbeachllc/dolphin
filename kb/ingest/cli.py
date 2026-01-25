@@ -144,7 +144,6 @@ def index(
     typer.echo(f"  files_indexed: {result.get('files_indexed')}")
     typer.echo(f"  chunks_indexed: {result.get('chunks_indexed')}")
     typer.echo(f"  chunks_skipped: {result.get('chunks_skipped')}")
-    typer.echo(f"  chunks_skipped: {result.get('chunks_skipped')}")
     typer.echo(f"  vectors_written: {result.get('vectors_written')}")
 
     # Notify server to reload
