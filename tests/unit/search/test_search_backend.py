@@ -21,6 +21,7 @@ def mock_providers():
             "get_chunk_contents",
             "get_chunk_by_id",
             "get_chunk_by_content_identity",
+            "get_chunk_locations_by_identity",
             "get_repo_by_name",
             "get_file_id",
             "index_chunk_for_fts",
@@ -61,18 +62,23 @@ class TestKnowledgeSearchBackend:
         # Mock the hydration methods for the BM25 result
         sql_store.get_repo_by_name.return_value = {"id": 1}
         sql_store.get_file_id.return_value = 2
-        sql_store.get_chunk_by_content_identity.return_value = {
-            "path": "p2.py",
-            "chunk_id": "chunk2",
-            "start_line": 1,
-            "end_line": 10,
-        }
+        sql_store.get_chunk_locations_by_identity.return_value = [
+            {
+                "content_id": "chunk2",
+                "start_line": 1,
+                "end_line": 10,
+                "symbol_kind": None,
+                "symbol_name": None,
+                "symbol_path": None,
+            }
+        ]
 
-        request = SearchRequest(query="test", top_k=10)
+        request = SearchRequest(query="test", top_k=10, embed_model="small")
         results = basic_backend.search(request)
 
+        expected_bm25_id = "1:2:small:hash2:1:10"
         assert len(results) == 2
-        assert {r["chunk_id"] for r in results} == {"chunk1", "chunk2"}
+        assert {r["chunk_id"] for r in results} == {"chunk1", expected_bm25_id}
         assert "score" in results[0]
         assert results[0]["score"] > 0
 
@@ -100,21 +106,25 @@ class TestKnowledgeSearchBackend:
         # Mock the hydration methods for the BM25 result
         sql_store.get_repo_by_name.return_value = {"id": 1}
         sql_store.get_file_id.return_value = 2
-        sql_store.get_chunk_by_content_identity.return_value = {
-            "path": "test.py",
-            "chunk_id": "chunk2",
-            "start_line": 1,
-            "end_line": 10,
-        }
+        sql_store.get_chunk_locations_by_identity.return_value = [
+            {
+                "content_id": "chunk2",
+                "start_line": 1,
+                "end_line": 10,
+                "symbol_kind": None,
+                "symbol_name": None,
+                "symbol_path": None,
+            }
+        ]
 
         # Use low cutoff (0.0) to accept RRF scores (~0.016)
-        request = SearchRequest(query="test", score_cutoff=0.0)
+        request = SearchRequest(query="test", score_cutoff=0.0, embed_model="small")
         results = basic_backend.search(request)
 
         assert len(results) == 2  # Both should pass with RRF scores
 
         # Test high cutoff that filters out results
-        request_high_cutoff = SearchRequest(query="test", score_cutoff=0.5)
+        request_high_cutoff = SearchRequest(query="test", score_cutoff=0.5, embed_model="small")
         results_high = basic_backend.search(request_high_cutoff)
 
         # RRF scores (~0.016) should be below 0.5 cutoff, so no results
@@ -132,17 +142,16 @@ class TestKnowledgeSearchBackend:
         sql_store.get_file_id = MagicMock(return_value=2)
 
         deterministic_id = "32char_deterministic_hash_id"
-        sql_store.get_chunk_by_content_identity.return_value = {
-            "chunk_id": "uuid-123",
-            "text_hash": "abcdef",
-            "embed_model": "small",
-            "path": "repo/file.py",
-            "language": "python",
-            "start_line": 10,
-            "end_line": 20,
-            "symbol_name": "func",
-            "symbol_path": "module.func",
-        }
+        sql_store.get_chunk_locations_by_identity.return_value = [
+            {
+                "content_id": "uuid-123",
+                "start_line": 10,
+                "end_line": 20,
+                "symbol_kind": None,
+                "symbol_name": "func",
+                "symbol_path": "module.func",
+            }
+        ]
         sql_store.get_chunk_by_id.return_value = None
 
         hydrated = basic_backend._hydrate_bm25_results(
@@ -156,15 +165,20 @@ class TestKnowledgeSearchBackend:
                 }
             ],
             sql_store,
+            embed_model="small",
         )
 
         # Verify the new lookup flow was used
         sql_store.get_repo_by_name.assert_called_once_with("repo")
         sql_store.get_file_id.assert_called_once_with(1, "repo/file.py")
-        sql_store.get_chunk_by_content_identity.assert_called_once_with(1, 2, "abcdef")
+        sql_store.get_chunk_locations_by_identity.assert_called_once_with(
+            1, 2, "abcdef", "small"
+        )
         sql_store.get_chunk_by_id.assert_not_called()
         assert hydrated[0]["start_line"] == 10
-        assert hydrated[0]["chunk_id"] == deterministic_id
+        # Check generated ID format: {repo_id}:{file_id}:{embed_model}:{text_hash}:{start_line}:{end_line}
+        expected_id = "1:2:small:abcdef:10:20"
+        assert hydrated[0]["chunk_id"] == expected_id
 
     def test_bm25_normalization_uses_min_max_when_stats_available(self, tmp_path: Path):
         stats_path = tmp_path / "bm25_stats.json"

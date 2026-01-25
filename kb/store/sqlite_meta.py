@@ -1481,6 +1481,61 @@ class SQLiteMetadataStore:
                 "symbol_path": row[11],
             }
 
+    def get_chunk_locations_by_identity(
+        self,
+        repo_id: int,
+        file_id: int,
+        text_hash: str,
+        embed_model: str,
+    ) -> list[dict[str, Any]]:
+        """Get all locations for a chunk content identity."""
+
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute(
+                """
+                SELECT id FROM chunk_content
+                WHERE repo_id = ? AND file_id = ? AND text_hash = ? AND embed_model = ?
+                """,
+                (repo_id, file_id, text_hash, embed_model),
+            )
+            rows = cur.fetchall()
+            content_ids = [str(r[0]) for r in rows]
+
+            if not content_ids:
+                return []
+
+            placeholders = ",".join(["?"] * len(content_ids))
+            cur.execute(
+                f"""
+                SELECT
+                    content_id,
+                    start_line,
+                    end_line,
+                    symbol_kind,
+                    symbol_name,
+                    symbol_path
+                FROM chunk_locations
+                WHERE content_id IN ({placeholders})
+                ORDER BY start_line ASC
+                """,
+                tuple(content_ids),
+            )
+
+            locations = []
+            for row in cur.fetchall():
+                locations.append(
+                    {
+                        "content_id": str(row[0]),
+                        "start_line": int(row[1]) if row[1] is not None else None,
+                        "end_line": int(row[2]) if row[2] is not None else None,
+                        "symbol_kind": row[3],
+                        "symbol_name": row[4],
+                        "symbol_path": row[5],
+                    }
+                )
+
+            return locations
+
     def get_chunk_by_content_identity(
         self,
         repo_id: int,
