@@ -87,7 +87,7 @@ cleanup() {
   
   if [ "$KEEP_REPO" = false ]; then
     echo "Removing repository from Dolphin KB..."
-    uv run dolphin kb remove-repo "$REPO_NAME" &>/dev/null || true
+    uv run dolphin kb rm-repo "$REPO_NAME" &>/dev/null || true
     
     echo "Removing test repository directory..."
     rm -rf "$REPO_PATH"
@@ -109,7 +109,7 @@ fi
 
 # Remove from Dolphin KB if registered
 echo "  Removing from Dolphin KB (if registered)..."
-uv run dolphin kb remove-repo "$REPO_NAME" &>/dev/null || true
+uv run dolphin kb rm-repo "$REPO_NAME" &>/dev/null || true
 
 # Step 2: Clone the test repository
 echo ""
@@ -156,15 +156,10 @@ START_TIME=$(date +%s)
 
 # Run profiling with py-spy and pv progress bar
 echo "Starting indexing..."
-(py-spy record \
-  --format speedscope \
-  --output "$PROFILE_FILE" \
-  --rate 100 \
-  --subprocesses \
-  -- uv run dolphin kb index "$REPO_NAME" 2>&1 | \
+  uv run dolphin kb index "$REPO_NAME" --full --force --parallel 2>&1 | \
   tee "$LOG_FILE" | \
-  grep --line-buffered "Chunked.*into.*chunks" | \
-  pv -l -s "$FILE_COUNT" -N "🐬 Indexing files" > /dev/null)
+  grep --line-buffered "Indexing file:" | \
+  pv -l -s "$FILE_COUNT" -N "🐬 Indexing files" > /dev/null
 
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
@@ -173,12 +168,12 @@ echo ""
 # Generate flame graph (reindex for flamegraph)
 echo ""
 echo "Generating flame graph (reindexing)..."
-py-spy record \
-  --format flamegraph \
-  --output "$FLAMEGRAPH_FILE" \
-  --rate 100 \
-  --subprocesses \
-  -- uv run dolphin kb index "$REPO_NAME" --full --force 2>&1 > /dev/null
+# py-spy record \
+#   --format flamegraph \
+#   --output "$FLAMEGRAPH_FILE" \
+#   --rate 100 \
+#   --subprocesses \
+#   -- uv run dolphin kb index "$REPO_NAME" --full --force --no-parallel 2>&1 > /dev/null
 
 echo ""
 echo "========================================="
@@ -214,6 +209,6 @@ else
   echo "  Repository: $REPO_PATH"
   echo "  Dolphin KB name: $REPO_NAME"
   echo "  To manually clean up later:"
-  echo "    uv run dolphin kb remove-repo $REPO_NAME"
+  echo "    uv run dolphin kb rm-repo $REPO_NAME"
   echo "    rm -rf $REPO_PATH"
 fi
