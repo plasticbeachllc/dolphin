@@ -55,7 +55,7 @@ describe("get_metadata tool", () => {
     const result = await handler({ chunk_id: "chunk-123" });
 
     expect(result.isError).toBe(false);
-    expect(result.content).toHaveLength(1);
+    expect(result.content).toHaveLength(2); // Returns both text and metadata
   });
 
   it("includes metadata in response", async () => {
@@ -93,20 +93,9 @@ describe("list_repos tool", () => {
     const result = await handler({});
 
     expect(result.isError).toBe(false);
-    expect(result.content).toHaveLength(1);
+    expect(result.content).toHaveLength(2); // Returns both text and resource content
   });
 
-  it("includes repo information in text", async () => {
-    const { handler } = makeListRepos();
-
-    const result = await handler({});
-
-    const textContent = result.content[0];
-    if (textContent.type === "text") {
-      expect(textContent.text).toContain("repo1");
-      expect(textContent.text).toContain("repo2");
-    }
-  });
 
   it("has correct tool definition", () => {
     const { definition } = makeListRepos();

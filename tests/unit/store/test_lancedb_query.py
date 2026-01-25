@@ -5,6 +5,7 @@ Tests vector querying, filtering, and retrieval operations
 """
 
 import pytest
+
 from kb.store.lancedb_store import LanceDBStore
 
 
@@ -42,13 +43,13 @@ def test_query_returns_results(memory_store):
             "created_at": None,
         }
     ]
-    
+
     memory_store.upsert_chunks("test-repo", chunks, model="small")
-    
+
     # Query
     query_vector = [0.1] * 1536
     results = memory_store.query(query_vector, model="small", top_k=5)
-    
+
     assert len(results) > 0
 
 
@@ -80,11 +81,11 @@ def test_query_with_repo_filter(memory_store):
             }
         ]
         memory_store.upsert_chunks(repo_name, chunks, model="small")
-    
+
     # Query with filter
     query_vector = [0.1] * 1536
     results = memory_store.query(query_vector, model="small", repo="repo1", top_k=10)
-    
+
     # All results should be from repo1
     if results:
         assert all(r.get("repo") == "repo1" for r in results)
@@ -117,13 +118,13 @@ def test_query_respects_top_k(memory_store):
         }
         for i in range(20)
     ]
-    
+
     memory_store.upsert_chunks("test-repo", chunks, model="small")
-    
+
     # Query with top_k=5
     query_vector = [0.1] * 1536
     results = memory_store.query(query_vector, model="small", top_k=5)
-    
+
     assert len(results) <= 5
 
 
@@ -131,7 +132,7 @@ def test_query_empty_store(memory_store):
     """Test querying an empty store."""
     query_vector = [0.1] * 1536
     results = memory_store.query(query_vector, model="small", top_k=5)
-    
+
     assert results == []
 
 
@@ -160,16 +161,16 @@ def test_get_vectors_by_hashes(memory_store):
             "created_at": None,
         }
     ]
-    
+
     memory_store.upsert_chunks("test-repo", chunks, model="small")
-    
+
     # Get vectors by hashes
     vectors = memory_store.get_vectors_by_hashes(
         "test-repo",
         ["unique_hash_1"],
         model="small"
     )
-    
+
     assert "unique_hash_1" in vectors
     assert len(vectors["unique_hash_1"]) == 1536
 
@@ -199,9 +200,9 @@ def test_upsert_replaces_existing(memory_store):
             "created_at": None,
         }
     ]
-    
+
     memory_store.upsert_chunks("test-repo", chunks_v1, model="small")
-    
+
     # Update with new vector
     chunks_v2 = [
         {
@@ -226,13 +227,13 @@ def test_upsert_replaces_existing(memory_store):
             "created_at": None,
         }
     ]
-    
+
     memory_store.upsert_chunks("test-repo", chunks_v2, model="small")
-    
+
     # Should only have one chunk
     count = memory_store.count_repo_vectors("test-repo", model="small")
     assert count == 1
-    
+
     # Verify it's the updated version
     chunk = memory_store.get_chunk_by_id("chunk1", model="small")
     assert chunk["text_hash"] == "hash1_updated"

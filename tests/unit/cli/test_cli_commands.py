@@ -7,9 +7,7 @@ covering add-repo, status, list-repos, list-files, search, validate, repair.
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 
-import pytest
 from typer.testing import CliRunner
 
 from kb.ingest.cli import app
@@ -235,7 +233,7 @@ class TestCLISearch:
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
 
-        result = runner.invoke(app, ["search", "nonexistent query"])
+        runner.invoke(app, ["search", "nonexistent query"])
 
         # May succeed with empty results or fail if no repos
         # We're just testing it doesn't crash

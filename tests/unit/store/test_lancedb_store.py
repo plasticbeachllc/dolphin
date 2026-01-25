@@ -5,6 +5,7 @@ Tests basic store operations without fragile table name assertions
 """
 
 import pytest
+
 from kb.store.lancedb_store import LanceDBStore
 
 
@@ -46,7 +47,7 @@ def test_upsert_and_count(memory_store):
             "created_at": None,
         }
     ]
-    
+
     memory_store.upsert_chunks("test-repo", chunks, model="small")
     count = memory_store.count_repo_vectors("test-repo", model="small")
     assert count == 1

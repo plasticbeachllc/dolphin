@@ -7,8 +7,6 @@ scanning, indexing, file processing, and deletion handling.
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -73,6 +71,7 @@ class TestPipelineInitialization:
         manager = pipeline.get_graph_manager(repo_id)
 
         assert manager is not None
+        assert pipeline.graph_managers is not None
         assert repo_id in pipeline.graph_managers
 
     def test_get_graph_manager_returns_cached(self, stores):
@@ -305,6 +304,7 @@ class TestPipelineProcessFiles:
         # Register repo
         metadata.register_repo("test-repo", str(repo_path), default_embed_model="small")
         repo = metadata.get_repo_by_name("test-repo")
+        assert repo is not None
         repo_id = int(repo["id"])
 
         # Start a session
@@ -416,6 +416,7 @@ class TestPipelineProcessDeletions:
         repo_path.mkdir()
         metadata.register_repo("test-repo", str(repo_path), default_embed_model="small")
         repo = metadata.get_repo_by_name("test-repo")
+        assert repo is not None
         repo_id = int(repo["id"])
 
         # Create a file entry
@@ -491,10 +492,11 @@ class TestPipelineDropRepoIndex:
         repo_path.mkdir()
         metadata.register_repo("test-repo", str(repo_path), default_embed_model="small")
         repo = metadata.get_repo_by_name("test-repo")
+        assert repo is not None
         repo_id = int(repo["id"])
 
         # Create some test data
-        file_id = metadata.upsert_file(
+        metadata.upsert_file(
             repo_id=repo_id,
             path="test.py",
             ext=".py",
@@ -502,7 +504,7 @@ class TestPipelineDropRepoIndex:
             is_binary=False,
             size_bytes=100,
         )
-        session_id = metadata.begin_session(repo_id, "abc123", "main", "small")
+        metadata.begin_session(repo_id, "abc123", "main", "small")
 
         return pipeline, metadata, repo_id
 
@@ -547,6 +549,7 @@ class TestPipelineComputeGraphMetrics:
 
         metadata.register_repo("test-repo", str(store_path), default_embed_model="small")
         repo = metadata.get_repo_by_name("test-repo")
+        assert repo is not None
         repo_id = int(repo["id"])
 
         return pipeline, repo_id

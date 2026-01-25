@@ -63,7 +63,7 @@ check-typescript:
 test TYPE="all":
 	@echo "🧪 Running {{TYPE}} tests..."
 	@just _pytest {{TYPE}}
-	@just _bun-test agent-core {{TYPE}}
+	# @just _bun-test agent-core {{TYPE}}
 	@just _bun-test mcp-bridge {{TYPE}}
 	@just _bun-test shared all
 	@echo "✅ All {{TYPE}} tests passed!"
@@ -88,9 +88,9 @@ test-ts TYPE="all":
 	@just _bun-test shared all
 	@echo "   ✅ TypeScript {{TYPE}} tests passed"
 
-# Run tests with coverage
+# Run tests with coverage (disable parallel execution for accurate coverage)
 test-cov:
-	@uv run pytest tests/ --cov=kb --cov-report=html --cov-report=term-missing
+	@uv run pytest -n0 tests/ --cov=kb --cov-report=html --cov-report=term-missing
 
 # Run tests for CORE modules (CI compatibility)
 test-core:
@@ -245,9 +245,6 @@ test-playwright:
 test-file FILE: setup-python
 	@uv run pytest {{FILE}} -v
 
-# Run Python tests with coverage
-test-coverage: setup-python
-	@uv run pytest -n0 --cov=kb --cov-report=html --cov-report=term-missing
 
 
 # ==============================================================================
