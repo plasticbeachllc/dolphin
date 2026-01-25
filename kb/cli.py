@@ -478,11 +478,10 @@ def config(
             store_root = config.resolved_store_root()
             if store_root.exists():
                 rprint(f"✅ Store Root: [green]{store_root}[/green]")
-                # Check writable
                 if os.access(store_root, os.W_OK):
-                    rprint("   (Writable)")
+                    rprint("(Writable)")
                 else:
-                    rprint("   [red](Not Writable)[/red]")
+                    rprint("[red](Not Writable)[/red]")
             else:
                 rprint(f"❌ Store Root: [red]{store_root} (Does not exist)[/red]")
 

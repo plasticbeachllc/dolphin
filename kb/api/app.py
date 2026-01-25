@@ -313,13 +313,17 @@ def _get_system_stats() -> dict[str, Any]:
 
         # Memory usage (RSS)
         usage = resource.getrusage(resource.RUSAGE_SELF)
+        # ru_maxrss is in bytes on macOS/BSD and kilobytes on Linux
+        import sys
+
+        divisor = (1024 * 1024) if sys.platform == "darwin" else 1024
         stats["memory"] = {
-            "rss_mb": round(usage.ru_maxrss / 1024 / 1024, 2)  # Mac returns bytes, Linux returns kb.
-            # Actually on Mac ru_maxrss is in bytes, on Linux it is in kilobytes.
-            # Wait, python docs say: "ru_maxrss is in kilobytes on Linux... and bytes on OS X"
-            # We are on Mac. So div by 1024*1024 for MB.
+            "rss_mb": round(usage.ru_maxrss / divisor, 2)
         }
-    except Exception:
+    except Exception as e:
+        import logging
+
+        logging.warning("Failed to collect system stats", exc_info=e)
         stats["error"] = "failed_to_collect"
 
     return stats

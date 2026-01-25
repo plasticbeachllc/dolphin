@@ -259,7 +259,6 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
     metadata.initialize()
 
     # Get aggregate counts
-    # Get aggregate counts
     summary = metadata.summarize()
 
     console = Console()
