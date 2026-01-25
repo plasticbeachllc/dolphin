@@ -295,6 +295,38 @@ def reset_search_backend() -> None:
     set_search_backend(None)
 
 
+def _get_system_stats() -> dict[str, Any]:
+    """Gather system resource statistics."""
+    stats = {}
+    try:
+        import resource
+        import shutil
+
+        # Disk usage
+        config = _load_default_config()
+        total, used, free = shutil.disk_usage(config.store_root)
+        stats["disk"] = {
+            "total_gb": round(total / (2**30), 2),
+            "free_gb": round(free / (2**30), 2),
+            "percent_free": round((free / total) * 100, 1),
+        }
+
+        # Memory usage (RSS)
+        usage = resource.getrusage(resource.RUSAGE_SELF)
+        # ru_maxrss is in bytes on macOS/BSD and kilobytes on Linux
+        import sys
+
+        divisor = (1024 * 1024) if sys.platform == "darwin" else 1024
+        stats["memory"] = {"rss_mb": round(usage.ru_maxrss / divisor, 2)}
+    except Exception as e:
+        import logging
+
+        logging.warning("Failed to collect system stats", exc_info=e)
+        stats["error"] = "failed_to_collect"
+
+    return stats
+
+
 async def health(check: str = Query(default="shallow")) -> dict[str, object]:
     """Health check logic with optional deep checks."""
     if check == "shallow":
@@ -320,6 +352,11 @@ async def health(check: str = Query(default="shallow")) -> dict[str, object]:
         checks["embeddings"] = "ok"
     else:
         checks["embeddings"] = "not_configured"
+
+        checks["embeddings"] = "not_configured"
+
+    # System stats
+    checks["system"] = _get_system_stats()
 
     return {"status": "ok", "checks": checks}
 

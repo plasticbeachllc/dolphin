@@ -452,6 +452,7 @@ def watch(
 @app.command()
 def config(
     show: bool = typer.Option(False, "--show", help="Show current configuration"),
+    check: bool = typer.Option(False, "--check", help="Validate configuration settings"),
 ) -> None:
     """Manage dolphin configuration."""
     if show:
@@ -463,9 +464,49 @@ def config(
         typer.echo(f"  Endpoint: {config.endpoint}")
         typer.echo(f"  Default embed model: {config.default_embed_model}")
         typer.echo(f"  Embedding provider: {config.embedding_provider}")
+    elif check:
+        # Validate configuration
+        try:
+            import shutil
+
+            from kb.config import load_config
+
+            config = load_config()
+            rprint("\n[bold]Configuration Validation[/bold]")
+
+            # Check 1: Store Root
+            store_root = config.resolved_store_root()
+            if store_root.exists():
+                rprint(f"✅ Store Root: [green]{store_root}[/green]")
+                if os.access(store_root, os.W_OK):
+                    rprint("(Writable)")
+                else:
+                    rprint("[red](Not Writable)[/red]")
+            else:
+                rprint(f"❌ Store Root: [red]{store_root} (Does not exist)[/red]")
+
+            # Check 2: API Keys
+            if config.embedding_provider == "openai":
+                if os.environ.get(config.openai_api_key_env):
+                    rprint(f"✅ OpenAI API Key: [green]Present ({config.openai_api_key_env})[/green]")
+                else:
+                    rprint(f"❌ OpenAI API Key: [red]Missing ({config.openai_api_key_env})[/red]")
+            else:
+                rprint(f"ℹ️  Provider: {config.embedding_provider}")
+
+            # Check 3: Dependencies (Simple check)
+            if shutil.which("uv"):
+                rprint("✅ 'uv' command: [green]Found[/green]")
+            else:
+                rprint("⚠️  'uv' command: [yellow]Not found (Recommended)[/yellow]")
+
+        except Exception as e:
+            rprint(f"[red]Validation failed: {e}[/red]")
+            raise typer.Exit(1)
     else:
         typer.echo("Use 'dolphin init' to initialize configuration")
         typer.echo("Use 'dolphin config --show' to view current config")
+        typer.echo("Use 'dolphin config --check' to validate config")
 
 
 def main() -> None:
