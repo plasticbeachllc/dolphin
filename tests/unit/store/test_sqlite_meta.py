@@ -166,7 +166,7 @@ def test_get_chunk_locations_fallback(meta_store, tmp_path):
     text_hash = "hash123"
     existing_model = "large"
     requested_model = "small"
-    
+
     with meta_store._connect() as conn:
         cur = conn.cursor()
         cur.execute(
