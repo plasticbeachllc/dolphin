@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `KBClient` REST wrapper to enable dependency injection and more reliable unit/integration testing.
 - Search output improvements (formatting + payload trimming) and request options:
   - Optional snippets, with configurable `context_lines_before` / `context_lines_after`
-  - Support for filters like `exclude_paths`, `exclude_patterns`, `score_cutoff`, `deadline_ms`, and `embed_model`
+  - Support for filters like `exclude_paths`, `exclude_patterns`, `score_cutoff`, `max_snippets`, and `embed_model`
 - Standardized MCP tool set:
   - `search`
   - `chunk_get`
@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Breaking**: Minimum required KB API version is now 0.2.0.
 - REST client targets KB `/v1` endpoints for search, repos, chunks, and file slices.
+- **Breaking**: Cursor-based pagination and `deadline_ms` are not supported in v0.2.0 (clients must not send them).
 
 ### Removed
 

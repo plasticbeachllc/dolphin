@@ -48,12 +48,11 @@ describe("search", () => {
 
     // Check _meta includes required fields
     expect(res._meta).toBeDefined();
-    expect(res._meta.cursor).toBeDefined();
     expect(res._meta.estimated_total).toBeDefined();
-    expect(res._meta.complete).toBeDefined();
     expect(res._meta.warnings).toBeDefined();
     expect(res._meta.model).toBeDefined();
     expect(res._meta.top_k).toBeDefined();
+    expect(res._meta.max_snippets).toBeDefined();
     expect(res._meta.tool_version).toBeDefined();
     expect(res._meta.latency_ms).toBeDefined();
   });
@@ -82,7 +81,7 @@ describe("search", () => {
 
     expect(res.isError).toBe(false);
     const hitsJson = parseHitsJson(String(res.content[1].text));
-    expect(hitsJson.schema_version).toBe("2025-11-25.1");
+    expect(hitsJson.schema_version).toBe("2026-01-25.1");
     expect(hitsJson.hits.length).toBeGreaterThan(0);
     expect(hitsJson.hits[0].chunk_id).toBeDefined();
     expect(hitsJson.hits[0].uris.abs_path).toContain("/abs/");
@@ -163,19 +162,6 @@ describe("search", () => {
     expect(res.isError).toBe(false);
   });
 
-  it("cursor passthrough: cursor input echoed to REST; returned cursor included in _meta", async () => {
-    const { handler } = makeSearchKnowledge();
-    const testCursor = "test-cursor-123";
-    const res = await handler({
-      input: {
-        query: "test",
-        cursor: testCursor,
-      },
-    });
-
-    expect(res.isError).toBe(false);
-    expect(res._meta.cursor).toBeDefined();
-  });
 
   it("server warnings are model-visible in summary text by default", async () => {
     const { handler } = makeSearchKnowledge();
@@ -268,16 +254,6 @@ describe("search", () => {
     expect(res._meta?.error?.remediation).toBeDefined();
   });
 
-  it("error mapping: deadline_exceeded with hits → success with complete=false", async () => {
-    // This would require mock server to simulate partial results with deadline exceeded
-    const { handler } = makeSearchKnowledge();
-    const res = await handler({ input: { query: "test" } });
-
-    // Test that complete=false is handled properly when present
-    if (res._meta.complete === false) {
-      expect(res.isError).toBe(false);
-    }
-  });
 
   it("embeddings_unavailable → isError=true with remediation", async () => {
     // This would require mock server to simulate embeddings unavailable error

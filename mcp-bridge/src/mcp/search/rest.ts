@@ -6,6 +6,10 @@ export function buildSearchRequestBody(
   input: SearchInput,
   options: SearchOptions
 ): SearchRequestBody {
+  const maxSnippets = options.includeSnippets ? options.snippetsTopN : 0;
+  const includeContextInKb = maxSnippets > 0 && options.topContextN >= maxSnippets;
+  const contextLinesBefore = includeContextInKb ? options.contextLinesBefore : 0;
+  const contextLinesAfter = includeContextInKb ? options.contextLinesAfter : 0;
   return {
     query: input.query,
     repos: options.repos,
@@ -13,22 +17,20 @@ export function buildSearchRequestBody(
     exclude_paths: input.exclude_paths,
     exclude_patterns: input.exclude_patterns,
     top_k: options.topK,
-    max_snippets: options.snippetsTopN,
-    deadline_ms: input.deadline_ms,
+    max_snippets: maxSnippets,
     embed_model: input.embed_model,
     score_cutoff: input.score_cutoff,
     mmr_enabled: input.mmr_enabled,
     mmr_lambda: input.mmr_lambda,
-    cursor: input.cursor,
-    include_prompt_ready: false,
     ann_strategy: input.ann_strategy,
     ann_nprobes: input.ann_nprobes,
     ann_refine_factor: input.ann_refine_factor,
     include_graph_context: options.includeGraphContext,
-    // Prefer lightweight candidate lists; fetch snippets separately for top results.
-    include_snippets: false,
-    context_lines_before: 0,
-    context_lines_after: 0,
+    // Ask the KB to include snippets for up to `max_snippets` hits. When the caller only wants
+    // expanded context for the top N, we fetch that via follow-up `file_lines` calls.
+    include_snippets: options.includeSnippets && maxSnippets > 0,
+    context_lines_before: contextLinesBefore,
+    context_lines_after: contextLinesAfter,
   };
 }
 

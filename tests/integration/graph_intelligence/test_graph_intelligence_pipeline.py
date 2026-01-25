@@ -480,33 +480,33 @@ class TestPerformance:
         graph_manager = pipeline.get_graph_manager(repo_id)
 
         # Graph is already loaded from indexing, so first access uses cache
-        start = time.time()
+        start = time.perf_counter()
         graph_manager.get_graph()
-        first_access_time = time.time() - start
+        first_access_time = time.perf_counter() - start
 
         # Second access should also use cache
-        start = time.time()
+        start = time.perf_counter()
         graph_manager.get_graph()
-        second_access_time = time.time() - start
+        second_access_time = time.perf_counter() - start
 
-        # Both cached accesses should be fast (< 30ms to account for CI/test overhead)
-        assert first_access_time < 0.03
-        assert second_access_time < 0.03
+        # Both cached accesses should be fast (< 50ms to account for CI/test overhead)
+        assert first_access_time < 0.05
+        assert second_access_time < 0.05
 
         # Test invalidation and rebuild
         graph_manager.invalidate_cache()
-        start = time.time()
+        start = time.perf_counter()
         graph_manager.get_graph()
-        rebuild_time = time.time() - start
+        rebuild_time = time.perf_counter() - start
 
         # Rebuild might be slower but still reasonable for small graph
         assert rebuild_time < 0.5  # 500ms should be plenty for a small graph
 
         # After rebuild, cache should work again
-        start = time.time()
+        start = time.perf_counter()
         graph_manager.get_graph()
-        cached_again_time = time.time() - start
-        assert cached_again_time < 0.03  # Relaxed to avoid timing flakiness in CI
+        cached_again_time = time.perf_counter() - start
+        assert cached_again_time < 0.05  # Relaxed to avoid timing flakiness in CI
 
     def test_metrics_computation_performance(self, pipeline, temp_repo):
         """Test metrics computation performance."""

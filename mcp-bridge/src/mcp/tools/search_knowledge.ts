@@ -92,8 +92,6 @@ export function makeSearchKnowledge(): {
         hits: transformedRes.hits,
         snippetsIncluded: snippetsByHitIndex.size,
         estimatedTotal: transformedRes.meta.estimated_total,
-        moreAvailable:
-          transformedRes.meta.complete === false && Boolean(transformedRes.meta.cursor),
         includeWarningsInText: options.includeWarningsInText,
         warningEntries,
       });
@@ -140,12 +138,11 @@ export function makeSearchKnowledge(): {
         content,
         isError: false,
         _meta: {
-          cursor: transformedRes.meta.cursor,
           estimated_total: transformedRes.meta.estimated_total,
-          complete: transformedRes.meta.complete,
           warnings,
           model: transformedRes.meta.model,
           top_k: transformedRes.meta.top_k ?? options.topK,
+          max_snippets: transformedRes.meta.max_snippets,
           tool_version: TOOL_VERSION,
           latency_ms: Date.now() - started,
         },
@@ -177,7 +174,7 @@ export function makeSearchKnowledge(): {
     } catch (e: unknown) {
       const { error: toolError, upstream } = normalizeToolError(
         e,
-        "Check repo names with /v1/repos, adjust filters, or increase deadline_ms/top_k."
+        "Check repo names with /v1/repos, adjust filters, or increase top_k/max_snippets."
       );
       await logError("search", "search error", {
         error_code: toolError.code,

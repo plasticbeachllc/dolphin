@@ -9,14 +9,12 @@ export const SEARCH_INPUT_SHAPE = {
   exclude_paths: z.array(z.string()).optional(),
   exclude_patterns: z.array(z.string()).optional(),
   top_k: z.number().int().min(1).max(CONFIG.MCP_LIMITS.TOP_K_MAX).optional(),
-  max_snippets: z.number().int().min(1).optional(),
+  max_snippets: z.number().int().min(0).optional(),
   top_context_n: z.number().int().min(0).optional(),
-  deadline_ms: z.number().int().min(50).optional(),
   embed_model: z.enum(["small", "large"]).optional().default("large"),
   score_cutoff: z.number().optional(),
   mmr_enabled: z.boolean().optional(),
   mmr_lambda: z.number().min(0).max(1).optional(),
-  cursor: z.string().optional(),
   ann_strategy: z.enum(["speed", "accuracy", "adaptive", "custom"]).optional(),
   ann_nprobes: z.number().int().min(1).max(50).optional(),
   ann_refine_factor: z.number().int().min(1).max(100).optional(),
@@ -32,7 +30,7 @@ export const SEARCH_INPUT_SHAPE = {
   include_vscode_uris: z.boolean().optional(),
 };
 
-export const SEARCH_INPUT = z.object(SEARCH_INPUT_SHAPE);
+export const SEARCH_INPUT = z.object(SEARCH_INPUT_SHAPE).strict();
 export const SEARCH_INPUT_SCHEMA = buildToolInputSchema(SEARCH_INPUT);
 
 export type SearchInput = z.infer<typeof SEARCH_INPUT>;

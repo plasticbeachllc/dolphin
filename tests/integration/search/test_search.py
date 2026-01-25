@@ -1,7 +1,7 @@
 """Integration tests for search functionality."""
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -91,7 +91,7 @@ class TestSearchIntegration:
 
         from kb.api.app import search
 
-        response = await search(request)
+        response = cast(dict[str, Any], await search(request))
 
         # Verify response structure
         assert "hits" in response
@@ -100,7 +100,7 @@ class TestSearchIntegration:
         assert response["meta"]["model"] == "small"
 
         # Verify search results
-        hits = response["hits"]
+        hits = cast(list[dict[str, Any]], response["hits"])
         assert len(hits) == 1
         assert hits[0]["path"] == "src/widgets.py"
         assert hits[0]["language"] == "python"
@@ -138,10 +138,10 @@ class TestSearchIntegration:
 
         from kb.api.app import search
 
-        response = await search(request)
+        response = cast(dict[str, Any], await search(request))
 
         # Verify response
-        hits = response["hits"]
+        hits = cast(list[dict[str, Any]], response["hits"])
         assert len(hits) == 1
         assert hits[0]["path"] == "docs/overview.md"
         assert hits[0]["language"] == "markdown"
@@ -172,7 +172,7 @@ class TestSearchIntegration:
 
         from kb.api.app import search
 
-        response = await search(request)
+        response = cast(dict[str, Any], await search(request))
 
         # Verify empty results
         assert len(response["hits"]) == 0
@@ -204,7 +204,7 @@ class TestSearchIntegration:
 
         from kb.api.app import search
 
-        response = await search(request)
+        response = cast(dict[str, Any], await search(request))
 
         # Verify latency measurement
         assert "latency_ms" in response["meta"]
@@ -310,7 +310,7 @@ class TestSearchPerformance:
         from kb.api.app import search
 
         start_time = time.time()
-        response = await search(request)
+        response = cast(dict[str, Any], await search(request))
         end_time = time.time()
 
         response_time_ms = (end_time - start_time) * 1000
@@ -360,7 +360,7 @@ class TestSearchPerformance:
         # Run concurrent searches
         start_time = time.time()
         tasks = [search(request) for request in requests]
-        results = await asyncio.gather(*tasks)
+        results = cast(list[dict[str, Any]], await asyncio.gather(*tasks))
         end_time = time.time()
 
         total_time_ms = (end_time - start_time) * 1000

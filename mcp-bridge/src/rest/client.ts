@@ -18,13 +18,10 @@ export interface SearchRequestBody {
   exclude_patterns?: string[];
   top_k?: number;
   max_snippets?: number;
-  deadline_ms?: number;
   embed_model?: "small" | "large";
   score_cutoff?: number;
   mmr_enabled?: boolean;
   mmr_lambda?: number;
-  cursor?: string;
-  include_prompt_ready?: boolean;
   include_snippets?: boolean;
   ann_strategy?: "speed" | "accuracy" | "adaptive" | "custom";
   ann_nprobes?: number;
@@ -55,9 +52,8 @@ export interface SearchResponse {
     model?: string;
     latency_ms?: number;
     timing?: { embedding_ms?: number; search_ms?: number; processing_ms?: number };
-    cursor?: string;
     estimated_total?: number;
-    complete?: boolean;
+    max_snippets?: number;
     warnings?: string[];
   };
   prompt_ready?: string;
@@ -153,7 +149,7 @@ export class KBClient {
           code: "invalid_json",
           message: `JSON parse error: ${normalizedMsg}`,
           remediation:
-            "Upstream returned non-JSON. Inspect server logs, verify endpoints and filters, or increase deadline_ms/top_k.",
+            "Upstream returned non-JSON. Inspect server logs, verify endpoints/filters, or reduce response size (top_k/max_snippets).",
           details: { status: res.status, statusText: res.statusText, body_snippet: snippet },
         },
       };
@@ -168,7 +164,7 @@ export class KBClient {
             code: "upstream_error",
             message: `HTTP ${res.status} ${res.statusText}`,
             remediation:
-              "Check repo names with /v1/repos, adjust filters, or increase deadline_ms/top_k. See server logs.",
+              "Check repo names with /v1/repos, adjust filters, or reduce response size (top_k/max_snippets). See server logs.",
             details: { body_snippet: (text || "").slice(0, 200) },
           },
         };
