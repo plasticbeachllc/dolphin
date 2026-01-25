@@ -96,7 +96,6 @@ describe("list_repos tool", () => {
     expect(result.content).toHaveLength(2); // Returns both text and resource content
   });
 
-
   it("has correct tool definition", () => {
     const { definition } = makeListRepos();
 
