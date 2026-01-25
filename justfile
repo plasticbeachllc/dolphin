@@ -117,6 +117,21 @@ test-all:
 	@just test-webview
 	@echo "✅ All tests passed!"
 
+# Run FULL test suite (including slow/integration tests) with fail-fast checks
+test-full:
+	@echo "🚀 Running FULL test suite (unskipping all tests)..."
+	@# 1. Check for OPENAI_API_KEY
+	@if [ -z "$OPENAI_API_KEY" ]; then echo "❌ OPENAI_API_KEY is not set"; exit 1; fi
+	@# 2. Check OpenAI API validity (simple connection check)
+	@echo "🔍 Checking OpenAI API connectivity..."
+	@curl -s -f -o /dev/null -H "Authorization: Bearer $OPENAI_API_KEY" https://api.openai.com/v1/models || (echo "❌ Invalid OPENAI_API_KEY or API unreachable"; exit 1)
+	@# 3. Check Redis
+	@echo "🔍 Checking Redis connectivity..."
+	@redis-cli ping >/dev/null 2>&1 || (echo "❌ Redis is not running (required for full tests)"; exit 1)
+	@# 4. Run tests with all flags enabled
+	@export DOLPHIN_TEST_FULL=1; \
+	 just test all
+
 # ==============================================================================
 # Testing - Internal Helpers
 # ==============================================================================

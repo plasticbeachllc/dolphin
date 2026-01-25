@@ -131,7 +131,7 @@ def add_repo(
         raise typer.Exit(code=2)
 
     config = load_config()
-    
+
     # Use provided model or fall back to global default
     if default_embed_model:
         model = default_embed_model.strip().lower()
