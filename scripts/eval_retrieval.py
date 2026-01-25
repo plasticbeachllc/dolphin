@@ -174,7 +174,6 @@ def evaluate_scenario(scenario: GoldenScenario, backend: KnowledgeSearchBackend,
     request = SearchRequest(
         query=scenario.query,
         top_k=top_k,
-        embed_model="large",
         repos=repos,
     )
 

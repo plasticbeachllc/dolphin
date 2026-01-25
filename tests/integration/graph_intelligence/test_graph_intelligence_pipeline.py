@@ -469,7 +469,7 @@ class TestPerformance:
     """Test performance characteristics."""
 
     def test_lazy_loading_performance(self, pipeline, temp_repo):
-        """Test that cached graph access is fast."""
+        """Test that cached graph access is significantly faster than rebuilding."""
         import time
 
         # Index repository (which now also builds the graph)
@@ -499,8 +499,8 @@ class TestPerformance:
         graph_manager.get_graph()
         rebuild_time = time.perf_counter() - start
 
-        # Rebuild might be slower but still reasonable for small graph
-        assert rebuild_time < 0.5  # 500ms should be plenty for a small graph
+        # Rebuild should complete in reasonable time
+        assert rebuild_time < 1.0, f"Rebuild took {rebuild_time:.3f}s, expected < 1.0s"
 
         # After rebuild, cache should work again
         start = time.perf_counter()

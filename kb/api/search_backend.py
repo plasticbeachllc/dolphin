@@ -45,7 +45,15 @@ class KnowledgeSearchBackend:
         self.cache = cache
         self.hybrid_search_enabled = hybrid_search_enabled
         self.reranker = reranker
-        self.config = config
+
+        if config is None:
+            # Fallback to default config if not provided
+            # This ensures self.config is never None (for type checkers)
+            from ..config import KBConfig
+
+            config = KBConfig()
+
+        self.config: KBConfig = config
         self.graph_store = graph_store
         self._request_ann_config = None  # Per-request ANN configuration overrides
 
@@ -173,7 +181,7 @@ class KnowledgeSearchBackend:
                 "path_prefix": request.path_prefix,
                 "top_k": request.top_k,
                 "score_cutoff": request.score_cutoff,
-                "embed_model": request.embed_model,
+                "embed_model": self.config.default_embed_model,
             },
         )
 
@@ -245,7 +253,9 @@ class KnowledgeSearchBackend:
                         "sample_score": (bm25_results[0].get("score") if bm25_results else None),
                     },
                 )
-                bm25_hydrated = self._hydrate_bm25_results(bm25_results, self.sql_store, self.config.default_embed_model)
+                bm25_hydrated = self._hydrate_bm25_results(
+                    bm25_results, self.sql_store, self.config.default_embed_model
+                )
                 request_logger.debug("BM25 results hydrated", {"hydrated_count": len(bm25_hydrated)})
             except Exception as e:
                 # Log error but continue with empty BM25 results
@@ -927,10 +937,10 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     # Map embedding_provider_type to embedding_provider (nested under "embedding")
     if "embedding_provider_type" in kwargs:
         embedding_data["provider"] = kwargs["embedding_provider_type"]
-    
+
     # Map default_embed_model if provided (CRITICAL FIX FOR OPTIONS B)
     if "default_embed_model" in kwargs:
-         embedding_data["default_embed_model"] = kwargs["default_embed_model"]
+        embedding_data["default_embed_model"] = kwargs["default_embed_model"]
 
     # Map cache_enabled
     if "cache_enabled" in kwargs:

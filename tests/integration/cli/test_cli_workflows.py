@@ -52,7 +52,7 @@ class TestAddRepoWorkflow:
         # Add repository
         add_result = runner.invoke(
             app,
-            ["add-repo", "test-repo", str(git_repo), "--default-embed-model", "small"],
+            ["add-repo", "test-repo", str(git_repo)],
             env=env,
         )
 

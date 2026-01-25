@@ -265,10 +265,10 @@ class TestPipelineIndex:
         assert result is not None
 
     def test_index_invalid_embed_model_raises(self, pipeline_with_repo):
-        """Test index raises error for invalid embed model."""
+        """Test index migrates repo when model in DB differs from global config."""
         pipeline, repo_path, metadata = pipeline_with_repo
 
-        # Update repo with invalid embed model
+        # Update repo with different model than global config
         with metadata._connect() as conn:
             conn.execute(
                 "UPDATE repos SET default_embed_model = ? WHERE name = ?",
@@ -276,8 +276,9 @@ class TestPipelineIndex:
             )
             conn.commit()
 
-        with pytest.raises(ValueError, match="Unsupported embed model"):
-            pipeline.index("test-repo", force=True)
+        # Should not raise - will migrate to global config (default is large)
+        result = pipeline.index("test-repo", force=True)
+        assert result is not None
 
 
 class TestPipelineProcessFiles:

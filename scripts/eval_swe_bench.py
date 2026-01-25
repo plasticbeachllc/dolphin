@@ -102,7 +102,7 @@ def evaluate_instance(
             query=problem_statement,
             repos=[instance["repo"]],
             top_k=top_k * 3,  # Get more results, then collapse to files
-            embed_model=embed_model,  # Use model from repo config
+            # Use model from repo config
         )
 
         results = backend.search(request)
@@ -280,7 +280,7 @@ def main():
         repo_root = args.repos_dir / repo.replace("/", "__")
 
         # Get embed model for this repo (default to small if not configured)
-        embed_model = repo_models.get(repo, "small")
+        repo_models.get(repo, "small")
 
         if not args.verbose:
             print(
@@ -293,7 +293,6 @@ def main():
             instance,
             backend,
             repo_root,
-            embed_model=embed_model,
             top_k=args.top_k,
             verbose=args.verbose,
         )

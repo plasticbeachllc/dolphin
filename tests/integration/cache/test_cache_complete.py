@@ -43,7 +43,6 @@ def _run_search(
         query=query,
         top_k=top_k,
         repos=[repo_name],
-        embed_model=embed_model,
         include_graph_context=False,
     )
     return backend.search(request)

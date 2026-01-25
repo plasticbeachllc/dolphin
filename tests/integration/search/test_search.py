@@ -87,7 +87,7 @@ class TestSearchIntegration:
         metadata_store.record_repo("test-repo", str(sample_repo_path), default_embed_model="small")
 
         # Test search with widget query
-        request = SearchRequest(query="widget class", repos=["test-repo"], top_k=5, embed_model="small")
+        request = SearchRequest(query="widget class", repos=["test-repo"], top_k=5)
 
         from kb.api.app import search
 
@@ -133,7 +133,6 @@ class TestSearchIntegration:
             repos=["specific-repo"],
             path_prefix=["docs/"],
             top_k=3,
-            embed_model="small",
         )
 
         from kb.api.app import search
@@ -168,7 +167,7 @@ class TestSearchIntegration:
         metadata_store.record_repo("test-repo", str(sample_repo_path), default_embed_model="small")
 
         # Test search with no matches
-        request = SearchRequest(query="nonexistent term", repos=["test-repo"], top_k=5, embed_model="small")
+        request = SearchRequest(query="nonexistent term", repos=["test-repo"], top_k=5)
 
         from kb.api.app import search
 
@@ -200,7 +199,7 @@ class TestSearchIntegration:
         metadata_store.record_repo("test-repo", str(sample_repo_path), default_embed_model="small")
 
         # Test search
-        request = SearchRequest(query="widget", repos=["test-repo"], top_k=5, embed_model="small")
+        request = SearchRequest(query="widget", repos=["test-repo"], top_k=5)
 
         from kb.api.app import search
 
@@ -264,7 +263,6 @@ class TestSearchIntegration:
             query="widget",
             repos=["repo1", "repo2", "repo3"],
             top_k=10,
-            embed_model="small",
         )
 
         from kb.api.app import search
@@ -305,7 +303,7 @@ class TestSearchPerformance:
         metadata_store.record_repo("test-repo", str(sample_repo_path), default_embed_model="small")
 
         # Measure search performance
-        request = SearchRequest(query="test query", repos=["test-repo"], top_k=5, embed_model="small")
+        request = SearchRequest(query="test query", repos=["test-repo"], top_k=5)
 
         from kb.api.app import search
 
@@ -352,7 +350,6 @@ class TestSearchPerformance:
                 query=f"query {i}",
                 repos=[f"repo-{i % 3}"],
                 top_k=5,
-                embed_model="small",
             )
             for i in range(10)
         ]
