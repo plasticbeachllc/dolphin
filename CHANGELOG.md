@@ -36,6 +36,7 @@ This release focuses the release-targeted surface on the Knowledge Bank (Python)
 
 - Ignore pattern handling standardized to `.gitignore` semantics.
 - **Breaking**: KB REST API is now `/v1/*` only (legacy unversioned routes removed).
+- **Breaking**: Removed legacy `include_snippets` from `/v1/search`; clients must use `max_snippets`.
 
 ### Fixed
 

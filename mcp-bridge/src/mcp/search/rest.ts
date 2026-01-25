@@ -28,7 +28,6 @@ export function buildSearchRequestBody(
     include_graph_context: options.includeGraphContext,
     // Ask the KB to include snippets for up to `max_snippets` hits. When the caller only wants
     // expanded context for the top N, we fetch that via follow-up `file_lines` calls.
-    include_snippets: options.includeSnippets && maxSnippets > 0,
     context_lines_before: contextLinesBefore,
     context_lines_after: contextLinesAfter,
   };

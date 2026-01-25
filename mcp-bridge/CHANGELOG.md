@@ -30,6 +30,7 @@ This release focuses the release-targeted surface on the MCP bridge and its cont
 - **Breaking**: Minimum required KB API version is now 0.2.0.
 - REST client targets KB `/v1` endpoints for search, repos, chunks, and file slices.
 - **Breaking**: Cursor-based pagination and `deadline_ms` are not supported in v0.2.0 (clients must not send them).
+- **Breaking**: Removed legacy `include_snippets` from KB search requests; use `max_snippets`.
 
 ### Improved
 

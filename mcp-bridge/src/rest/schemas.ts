@@ -12,7 +12,6 @@ export const SearchRequestSchema = z.object({
   score_cutoff: z.number().optional(),
   mmr_enabled: z.boolean().optional(),
   mmr_lambda: z.number().min(0).max(1).optional(),
-  include_snippets: z.boolean().optional(),
   ann_strategy: z.enum(["speed", "accuracy", "adaptive", "custom"]).optional(),
   ann_nprobes: z.number().int().min(1).max(50).optional(),
   ann_refine_factor: z.number().int().min(1).max(100).optional(),
