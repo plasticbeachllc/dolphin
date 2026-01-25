@@ -1526,7 +1526,7 @@ class SQLiteMetadataStore:
                         "symbol_kind": row[3],
                         "symbol_name": row[4],
                         "symbol_path": row[5],
-                        # "embed_model": model, # Optional: include if needed
+                        "embed_model": model,
                     }
                 )
 

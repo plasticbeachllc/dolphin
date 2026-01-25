@@ -314,6 +314,7 @@ def create_cache(
                 "Redis package not available. Install with: pip install redis. Using in-memory cache as fallback."
             )
         except Exception as e:
+            redis_client = None
             _log.warning(
                 "Failed to connect to Redis at %s: %s. Using in-memory cache as fallback.",
                 redis_url,

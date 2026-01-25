@@ -586,11 +586,13 @@ class KnowledgeSearchBackend:
                 for loc in locations:
                     start_line = loc.get("start_line")
                     end_line = loc.get("end_line")
+                    # Use the actual model from the location, or fallback to requested if missing (should be there now)
+                    actual_model = loc.get("embed_model", embed_model)
 
                     # Generate LanceDB-compatible row ID
                     # Format: {repo_id}:{file_id}:{embed_model}:{text_hash}:{start_line}:{end_line}
                     if start_line is not None and end_line is not None:
-                        row_id = f"{repo_id}:{file_id}:{embed_model}:{text_hash}:{start_line}:{end_line}"
+                        row_id = f"{repo_id}:{file_id}:{actual_model}:{text_hash}:{start_line}:{end_line}"
                     else:
                         row_id = chunk_id  # Fallback
 
@@ -601,7 +603,7 @@ class KnowledgeSearchBackend:
                         "score": normalized_score,
                         "id": row_id,
                         "text_hash": text_hash,
-                        "embed_model": embed_model,
+                        "embed_model": actual_model,
                         # We don't have language here easily without extra query,
                         # but hydration later might fill it if needed.
                         "start_line": start_line,
@@ -1042,8 +1044,9 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     graph_store = None
     try:
         graph_store = GraphStore(config.resolved_store_root() / "metadata.db")
-    except Exception:
+    except Exception as e:
         # Graph store is optional - no logging needed for expected absence
+        print(f"ERROR: GraphStore init failed: {e}", flush=True)
         pass
 
     # Create and return the search backend

@@ -1,5 +1,6 @@
 """End-to-end tests for complete indexing workflow."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -261,7 +262,10 @@ class TestIndexingPerformance:
         assert elapsed_time < 30
         assert result["files_indexed"] > 0
 
-    @pytest.mark.skip(reason="Performance test - run manually")
+    @pytest.mark.skipif(
+        os.environ.get("DOLPHIN_TEST_FULL") != "1",
+        reason="Performance test - run manually or set DOLPHIN_TEST_FULL=1",
+    )
     def test_indexing_throughput(self, e2e_kb_setup):
         """Test indexing throughput."""
         import time

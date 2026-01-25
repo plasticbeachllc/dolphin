@@ -1,5 +1,6 @@
 """Integration tests for complete KB pipeline orchestration."""
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -337,13 +338,17 @@ def test_function():
 class TestPipelineParallelization:
     """Test pipeline parallelization and performance."""
 
-    @pytest.mark.skip(reason="Performance test - run manually")
+    @pytest.mark.skipif(
+        os.environ.get("DOLPHIN_TEST_FULL") != "1",
+        reason="Performance test - run manually or set DOLPHIN_TEST_FULL=1",
+    )
     def test_pipeline_processes_multiple_files_efficiently(self, temp_dir: Path):
         """Test pipeline can process multiple files efficiently."""
         import time
 
         repo_path = temp_dir / "perf_repo"
         repo_path.mkdir()
+        init_test_git_repo(repo_path)
 
         # Create many files
         for i in range(50):
@@ -354,6 +359,14 @@ def function_{i}():
     return {i}
 """
             )
+
+        # Commit files to ensure they are tracked
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "Add performance test files"],
+            check=True,
+            capture_output=True,
+        )
 
         # Setup pipeline
         db_path = temp_dir / "perf.db"
