@@ -143,7 +143,7 @@ default_embed_model = "small"
         start_wait = time.time()
         poll_interval = 0.3  # Poll more frequently
         max_wait = 30
-        
+
         while time.time() - start_wait < max_wait:
             import sqlite3
 
