@@ -307,9 +307,8 @@ class TestApiKeyMiddleware:
         assert req.query == "test"
         assert req.repos is None
         assert req.top_k == 8
-        assert req.max_snippet_tokens == 240
-        assert req.max_snippets == 0
         # embed_model removed - now uses global config
+        assert req.max_snippets == 0
 
     def test_search_request_with_all_fields(self):
         """Test SearchRequest with all fields."""

@@ -55,6 +55,7 @@ def init(
     target = config_path or DEFAULT_CONFIG_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
     created = False
+
     # Load existing or template content
     if target.exists():
         typer.echo(f"Config already exists at {target}")
@@ -82,15 +83,6 @@ def init(
         # Patch the template string before writing
         # We assume the template has `default_embed_model = "large"` or similar
         # A simple replace works for the template
-        if 'default_embed_model = "large"' in config_content:
-            config_content = config_content.replace(
-                'default_embed_model = "large"',
-                f'default_embed_model = "{model_choice}"',
-            )
-        elif 'default_embed_model = "small"' in config_content:
-            config_content = config_content.replace(
-                'default_embed_model = "small"',
-                f'default_embed_model = "{model_choice}"',
             )
 
         target.write_text(config_content, encoding="utf-8")
@@ -140,14 +132,14 @@ def add_repo(
     metadata.record_repo(name=name, path=repo_path, default_embed_model=model)
 
     typer.echo(f"Repository registered: name='{name}', path='{repo_path}'")
-    
+
     # Note: We rely on 'kb index' to handle any model mismatch if this was an update
     # to an existing repo that had a different model.
 
-    # Only prompt for indexing in interactive mode
+    # Only prompt for indexing in interactive mode (skip in tests or if --no-index)
     import sys
 
-    if sys.stdin is not None and sys.stdin.isatty():
+    if not no_index and sys.stdin is not None and sys.stdin.isatty():
         if typer.confirm(f"Do you want to index '{name}' now?", default=False):
             typer.echo(f"Starting index for {name}...")
             pipeline = _build_pipeline(config)

@@ -76,7 +76,7 @@ class TestKnowledgeSearchBackend:
             }
         ]
 
-        request = SearchRequest(query="test", top_k=10, embed_model="small")
+        request = SearchRequest(query="test", top_k=10)
         results = basic_backend.search(request)
 
         expected_bm25_id = "1:2:small:hash2:1:10"
@@ -121,13 +121,13 @@ class TestKnowledgeSearchBackend:
         ]
 
         # Use low cutoff (0.0) to accept RRF scores (~0.016)
-        request = SearchRequest(query="test", score_cutoff=0.0, embed_model="small")
+        request = SearchRequest(query="test", score_cutoff=0.0)
         results = basic_backend.search(request)
 
         assert len(results) == 2  # Both should pass with RRF scores
 
         # Test high cutoff that filters out results
-        request_high_cutoff = SearchRequest(query="test", score_cutoff=0.5, embed_model="small")
+        request_high_cutoff = SearchRequest(query="test", score_cutoff=0.5)
         results_high = basic_backend.search(request_high_cutoff)
 
         # RRF scores (~0.016) should be below 0.5 cutoff, so no results
