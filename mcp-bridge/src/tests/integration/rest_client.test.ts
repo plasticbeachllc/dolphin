@@ -33,16 +33,7 @@ describe("REST Client - Search", () => {
       path_prefix: ["src/"],
       score_cutoff: 0.5,
       embed_model: "large",
-    });
-
-    expect(result).toBeDefined();
-    expect(result.hits).toBeDefined();
-  });
-
-  it("should handle search with cursor", async () => {
-    const result = await restSearch({
-      query: "test",
-      cursor: "cursor-token-123",
+      max_snippets: 1,
     });
 
     expect(result).toBeDefined();
@@ -90,14 +81,6 @@ describe("REST Client - Search", () => {
     expect(result).toBeDefined();
   });
 
-  it("should handle search with deadline", async () => {
-    const result = await restSearch({
-      query: "test",
-      deadline_ms: 5000,
-    });
-
-    expect(result).toBeDefined();
-  });
 
   it("should handle repo not found error", async () => {
     await expect(async () => {

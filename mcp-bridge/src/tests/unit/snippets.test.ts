@@ -94,7 +94,8 @@ describe("fetchSnippetsForHits", () => {
     expect(mockFetchSnippetsInParallel).toHaveBeenCalled();
     const calls = mockFetchSnippetsInParallel.mock.calls as any;
     const requests = calls[calls.length - 1][0];
-    expect(requests.length).toBe(5);
+    // With server-provided snippets, only the top-context subset needs follow-up fetches.
+    expect(requests.length).toBe(2);
   });
 
   it("handles snippet fetch failures", async () => {

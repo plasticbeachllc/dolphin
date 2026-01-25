@@ -42,11 +42,31 @@ export async function fetchSnippetsForHits(params: {
   }> = [];
   const requestHitIndices: number[] = [];
 
-  for (let i = 0; i < hits.length && requests.length < snippetsTopN; i++) {
+  let snippetSlots = 0;
+  for (let i = 0; i < hits.length && snippetSlots < snippetsTopN; i++) {
     const h = hits[i];
     if (!h?.repo || !h?.path) continue;
     if (typeof h.start_line !== "number" || typeof h.end_line !== "number") continue;
-    const includeContext = requests.length < topContextN;
+
+    const includeContext = snippetSlots < topContextN;
+    snippetSlots++;
+
+    const existingSnippet = typeof h.snippet === "string" ? h.snippet : "";
+    const snippetStartLine =
+      typeof h.snippet_start_line === "number" ? h.snippet_start_line : h.start_line;
+    const snippetEndLine = typeof h.snippet_end_line === "number" ? h.snippet_end_line : h.end_line;
+    const hasContext = snippetStartLine < h.start_line || snippetEndLine > h.end_line;
+
+    // If the KB already returned a snippet, prefer it and avoid follow-up calls unless we explicitly
+    // need expanded context and the snippet does not include it.
+    if (existingSnippet) {
+      const needsExpandedContext = includeContext && (contextLinesBefore > 0 || contextLinesAfter > 0);
+      if (!needsExpandedContext || hasContext) {
+        snippetsByHitIndex.set(i, { snippet: existingSnippet, start: snippetStartLine, end: snippetEndLine });
+        continue;
+      }
+    }
+
     requests.push({
       repo: h.repo,
       path: h.path,

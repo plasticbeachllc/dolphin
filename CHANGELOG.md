@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Ignore pattern handling standardized to `.gitignore` semantics.
+- **Breaking**: KB REST API is now `/v1/*` only (legacy unversioned routes removed).
 
 ### Fixed
 

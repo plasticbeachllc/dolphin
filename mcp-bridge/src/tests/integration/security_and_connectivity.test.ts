@@ -80,20 +80,26 @@ describe("security and connectivity", () => {
     expect(res).toHaveProperty("content");
   });
 
-  it("respects timeout and cancellation signals", async () => {
+  it("rejects unsupported input fields with remediation", async () => {
     const { handler } = makeSearchKnowledge();
-
-    // Test with a very short deadline
     const res = await handler({
-      input: {
-        query: "test",
-        deadline_ms: 1, // Should trigger deadline handling
-      },
+      // @ts-expect-error - cursor is intentionally unsupported
+      input: { query: "test", cursor: "nope" },
     });
 
-    // The response should be handled gracefully even with timeouts
-    expect(res).toHaveProperty("isError");
-    expect(res).toHaveProperty("content");
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/remediation/i);
+    expect(res._meta?.error?.code).toBe("invalid_input");
+  });
+
+  it("supports cancellation via AbortSignal", async () => {
+    const { handler } = makeSearchKnowledge();
+    const controller = new AbortController();
+    controller.abort();
+
+    const res = await handler({ input: { query: "test" } }, controller.signal);
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/remediation/i);
   });
 
   it("prevents path traversal attacks", async () => {
