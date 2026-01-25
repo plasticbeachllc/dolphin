@@ -45,15 +45,7 @@ class KnowledgeSearchBackend:
         self.cache = cache
         self.hybrid_search_enabled = hybrid_search_enabled
         self.reranker = reranker
-
-        if config is None:
-            # Fallback to default config if not provided
-            # This ensures self.config is never None (for type checkers)
-            from ..config import KBConfig
-
-            config = KBConfig()
-
-        self.config: KBConfig = config
+        self.config = config
         self.graph_store = graph_store
         self._request_ann_config = None  # Per-request ANN configuration overrides
 
@@ -940,7 +932,7 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
 
     # Map default_embed_model if provided (CRITICAL FIX FOR OPTIONS B)
     if "default_embed_model" in kwargs:
-        embedding_data["default_embed_model"] = kwargs["default_embed_model"]
+         embedding_data["default_embed_model"] = kwargs["default_embed_model"]
 
     # Map cache_enabled
     if "cache_enabled" in kwargs:

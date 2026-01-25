@@ -60,9 +60,10 @@ def populated_backend(tmp_path: Path):
         store_root=tmp_path,
         embedding_provider_type="stub",
         hybrid_search_enabled=False,
+        default_embed_model="small",  # Set global config to match indexed data
     )
 
-    chunk_id, _ = _seed_test_data(backend)
+    chunk_id, _ = _seed_test_data(backend, embed_model="small")
     return backend, chunk_id
 
 
@@ -74,9 +75,10 @@ def populated_hybrid_backend(tmp_path: Path):
         store_root=tmp_path,
         embedding_provider_type="stub",
         hybrid_search_enabled=True,
+        default_embed_model="small",  # Set global config to match indexed data
     )
 
-    chunk_id, _ = _seed_test_data(backend)
+    chunk_id, _ = _seed_test_data(backend, embed_model="small")
     return backend, chunk_id
 
 
@@ -84,7 +86,8 @@ def test_vector_search_with_populated_data(populated_backend):
     """Verify vector search returns the seeded chunk without external state."""
 
     backend, chunk_id = populated_backend
-    request = SearchRequest(query="authentication", top_k=3, embed_model="small")
+    # No longer pass embed_model - uses global config
+    request = SearchRequest(query="authentication", top_k=3)
 
     results = backend.search(request)
 
@@ -97,7 +100,8 @@ def test_hybrid_search_comparison(populated_hybrid_backend):
 
     backend, chunk_id = populated_hybrid_backend
 
-    request = SearchRequest(query="authentication", top_k=5, embed_model="small")
+    # No longer pass embed_model - uses global config
+    request = SearchRequest(query="authentication", top_k=5)
 
     vector_only = backend
     vector_only.hybrid_search_enabled = False

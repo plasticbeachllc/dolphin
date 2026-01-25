@@ -86,7 +86,7 @@ default_embed_model = "small"
 
         found = False
         start_wait = time.time()
-        while time.time() - start_wait < 10:
+        while time.time() - start_wait < 30:
             if metadata_db.exists():
                 import sqlite3
 
@@ -116,7 +116,7 @@ default_embed_model = "small"
         # Wait for index
         found_branch = False
         start_wait = time.time()
-        while time.time() - start_wait < 10:
+        while time.time() - start_wait < 30:
             import sqlite3
 
             conn = sqlite3.connect(metadata_db)

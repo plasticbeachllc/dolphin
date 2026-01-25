@@ -315,7 +315,7 @@ class TestApiKeyMiddleware:
         assert req.repos is None
         assert req.top_k == 8
         assert req.max_snippet_tokens == 240
-        assert req.embed_model == "small"
+        # embed_model removed - now uses global config
 
     def test_search_request_with_all_fields(self):
         """Test SearchRequest with all fields."""
@@ -325,7 +325,6 @@ class TestApiKeyMiddleware:
             path_prefix=["src/"],
             top_k=20,
             max_snippet_tokens=500,
-            embed_model="small",
             score_cutoff=0.5,
         )
 
@@ -334,7 +333,7 @@ class TestApiKeyMiddleware:
         assert req.path_prefix == ["src/"]
         assert req.top_k == 20
         assert req.max_snippet_tokens == 500
-        assert req.embed_model == "small"
+        # embed_model removed - now uses global config
         assert req.score_cutoff == 0.5
 
 

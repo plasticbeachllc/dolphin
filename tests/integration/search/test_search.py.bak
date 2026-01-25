@@ -133,6 +133,7 @@ class TestSearchIntegration:
             repos=["specific-repo"],
             path_prefix=["docs/"],
             top_k=3,
+            embed_model="small",
         )
 
         from kb.api.app import search
@@ -263,6 +264,7 @@ class TestSearchIntegration:
             query="widget",
             repos=["repo1", "repo2", "repo3"],
             top_k=10,
+            embed_model="small",
         )
 
         from kb.api.app import search
@@ -350,6 +352,7 @@ class TestSearchPerformance:
                 query=f"query {i}",
                 repos=[f"repo-{i % 3}"],
                 top_k=5,
+                embed_model="small",
             )
             for i in range(10)
         ]

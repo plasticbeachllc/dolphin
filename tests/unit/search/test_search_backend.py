@@ -32,10 +32,13 @@ def mock_providers():
 
 
 @pytest.fixture
-def basic_backend(mock_providers):
+def basic_backend(mock_providers, tmp_path):
     """A basic backend with hybrid search enabled."""
     embedding_provider, lance_store, sql_store = mock_providers
-    return KnowledgeSearchBackend(embedding_provider, lance_store, sql_store, hybrid_search_enabled=True)
+    config = KBConfig.from_mapping(
+        {"storage": {"store_root": str(tmp_path)}, "embedding": {"default_embed_model": "small"}}
+    )
+    return KnowledgeSearchBackend(embedding_provider, lance_store, sql_store, hybrid_search_enabled=True, config=config)
 
 
 class TestKnowledgeSearchBackend:
@@ -73,7 +76,7 @@ class TestKnowledgeSearchBackend:
             }
         ]
 
-        request = SearchRequest(query="test", top_k=10, embed_model="small")
+        request = SearchRequest(query="test", top_k=10)
         results = basic_backend.search(request)
 
         expected_bm25_id = "1:2:small:hash2:1:10"
@@ -118,13 +121,13 @@ class TestKnowledgeSearchBackend:
         ]
 
         # Use low cutoff (0.0) to accept RRF scores (~0.016)
-        request = SearchRequest(query="test", score_cutoff=0.0, embed_model="small")
+        request = SearchRequest(query="test", score_cutoff=0.0)
         results = basic_backend.search(request)
 
         assert len(results) == 2  # Both should pass with RRF scores
 
         # Test high cutoff that filters out results
-        request_high_cutoff = SearchRequest(query="test", score_cutoff=0.5, embed_model="small")
+        request_high_cutoff = SearchRequest(query="test", score_cutoff=0.5)
         results_high = basic_backend.search(request_high_cutoff)
 
         # RRF scores (~0.016) should be below 0.5 cutoff, so no results
@@ -343,7 +346,7 @@ class TestSearchBackendIntegration:
             for row in fts_rows:
                 logging.info(f"  FTS content_id: {row[0]}, content: {row[1][:50]}...")
 
-        request = SearchRequest(query="test", top_k=5, embed_model="small")
+        request = SearchRequest(query="test", top_k=5)
         results = real_backend.search(request)
 
         logging.info(f"Test: Search returned {len(results)} results")

@@ -43,7 +43,8 @@ class TestCLIAddRepo:
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
 
-        result = runner.invoke(app, ["add-repo", "myrepo", str(repo_path), "--default-embed-model", "small"])
+        # No longer pass --default-embed-model, uses global config
+        result = runner.invoke(app, ["add-repo", "myrepo", str(repo_path)])
 
         assert result.exit_code == 0
 

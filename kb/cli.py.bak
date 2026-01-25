@@ -209,6 +209,7 @@ def _search_local(
             path_prefix=path_prefix,
             top_k=top_k,
             score_cutoff=score_cutoff,
+            embed_model=embed_model,
         )
 
         # Execute search
