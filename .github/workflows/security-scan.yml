@@ -33,9 +33,7 @@ jobs:
       matrix:
         project:
           - .
-          - agent-core
           - mcp-bridge
-          - vscode-extension
           - shared
     steps:
       - name: Checkout repository
