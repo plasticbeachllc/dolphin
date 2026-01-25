@@ -978,7 +978,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             )
             new_hashes = {c.text_hash for c in changed_chunks}
             skipped_occurrences = len(unchanged_chunks)
-            logger.info(
+            logger.debug(
                 f"File {filepath}: {len(changed_chunks)} changed, "
                 f"{len(unchanged_chunks)} unchanged, {len(new_hashes)} new hashes"
             )

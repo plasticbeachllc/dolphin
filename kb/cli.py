@@ -433,7 +433,7 @@ async def _watch_repo(repo_name: str) -> None:
         watcher = RepoWatcher(repo_name, config, pipeline)
         await watcher.watch()
     except Exception as e:
-        rprint(f"[red]Watcher failed: {e}[/red]")
+        _log.error("Watcher failed", error=e)
         sys.exit(1)
 
 
