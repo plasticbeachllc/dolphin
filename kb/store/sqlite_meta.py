@@ -1693,7 +1693,72 @@ class SQLiteMetadataStore:
         cur.execute("SELECT COUNT(*) FROM sessions WHERE repo_id = ?", (repo_id,))
         counts["sessions"] = cur.fetchone()[0]
 
+        if self._table_exists(cur, "file_snapshots"):
+            cur.execute("SELECT COUNT(*) FROM file_snapshots WHERE repo_id = ?", (repo_id,))
+            counts["file_snapshots"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "pending_changes"):
+            cur.execute("SELECT COUNT(*) FROM pending_changes WHERE repo_id = ?", (repo_id,))
+            counts["pending_changes"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "code_nodes"):
+            cur.execute("SELECT COUNT(*) FROM code_nodes WHERE repo_id = ?", (repo_id,))
+            counts["code_nodes"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "code_edges"):
+            cur.execute("SELECT COUNT(*) FROM code_edges WHERE repo_id = ?", (repo_id,))
+            counts["code_edges"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "node_aliases"):
+            cur.execute(
+                """
+                SELECT COUNT(*) FROM node_aliases
+                WHERE node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)
+            """,
+                (repo_id,),
+            )
+            counts["node_aliases"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "code_nodes_fts"):
+            cur.execute(
+                """
+                SELECT COUNT(*) FROM code_nodes_fts
+                WHERE node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)
+            """,
+                (repo_id,),
+            )
+            counts["code_nodes_fts"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "graph_metrics"):
+            cur.execute(
+                """
+                SELECT COUNT(*) FROM graph_metrics
+                WHERE node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)
+            """,
+                (repo_id,),
+            )
+            counts["graph_metrics"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "cross_repo_references"):
+            cur.execute("SELECT COUNT(*) FROM cross_repo_references WHERE source_repo_id = ?", (repo_id,))
+            counts["cross_repo_references"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "graph_snapshots"):
+            cur.execute("SELECT COUNT(*) FROM graph_snapshots WHERE repo_id = ?", (repo_id,))
+            counts["graph_snapshots"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "graph_cache_state"):
+            cur.execute("SELECT COUNT(*) FROM graph_cache_state WHERE repo_id = ?", (repo_id,))
+            counts["graph_cache_state"] = cur.fetchone()[0]
+
         return counts
+
+    def _table_exists(self, cur, table_name: str) -> bool:
+        cur.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?",
+            (table_name,),
+        )
+        return cur.fetchone() is not None
 
     def _cleanup_fts_entries_comprehensive(self, cur, repo_id: int, repo_name: str) -> dict:
         """Comprehensive FTS5 cleanup with multiple strategies."""
@@ -1757,6 +1822,84 @@ class SQLiteMetadataStore:
         cur.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
         return cur.rowcount
 
+    def _delete_file_snapshots_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "file_snapshots"):
+            return 0
+        cur.execute("DELETE FROM file_snapshots WHERE repo_id = ?", (repo_id,))
+        return cur.rowcount
+
+    def _delete_pending_changes_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "pending_changes"):
+            return 0
+        cur.execute("DELETE FROM pending_changes WHERE repo_id = ?", (repo_id,))
+        return cur.rowcount
+
+    def _delete_code_edges_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "code_edges"):
+            return 0
+        cur.execute("DELETE FROM code_edges WHERE repo_id = ?", (repo_id,))
+        return cur.rowcount
+
+    def _delete_node_aliases_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "node_aliases"):
+            return 0
+        cur.execute(
+            """
+            DELETE FROM node_aliases
+            WHERE node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)
+        """,
+            (repo_id,),
+        )
+        return cur.rowcount
+
+    def _delete_graph_metrics_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "graph_metrics"):
+            return 0
+        cur.execute(
+            """
+            DELETE FROM graph_metrics
+            WHERE node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)
+        """,
+            (repo_id,),
+        )
+        return cur.rowcount
+
+    def _delete_cross_repo_references_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "cross_repo_references"):
+            return 0
+        cur.execute("DELETE FROM cross_repo_references WHERE source_repo_id = ?", (repo_id,))
+        return cur.rowcount
+
+    def _delete_code_nodes_fts_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "code_nodes_fts"):
+            return 0
+        cur.execute(
+            """
+            DELETE FROM code_nodes_fts
+            WHERE node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)
+        """,
+            (repo_id,),
+        )
+        return cur.rowcount
+
+    def _delete_code_nodes_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "code_nodes"):
+            return 0
+        cur.execute("DELETE FROM code_nodes WHERE repo_id = ?", (repo_id,))
+        return cur.rowcount
+
+    def _delete_graph_snapshots_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "graph_snapshots"):
+            return 0
+        cur.execute("DELETE FROM graph_snapshots WHERE repo_id = ?", (repo_id,))
+        return cur.rowcount
+
+    def _delete_graph_cache_state_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "graph_cache_state"):
+            return 0
+        cur.execute("DELETE FROM graph_cache_state WHERE repo_id = ?", (repo_id,))
+        return cur.rowcount
+
     def _delete_sessions_by_repo(self, cur, repo_id: int) -> int:
         """Delete all sessions for a repository."""
         cur.execute("DELETE FROM sessions WHERE repo_id = ?", (repo_id,))
@@ -1815,13 +1958,29 @@ class SQLiteMetadataStore:
                 # 3. Chunk content (foreign key to files)
                 content_deleted = self._delete_chunk_content_by_repo(cur, repo_id)
 
-                # 4. Files (foreign key to repos)
+                # 4. Code graph data (foreign keys to repos/files/nodes)
+                code_edges_deleted = self._delete_code_edges_by_repo(cur, repo_id)
+                node_aliases_deleted = self._delete_node_aliases_by_repo(cur, repo_id)
+                graph_metrics_deleted = self._delete_graph_metrics_by_repo(cur, repo_id)
+                cross_repo_refs_deleted = self._delete_cross_repo_references_by_repo(cur, repo_id)
+                code_nodes_fts_deleted = self._delete_code_nodes_fts_by_repo(cur, repo_id)
+                code_nodes_deleted = self._delete_code_nodes_by_repo(cur, repo_id)
+
+                # 5. File sync data (foreign keys to files)
+                file_snapshots_deleted = self._delete_file_snapshots_by_repo(cur, repo_id)
+                pending_changes_deleted = self._delete_pending_changes_by_repo(cur, repo_id)
+
+                # 6. Graph intelligence metadata (foreign key to repos)
+                graph_snapshots_deleted = self._delete_graph_snapshots_by_repo(cur, repo_id)
+                graph_cache_state_deleted = self._delete_graph_cache_state_by_repo(cur, repo_id)
+
+                # 7. Files (foreign key to repos)
                 files_deleted = self._delete_files_by_repo(cur, repo_id)
 
-                # 5. Sessions (foreign key to repos)
+                # 8. Sessions (foreign key to repos)
                 sessions_deleted = self._delete_sessions_by_repo(cur, repo_id)
 
-                # 6. Repository registration
+                # 9. Repository registration
                 repo_deleted = self._delete_repo_registration(cur, repo_id)
 
                 # Validate cleanup was comprehensive
@@ -1844,6 +2003,16 @@ class SQLiteMetadataStore:
                 "fts5_entries": fts_cleanup_stats,
                 "locations_deleted": locations_deleted,
                 "content_deleted": content_deleted,
+                "code_edges_deleted": code_edges_deleted,
+                "node_aliases_deleted": node_aliases_deleted,
+                "graph_metrics_deleted": graph_metrics_deleted,
+                "cross_repo_refs_deleted": cross_repo_refs_deleted,
+                "code_nodes_fts_deleted": code_nodes_fts_deleted,
+                "code_nodes_deleted": code_nodes_deleted,
+                "file_snapshots_deleted": file_snapshots_deleted,
+                "pending_changes_deleted": pending_changes_deleted,
+                "graph_snapshots_deleted": graph_snapshots_deleted,
+                "graph_cache_state_deleted": graph_cache_state_deleted,
                 "files_deleted": files_deleted,
                 "sessions_deleted": sessions_deleted,
                 "repo_deleted": repo_deleted,

@@ -12,11 +12,12 @@ const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
 export function makeStoreInfo(): {
   definition: Tool;
+  inputSchema: typeof INPUT;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: any;
 } {
   const definition: Tool = {
-    name: "store.info",
+    name: "store_info",
     description: "Report vector store dims, namespaces, and counts.",
     inputSchema: INPUT_SCHEMA,
     annotations: {
@@ -46,7 +47,7 @@ export function makeStoreInfo(): {
       };
 
       const infoJson = "```json\n" + JSON.stringify(data) + "\n```";
-      await logInfo("store.info", "store.info success", {
+      await logInfo("store_info", "store_info success", {
         latency_ms: Date.now() - started,
       });
       return {
@@ -66,7 +67,7 @@ export function makeStoreInfo(): {
         e,
         "Ensure REST service is running on 127.0.0.1:7777."
       );
-      await logError("store.info", "store.info error", {
+      await logError("store_info", "store_info error", {
         error_code: toolError.code,
         message: toolError.message,
       });
@@ -90,5 +91,5 @@ export function makeStoreInfo(): {
     }
   };
 
-  return { definition, handler };
+  return { definition, inputSchema: INPUT, handler };
 }

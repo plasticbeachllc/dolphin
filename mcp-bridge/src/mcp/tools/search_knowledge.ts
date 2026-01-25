@@ -3,7 +3,12 @@ import { CONFIG } from "../../util/config.js";
 import { mimeFromLangOrPath } from "../../util/mime.js";
 import { logInfo, logError } from "../../util/logger.js";
 import type { RepoInfo } from "../../rest/client.js";
-import { parseSearchInput, resolveSearchOptions, SEARCH_INPUT_SCHEMA } from "../search/input.js";
+import {
+  parseSearchInput,
+  resolveSearchOptions,
+  SEARCH_INPUT,
+  SEARCH_INPUT_SCHEMA,
+} from "../search/input.js";
 import { buildSearchRequestBody, executeSearch } from "../search/rest.js";
 import { fetchSnippetsForHits } from "../search/snippets.js";
 import { getReposByName, transformHits } from "../search/transform.js";
@@ -21,6 +26,7 @@ import { normalizeToolError, formatToolErrorText } from "./error.js";
 
 export function makeSearchKnowledge(): {
   definition: Tool;
+  inputSchema: typeof SEARCH_INPUT;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: any;
 } {
@@ -197,5 +203,5 @@ export function makeSearchKnowledge(): {
     }
   };
 
-  return { definition, handler };
+  return { definition, inputSchema: SEARCH_INPUT, handler };
 }

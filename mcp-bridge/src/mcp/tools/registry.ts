@@ -1,4 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { ZodTypeAny } from "zod";
 import { makeSearchKnowledge } from "./search_knowledge.js";
 import { makeChunkGet } from "./chunk_get.js";
 import { makeFileLines } from "./file_lines.js";
@@ -10,6 +11,7 @@ import { TOOL_VERSION } from "./version.js";
 
 export interface ToolRegistration {
   definition: Tool;
+  inputSchema: ZodTypeAny;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: any;
   version: string;
@@ -33,6 +35,9 @@ export function validateTools(tools: ToolRegistration[]): ToolRegistration[] {
     }
     if (!tool.definition.inputSchema) {
       throw new Error(`Tool registry error: "${name}" missing input schema`);
+    }
+    if (!tool.inputSchema) {
+      throw new Error(`Tool registry error: "${name}" missing zod input schema`);
     }
     if (!tool.definition.annotations?.title) {
       throw new Error(`Tool registry error: "${name}" missing annotations.title`);

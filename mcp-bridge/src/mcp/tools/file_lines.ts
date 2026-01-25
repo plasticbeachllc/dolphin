@@ -8,7 +8,7 @@ import { TOOL_VERSION } from "./version.js";
 import { normalizeToolError, formatToolErrorText } from "./error.js";
 
 /**
- * file.lines tool analysis:
+ * file_lines tool analysis:
  * - Single request tool: fetches one file slice by repo/path/line range
  * - No parallelization needed: only makes one restGetFileSlice() call
  * - Performance is optimal: one request = one response
@@ -27,11 +27,12 @@ const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
 export function makeFileLines(): {
   definition: Tool;
+  inputSchema: typeof INPUT;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: any;
 } {
   const definition: Tool = {
-    name: "file.lines",
+    name: "file_lines",
     description:
       "Fetch a file slice [start, end] inclusive from disk and return fenced code with citation.",
     inputSchema: INPUT_SCHEMA,
@@ -69,7 +70,7 @@ export function makeFileLines(): {
         },
       ];
 
-      await logInfo("file.lines", "file.lines success", { latency_ms: Date.now() - started });
+      await logInfo("file_lines", "file_lines success", { latency_ms: Date.now() - started });
       return {
         content,
         isError: false,
@@ -84,7 +85,7 @@ export function makeFileLines(): {
         e,
         "Verify repo/path and line range."
       );
-      await logError("file.lines", "file.lines error", {
+      await logError("file_lines", "file_lines error", {
         error_code: toolError.code,
         message: toolError.message,
       });
@@ -108,5 +109,5 @@ export function makeFileLines(): {
     }
   };
 
-  return { definition, handler };
+  return { definition, inputSchema: INPUT, handler };
 }

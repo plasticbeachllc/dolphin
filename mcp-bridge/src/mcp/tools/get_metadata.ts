@@ -7,7 +7,7 @@ import { TOOL_VERSION } from "./version.js";
 import { normalizeToolError, formatToolErrorText } from "./error.js";
 
 /**
- * metadata.get tool analysis:
+ * metadata_get tool analysis:
  * - Single request tool: fetches metadata for one chunk by chunk_id
  * - No parallelization needed: only makes one restGetChunk() call
  * - Performance is optimal: one request = one response
@@ -20,11 +20,12 @@ const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
 export function makeGetMetadata(): {
   definition: Tool;
+  inputSchema: typeof INPUT;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: any;
 } {
   const definition: Tool = {
-    name: "metadata.get",
+    name: "metadata_get",
     description: "Fetch chunk metadata without content.",
     inputSchema: INPUT_SCHEMA,
     annotations: {
@@ -44,7 +45,7 @@ export function makeGetMetadata(): {
       // Drop content to keep response small
       const { content: _content, ...meta } = chunk;
       const metaJson = "```json\n" + JSON.stringify(meta) + "\n```";
-      await logInfo("metadata.get", "metadata.get success", { latency_ms: Date.now() - started });
+      await logInfo("metadata_get", "metadata_get success", { latency_ms: Date.now() - started });
       return {
         content: [
           { type: "text", text: "Metadata ready." },
@@ -62,7 +63,7 @@ export function makeGetMetadata(): {
         e,
         "Verify chunk_id or re-run search."
       );
-      await logError("metadata.get", "metadata.get error", {
+      await logError("metadata_get", "metadata_get error", {
         error_code: toolError.code,
         message: toolError.message,
       });
@@ -86,5 +87,5 @@ export function makeGetMetadata(): {
     }
   };
 
-  return { definition, handler };
+  return { definition, inputSchema: INPUT, handler };
 }

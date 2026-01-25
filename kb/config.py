@@ -24,10 +24,18 @@ USER_CONFIG_PATH = Path.home() / ".dolphin" / "config.toml"
 _TEMPLATE_PATH = Path(__file__).parent / "config_template.toml"
 
 
-def _to_path(value: Any) -> Path:
+def _to_path(value: Any, base_dir: Path | None = None) -> Path:
     if isinstance(value, Path):
-        return value.expanduser().resolve()
-    return Path(str(value)).expanduser().resolve()
+        path = value
+    else:
+        path = Path(str(value))
+
+    path = path.expanduser()
+
+    if base_dir and not path.is_absolute():
+        path = base_dir / path
+
+    return path.resolve()
 
 
 def _read_template() -> str:
@@ -295,7 +303,7 @@ class KBConfig:
         return config
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any]) -> KBConfig:
+    def from_mapping(cls, data: Mapping[str, Any], config_dir: Path | None = None) -> KBConfig:
         """Create a configuration object from a mapping, handling nested sections."""
 
         # Extract nested sections
@@ -323,7 +331,7 @@ class KBConfig:
         if storage_data and storage_data.get("store_root"):
             store_root_value = storage_data.get("store_root")
             if store_root_value is not None:
-                config_kwargs["store_root"] = _to_path(store_root_value)
+                config_kwargs["store_root"] = _to_path(store_root_value, base_dir=config_dir)
 
         # Handle server settings
         if server_data and server_data.get("endpoint"):

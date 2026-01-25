@@ -3,32 +3,7 @@
 [![PyPi Version](https://img.shields.io/pypi/v/pb-dolphin.svg)](https://pypi.org/project/pb-dolphin/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A semantic code search and knowledge management system for AI interfaces. This repository ships the Knowledge Bank (Python) and MCP server (TypeScript/Bun) as the stable, release-targeted components. The agent core and VSCode extension are experimental, under active development, and not part of the stable release scope.
-
-## Repository Layout & Tooling
-
-- **Python backend (Knowledge Bank)** (`kb/`)
-  - Tooling: `uv` (`pyproject.toml`, `uv.lock`)
-  - Commands: `uv run dolphin ...`, `uv run pytest ...`
-- **MCP bridge** (`mcp-bridge/`)
-  - Tooling: Bun (`package.json`, `bun.lock`)
-  - Commands: `cd mcp-bridge && bun install && bun test`
-- **Experimental: Agent core** (`agent-core/`)
-  - Tooling: Bun (`package.json`, `bun.lockb`)
-  - Commands: `cd agent-core && bun install && bun test`
-- **Experimental: VS Code extension** (`vscode-extension/`)
-  - Tooling: npm for the extension, Bun for the webview
-  - Commands:
-    - `cd vscode-extension && npm install && npm run compile`
-    - `cd vscode-extension/webview && bun install && bun run build`
-- **Shared telemetry/IPC** (`shared/`)
-  - Tooling: npm (`package.json`, `node_modules/`)
-  - Commands: `cd shared && npm install && npm test`
-
-At the repo root:
-
-- `package.json` acts as a workspace aggregator with convenience scripts (`npm run build:all`, `npm run lint:all`, `npm run format`).
-- Use `just` targets (`just test-all`, `just check`) for the canonical, cross-project workflows.
+A semantic code search and knowledge management system for AI interfaces. This repository ships the Knowledge Bank (Python) and MCP server (TypeScript/Bun) as the stable, release-targeted components.
 
 ## Quick Start
 
@@ -105,6 +80,23 @@ dolphin serve
           └─────────┘                └──────────┘
 ```
 
+### Repository Layout & Tooling
+
+- **Python backend (Knowledge Bank)** (`kb/`)
+  - Tooling: `uv` (`pyproject.toml`, `uv.lock`)
+  - Commands: `uv run dolphin ...`, `uv run pytest ...`
+- **MCP bridge** (`mcp-bridge/`)
+  - Tooling: Bun (`package.json`, `bun.lock`)
+  - Commands: `cd mcp-bridge && bun install && bun test`
+- **Shared telemetry/IPC** (`shared/`)
+  - Tooling: npm (`package.json`, `node_modules/`)
+  - Commands: `cd shared && npm install && npm test`
+
+At the repo root:
+
+- `package.json` acts as a workspace aggregator with convenience scripts (`npm run build:all`, `npm run lint:all`, `npm run format`).
+- Use `just` targets (`just test-all`, `just check`) for the canonical, cross-project workflows.
+
 ### Key Features
 
 - **Language-Aware Chunking** - Code parsing for Python, TypeScript, JavaScript, Markdown
@@ -159,7 +151,6 @@ Dolphin automatically manages a per-user KB API key for securing Knowledge Base 
 **Auto-Provisioning:**
 
 - Running `dolphin init` or `dolphin serve` automatically creates `~/.dolphin/kb_api_key`
-- The VS Code extension auto-provisions the key on first activation
 - The MCP bridge (`bunx dolphin-mcp`) auto-provisions the key on startup
 - The key is a 64-character hex string with file permissions set to `0600` (user-only)
 
@@ -206,57 +197,7 @@ Set `DOLPHIN_API_URL` if your KB server is not running at `http://127.0.0.1:7777
 
 MCP uses the `/v1` KB endpoints and includes the `X-API-Key` header automatically when the key is available. The key is auto-provisioned to `~/.dolphin/kb_api_key` by `dolphin init`, `dolphin serve`, and `bunx dolphin-mcp`.
 
-In experimental components (e.g., the VSCode extension), the KB server lifecycle is managed automatically.
-
 Available MCP tools: `search`, `chunk.get`, `file.lines`, `store.info`, `metadata.get`, `repos.list`, `health`
-
-## VSCode Extension (Experimental)
-
-Dolphin includes a VSCode extension that provides an AI coding assistant with semantic code search integration. It is experimental and not part of the stable release scope.
-
-### Features
-
-- **AI Chat Interface**: Interact with Claude AI directly in VSCode
-- **Knowledge Bank Integration**: Automatically searches your indexed codebase for context
-- **Dual Authentication**: Supports both Claude CLI (subscription) and API key modes
-- **Real-time Streaming**: See AI responses as they're generated
-- **Tool Call Visualization**: Monitor Knowledge Bank searches and other tool executions
-
-### Installation (Development)
-
-```bash
-# 1. Build the extension
-cd vscode-extension
-npm install
-npm run compile
-
-# 2. Build the webview
-cd webview
-bun install
-bun run build
-cd ../..
-
-# 3. Launch Extension Development Host
-# Open vscode-extension folder in VSCode and press F5
-```
-
-### Authentication
-
-The extension supports two authentication modes:
-
-**Option A: Claude CLI (No API Costs)**
-
-```bash
-npm install -g @anthropic-ai/claude-code
-claude
-# Select: "1. Claude account with subscription"
-```
-
-**Option B: API Key**
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-```
 
 ## REST API
 
@@ -326,7 +267,6 @@ uv run dolphin serve
 - ✅ REST API with MCP bridge available at `bunx dolphin-mcp`
 - ✅ Cross-encoder reranking support
 - ✅ Hybrid search (BM25 + Vector)
-- ⚠️ Agent core and VSCode extension are experimental and under active development
 
 **Upcoming**:
 
@@ -412,7 +352,6 @@ Current versions:
 
 - **Python Package (PyPI)**: [`0.2.0`](pyproject.toml:7) - `pb-dolphin`
 - **MCP Bridge (npm)**: [`0.2.0`](mcp-bridge/package.json:3) - `dolphin-mcp`
-- **Experimental: VSCode Extension**: [`0.1.0`](vscode-extension/package.json:5) - `dolphin`
 
 ### License
 
@@ -424,4 +363,66 @@ Built with [LanceDB](https://lancedb.com/), [OpenAI](https://openai.com/), [Fast
 
 ---
 
-**⚠️ Remember**: Knowledge Bank + MCP are release-candidate quality; experimental components remain under active development. Use at your own risk.
+## Experimental Components (WIP)
+
+The following components are under active development and not part of the stable release scope.
+
+### Agent Core
+
+- Location: `agent-core/`
+- Tooling: Bun (`bun.lockb`)
+- Commands: `cd agent-core && bun install && bun test`
+
+### VS Code Extension
+
+Current version: [`0.1.0`](vscode-extension/package.json:5) - `dolphin`
+
+Dolphin includes a VS Code extension that provides an AI coding assistant with Knowledge Bank integration.
+
+The extension manages the KB server lifecycle automatically.
+
+#### Features
+
+- **AI Chat Interface**: Interact with Claude AI directly in VS Code
+- **Knowledge Bank Integration**: Automatically searches your indexed codebase for context
+- **Dual Authentication**: Supports both Claude CLI (subscription) and API key modes
+- **Real-time Streaming**: See AI responses as they're generated
+- **Tool Call Visualization**: Monitor Knowledge Bank searches and other tool executions
+
+#### Installation (Development)
+
+```bash
+# 1. Build the extension
+cd vscode-extension
+npm install
+npm run compile
+
+# 2. Build the webview
+cd webview
+bun install
+bun run build
+cd ../..
+
+# 3. Launch Extension Development Host
+# Open vscode-extension folder in VS Code and press F5
+```
+
+#### Authentication
+
+The extension supports two authentication modes:
+
+**Option A: Claude CLI (No API Costs)**
+
+```bash
+npm install -g @anthropic-ai/claude-code
+claude
+# Select: "1. Claude account with subscription"
+```
+
+**Option B: API Key**
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+**⚠️ Note**: Knowledge Bank + MCP are release-candidate quality; experimental components remain under active development. Use at your own risk.
