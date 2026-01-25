@@ -80,7 +80,6 @@ describe("REST Client - Search", () => {
     expect(result).toBeDefined();
   });
 
-
   it("should handle repo not found error", async () => {
     await expect(async () => {
       await restSearch({

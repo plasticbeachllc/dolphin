@@ -579,9 +579,7 @@ class KnowledgeSearchBackend:
                     repo_id = repo_info["id"]
                     file_id = sql_store.get_file_id(repo_id, path)
                     if file_id:
-                        locations = sql_store.get_chunk_locations_by_identity(
-                            repo_id, file_id, text_hash, embed_model
-                        )
+                        locations = sql_store.get_chunk_locations_by_identity(repo_id, file_id, text_hash, embed_model)
 
             # If we found locations, create a result for each one
             if locations and repo_id is not None and file_id is not None:

@@ -60,9 +60,14 @@ export async function fetchSnippetsForHits(params: {
     // If the KB already returned a snippet, prefer it and avoid follow-up calls unless we explicitly
     // need expanded context and the snippet does not include it.
     if (existingSnippet) {
-      const needsExpandedContext = includeContext && (contextLinesBefore > 0 || contextLinesAfter > 0);
+      const needsExpandedContext =
+        includeContext && (contextLinesBefore > 0 || contextLinesAfter > 0);
       if (!needsExpandedContext || hasContext) {
-        snippetsByHitIndex.set(i, { snippet: existingSnippet, start: snippetStartLine, end: snippetEndLine });
+        snippetsByHitIndex.set(i, {
+          snippet: existingSnippet,
+          start: snippetStartLine,
+          end: snippetEndLine,
+        });
         continue;
       }
     }

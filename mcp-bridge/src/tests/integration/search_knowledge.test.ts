@@ -161,7 +161,6 @@ describe("search", () => {
     expect(res.isError).toBe(false);
   });
 
-
   it("server warnings are model-visible in summary text by default", async () => {
     const { handler } = makeSearchKnowledge();
     const res = await handler({
@@ -252,7 +251,6 @@ describe("search", () => {
     expect(res._meta?.error?.message).toBeDefined();
     expect(res._meta?.error?.remediation).toBeDefined();
   });
-
 
   it("embeddings_unavailable → isError=true with remediation", async () => {
     // This would require mock server to simulate embeddings unavailable error

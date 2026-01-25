@@ -132,7 +132,9 @@ async function handleRequest(req: Request): Promise<Response> {
     }
 
     const maxSnippets =
-      typeof max_snippets === "number" && Number.isFinite(max_snippets) ? Math.max(0, max_snippets) : 0;
+      typeof max_snippets === "number" && Number.isFinite(max_snippets)
+        ? Math.max(0, max_snippets)
+        : 0;
     const snippetLimit = maxSnippets;
     const applySnippetLimit = (hits: any[]) =>
       hits.map((hit, idx) => {

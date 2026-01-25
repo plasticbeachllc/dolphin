@@ -70,12 +70,16 @@ def init(
 
     # If creating fresh, let's ask for preference
     if created and sys.stdin is not None and sys.stdin.isatty():
-        model_choice = typer.prompt(
-            "Select default embedding model",
-            default="large",
-            show_choices=True,
-            type=str,
-        ).strip().lower()
+        model_choice = (
+            typer.prompt(
+                "Select default embedding model",
+                default="large",
+                show_choices=True,
+                type=str,
+            )
+            .strip()
+            .lower()
+        )
 
         if model_choice not in ("small", "large"):
             model_choice = "large"

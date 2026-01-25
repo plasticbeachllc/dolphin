@@ -29,6 +29,7 @@ Version 0.2.0 represents a complete Python backend.
   - Change tracking: `/v1/repos/{repo_name}/changes`, `/v1/repos/{repo_name}/pending-changes`, `/v1/repos/{repo_name}/changes/mark-processed`, `/v1/repos/{repo_name}/drift`
   - Admin: `/v1/admin/reload`, `/v1/admin/rebuild-fts5`
 - Major ingestion/indexing improvements for performance and correctness (async/parallel pipeline, dynamic pooling, branch tracking, and file-watching workflows).
+
 #### 📘 Documentation and Process
 
 - Standardized all testing guidance into the canonical `docs/TESTING.md`, consolidating backend/extension/MCP/observability instructions and adding a post-merge verification checklist to keep releases linted, tested, and reflected in the changelog.
