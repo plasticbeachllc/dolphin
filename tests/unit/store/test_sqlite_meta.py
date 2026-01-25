@@ -123,12 +123,20 @@ def test_get_chunk_locations_by_identity(meta_store, tmp_path):
     with meta_store._connect() as conn:
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO chunk_content (repo_id, file_id, text_hash, embed_model, id, first_indexed_at, last_indexed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            """
+            INSERT INTO chunk_content (
+                repo_id, file_id, text_hash, embed_model, id, first_indexed_at, last_indexed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
             (repo_id, file_id, text_hash, embed_model, "uuid-123", "2024-01-01", "2024-01-01"),
         )
         content_id = "uuid-123"
         cur.execute(
-            "INSERT INTO chunk_locations (content_id, start_line, end_line, symbol_name, symbol_path, symbol_kind, id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            """
+            INSERT INTO chunk_locations (
+                content_id, start_line, end_line, symbol_name, symbol_path, symbol_kind, id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
             (content_id, 1, 10, "test_func", "test.test_func", "function", "loc-123"),
         )
         conn.commit()
