@@ -26,9 +26,7 @@ def get_current_branch_state(repo_root: Path) -> BranchState:
     """
     try:
         commit_sha = (
-            subprocess.check_output(
-                ["git", "-C", str(repo_root), "rev-parse", "HEAD"], stderr=subprocess.STDOUT
-            )
+            subprocess.check_output(["git", "-C", str(repo_root), "rev-parse", "HEAD"], stderr=subprocess.STDOUT)
             .decode("utf-8")
             .strip()
         )

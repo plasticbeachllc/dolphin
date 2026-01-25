@@ -311,7 +311,8 @@ class IngestionPipeline:
         # Start session
         session_id = self.metadata.begin_session(repo_id, commit_sha, branch, embed_model)
 
-        # Build ignore set (merge config + security patterns)
+        # Build ignore patterns using shared utility (returns set, not PathSpec)
+        # For scan, we need the pattern set directly, not PathSpec
         extra_security = {
             "**/id_rsa",
             "**/*.pem",
@@ -754,26 +755,10 @@ class IngestionPipeline:
         # Initialize error logger (lazy file creation on first error)
         error_logger = ErrorLogger(root, str(session_id))
 
-        # Build ignore spec for incremental processing
-        extra_security = {
-            "**/id_rsa",
-            "**/*.pem",
-            "**/.aws/**",
-            "**/gcloud/**",
-            "**/secrets/**",
-            "**/*keys.json",
-            "**/*service_account.json",
-            "**/*auth.json",
-        }
-        ignore_patterns = build_ignore_set(self.config.ignore, self.config.ignore_exceptions)
-        repo_level_patterns, repo_level_exceptions = load_repo_ignores(root)
-        if repo_level_patterns:
-            ignore_patterns.update(repo_level_patterns)
-        # Apply repo-level exceptions
-        if repo_level_exceptions:
-            ignore_patterns = build_ignore_set(ignore_patterns, repo_level_exceptions)
-        ignore_patterns.update(extra_security)
-        ignore_spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
+        # Build ignore spec using shared utility
+        from ..ignores import build_ignore_pathspec
+
+        ignore_spec = build_ignore_pathspec(self.config.ignore, self.config.ignore_exceptions, root)
 
         # Determine changed files list
         if full_reindex or last_success is None:

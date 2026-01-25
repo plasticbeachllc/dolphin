@@ -10,7 +10,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 import uvicorn
@@ -351,11 +351,10 @@ def reset_all(
 def serve(
     host: Annotated[str, typer.Option("--host", help="Host to bind to")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", help="Port to bind to")] = 7777,
-    watch: Annotated[Optional[list[str]], typer.Option("--watch", help="Repositories to watch")] = None,
+    watch: Annotated[list[str] | None, typer.Option("--watch", help="Repositories to watch")] = None,
 ) -> None:
     """Start the dolphin API server."""
-    import uvicorn
-    
+
     # Configure watcher environment variables BEFORE starting uvicorn
     if watch:
         repo_list = [r for r in watch if r.strip()]
@@ -372,23 +371,28 @@ def serve(
 async def _watch_repo(repo_name: str) -> None:
     """Async implementation of watch command."""
     try:
-        from kb.ingest.watcher import RepoWatcher
         from kb.config import load_config
-        from kb.store import LanceDBStore, SQLiteMetadataStore
         from kb.ingest.pipeline import IngestionPipeline
+        from kb.ingest.watcher import RepoWatcher
+        from kb.store import LanceDBStore, SQLiteMetadataStore
         from kb.store.graph_store import GraphStore
-        
+
         config = load_config()
-        # Initialize pipeline fully for standalone watcher
-        lancedb = LanceDBStore(config)
-        metadata = SQLiteMetadataStore(config)
+
+        # Construct proper paths for store initialization
+        store_root = config.resolved_store_root()
+        lancedb_path = store_root / "lancedb"
+        metadata_path = store_root / "metadata.db"
+
+        # Initialize stores with proper paths
+        lancedb = LanceDBStore(lancedb_path)
+        metadata = SQLiteMetadataStore(metadata_path)
+
+        # Initialize pipeline
         pipeline = IngestionPipeline(
-            config=config,
-            lancedb=lancedb,
-            metadata=metadata,
-            graph_store=GraphStore(metadata.db_path)
+            config=config, lancedb=lancedb, metadata=metadata, graph_store=GraphStore(metadata_path)
         )
-        
+
         watcher = RepoWatcher(repo_name, config, pipeline)
         await watcher.watch()
     except Exception as e:

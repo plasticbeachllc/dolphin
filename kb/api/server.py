@@ -137,7 +137,7 @@ async def lifespan_handler(app_instance: FastAPI):
 
     # Startup is handled by module-level initialization (line 95-96)
     # This keeps existing behavior where backend is ready before uvicorn starts
-    
+
     # Start watchers if configured
     watch_tasks = []
     watch_repos = os.environ.get("DOLPHIN_WATCH_REPOS")
@@ -147,6 +147,7 @@ async def lifespan_handler(app_instance: FastAPI):
             print(f"👀 Starting watchers for repositories: {', '.join(repo_names)}", file=sys.stderr)
             try:
                 from ..ingest.watcher import RepoWatcher
+
                 pipeline = get_pipeline()
                 if pipeline:
                     config = load_config()
@@ -173,7 +174,7 @@ async def lifespan_handler(app_instance: FastAPI):
             task.cancel()
         try:
             await asyncio.wait(watch_tasks, timeout=5.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             print("⚠️  Watchers did not stop gracefully", file=sys.stderr)
         except Exception as e:
             print(f"⚠️  Error stopping watchers: {e}", file=sys.stderr)
