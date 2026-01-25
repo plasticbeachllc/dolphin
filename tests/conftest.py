@@ -414,6 +414,7 @@ def pytest_configure(config):
         "markers",
         "integration: mark test as an integration test (uses real dependencies)",
     )
+    config.addinivalue_line("markers", "e2e: mark test as an end-to-end test")
 
 
 @pytest.fixture(scope="session", autouse=True)

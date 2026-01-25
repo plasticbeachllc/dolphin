@@ -320,7 +320,7 @@ class TestPipelineProcessFiles:
         from kb.ingest.error_logging import ErrorLogger
 
         error_logger = ErrorLogger(repo_path, str(session_id))
-        ignore_spec = PathSpec.from_lines("gitwildmatch", [])
+        ignore_spec = PathSpec.from_lines("gitignore", [])
 
         stats = pipeline.process_files(
             repo_id=repo_id,
@@ -349,7 +349,7 @@ class TestPipelineProcessFiles:
         from kb.ingest.error_logging import ErrorLogger
 
         error_logger = ErrorLogger(repo_path, str(session_id))
-        ignore_spec = PathSpec.from_lines("gitwildmatch", ["*.py"])  # Ignore all .py
+        ignore_spec = PathSpec.from_lines("gitignore", ["*.py"])  # Ignore all .py
 
         stats = pipeline.process_files(
             repo_id=repo_id,
@@ -376,7 +376,7 @@ class TestPipelineProcessFiles:
         from kb.ingest.error_logging import ErrorLogger
 
         error_logger = ErrorLogger(repo_path, str(session_id))
-        ignore_spec = PathSpec.from_lines("gitwildmatch", [])
+        ignore_spec = PathSpec.from_lines("gitignore", [])
 
         stats = pipeline.process_files(
             repo_id=repo_id,

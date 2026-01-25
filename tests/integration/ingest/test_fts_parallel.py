@@ -33,7 +33,9 @@ def pipeline_with_fts(tmp_path: Path) -> IngestionPipeline:
             return [[0.1] * 1536 for _ in texts]
 
     set_default_provider(MockProvider())
-    return IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+    yield IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+    # Reset default provider to stub
+    set_default_provider(EmbeddingProvider())
 
 
 @pytest.fixture

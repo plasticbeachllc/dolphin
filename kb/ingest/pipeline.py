@@ -993,7 +993,7 @@ class IngestionPipeline:
             deleted_files = git_changed_files_deleted(root, last_success, commit_sha)
 
             # Filter ignored files from changed list
-            ignore_spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
+            ignore_spec = PathSpec.from_lines("gitignore", ignore_patterns)
             changed_files = [f for f in changed_files if not ignore_spec.match_file(f)]
 
         return (
