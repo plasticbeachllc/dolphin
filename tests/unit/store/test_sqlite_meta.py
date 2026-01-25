@@ -148,4 +148,3 @@ def test_get_chunk_locations_by_identity(meta_store, tmp_path):
     assert locations[0]["start_line"] == 1
     assert locations[0]["end_line"] == 10
     assert locations[0]["symbol_name"] == "test_func"
-
