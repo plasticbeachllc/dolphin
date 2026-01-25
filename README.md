@@ -21,7 +21,6 @@ export OPENAI_API_KEY="sk-your-key-here"
 
 The accompanying [MCP server](#mcp-configuration) is available at `bunx dolphin-mcp`.
 
-
 #### Optional: Cross-Encoder Reranking (~2GB additional)
 
 For advanced search quality improvement (+20-30% MRR):
