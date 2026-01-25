@@ -1,7 +1,7 @@
 """Integration tests for search functionality."""
 
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
@@ -94,20 +94,17 @@ class TestSearchIntegration:
         response = await search(request)
 
         # Verify response structure
-        # Verify response structure
         assert "hits" in response
         assert "meta" in response
-
-        meta = cast(dict[str, Any], response["meta"])
-        assert meta["top_k"] == 5
-        assert meta["model"] == "small"
+        assert response["meta"]["top_k"] == 5
+        assert response["meta"]["model"] == "small"
 
         # Verify search results
-        hits = cast(list[dict[str, Any]], response["hits"])
+        hits = response["hits"]
         assert len(hits) == 1
         assert hits[0]["path"] == "src/widgets.py"
         assert hits[0]["language"] == "python"
-        assert "Widget" in str(hits[0]["text"])
+        assert "Widget" in hits[0]["text"]
 
     @pytest.mark.asyncio
     async def test_search_with_filters(
@@ -136,6 +133,7 @@ class TestSearchIntegration:
             repos=["specific-repo"],
             path_prefix=["docs/"],
             top_k=3,
+            
         )
 
         from kb.api.app import search
@@ -143,7 +141,7 @@ class TestSearchIntegration:
         response = await search(request)
 
         # Verify response
-        hits = cast(list[dict[str, Any]], response["hits"])
+        hits = response["hits"]
         assert len(hits) == 1
         assert hits[0]["path"] == "docs/overview.md"
         assert hits[0]["language"] == "markdown"
@@ -177,10 +175,8 @@ class TestSearchIntegration:
         response = await search(request)
 
         # Verify empty results
-        hits = cast(list[dict[str, Any]], response["hits"])
-        meta = cast(dict[str, Any], response["meta"])
-        assert len(hits) == 0
-        assert meta["top_k"] == 5
+        assert len(response["hits"]) == 0
+        assert response["meta"]["top_k"] == 5
 
     @pytest.mark.asyncio
     async def test_search_latency_measurement(
@@ -211,9 +207,8 @@ class TestSearchIntegration:
         response = await search(request)
 
         # Verify latency measurement
-        meta = cast(dict[str, Any], response["meta"])
-        assert "latency_ms" in meta
-        latency = meta["latency_ms"]
+        assert "latency_ms" in response["meta"]
+        latency = response["meta"]["latency_ms"]
         assert isinstance(latency, int)
         assert latency >= 0
 
@@ -269,6 +264,7 @@ class TestSearchIntegration:
             query="widget",
             repos=["repo1", "repo2", "repo3"],
             top_k=10,
+            
         )
 
         from kb.api.app import search
@@ -321,8 +317,7 @@ class TestSearchPerformance:
 
         # Verify response time is reasonable (under 100ms for mock)
         assert response_time_ms < 100
-        meta = cast(dict[str, Any], response["meta"])
-        assert meta["latency_ms"] < 100
+        assert response["meta"]["latency_ms"] < 100
 
     @pytest.mark.asyncio
     async def test_search_concurrent_requests(
@@ -357,6 +352,7 @@ class TestSearchPerformance:
                 query=f"query {i}",
                 repos=[f"repo-{i % 3}"],
                 top_k=5,
+                
             )
             for i in range(10)
         ]

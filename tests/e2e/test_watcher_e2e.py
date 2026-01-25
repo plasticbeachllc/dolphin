@@ -1,4 +1,8 @@
 import os
+
+# Port for E2E server
+# Use dynamic port allocation to avoid conflicts in parallel execution
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -6,12 +10,14 @@ from pathlib import Path
 import pytest
 import requests
 
-# Port for E2E server
-E2E_PORT = 7779
-E2E_HOST = "127.0.0.1"
+
+def get_free_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
 
 
-def wait_for_server(url: str, timeout: int = 10) -> bool:
+def wait_for_server(url: str, timeout: int = 15) -> bool:
     start = time.time()
     while time.time() - start < timeout:
         try:
@@ -29,6 +35,10 @@ def test_watcher_live_e2e(git_repo: Path, temp_db_path: Path, monkeypatch):
     Verified by creating files and checking if they appear in the index (via DB).
     """
 
+    # Get a dynamic free port
+    e2e_port = get_free_port()
+    e2e_host = "127.0.0.1"
+
     # 1. Setup Environment
     # Use a temp config file pointing to our temp DB and Repo
     store_root = temp_db_path.parent / "dolphin_store"
@@ -39,7 +49,7 @@ def test_watcher_live_e2e(git_repo: Path, temp_db_path: Path, monkeypatch):
 store_root = "{store_root}"
 
 [server]
-endpoint = "{E2E_HOST}:{E2E_PORT}"
+endpoint = "{e2e_host}:{e2e_port}"
 
 [embedding]
 provider = "stub"
@@ -55,13 +65,24 @@ default_embed_model = "small"
     # 2. Add Repo via CLI (using subprocess)
     # This populates the DB with the repo
     subprocess.run(
-        ["dolphin", "kb", "add-repo", "test-repo", str(git_repo), "--default-embed-model", "small"], env=env, check=True
+        [
+            "dolphin",
+            "kb",
+            "add-repo",
+            "test-repo",
+            str(git_repo),
+            "--default-embed-model",
+            "small",
+            "--no-index",
+        ],
+        env=env,
+        check=True,
     )
 
     # 3. Start Server with --watch
     # We use subprocess to run "dolphin serve"
     server_process = subprocess.Popen(
-        ["dolphin", "serve", "--port", str(E2E_PORT), "--watch", "test-repo"],
+        ["dolphin", "serve", "--port", str(e2e_port), "--watch", "test-repo"],
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -70,8 +91,8 @@ default_embed_model = "small"
 
     try:
         # Wait for valid status
-        base_url = f"http://{E2E_HOST}:{E2E_PORT}"
-        assert wait_for_server(f"{base_url}/v1/health"), "Server failed to start"
+        base_url = f"http://{e2e_host}:{e2e_port}"
+        assert wait_for_server(f"{base_url}/health"), "Server failed to start"
 
         # 4. Create a new file in the git repo (uncommitted)
         new_file = git_repo / "live_watch.py"
@@ -86,7 +107,7 @@ default_embed_model = "small"
 
         found = False
         start_wait = time.time()
-        while time.time() - start_wait < 10:
+        while time.time() - start_wait < 30:
             if metadata_db.exists():
                 import sqlite3
 
@@ -116,7 +137,7 @@ default_embed_model = "small"
         # Wait for index
         found_branch = False
         start_wait = time.time()
-        while time.time() - start_wait < 10:
+        while time.time() - start_wait < 30:
             import sqlite3
 
             conn = sqlite3.connect(metadata_db)

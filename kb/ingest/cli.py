@@ -1,6 +1,7 @@
 # from __future__ import annotations
 import asyncio
 import os
+import sys
 from pathlib import Path
 from typing import cast
 
@@ -54,12 +55,47 @@ def init(
     target = config_path or DEFAULT_CONFIG_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
     created = False
+
+    # Load existing or template content
     if target.exists():
         typer.echo(f"Config already exists at {target}")
+        config_content = target.read_text(encoding="utf-8")
     else:
-        target.write_text(_read_config_template(), encoding="utf-8")
-        typer.echo(f"Created knowledge store config at {target}")
+        config_content = _read_config_template()
         created = True
+
+    # Prompt for default embedding model if we are creating new or purely interactive
+    # (Simple approach: we just append/replace the setting in the TOML string?
+    #  Or we just guide the user. For a robust CLI, let's just write the file first.)
+
+    # If creating fresh, let's ask for preference
+    if created and sys.stdin is not None and sys.stdin.isatty():
+        model_choice = (
+            typer.prompt("Select default embedding model", default="large", show_choices=True, type=str).strip().lower()
+        )
+
+        if model_choice not in ("small", "large"):
+            model_choice = "large"
+            typer.echo("Invalid choice, defaulting to 'large'.")
+
+        # Patch the template string before writing
+        # We assume the template has `default_embed_model = "large"` or similar
+        # A simple replace works for the template
+        if 'default_embed_model = "large"' in config_content:
+            config_content = config_content.replace(
+                'default_embed_model = "large"', f'default_embed_model = "{model_choice}"'
+            )
+        elif 'default_embed_model = "small"' in config_content:
+            config_content = config_content.replace(
+                'default_embed_model = "small"', f'default_embed_model = "{model_choice}"'
+            )
+
+        target.write_text(config_content, encoding="utf-8")
+        typer.echo(f"Created knowledge store config at {target}")
+    elif created:
+        # Non-interactive, write default
+        target.write_text(config_content, encoding="utf-8")
+        typer.echo(f"Created knowledge store config at {target}")
 
     # Load config and initialize storage backends.
     config = load_config(target)
@@ -85,33 +121,40 @@ def add_repo(
     name: str = typer.Argument(..., help="Logical name for the repository."),
     path: Path = typer.Argument(..., help="Absolute path to the repository root."),
     default_embed_model: str = typer.Option(
-        "large",
-        "--default-embed-model",
-        help="Default embedding model for the Repo (small|large).",
+        None, "--default-embed-model", help="Default embedding model (small|large)."
     ),
+    no_index: bool = typer.Option(False, "--no-index", help="Skip indexing prompt."),
 ) -> None:
     """Register or update a repository in the metadata store."""
-    model = default_embed_model.strip().lower()
-    if model not in {"small", "large"}:
-        typer.echo("Error: --default-embed-model must be 'small' or 'large'.")
-        raise typer.Exit(code=2)
-
     repo_path = path.expanduser().resolve()
     if not repo_path.exists() or not repo_path.is_dir():
         typer.echo(f"Error: path does not exist or is not a directory: {repo_path}")
         raise typer.Exit(code=2)
 
     config = load_config()
+
+    # Use provided model or fall back to global default
+    if default_embed_model:
+        model = default_embed_model.strip().lower()
+        if model not in {"small", "large"}:
+            typer.echo("Error: --default-embed-model must be 'small' or 'large'.")
+            raise typer.Exit(code=2)
+    else:
+        model = config.default_embed_model
+
     metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
     metadata.initialize()
     metadata.record_repo(name=name, path=repo_path, default_embed_model=model)
 
-    typer.echo(f"Repository registered: name='{name}', path='{repo_path}', default_embed_model='{model}'")
+    typer.echo(f"Repository registered: name='{name}', path='{repo_path}'")
 
-    # Only prompt for indexing in interactive mode (skip in tests)
+    # Note: We rely on 'kb index' to handle any model mismatch if this was an update
+    # to an existing repo that had a different model.
+
+    # Only prompt for indexing in interactive mode (skip in tests or if --no-index)
     import sys
 
-    if sys.stdin is not None and sys.stdin.isatty():
+    if not no_index and sys.stdin is not None and sys.stdin.isatty():
         if typer.confirm(f"Do you want to index '{name}' now?", default=False):
             typer.echo(f"Starting index for {name}...")
             pipeline = _build_pipeline(config)
@@ -568,7 +611,6 @@ def search(
     path_prefix: list[str] | None = typer.Option(None, "--path", "-p", help="Filter by path prefix."),
     top_k: int = typer.Option(8, "--top-k", "-k", help="Number of results to return."),
     score_cutoff: float = typer.Option(0.0, "--score-cutoff", "-s", help="Minimum similarity score."),
-    embed_model: str = typer.Option("large", "--embed-model", "-m", help="Embedding model to use (small|large)."),
     show_content: bool = typer.Option(False, "--show-content", "-c", help="Display code snippets."),
 ) -> None:
     """Search indexed code semantically (local backend).
@@ -588,6 +630,7 @@ def search(
         backend = create_search_backend(
             store_root=config.resolved_store_root(),
             embedding_provider_type=config.embedding_provider,
+            default_embed_model=config.default_embed_model,
             hybrid_search_enabled=True,
         )
 
@@ -598,7 +641,6 @@ def search(
             path_prefix=path_prefix,
             top_k=top_k,
             score_cutoff=score_cutoff,
-            embed_model=embed_model,
         )
 
         # Execute search

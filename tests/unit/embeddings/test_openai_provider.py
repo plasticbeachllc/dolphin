@@ -216,8 +216,8 @@ class TestIntegration:
     @pytest.mark.integration
     @pytest.mark.slow
     @pytest.mark.skipif(
-        not (os.environ.get("DOLPHIN_RUN_REAL_OPENAI") == "1" and os.environ.get("OPENAI_API_KEY")),
-        reason="Set DOLPHIN_RUN_REAL_OPENAI=1 and OPENAI_API_KEY to run real OpenAI integration test",
+        not (os.environ.get("DOLPHIN_TEST_FULL") == "1" and os.environ.get("OPENAI_API_KEY")),
+        reason="Set DOLPHIN_TEST_FULL=1 and OPENAI_API_KEY to run real OpenAI integration test",
     )
     def test_real_openai_api(self):
         """Test real OpenAI API call (requires valid API key)."""

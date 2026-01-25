@@ -1481,6 +1481,67 @@ class SQLiteMetadataStore:
                 "symbol_path": row[11],
             }
 
+    def get_chunk_locations_by_identity(
+        self,
+        repo_id: int,
+        file_id: int,
+        text_hash: str,
+        embed_model: str,
+    ) -> list[dict[str, Any]]:
+        """Get all locations for a chunk content identity."""
+
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            # We fetch all locations for the text_hash, regardless of embed_model,
+            # so we can fall back to other models if the requested one is missing.
+            cur.execute(
+                """
+                SELECT
+                    cl.content_id,
+                    cl.start_line,
+                    cl.end_line,
+                    cl.symbol_kind,
+                    cl.symbol_name,
+                    cl.symbol_path,
+                    cc.embed_model
+                FROM chunk_locations cl
+                JOIN chunk_content cc ON cl.content_id = cc.id
+                WHERE cc.repo_id = ? AND cc.file_id = ? AND cc.text_hash = ?
+                ORDER BY cl.start_line ASC
+                """,
+                (repo_id, file_id, text_hash),
+            )
+
+            # Group locations by embed_model
+            locations_by_model: dict[str, list[dict[str, Any]]] = {}
+            for row in cur.fetchall():
+                model = row[6]
+                if model not in locations_by_model:
+                    locations_by_model[model] = []
+
+                locations_by_model[model].append(
+                    {
+                        "content_id": str(row[0]),
+                        "start_line": int(row[1]) if row[1] is not None else None,
+                        "end_line": int(row[2]) if row[2] is not None else None,
+                        "symbol_kind": row[3],
+                        "symbol_name": row[4],
+                        "symbol_path": row[5],
+                        "embed_model": model,
+                    }
+                )
+
+            # Prefer the requested model, otherwise fall back to any available model
+            if embed_model in locations_by_model:
+                return locations_by_model[embed_model]
+
+            # Fallback: return the first available model's locations
+            # (sorting keys to be deterministic)
+            sorted_models = sorted(locations_by_model.keys())
+            if sorted_models:
+                return locations_by_model[sorted_models[0]]
+
+            return []
+
     def get_chunk_by_content_identity(
         self,
         repo_id: int,

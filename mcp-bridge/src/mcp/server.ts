@@ -44,7 +44,7 @@ export async function createServer(): Promise<void> {
       {
         title: tool.definition.annotations?.title,
         description: tool.definition.description,
-        inputSchema: tool.definition.inputSchema ?? {},
+        inputSchema: tool.inputSchema ?? {},
 
         annotations: tool.definition.annotations,
       },
