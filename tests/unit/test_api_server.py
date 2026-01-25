@@ -2,8 +2,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from kb.api.app import get_search_backend, reset_search_backend
-from kb.api.app import reset_pipeline, reset_stores
+from kb.api.app import get_search_backend, reset_pipeline, reset_search_backend, reset_stores
 from kb.api.server import initialize_search_backend
 from kb.config import KBConfig
 
