@@ -46,6 +46,7 @@ dependencies = [
     "pyyaml",
     "python-dotenv",
     "sqlite-utils",
+    "watchfiles>=0.21.0",
     # Graph intelligence dependencies (Phase 1)
     "networkx>=3.2",
     "python-louvain>=0.16",

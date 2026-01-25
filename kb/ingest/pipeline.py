@@ -372,106 +372,37 @@ class IngestionPipeline:
         result = self.scan(repo_name, dry_run=dry_run)
         print(f"Scan complete for {repo_name}: files_kept={result['files_kept']}, session={result['session_id']}")
 
-    def index(
+    def process_files(
         self,
+        repo_id: int,
         repo_name: str,
-        *,
-        dry_run: bool = False,
-        force: bool = False,
-        full_reindex: bool = False,
-    ) -> dict[str, Any]:
-        """Perform full indexing pipeline for the named repository.
-
-        This method implements the Phase 6 indexing pipeline:
-        - Git diff gating for incremental indexing
-        - Content hashing and deduplication
-        - Embedding only new unique content
-        - Metadata and vector persistence
-        - Error handling and logging
-
-        Args:
-            repo_name: Name of the repository to index
-            dry_run: If True, don't persist changes
-            force: If True, skip clean working tree check
-            full_reindex: If True, drop existing index and process all files
-
-        Returns:
-            Dictionary with session summary and counters
-        """
-        # Resolve repo and Git state
-        repo = self.metadata.get_repo_by_name(repo_name)
-        if not repo:
-            raise ValueError(f"Repository not registered: {repo_name}")
-
-        repo_id = int(repo["id"])
-        root = Path(repo["root_path"])
-        embed_model = str(repo.get("default_embed_model", self.config.default_embed_model))
-        # Validate embed model early
-        from ..embeddings.provider import SUPPORTED_MODELS
-
-        if embed_model not in SUPPORTED_MODELS:
-            raise ValueError(f"Unsupported embed model configured for repo {repo_name}: {embed_model}")
-
-        # Ensure clean working tree and capture provenance (unless forced)
-        if not force:
-            self._ensure_clean_working_tree(root)
-        else:
-            print(f"Warning: force=True, skipping clean working tree check for {repo_name}")
-
-        commit_sha = self._git(root, "rev-parse", "HEAD").strip()
-        branch = self._git(root, "rev-parse", "--abbrev-ref", "HEAD").strip()
-
-        # Drop existing index if full_reindex is requested
-        if full_reindex and not dry_run:
-            print(f"Full reindex requested: dropping existing index for {repo_name}...")
-            self._drop_repo_index(repo_id, repo_name)
-
-        # Get last successful commit
-        last_success = self.metadata.get_last_successful_commit(repo_id)
-
-        # Start session
-        session_id = self.metadata.begin_session(repo_id, commit_sha, branch, embed_model)
-
-        # Initialize error logger (lazy file creation on first error)
-        error_logger = ErrorLogger(root, str(session_id))
-
-        # Build ignore spec for incremental processing
-        extra_security = {
-            "**/id_rsa",
-            "**/*.pem",
-            "**/.aws/**",
-            "**/gcloud/**",
-            "**/secrets/**",
-            "**/*keys.json",
-            "**/*service_account.json",
-            "**/*auth.json",
+        root: Path,
+        files: list[str],
+        ignore_spec: PathSpec,
+        embed_model: str,
+        session_id: int,
+        commit_sha: str,
+        branch: str,
+        dry_run: bool,
+        error_logger: ErrorLogger,
+    ) -> dict[str, int]:
+        """Process a list of modified or added files."""
+        stats = {
+            "files_done": 0,
+            "chunks_indexed": 0,
+            "chunks_skipped": 0,
+            "vectors_written": 0,
+            "chunks_pruned": 0,
+            "graph_nodes_created": 0,
+            "graph_edges_created": 0,
         }
-        ignore_patterns = build_ignore_set(self.config.ignore, self.config.ignore_exceptions)
-        repo_level_patterns, repo_level_exceptions = load_repo_ignores(root)
-        if repo_level_patterns:
-            ignore_patterns.update(repo_level_patterns)
-        # Apply repo-level exceptions
-        if repo_level_exceptions:
-            ignore_patterns = build_ignore_set(ignore_patterns, repo_level_exceptions)
-        ignore_patterns.update(extra_security)
-        ignore_spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
 
-        # Determine changed files list
-        if full_reindex or last_success is None:
-            print(f"Full reindex mode: processing all tracked files for {repo_name}")
-            changed_files = get_all_tracked_files(root)
-            deleted_files = []
-        else:
-            print(f"Incremental mode: processing files changed since {last_success[:8]}")
-            changed_files = git_changed_files_modified_added(root, last_success, commit_sha)
-            deleted_files = git_changed_files_deleted(root, last_success, commit_sha)
+        # Lazy load config
+        from ..chunkers.repo_config import load_repo_chunking_config
 
-        # Initialize counters
-        files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
-        graph_nodes_created = graph_edges_created = 0
+        repo_config = load_repo_chunking_config(root)
 
-        # Process modified/added files
-        for path in changed_files:
+        for path in files:
             try:
                 if ignore_spec.match_file(path):
                     print(f"  {path}: skipped (ignored pattern)")
@@ -486,9 +417,10 @@ class IngestionPipeline:
                                     current_hashes=set(),
                                 )
                                 if pruned:
-                                    chunks_pruned += pruned
+                                    stats["chunks_pruned"] += pruned
                                 self.lancedb.prune_file_rows(repo_name, path, model=model_name)
                     continue
+
                 # Skip binary files and files that don't exist
                 file_path = root / path
                 if not file_path.exists() or file_path.is_dir():
@@ -512,10 +444,6 @@ class IngestionPipeline:
                     error_logger.log_file_error(path, e)
                     print(f"Error reading {path}: {e}")
                     continue
-
-                from ..chunkers.repo_config import load_repo_chunking_config
-
-                repo_config = load_repo_chunking_config(root)
 
                 chunks = chunk_file_with_config(
                     abs_path=file_path,
@@ -544,8 +472,8 @@ class IngestionPipeline:
                                 commit_sha=commit_sha,
                                 branch=branch,
                             )
-                            graph_nodes_created += graph_stats["nodes_created"]
-                            graph_edges_created += graph_stats["edges_created"]
+                            stats["graph_nodes_created"] += graph_stats["nodes_created"]
+                            stats["graph_edges_created"] += graph_stats["edges_created"]
 
                             # Initialize cache state if this is first indexing
                             graph_manager = self.get_graph_manager(repo_id)
@@ -682,10 +610,10 @@ class IngestionPipeline:
                         self.lancedb.prune_file_rows(repo_name, path, model=embed_model)
 
                 # Update counters
-                files_done += 1
-                chunks_indexed += len(new_hashes)
-                chunks_skipped += skipped_occurrences
-                vectors_written += len(new_hashes)
+                stats["files_done"] += 1
+                stats["chunks_indexed"] += len(new_hashes)
+                stats["chunks_skipped"] += skipped_occurrences
+                stats["vectors_written"] += len(new_hashes)
 
                 # Log per-file summary
                 print(f"  {path}: {len(chunks)} chunks, {len(new_hashes)} new, {skipped_occurrences} skipped")
@@ -695,8 +623,24 @@ class IngestionPipeline:
                 print(f"Error processing {path}: {e}")
                 continue
 
-        # Process deleted files
-        for path in deleted_files:
+        return stats
+
+    def process_deletions(
+        self,
+        repo_id: int,
+        repo_name: str,
+        files: list[str],
+        embed_model: str,
+        dry_run: bool,
+        error_logger: ErrorLogger,
+    ) -> dict[str, int]:
+        """Process a list of deleted files."""
+        stats = {
+            "files_done": 0,
+            "chunks_pruned": 0,
+        }
+
+        for path in files:
             try:
                 file_id = self.metadata.get_file_id(repo_id, path)
                 if file_id:
@@ -725,13 +669,159 @@ class IngestionPipeline:
                         else:
                             graph_manager.invalidate_cache()
 
-                    files_done += 1
-                    chunks_pruned += total_pruned
+                    stats["files_done"] += 1
+                    stats["chunks_pruned"] += total_pruned
                     print(f"  {path}: deleted, {total_pruned} chunks pruned")
             except Exception as e:
                 error_logger.log_file_error(f"deleted: {path}", e)
                 print(f"Error processing deleted file {path}: {e}")
                 continue
+
+        return stats
+
+    def reconcile_branch_switch(self, repo_name: str) -> None:
+        """Reconcile the index after a branch switch (using diff-based approach).
+
+        This is a convenience wrapper for index() with intelligent defaults.
+        It relies on the existing index() logic which handles merge-base diffing
+        correctly when `full_reindex=False`.
+        """
+        # Calling index(..., force=True) to allow indexing even if working tree is dirty
+        # (user preference for watcher mode).
+        print(f"Reconciling branch switch for {repo_name}...")
+        self.index(repo_name, force=True)
+
+    def index(
+        self,
+        repo_name: str,
+        *,
+        dry_run: bool = False,
+        force: bool = False,
+        full_reindex: bool = False,
+    ) -> dict[str, Any]:
+        """Perform full indexing pipeline for the named repository.
+
+        This method implements the Phase 6 indexing pipeline:
+        - Git diff gating for incremental indexing
+        - Content hashing and deduplication
+        - Embedding only new unique content
+        - Metadata and vector persistence
+        - Error handling and logging
+
+        Args:
+            repo_name: Name of the repository to index
+            dry_run: If True, don't persist changes
+            force: If True, skip clean working tree check
+            full_reindex: If True, drop existing index and process all files
+
+        Returns:
+            Dictionary with session summary and counters
+        """
+        # Resolve repo and Git state
+        repo = self.metadata.get_repo_by_name(repo_name)
+        if not repo:
+            raise ValueError(f"Repository not registered: {repo_name}")
+
+        repo_id = int(repo["id"])
+        root = Path(repo["root_path"])
+        embed_model = str(repo.get("default_embed_model", self.config.default_embed_model))
+        # Validate embed model early
+        from ..embeddings.provider import SUPPORTED_MODELS
+
+        if embed_model not in SUPPORTED_MODELS:
+            raise ValueError(f"Unsupported embed model configured for repo {repo_name}: {embed_model}")
+
+        # Ensure clean working tree and capture provenance (unless forced)
+        if not force:
+            self._ensure_clean_working_tree(root)
+        else:
+            print(f"Warning: force=True, skipping clean working tree check for {repo_name}")
+
+        commit_sha = self._git(root, "rev-parse", "HEAD").strip()
+        branch = self._git(root, "rev-parse", "--abbrev-ref", "HEAD").strip()
+
+        # Drop existing index if full_reindex is requested
+        if full_reindex and not dry_run:
+            print(f"Full reindex requested: dropping existing index for {repo_name}...")
+            self._drop_repo_index(repo_id, repo_name)
+
+        # Get last successful commit
+        last_success = self.metadata.get_last_successful_commit(repo_id)
+
+        # Start session
+        session_id = self.metadata.begin_session(repo_id, commit_sha, branch, embed_model)
+
+        # Initialize error logger (lazy file creation on first error)
+        error_logger = ErrorLogger(root, str(session_id))
+
+        # Build ignore spec for incremental processing
+        extra_security = {
+            "**/id_rsa",
+            "**/*.pem",
+            "**/.aws/**",
+            "**/gcloud/**",
+            "**/secrets/**",
+            "**/*keys.json",
+            "**/*service_account.json",
+            "**/*auth.json",
+        }
+        ignore_patterns = build_ignore_set(self.config.ignore, self.config.ignore_exceptions)
+        repo_level_patterns, repo_level_exceptions = load_repo_ignores(root)
+        if repo_level_patterns:
+            ignore_patterns.update(repo_level_patterns)
+        # Apply repo-level exceptions
+        if repo_level_exceptions:
+            ignore_patterns = build_ignore_set(ignore_patterns, repo_level_exceptions)
+        ignore_patterns.update(extra_security)
+        ignore_spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
+
+        # Determine changed files list
+        if full_reindex or last_success is None:
+            print(f"Full reindex mode: processing all tracked files for {repo_name}")
+            changed_files = get_all_tracked_files(root)
+            deleted_files = []
+        else:
+            print(f"Incremental mode: processing files changed since {last_success[:8]}")
+            changed_files = git_changed_files_modified_added(root, last_success, commit_sha)
+            deleted_files = git_changed_files_deleted(root, last_success, commit_sha)
+
+        # Initialize counters
+        files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
+        graph_nodes_created = graph_edges_created = 0
+
+        # Process modified/added files
+        stats = self.process_files(
+            repo_id=repo_id,
+            repo_name=repo_name,
+            root=root,
+            files=changed_files,
+            ignore_spec=ignore_spec,
+            embed_model=embed_model,
+            session_id=session_id,
+            commit_sha=commit_sha,
+            branch=branch,
+            dry_run=dry_run,
+            error_logger=error_logger,
+        )
+        files_done += stats["files_done"]
+        chunks_indexed += stats["chunks_indexed"]
+        chunks_skipped += stats["chunks_skipped"]
+        vectors_written += stats["vectors_written"]
+        chunks_pruned += stats["chunks_pruned"]
+        graph_nodes_created += stats["graph_nodes_created"]
+        graph_edges_created += stats["graph_edges_created"]
+
+        # Process deleted files
+        del_stats = self.process_deletions(
+            repo_id=repo_id,
+            repo_name=repo_name,
+            files=deleted_files,
+            embed_model=embed_model,
+            dry_run=dry_run,
+            error_logger=error_logger,
+        )
+        files_done += del_stats["files_done"]
+        chunks_pruned += del_stats["chunks_pruned"]
 
         # Prune any ignored files that were previously indexed
         # This handles files that were committed before being added to .gitignore
