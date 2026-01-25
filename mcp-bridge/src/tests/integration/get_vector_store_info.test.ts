@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { startMockRest } from "./mockServer.js";
-import { initLogger } from "../util/logger.js";
+import { initLogger } from "../../util/logger.js";
 
 let stop: () => Promise<void>;
-let makeStoreInfo: typeof import("../mcp/tools/store_info.js").makeStoreInfo;
+let makeStoreInfo: typeof import("../../mcp/tools/store_info.js").makeStoreInfo;
 
 function parseJsonBlock(text: string): Record<string, unknown> {
   const match = text.match(/```json\n([\s\S]*?)\n```/);
@@ -17,7 +17,7 @@ beforeAll(async () => {
   await initLogger();
   process.env.KB_REST_BASE_URL = "http://127.0.0.1:7777";
   stop = await startMockRest(7777);
-  ({ makeStoreInfo } = await import(`../mcp/tools/store_info.js`));
+  ({ makeStoreInfo } = await import(`../../mcp/tools/store_info.js`));
 });
 afterAll(async () => {
   await stop?.();

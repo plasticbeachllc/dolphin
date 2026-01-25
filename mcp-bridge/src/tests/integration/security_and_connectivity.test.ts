@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
 import { startMockRest } from "./mockServer.js";
-import { makeSearchKnowledge } from "../mcp/tools/search_knowledge.js";
-import { makeChunkGet } from "../mcp/tools/chunk_get.js";
-import { makeFileLines } from "../mcp/tools/file_lines.js";
-import { initLogger } from "../util/logger.js";
+import { makeSearchKnowledge } from "../../mcp/tools/search_knowledge.js";
+import { makeChunkGet } from "../../mcp/tools/chunk_get.js";
+import { makeFileLines } from "../../mcp/tools/file_lines.js";
+import { initLogger } from "../../util/logger.js";
 
 let stop: () => Promise<void>;
 

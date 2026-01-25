@@ -14,8 +14,11 @@
     "dev": "bun run --hot src/index.ts",
     "lint": "bun x eslint .",
     "clean": "rm -rf dist",
-    "test": "bun test ==serial ./src/tests --exclude dist",
+    "test": "bun test --serial ./src/tests --exclude dist",
     "test:clean": "npm run clean && bun test --serial ./src/tests",
+    "test:coverage": "bun test --serial ./src/tests --exclude dist --coverage",
+    "test:unit": "bun test --serial ./src/tests/unit --exclude dist",
+    "test:integration": "bun test --serial ./src/tests/integration --exclude dist",
     "prepublishOnly": "bun run build"
   },
   "dependencies": {

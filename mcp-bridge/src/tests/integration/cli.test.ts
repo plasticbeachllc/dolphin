@@ -6,13 +6,13 @@ const originalEnv = { ...process.env };
 describe("cli", () => {
   it("starts server with config values", async () => {
     createServerCalled = false;
-    mock.module("../mcp/server.js", () => ({
+    mock.module("../../mcp/server.js", () => ({
       createServer: async () => {
         createServerCalled = true;
       },
     }));
 
-    mock.module("../util/config.js", () => ({
+    mock.module("../../util/config.js", () => ({
       CONFIG: {
         DOLPHIN_API_URL: "http://127.0.0.1:9999",
         LOG_LEVEL: "warn",
@@ -46,7 +46,7 @@ describe("cli", () => {
     process.env.SERVER_VERSION = "0.0.1";
 
     try {
-      await import(`../cli.ts?test=${Date.now()}`);
+      await import(`../../cli.ts?test=${Date.now()}`);
 
       expect(createServerCalled).toBe(true);
       expect(process.env.DOLPHIN_API_URL).toBe("http://127.0.0.1:9999");

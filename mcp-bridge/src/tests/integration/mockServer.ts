@@ -283,7 +283,7 @@ export function startMockRest(port = 7777): Promise<() => Promise<void>> {
       return jsonResponse({
         hits,
         meta: {
-          top_k: top_k || 5,
+          top_k: top_k || 20,
           model: body.embed_model || "text-embedding-3-small",
           cursor: cursor || (hits.length ? "opaque-cursor" : undefined),
           estimated_total: hits.length,

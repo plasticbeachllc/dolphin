@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { z } from "zod";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { validateTools, type ToolRegistration } from "../mcp/tools/registry.js";
+import { validateTools, type ToolRegistration } from "../../mcp/tools/registry.js";
 
 function makeTool(overrides?: Partial<Tool>): Tool {
   return {

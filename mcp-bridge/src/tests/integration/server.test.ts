@@ -26,17 +26,17 @@ describe("createServer", () => {
       StdioServerTransport: class {},
     }));
 
-    mock.module("../util/logger.js", () => ({
+    mock.module("../../util/logger.js", () => ({
       initLogger: async () => {},
-      logDebug: () => {},
-      logInfo: () => {
+      logDebug: async () => {},
+      logInfo: async () => {
         logCalled = true;
       },
-      logWarn: () => {},
-      logError: () => {},
+      logWarn: async () => {},
+      logError: async () => {},
     }));
 
-    mock.module("../util/config.js", () => ({
+    mock.module("../../util/config.js", () => ({
       CONFIG: {
         SERVER_NAME: "test-server",
         SERVER_VERSION: "1.2.3",
@@ -62,7 +62,7 @@ describe("createServer", () => {
     }));
 
     try {
-      const { createServer } = await import(`../mcp/server.js?test=${Date.now()}`);
+      const { createServer } = await import(`../../mcp/server.js?test=${Date.now()}`);
 
       await createServer();
 
@@ -96,15 +96,15 @@ describe("createServer", () => {
       StdioServerTransport: class {},
     }));
 
-    mock.module("../util/logger.js", () => ({
+    mock.module("../../util/logger.js", () => ({
       initLogger: async () => {},
-      logDebug: () => {},
-      logInfo: () => {},
-      logWarn: () => {},
-      logError: () => {},
+      logDebug: async () => {},
+      logInfo: async () => {},
+      logWarn: async () => {},
+      logError: async () => {},
     }));
 
-    mock.module("../util/config.js", () => ({
+    mock.module("../../util/config.js", () => ({
       CONFIG: {
         SERVER_NAME: "test-server",
         SERVER_VERSION: "1.2.3",
@@ -140,7 +140,7 @@ describe("createServer", () => {
     }));
 
     try {
-      const { createServer } = await import(`../mcp/server.js?test=${Date.now()}`);
+      const { createServer } = await import(`../../mcp/server.js?test=${Date.now()}`);
 
       await createServer();
 

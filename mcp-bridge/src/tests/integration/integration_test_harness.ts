@@ -3,14 +3,14 @@
 // Integration test harness for MCP Bridge with real REST retriever
 // Usage: Run the FastAPI retriever on 127.0.0.1:7777 first, then run this script
 
-import { makeSearchKnowledge } from "../mcp/tools/search_knowledge.js";
-import { makeChunkGet } from "../mcp/tools/chunk_get.js";
-import { makeFileLines } from "../mcp/tools/file_lines.js";
-import { makeStoreInfo } from "../mcp/tools/store_info.js";
-import { makeGetMetadata } from "../mcp/tools/get_metadata.js";
-import { makeListRepos } from "../mcp/tools/list_repos.js";
-import { makeKbHealth } from "../mcp/tools/kb_health.js";
-import { initLogger } from "../util/logger.js";
+import { makeSearchKnowledge } from "../../mcp/tools/search_knowledge.js";
+import { makeChunkGet } from "../../mcp/tools/chunk_get.js";
+import { makeFileLines } from "../../mcp/tools/file_lines.js";
+import { makeStoreInfo } from "../../mcp/tools/store_info.js";
+import { makeGetMetadata } from "../../mcp/tools/get_metadata.js";
+import { makeListRepos } from "../../mcp/tools/list_repos.js";
+import { makeKbHealth } from "../../mcp/tools/kb_health.js";
+import { initLogger } from "../../util/logger.js";
 
 function parseHitsJson(
   content: Array<{ type: string; text?: string }>

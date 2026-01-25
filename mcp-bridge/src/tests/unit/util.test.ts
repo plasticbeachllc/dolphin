@@ -14,7 +14,7 @@ import {
   CONFIG_PRESETS,
   validateConfig,
   getConfigSummary,
-} from "../util/config";
+} from "../../util/config";
 
 // Language utilities
 import {
@@ -22,10 +22,10 @@ import {
   getLanguageInfo,
   mimeFromLangOrPath,
   fenceLang,
-} from "../util/language";
+} from "../../util/language";
 
 // Logger utilities
-import { initLogger, logInfo, logWarn, logError } from "../util/logger";
+import { initLogger, logInfo, logWarn, logError } from "../../util/logger";
 
 describe("Config Utilities", () => {
   describe("CONFIG object", () => {

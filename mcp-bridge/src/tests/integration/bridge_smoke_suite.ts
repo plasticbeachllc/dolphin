@@ -1,9 +1,9 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { restListRepos } from "../rest/client.js";
-import type { makeSearchKnowledge } from "../mcp/tools/search_knowledge.js";
-import type { makeChunkGet } from "../mcp/tools/chunk_get.js";
-import type { makeFileLines } from "../mcp/tools/file_lines.js";
-import type { makeStoreInfo } from "../mcp/tools/store_info.js";
+import type { restListRepos } from "../../rest/client.js";
+import type { makeSearchKnowledge } from "../../mcp/tools/search_knowledge.js";
+import type { makeChunkGet } from "../../mcp/tools/chunk_get.js";
+import type { makeFileLines } from "../../mcp/tools/file_lines.js";
+import type { makeStoreInfo } from "../../mcp/tools/store_info.js";
 
 export interface BridgeSmokeDeps {
   listRepos: typeof restListRepos;

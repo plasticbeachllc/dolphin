@@ -136,13 +136,13 @@ test-e2e-all:
 test-python TYPE="all": setup-python
 	@echo "🐍 Running Python {{TYPE}} tests..."
 	@if [ "{{TYPE}}" = "all" ]; then \
-		uv run pytest tests/ -q --tb=short || (echo "   ❌ Python tests failed"; exit 1); \
+		uv run python tests/run_tests.py -q || (echo "   ❌ Python tests failed"; exit 1); \
 	elif [ "{{TYPE}}" = "unit" ]; then \
-		uv run pytest tests/unit/ -q --tb=short || (echo "   ❌ Python unit tests failed"; exit 1); \
+		uv run python tests/run_tests.py --unit -q || (echo "   ❌ Python unit tests failed"; exit 1); \
 	elif [ "{{TYPE}}" = "integration" ]; then \
-		uv run pytest tests/integration/ -q --tb=short || (echo "   ❌ Python integration tests failed"; exit 1); \
+		uv run python tests/run_tests.py --integration -q || (echo "   ❌ Python integration tests failed"; exit 1); \
 	elif [ "{{TYPE}}" = "e2e" ]; then \
-		uv run pytest tests/e2e/ -q --tb=short || (echo "   ❌ Python e2e tests failed"; exit 1); \
+		uv run python tests/run_tests.py --e2e -q || (echo "   ❌ Python e2e tests failed"; exit 1); \
 	else \
 		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
 	fi
@@ -241,11 +241,19 @@ test-extension-domain DOMAIN TYPE="all":
 	fi; \
 	echo "   ✅ {{DOMAIN}} {{TYPE}} tests passed"
 
-# Run MCP Bridge tests (all are integration tests)
-test-mcp-bridge:
-	@echo "🌉 Running MCP Bridge tests..."
-	@cd mcp-bridge && bun test || (echo "   ❌ MCP Bridge tests failed"; exit 1)
-	@echo "   ✅ MCP Bridge tests passed"
+# Run MCP Bridge tests (all, unit, integration)
+test-mcp-bridge TYPE="all":
+	@echo "🌉 Running MCP Bridge {{TYPE}} tests..."
+	@if [ "{{TYPE}}" = "all" ]; then \
+		cd mcp-bridge && bun test || (echo "   ❌ MCP Bridge tests failed"; exit 1); \
+	elif [ "{{TYPE}}" = "unit" ]; then \
+		cd mcp-bridge && bun run test:unit || (echo "   ❌ MCP Bridge unit tests failed"; exit 1); \
+	elif [ "{{TYPE}}" = "integration" ]; then \
+		cd mcp-bridge && bun run test:integration || (echo "   ❌ MCP Bridge integration tests failed"; exit 1); \
+	else \
+		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, or all"; exit 1; \
+	fi
+	@echo "   ✅ MCP Bridge {{TYPE}} tests passed"
 
 # Run shared package tests (bun)
 test-shared:
@@ -277,7 +285,25 @@ test-file FILE: setup-python
 # Run Python tests with coverage
 test-coverage: setup-python
 	@echo "🧪 Running Python tests with coverage..."
-	@uv run pytest -n0 --cov=kb --cov-report=html --cov-report=term-missing
+	@uv run python tests/run_tests.py --html
+
+test-python-coverage: test-coverage
+
+test-mcp-bridge-coverage:
+	@echo "🧪 Running MCP Bridge tests with coverage..."
+	@cd mcp-bridge && bun run test:coverage
+
+test-shared-coverage:
+	@echo "🧪 Running Shared tests with coverage..."
+	@cd shared && bun run test:coverage
+
+# Install all test dependencies
+setup-test: setup-python
+	@echo "🔧 Installing TypeScript dependencies..."
+	@cd mcp-bridge && bun install
+	@cd shared && bun install
+	@if [ -d "agent-core" ]; then cd agent-core && bun install; fi
+	@echo "✅ All dependencies installed"
 
 
 # ==============================================================================
