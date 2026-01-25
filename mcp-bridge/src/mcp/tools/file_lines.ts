@@ -50,20 +50,8 @@ export function makeFileLines(client?: KBClient): {
       const argsObj = args as { input?: unknown } | undefined;
       const input = INPUT.parse(argsObj?.input ?? args);
       const res = await (client
-        ? client.getFileSlice(
-            input.repo.trim(),
-            input.path,
-            input.start,
-            input.end,
-            signal
-          )
-        : restGetFileSlice(
-            input.repo.trim(),
-            input.path,
-            input.start,
-            input.end,
-            signal
-          ));
+        ? client.getFileSlice(input.repo.trim(), input.path, input.start, input.end, signal)
+        : restGetFileSlice(input.repo.trim(), input.path, input.start, input.end, signal));
       const mime = mimeFromLangOrPath(res.lang, res.path);
 
       const content: CallToolResult["content"] = [

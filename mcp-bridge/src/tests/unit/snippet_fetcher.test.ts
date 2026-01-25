@@ -57,14 +57,16 @@ describe("requestsFromHits", () => {
 
 describe("fetchSnippetsInParallel", () => {
   it("fetches multiple snippets successfully", async () => {
-    mockGetFileSlice.mockImplementation(async (repo: string, path: string, start: number, end: number) => ({
-      repo,
-      path,
-      start_line: start,
-      end_line: end,
-      content: `content for ${path}`,
-      source: "file",
-    }));
+    mockGetFileSlice.mockImplementation(
+      async (repo: string, path: string, start: number, end: number) => ({
+        repo,
+        path,
+        start_line: start,
+        end_line: end,
+        content: `content for ${path}`,
+        source: "file",
+      })
+    );
 
     const requests: SnippetFetchRequest[] = [
       { repo: "r1", path: "p1.ts", startLine: 1, endLine: 10 },
@@ -102,14 +104,16 @@ describe("fetchSnippetsInParallel", () => {
   });
 
   it("handles context lines in requests", async () => {
-    mockGetFileSlice.mockImplementation(async (repo: string, path: string, start: number, end: number) => ({
-      repo,
-      path,
-      start_line: start,
-      end_line: end,
-      content: "context content",
-      source: "file",
-    }));
+    mockGetFileSlice.mockImplementation(
+      async (repo: string, path: string, start: number, end: number) => ({
+        repo,
+        path,
+        start_line: start,
+        end_line: end,
+        content: "context content",
+        source: "file",
+      })
+    );
 
     const requests: SnippetFetchRequest[] = [
       {
@@ -275,14 +279,16 @@ describe("fetchSnippetsInParallel", () => {
   });
 
   it("includes actual line numbers in result", async () => {
-    mockGetFileSlice.mockImplementation(async (repo: string, path: string, start: number, end: number) => ({
-      repo,
-      path,
-      start_line: start,
-      end_line: end,
-      content: "content",
-      source: "file",
-    }));
+    mockGetFileSlice.mockImplementation(
+      async (repo: string, path: string, start: number, end: number) => ({
+        repo,
+        path,
+        start_line: start,
+        end_line: end,
+        content: "content",
+        source: "file",
+      })
+    );
 
     const requests: SnippetFetchRequest[] = [
       { repo: "r", path: "p.ts", startLine: 5, endLine: 15 },

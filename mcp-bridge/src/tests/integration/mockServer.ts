@@ -61,17 +61,11 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   // GET /chunks/{id}
-  if (
-    method === "GET" &&
-    (pathname.startsWith("/v1/chunks/") || pathname.startsWith("/chunks/"))
-  ) {
+  if (method === "GET" && (pathname.startsWith("/v1/chunks/") || pathname.startsWith("/chunks/"))) {
     const id = decodeURIComponent(pathname.split("/").pop() ?? "");
 
     if (id === "not-found") {
-      return jsonResponse(
-        { error: { code: "chunk_not_found", message: "Chunk not found" } },
-        404
-      );
+      return jsonResponse({ error: { code: "chunk_not_found", message: "Chunk not found" } }, 404);
     }
 
     return jsonResponse({
@@ -98,10 +92,7 @@ async function handleRequest(req: Request): Promise<Response> {
     }
 
     if (start > end) {
-      return jsonResponse(
-        { error: { code: "invalid_range", message: "Invalid line range" } },
-        400
-      );
+      return jsonResponse({ error: { code: "invalid_range", message: "Invalid line range" } }, 400);
     }
 
     const lang = path.endsWith(".ts") ? "typescript" : path.endsWith(".py") ? "python" : "plain";

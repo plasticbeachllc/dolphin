@@ -41,7 +41,9 @@ export function makeGetMetadata(client?: KBClient): {
     try {
       const argsObj = args as { input?: unknown } | undefined;
       const input = INPUT.parse(argsObj?.input ?? args);
-      const chunk = await (client ? client.getChunk(input.chunk_id, signal) : restGetChunk(input.chunk_id, signal));
+      const chunk = await (client
+        ? client.getChunk(input.chunk_id, signal)
+        : restGetChunk(input.chunk_id, signal));
       // Drop content to keep response small
       const { content: _content, ...meta } = chunk;
       const metaJson = "```json\n" + JSON.stringify(meta) + "\n```";

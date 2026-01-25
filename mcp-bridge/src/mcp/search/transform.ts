@@ -28,7 +28,10 @@ function isRepoCacheExpired(entry: RepoCacheEntry): boolean {
   return Date.now() - entry.ts > REPO_CACHE_TTL_MS;
 }
 
-export async function getReposByName(signal?: AbortSignal, client?: KBClient): Promise<Map<string, RepoInfo>> {
+export async function getReposByName(
+  signal?: AbortSignal,
+  client?: KBClient
+): Promise<Map<string, RepoInfo>> {
   if (repoCache && !isRepoCacheExpired(repoCache)) {
     return repoCache.reposByName;
   }

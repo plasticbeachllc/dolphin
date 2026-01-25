@@ -36,7 +36,9 @@ export function makeKbHealth(client?: KBClient): {
       const argsObj = args as { input?: unknown } | undefined;
       const input = INPUT.parse(argsObj?.input ?? args);
 
-      const health = await (client ? client.healthV1(input.check, signal) : restHealthV1(input.check, signal));
+      const health = await (client
+        ? client.healthV1(input.check, signal)
+        : restHealthV1(input.check, signal));
       const content: CallToolResult["content"] = [
         { type: "text", text: "KB health ready." } as TextContent,
         { type: "text", text: "```json\n" + JSON.stringify(health) + "\n```" } as TextContent,

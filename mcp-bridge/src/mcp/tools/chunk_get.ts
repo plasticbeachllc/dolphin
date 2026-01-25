@@ -42,7 +42,9 @@ export function makeChunkGet(client?: KBClient): {
     try {
       const argsObj = args as { input?: unknown } | undefined;
       const input = INPUT.parse(argsObj?.input ?? args);
-      const chunk = await (client ? client.getChunk(input.chunk_id, signal) : restGetChunk(input.chunk_id, signal));
+      const chunk = await (client
+        ? client.getChunk(input.chunk_id, signal)
+        : restGetChunk(input.chunk_id, signal));
       const lang = chunk.lang;
       const code = chunk.content;
       const mime = mimeFromLangOrPath(lang, chunk.path);
