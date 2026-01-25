@@ -36,7 +36,7 @@ def _process_file_batch(
     Returns:
         List of FileCandidate objects for valid files
     """
-    spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
+    spec = PathSpec.from_lines("gitignore", ignore_patterns)
     candidates: list[FileCandidate] = []
 
     for rel in file_paths:

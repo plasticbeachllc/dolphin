@@ -1,4 +1,4 @@
-import type { SearchRequestBody, SearchResponse } from "../../rest/client.js";
+import type { SearchRequestBody, SearchResponse, KBClient } from "../../rest/client.js";
 import { restSearch } from "../../rest/client.js";
 import type { SearchInput, SearchOptions } from "./input.js";
 
@@ -34,7 +34,8 @@ export function buildSearchRequestBody(
 
 export async function executeSearch(
   body: SearchRequestBody,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  client?: KBClient
 ): Promise<SearchResponse> {
-  return await restSearch(body, signal);
+  return await (client ? client.search(body, signal) : restSearch(body, signal));
 }

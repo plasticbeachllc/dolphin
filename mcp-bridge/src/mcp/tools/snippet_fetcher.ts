@@ -1,4 +1,4 @@
-import { restGetFileSlice } from "../../rest/client.js";
+import { KBClient } from "../../rest/client.js";
 import { CONFIG } from "../../util/config.js";
 import { mapWithConcurrency } from "../../util/concurrency.js";
 import { logWarn, logInfo, logDebug } from "../../util/logger.js";
@@ -35,6 +35,7 @@ export interface SnippetFetchOptions {
   requestTimeoutMs?: number;
   retryAttempts?: number;
   signal?: AbortSignal;
+  client?: KBClient;
 }
 
 /**
@@ -71,6 +72,7 @@ export async function fetchSnippetsInParallel(
     requestTimeoutMs = CONFIG.SNIPPET_FETCH_TIMEOUT_MS,
     retryAttempts = CONFIG.SNIPPET_FETCH_RETRY_ATTEMPTS,
     signal,
+    client = new KBClient(),
   } = options;
 
   const startTime = Date.now();
@@ -120,7 +122,7 @@ export async function fetchSnippetsInParallel(
             const fetchStartLine = Math.max(1, request.startLine - contextBefore);
             const fetchEndLine = request.endLine + contextAfter;
 
-            const result = await restGetFileSlice(
+            const result = await client.getFileSlice(
               request.repo.trim(),
               request.path,
               fetchStartLine,

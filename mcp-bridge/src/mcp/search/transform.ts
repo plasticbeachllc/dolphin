@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { RepoInfo } from "../../rest/client.js";
+import type { RepoInfo, KBClient } from "../../rest/client.js";
 import { restListRepos } from "../../rest/client.js";
 import type { ApiHit, ExtendedSearchHit, SnippetInfo } from "./contracts.js";
 
@@ -28,13 +28,22 @@ function isRepoCacheExpired(entry: RepoCacheEntry): boolean {
   return Date.now() - entry.ts > REPO_CACHE_TTL_MS;
 }
 
-export async function getReposByName(signal?: AbortSignal): Promise<Map<string, RepoInfo>> {
-  if (repoCache && !isRepoCacheExpired(repoCache)) {
+export async function getReposByName(
+  signal?: AbortSignal,
+  client?: KBClient
+): Promise<Map<string, RepoInfo>> {
+  // If a client is provided, we must skip the global cache to avoid cross-client pollution
+  // (e.g. one client pointing to dev vs prod, or different test mocks).
+  if (!client && repoCache && !isRepoCacheExpired(repoCache)) {
     return repoCache.reposByName;
   }
-  const repoList = await restListRepos(signal);
+  const repoList = await (client ? client.listRepos(signal) : restListRepos(signal));
   const reposByName = new Map(repoList.repos.map((r) => [r.name, r]));
-  repoCache = { ts: Date.now(), reposByName };
+
+  // Only cache if using the default global client
+  if (!client) {
+    repoCache = { ts: Date.now(), reposByName };
+  }
   return reposByName;
 }
 
@@ -55,7 +64,7 @@ export function transformHits(params: {
     const snippetStart =
       snippetInfo?.start ??
       hit.snippet_start_line ??
-      (typeof chunkStart === "number" ? chunkStart : 1);
+      (typeof chunkStart === "number" ? chunkStart : undefined);
     const snippetEnd =
       snippetInfo?.end ??
       hit.snippet_end_line ??

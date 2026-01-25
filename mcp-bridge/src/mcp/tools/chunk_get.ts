@@ -1,6 +1,6 @@
 import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { restGetChunk } from "../../rest/client.js";
+import { restGetChunk, KBClient } from "../../rest/client.js";
 import { mimeFromLangOrPath } from "../../util/mime.js";
 import { logInfo, logError } from "../../util/logger.js";
 import { buildToolInputSchema } from "./schema.js";
@@ -19,7 +19,7 @@ const INPUT_SHAPE = { chunk_id: z.string() };
 const INPUT = z.object(INPUT_SHAPE);
 const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
-export function makeChunkGet(): {
+export function makeChunkGet(client?: KBClient): {
   definition: Tool;
   inputSchema: typeof INPUT;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -42,7 +42,9 @@ export function makeChunkGet(): {
     try {
       const argsObj = args as { input?: unknown } | undefined;
       const input = INPUT.parse(argsObj?.input ?? args);
-      const chunk = await restGetChunk(input.chunk_id, signal);
+      const chunk = await (client
+        ? client.getChunk(input.chunk_id, signal)
+        : restGetChunk(input.chunk_id, signal));
       const lang = chunk.lang;
       const code = chunk.content;
       const mime = mimeFromLangOrPath(lang, chunk.path);

@@ -1,6 +1,7 @@
 """Pytest configuration and shared fixtures for KB pipeline tests."""
 
 import os
+import shutil
 import tempfile
 from collections.abc import Generator
 from pathlib import Path
@@ -14,20 +15,20 @@ if TYPE_CHECKING:
 
 _TEST_CONFIG_ENV = "DOLPHIN_CONFIG_PATH"
 # Keep tests deterministic by avoiding user-level configs.
-if _TEST_CONFIG_ENV not in os.environ:
-    _test_config_dir = Path(tempfile.mkdtemp(prefix="dolphin-test-config-"))
-    _test_config_path = _test_config_dir / "config.toml"
-    _test_config_path.write_text(
-        """
+_xdist_worker = os.environ.get("PYTEST_XDIST_WORKER") or "main"
+_test_config_dir = Path(tempfile.mkdtemp(prefix=f"dolphin-test-config-{_xdist_worker}-"))
+_test_config_path = _test_config_dir / "config.toml"
+_test_config_path.write_text(
+    """
 [storage]
-store_root = "/tmp/dolphin-test-store"
+store_root = "/tmp/dolphin-test-store-{worker}"
 
 [server]
 endpoint = "127.0.0.1:7777"
 
 [embedding]
 provider = "stub"
-default_embed_model = "large"
+default_embed_model = "small"
 
 [retrieval]
 score_cutoff = 0.005
@@ -35,10 +36,10 @@ top_k = 8
 max_snippet_tokens = 240
 mmr_enabled = true
 mmr_lambda = 0.7
-""".lstrip(),
-        encoding="utf-8",
-    )
-    os.environ[_TEST_CONFIG_ENV] = str(_test_config_path)
+""".lstrip().format(worker=_xdist_worker),
+    encoding="utf-8",
+)
+os.environ[_TEST_CONFIG_ENV] = str(_test_config_path)
 
 
 @pytest.fixture(scope="session")
@@ -93,6 +94,19 @@ def mock_embedding_service():
     return MockEmbeddingService()
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _disable_retry_sleeps_for_tests() -> Generator[None, None, None]:
+    """Avoid real sleeps from retry/backoff logic during tests."""
+    import kb.ingest.error_logging as error_logging
+
+    mp = pytest.MonkeyPatch()
+    mp.setattr(error_logging, "_sleep", lambda _seconds: None)
+    try:
+        yield
+    finally:
+        mp.undo()
+
+
 def init_test_git_repo(repo_path: Path) -> None:
     """Initialize a git repository with test-friendly defaults.
 
@@ -113,12 +127,30 @@ def init_test_git_repo(repo_path: Path) -> None:
     subprocess.run(["git", "-C", str(repo_path), "commit", "--allow-empty", "-m", "Initial commit"], check=True)
 
 
+@pytest.fixture(scope="session")
+def _git_template_dir(tmp_path_factory) -> Path:
+    """Create a template git repo once per session.
+
+    This optimization avoids running `git init` and `git config` (subprocess calls)
+    for every single test that needs a repo, reducing overhead significantly.
+    """
+    # Create valid path for template
+    template_dir = tmp_path_factory.mktemp("git_template")
+    # Initialize the repo in this persistent temp dir
+    init_test_git_repo(template_dir)
+    return template_dir
+
+
 @pytest.fixture
-def git_repo(temp_dir: Path) -> Generator[Path, None, None]:
-    """Create a git repository for testing with proper cleanup."""
+def git_repo(temp_dir: Path, _git_template_dir: Path) -> Generator[Path, None, None]:
+    """Create a git repository for testing with proper cleanup.
+
+    Implementation: Copies a pre-initialized template repo to the test's
+    temp dir instead of running slow git commands.
+    """
     repo_path = temp_dir / "test_repo"
-    repo_path.mkdir()
-    init_test_git_repo(repo_path)
+    # Copy from template is drastically faster than subprocess git calls
+    shutil.copytree(_git_template_dir, repo_path, dirs_exist_ok=True)
     yield repo_path
     # Cleanup is handled by temp_dir context manager
 
@@ -395,6 +427,7 @@ def pytest_configure(config):
         "markers",
         "integration: mark test as an integration test (uses real dependencies)",
     )
+    config.addinivalue_line("markers", "e2e: mark test as an end-to-end test")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -513,7 +546,7 @@ def registered_test_repo(mock_kb_stores, temp_dir):
     workspace_path.mkdir()
 
     # Register repo
-    sql_store.record_repo(name="test-repo", path=workspace_path, default_embed_model="large")
+    sql_store.record_repo(name="test-repo", path=workspace_path, default_embed_model="small")
 
     # Get repo info
     repo = sql_store.get_repo_by_name("test-repo")

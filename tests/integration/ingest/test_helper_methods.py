@@ -1,6 +1,7 @@
 """Tests for helper method extraction."""
 
 import asyncio
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,7 @@ from kb.store import LanceDBStore, SQLiteMetadataStore
 
 
 @pytest.fixture
-def pipeline(tmp_path: Path) -> IngestionPipeline:
+def pipeline(tmp_path: Path) -> Generator[IngestionPipeline, None, None]:
     """Create a pipeline."""
     store_root = tmp_path / "store"
     store_root.mkdir()
@@ -32,7 +33,9 @@ def pipeline(tmp_path: Path) -> IngestionPipeline:
             return [[0.1] * 1536 for _ in texts]
 
     set_default_provider(MockProvider())
-    return IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+    yield IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+    # Reset provider
+    set_default_provider(EmbeddingProvider())
 
 
 @pytest.fixture

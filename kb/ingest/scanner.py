@@ -67,7 +67,7 @@ def _submodule_roots(root: Path) -> list[str]:
 
 def _build_pathspec(ignores: Iterable[str]) -> PathSpec:
     patterns = list(ignores or [])
-    return PathSpec.from_lines("gitwildmatch", patterns)
+    return PathSpec.from_lines("gitignore", patterns)
 
 
 def _is_binary(path: Path, sniff_bytes: int = 65536) -> bool:

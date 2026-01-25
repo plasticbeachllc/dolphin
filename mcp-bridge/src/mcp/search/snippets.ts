@@ -10,6 +10,7 @@ export async function fetchSnippetsForHits(params: {
   contextLinesBefore: number;
   contextLinesAfter: number;
   signal?: AbortSignal;
+  fetcher?: typeof fetchSnippetsInParallel;
 }): Promise<{
   snippetsByHitIndex: Map<number, SnippetInfo>;
   snippetFailures: SnippetFailure[];
@@ -61,7 +62,8 @@ export async function fetchSnippetsForHits(params: {
     return { snippetsByHitIndex, snippetFailures };
   }
 
-  const snippetMap = await fetchSnippetsInParallel(requests, {
+  const fetcher = params.fetcher ?? fetchSnippetsInParallel;
+  const snippetMap = await fetcher(requests, {
     maxConcurrent: CONFIG.MAX_CONCURRENT_SNIPPET_FETCH,
     requestTimeoutMs: CONFIG.SNIPPET_FETCH_TIMEOUT_MS,
     retryAttempts: CONFIG.SNIPPET_FETCH_RETRY_ATTEMPTS,

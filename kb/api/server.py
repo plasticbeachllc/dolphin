@@ -121,16 +121,6 @@ def reload_search_backend() -> None:
         raise
 
 
-# Initialize search backend when module loads (before uvicorn starts)
-print("🚀 Initializing KB server...", file=sys.stderr)
-try:
-    initialize_search_backend()
-except FileNotFoundError:
-    print(
-        "⚠️  No KB configuration found at import time. Call initialize_search_backend() after creating a config.",
-        file=sys.stderr,
-    )
-
 # Add Prometheus metrics middleware to the app
 app.middleware("http")(prometheus_middleware)
 
@@ -148,8 +138,17 @@ async def lifespan_handler(app_instance: FastAPI):
     """Manage application lifespan (startup and shutdown)."""
     global _embedding_provider
 
-    # Startup is handled by module-level initialization (line 95-96)
-    # This keeps existing behavior where backend is ready before uvicorn starts
+    # Startup: Initialize backend/pipeline if not already initialized.
+    # Avoid module import-time side effects (important for test collection and xdist).
+    if get_pipeline() is None:
+        print("🚀 Initializing KB server...", file=sys.stderr)
+        try:
+            initialize_search_backend()
+        except FileNotFoundError:
+            print(
+                "⚠️  No KB configuration found. Create a config, then call initialize_search_backend().",
+                file=sys.stderr,
+            )
 
     # Start watchers if configured
     watch_tasks = []

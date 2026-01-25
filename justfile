@@ -56,213 +56,208 @@ check-typescript:
 	@echo "   ✅ linting  passed"
 
 # ==============================================================================
-# Testing - Main Commands
+# Testing - Unified Commands
 # ==============================================================================
 
-# Run tests for CORE modules
+# Run tests (TYPE: unit, integration, e2e, or all)
+test TYPE="all":
+	@echo "🧪 Running {{TYPE}} tests..."
+	@just _pytest {{TYPE}}
+	# @just _bun-test agent-core {{TYPE}}
+	@just _bun-test mcp-bridge {{TYPE}}
+	@just _bun-test shared all
+	@echo "✅ All {{TYPE}} tests passed!"
+
+# Run Python (kb) tests only
+test-kb TYPE="all":
+	@echo "🐍 Running Python {{TYPE}} tests..."
+	@just _pytest {{TYPE}}
+	@echo "   ✅ Python {{TYPE}} tests passed"
+
+# Run MCP Bridge tests only
+test-mcp TYPE="all":
+	@echo "🌉 Running MCP Bridge {{TYPE}} tests..."
+	@if [ "{{TYPE}}" = "all" ]; then \
+		just _bun-test mcp-bridge unit && \
+		just _bun-test mcp-bridge integration; \
+	else \
+		just _bun-test mcp-bridge {{TYPE}}; \
+	fi
+	@echo "   ✅ MCP Bridge {{TYPE}} tests passed"
+
+# Run all TypeScript tests
+test-ts TYPE="all":
+	@echo "📘 Running TypeScript {{TYPE}} tests..."
+	@just _bun-test agent-core {{TYPE}}
+	@just _bun-test mcp-bridge {{TYPE}}
+	@just _bun-test shared all
+	@echo "   ✅ TypeScript {{TYPE}} tests passed"
+
+# Run tests with coverage (disable parallel execution for accurate coverage)
+test-cov:
+	@uv run pytest -n0 tests/ --cov=kb --cov-report=html --cov-report=term-missing
+
+# Show the slowest tests (helps keep runtime regressions visible)
+test-slowest TYPE="all" N="30" MIN="0.2":
+	@echo "🐢 Slowest {{N}} tests (min={{MIN}}s)..."
+	@just _pytest_slowest {{TYPE}} {{N}} {{MIN}}
+
+# Run tests for CORE modules (CI compatibility)
 test-core:
 	@echo "Testing core dolphin functions..."
-	echo ""
-	@just test-python all
-	@just test-mcp-bridge
-	@just test-shared
-	@echo ""
+	@just test-kb all
+	@just test-mcp all
+	@just _bun-test shared all
 	@echo "✅ Core tests passed!"
 
 # Run ALL tests across all projects
 test-all:
-	@echo "🚀 Running ALL tests across all projects..."
-	@echo ""
-	@just test-python all
-	@just test-agent-core all
-	@just test-mcp-bridge
-	@just test-shared
+	@echo "🚀 Running ALL tests..."
+	@just test all
 	@just test-webview
-	@echo ""
 	@echo "✅ All tests passed!"
 
-# Run all unit tests across all projects
-test-unit-all:
-	@echo "⚡ Running all unit tests..."
-	@echo ""
-	@just test-python unit
-	@just test-agent-core unit
-	@just test-shared
-	@just test-webview
-	@echo ""
-	@echo "✅ All unit tests passed!"
-
-# Run all integration tests across all projects
-test-integration-all:
-	@echo "🔗 Running all integration tests..."
-	@echo ""
-	@just test-python integration
-	@just test-agent-core integration
-	@just test-mcp-bridge
-	@just test-extension integration
-	@echo ""
-	@echo "✅ All integration tests passed!"
-
-test-integration-headless:
-	@rm -f /tmp/.X99-lock
-	@export DISPLAY=":99.0"
-	@Xvfb :99 -screen 0 1024x768x24 &
-	@sleep 3
-	@echo "🔗 Running all integration tests..."
-	@echo ""
-	@just test-python integration
-	@just test-agent-core integration
-	@just test-mcp-bridge
-	@just test-extension integration
-	@echo ""
-	@echo "✅ All integration tests passed!"
-
-# Run all e2e tests across all projects (will require VS Code host)
-test-e2e-all:
-	@echo "🎯 Running all E2E tests..."
-	@echo ""
-	@just test-python e2e
-	@just test-agent-core e2e
-	@just test-extension e2e
-	@just test-playwright
-	@echo ""
-	@echo "✅ All E2E tests passed!"
-
 # ==============================================================================
-# Testing - Per-Project Commands
+# Testing - Internal Helpers
 # ==============================================================================
 
-# Run Python tests (TYPE: unit, integration, e2e, or all)
-test-python TYPE="all": setup-python
-	@echo "🐍 Running Python {{TYPE}} tests..."
-	@if [ "{{TYPE}}" = "all" ]; then \
-		uv run pytest tests/ -q --tb=short || (echo "   ❌ Python tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "unit" ]; then \
-		uv run pytest tests/unit/ -q --tb=short || (echo "   ❌ Python unit tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "integration" ]; then \
-		uv run pytest tests/integration/ -q --tb=short || (echo "   ❌ Python integration tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "e2e" ]; then \
-		uv run pytest tests/e2e/ -q --tb=short || (echo "   ❌ Python e2e tests failed"; exit 1); \
-	else \
-		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
+# Internal: Generic pytest runner (TYPE: unit, integration, e2e, or all)
+_pytest TYPE: setup-python
+	#!/usr/bin/env bash
+	set -euo pipefail
+	case "{{TYPE}}" in
+		all)         dir="tests/" ;;
+		unit)        dir="tests/unit/" ;;
+		integration) dir="tests/integration/" ;;
+		e2e)         dir="tests/e2e/" ;;
+		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
+	esac
+	uv run pytest "$dir" -q --tb=short
+
+# Internal: pytest runner with duration reporting
+_pytest_slowest TYPE N MIN: setup-python
+	#!/usr/bin/env bash
+	set -euo pipefail
+	case "{{TYPE}}" in
+		all)         dir="tests/" ;;
+		unit)        dir="tests/unit/" ;;
+		integration) dir="tests/integration/" ;;
+		e2e)         dir="tests/e2e/" ;;
+		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
+	esac
+	uv run pytest "$dir" -q --tb=short --durations="{{N}}" --durations-min="{{MIN}}"
+
+# Internal: Generic bun test runner (PROJECT: agent-core, mcp-bridge, shared)
+_bun-test PROJECT TYPE:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	if [ "{{PROJECT}}" = "shared" ]; then
+		cd shared && bun test
+		exit 0
 	fi
+	case "{{TYPE}}" in
+		all)         dir="" ;;
+		unit)        dir="tests/unit/" ;;
+		integration|e2e) dir="tests/integration/" ;;
+		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
+	esac
+	if [ "{{PROJECT}}" = "mcp-bridge" ] && [ -n "$dir" ]; then
+		dir="src/tests/${dir#tests/}"
+	fi
+	cd "{{PROJECT}}" && bun test $dir --bail
+
+# ==============================================================================
+# Testing - Per-Project Commands (aliases to internal helpers)
+# ==============================================================================
+
+# Run Python tests
+test-python TYPE="all": (_pytest TYPE)
 	@echo "   ✅ Python {{TYPE}} tests passed"
 
-# Run Python domain tests (TYPE: unit, integration, e2e, or all)
+# Run Python domain tests
 test-python-domain DOMAIN TYPE="all": setup-python
-	@echo "🐍 Running Python {{DOMAIN}} {{TYPE}} tests..."
-	@if [ "{{TYPE}}" = "all" ]; then \
-		uv run pytest tests/unit/{{DOMAIN}}/ tests/integration/{{DOMAIN}}/ -v --tb=short 2>/dev/null || \
-		uv run pytest tests/unit/{{DOMAIN}}/ -v --tb=short 2>/dev/null || \
-		uv run pytest tests/integration/{{DOMAIN}}/ -v --tb=short || \
-		(echo "   ❌ No tests found for domain {{DOMAIN}}"; exit 1); \
-	elif [ "{{TYPE}}" = "unit" ]; then \
-		uv run pytest tests/unit/{{DOMAIN}}/ -v --tb=short || (echo "   ❌ Unit tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "integration" ]; then \
-		uv run pytest tests/integration/{{DOMAIN}}/ -v --tb=short || (echo "   ❌ Integration tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "e2e" ]; then \
-		uv run pytest tests/e2e/{{DOMAIN}}/ -v --tb=short || (echo "   ❌ E2E tests failed"; exit 1); \
-	else \
-		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
-	fi
-	@echo "   ✅ {{DOMAIN}} {{TYPE}} tests passed"
-
-# Run Agent Core tests (TYPE: unit, integration, e2e, or all)
-test-agent-core TYPE="all":
-	@echo "🤖 Running Agent Core {{TYPE}} tests..."
-	@if [ "{{TYPE}}" = "all" ]; then \
-		cd agent-core && bun test --bail || (echo "   ❌ Agent Core tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "unit" ]; then \
-		cd agent-core && bun test tests/unit/ --bail || (echo "   ❌ Agent Core unit tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "integration" ]; then \
-		cd agent-core && bun test tests/integration/ --bail || (echo "   ❌ Agent Core integration tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "e2e" ]; then \
-		cd agent-core && bun test tests/integration/e2e/ --bail || (echo "   ❌ Agent Core e2e tests failed"; exit 1); \
-	else \
-		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
-	fi
-	@echo "   ✅ Agent Core {{TYPE}} tests passed"
-
-# Run Agent Core domain tests (TYPE: unit, integration, or all)
-test-agent-core-domain DOMAIN TYPE="all":
-	@echo "🤖 Running Agent Core {{DOMAIN}} {{TYPE}} tests..."
-	@if [ "{{TYPE}}" = "all" ]; then \
-		cd agent-core && (bun test tests/unit/{{DOMAIN}}/ tests/integration/{{DOMAIN}}/ --bail 2>/dev/null || \
-		bun test tests/unit/{{DOMAIN}}/ --bail 2>/dev/null || \
-		bun test tests/integration/{{DOMAIN}}/ --bail) || (echo "   ❌ No tests found for domain {{DOMAIN}}"; exit 1); \
-	elif [ "{{TYPE}}" = "unit" ]; then \
-		cd agent-core && bun test tests/unit/{{DOMAIN}}/ --bail || (echo "   ❌ Unit tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "integration" ]; then \
-		cd agent-core && bun test tests/integration/{{DOMAIN}}/ --bail || (echo "   ❌ Integration tests failed"; exit 1); \
-	else \
-		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, or all"; exit 1; \
-	fi
-	@echo "   ✅ {{DOMAIN}} {{TYPE}} tests passed"
-
-# Run VSCode Extension tests (TYPE: unit, integration, e2e, or all)
-test-extension TYPE="all":
-	@echo "📦 Running VSCode Extension {{TYPE}} tests..."
-	@cd vscode-extension && npm run compile >/dev/null
-	if [ "{{TYPE}}" = "all" ]; then \
-		(cd vscode-extension && npm run test:all) || { echo "   ❌ Extension tests failed"; exit 1; }; \
-	elif [ "{{TYPE}}" = "unit" ]; then \
-		(cd vscode-extension && npm run test:unit) || { echo "   ❌ Extension unit tests failed"; exit 1; }; \
-	elif [ "{{TYPE}}" = "integration" ]; then \
-		(cd vscode-extension && npm run test:integration) || { echo "   ❌ Extension integration tests failed"; exit 1; }; \
-	elif [ "{{TYPE}}" = "e2e" ]; then \
-		(cd vscode-extension && npm run test:e2e) || { echo "   ❌ Extension e2e tests failed"; exit 1; }; \
-	else \
-		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
-	fi; \
-	echo "   ✅ Extension {{TYPE}} tests passed"
-
-# Run VSCode Extension domain tests (TYPE: unit, integration, e2e, or all)
-test-extension-domain DOMAIN TYPE="all":
-	@echo "📦 Running Extension {{DOMAIN}} {{TYPE}} tests..."
-	@cd vscode-extension && npm run compile >/dev/null
-	if [ "{{TYPE}}" = "all" ]; then \
-		FILES=$$(cd vscode-extension && find out/test/suite -path "*{{DOMAIN}}*" -name '*.test.js'); \
-		if [ -z "$$FILES" ]; then echo "   ❌ No tests found for {{DOMAIN}}"; exit 1; fi; \
-		cd vscode-extension && npm run test:all -- --run $$FILES || { echo "   ❌ Tests failed"; exit 1; }; \
-	elif [ "{{TYPE}}" = "unit" ]; then \
-		FILES=$$(cd vscode-extension && find out/test/suite/unit/{{DOMAIN}} -name '*.test.js' 2>/dev/null); \
-		if [ -z "$$FILES" ]; then echo "   ❌ No unit tests found for {{DOMAIN}}"; exit 1; fi; \
-		cd vscode-extension && npm run test:unit -- --run $$FILES || { echo "   ❌ Unit tests failed"; exit 1; }; \
-	elif [ "{{TYPE}}" = "integration" ]; then \
-		FILES=$$(cd vscode-extension && find out/test/suite/integration/{{DOMAIN}} -name '*.test.js' 2>/dev/null); \
-		if [ -z "$$FILES" ]; then echo "   ❌ No integration tests found for {{DOMAIN}}"; exit 1; fi; \
-		cd vscode-extension && npm run test:integration -- --run $$FILES || { echo "   ❌ Integration tests failed"; exit 1; }; \
-	elif [ "{{TYPE}}" = "e2e" ]; then \
-		FILES=$$(cd vscode-extension && find out/test/suite/e2e/{{DOMAIN}} -name '*.test.js' 2>/dev/null); \
-		if [ -z "$$FILES" ]; then echo "   ❌ No e2e tests found for {{DOMAIN}}"; exit 1; fi; \
-		cd vscode-extension && npm run test:e2e -- --run $$FILES || { echo "   ❌ E2E tests failed"; exit 1; }; \
-	else \
-		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
-	fi; \
+	#!/usr/bin/env bash
+	set -euo pipefail
+	echo "🐍 Running Python {{DOMAIN}} {{TYPE}} tests..."
+	case "{{TYPE}}" in
+		all)         uv run pytest tests/unit/{{DOMAIN}}/ tests/integration/{{DOMAIN}}/ -v --tb=short 2>/dev/null || \
+		             uv run pytest tests/unit/{{DOMAIN}}/ -v --tb=short 2>/dev/null || \
+		             uv run pytest tests/integration/{{DOMAIN}}/ -v --tb=short ;;
+		unit)        uv run pytest tests/unit/{{DOMAIN}}/ -v --tb=short ;;
+		integration) uv run pytest tests/integration/{{DOMAIN}}/ -v --tb=short ;;
+		e2e)         uv run pytest tests/e2e/{{DOMAIN}}/ -v --tb=short ;;
+		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
+	esac
 	echo "   ✅ {{DOMAIN}} {{TYPE}} tests passed"
 
-# Run MCP Bridge tests (all are integration tests)
-test-mcp-bridge:
-	@echo "🌉 Running MCP Bridge tests..."
-	@cd mcp-bridge && bun test || (echo "   ❌ MCP Bridge tests failed"; exit 1)
+# Run Agent Core tests
+test-agent-core TYPE="all": (_bun-test "agent-core" TYPE)
+	@echo "   ✅ Agent Core {{TYPE}} tests passed"
+
+# Run Agent Core domain tests
+test-agent-core-domain DOMAIN TYPE="all":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	echo "🤖 Running Agent Core {{DOMAIN}} {{TYPE}} tests..."
+	case "{{TYPE}}" in
+		all)         cd agent-core && (bun test tests/unit/{{DOMAIN}}/ tests/integration/{{DOMAIN}}/ --bail 2>/dev/null || \
+		             bun test tests/unit/{{DOMAIN}}/ --bail 2>/dev/null || \
+		             bun test tests/integration/{{DOMAIN}}/ --bail) ;;
+		unit)        cd agent-core && bun test tests/unit/{{DOMAIN}}/ --bail ;;
+		integration) cd agent-core && bun test tests/integration/{{DOMAIN}}/ --bail ;;
+		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
+	esac
+	echo "   ✅ {{DOMAIN}} {{TYPE}} tests passed"
+
+# Run VSCode Extension tests
+test-extension TYPE="all":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	echo "📦 Running VSCode Extension {{TYPE}} tests..."
+	cd vscode-extension && npm run compile >/dev/null
+	case "{{TYPE}}" in
+		all)         npm run test:all ;;
+		unit)        npm run test:unit ;;
+		integration) npm run test:integration ;;
+		e2e)         npm run test:e2e ;;
+		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
+	esac
+	echo "   ✅ Extension {{TYPE}} tests passed"
+
+# Run VSCode Extension domain tests
+test-extension-domain DOMAIN TYPE="all":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	echo "📦 Running Extension {{DOMAIN}} {{TYPE}} tests..."
+	cd vscode-extension && npm run compile >/dev/null
+	case "{{TYPE}}" in
+		all)         target="out/test/suite" ;;
+		unit)        target="out/test/suite/unit/{{DOMAIN}}" ;;
+		integration) target="out/test/suite/integration/{{DOMAIN}}" ;;
+		e2e)         target="out/test/suite/e2e/{{DOMAIN}}" ;;
+		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
+	esac
+	FILES=$(find "$target" -path "*{{DOMAIN}}*" -name '*.test.js' 2>/dev/null || true)
+	[ -z "$FILES" ] && { echo "❌ No tests found for {{DOMAIN}}"; exit 1; }
+	npm run test:{{TYPE}} -- --run $FILES
+	echo "   ✅ {{DOMAIN}} {{TYPE}} tests passed"
+
+# Run MCP Bridge tests
+test-mcp-bridge: (_bun-test "mcp-bridge" "all")
 	@echo "   ✅ MCP Bridge tests passed"
 
-# Run shared package tests (bun)
-test-shared:
-	@echo "📦 Running shared package tests..."
-	@cd shared && bun test || (echo "   ❌ Shared package tests failed"; exit 1)
+# Run shared package tests
+test-shared: (_bun-test "shared" "all")
 	@echo "   ✅ Shared package tests passed"
 
-# Run Webview tests (all are unit tests)
+# Run Webview tests
 test-webview:
-	@echo "🎨 Running Webview tests..."
-	@cd vscode-extension/webview && bun test || (echo "   ❌ Webview tests failed"; exit 1)
+	@cd vscode-extension/webview && bun test
 	@echo "   ✅ Webview tests passed"
 
-# Run Playwright UI/E2E tests for the webview/extension shell
+# Run Playwright UI/E2E tests
 test-playwright:
-	@echo "🎭 Running Playwright UI tests..."
-	@cd vscode-extension/playwright && npm test || (echo "   ❌ Playwright tests failed"; exit 1)
+	@cd vscode-extension/playwright && npm test
 	@echo "   ✅ Playwright tests passed"
 
 # ==============================================================================
@@ -271,13 +266,8 @@ test-playwright:
 
 # Run specific test file
 test-file FILE: setup-python
-	@echo "🧪 Running specific test file: {{FILE}}"
 	@uv run pytest {{FILE}} -v
 
-# Run Python tests with coverage
-test-coverage: setup-python
-	@echo "🧪 Running Python tests with coverage..."
-	@uv run pytest -n0 --cov=kb --cov-report=html --cov-report=term-missing
 
 
 # ==============================================================================

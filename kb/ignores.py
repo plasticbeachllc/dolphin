@@ -201,4 +201,4 @@ def build_ignore_pathspec(config_ignore: Iterable[str], config_exceptions: Itera
     # Add security patterns
     ignore_patterns.update(extra_security)
 
-    return PathSpec.from_lines("gitwildmatch", ignore_patterns)
+    return PathSpec.from_lines("gitignore", ignore_patterns)

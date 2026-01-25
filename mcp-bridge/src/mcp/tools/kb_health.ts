@@ -1,6 +1,6 @@
 import type { Tool, CallToolResult, TextContent } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { restHealthV1 } from "../../rest/client.js";
+import { restHealthV1, KBClient } from "../../rest/client.js";
 import { logInfo, logError } from "../../util/logger.js";
 import { buildToolInputSchema } from "./schema.js";
 import { TOOL_VERSION } from "./version.js";
@@ -12,7 +12,7 @@ const INPUT_SHAPE = {
 const INPUT = z.object(INPUT_SHAPE);
 const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
-export function makeKbHealth(): {
+export function makeKbHealth(client?: KBClient): {
   definition: Tool;
   inputSchema: typeof INPUT;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -36,7 +36,9 @@ export function makeKbHealth(): {
       const argsObj = args as { input?: unknown } | undefined;
       const input = INPUT.parse(argsObj?.input ?? args);
 
-      const health = await restHealthV1(input.check, signal);
+      const health = await (client
+        ? client.healthV1(input.check, signal)
+        : restHealthV1(input.check, signal));
       const content: CallToolResult["content"] = [
         { type: "text", text: "KB health ready." } as TextContent,
         { type: "text", text: "```json\n" + JSON.stringify(health) + "\n```" } as TextContent,

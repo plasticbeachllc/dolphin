@@ -60,7 +60,7 @@ class TestSnapshotTracking:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
         repo = sql_store.get_repo_by_name("test-repo")
         assert repo is not None
 
@@ -141,7 +141,7 @@ class TestSnapshotTracking:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
         repo = sql_store.get_repo_by_name("test-repo")
         assert repo is not None
 
@@ -225,7 +225,7 @@ class TestSnapshotTracking:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
         repo = sql_store.get_repo_by_name("test-repo")
         assert repo is not None
 
@@ -290,7 +290,7 @@ class TestPostIndexValidation:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
 
         # Create multiple files to increase indexing time
         files = []
@@ -355,7 +355,7 @@ class TestDriftDetection:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
         sql_store.get_repo_by_name("test-repo")
 
         # Create and index file
@@ -420,7 +420,7 @@ class TestDriftDetection:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
 
         # Create and index file
         test_file = workspace / "to_delete.py"
@@ -477,7 +477,7 @@ class TestDriftDetection:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
 
         # Create and index file
         test_file = workspace / "stable.py"
@@ -535,7 +535,7 @@ class TestAutomaticChangeProcessing:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
         repo = sql_store.get_repo_by_name("test-repo")
         assert repo is not None
 
@@ -617,7 +617,7 @@ class TestPendingChangesWorkflow:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
 
         # Record pending changes
         client = create_api_client()
@@ -674,7 +674,7 @@ class TestPendingChangesWorkflow:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
 
         # Create test files
         file1 = workspace / "file1.py"

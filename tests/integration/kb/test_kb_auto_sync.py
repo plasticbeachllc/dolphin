@@ -161,7 +161,7 @@ class TestAsyncIndexingFlow:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
         repo = sql_store.get_repo_by_name("test-repo")
         assert repo is not None
 
@@ -207,6 +207,8 @@ def goodbye():
 
         # Verify completion
         assert final_status is not None, "Indexing did not complete within 30 seconds"
+        if final_status["status"] == "failed":
+            pytest.fail(f"Indexing failed: {final_status.get('error')}")
         assert final_status["status"] == "completed", f"Indexing failed: {final_status.get('error')}"
         assert final_status["total"] == 1
 
@@ -240,7 +242,7 @@ def goodbye():
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
         repo = sql_store.get_repo_by_name("test-repo")
         assert repo is not None
 
@@ -281,6 +283,8 @@ def function_{i}():
 
         # Verify
         assert final_status is not None
+        if final_status["status"] == "failed":
+            pytest.fail(f"Indexing failed: {final_status.get('error')}")
         assert final_status["status"] == "completed"
         assert final_status["total"] == 5
 
@@ -315,7 +319,7 @@ def function_{i}():
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
         repo = sql_store.get_repo_by_name("test-repo")
         assert repo is not None
 
@@ -338,9 +342,11 @@ def function_{i}():
             status = client.get(f"/v1/index/status/{task_id_1}").json()
             if status["status"] == "completed":
                 break
+            if status["status"] == "failed":
+                pytest.fail(f"Indexing failed: {status.get('error')}")
             time.sleep(1)
 
-        assert status["status"] == "completed"
+        assert status["status"] == "completed", f"Indexing failed: {status.get('error', 'unknown error')}"
         chunks = sql_store.get_chunks_for_file(repo["id"], "test.py")
         assert chunks is not None
         first_indexed_count = len(chunks)
@@ -357,9 +363,11 @@ def function_{i}():
             status = client.get(f"/v1/index/status/{task_id_2}").json()
             if status["status"] == "completed":
                 break
+            if status["status"] == "failed":
+                pytest.fail(f"Indexing failed: {status.get('error')}")
             time.sleep(1)
 
-        assert status["status"] == "completed"
+        assert status["status"] == "completed", f"Indexing failed: {status.get('error', 'unknown error')}"
         chunks = sql_store.get_chunks_for_file(repo["id"], "test.py")
         assert chunks is not None
         second_indexed_count = len(chunks)
@@ -397,7 +405,7 @@ class TestTaskStatusTracking:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
         sql_store.get_repo_by_name("test-repo")
 
         # Create test file
@@ -453,10 +461,10 @@ class TestTaskStatusTracking:
         workspace2 = temp_dir / "workspace2"
         workspace2.mkdir()
 
-        sql_store.record_repo(name="repo1", path=workspace1, default_embed_model="large")
+        sql_store.record_repo(name="repo1", path=workspace1, default_embed_model="small")
 
         sql_store.get_repo_by_name("repo1")
-        sql_store.record_repo(name="repo2", path=workspace2, default_embed_model="large")
+        sql_store.record_repo(name="repo2", path=workspace2, default_embed_model="small")
 
         sql_store.get_repo_by_name("repo2")
 
@@ -515,7 +523,7 @@ class TestErrorHandling:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
         sql_store.get_repo_by_name("test-repo")
 
         client = create_api_client()
@@ -650,9 +658,11 @@ class APIEndpoint:
             status = client.get(f"/v1/index/status/{task_id}").json()
             if status["status"] == "completed":
                 break
+            if status["status"] == "failed":
+                pytest.fail(f"Indexing failed: {status.get('error')}")
             time.sleep(1)
 
-        assert status["status"] == "completed"
+        assert status["status"] == "completed", f"Indexing failed: {status.get('error', 'unknown error')}"
 
         # Step 4: Search for indexed content
         search_response = client.post(

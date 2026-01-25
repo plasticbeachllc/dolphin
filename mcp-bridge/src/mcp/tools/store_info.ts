@@ -1,6 +1,6 @@
 import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { restListRepos } from "../../rest/client.js";
+import { restListRepos, KBClient } from "../../rest/client.js";
 import { logInfo, logError } from "../../util/logger.js";
 import { CONFIG } from "../../util/config.js";
 import { buildToolInputSchema } from "./schema.js";
@@ -10,7 +10,7 @@ import { normalizeToolError, formatToolErrorText } from "./error.js";
 const INPUT = z.object({});
 const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
-export function makeStoreInfo(): {
+export function makeStoreInfo(client?: KBClient): {
   definition: Tool;
   inputSchema: typeof INPUT;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -31,7 +31,7 @@ export function makeStoreInfo(): {
   const handler = async (_args: unknown, signal?: AbortSignal): Promise<CallToolResult> => {
     const started = Date.now();
     try {
-      const repos = await restListRepos(signal);
+      const repos = await (client ? client.listRepos(signal) : restListRepos(signal));
       const totalChunks = repos.repos.reduce((sum, r) => sum + (r.chunks ?? 0), 0);
 
       const data = {

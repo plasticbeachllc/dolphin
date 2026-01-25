@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 
 # Track initialized loggers to avoid duplicate handlers across instances
 _initialized_loggers: dict[str, bool] = {}
+
+_sleep = time.sleep
 
 
 class ErrorLogger:
@@ -136,8 +139,13 @@ def with_retry(max_attempts: int = 3, delays: tuple[float, ...] = (1.0, 2.0, 4.0
         def embed_texts(model, texts):
             # embedding implementation
     """
-    import time
     from functools import wraps
+
+    def _should_retry(exc: BaseException) -> bool:
+        # Never retry on obvious "programmer / caller error" exceptions by default.
+        if isinstance(exc, (ValueError, TypeError)):
+            return False
+        return True
 
     def decorator(func):
         @wraps(func)
@@ -148,9 +156,11 @@ def with_retry(max_attempts: int = 3, delays: tuple[float, ...] = (1.0, 2.0, 4.0
                     return func(*args, **kwargs)
                 except Exception as e:
                     last_exception = e
+                    if not _should_retry(e):
+                        raise
                     if attempt < max_attempts - 1:  # Not the last attempt
                         delay = delays[attempt] if attempt < len(delays) else delays[-1]
-                        time.sleep(delay)
+                        _sleep(delay)
                     else:
                         # Last attempt failed, re-raise the exception
                         raise last_exception

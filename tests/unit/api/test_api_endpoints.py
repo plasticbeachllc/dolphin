@@ -315,7 +315,7 @@ class TestApiKeyMiddleware:
         assert req.repos is None
         assert req.top_k == 8
         assert req.max_snippet_tokens == 240
-        assert req.embed_model == "large"
+        assert req.embed_model == "small"
 
     def test_search_request_with_all_fields(self):
         """Test SearchRequest with all fields."""

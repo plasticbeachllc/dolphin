@@ -297,7 +297,7 @@ def prune_ignored(
     ignore_patterns.add("bun.lock")
     ignore_patterns.add("**/bun.lock")
 
-    ignore_spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
+    ignore_spec = PathSpec.from_lines("gitignore", ignore_patterns)
 
     # Debug: show which patterns we're using
     if dry_run:

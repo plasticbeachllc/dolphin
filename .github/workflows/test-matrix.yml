@@ -41,10 +41,9 @@ jobs:
 
       - name: Run consolidated unit suite
         run: |
-          just test-python unit
-          just test-agent-core unit
+          just test-kb unit
+          just test-mcp unit
           just test-shared
-          just test-webview
 
   integration-tests:
     name: Integration Tests
@@ -84,8 +83,7 @@ jobs:
       - name: Run consolidated integration suite
         run: |
           just test-python integration
-          just test-agent-core integration
-          just test-mcp-bridge
+          just test-mcp integration
 
   e2e-tests:
     name: E2E Tests
@@ -135,6 +133,5 @@ jobs:
         run: |
           Xvfb :99 -screen 0 1024x768x24 &
           sleep 3
-          just test-python e2e
-          just test-agent-core e2e
-          just test-extension all
+          just test-kb e2e
+          just test-mcp e2e

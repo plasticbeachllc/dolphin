@@ -107,6 +107,7 @@ class TestSQLiteConnectionPool:
             database=temp_db,
             pool_size=2,
             max_overflow=2,
+            timeout=0.5,
         )
 
         # Acquire all pooled connections
@@ -114,8 +115,11 @@ class TestSQLiteConnectionPool:
         conn2 = pool.acquire()
 
         # Should create overflow connection
+        start = time.perf_counter()
         conn3 = pool.acquire()
+        elapsed = time.perf_counter() - start
         assert conn3 is not None
+        assert elapsed < 0.1
 
         stats = pool.stats()
         assert stats["current_overflow"] >= 1
