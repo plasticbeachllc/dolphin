@@ -76,7 +76,7 @@ class TestKnowledgeSearchBackend:
             }
         ]
 
-        request = SearchRequest(query="test", top_k=10)
+        request = SearchRequest(query="test", top_k=10, embed_model="small")
         results = basic_backend.search(request)
 
         expected_bm25_id = "1:2:small:hash2:1:10"
@@ -121,13 +121,13 @@ class TestKnowledgeSearchBackend:
         ]
 
         # Use low cutoff (0.0) to accept RRF scores (~0.016)
-        request = SearchRequest(query="test", score_cutoff=0.0)
+        request = SearchRequest(query="test", score_cutoff=0.0, embed_model="small")
         results = basic_backend.search(request)
 
         assert len(results) == 2  # Both should pass with RRF scores
 
         # Test high cutoff that filters out results
-        request_high_cutoff = SearchRequest(query="test", score_cutoff=0.5)
+        request_high_cutoff = SearchRequest(query="test", score_cutoff=0.5, embed_model="small")
         results_high = basic_backend.search(request_high_cutoff)
 
         # RRF scores (~0.016) should be below 0.5 cutoff, so no results
@@ -174,7 +174,9 @@ class TestKnowledgeSearchBackend:
         # Verify the new lookup flow was used
         sql_store.get_repo_by_name.assert_called_once_with("repo")
         sql_store.get_file_id.assert_called_once_with(1, "repo/file.py")
-        sql_store.get_chunk_locations_by_identity.assert_called_once_with(1, 2, "abcdef", "small")
+        sql_store.get_chunk_locations_by_identity.assert_called_once_with(
+            1, 2, "abcdef", "small"
+        )
         sql_store.get_chunk_by_id.assert_not_called()
         assert hydrated[0]["start_line"] == 10
         # Check generated ID format: {repo_id}:{file_id}:{embed_model}:{text_hash}:{start_line}:{end_line}
