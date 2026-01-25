@@ -941,6 +941,10 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     # Map embedding_provider_type to embedding_provider (nested under "embedding")
     if "embedding_provider_type" in kwargs:
         embedding_data["provider"] = kwargs["embedding_provider_type"]
+    
+    # Map default_embed_model if provided (CRITICAL FIX FOR OPTIONS B)
+    if "default_embed_model" in kwargs:
+         embedding_data["default_embed_model"] = kwargs["default_embed_model"]
 
     # Map default_embed_model if provided (CRITICAL FIX FOR OPTIONS B)
     if "default_embed_model" in kwargs:
