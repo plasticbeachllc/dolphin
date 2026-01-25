@@ -197,7 +197,7 @@ Set `DOLPHIN_API_URL` if your KB server is not running at `http://127.0.0.1:7777
 
 MCP uses the `/v1` KB endpoints and includes the `X-API-Key` header automatically when the key is available. The key is auto-provisioned to `~/.dolphin/kb_api_key` by `dolphin init`, `dolphin serve`, and `bunx dolphin-mcp`.
 
-Available MCP tools: `search`, `chunk.get`, `file.lines`, `store.info`, `metadata.get`, `repos.list`, `health`
+Available MCP tools: `search`, `chunk_get`, `file_lines`, `store_info`, `metadata_get`, `repos_list`, `health`
 
 ## REST API
 
@@ -206,9 +206,9 @@ Available MCP tools: `search`, `chunk.get`, `file.lines`, `store.info`, `metadat
 dolphin serve
 
 # Health check (unauthenticated)
-curl http://127.0.0.1:7777/health
+curl http://127.0.0.1:7777/v1/health
 
-# v1 endpoints require an API key
+# Most v1 endpoints require an API key
 export DOLPHIN_API_KEY="$(cat ~/.dolphin/kb_api_key)"
 
 # List repositories
@@ -308,7 +308,7 @@ See [docs/TESTING.md](docs/TESTING.md) for complete testing procedures.
 
 ```bash
 # Check API server
-curl http://127.0.0.1:7777/health
+curl http://127.0.0.1:7777/v1/health
 
 # Check indexed repositories
 dolphin kb status
@@ -332,7 +332,7 @@ dolphin kb index <repo-name> --full --force
 
 **MCP not connecting:**
 
-- Verify API server is running: `curl http://127.0.0.1:7777/health`
+- Verify API server is running: `curl http://127.0.0.1:7777/v1/health`
 - Check MCP bridge logs: `tail -f mcp-bridge/logs/mcp.log`
 - Verify Bun is installed: `bun --version`
 

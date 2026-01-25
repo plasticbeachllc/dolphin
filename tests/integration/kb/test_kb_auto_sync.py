@@ -666,7 +666,7 @@ class APIEndpoint:
 
         # Step 4: Search for indexed content
         search_response = client.post(
-            "/search",
+            "/v1/search",
             json={"query": "authentication", "repos": ["my-project"], "top_k": 5},
         )
 

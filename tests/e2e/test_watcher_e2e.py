@@ -71,7 +71,7 @@ default_embed_model = "small"
     try:
         # Wait for valid status
         base_url = f"http://{E2E_HOST}:{E2E_PORT}"
-        assert wait_for_server(f"{base_url}/health"), "Server failed to start"
+        assert wait_for_server(f"{base_url}/v1/health"), "Server failed to start"
 
         # 4. Create a new file in the git repo (uncommitted)
         new_file = git_repo / "live_watch.py"

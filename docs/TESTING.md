@@ -87,7 +87,7 @@ just test-webview                # Webview tests (unit)
 - **Smoke flow**:
   1. Start the stack: `cd observability && ./start-stack.sh` (expects Prometheus/Grafana/Jaeger/Loki healthy).
   2. Boot the KB API with metrics: `cd kb && uv run python -m uvicorn api.server:app_with_lifespan --host 0.0.0.0 --port 8000`.
-  3. Verify `/metrics` and `/health` respond, then confirm Prometheus shows the `kb-api` target as `UP` at http://localhost:9090/targets.
+  3. Verify `/metrics` and `/v1/health` respond, then confirm Prometheus shows the `kb-api` target as `UP` at http://localhost:9090/targets.
   4. Run Grafana queries/dashboards once data is flowing; fix scrape errors before merging.
 
 ## Known gaps to close

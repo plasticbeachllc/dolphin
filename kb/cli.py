@@ -234,10 +234,11 @@ def _search_remote(
     import requests
     import requests.exceptions  # Import the exceptions module explicitly
 
+    from kb.api_key import load_kb_api_key
     from kb.config import load_config
 
     config = load_config()
-    endpoint = f"http://{config.endpoint}/search"
+    endpoint = f"http://{config.endpoint}/v1/search"
 
     payload = {
         "query": query,
@@ -252,7 +253,20 @@ def _search_remote(
         payload["path_prefix"] = path_prefix
 
     try:
-        response = requests.post(endpoint, json=payload, timeout=30)
+        api_key = load_kb_api_key()
+        if not api_key:
+            typer.echo(
+                "Error: No KB API key configured. Set DOLPHIN_API_KEY (or DOLPHIN_KB_API_KEY) to match the server.",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        response = requests.post(
+            endpoint,
+            json=payload,
+            headers={"X-API-Key": api_key},
+            timeout=30,
+        )
         response.raise_for_status()
 
         result = response.json()
