@@ -1493,32 +1493,19 @@ class SQLiteMetadataStore:
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 """
-                SELECT id FROM chunk_content
-                WHERE repo_id = ? AND file_id = ? AND text_hash = ? AND embed_model = ?
+                SELECT
+                    cl.content_id,
+                    cl.start_line,
+                    cl.end_line,
+                    cl.symbol_kind,
+                    cl.symbol_name,
+                    cl.symbol_path
+                FROM chunk_locations cl
+                JOIN chunk_content cc ON cl.content_id = cc.id
+                WHERE cc.repo_id = ? AND cc.file_id = ? AND cc.text_hash = ? AND cc.embed_model = ?
+                ORDER BY cl.start_line ASC
                 """,
                 (repo_id, file_id, text_hash, embed_model),
-            )
-            rows = cur.fetchall()
-            content_ids = [str(r[0]) for r in rows]
-
-            if not content_ids:
-                return []
-
-            placeholders = ",".join(["?"] * len(content_ids))
-            cur.execute(
-                f"""
-                SELECT
-                    content_id,
-                    start_line,
-                    end_line,
-                    symbol_kind,
-                    symbol_name,
-                    symbol_path
-                FROM chunk_locations
-                WHERE content_id IN ({placeholders})
-                ORDER BY start_line ASC
-                """,
-                tuple(content_ids),
             )
 
             locations = []
