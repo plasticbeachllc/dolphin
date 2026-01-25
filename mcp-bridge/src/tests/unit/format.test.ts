@@ -171,7 +171,6 @@ describe("buildSummary", () => {
     const result = buildSummary({
       hits: createMockHits(5),
       snippetsIncluded: 3,
-      moreAvailable: false,
       includeWarningsInText: false,
       warningEntries: [],
     });
@@ -184,7 +183,6 @@ describe("buildSummary", () => {
     const result = buildSummary({
       hits: createMockHits(1),
       snippetsIncluded: 1,
-      moreAvailable: false,
       includeWarningsInText: false,
       warningEntries: [],
     });
@@ -197,7 +195,6 @@ describe("buildSummary", () => {
     const result = buildSummary({
       hits: createMockHits(10),
       snippetsIncluded: 5,
-      moreAvailable: false,
       includeWarningsInText: false,
       warningEntries: [],
     });
@@ -210,7 +207,6 @@ describe("buildSummary", () => {
       hits: createMockHits(5),
       snippetsIncluded: 5,
       estimatedTotal: 100,
-      moreAvailable: false,
       includeWarningsInText: false,
       warningEntries: [],
     });
@@ -218,24 +214,10 @@ describe("buildSummary", () => {
     expect(result).toContain("~100 estimated");
   });
 
-  it("shows pagination hint when more available", () => {
-    const result = buildSummary({
-      hits: createMockHits(5),
-      snippetsIncluded: 5,
-      moreAvailable: true,
-      includeWarningsInText: false,
-      warningEntries: [],
-    });
-
-    expect(result).toContain("More available");
-    expect(result).toContain("cursor");
-  });
-
   it("includes warnings in text when requested", () => {
     const result = buildSummary({
       hits: createMockHits(1),
       snippetsIncluded: 1,
-      moreAvailable: false,
       includeWarningsInText: true,
       warningEntries: [{ code: "low_confidence" }, { code: "snippet_failed", detail: "timeout" }],
     });
@@ -249,7 +231,6 @@ describe("buildSummary", () => {
     const result = buildSummary({
       hits: createMockHits(1),
       snippetsIncluded: 1,
-      moreAvailable: false,
       includeWarningsInText: false,
       warningEntries: [{ code: "test_warning" }],
     });
@@ -276,7 +257,7 @@ describe("buildHitsJsonObject", () => {
     const result = buildHitsJsonObject({
       query: "test query",
       hits: [createMockHit()],
-      meta: { cursor: undefined, estimated_total: 100 },
+      meta: { estimated_total: 100, max_snippets: 1 },
       topK: 20,
       warningEntries: [],
     });
@@ -359,12 +340,11 @@ describe("buildHitsJsonObject", () => {
     const result = buildHitsJsonObject({
       query: "query",
       hits: [],
-      meta: { cursor: "next-page", estimated_total: 50, model: "large", top_k: 20 },
+      meta: { estimated_total: 50, model: "large", top_k: 20, max_snippets: 0 },
       topK: 20,
       warningEntries: [{ code: "test_warning" }],
     });
 
-    expect(result.meta.cursor).toBe("next-page");
     expect(result.meta.estimated_total).toBe(50);
     expect(result.meta.model).toBe("large");
     expect(result.meta.warnings).toHaveLength(1);
@@ -378,12 +358,11 @@ describe("buildHitsJsonText", () => {
       query: "test",
       hits: [],
       meta: {
-        cursor: null,
         estimated_total: null,
-        complete: null,
         warnings: [],
         model: null,
         top_k: 20,
+        max_snippets: null,
       },
     };
 
@@ -399,12 +378,11 @@ describe("buildHitsJsonText", () => {
       query: "search term",
       hits: [],
       meta: {
-        cursor: null,
         estimated_total: 10,
-        complete: true,
         warnings: [],
         model: "small",
         top_k: 5,
+        max_snippets: 0,
       },
     };
 

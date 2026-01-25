@@ -71,23 +71,31 @@ def init(
     # If creating fresh, let's ask for preference
     if created and sys.stdin is not None and sys.stdin.isatty():
         model_choice = (
-            typer.prompt("Select default embedding model", default="large", show_choices=True, type=str).strip().lower()
+            typer.prompt(
+                "Select default embedding model",
+                default="large",
+                show_choices=True,
+                type=str,
+            )
+            .strip()
+            .lower()
         )
 
         if model_choice not in ("small", "large"):
             model_choice = "large"
             typer.echo("Invalid choice, defaulting to 'large'.")
-
         # Patch the template string before writing
         # We assume the template has `default_embed_model = "large"` or similar
         # A simple replace works for the template
         if 'default_embed_model = "large"' in config_content:
             config_content = config_content.replace(
-                'default_embed_model = "large"', f'default_embed_model = "{model_choice}"'
+                'default_embed_model = "large"',
+                f'default_embed_model = "{model_choice}"',
             )
         elif 'default_embed_model = "small"' in config_content:
             config_content = config_content.replace(
-                'default_embed_model = "small"', f'default_embed_model = "{model_choice}"'
+                'default_embed_model = "small"',
+                f'default_embed_model = "{model_choice}"',
             )
 
         target.write_text(config_content, encoding="utf-8")
@@ -120,9 +128,6 @@ def init(
 def add_repo(
     name: str = typer.Argument(..., help="Logical name for the repository."),
     path: Path = typer.Argument(..., help="Absolute path to the repository root."),
-    default_embed_model: str = typer.Option(
-        None, "--default-embed-model", help="Default embedding model (small|large)."
-    ),
     no_index: bool = typer.Option(False, "--no-index", help="Skip indexing prompt."),
 ) -> None:
     """Register or update a repository in the metadata store."""
@@ -132,15 +137,8 @@ def add_repo(
         raise typer.Exit(code=2)
 
     config = load_config()
-
-    # Use provided model or fall back to global default
-    if default_embed_model:
-        model = default_embed_model.strip().lower()
-        if model not in {"small", "large"}:
-            typer.echo("Error: --default-embed-model must be 'small' or 'large'.")
-            raise typer.Exit(code=2)
-    else:
-        model = config.default_embed_model
+    # Use the global default model from config
+    model = config.default_embed_model
 
     metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
     metadata.initialize()

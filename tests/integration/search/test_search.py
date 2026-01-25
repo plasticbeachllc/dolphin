@@ -364,7 +364,7 @@ class TestSearchPerformance:
         # Run concurrent searches
         start_time = time.time()
         tasks = [search(request) for request in requests]
-        results = await asyncio.gather(*tasks)
+        results = cast(list[dict[str, Any]], await asyncio.gather(*tasks))
         end_time = time.time()
 
         total_time_ms = (end_time - start_time) * 1000

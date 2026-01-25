@@ -481,9 +481,9 @@ class TestPerformance:
 
         # Test invalidation and rebuild to get baseline rebuild time
         graph_manager.invalidate_cache()
-        start = time.time()
+        start = time.perf_counter()
         graph_manager.get_graph()
-        rebuild_time = time.time() - start
+        rebuild_time = time.perf_counter() - start
 
         # Rebuild should complete in reasonable time
         assert rebuild_time < 1.0, f"Rebuild took {rebuild_time:.3f}s, expected < 1.0s"

@@ -16,6 +16,7 @@ def test_search_returns_provenance_rich_snippets(kb_api_client):
             "query": "calibration metrics",
             "top_k": 3,
             "max_snippet_tokens": 12,
+            "max_snippets": 1,
         }
         response = kb_api_client.post("/v1/search", json=payload)
         assert response.status_code == 200, f"Unexpected status: {response.status_code}"

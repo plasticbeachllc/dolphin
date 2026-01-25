@@ -43,12 +43,11 @@ describe("applyPayloadTrimming", () => {
       },
     })),
     meta: {
-      cursor: null,
       estimated_total: null,
-      complete: null,
       warnings: [],
       model: null,
       top_k: 20,
+      max_snippets: null,
     },
   });
 

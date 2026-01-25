@@ -620,6 +620,7 @@ Columns:
 5. Post-process
    ├─ Apply score_cutoff filter
    ├─ Apply MMR reranking (if enabled)
+   ├─ Limit snippet payloads to max_snippets hits
    ├─ Truncate snippets to max_snippet_tokens
    ├─ Fetch metadata from SQLite
    └─ Build response
@@ -687,7 +688,7 @@ Columns:
 
 ### 🚧 EP-11 In Progress: Architect Mode KB Discovery
 
-> For the unified KB API key design and status, see `docs/API_KEY_PLAN.md` (covers auto-provisioning, env overrides, and client behavior across CLI, Agent Core, VS Code, and MCP bridge).
+> For KB API key setup and env overrides (`DOLPHIN_API_KEY`, `~/.dolphin/kb_api_key`), see `README.md`.
 
 **Phase 1 (Foundation) - Completed ✅:**
 
@@ -774,9 +775,9 @@ Columns:
 
 ```bash
 # Python tests
-pytest tests/unit/ -v                    # Unit tests
-pytest tests/integration/ -v             # Integration tests
-pytest --cov=kb/src                    # With coverage
+uv run pytest tests/unit/ -v             # Unit tests
+uv run pytest tests/integration/ -v      # Integration tests
+uv run pytest --cov=kb                  # With coverage
 
 # TypeScript tests
 cd mcp-bridge && bun test                # All MCP tests
