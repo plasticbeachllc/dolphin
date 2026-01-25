@@ -297,7 +297,6 @@ def test_mcp_search_live_has_graph_context(live_api_server: str) -> None:
 
     args = {
         "query": "Calculator",
-        "embed_model": "small",
         "include_graph_context": True,
         "output_mode": "prompt_ready",
         "top_k": 3,

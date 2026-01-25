@@ -95,6 +95,7 @@ class TestSearchEndpoint:
         data = response.json()
         assert "hits" in data
         assert len(data["hits"]) > 0
+        assert data["meta"]["max_snippets"] == 0
 
     def test_search_v1_unknown_repo_returns_404(self, kb_api_client):
         """Unknown repos should return a 404 with a helpful message."""
@@ -133,7 +134,7 @@ class TestSearchEndpoint:
 
         assert response.status_code == 422  # Validation error
 
-    def test_search_v1_include_snippets_with_context(self, mock_kb_stores, tmp_path, monkeypatch):
+    def test_search_v1_snippets_with_context(self, mock_kb_stores, tmp_path, monkeypatch):
         """Test v1 search snippet enrichment with context lines."""
         sql_store, lance_store = mock_kb_stores
         set_stores(sql_store, lance_store)
@@ -169,7 +170,7 @@ class TestSearchEndpoint:
             "/v1/search",
             json={
                 "query": "test",
-                "include_snippets": True,
+                "max_snippets": 1,
                 "context_lines_before": 1,
                 "context_lines_after": 1,
             },
@@ -306,8 +307,8 @@ class TestApiKeyMiddleware:
         assert req.query == "test"
         assert req.repos is None
         assert req.top_k == 8
-        assert req.max_snippet_tokens == 240
         # embed_model removed - now uses global config
+        assert req.max_snippets == 0
 
     def test_search_request_with_all_fields(self):
         """Test SearchRequest with all fields."""

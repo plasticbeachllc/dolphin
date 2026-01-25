@@ -3,7 +3,7 @@
 [![PyPi Version](https://img.shields.io/pypi/v/pb-dolphin.svg)](https://pypi.org/project/pb-dolphin/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A semantic code search and knowledge management system for AI interfaces. This repository ships the Knowledge Bank (Python) and MCP server (TypeScript/Bun) as the stable, release-targeted components.
+A semantic code indexing and search system with multiple interfaces. This repository currently ships the Knowledge Bank (Python) and MCP server (TypeScript/Bun) as stable, release-targeted components.
 
 ## Quick Start
 
@@ -27,9 +27,11 @@ For advanced search quality improvement (+20-30% MRR):
 uv pip install "pb-dolphin[reranking]"
 ```
 
-**Trade-off**: Better relevance but 2-3x slower searches. See [Advanced Features](#advanced-features) for configuration.
+See [Advanced Features](#advanced-features) for more information.
 
 ### Basic Usage
+
+We recommend using `uv run` to execute all commands for maximum compatibility.
 
 ```bash
 # Initialize global knowledge store and index a repository

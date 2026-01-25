@@ -74,7 +74,7 @@ describe("rest/client", () => {
         query: "findme",
         repos: ["r1", "r2"],
         top_k: 50,
-        embed_model: "small",
+        max_snippets: 2,
       };
       await client.search(body);
 
@@ -83,6 +83,7 @@ describe("rest/client", () => {
       expect(parsed.query).toBe("findme");
       expect(parsed.repos).toEqual(["r1", "r2"]);
       expect(parsed.top_k).toBe(50);
+      expect(parsed.max_snippets).toBe(2);
     });
 
     it("handles error response", async () => {

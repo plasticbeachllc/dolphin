@@ -71,8 +71,6 @@ default_embed_model = "small"
             "add-repo",
             "test-repo",
             str(git_repo),
-            "--default-embed-model",
-            "small",
             "--no-index",
         ],
         env=env,

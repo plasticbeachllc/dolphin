@@ -12,9 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.2.0] - Under Development
-
-## [0.2.0] - 2026-01-25
+Version 0.2.0 represents a complete Python backend.
 
 ### Added
 
@@ -32,9 +30,421 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Admin: `/v1/admin/reload`, `/v1/admin/rebuild-fts5`
 - Major ingestion/indexing improvements for performance and correctness (async/parallel pipeline, dynamic pooling, branch tracking, and file-watching workflows).
 
+#### 📘 Documentation and Process
+
+- Standardized all testing guidance into the canonical `docs/TESTING.md`, consolidating backend/extension/MCP/observability instructions and adding a post-merge verification checklist to keep releases linted, tested, and reflected in the changelog.
+
+#### 📚 Enhanced Knowledge Base Core
+
+- **Advanced Language-Aware Chunking**
+  - **Python** (`py_chunker.py`): Tree-sitter AST parsing for classes, functions, methods, docstrings
+  - **TypeScript/JavaScript** (`ts_chunker.py`): Exports, functions, classes, interfaces, type definitions
+  - **Markdown** (`md_chunker.py`): Heading-based hierarchical sectioning (H1-H6)
+  - **SQL** (`sql_chunker.py`): Table definitions, queries, stored procedures, views
+  - **Svelte** (`svelte_chunker.py`): Component parsing with script/template/style separation
+  - **Fallback** (`fallback_chunker.py`): Token-windowing with configurable overlap for unsupported languages
+
+- **Hybrid Semantic Search**
+  - OpenAI embeddings (text-embedding-3-small: 1536-dim, text-embedding-3-large: 3072-dim)
+  - LanceDB vector storage with IVF (Inverted File) indexing
+  - **Hybrid Search**: BM25 full-text + Vector search with Reciprocal Rank Fusion
+    - 40% better precision on identifier searches vs. vector-only
+    - Configurable BM25 k1 and b parameters
+    - Configurable fusion k parameter (default: 60)
+  - **Cross-Encoder Reranking** (optional, install with `pip install pb-dolphin[reranking]`):
+    - ms-marco-MiniLM-L-6-v2 model
+    - 20-30% MRR improvement over baseline
+    - Batch processing with configurable batch size
+    - Score threshold filtering
+    - Device selection (CPU/CUDA)
+    - Trade-off: 2-3x slower, ~2GB additional install size
+
+- **Result Ranking**
+  - **Maximal Marginal Relevance (MMR)**: Balances relevance and diversity
+    - Prevents redundant/similar results
+    - Configurable lambda parameter (default: 0.7)
+    - Improves result variety for exploratory searches
+  - **Reciprocal Rank Fusion (RRF)**: Combines multiple ranking sources
+    - Merges BM25 and vector search results
+    - No score normalization required
+    - Robust to outliers and score scale differences
+
+- **Code Graph Store**
+  - SQLite-based graph database for code entities and relationships
+  - Node types: functions, classes, methods, modules
+  - Edge types: calls, imports, inheritance, references
+  - Cross-repository relationship tracking
+  - Entity metadata: signatures, docstrings, visibility modifiers
+  - Graph pruning on file deletions to prevent orphaned data
+  - Query optimization for large codebases
+
+- **Multi-Backend Storage**
+  - **SQLite**: Metadata, provenance, graph, FTS5 full-text search
+  - **LanceDB**: Vector embeddings with ANN search
+  - Content deduplication via SHA256 hashing
+  - Separate LanceDB collections per embedding model
+  - Foreign key constraints for referential integrity
+
+#### ⚡ Parallelized Knowledge Base
+
+- **Batch Processing**
+  - Configurable batch size for embedding API calls (default: 100)
+  - Parallel embedding requests with concurrency control
+  - Rate limit handling with exponential backoff retry logic
+  - Batch processing for cross-encoder reranking (batch size: 32)
+
+- **Concurrent Search Capabilities**
+  - 8 parallel search queries supported (for LLM multi-tool calls)
+  - ~300ms p50 search latency for medium-sized repos (~500K chunks)
+  - ~800ms p95 search latency ""
+  - 10-20 sustained queries per second for single-user workloads
+
+- **Adaptive ANN (Approximate Nearest Neighbor) Tuning**
+  - Automatic query-type detection (identifier vs. concept vs. example-based)
+  - Dynamic nprobes adjustment based on dataset size and query patterns
+  - Three preset optimization strategies: speed, accuracy, development
+  - Custom parameter support for fine-tuning
+  - ~40% faster searches with adaptive tuning vs. static parameters
+  - Profiling and benchmarking scripts (`scripts/benchmark_ann.py`)
+
+- **Multi-Level Caching System**
+  - Redis support for distributed caching (optional)
+  - In-memory LRU caching for hot queries
+  - 512 MB LanceDB cache (configurable via `LANCE_DB_CACHE_SIZE`)
+  - Embedding deduplication via SHA256 content hashing
+  - Query result caching with TTL
+
+- **Resource Management**
+  - Baseline memory footprint: ~200 MB
+  - Under load (8 concurrent queries): ~500 MB
+  - Per-session spend caps (default: $10 USD)
+  - Token usage tracking and reporting
+  - Graceful handling of rate limits
+
+#### 🌐 REST API
+
+- **Production FastAPI REST API**
+  - **5 Core Endpoints**:
+    1. `GET /health` - Health checks (shallow: API availability, deep: DB + vector store)
+    2. `GET /v1/repos` - List indexed repositories with file counts and statistics
+    3. `POST /v1/search` - Semantic search with configurable parameters (top_k, score_threshold, etc.)
+    4. `GET /v1/chunks/{id}` - Retrieve specific chunk by ID with metadata
+    5. `GET /v1/file` - Fetch file slices by line range with path traversal protection
+  - CORS middleware for VSCode webview integration
+  - Structured error responses with remediation hints
+  - Request validation with Pydantic models
+  - JSONL logging with automatic rotation
+  - `/v1` aliases added for core read endpoints (search, repos, chunks, file); `/health` remains unauthenticated
+
+#### 🔧 Configuration & CLI Management
+
+- **Multi-Level Configuration System**
+  - Repository-specific: `.dolphin/config.toml`
+  - User-global: `~/.dolphin/config.toml`
+  - Automatic config creation with sensible defaults
+  - TOML format with schema validation
+  - Config hierarchy: repo-specific overrides user-global
+
+- **Unified CLI (`dolphin` command)**
+  - `dolphin init` - Initialize configuration files
+  - `dolphin add-repo` - Register a repository for indexing
+  - `dolphin index` - Index or reindex repository
+  - `dolphin search` - Interactive semantic code search
+  - `dolphin serve` - Start REST API server
+  - `dolphin config --show` - Display active configuration
+  - Rich terminal output with progress bars and status indicators
+  - Legacy `kb` CLI maintained for backward compatibility
+
+- **Repository Management Commands**
+  - `rm-repo` - Remove repository with cleanup validation and confirmation (use `--force` to skip)
+  - `reset-repo` - Reset repository state with automatic session abort
+  - `validate-repo` - Check repository integrity and index health
+  - `repair-repo` - Repair corrupted repositories with `--dry-run` support
+  - Foreign key validation during operations
+  - Comprehensive cleanup with warnings for non-critical issues
+
+#### 🧪 Comprehensive Testing Framework
+
+- **Extensive Test Suite (191+ Python Tests)**
+  - **Unit tests**: `tests/unit/` - Test individual components
+    - Chunkers (Python, TypeScript, Markdown, SQL, Svelte, fallback): 45+ tests
+    - Embeddings (OpenAI provider, retry logic, stub implementations): 15 tests
+    - Storage layers (SQLite, LanceDB, graph store): 29 tests
+    - Hashing and content deduplication: 12 tests
+    - Scanner and `.gitignore` handling: 18 tests
+    - Token counting utilities: 8 tests
+    - ANN tuning and optimization: Multiple tests
+  - **Integration tests**: `tests/integration/` - Test API endpoints and workflows
+    - Search API integration: 11 tests
+    - Search backend unit tests: 10 tests
+    - MCP endpoints: 12 tests
+    - Rank fusion algorithms: 19 tests
+    - End-to-end pipeline tests: 12 tests
+    - Hybrid search: Multiple tests
+    - KB auto-sync system: Multiple tests
+  - **Run**: `uv run pytest tests/unit/ -v` or `uv run pytest tests/integration/ -v`
+  - **Coverage**: `uv run pytest --cov=kb/src`
+
+- **Profiling and Benchmarking Tools**
+  - `scripts/benchmark_ann.py` - ANN parameter profiling across datasets
+  - `scripts/test_hybrid_search_performance.py` - Hybrid search quality metrics:
+    - Precision@5, Precision@10 measurements
+    - Mean Reciprocal Rank (MRR) calculations
+    - Latency profiling (mean, median, p95, p99)
+    - Baseline vs. hybrid vs. reranked comparisons
+  - Performance regression detection
+  - Memory profiling utilities
+
+- **Evaluation Framework**
+  - Search quality metrics (Precision, Recall, MRR, NDCG)
+  - Latency and throughput tracking
+  - HTML and XML coverage reports
+  - JUnit XML output for CI/CD integration
+  - Parallel test execution with `pytest-xdist`
+  - Cache testing guide for embedding providers
+
+#### 🚀 Production-Ready Features
+
+- **Security Hardening**
+  - Path traversal protection in file serving endpoints
+  - Parameterized SQL queries to prevent injection attacks
+  - Secure environment variable handling for API keys
+  - Secret file exclusion (`.env`, `.pem`, `.aws/`, etc.)
+  - Input validation and sanitization
+  - CORS configuration for webview security
+
+- **Robust Error Handling**
+  - Comprehensive error messages with actionable guidance
+  - Graceful degradation on service failures
+  - Exponential backoff retry logic for transient errors
+  - Automatic session cleanup on fatal errors
+  - Transaction rollback for database operations
+  - Non-blocking warnings for non-critical issues
+
+- **Monitoring and Observability**
+  - Health check endpoints (shallow and deep)
+  - Real-time progress tracking with file-level granularity
+  - Latency metrics (p50, p95, p99)
+  - Token usage tracking and reporting
+  - Spend cap enforcement per session
+  - JSONL structured logging for analysis
+  - Warning detection and reporting
+
+#### 📘 Documentation and Process
+
+- Standardized all testing guidance into the canonical `docs/TESTING.md`, consolidating backend/extension/MCP/observability instructions and adding a post-merge verification checklist to keep releases linted, tested, and reflected in the changelog.
+
+#### 📚 Enhanced Knowledge Base Core
+
+- **Advanced Language-Aware Chunking**
+  - **Python** (`py_chunker.py`): Tree-sitter AST parsing for classes, functions, methods, docstrings
+  - **TypeScript/JavaScript** (`ts_chunker.py`): Exports, functions, classes, interfaces, type definitions
+  - **Markdown** (`md_chunker.py`): Heading-based hierarchical sectioning (H1-H6)
+  - **SQL** (`sql_chunker.py`): Table definitions, queries, stored procedures, views
+  - **Svelte** (`svelte_chunker.py`): Component parsing with script/template/style separation
+  - **Fallback** (`fallback_chunker.py`): Token-windowing with configurable overlap for unsupported languages
+
+- **Hybrid Semantic Search**
+  - OpenAI embeddings (text-embedding-3-small: 1536-dim, text-embedding-3-large: 3072-dim)
+  - LanceDB vector storage with IVF (Inverted File) indexing
+  - **Hybrid Search**: BM25 full-text + Vector search with Reciprocal Rank Fusion
+    - 40% better precision on identifier searches vs. vector-only
+    - Configurable BM25 k1 and b parameters
+    - Configurable fusion k parameter (default: 60)
+  - **Cross-Encoder Reranking** (optional, install with `pip install pb-dolphin[reranking]`):
+    - ms-marco-MiniLM-L-6-v2 model
+    - 20-30% MRR improvement over baseline
+    - Batch processing with configurable batch size
+    - Score threshold filtering
+    - Device selection (CPU/CUDA)
+    - Trade-off: 2-3x slower, ~2GB additional install size
+
+- **Result Ranking**
+  - **Maximal Marginal Relevance (MMR)**: Balances relevance and diversity
+    - Prevents redundant/similar results
+    - Configurable lambda parameter (default: 0.7)
+    - Improves result variety for exploratory searches
+  - **Reciprocal Rank Fusion (RRF)**: Combines multiple ranking sources
+    - Merges BM25 and vector search results
+    - No score normalization required
+    - Robust to outliers and score scale differences
+
+- **Code Graph Store**
+  - SQLite-based graph database for code entities and relationships
+  - Node types: functions, classes, methods, modules
+  - Edge types: calls, imports, inheritance, references
+  - Cross-repository relationship tracking
+  - Entity metadata: signatures, docstrings, visibility modifiers
+  - Graph pruning on file deletions to prevent orphaned data
+  - Query optimization for large codebases
+
+- **Multi-Backend Storage**
+  - **SQLite**: Metadata, provenance, graph, FTS5 full-text search
+  - **LanceDB**: Vector embeddings with ANN search
+  - Content deduplication via SHA256 hashing
+  - Separate LanceDB collections per embedding model
+  - Foreign key constraints for referential integrity
+
+#### ⚡ Parallelized Knowledge Base
+
+- **Batch Processing**
+  - Configurable batch size for embedding API calls (default: 100)
+  - Parallel embedding requests with concurrency control
+  - Rate limit handling with exponential backoff retry logic
+  - Batch processing for cross-encoder reranking (batch size: 32)
+
+- **Concurrent Search Capabilities**
+  - 8 parallel search queries supported (for LLM multi-tool calls)
+  - ~300ms p50 search latency for medium-sized repos (~500K chunks)
+  - ~800ms p95 search latency ""
+  - 10-20 sustained queries per second for single-user workloads
+
+- **Adaptive ANN (Approximate Nearest Neighbor) Tuning**
+  - Automatic query-type detection (identifier vs. concept vs. example-based)
+  - Dynamic nprobes adjustment based on dataset size and query patterns
+  - Three preset optimization strategies: speed, accuracy, development
+  - Custom parameter support for fine-tuning
+  - ~40% faster searches with adaptive tuning vs. static parameters
+  - Profiling and benchmarking scripts (`scripts/benchmark_ann.py`)
+
+- **Multi-Level Caching System**
+  - Redis support for distributed caching (optional)
+  - In-memory LRU caching for hot queries
+  - 512 MB LanceDB cache (configurable via `LANCE_DB_CACHE_SIZE`)
+  - Embedding deduplication via SHA256 content hashing
+  - Query result caching with TTL
+
+- **Resource Management**
+  - Baseline memory footprint: ~200 MB
+  - Under load (8 concurrent queries): ~500 MB
+  - Per-session spend caps (default: $10 USD)
+  - Token usage tracking and reporting
+  - Graceful handling of rate limits
+
+#### 🌐 REST API
+
+- **Production FastAPI REST API**
+  - **5 Core Endpoints**:
+    1. `GET /health` - Health checks (shallow: API availability, deep: DB + vector store)
+    2. `GET /v1/repos` - List indexed repositories with file counts and statistics
+    3. `POST /v1/search` - Semantic search with configurable parameters (top_k, score_threshold, etc.)
+    4. `GET /v1/chunks/{id}` - Retrieve specific chunk by ID with metadata
+    5. `GET /v1/file` - Fetch file slices by line range with path traversal protection
+  - CORS middleware for VSCode webview integration
+  - Structured error responses with remediation hints
+  - Request validation with Pydantic models
+  - JSONL logging with automatic rotation
+  - `/v1` aliases added for core read endpoints (search, repos, chunks, file); `/health` remains unauthenticated
+
+#### 🔧 Configuration & CLI Management
+
+- **Multi-Level Configuration System**
+  - Repository-specific: `.dolphin/config.toml`
+  - User-global: `~/.dolphin/config.toml`
+  - Automatic config creation with sensible defaults
+  - TOML format with schema validation
+  - Config hierarchy: repo-specific overrides user-global
+
+- **Unified CLI (`dolphin` command)**
+  - `dolphin init` - Initialize configuration files
+  - `dolphin add-repo` - Register a repository for indexing
+  - `dolphin index` - Index or reindex repository
+  - `dolphin search` - Interactive semantic code search
+  - `dolphin serve` - Start REST API server
+  - `dolphin config --show` - Display active configuration
+  - Rich terminal output with progress bars and status indicators
+  - Legacy `kb` CLI maintained for backward compatibility
+
+- **Repository Management Commands**
+  - `rm-repo` - Remove repository with cleanup validation and confirmation (use `--force` to skip)
+  - `reset-repo` - Reset repository state with automatic session abort
+  - `validate-repo` - Check repository integrity and index health
+  - `repair-repo` - Repair corrupted repositories with `--dry-run` support
+  - Foreign key validation during operations
+  - Comprehensive cleanup with warnings for non-critical issues
+
+#### 🧪 Comprehensive Testing Framework
+
+- **Extensive Test Suite (191+ Python Tests)**
+  - **Unit tests**: `tests/unit/` - Test individual components
+    - Chunkers (Python, TypeScript, Markdown, SQL, Svelte, fallback): 45+ tests
+    - Embeddings (OpenAI provider, retry logic, stub implementations): 15 tests
+    - Storage layers (SQLite, LanceDB, graph store): 29 tests
+    - Hashing and content deduplication: 12 tests
+    - Scanner and `.gitignore` handling: 18 tests
+    - Token counting utilities: 8 tests
+    - ANN tuning and optimization: Multiple tests
+  - **Integration tests**: `tests/integration/` - Test API endpoints and workflows
+    - Search API integration: 11 tests
+    - Search backend unit tests: 10 tests
+    - MCP endpoints: 12 tests
+    - Rank fusion algorithms: 19 tests
+    - End-to-end pipeline tests: 12 tests
+    - Hybrid search: Multiple tests
+    - KB auto-sync system: Multiple tests
+  - **Run**: `uv run pytest tests/unit/ -v` or `uv run pytest tests/integration/ -v`
+  - **Coverage**: `uv run pytest --cov=kb/src`
+
+- **Profiling and Benchmarking Tools**
+  - `scripts/benchmark_ann.py` - ANN parameter profiling across datasets
+  - `scripts/test_hybrid_search_performance.py` - Hybrid search quality metrics:
+    - Precision@5, Precision@10 measurements
+    - Mean Reciprocal Rank (MRR) calculations
+    - Latency profiling (mean, median, p95, p99)
+    - Baseline vs. hybrid vs. reranked comparisons
+  - Performance regression detection
+  - Memory profiling utilities
+
+- **Evaluation Framework**
+  - Search quality metrics (Precision, Recall, MRR, NDCG)
+  - Latency and throughput tracking
+  - HTML and XML coverage reports
+  - JUnit XML output for CI/CD integration
+  - Parallel test execution with `pytest-xdist`
+  - Cache testing guide for embedding providers
+
+#### 🚀 Production-Ready Features
+
+- **Security Hardening**
+  - Path traversal protection in file serving endpoints
+  - Parameterized SQL queries to prevent injection attacks
+  - Secure environment variable handling for API keys
+  - Secret file exclusion (`.env`, `.pem`, `.aws/`, etc.)
+  - Input validation and sanitization
+  - CORS configuration for webview security
+
+- **Robust Error Handling**
+  - Comprehensive error messages with actionable guidance
+  - Graceful degradation on service failures
+  - Exponential backoff retry logic for transient errors
+  - Automatic session cleanup on fatal errors
+  - Transaction rollback for database operations
+  - Non-blocking warnings for non-critical issues
+
+- **Monitoring and Observability**
+  - Health check endpoints (shallow and deep)
+  - Real-time progress tracking with file-level granularity
+  - Latency metrics (p50, p95, p99)
+  - Token usage tracking and reporting
+  - Spend cap enforcement per session
+  - JSONL structured logging for analysis
+  - Warning detection and reporting
+
 ### Changed
 
-- Ignore pattern handling standardized to `.gitignore` semantics.
+- **Dependency Optimization**
+  - Core install reduced from ~2GB to ~200MB
+  - Heavy ML dependencies moved to optional extras
+  - Reranking: `pip install pb-dolphin[reranking]` (~2GB)
+  - Orchestrator: `pip install pb-dolphin[orchestrator]`
+  - Faster installation and reduced storage footprint
+
+- **Configuration System Improvements**
+  - Fixed config template field names to match parser expectations
+  - Added missing configuration fields (cache settings, batch_size, concurrency)
+  - Removed non-functional config sections to reduce confusion
+  - Default embedding provider now "openai" (was "stub")
+  - Config hierarchy properly loads user config before system defaults
 
 ### Fixed
 

@@ -22,9 +22,8 @@ export interface ApiSearchResponse {
     model?: string;
     latency_ms?: number;
     timing?: { embedding_ms?: number; search_ms?: number; processing_ms?: number };
-    cursor?: string;
     estimated_total?: number;
-    complete?: boolean;
+    max_snippets?: number;
     warnings?: string[];
   };
 }
@@ -73,4 +72,4 @@ export type SnippetInfo = { snippet: string; start: number; end: number };
 
 export type SearchResultWithHits = SearchResponse & { hits: ExtendedSearchHit[] };
 
-export const HITS_JSON_SCHEMA_VERSION = "2025-11-25.1";
+export const HITS_JSON_SCHEMA_VERSION = "2026-01-25.1";
