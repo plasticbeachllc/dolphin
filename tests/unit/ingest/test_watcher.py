@@ -30,6 +30,7 @@ class TestRepoWatcher:
     @patch("kb.ignores.build_ignore_pathspec")
     async def test_init(self, mock_build_ignore, mock_get_branch, mock_pipeline, config):
         from pathspec import PathSpec
+
         mock_build_ignore.return_value = PathSpec.from_lines("gitwildmatch", [])
         mock_get_branch.return_value = BranchState(branch="main", commit_sha="123")
 
@@ -43,6 +44,7 @@ class TestRepoWatcher:
     @patch("kb.ignores.build_ignore_pathspec")
     async def test_filter_changes(self, mock_build_ignore, mock_get_branch, mock_pipeline, config):
         from pathspec import PathSpec
+
         mock_build_ignore.return_value = PathSpec.from_lines("gitwildmatch", [])
         mock_get_branch.return_value = BranchState(branch="main", commit_sha="123")
 
@@ -71,6 +73,7 @@ class TestRepoWatcher:
     @patch("kb.ignores.build_ignore_pathspec")
     async def test_check_branch_switch_no_change(self, mock_build_ignore, mock_get_branch, mock_pipeline, config):
         from pathspec import PathSpec
+
         mock_build_ignore.return_value = PathSpec.from_lines("gitwildmatch", [])
         mock_get_branch.return_value = BranchState(branch="main", commit_sha="123")
 
@@ -95,6 +98,7 @@ class TestRepoWatcher:
     @patch("kb.ignores.build_ignore_pathspec")
     async def test_check_branch_switch_detected(self, mock_build_ignore, mock_get_branch, mock_pipeline, config):
         from pathspec import PathSpec
+
         mock_build_ignore.return_value = PathSpec.from_lines("gitwildmatch", [])
         initial_state = BranchState(branch="main", commit_sha="123")
         mock_get_branch.return_value = initial_state
@@ -125,6 +129,7 @@ class TestRepoWatcher:
     @patch("kb.ignores.build_ignore_pathspec")
     async def test_record_changes(self, mock_build_ignore, mock_get_branch, mock_pipeline, config):
         from pathspec import PathSpec
+
         mock_build_ignore.return_value = PathSpec.from_lines("gitwildmatch", [])
         mock_get_branch.return_value = BranchState(branch="main", commit_sha="123")
 
@@ -167,6 +172,7 @@ class TestRepoWatcher:
     @patch("kb.ignores.build_ignore_pathspec")
     async def test_process_pending_sync(self, mock_build_ignore, mock_get_branch, mock_pipeline, config):
         from pathspec import PathSpec
+
         mock_build_ignore.return_value = PathSpec.from_lines("gitwildmatch", [])
         mock_get_branch.return_value = BranchState(branch="main", commit_sha="123")
 
