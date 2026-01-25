@@ -66,6 +66,18 @@ class RepoWatcher:
         """Start watching the repository for changes."""
         print(f"Starting watcher for {self.repo_name} at {self.root}")
         
+        # Perform startup sync to ensure index is up to date with HEAD
+        # We use force=True to allow dirty working tree (since we are watching for edits)
+        print(f"Performing startup sync for {self.repo_name}...")
+        try:
+            await asyncio.get_event_loop().run_in_executor(
+                self._executor,
+                lambda: self.pipeline.index(self.repo_name, dry_run=False, force=True)
+            )
+            print(f"Startup sync complete for {self.repo_name}")
+        except Exception as e:
+            logger.error(f"Startup sync failed for {self.repo_name}: {e}")
+        
         # Process any pending changes from previous run first
         await self._process_pending_changes()
 
