@@ -15,13 +15,13 @@ if TYPE_CHECKING:
 
 _TEST_CONFIG_ENV = "DOLPHIN_CONFIG_PATH"
 # Keep tests deterministic by avoiding user-level configs.
-if _TEST_CONFIG_ENV not in os.environ:
-    _test_config_dir = Path(tempfile.mkdtemp(prefix="dolphin-test-config-"))
-    _test_config_path = _test_config_dir / "config.toml"
-    _test_config_path.write_text(
-        """
+_xdist_worker = os.environ.get("PYTEST_XDIST_WORKER") or "main"
+_test_config_dir = Path(tempfile.mkdtemp(prefix=f"dolphin-test-config-{_xdist_worker}-"))
+_test_config_path = _test_config_dir / "config.toml"
+_test_config_path.write_text(
+    """
 [storage]
-store_root = "/tmp/dolphin-test-store"
+store_root = "/tmp/dolphin-test-store-{worker}"
 
 [server]
 endpoint = "127.0.0.1:7777"
@@ -36,10 +36,10 @@ top_k = 8
 max_snippet_tokens = 240
 mmr_enabled = true
 mmr_lambda = 0.7
-""".lstrip(),
-        encoding="utf-8",
-    )
-    os.environ[_TEST_CONFIG_ENV] = str(_test_config_path)
+""".lstrip().format(worker=_xdist_worker),
+    encoding="utf-8",
+)
+os.environ[_TEST_CONFIG_ENV] = str(_test_config_path)
 
 
 @pytest.fixture(scope="session")

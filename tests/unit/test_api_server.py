@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from kb.api.app import get_search_backend, reset_search_backend
+from kb.api.app import reset_pipeline, reset_stores
 from kb.api.server import initialize_search_backend
 from kb.config import KBConfig
 
@@ -13,6 +14,8 @@ class TestServerInitialization:
     def teardown_method(self):
         """Reset search backend after each test."""
         reset_search_backend()
+        reset_pipeline()
+        reset_stores()
 
     def test_initialize_with_stub_provider(self):
         """Test initialization with stub provider."""
