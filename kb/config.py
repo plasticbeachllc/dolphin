@@ -295,7 +295,7 @@ class KBConfig:
         return config
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any]) -> KBConfig:
+    def from_mapping(cls, data: Mapping[str, Any], config_dir: Path | None = None) -> KBConfig:
         """Create a configuration object from a mapping, handling nested sections."""
 
         # Extract nested sections
@@ -323,7 +323,7 @@ class KBConfig:
         if storage_data and storage_data.get("store_root"):
             store_root_value = storage_data.get("store_root")
             if store_root_value is not None:
-                config_kwargs["store_root"] = _to_path(store_root_value)
+                config_kwargs["store_root"] = _to_path(store_root_value, base_dir=config_dir)
 
         # Handle server settings
         if server_data and server_data.get("endpoint"):
