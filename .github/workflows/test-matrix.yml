@@ -77,9 +77,6 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --dev --group test
 
-      - name: Install just
-        run: sudo apt-get update && sudo apt-get install -y just
-
       - name: Run consolidated integration suite
         run: |
           just test-python integration
