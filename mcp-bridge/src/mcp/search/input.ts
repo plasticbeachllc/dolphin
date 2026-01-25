@@ -1,13 +1,11 @@
 import { z } from "zod";
 import { CONFIG } from "../../util/config.js";
 import { buildToolInputSchema } from "../tools/schema.js";
+import { SearchRequestSchema } from "../../rest/schemas.js";
 
-export const SEARCH_INPUT_SHAPE = {
-  query: z.string().min(1),
-  repos: z.array(z.string()).optional(),
-  path_prefix: z.array(z.string()).optional(),
-  exclude_paths: z.array(z.string()).optional(),
-  exclude_patterns: z.array(z.string()).optional(),
+export const SEARCH_INPUT = SearchRequestSchema.omit({
+  include_snippets: true,
+}).extend({
   top_k: z.number().int().min(1).max(CONFIG.MCP_LIMITS.TOP_K_MAX).optional(),
   max_snippets: z.number().int().min(0).optional(),
   top_context_n: z.number().int().min(0).optional(),
@@ -28,9 +26,7 @@ export const SEARCH_INPUT_SHAPE = {
   include_warnings_in_text: z.boolean().optional(),
   include_abs_paths: z.boolean().optional(),
   include_vscode_uris: z.boolean().optional(),
-};
-
-export const SEARCH_INPUT = z.object(SEARCH_INPUT_SHAPE).strict();
+}).strict();
 export const SEARCH_INPUT_SCHEMA = buildToolInputSchema(SEARCH_INPUT);
 
 export type SearchInput = z.infer<typeof SEARCH_INPUT>;
