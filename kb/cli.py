@@ -385,6 +385,9 @@ def serve(
     if repo_list:
         os.environ["DOLPHIN_WATCH_REPOS"] = ",".join(repo_list)
         rprint(f"[green]Configured to watch repositories: {', '.join(repo_list)}[/green]")
+    elif "DOLPHIN_WATCH_REPOS" in os.environ:
+        # If no repos to watch, clear the env var to prevent inheriting it
+        del os.environ["DOLPHIN_WATCH_REPOS"]
 
     if not os.environ.get("DOLPHIN_API_KEY") and not os.environ.get("DOLPHIN_KB_API_KEY"):
         os.environ["DOLPHIN_API_KEY"] = get_or_create_kb_api_key()
