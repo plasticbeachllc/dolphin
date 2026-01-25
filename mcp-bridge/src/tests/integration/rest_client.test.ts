@@ -32,7 +32,6 @@ describe("REST Client - Search", () => {
       repos: ["repoa", "repob"],
       path_prefix: ["src/"],
       score_cutoff: 0.5,
-      embed_model: "large",
       max_snippets: 1,
     });
 

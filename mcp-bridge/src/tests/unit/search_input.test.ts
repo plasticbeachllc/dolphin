@@ -44,15 +44,6 @@ describe("parseSearchInput", () => {
     expect(result.top_k).toBe(50);
   });
 
-  it("parses embed_model parameter", () => {
-    const result = parseSearchInput({
-      query: "test",
-      embed_model: "large",
-    });
-
-    expect(result.embed_model).toBe("large");
-  });
-
   it("validates query is required", () => {
     try {
       parseSearchInput({});
@@ -138,12 +129,12 @@ describe("buildSearchRequestBody", () => {
     expect(body.top_k).toBe(50);
   });
 
-  it("includes embed_model", () => {
-    const input = parseSearchInput({ query: "test", embed_model: "large" });
+  it("includes max_snippets", () => {
+    const input = parseSearchInput({ query: "test", max_snippets: 2 });
     const options = resolveSearchOptions(input);
     const body = buildSearchRequestBody(input, options);
 
-    expect(body.embed_model).toBe("large");
+    expect(body.max_snippets).toBe(2);
   });
 });
 

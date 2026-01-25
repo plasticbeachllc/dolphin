@@ -7,7 +7,6 @@ export const SEARCH_INPUT = SearchRequestSchema.extend({
   top_k: z.number().int().min(1).max(CONFIG.MCP_LIMITS.TOP_K_MAX).optional(),
   max_snippets: z.number().int().min(0).optional(),
   top_context_n: z.number().int().min(0).optional(),
-  embed_model: z.enum(["small", "large"]).optional().default("large"),
   score_cutoff: z.number().optional(),
   mmr_enabled: z.boolean().optional(),
   mmr_lambda: z.number().min(0).max(1).optional(),

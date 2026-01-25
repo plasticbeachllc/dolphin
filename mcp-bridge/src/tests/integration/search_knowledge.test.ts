@@ -149,12 +149,11 @@ describe("search", () => {
     expect(res.isError).toBe(false);
   });
 
-  it("filters: embed_model and score_cutoff passthrough", async () => {
+  it("filters: score_cutoff passthrough", async () => {
     const { handler } = makeSearchKnowledge();
     const res = await handler({
       input: {
         query: "test",
-        embed_model: "large",
         score_cutoff: 0.2,
       },
     });

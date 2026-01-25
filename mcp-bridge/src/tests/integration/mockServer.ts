@@ -141,13 +141,6 @@ async function handleRequest(req: Request): Promise<Response> {
         return rest;
       });
 
-    if (body.embed_model === "unavailable") {
-      return jsonResponse(
-        { error: { code: "embeddings_unavailable", message: "Embeddings service unavailable" } },
-        503
-      );
-    }
-
     let hits: any[] = [];
     if (query) {
       if (query === "snippet-failure") {
@@ -247,7 +240,7 @@ async function handleRequest(req: Request): Promise<Response> {
       hits: applySnippetLimit(hits),
       meta: {
         top_k: top_k || 5,
-        model: body.embed_model || "text-embedding-3-small",
+        model: "text-embedding-3-small",
         estimated_total: hits.length,
         max_snippets: snippetLimit,
         warnings: top_k && top_k > 100 ? ["top_k clamped to 100"] : [],

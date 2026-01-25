@@ -18,7 +18,6 @@ export function buildSearchRequestBody(
     exclude_patterns: input.exclude_patterns,
     top_k: options.topK,
     max_snippets: maxSnippets,
-    embed_model: input.embed_model,
     score_cutoff: input.score_cutoff,
     mmr_enabled: input.mmr_enabled,
     mmr_lambda: input.mmr_lambda,

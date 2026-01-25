@@ -8,7 +8,6 @@ export const SearchRequestSchema = z.object({
   exclude_patterns: z.array(z.string()).optional(),
   top_k: z.number().int().min(1).optional(),
   max_snippets: z.number().int().min(0).optional(),
-  embed_model: z.enum(["small", "large"]).optional(),
   score_cutoff: z.number().optional(),
   mmr_enabled: z.boolean().optional(),
   mmr_lambda: z.number().min(0).max(1).optional(),
