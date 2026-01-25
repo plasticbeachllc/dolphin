@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-FIXTURE_DIR = Path(__file__).parent / "fixtures"
+FIXTURE_DIR = Path(__file__).parent.parent.parent / "fixtures"
 DEFAULT_FIXTURE = "mcp_graph_response.json"
 
 
