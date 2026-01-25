@@ -746,14 +746,10 @@ class IngestionPipeline:
         last_success = self.metadata.get_last_successful_commit(repo_id)
         is_fresh_index = last_success is None
 
-        if target_model != last_model:
+        if not is_fresh_index and target_model != last_model:
             print(f"⚠️  Global model '{target_model}' differs from repo model '{last_model}'.")
-
-            if not is_fresh_index:
-                print(f"   Triggering full re-index and migration for {repo_name}...")
-                full_reindex = True
-            else:
-                print(f"   Updating repo configuration for {repo_name}...")
+            print(f"   Triggering full re-index and migration for {repo_name}...")
+            full_reindex = True
 
             # Update repo record to new model immediately so this session is recorded correctly
             self.metadata.record_repo(repo_name, root, default_embed_model=target_model)

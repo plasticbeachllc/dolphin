@@ -253,7 +253,7 @@ class KnowledgeSearchBackend:
                         "sample_score": (bm25_results[0].get("score") if bm25_results else None),
                     },
                 )
-                bm25_hydrated = self._hydrate_bm25_results(bm25_results, self.sql_store, request.embed_model)
+                bm25_hydrated = self._hydrate_bm25_results(bm25_results, self.sql_store, self.config.default_embed_model)
                 request_logger.debug("BM25 results hydrated", {"hydrated_count": len(bm25_hydrated)})
             except Exception as e:
                 # Log error but continue with empty BM25 results
@@ -935,6 +935,10 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     # Map embedding_provider_type to embedding_provider (nested under "embedding")
     if "embedding_provider_type" in kwargs:
         embedding_data["provider"] = kwargs["embedding_provider_type"]
+    
+    # Map default_embed_model if provided (CRITICAL FIX FOR OPTIONS B)
+    if "default_embed_model" in kwargs:
+         embedding_data["default_embed_model"] = kwargs["default_embed_model"]
 
     # Map default_embed_model if provided (CRITICAL FIX FOR OPTIONS B)
     if "default_embed_model" in kwargs:
