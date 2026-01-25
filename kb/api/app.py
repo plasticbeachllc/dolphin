@@ -747,6 +747,29 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
         raise HTTPException(status_code=500, detail=f"Failed to register repository: {str(e)}")
 
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to register repository: {str(e)}")
+
+
+@app.post("/v1/admin/reload")
+async def admin_reload_backend() -> dict[str, str]:
+    """Reload the search backend and store connections.
+    
+    This is used by the indexing CLI to notify the server that the index has changed.
+    """
+    # Import here to avoid circular dependency with server.py
+    # server.py imports app.py, so app.py cannot import server.py at top level
+    try:
+        from .server import reload_search_backend
+        
+        reload_search_backend()
+        return {"status": "ok", "message": "Search backend reloaded"}
+    except Exception as e:
+        import logging
+        logging.error("Failed to reload backend", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Reload failed: {str(e)}")
+
+
 @app.post("/v1/admin/rebuild-fts5")
 async def rebuild_fts5() -> dict[str, str]:
     """Rebuild the FTS5 table with updated schema.

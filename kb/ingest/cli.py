@@ -144,7 +144,38 @@ def index(
     typer.echo(f"  files_indexed: {result.get('files_indexed')}")
     typer.echo(f"  chunks_indexed: {result.get('chunks_indexed')}")
     typer.echo(f"  chunks_skipped: {result.get('chunks_skipped')}")
+    typer.echo(f"  chunks_skipped: {result.get('chunks_skipped')}")
     typer.echo(f"  vectors_written: {result.get('vectors_written')}")
+
+    # Notify server to reload
+    _notify_server_reload(config)
+
+
+def _notify_server_reload(config: KBConfig) -> None:
+    """Notify the running server to reload its backend."""
+    import requests
+    from ..api_key import load_kb_api_key
+
+    endpoint = f"http://{config.endpoint}/v1/admin/reload"
+    try:
+        api_key = load_kb_api_key()
+    except Exception:
+        # API key might not exist yet if only indexing
+        return
+
+    try:
+        response = requests.post(
+            endpoint, 
+            headers={"X-API-Key": api_key},
+            timeout=2.0 
+        )
+        if response.status_code == 200:
+            typer.echo(f"🔄 Server notified: {response.json().get('message')}")
+        elif response.status_code != 404: # Ignore 404 if old server running
+            typer.echo(f"⚠️  Server reload failed: {response.status_code}", err=True)
+    except requests.RequestException:
+        # Server probably not running, which is fine
+        pass
 
 
 @app.command()

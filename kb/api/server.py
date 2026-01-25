@@ -107,6 +107,22 @@ def initialize_search_backend() -> None:
     print("✅ Ingestion pipeline ready", file=sys.stderr)
 
 
+    print("✅ Ingestion pipeline ready", file=sys.stderr)
+
+
+def reload_search_backend() -> None:
+    """Reload the search backend and stores to pick up index changes."""
+    print("🔄 Reloading search backend...", file=sys.stderr)
+    try:
+        # Reset existing backend first to force fresh connections
+        reset_search_backend()
+        initialize_search_backend()
+        print("✅ Search backend reloaded successfully", file=sys.stderr)
+    except Exception as e:
+        print(f"❌ Failed to reload search backend: {e}", file=sys.stderr)
+        raise
+
+
 # Initialize search backend when module loads (before uvicorn starts)
 print("🚀 Initializing KB server...", file=sys.stderr)
 try:
