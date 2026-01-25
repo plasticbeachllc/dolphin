@@ -7,9 +7,9 @@ achieving significant speedup on multi-core systems.
 from __future__ import annotations
 
 import multiprocessing as mp
-from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from ..chunkers.registry import get_chunker_for_file
 from ..chunkers.types import Chunk
@@ -77,7 +77,7 @@ def _parse_file_worker(job: ParseJob) -> ParseResult:
 def parse_files_parallel(
     jobs: list[ParseJob],
     num_workers: int | None = None,
-    pool: ProcessPoolExecutor | None = None,
+    pool: Any = None,  # Can be ProcessPoolExecutor or DynamicWorkerPool
 ) -> list[ParseResult]:
     """Parse multiple files in parallel using multiprocessing.
 

@@ -156,25 +156,20 @@ def index(
             # Run async parallel indexing
             typer.echo(f"Starting parallel indexing for {name} (workers={workers or 'auto'})...")
             result = asyncio.run(
-                pipeline.index_parallel(
-                    name, 
-                    dry_run=dry_run, 
-                    force=force, 
-                    full_reindex=full, 
-                    max_workers=workers
-                )
+                pipeline.index_parallel(name, dry_run=dry_run, force=force, full_reindex=full, max_workers=workers)
             )
         else:
             # Legacy sequential indexing
             typer.echo(f"Starting sequential indexing for {name}...")
             result = pipeline.index(name, dry_run=dry_run, force=force, full_reindex=full)
-            
+
     except Exception as e:
         typer.echo(f"Indexing failed: {e}")
         import traceback
+
         traceback.print_exc()
         raise
-        
+
     typer.echo(f"Index complete for {name}: session={result.get('session_id')}")
     typer.echo(f"  files_indexed: {result.get('files_indexed')}")
     typer.echo(f"  chunks_indexed: {result.get('chunks_indexed')}")
