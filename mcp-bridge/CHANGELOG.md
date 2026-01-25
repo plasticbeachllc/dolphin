@@ -5,9 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
 ## [0.2.0] - 2026-01-25
+
+This release focuses the release-targeted surface on the MCP bridge and its contract with the KB `/v1/*` API.
 
 ### Added
 
@@ -31,18 +31,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - REST client targets KB `/v1` endpoints for search, repos, chunks, and file slices.
 - **Breaking**: Cursor-based pagination and `deadline_ms` are not supported in v0.2.0 (clients must not send them).
 
-### Removed
+### Improved
 
-- Filesystem read/write tools removed for safety (`read_files`, `file_write`).
+- **Performance optimizations** for batch operations
+- **Memory efficiency** in file reading operations
+- **Concurrent request handling** for multiple tool calls
+- **Type safety** with enhanced Zod schemas
 
-### Fixed
+### Documentation
 
-- Search/snippet handling and trimming behavior for more stable MCP payload sizes.
-- Prevent cache pollution in `getReposByName` when a client is provided.
-
-### Breaking / Migration Notes
-
-- MCP tool names/availability changed; downstream MCP clients may need updates (e.g., legacy `search_knowledge` / `fetch_chunk` / `fetch_lines` / `get_vector_store_info` are replaced by the tool set above).
+- Updated tool schemas with new parameters
+- Added examples for file system operations
+- Documented graph context integration
+- Enhanced error handling guide
 
 ---
 
@@ -97,10 +98,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP server implementation for Dolphin semantic code search
 - Tools:
   - `search` - Semantic search across indexed repositories
-  - `chunk_get` - Fetch code chunks by ID
-  - `file_lines` - Fetch file slices by line range
-  - `store_info` - Repository metadata
-  - `metadata_get` - Chunk metadata
+  - `chunk.get` - Fetch code chunks by ID
+  - `file.lines` - Fetch file slices by line range
+  - `store.info` - Repository metadata
+  - `metadata.get` - Chunk metadata
   - `open_in_editor` - Generate VS Code URIs
 - Support for Continue.dev and Claude Desktop
 - JSONL logging to `logs/mcp.log`

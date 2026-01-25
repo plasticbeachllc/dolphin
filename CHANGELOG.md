@@ -12,9 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
-
 ## [0.2.0] - 2026-01-25
+
+This release focuses the release-targeted surface on the Knowledge Bank (Python) and the versioned KB REST API.
 
 ### Added
 
@@ -52,6 +52,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **MMR Relevance Selection** - Configured to work properly
+
+### Changed
+
+- **MCP Bridge Version** bumped to 0.1.2
+  - REST client now reads `KB_REST_BASE_URL` dynamically during runtime
+  - Maintains backward compatibility with production configurations
 
 ## [0.1.12] - 2025-11-04
 

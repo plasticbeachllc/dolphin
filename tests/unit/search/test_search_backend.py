@@ -171,7 +171,9 @@ class TestKnowledgeSearchBackend:
         # Verify the new lookup flow was used
         sql_store.get_repo_by_name.assert_called_once_with("repo")
         sql_store.get_file_id.assert_called_once_with(1, "repo/file.py")
-        sql_store.get_chunk_locations_by_identity.assert_called_once_with(1, 2, "abcdef", "small")
+        sql_store.get_chunk_locations_by_identity.assert_called_once_with(
+            1, 2, "abcdef", "small"
+        )
         sql_store.get_chunk_by_id.assert_not_called()
         assert hydrated[0]["start_line"] == 10
         # Check generated ID format: {repo_id}:{file_id}:{embed_model}:{text_hash}:{start_line}:{end_line}
