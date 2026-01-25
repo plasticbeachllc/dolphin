@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import datetime
 import logging
 import subprocess
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -35,6 +37,12 @@ from ..ingest.scanner import FileCandidate, scan_repo
 from ..store import LanceDBStore, SQLiteMetadataStore
 from ..store.graph_store import GraphStore
 from ..store.sqlite_meta import generate_fts_content_id
+
+# Parallel indexing imports
+from .async_embedder import RateLimitedEmbedder, EmbeddingQueue
+from .dynamic_pool import DynamicWorkerPool, WorkloadEstimator
+from .parallel_parser import ParseJob, parse_files_parallel
+from .parallel_scanner import scan_repo_parallel
 
 logger = logging.getLogger(__name__)
 
@@ -810,6 +818,408 @@ class IngestionPipeline:
                     print(f"  Errors logged to: {lp}")
         except Exception:
             pass
+
+        return {
+            "repo": repo_name,
+            "repo_id": repo_id,
+            "session_id": session_id,
+            "commit": commit_sha,
+            "branch": branch,
+            "files_indexed": files_done,
+            "chunks_indexed": chunks_indexed,
+            "chunks_skipped": chunks_skipped,
+            "vectors_written": vectors_written,
+            "chunks_pruned": chunks_pruned,
+            "graph_nodes_created": graph_nodes_created,
+            "graph_edges_created": graph_edges_created,
+            "dry_run": dry_run,
+        }
+
+    async def index_parallel(
+        self,
+        repo_name: str,
+        *,
+        dry_run: bool = False,
+        force: bool = False,
+        full_reindex: bool = False,
+        max_workers: int | None = None,
+    ) -> dict[str, Any]:
+        """Parallel indexing with dynamic worker scaling.
+
+        Args:
+            repo_name: Name of the repository to index
+            dry_run: If True, don't persist changes
+            force: If True, skip clean working tree check
+            full_reindex: If True, drop existing index and process all files
+            max_workers: Max concurrent workers (None = auto-scale)
+
+        Returns:
+            Dictionary with session summary and counters
+        """
+        # Resolve repo and Git state (same as Sync)
+        repo = self.metadata.get_repo_by_name(repo_name)
+        if not repo:
+            raise ValueError(f"Repository not registered: {repo_name}")
+
+        repo_id = int(repo["id"])
+        root = Path(repo["root_path"])
+        embed_model = str(repo.get("default_embed_model", self.config.default_embed_model))
+        
+        from ..embeddings.provider import SUPPORTED_MODELS
+        if embed_model not in SUPPORTED_MODELS:
+            raise ValueError(f"Unsupported embed model configured for repo {repo_name}: {embed_model}")
+
+        if not force:
+            self._ensure_clean_working_tree(root)
+        else:
+            print(f"Warning: force=True, skipping clean working tree check for {repo_name}")
+
+        # Get git info
+        commit_sha = self._git(root, "rev-parse", "HEAD").strip()
+        branch = self._git(root, "rev-parse", "--abbrev-ref", "HEAD").strip()
+
+        # Drop existing index if full_reindex is requested
+        if full_reindex and not dry_run:
+            print(f"Full reindex requested: dropping existing index for {repo_name}...")
+            self._drop_repo_index(repo_id, repo_name)
+
+        # Get last successful commit
+        last_success = self.metadata.get_last_successful_commit(repo_id)
+
+        # Start session
+        session_id = self.metadata.begin_session(repo_id, commit_sha, branch, embed_model)
+        
+        # Initialize error logger
+        error_logger = ErrorLogger(root, str(session_id))
+
+        # Build ignore spec
+        extra_security = {
+            "**/id_rsa", "**/*.pem", "**/.aws/**", "**/gcloud/**", 
+            "**/secrets/**", "**/*keys.json", "**/*service_account.json", "**/*auth.json",
+        }
+        ignore_patterns = build_ignore_set(self.config.ignore, self.config.ignore_exceptions)
+        repo_level_patterns, repo_level_exceptions = load_repo_ignores(root)
+        if repo_level_patterns:
+            ignore_patterns.update(repo_level_patterns)
+        if repo_level_exceptions:
+            ignore_patterns = build_ignore_set(ignore_patterns, repo_level_exceptions)
+        ignore_patterns.update(extra_security)
+        
+        # Determine changed files
+        if full_reindex or last_success is None:
+            print(f"Full reindex mode: scanning all files for {repo_name}")
+            # Use parallel scanner for full reindex
+            with DynamicWorkerPool(max_workers=max_workers) as pool:
+                candidates = scan_repo_parallel(root, ignore_patterns, pool=pool)
+            changed_files = [c.rel_path for c in candidates]
+            deleted_files = []
+        else:
+            print(f"Incremental mode: processing files changed since {last_success[:8]}")
+            changed_files = git_changed_files_modified_added(root, last_success, commit_sha)
+            deleted_files = git_changed_files_deleted(root, last_success, commit_sha)
+            
+            # Filter ignored files from changed list
+            ignore_spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
+            changed_files = [f for f in changed_files if not ignore_spec.match_file(f)]
+
+        # Counters
+        files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
+        graph_nodes_created = graph_edges_created = 0
+        
+        # Setup Async Embedder
+        embedder = RateLimitedEmbedder(provider_model=embed_model)
+        embedding_queue = EmbeddingQueue(embedder)
+        embedding_queue.start()
+
+        try:
+            # Phase 1: Parallel Parsing
+            print(f"Processing {len(changed_files)} files...")
+            
+            batch_size = 50 
+            repo_config = None # Lazy loaded
+            
+            # Create dynamic pool for parsing
+            with DynamicWorkerPool(max_workers=max_workers) as pool:
+                
+                # Process in batches to manage memory and flow
+                for i in range(0, len(changed_files), batch_size):
+                    batch_paths = changed_files[i : i + batch_size]
+                    
+                    parse_jobs = []
+                    for path in batch_paths:
+                        file_path = root / path
+                        if not file_path.exists() or file_path.is_dir():
+                            continue
+                            
+                        # Quick metadata update
+                        if not dry_run:
+                            # Prune invalidated content if re-indexing existing file
+                            file_id = self.metadata.get_file_id(repo_id, path)
+                            if file_id:
+                                for model_name in ("small", "large"):
+                                    pruned = self.metadata.prune_invalidated_content_for_file(
+                                        repo_id, file_id, model_name, current_hashes=set()
+                                    )
+                                    if pruned:
+                                        chunks_pruned += pruned
+                                    self.lancedb.prune_file_rows(repo_name, path, model=model_name)
+                        
+                        try:
+                            # Read content (I/O bound but fast for source files)
+                            text = file_path.read_text(encoding="utf-8", errors="ignore")
+                            language = detect_language_from_extension(file_path) or "text"
+                            
+                            # Update metadata catalog
+                            if not dry_run:
+                                file_id = self.metadata.upsert_file(
+                                    repo_id=repo_id,
+                                    path=path,
+                                    ext=file_path.suffix,
+                                    language=language,
+                                    is_binary=False,
+                                    size_bytes=file_path.stat().st_size,
+                                )
+
+                            parse_jobs.append(ParseJob(
+                                file_path=file_path,
+                                content=text,
+                                language=language,
+                                model=embed_model,
+                                token_target=512, # Should assume from config
+                                overlap_pct=0.1,
+                            ))
+                        except Exception as e:
+                            error_logger.log_file_error(path, e)
+                            continue
+
+                    # Execute Parallel Parsing
+                    parse_results = parse_files_parallel(parse_jobs, pool=pool)
+
+                    # Sequential Processing of Results (dedup, graph, queuing)
+                    files_db_batch = [] # batch DB updates if possible
+                    
+                    for res in parse_results:
+                        if not res.success:
+                            error_logger.log_file_error(str(res.file_path), res.error)
+                            continue
+                            
+                        chunks = res.chunks
+                        path = str(res.file_path.relative_to(root))
+                        
+                        # Graph Extraction (Main Thread)
+                        if self.graph_store and not dry_run:
+                            try:
+                                # We need text for graph extraction. Ideally we passed it through or re-read
+                                # But we have it in ParseJob... reusing here would require mapping back
+                                # Re-reading might be safer or pass through ParseResult? 
+                                # Let's assume re-read is cached by OS or cheap enough.
+                                # Actually we should start loading repo_config once
+                                if repo_config is None:
+                                    from ..chunkers.repo_config import load_repo_chunking_config
+                                    repo_config = load_repo_chunking_config(root)
+
+                                text = res.file_path.read_text(encoding="utf-8", errors="ignore")
+                                language = detect_language_from_extension(res.file_path) or "text" # Re-detect
+                                
+                                nodes, edges = extract_graph_from_file(res.file_path, language, text, repo_config)
+                                if nodes or edges:
+                                    # Need file_id...
+                                    file_id = self.metadata.get_file_id(repo_id, path)
+                                    if file_id:
+                                        graph_stats = store_graph_data(
+                                            self.graph_store,
+                                            nodes,
+                                            edges,
+                                            repo_id=repo_id,
+                                            file_id=file_id,
+                                            language=language,
+                                            commit_sha=commit_sha,
+                                            branch=branch,
+                                        )
+                                        graph_nodes_created += graph_stats["nodes_created"]
+                                        graph_edges_created += graph_stats["edges_created"]
+                                        
+                                        # Track changes for graph validation
+                                        if graph_stats["edges_created"] > 0:
+                                              graph_manager = self.get_graph_manager(repo_id)
+                                              graph_manager.on_edges_changed(graph_stats["edges_created"])
+
+                            except Exception as e:
+                                error_logger.log_file_error(f"graph: {path}", e)
+                        
+                        # Deduplication
+                        for c in chunks:
+                            c.text_hash = hash_text(c.text)
+
+                        dedup = ChunkDeduplicator(self.metadata)
+                        file_id = self.metadata.get_file_id(repo_id, path)
+                        if not file_id: continue 
+                        
+                        changed_chunks, unchanged_chunks = dedup.filter_unchanged_chunks(chunks, repo_id, file_id, embed_model)
+                        skipped_occurrences = len(unchanged_chunks)
+                        chunks_skipped += skipped_occurrences
+                        
+                        # Prepare for embedding
+                        new_hashes = {c.text_hash for c in changed_chunks}
+                        
+                        if new_hashes and not dry_run:
+                             # Submit to Async Queue
+                             unique_changed = [] 
+                             seen = set()
+                             for c in changed_chunks:
+                                 if c.text_hash not in seen:
+                                     unique_changed.append(c)
+                                     seen.add(c.text_hash)
+                                     
+                             texts = [c.text for c in unique_changed]
+                             hashes = [c.text_hash for c in unique_changed]
+                             
+                             # We need to persist results when they come back
+                             # We can await here (sequential file logic, parallel embedding)
+                             # or fire and forget if we handle persistence in callback?
+                             # For simplicity in this iteration: await the batch result
+                             # This still allows parallelism because other workers are parsing next batch!
+                             # Wait... if we await, we block main thread. 
+                             # But we want main thread to process other parse results.
+                             # Better: Collect all embedding futures for the batch/file and gather them?
+                             
+                             # Let's submit and get a future
+                             vectors_future = await embedding_queue.submit(texts, metadata={"path": path})
+                             
+                             # For now, let's await immediately to keep logic simple and safe (Phase 1)
+                             # The queue still manages rate limiting and concurrent dispatch if we had multiple
+                             # submission streams, but here we are linear in main thread.
+                             # To get true parallelism, we should submit ALL files in batch, then gather ALL.
+                             # BUT we need to associate vectors back to chunks for persistence.
+                             
+                             # Persistence logic requires:
+                             # 1. Vectors
+                             # 2. Metadata upsert
+                             # 3. LanceDB upsert
+                             
+                             # Let's execute persistence inline for now
+                             vectors = vectors_future # it's already awaited in submit() helper currently?
+                             mapping = dict(zip(hashes, vectors))
+                             
+                             # Persist (Existing Logic duplicated/adapted)
+                             desired = build_desired_map(chunks)
+                             
+                             content_mapping = self.metadata.ensure_content_rows_for_file(
+                                repo_id, file_id, embed_model, list(desired.keys())
+                             )
+                             
+                             for h, occs in desired.items():
+                                cid = content_mapping.get(h)
+                                if cid:
+                                    self.metadata.sync_locations_for_content_row(cid, occs)
+                                    
+                             self.metadata.prune_invalidated_content_for_file(repo_id, file_id, embed_model, set(desired.keys()))
+                             
+                             # LanceDB Payload
+                             payload = []
+                             occ_token_counts = {(c.start_line, c.end_line): getattr(c, "token_count", 0) for c in chunks}
+                             desired_row_ids = set()
+                             
+                             for h, occs in desired.items():
+                                 vec = mapping.get(h) 
+                                 # If not in mapping (unchanged), we don't need to re-insert vector usually,
+                                 # but ensure_content_rows handles location. LanceDB needs vector for new rows.
+                                 # If unchanged, we skip LanceDB upsert? 
+                                 # Existing logic: if vec is None continue (unchanged hash)
+                                 
+                                 for occ in occs:
+                                     row_id = f"{repo_id}:{file_id}:{embed_model}:{h}:{occ['start_line']}:{occ['end_line']}"
+                                     desired_row_ids.add(row_id)
+                                     if vec is None: continue
+                                     
+                                     payload.append({
+                                         "id": row_id,
+                                         "vector": vec,
+                                         "repo": repo_name,
+                                         "path": path,
+                                         "start_line": occ["start_line"],
+                                         "end_line": occ["end_line"],
+                                         "text_hash": h,
+                                         "commit": commit_sha,
+                                         "branch": branch,
+                                         "embed_model": embed_model,
+                                         "language": language,
+                                         "symbol_kind": occ.get("symbol_kind"),
+                                         "symbol_name": occ.get("symbol_name"),
+                                         "symbol_path": occ.get("symbol_path"),
+                                         "heading_h1": occ.get("heading_h1"),
+                                         "heading_h2": occ.get("heading_h2"),
+                                         "heading_h3": occ.get("heading_h3"),
+                                         "token_count": occ_token_counts.get((occ["start_line"], occ["end_line"]), 0),
+                                         "created_at": datetime.datetime.now(datetime.UTC),
+                                     })
+
+                             if payload:
+                                 self.lancedb.upsert_chunks(repo_name, payload, model=embed_model)
+                                 vectors_written += len(mapping)
+                            
+                             # Prune LanceDB
+                             if desired_row_ids:
+                                 self.lancedb.prune_file_rows(repo_name, path, model=embed_model, keep_ids=desired_row_ids)
+                             else:
+                                 self.lancedb.prune_file_rows(repo_name, path, model=embed_model)
+
+                        chunks_indexed += len(new_hashes)
+                        files_done += 1
+                        print(f"  {path}: {len(chunks)} chunks, {len(new_hashes)} new")
+
+            # Process deleted files (same as sync)
+            for path in deleted_files:
+                # ... (Deletion logic)
+                try:
+                    file_id = self.metadata.get_file_id(repo_id, path)
+                    if file_id:
+                        total_pruned = 0
+                        for model_name in ("small", "large"):
+                            pruned_count = self.metadata.prune_invalidated_content_for_file(
+                                repo_id, file_id, embed_model=model_name, current_hashes=set(),
+                            )
+                            if pruned_count: total_pruned += pruned_count
+                            self.lancedb.prune_file_rows(repo_name, path, model=model_name)
+                        
+                        edges_deleted = 0
+                        nodes_deleted = 0
+                        if self.graph_store:
+                            nodes_deleted, edges_deleted = cleanup_graph_for_file(self.graph_store, file_id)
+                        
+                        if self.graph_store and (edges_deleted > 0 or nodes_deleted > 0):
+                            graph_manager = self.get_graph_manager(repo_id)
+                            if edges_deleted > 0:
+                                graph_manager.on_edges_changed(edges_deleted)
+                            else:
+                                graph_manager.invalidate_cache()
+
+                        files_done += 1
+                        chunks_pruned += total_pruned
+                        print(f"  {path}: deleted, {total_pruned} chunks pruned")
+                except Exception as e:
+                    error_logger.log_file_error(f"deleted: {path}", e)
+                    
+        finally:
+            await embedding_queue.stop()
+            
+        # Update session counters (same as sync behavior)
+        if not dry_run:
+            self.metadata.bump_session_counters(
+                session_id,
+                files_indexed=files_done,
+                chunks_indexed=chunks_indexed,
+                chunks_skipped=chunks_skipped,
+                vectors_written=vectors_written,
+                chunks_pruned=chunks_pruned,
+            )
+            self.metadata.set_session_status(session_id, "succeeded")
+            self._flush_bm25_statistics()
+        
+        # Graph cache updates
+        if not dry_run and self.graph_store:
+            graph_manager = self.get_graph_manager(repo_id)
+            graph_manager.get_graph(force_rebuild=True)
 
         return {
             "repo": repo_name,

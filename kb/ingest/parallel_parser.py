@@ -7,6 +7,7 @@ achieving significant speedup on multi-core systems.
 from __future__ import annotations
 
 import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -76,12 +77,14 @@ def _parse_file_worker(job: ParseJob) -> ParseResult:
 def parse_files_parallel(
     jobs: list[ParseJob],
     num_workers: int | None = None,
+    pool: ProcessPoolExecutor | None = None,
 ) -> list[ParseResult]:
     """Parse multiple files in parallel using multiprocessing.
 
     Args:
         jobs: List of ParseJob objects
         num_workers: Number of worker processes (default: CPU count)
+        pool: Optional shared executor to use (overrides num_workers)
 
     Returns:
         List of ParseResult objects in the same order as jobs
@@ -89,19 +92,26 @@ def parse_files_parallel(
     if not jobs:
         return []
 
-    # Determine number of workers
-    if num_workers is None:
+    # Determine number of workers logic
+    if pool is None and num_workers is None:
         num_workers = min(mp.cpu_count(), 8)  # Cap at 8 to avoid overhead
 
-    # For small batches, use sequential processing
-    if len(jobs) < 4:
+    # For small batches, use sequential processing unless pool is provided
+    # (If pool is provided, we assume caller wants parallel regardless)
+    if pool is None and len(jobs) < 4:
         return [_parse_file_worker(job) for job in jobs]
 
     # Process in parallel
     try:
-        with mp.Pool(processes=num_workers) as pool:
-            results = pool.map(_parse_file_worker, jobs)
-        return results
+        if pool:
+            # Use shared executor
+            results = list(pool.map(_parse_file_worker, jobs))
+            return results
+        else:
+            # Create new pool
+            with mp.Pool(processes=num_workers) as mp_pool:
+                results = mp_pool.map(_parse_file_worker, jobs)
+            return results
     except Exception as e:
         # Fall back to sequential processing on error
         import logging

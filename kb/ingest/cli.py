@@ -1,4 +1,5 @@
 # from __future__ import annotations
+import asyncio
 import os
 from pathlib import Path
 from typing import cast
@@ -114,6 +115,8 @@ def index(
     dry_run: bool = typer.Option(False, "--dry-run", help="Run without persisting."),
     force: bool = typer.Option(False, "--force", help="Bypass clean working tree check."),
     full: bool = typer.Option(False, "--full", help="Process all files instead of incremental diff."),
+    parallel: bool = typer.Option(True, "--parallel/--no-parallel", help="Use parallel indexing (default: True)."),
+    workers: int | None = typer.Option(None, "--workers", "-w", help="Number of worker processes (default: auto)."),
 ) -> None:
     """Run the full indexing pipeline for the specified repository.
 
@@ -136,10 +139,29 @@ def index(
 
     pipeline = _build_pipeline(config)
     try:
-        result = pipeline.index(name, dry_run=dry_run, force=force, full_reindex=full)
+        if parallel:
+            # Run async parallel indexing
+            typer.echo(f"Starting parallel indexing for {name} (workers={workers or 'auto'})...")
+            result = asyncio.run(
+                pipeline.index_parallel(
+                    name, 
+                    dry_run=dry_run, 
+                    force=force, 
+                    full_reindex=full, 
+                    max_workers=workers
+                )
+            )
+        else:
+            # Legacy sequential indexing
+            typer.echo(f"Starting sequential indexing for {name}...")
+            result = pipeline.index(name, dry_run=dry_run, force=force, full_reindex=full)
+            
     except Exception as e:
         typer.echo(f"Indexing failed: {e}")
+        import traceback
+        traceback.print_exc()
         raise
+        
     typer.echo(f"Index complete for {name}: session={result.get('session_id')}")
     typer.echo(f"  files_indexed: {result.get('files_indexed')}")
     typer.echo(f"  chunks_indexed: {result.get('chunks_indexed')}")
