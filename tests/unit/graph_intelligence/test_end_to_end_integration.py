@@ -481,7 +481,7 @@ class TestPerformance:
         # First access (builds graph)
         start = time.time()
         first_graph = graph_manager.get_graph()
-        first_time = time.time() - start
+        time.time() - start
 
         # Second access (uses cache)
         start = time.time()
