@@ -1,38 +1,22 @@
 import { z } from "zod";
 import { CONFIG } from "../../util/config.js";
 import { buildToolInputSchema } from "../tools/schema.js";
+import { SearchRequestSchema } from "../../rest/schemas.js";
 
-export const SEARCH_INPUT_SHAPE = {
-  query: z.string().min(1),
-  repos: z.array(z.string()).optional(),
-  path_prefix: z.array(z.string()).optional(),
-  exclude_paths: z.array(z.string()).optional(),
-  exclude_patterns: z.array(z.string()).optional(),
+export const SEARCH_INPUT = SearchRequestSchema.omit({
+  include_snippets: true,
+}).extend({
   top_k: z.number().int().min(1).max(CONFIG.MCP_LIMITS.TOP_K_MAX).optional(),
-  max_snippets: z.number().int().min(1).optional(),
-  top_context_n: z.number().int().min(0).optional(),
-  deadline_ms: z.number().int().min(50).optional(),
   embed_model: z.enum(["small", "large"]).optional().default("large"),
-  score_cutoff: z.number().optional(),
-  mmr_enabled: z.boolean().optional(),
-  mmr_lambda: z.number().min(0).max(1).optional(),
-  cursor: z.string().optional(),
-  ann_strategy: z.enum(["speed", "accuracy", "adaptive", "custom"]).optional(),
-  ann_nprobes: z.number().int().min(1).max(50).optional(),
-  ann_refine_factor: z.number().int().min(1).max(100).optional(),
-  include_graph_context: z.boolean().optional(),
-  context_lines_before: z.number().int().min(0).max(10).optional(),
-  context_lines_after: z.number().int().min(0).max(10).optional(),
+  top_context_n: z.number().int().min(0).optional(),
   output_mode: z.enum(["prompt_ready", "resources", "both"]).optional(),
-  include_prompt_ready: z.boolean().optional(),
   include_resource_text: z.boolean().optional(),
   include_hits_json: z.boolean().optional(),
   include_warnings_in_text: z.boolean().optional(),
   include_abs_paths: z.boolean().optional(),
   include_vscode_uris: z.boolean().optional(),
-};
+});
 
-export const SEARCH_INPUT = z.object(SEARCH_INPUT_SHAPE);
 export const SEARCH_INPUT_SCHEMA = buildToolInputSchema(SEARCH_INPUT);
 
 export type SearchInput = z.infer<typeof SEARCH_INPUT>;

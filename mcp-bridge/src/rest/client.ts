@@ -1,5 +1,6 @@
 import { CONFIG } from "../util/config.js";
 import { resolveKbApiKey } from "../../../shared/kb-auth";
+export type { SearchRequestBody } from "./schemas.js";
 
 export interface RestError {
   error: {
@@ -8,30 +9,6 @@ export interface RestError {
     details?: unknown;
     remediation?: string;
   };
-}
-
-export interface SearchRequestBody {
-  query: string;
-  repos?: string[];
-  path_prefix?: string[];
-  exclude_paths?: string[];
-  exclude_patterns?: string[];
-  top_k?: number;
-  max_snippets?: number;
-  deadline_ms?: number;
-  embed_model?: "small" | "large";
-  score_cutoff?: number;
-  mmr_enabled?: boolean;
-  mmr_lambda?: number;
-  cursor?: string;
-  include_prompt_ready?: boolean;
-  include_snippets?: boolean;
-  ann_strategy?: "speed" | "accuracy" | "adaptive" | "custom";
-  ann_nprobes?: number;
-  ann_refine_factor?: number;
-  include_graph_context?: boolean;
-  context_lines_before?: number;
-  context_lines_after?: number;
 }
 
 export interface SearchHit {
