@@ -5,45 +5,74 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-## [0.2.0] - 2026-01-25
-
-This release focuses the release-targeted surface on the MCP bridge and its contract with the KB `/v1/*` API.
+## [0.2.0] - Under Development
 
 ### Added
 
-- `KBClient` REST wrapper to enable dependency injection and more reliable unit/integration testing.
-- Search output improvements (formatting + payload trimming) and request options:
-  - Optional snippets, with configurable `context_lines_before` / `context_lines_after`
-  - Support for filters like `exclude_paths`, `exclude_patterns`, `score_cutoff`, `deadline_ms`, and `embed_model`
-- Standardized MCP tool set:
-  - `search`
-  - `chunk_get`
-  - `file_lines`
-  - `store_info`
-  - `metadata_get`
-  - `repos_list`
-  - `health`
-  - `open_in_editor`
+#### 🧠 Context Enrichment & Intelligence
+
+- **Graph-based code intelligence** integration
+  - Support for `include_graph_context` parameter in search queries
+  - Entity relationship enrichment (calls, imports, inheritance)
+  - Cross-file dependency context
+  - Enhanced search results with structural understanding
+
+- **Context line expansion**
+  - `context_lines_before` and `context_lines_after` parameters
+  - Configurable context window (0-10 lines)
+  - Better code comprehension with surrounding context
+  - Maintains performance with bounded expansion
+
+#### 🔧 Enhanced Search Capabilities
+
+- **JSON-RPC protocol support** (in addition to MCP stdio)
+  - Enables integration with more AI platforms
+  - Standardized request/response format
+  - Better error handling and structured responses
+  - Backward compatible with existing MCP stdio clients
+
+- **Advanced search parameters**
+  - `exclude_paths` - Filter out specific file paths from results
+  - `exclude_patterns` - Pattern-based exclusion (glob patterns)
+  - `mmr_enabled` - Toggle Maximal Marginal Relevance
+  - `mmr_lambda` - Configure MMR diversity parameter (0-1)
+  - `score_cutoff` - Minimum relevance threshold
+  - `deadline_ms` - Per-query timeout configuration
+
+- **Embedding model selection**
+  - `embed_model` parameter: "small" (1536d) or "large" (3072d)
+  - Dynamic model selection per query
+  - Backward compatible with default model
+
+#### 📊 Improved Observability
+
+- **Enhanced logging and debugging**
+  - Structured JSONL logging for all tool operations
+  - Request/response tracking with correlation IDs
+  - Performance metrics for each tool call
+  - Error context and stack traces
 
 ### Changed
 
-- **Breaking**: Minimum required KB API version is now 0.2.0.
-- REST client targets KB `/v1` endpoints for search, repos, chunks, and file slices.
+- **Breaking**: Minimum required kb API version is now 0.2.0
+- **Tool response format** now includes graph context when available
+- **Search results** enriched with entity relationships
+- **Error messages** more detailed with actionable remediation steps
+- **REST client** now targets `/v1` KB endpoints for search, repos, chunks, and file slices
 
-### Removed
+### Improved
 
-- Filesystem read/write tools removed for safety (`read_files`, `file_write`).
+- **Performance optimizations** for batch operations
+- **Memory efficiency** in file reading operations
+- **Concurrent request handling** for multiple tool calls
+- **Type safety** with enhanced Zod schemas
 
-### Fixed
+### Documentation
 
-- Search/snippet handling and trimming behavior for more stable MCP payload sizes.
-- Prevent cache pollution in `getReposByName` when a client is provided.
-
-### Breaking / Migration Notes
-
-- MCP tool names/availability changed; downstream MCP clients may need updates (e.g., legacy `search_knowledge` / `fetch_chunk` / `fetch_lines` / `get_vector_store_info` are replaced by the tool set above).
+- Updated tool schemas with new parameters
+- Added examples for file system operations
+- Documented graph context integration
+- Enhanced error handling guide
 
 ---
 
@@ -98,10 +127,10 @@ This release focuses the release-targeted surface on the MCP bridge and its cont
 - MCP server implementation for Dolphin semantic code search
 - Tools:
   - `search` - Semantic search across indexed repositories
-  - `chunk_get` - Fetch code chunks by ID
-  - `file_lines` - Fetch file slices by line range
-  - `store_info` - Repository metadata
-  - `metadata_get` - Chunk metadata
+  - `chunk.get` - Fetch code chunks by ID
+  - `file.lines` - Fetch file slices by line range
+  - `store.info` - Repository metadata
+  - `metadata.get` - Chunk metadata
   - `open_in_editor` - Generate VS Code URIs
 - Support for Continue.dev and Claude Desktop
 - JSONL logging to `logs/mcp.log`
