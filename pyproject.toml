@@ -140,6 +140,11 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
     "--strict-markers",
+    "--strict-config",
+    "--tb=short",
+    "--maxfail=5",
+    "-n",
+    "auto",
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
@@ -151,6 +156,11 @@ markers = [
     "scenario: marks tests as scenario tests",
 ]
 asyncio_mode = "auto"
+norecursedirs = ["scripts"]
+filterwarnings = [
+    "default::DeprecationWarning",
+    "default::PendingDeprecationWarning",
+]
 
 [tool.coverage.run]
 source = ["kb"]

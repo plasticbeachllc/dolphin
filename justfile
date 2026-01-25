@@ -97,6 +97,11 @@ test-ts TYPE="all":
 test-cov:
 	@uv run pytest -n0 tests/ --cov=kb --cov-report=html --cov-report=term-missing
 
+# Show the slowest tests (helps keep runtime regressions visible)
+test-slowest TYPE="all" N="30" MIN="0.2":
+	@echo "🐢 Slowest {{N}} tests (min={{MIN}}s)..."
+	@just _pytest_slowest {{TYPE}} {{N}} {{MIN}}
+
 # Run tests for CORE modules (CI compatibility)
 test-core:
 	@echo "Testing core dolphin functions..."
@@ -128,6 +133,19 @@ _pytest TYPE: setup-python
 		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
 	esac
 	uv run pytest "$dir" -q --tb=short
+
+# Internal: pytest runner with duration reporting
+_pytest_slowest TYPE N MIN: setup-python
+	#!/usr/bin/env bash
+	set -euo pipefail
+	case "{{TYPE}}" in
+		all)         dir="tests/" ;;
+		unit)        dir="tests/unit/" ;;
+		integration) dir="tests/integration/" ;;
+		e2e)         dir="tests/e2e/" ;;
+		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
+	esac
+	uv run pytest "$dir" -q --tb=short --durations="{{N}}" --durations-min="{{MIN}}"
 
 # Internal: Generic bun test runner (PROJECT: agent-core, mcp-bridge, shared)
 _bun-test PROJECT TYPE:

@@ -146,37 +146,49 @@ class SQLiteConnectionPool:
         Raises:
             TimeoutError: If connection cannot be acquired within timeout
         """
-        # Try to get from pool
+        # Fast path: try to get a pooled connection immediately.
         try:
-            conn = self._pool.get(timeout=self.timeout)
+            conn = self._pool.get_nowait()
+        except Empty:
+            conn = None
 
-            # Validate connection
+        if conn is not None:
             if self._validate_connection(conn):
                 self._reused_connections += 1
                 return conn
-            else:
-                # Connection is stale, create new one
-                logger.warning("Stale connection detected, creating new one")
+            logger.warning("Stale connection detected, creating new one")
+            conn = self._create_connection()
+            self._created_connections += 1
+            return conn
+
+        # Pool is empty: create overflow connection immediately if allowed.
+        with self._overflow_lock:
+            if self._overflow_count < self.max_overflow:
+                self._overflow_count += 1
+                self._overflow_connections += 1
                 conn = self._create_connection()
                 self._created_connections += 1
+                logger.info(f"Created overflow connection ({self._overflow_count}/{self.max_overflow})")
                 return conn
 
-        except Empty:
-            # Pool is empty, try to create overflow connection
-            with self._overflow_lock:
-                if self._overflow_count < self.max_overflow:
-                    self._overflow_count += 1
-                    self._overflow_connections += 1
-                    conn = self._create_connection()
-                    self._created_connections += 1
-                    logger.info(f"Created overflow connection ({self._overflow_count}/{self.max_overflow})")
-                    return conn
-                else:
-                    raise TimeoutError(
-                        f"Could not acquire connection within {self.timeout}s. "
-                        f"Pool size: {self.pool_size}, "
-                        f"Overflow: {self._overflow_count}/{self.max_overflow}"
-                    )
+        # Overflow is exhausted: wait for a pooled connection to be returned.
+        try:
+            conn = self._pool.get(timeout=self.timeout)
+        except Empty as e:
+            raise TimeoutError(
+                f"Could not acquire connection within {self.timeout}s. "
+                f"Pool size: {self.pool_size}, "
+                f"Overflow: {self._overflow_count}/{self.max_overflow}"
+            ) from e
+
+        if self._validate_connection(conn):
+            self._reused_connections += 1
+            return conn
+
+        logger.warning("Stale connection detected, creating new one")
+        conn = self._create_connection()
+        self._created_connections += 1
+        return conn
 
     def release(self, conn: sqlite3.Connection) -> None:
         """Release a connection back to the pool.

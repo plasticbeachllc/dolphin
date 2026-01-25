@@ -94,6 +94,19 @@ def mock_embedding_service():
     return MockEmbeddingService()
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _disable_retry_sleeps_for_tests() -> Generator[None, None, None]:
+    """Avoid real sleeps from retry/backoff logic during tests."""
+    import kb.ingest.error_logging as error_logging
+
+    mp = pytest.MonkeyPatch()
+    mp.setattr(error_logging, "_sleep", lambda _seconds: None)
+    try:
+        yield
+    finally:
+        mp.undo()
+
+
 def init_test_git_repo(repo_path: Path) -> None:
     """Initialize a git repository with test-friendly defaults.
 
