@@ -9,6 +9,7 @@ from time import perf_counter
 from typing import Any, Protocol, cast
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -25,6 +26,40 @@ ESTIMATED_TOKENS_PER_CHUNK = 200
 CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_:-]+$")
 
 app = FastAPI(title="Unified Knowledge Store", version="0.2.0")
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    errors = exc.errors()
+
+    unknown_fields: list[str] = []
+    for err in errors:
+        err_type = str(err.get("type", ""))
+        if err_type in {"value_error.extra", "extra_forbidden"}:
+            loc = err.get("loc") or ()
+            if isinstance(loc, (list, tuple)) and loc:
+                field = loc[-1]
+                if isinstance(field, str):
+                    unknown_fields.append(field)
+
+    remediation = "Fix the request body and try again."
+    if unknown_fields:
+        uniq = sorted(set(unknown_fields))
+        remediation = f"Remove unsupported field(s): {', '.join(uniq)}."
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": {
+                "code": "invalid_request",
+                "message": "Request validation failed.",
+                "remediation": remediation,
+                "details": errors,
+            },
+            # Backwards-compatible FastAPI-style detail.
+            "detail": errors,
+        },
+    )
 
 
 def _load_default_config() -> KBConfig:
@@ -122,6 +157,10 @@ def _enrich_hits_with_snippets(
     file_lines_cache: dict[tuple[str, str], list[str]] = {}
 
     for hit in hits:
+        existing_snippet = hit.get("snippet")
+        if isinstance(existing_snippet, str) and existing_snippet:
+            continue
+
         repo = hit.get("repo")
         path = hit.get("path")
         start_line = hit.get("start_line")
@@ -182,6 +221,9 @@ def _enrich_hits_with_snippets(
 
 
 class SearchRequest(BaseModel):
+    class Config:
+        extra = "forbid"
+
     query: str
     repos: list[str] | None = None
     path_prefix: list[str] | None = None
@@ -200,7 +242,8 @@ class SearchRequest(BaseModel):
     ann_strategy: str | None = None
     ann_nprobes: int | None = None
     ann_refine_factor: int | None = None
-    include_snippets: bool = False
+    # top_k controls total results; max_snippets controls how many hits return a snippet payload.
+    max_snippets: int = Field(default=0, ge=0, le=_API_LIMITS.max_top_k)
     # Graph context enrichment (enabled by default for better context)
     include_graph_context: bool = _DEFAULT_CONFIG.api.include_graph_context
     # Leading/trailing line context (disabled by default for backwards compatibility)
@@ -357,8 +400,20 @@ async def search(request: SearchRequest) -> dict[str, Any]:
     hits_list = list(hits)
     latency_ms = int((perf_counter() - started) * 1000)
 
-    if request.include_snippets and _sql_store is not None:
-        hits_list = _enrich_hits_with_snippets(hits_list, request, _sql_store)
+    snippet_limit = request.max_snippets
+    snippet_limit = max(0, min(int(snippet_limit), len(hits_list)))
+
+    if snippet_limit > 0 and _sql_store is not None:
+        hits_list[:snippet_limit] = _enrich_hits_with_snippets(hits_list[:snippet_limit], request, _sql_store)
+
+    if snippet_limit < len(hits_list):
+        for hit in hits_list[snippet_limit:]:
+            hit.pop("snippet", None)
+            hit.pop("snippet_start_line", None)
+            hit.pop("snippet_end_line", None)
+            hit.pop("snippet_tokens", None)
+            hit.pop("total_tokens", None)
+            hit.pop("truncated", None)
 
     # Include ANN config in response meta if it was used
     meta = {
@@ -366,6 +421,7 @@ async def search(request: SearchRequest) -> dict[str, Any]:
         "model": _DEFAULT_CONFIG.default_embed_model,
         "latency_ms": latency_ms,
         "max_snippet_tokens": request.max_snippet_tokens,
+        "max_snippets": snippet_limit,
         "mmr_enabled": request.mmr_enabled,
         "mmr_lambda": request.mmr_lambda,
     }

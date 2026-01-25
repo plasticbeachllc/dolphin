@@ -111,7 +111,7 @@ async function handleRequest(req: Request): Promise<Response> {
   // POST /search
   if (method === "POST" && (pathname === "/v1/search" || pathname === "/search")) {
     const body = await readJsonBody();
-    const { query, repos, path_prefix, top_k, cursor, deadline_ms, include_snippets } = body;
+    const { query, repos, path_prefix, top_k, max_snippets } = body;
 
     if (query === "trigger-500") {
       return jsonResponse(
@@ -131,52 +131,23 @@ async function handleRequest(req: Request): Promise<Response> {
       );
     }
 
-    const attachSnippet = (hit: any) => {
-      if (!include_snippets) {
-        const { snippet, ...rest } = hit;
+    const maxSnippets =
+      typeof max_snippets === "number" && Number.isFinite(max_snippets)
+        ? Math.max(0, max_snippets)
+        : 0;
+    const snippetLimit = maxSnippets;
+    const applySnippetLimit = (hits: any[]) =>
+      hits.map((hit, idx) => {
+        if (idx < snippetLimit) return hit;
+        const { snippet, snippet_start_line, snippet_end_line, ...rest } = hit;
         return rest;
-      }
-      return hit;
-    };
-
-    if (deadline_ms === 1) {
-      return jsonResponse({
-        hits: [
-          attachSnippet({
-            repo: "repoa",
-            path: "src/a.ts",
-            lang: "typescript",
-            start_line: 1,
-            end_line: 20,
-            score: 0.9,
-            snippet: "export const a = 1",
-            chunk_id: "1",
-            resource_link: "kb://repoa/src/a.ts#L1-L20",
-          }),
-        ],
-        meta: {
-          top_k: top_k || 5,
-          model: "text-embedding-3-small",
-          cursor: "partial-cursor",
-          estimated_total: 10,
-          complete: false,
-          warnings: ["deadline_exceeded"],
-        },
       });
-    }
-
-    if (body.embed_model === "unavailable") {
-      return jsonResponse(
-        { error: { code: "embeddings_unavailable", message: "Embeddings service unavailable" } },
-        503
-      );
-    }
 
     let hits: any[] = [];
     if (query) {
       if (query === "snippet-failure") {
         hits = [
-          attachSnippet({
+          {
             repo: "repoa",
             path: "nonexistent.ts",
             lang: "typescript",
@@ -186,11 +157,11 @@ async function handleRequest(req: Request): Promise<Response> {
             snippet: "export const a = 1",
             chunk_id: "1",
             resource_link: "kb://repoa/nonexistent.ts#L1-L10",
-          }),
+          },
         ];
       } else if (typeof query === "string" && query.toLowerCase().includes("ingestion")) {
         hits = [
-          attachSnippet({
+          {
             repo: "repoa",
             path: "kb/ingest/pipeline.py",
             lang: "python",
@@ -200,8 +171,8 @@ async function handleRequest(req: Request): Promise<Response> {
             snippet: "def run_pipeline(...):\n    pass",
             chunk_id: "ing-1",
             resource_link: "kb://repoa/kb/ingest/pipeline.py#L1-L40",
-          }),
-          attachSnippet({
+          },
+          {
             repo: "repoa",
             path: "kb/chunkers/md_chunker.py",
             lang: "python",
@@ -211,8 +182,8 @@ async function handleRequest(req: Request): Promise<Response> {
             snippet: "class MdChunker:\n    pass",
             chunk_id: "ing-2",
             resource_link: "kb://repoa/kb/chunkers/md_chunker.py#L10-L80",
-          }),
-          attachSnippet({
+          },
+          {
             repo: "repoa",
             path: ".continue/agents/personas_config.yaml",
             lang: "yaml",
@@ -223,11 +194,11 @@ async function handleRequest(req: Request): Promise<Response> {
               "name: Dolphin Personas\nversion: 0.1.1\nschema: v1\nmodels:\n- name: Chief of Staff",
             chunk_id: "noise-1",
             resource_link: "kb://repoa/.continue/agents/personas_config.yaml#L1-L200",
-          }),
+          },
         ];
       } else if (query === "large-snippet") {
         hits = [
-          attachSnippet({
+          {
             repo: "repoa",
             path: "src/a.ts",
             lang: "typescript",
@@ -237,11 +208,11 @@ async function handleRequest(req: Request): Promise<Response> {
             snippet: "x".repeat(600),
             chunk_id: "1",
             resource_link: "kb://repoa/src/a.ts#L1-L20",
-          }),
+          },
         ];
       } else {
         hits = [
-          attachSnippet({
+          {
             repo: "repoa",
             path: "src/a.ts",
             lang: "typescript",
@@ -251,8 +222,8 @@ async function handleRequest(req: Request): Promise<Response> {
             snippet: "export const a = 1",
             chunk_id: "1",
             resource_link: "kb://repoa/src/a.ts#L1-L20",
-          }),
-          attachSnippet({
+          },
+          {
             repo: "repob",
             path: "src/b.py",
             lang: "python",
@@ -262,19 +233,18 @@ async function handleRequest(req: Request): Promise<Response> {
             snippet: "def test_function():\n    return True",
             chunk_id: "2",
             resource_link: "kb://repob/src/b.py#L5-L15",
-          }),
+          },
         ];
       }
     }
 
     return jsonResponse({
-      hits,
+      hits: applySnippetLimit(hits),
       meta: {
         top_k: top_k || 5,
-        model: body.embed_model || "text-embedding-3-small",
-        cursor: cursor || (hits.length ? "opaque-cursor" : undefined),
+        model: "text-embedding-3-small",
         estimated_total: hits.length,
-        complete: true,
+        max_snippets: snippetLimit,
         warnings: top_k && top_k > 100 ? ["top_k clamped to 100"] : [],
       },
     });

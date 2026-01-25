@@ -103,38 +103,7 @@ async function runIntegrationTests() {
   }
 
   // Test pagination with multiple calls
-  console.log("📋 Running: search - pagination test");
-  try {
-    const { handler } = makeSearchKnowledge();
-    const firstPage = await handler({ input: { query: "test", top_k: 2 } });
-
-    if (firstPage.isError) {
-      console.log(`  ❌ First page failed: ${firstPage.content[0]?.text}`);
-      failed++;
-    } else if (firstPage._meta?.cursor) {
-      const secondPage = await handler({
-        input: {
-          query: "test",
-          top_k: 2,
-          cursor: firstPage._meta.cursor,
-        },
-      });
-
-      if (secondPage.isError) {
-        console.log(`  ❌ Second page failed: ${secondPage.content[0]?.text}`);
-        failed++;
-      } else {
-        console.log("  ✅ Pagination test passed");
-        passed++;
-      }
-    } else {
-      console.log("  ⚠️  No cursor for pagination test (expected if no more results)");
-      passed++; // Not a failure, just no pagination needed
-    }
-  } catch (error) {
-    console.log(`  ❌ Pagination error: ${error.message}`);
-    failed++;
-  }
+  // Cursor-based pagination is intentionally not supported in v0.2.0.
 
   console.log("\n📊 Test Summary:");
   console.log(`   ✅ Passed: ${passed}`);
@@ -155,7 +124,7 @@ async function runIntegrationTests() {
 // Check if REST server is available before running tests
 async function checkRestServer() {
   try {
-    const response = await fetch("http://127.0.0.1:7777/health");
+    const response = await fetch("http://127.0.0.1:7777/v1/health");
     return response.ok;
   } catch {
     return false;

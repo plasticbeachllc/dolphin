@@ -207,7 +207,6 @@ export function buildSummary(params: {
   hits: ExtendedSearchHit[];
   snippetsIncluded: number;
   estimatedTotal?: number;
-  moreAvailable: boolean;
   includeWarningsInText: boolean;
   warningEntries: WarningEntry[];
 }): string {
@@ -221,7 +220,7 @@ export function buildSummary(params: {
   ];
   if (typeof params.estimatedTotal === "number")
     summaryParts.push(`~${params.estimatedTotal} estimated results.`);
-  if (params.moreAvailable) summaryParts.push("More available — call search again with cursor.");
+
   if (params.includeWarningsInText && params.warningEntries.length > 0) {
     const warningText = params.warningEntries
       .map((entry) => (entry.detail ? `${entry.code}(${entry.detail})` : entry.code))
@@ -256,12 +255,11 @@ export type HitsJson = {
     };
   }>;
   meta: {
-    cursor: string | null;
     estimated_total: number | null;
-    complete: boolean | null;
     warnings: WarningEntry[];
     model: string | null;
     top_k: number;
+    max_snippets: number | null;
   };
 };
 
@@ -314,12 +312,11 @@ export function buildHitsJsonObject(params: {
       };
     }),
     meta: {
-      cursor: params.meta.cursor ?? null,
       estimated_total: params.meta.estimated_total ?? null,
-      complete: params.meta.complete ?? null,
       warnings: params.warningEntries,
       model: params.meta.model ?? null,
       top_k: params.meta.top_k ?? params.topK,
+      max_snippets: params.meta.max_snippets ?? null,
     },
   };
 }

@@ -101,12 +101,9 @@ def init(
 def add_repo(
     name: str = typer.Argument(..., help="Logical name for the repository."),
     path: Path = typer.Argument(..., help="Absolute path to the repository root."),
-    default_embed_model: str = typer.Option(
-        "large", "--default-embed-model", help="Default embedding model (small|large)."
-    ),
 ) -> None:
     """Register or update a repository in the metadata store."""
-    kb_add_repo(name=name, path=path, default_embed_model=default_embed_model)
+    kb_add_repo(name=name, path=path)
 
 
 @app.command()

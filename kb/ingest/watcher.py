@@ -59,6 +59,9 @@ class RepoWatcher:
         except Exception as e:
             logger.error(f"Startup sync failed for {self.repo_name}: {e}")
 
+        # Seed pending changes for untracked or modified files created during startup sync.
+        await self._seed_working_tree_changes()
+
         # Process any pending changes from previous run first
         await self._process_pending_changes()
 
@@ -125,6 +128,27 @@ class RepoWatcher:
 
         except Exception as e:
             logger.error(f"Error checking branch state: {e}")
+
+    async def _seed_working_tree_changes(self) -> None:
+        """Capture working tree changes before the watch loop starts."""
+        try:
+            from ..ingest.incremental import detect_changed_files
+
+            modified_files, deleted_files = detect_changed_files(self.root, self.metadata, self.repo_name)
+        except Exception as e:
+            logger.warning(f"Failed to seed working tree changes for {self.repo_name}: {e}")
+            return
+
+        changes: list[tuple[Change, str]] = []
+        for path in modified_files:
+            if path:
+                changes.append((Change.modified, path))
+        for path in deleted_files:
+            if path:
+                changes.append((Change.deleted, path))
+
+        if changes:
+            await self._record_changes(changes)
 
     async def _record_changes(self, changes: list[tuple[Change, str]]):
         """Record detected changes to the database."""

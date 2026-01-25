@@ -31,6 +31,27 @@ export function normalizeToolError(err: unknown, remediation?: string): Normaliz
   }
 
   if (err instanceof ZodError) {
+    const unrecognizedKeys = err.issues.find(
+      (issue): issue is typeof issue & { keys: string[] } =>
+        issue.code === "unrecognized_keys" && "keys" in issue
+    );
+    if (unrecognizedKeys && unrecognizedKeys.keys.length > 0) {
+      const keys = unrecognizedKeys.keys.slice(0, 10);
+      const extra =
+        unrecognizedKeys.keys.length > keys.length
+          ? ` (and ${unrecognizedKeys.keys.length - keys.length} more)`
+          : "";
+      const keysText = keys.map((k) => `"${k}"`).join(", ") + extra;
+      const baseRemediation = `Remove unsupported field(s): ${keysText}.`;
+      return {
+        error: {
+          code: "invalid_input",
+          message: `Unknown input field(s): ${keys.join(", ")}${extra}.`,
+          remediation: remediation ? `${baseRemediation} ${remediation}` : baseRemediation,
+          details: err.flatten(),
+        },
+      };
+    }
     return {
       error: {
         code: "invalid_input",
