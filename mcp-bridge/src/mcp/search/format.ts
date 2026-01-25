@@ -251,8 +251,8 @@ export type HitsJson = {
       repo_root: string | null;
     };
     followups: {
-      "chunk_get": { chunk_id: string };
-      "file_lines": { repo: string; path: string; start: number; end: number };
+      chunk_get: { chunk_id: string };
+      file_lines: { repo: string; path: string; start: number; end: number };
     };
   }>;
   meta: {
@@ -308,8 +308,8 @@ export function buildHitsJsonObject(params: {
           repo_root: hit.repo_root ?? null,
         },
         followups: {
-          "chunk_get": { chunk_id: hit.chunk_id },
-          "file_lines": defaultFetchLines,
+          chunk_get: { chunk_id: hit.chunk_id },
+          file_lines: defaultFetchLines,
         },
       };
     }),
