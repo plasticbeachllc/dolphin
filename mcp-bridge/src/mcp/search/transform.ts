@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { RepoInfo } from "../../rest/client.js";
+import type { RepoInfo, KBClient } from "../../rest/client.js";
 import { restListRepos } from "../../rest/client.js";
 import type { ApiHit, ExtendedSearchHit, SnippetInfo } from "./contracts.js";
 
@@ -28,11 +28,11 @@ function isRepoCacheExpired(entry: RepoCacheEntry): boolean {
   return Date.now() - entry.ts > REPO_CACHE_TTL_MS;
 }
 
-export async function getReposByName(signal?: AbortSignal): Promise<Map<string, RepoInfo>> {
+export async function getReposByName(signal?: AbortSignal, client?: KBClient): Promise<Map<string, RepoInfo>> {
   if (repoCache && !isRepoCacheExpired(repoCache)) {
     return repoCache.reposByName;
   }
-  const repoList = await restListRepos(signal);
+  const repoList = await (client ? client.listRepos(signal) : restListRepos(signal));
   const reposByName = new Map(repoList.repos.map((r) => [r.name, r]));
   repoCache = { ts: Date.now(), reposByName };
   return reposByName;

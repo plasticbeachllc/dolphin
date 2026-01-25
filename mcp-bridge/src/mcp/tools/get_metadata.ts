@@ -1,6 +1,6 @@
 import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { restGetChunk } from "../../rest/client.js";
+import { restGetChunk, KBClient } from "../../rest/client.js";
 import { logInfo, logError } from "../../util/logger.js";
 import { buildToolInputSchema } from "./schema.js";
 import { TOOL_VERSION } from "./version.js";
@@ -18,7 +18,7 @@ const INPUT_SHAPE = { chunk_id: z.string() };
 const INPUT = z.object(INPUT_SHAPE);
 const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
-export function makeGetMetadata(): {
+export function makeGetMetadata(client?: KBClient): {
   definition: Tool;
   inputSchema: typeof INPUT;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -41,7 +41,7 @@ export function makeGetMetadata(): {
     try {
       const argsObj = args as { input?: unknown } | undefined;
       const input = INPUT.parse(argsObj?.input ?? args);
-      const chunk = await restGetChunk(input.chunk_id, signal);
+      const chunk = await (client ? client.getChunk(input.chunk_id, signal) : restGetChunk(input.chunk_id, signal));
       // Drop content to keep response small
       const { content: _content, ...meta } = chunk;
       const metaJson = "```json\n" + JSON.stringify(meta) + "\n```";

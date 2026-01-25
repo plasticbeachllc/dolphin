@@ -9,21 +9,17 @@ import { transformHits, getReposByName } from "../../mcp/search/transform.js";
 import type { ApiHit, SnippetInfo } from "../../mcp/search/contracts.js";
 import type { RepoInfo } from "../../rest/client.js";
 
+import { type KBClient } from "../../rest/client.js";
+
 // Mock the rest client
-const mockRestListRepos = mock(async () => ({
+const mockListRepos = mock(async () => ({
   repos: [
     { name: "repo1", path: "/path/to/repo1" },
     { name: "repo2", path: "/path/to/repo2" },
   ] as RepoInfo[],
 }));
 
-// Import original client to preserve other exports
-import * as originalClient from "../../rest/client.ts";
-
-mock.module("../../rest/client.js", () => ({
-  ...originalClient,
-  restListRepos: mockRestListRepos,
-}));
+const mockClient = { listRepos: mockListRepos } as unknown as KBClient;
 
 describe("transformHits", () => {
   const createMockHit = (overrides: Partial<ApiHit> = {}): ApiHit => ({
@@ -206,14 +202,14 @@ describe("transformHits", () => {
 
 describe("getReposByName", () => {
   it("fetches and caches repo list", async () => {
-    mockRestListRepos.mockImplementation(async () => ({
+    mockListRepos.mockImplementation(async () => ({
       repos: [
         { name: "repo1", path: "/path1" },
         { name: "repo2", path: "/path2" },
       ],
     }));
 
-    const result = await getReposByName();
+    const result = await getReposByName(undefined, mockClient);
 
     expect(result.size).toBe(2);
     expect(result.get("repo1")?.path).toBe("/path1");

@@ -11,10 +11,6 @@ import type { ApiHit } from "../../mcp/search/contracts.js";
 // Mock snippet fetcher
 const mockFetchSnippetsInParallel = mock(async () => ({}));
 
-mock.module("../../mcp/tools/snippet_fetcher.js", () => ({
-  fetchSnippetsInParallel: mockFetchSnippetsInParallel,
-}));
-
 describe("fetchSnippetsForHits", () => {
   it("returns empty when snippets disabled", async () => {
     const hits: ApiHit[] = [
@@ -66,6 +62,7 @@ describe("fetchSnippetsForHits", () => {
       topContextN: 5,
       contextLinesBefore: 3,
       contextLinesAfter: 3,
+      fetcher: mockFetchSnippetsInParallel,
     });
 
     expect(result.snippetsByHitIndex.size).toBe(1);
@@ -90,11 +87,12 @@ describe("fetchSnippetsForHits", () => {
       topContextN: 2,
       contextLinesBefore: 3,
       contextLinesAfter: 3,
+      fetcher: mockFetchSnippetsInParallel,
     });
 
     // Should only request 5 snippets
     expect(mockFetchSnippetsInParallel).toHaveBeenCalled();
-    const calls = mockFetchSnippetsInParallel.mock.calls;
+    const calls = mockFetchSnippetsInParallel.mock.calls as any;
     const requests = calls[calls.length - 1][0];
     expect(requests.length).toBe(5);
   });
@@ -123,6 +121,7 @@ describe("fetchSnippetsForHits", () => {
       topContextN: 5,
       contextLinesBefore: 3,
       contextLinesAfter: 3,
+      fetcher: mockFetchSnippetsInParallel,
     });
 
     expect(result.snippetsByHitIndex.size).toBe(0);
@@ -168,9 +167,10 @@ describe("fetchSnippetsForHits", () => {
       topContextN: 5,
       contextLinesBefore: 3,
       contextLinesAfter: 3,
+      fetcher: mockFetchSnippetsInParallel,
     });
 
-    const calls = mockFetchSnippetsInParallel.mock.calls;
+    const calls = mockFetchSnippetsInParallel.mock.calls as any;
     const requests = calls[calls.length - 1][0];
     // Should only request for the valid hit
     expect(requests.length).toBe(1);
@@ -196,9 +196,10 @@ describe("fetchSnippetsForHits", () => {
       topContextN: 3,
       contextLinesBefore: 5,
       contextLinesAfter: 5,
+      fetcher: mockFetchSnippetsInParallel,
     });
 
-    const calls = mockFetchSnippetsInParallel.mock.calls;
+    const calls = mockFetchSnippetsInParallel.mock.calls as any;
     const requests = calls[calls.length - 1][0];
 
     // First 3 should have context
@@ -236,6 +237,7 @@ describe("fetchSnippetsForHits", () => {
       contextLinesBefore: 3,
       contextLinesAfter: 3,
       signal: abortController.signal,
+      fetcher: mockFetchSnippetsInParallel,
     });
 
     // Verify signal was passed

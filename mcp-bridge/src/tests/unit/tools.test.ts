@@ -6,10 +6,10 @@
 
 import { describe, it, expect, mock, beforeEach } from "bun:test";
 import { makeChunkGet } from "../../mcp/tools/chunk_get.js";
-import type { ChunkResponse } from "../../rest/client.js";
+import type { ChunkResponse, KBClient } from "../../rest/client.js";
 
-// Mock REST client
-const mockRestGetChunk = mock(async () => ({
+// Mock REST client methods
+const mockGetChunk = mock(async () => ({
   chunk_id: "chunk-123",
   repo: "test-repo",
   path: "src/test.ts",
@@ -20,25 +20,11 @@ const mockRestGetChunk = mock(async () => ({
   lang: "typescript",
 }));
 
-import * as originalClient from "../../rest/client.ts";
-
-mock.module("../../rest/client.js", () => ({
-  ...originalClient,
-  restGetChunk: mockRestGetChunk,
-  restGetFileSlice: mock(async () => ({
-    repo: "r",
-    path: "p",
-    start_line: 1,
-    end_line: 10,
-    content: "code",
-    source: "file",
-  })),
-  restListRepos: mock(async () => ({ repos: [] })),
-}));
+const mockClient = { getChunk: mockGetChunk } as unknown as KBClient;
 
 describe("chunk_get tool", () => {
   it("returns chunk content successfully", async () => {
-    const { handler } = makeChunkGet();
+    const { handler } = makeChunkGet(mockClient);
 
     const result = await handler({ chunk_id: "chunk-123" });
 
@@ -49,7 +35,7 @@ describe("chunk_get tool", () => {
   });
 
   it("includes chunk citation in text", async () => {
-    const { handler } = makeChunkGet();
+    const { handler } = makeChunkGet(mockClient);
 
     const result = await handler({ chunk_id: "chunk-123" });
 
@@ -62,7 +48,7 @@ describe("chunk_get tool", () => {
   });
 
   it("includes code content as resource", async () => {
-    const { handler } = makeChunkGet();
+    const { handler } = makeChunkGet(mockClient);
 
     const result = await handler({ chunk_id: "chunk-123" });
 
@@ -74,7 +60,7 @@ describe("chunk_get tool", () => {
   });
 
   it("sets correct MIME type for TypeScript", async () => {
-    const { handler } = makeChunkGet();
+    const { handler } = makeChunkGet(mockClient);
 
     const result = await handler({ chunk_id: "chunk-123" });
 
@@ -85,11 +71,11 @@ describe("chunk_get tool", () => {
   });
 
   it("handles errors gracefully", async () => {
-    mockRestGetChunk.mockImplementationOnce(async () => {
+    mockGetChunk.mockImplementationOnce(async () => {
       throw new Error("Chunk not found");
     });
 
-    const { handler } = makeChunkGet();
+    const { handler } = makeChunkGet(mockClient);
     const result = await handler({ chunk_id: "nonexistent" });
 
     expect(result.isError).toBe(true);
@@ -97,7 +83,7 @@ describe("chunk_get tool", () => {
   });
 
   it("includes metadata in response", async () => {
-    const { handler } = makeChunkGet();
+    const { handler } = makeChunkGet(mockClient);
 
     const result = await handler({ chunk_id: "chunk-123" });
 
@@ -107,7 +93,7 @@ describe("chunk_get tool", () => {
   });
 
   it("accepts input wrapped in input field", async () => {
-    const { handler } = makeChunkGet();
+    const { handler } = makeChunkGet(mockClient);
 
     const result = await handler({ input: { chunk_id: "chunk-123" } });
 
@@ -116,7 +102,7 @@ describe("chunk_get tool", () => {
 
   it("respects abort signal", async () => {
     const abortController = new AbortController();
-    const { handler } = makeChunkGet();
+    const { handler } = makeChunkGet(mockClient);
 
     // Verify signal is passed through
     const resultPromise = handler({ chunk_id: "chunk-123" }, abortController.signal);
@@ -126,7 +112,7 @@ describe("chunk_get tool", () => {
   });
 
   it("validates chunk_id is required", async () => {
-    const { handler } = makeChunkGet();
+    const { handler } = makeChunkGet(mockClient);
 
     try {
       await handler({});
@@ -138,7 +124,7 @@ describe("chunk_get tool", () => {
   });
 
   it("has correct tool definition", () => {
-    const { definition } = makeChunkGet();
+    const { definition } = makeChunkGet(mockClient);
 
     expect(definition.name).toBe("chunk_get");
     expect(definition.description).toContain("chunk");
@@ -146,14 +132,14 @@ describe("chunk_get tool", () => {
   });
 
   it("marks tool as read-only and idempotent", () => {
-    const { definition } = makeChunkGet();
+    const { definition } = makeChunkGet(mockClient);
 
     expect(definition.annotations?.readOnlyHint).toBe(true);
     expect(definition.annotations?.idempotentHint).toBe(true);
   });
 
   it("includes latency tracking", async () => {
-    const { handler } = makeChunkGet();
+    const { handler } = makeChunkGet(mockClient);
 
     const result = await handler({ chunk_id: "chunk-123" });
 

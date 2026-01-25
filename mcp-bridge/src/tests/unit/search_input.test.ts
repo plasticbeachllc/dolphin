@@ -8,25 +8,16 @@ import { describe, it, expect, mock } from "bun:test";
 import { parseSearchInput, resolveSearchOptions, SEARCH_INPUT } from "../../mcp/search/input.js";
 import { buildSearchRequestBody, executeSearch } from "../../mcp/search/rest.js";
 
+import type { KBClient } from "../../rest/client.js";
+
 // Mock REST client
-const mockRestSearch = mock(async () => ({
-  hits: [],
+const mockSearch = mock(async () => ({
+  hits: [] as any[],
   meta: { top_k: 20 },
+  prompt_ready: "",
 }));
 
-mock.module("../../rest/client.js", () => ({
-  restSearch: mockRestSearch,
-  restGetChunk: mock(async () => ({
-    chunk_id: "",
-    repo: "",
-    path: "",
-    start_line: 1,
-    end_line: 1,
-    content: "",
-    resource_link: "",
-  })),
-  restListRepos: mock(async () => ({ repos: [] })),
-}));
+const mockClient = { search: mockSearch } as unknown as KBClient;
 
 describe("parseSearchInput", () => {
   it("parses basic query", () => {
@@ -160,23 +151,23 @@ describe("executeSearch", () => {
   it("calls REST search with body", async () => {
     const body = { query: "test", top_k: 20 };
 
-    const result = await executeSearch(body);
+    const result = await executeSearch(body, undefined, mockClient);
 
     expect(result).toBeDefined();
-    expect(mockRestSearch).toHaveBeenCalled();
+    expect(mockSearch).toHaveBeenCalled();
   });
 
   it("passes abort signal", async () => {
     const body = { query: "test" };
     const abortController = new AbortController();
 
-    await executeSearch(body, abortController.signal);
+    await executeSearch(body, abortController.signal, mockClient);
 
-    expect(mockRestSearch).toHaveBeenCalled();
+    expect(mockSearch).toHaveBeenCalled();
   });
 
   it("returns hits and metadata", async () => {
-    mockRestSearch.mockImplementationOnce(async () => ({
+    mockSearch.mockImplementationOnce(async () => ({
       hits: [
         {
           repo: "r",
@@ -186,13 +177,15 @@ describe("executeSearch", () => {
           score: 0.9,
           snippet: "code",
           chunk_id: "c",
+          resource_link: "",
         },
       ],
       meta: { top_k: 20, model: "small" },
+      prompt_ready: "",
     }));
 
     const body = { query: "test" };
-    const result = await executeSearch(body);
+    const result = await executeSearch(body, undefined, mockClient);
 
     expect(result.hits).toHaveLength(1);
     expect(result.meta.top_k).toBe(20);

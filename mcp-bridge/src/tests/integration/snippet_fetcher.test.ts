@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, mock } from "bun:test";
-import { startMockRest } from "./mockServer.js";
+import { describe, it, expect } from "bun:test";
+import { createMockFetch } from "./mockServer.js";
+import { KBClient } from "../../rest/client.js";
 import {
   fetchSnippetsInParallel,
   requestsFromHits,
@@ -8,15 +9,14 @@ import {
 } from "../../mcp/tools/snippet_fetcher.js";
 import { initLogger } from "../../util/logger.js";
 
-let stop: () => Promise<void>;
+// Init logger once
+initLogger();
 
-beforeAll(async () => {
-  await initLogger();
-  stop = await startMockRest(7777);
-});
-
-afterAll(async () => {
-  await stop?.();
+// Create isolated client
+const mockFetch = createMockFetch();
+const client = new KBClient({
+  baseUrl: "http://127.0.0.1:7777",
+  fetch: mockFetch,
 });
 
 describe("snippet_fetcher", () => {
@@ -32,6 +32,7 @@ describe("snippet_fetcher", () => {
         maxConcurrent: 3,
         requestTimeoutMs: 2000,
         retryAttempts: 1,
+        client,
       });
 
       expect(Object.keys(results)).toHaveLength(3);
@@ -62,6 +63,7 @@ describe("snippet_fetcher", () => {
         maxConcurrent: 2,
         requestTimeoutMs: 2000,
         retryAttempts: 1,
+        client,
       });
 
       expect(Object.keys(results)).toHaveLength(4);
@@ -111,6 +113,7 @@ describe("snippet_fetcher", () => {
         maxConcurrent: maxConcurrency,
         requestTimeoutMs: 2000,
         retryAttempts: 0,
+        client,
       });
 
       const endTime = Date.now();
@@ -139,6 +142,7 @@ describe("snippet_fetcher", () => {
         maxConcurrent: 2,
         requestTimeoutMs: 10, // Very short timeout
         retryAttempts: 0,
+        client,
       });
 
       // Should have results for both requests (even if some fail due to timeout)
@@ -160,6 +164,7 @@ describe("snippet_fetcher", () => {
         maxConcurrent: 1,
         requestTimeoutMs: 100,
         retryAttempts: 2,
+        client,
       });
 
       // Note: retry timing is fast with mock server, so we don't test timing here
@@ -182,6 +187,7 @@ describe("snippet_fetcher", () => {
         requestTimeoutMs: 200,
         retryAttempts: 0,
         signal: controller.signal,
+        client,
       });
 
       // Should return results structure even when aborted
@@ -198,6 +204,7 @@ describe("snippet_fetcher", () => {
         maxConcurrent: 2,
         requestTimeoutMs: 1000,
         retryAttempts: 1,
+        client,
       });
 
       expect(Object.keys(results)).toHaveLength(0);
@@ -213,6 +220,7 @@ describe("snippet_fetcher", () => {
         maxConcurrent: 1,
         requestTimeoutMs: 1000,
         retryAttempts: 0,
+        client,
       });
 
       expect(Object.keys(results)).toHaveLength(1);
@@ -226,7 +234,7 @@ describe("snippet_fetcher", () => {
         { repo: "repoa", path: "src/a.ts", startLine: 1, endLine: 10 },
       ];
 
-      const results = await fetchSnippetsInParallel(requests);
+      const results = await fetchSnippetsInParallel(requests, { client });
 
       expect(Object.keys(results)).toHaveLength(1);
       expect(results[0]).toBeDefined();
@@ -243,6 +251,7 @@ describe("snippet_fetcher", () => {
         maxConcurrent: 100, // Much larger than request count
         requestTimeoutMs: 1000,
         retryAttempts: 0,
+        client,
       });
 
       expect(Object.keys(results)).toHaveLength(2);
@@ -261,6 +270,7 @@ describe("snippet_fetcher", () => {
         maxConcurrent: 1,
         requestTimeoutMs: 1000,
         retryAttempts: 0,
+        client,
       });
 
       expect(Object.keys(results)).toHaveLength(1);
@@ -282,6 +292,7 @@ describe("snippet_fetcher", () => {
         maxConcurrent: 3,
         requestTimeoutMs: 1000,
         retryAttempts: 0,
+        client,
       });
       const endTime = Date.now();
 
@@ -309,6 +320,7 @@ describe("snippet_fetcher", () => {
         maxConcurrent: 3,
         requestTimeoutMs: 1000,
         retryAttempts: 0,
+        client,
       });
 
       expect(Object.keys(results)).toHaveLength(5);

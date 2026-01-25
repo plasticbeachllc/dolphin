@@ -7,8 +7,10 @@
 import { describe, it, expect, mock } from "bun:test";
 import { makeFileLines } from "../../mcp/tools/file_lines.js";
 
-// Mock REST client
-const mockRestGetFileSlice = mock(async () => ({
+import type { KBClient } from "../../rest/client.js";
+
+// Mock REST client methods
+const mockGetFileSlice = mock(async () => ({
   repo: "test-repo",
   path: "src/test.ts",
   start_line: 1,
@@ -18,23 +20,11 @@ const mockRestGetFileSlice = mock(async () => ({
   source: "file",
 }));
 
-mock.module("../../rest/client.js", () => ({
-  restGetFileSlice: mockRestGetFileSlice,
-  restGetChunk: mock(async () => ({
-    chunk_id: "",
-    repo: "",
-    path: "",
-    start_line: 1,
-    end_line: 1,
-    content: "",
-    resource_link: "",
-  })),
-  restListRepos: mock(async () => ({ repos: [] })),
-}));
+const mockClient = { getFileSlice: mockGetFileSlice } as unknown as KBClient;
 
 describe("file_lines tool", () => {
   it("fetches file slice successfully", async () => {
-    const { handler } = makeFileLines();
+    const { handler } = makeFileLines(mockClient);
 
     const result = await handler({
       repo: "test-repo",
@@ -48,7 +38,7 @@ describe("file_lines tool", () => {
   });
 
   it("includes file citation", async () => {
-    const { handler } = makeFileLines();
+    const { handler } = makeFileLines(mockClient);
 
     const result = await handler({
       repo: "test-repo",
@@ -66,7 +56,7 @@ describe("file_lines tool", () => {
   });
 
   it("returns code as resource", async () => {
-    const { handler } = makeFileLines();
+    const { handler } = makeFileLines(mockClient);
 
     const result = await handler({
       repo: "test-repo",
@@ -82,7 +72,7 @@ describe("file_lines tool", () => {
   });
 
   it("validates required fields", async () => {
-    const { handler } = makeFileLines();
+    const { handler } = makeFileLines(mockClient);
 
     try {
       await handler({ repo: "test-repo" }); // Missing path, start, end
@@ -93,18 +83,18 @@ describe("file_lines tool", () => {
   });
 
   it("has correct tool definition", () => {
-    const { definition } = makeFileLines();
+    const { definition } = makeFileLines(mockClient);
 
     expect(definition.name).toBe("file_lines");
     expect(definition.description).toContain("file");
   });
 
   it("handles errors gracefully", async () => {
-    mockRestGetFileSlice.mockImplementationOnce(async () => {
+    mockGetFileSlice.mockImplementationOnce(async () => {
       throw new Error("File not found");
     });
 
-    const { handler } = makeFileLines();
+    const { handler } = makeFileLines(mockClient);
     const result = await handler({
       repo: "test-repo",
       path: "nonexistent.ts",
@@ -116,7 +106,7 @@ describe("file_lines tool", () => {
   });
 
   it("accepts input wrapped in input field", async () => {
-    const { handler } = makeFileLines();
+    const { handler } = makeFileLines(mockClient);
 
     const result = await handler({
       input: {
@@ -131,7 +121,7 @@ describe("file_lines tool", () => {
   });
 
   it("includes metadata", async () => {
-    const { handler } = makeFileLines();
+    const { handler } = makeFileLines(mockClient);
 
     const result = await handler({
       repo: "test-repo",

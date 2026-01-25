@@ -11,9 +11,10 @@ import {
   type SnippetFetchRequest,
   type SnippetFetchResult,
 } from "../../mcp/tools/snippet_fetcher.js";
+import { type KBClient } from "../../rest/client.js";
 
-// Mock the rest client
-const mockRestGetFileSlice = mock(async () => ({
+// Mock the client method
+const mockGetFileSlice = mock(async (repo: string, path: string, start: number, end: number) => ({
   repo: "test-repo",
   path: "test.ts",
   start_line: 1,
@@ -22,10 +23,7 @@ const mockRestGetFileSlice = mock(async () => ({
   source: "file",
 }));
 
-// Replace the import
-mock.module("../../rest/client.js", () => ({
-  restGetFileSlice: mockRestGetFileSlice,
-}));
+const mockClient = { getFileSlice: mockGetFileSlice } as unknown as KBClient;
 
 describe("requestsFromHits", () => {
   it("converts hits to snippet requests", () => {
@@ -59,7 +57,7 @@ describe("requestsFromHits", () => {
 
 describe("fetchSnippetsInParallel", () => {
   it("fetches multiple snippets successfully", async () => {
-    mockRestGetFileSlice.mockImplementation(async (repo, path, start, end) => ({
+    mockGetFileSlice.mockImplementation(async (repo: string, path: string, start: number, end: number) => ({
       repo,
       path,
       start_line: start,
@@ -73,7 +71,7 @@ describe("fetchSnippetsInParallel", () => {
       { repo: "r2", path: "p2.ts", startLine: 5, endLine: 15 },
     ];
 
-    const results = await fetchSnippetsInParallel(requests);
+    const results = await fetchSnippetsInParallel(requests, { client: mockClient });
 
     expect(Object.keys(results)).toHaveLength(2);
     expect(results[0]?.content).toBe("content for p1.ts");
@@ -81,12 +79,12 @@ describe("fetchSnippetsInParallel", () => {
   });
 
   it("returns empty object for empty requests", async () => {
-    const results = await fetchSnippetsInParallel([]);
+    const results = await fetchSnippetsInParallel([], { client: mockClient });
     expect(Object.keys(results)).toHaveLength(0);
   });
 
   it("handles single request", async () => {
-    mockRestGetFileSlice.mockImplementation(async () => ({
+    mockGetFileSlice.mockImplementation(async () => ({
       repo: "r",
       path: "p.ts",
       start_line: 1,
@@ -97,14 +95,14 @@ describe("fetchSnippetsInParallel", () => {
 
     const requests: SnippetFetchRequest[] = [{ repo: "r", path: "p.ts", startLine: 1, endLine: 5 }];
 
-    const results = await fetchSnippetsInParallel(requests);
+    const results = await fetchSnippetsInParallel(requests, { client: mockClient });
 
     expect(Object.keys(results)).toHaveLength(1);
     expect(results[0]?.content).toBe("single snippet");
   });
 
   it("handles context lines in requests", async () => {
-    mockRestGetFileSlice.mockImplementation(async (repo, path, start, end) => ({
+    mockGetFileSlice.mockImplementation(async (repo: string, path: string, start: number, end: number) => ({
       repo,
       path,
       start_line: start,
@@ -124,18 +122,18 @@ describe("fetchSnippetsInParallel", () => {
       },
     ];
 
-    const results = await fetchSnippetsInParallel(requests);
+    const results = await fetchSnippetsInParallel(requests, { client: mockClient });
 
     expect(results[0]?.content).toBe("context content");
     // Verify that context lines were passed to the REST client
-    expect(mockRestGetFileSlice).toHaveBeenCalled();
+    expect(mockGetFileSlice).toHaveBeenCalled();
   });
 
   it("respects maxConcurrent option", async () => {
     let concurrentCalls = 0;
     let maxConcurrent = 0;
 
-    mockRestGetFileSlice.mockImplementation(async () => {
+    mockGetFileSlice.mockImplementation(async () => {
       concurrentCalls++;
       maxConcurrent = Math.max(maxConcurrent, concurrentCalls);
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -157,14 +155,14 @@ describe("fetchSnippetsInParallel", () => {
       endLine: 10,
     }));
 
-    await fetchSnippetsInParallel(requests, { maxConcurrent: 2 });
+    await fetchSnippetsInParallel(requests, { maxConcurrent: 2, client: mockClient });
 
     // With maxConcurrent=2, we shouldn't see more than 2 concurrent calls
     expect(maxConcurrent).toBeLessThanOrEqual(2);
   });
 
   it("handles fetch errors gracefully", async () => {
-    mockRestGetFileSlice.mockImplementation(async (repo, path) => {
+    mockGetFileSlice.mockImplementation(async (repo: string, path: string) => {
       if (path === "error.ts") {
         throw new Error("Fetch failed");
       }
@@ -183,7 +181,7 @@ describe("fetchSnippetsInParallel", () => {
       { repo: "r", path: "error.ts", startLine: 1, endLine: 10 },
     ];
 
-    const results = await fetchSnippetsInParallel(requests);
+    const results = await fetchSnippetsInParallel(requests, { client: mockClient });
 
     // Successful fetch should be present
     expect(results[0]?.content).toBe("success");
@@ -194,7 +192,7 @@ describe("fetchSnippetsInParallel", () => {
   });
 
   it("handles warnings from REST response", async () => {
-    mockRestGetFileSlice.mockImplementation(async () => ({
+    mockGetFileSlice.mockImplementation(async () => ({
       repo: "r",
       path: "p.ts",
       start_line: 1,
@@ -210,7 +208,7 @@ describe("fetchSnippetsInParallel", () => {
       { repo: "r", path: "p.ts", startLine: 1, endLine: 10 },
     ];
 
-    const results = await fetchSnippetsInParallel(requests);
+    const results = await fetchSnippetsInParallel(requests, { client: mockClient });
 
     expect(results[0]?.warnings).toBeDefined();
     expect(results[0]?.warnings).toHaveLength(2);
@@ -219,7 +217,7 @@ describe("fetchSnippetsInParallel", () => {
   it("respects abort signal", async () => {
     const abortController = new AbortController();
 
-    mockRestGetFileSlice.mockImplementation(async () => {
+    mockGetFileSlice.mockImplementation(async () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
       return {
         repo: "r",
@@ -240,6 +238,7 @@ describe("fetchSnippetsInParallel", () => {
 
     const results = await fetchSnippetsInParallel(requests, {
       signal: abortController.signal,
+      client: mockClient,
     });
 
     // Abort signal is checked but may still process some results
@@ -248,7 +247,7 @@ describe("fetchSnippetsInParallel", () => {
   });
 
   it("handles timeout correctly", async () => {
-    mockRestGetFileSlice.mockImplementation(async () => {
+    mockGetFileSlice.mockImplementation(async () => {
       // Simulate slow response
       await new Promise((resolve) => setTimeout(resolve, 1000));
       return {
@@ -267,6 +266,7 @@ describe("fetchSnippetsInParallel", () => {
 
     const results = await fetchSnippetsInParallel(requests, {
       requestTimeoutMs: 100,
+      client: mockClient,
     });
 
     // With short timeout, the request may complete or timeout
@@ -275,7 +275,7 @@ describe("fetchSnippetsInParallel", () => {
   });
 
   it("includes actual line numbers in result", async () => {
-    mockRestGetFileSlice.mockImplementation(async (repo, path, start, end) => ({
+    mockGetFileSlice.mockImplementation(async (repo: string, path: string, start: number, end: number) => ({
       repo,
       path,
       start_line: start,
@@ -288,7 +288,7 @@ describe("fetchSnippetsInParallel", () => {
       { repo: "r", path: "p.ts", startLine: 5, endLine: 15 },
     ];
 
-    const results = await fetchSnippetsInParallel(requests);
+    const results = await fetchSnippetsInParallel(requests, { client: mockClient });
 
     expect(results[0]?.actualStartLine).toBe(5);
     expect(results[0]?.actualEndLine).toBe(15);

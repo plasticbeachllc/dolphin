@@ -1,6 +1,6 @@
 import type { Tool, CallToolResult, TextContent } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { restListRepos } from "../../rest/client.js";
+import { restListRepos, KBClient } from "../../rest/client.js";
 import { logInfo, logError } from "../../util/logger.js";
 import { buildToolInputSchema } from "./schema.js";
 import { TOOL_VERSION } from "./version.js";
@@ -9,7 +9,7 @@ import { normalizeToolError, formatToolErrorText } from "./error.js";
 const INPUT = z.object({});
 const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
-export function makeListRepos(): {
+export function makeListRepos(client?: KBClient): {
   definition: Tool;
   inputSchema: typeof INPUT;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -31,7 +31,7 @@ export function makeListRepos(): {
   const handler = async (_args: unknown, signal?: AbortSignal): Promise<CallToolResult> => {
     const started = Date.now();
     try {
-      const res = await restListRepos(signal);
+      const res = await (client ? client.listRepos(signal) : restListRepos(signal));
       const repos = res.repos ?? [];
 
       const content: CallToolResult["content"] = [

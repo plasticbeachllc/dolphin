@@ -10,8 +10,10 @@ import { makeListRepos } from "../../mcp/tools/list_repos.js";
 import { makeKbHealth } from "../../mcp/tools/kb_health.js";
 import { makeStoreInfo } from "../../mcp/tools/store_info.js";
 
-// Mock REST client
-const mockRestGetChunk = mock(async () => ({
+import { type KBClient } from "../../rest/client.js";
+
+// Mock REST client methods
+const mockGetChunk = mock(async () => ({
   chunk_id: "chunk-123",
   repo: "test-repo",
   path: "src/test.ts",
@@ -22,38 +24,27 @@ const mockRestGetChunk = mock(async () => ({
   lang: "typescript",
 }));
 
-const mockRestListRepos = mock(async () => ({
+const mockListRepos = mock(async () => ({
   repos: [
     { name: "repo1", path: "/path/to/repo1", files: 100, chunks: 500 },
     { name: "repo2", path: "/path/to/repo2", default_embed_model: "large" },
   ],
 }));
 
-const mockRestHealthV1 = mock(async () => ({
+const mockHealthV1 = mock(async () => ({
   status: "ok",
   version: "1.0.0",
 }));
 
-import * as originalClient from "../../rest/client.ts";
-
-mock.module("../../rest/client.js", () => ({
-  ...originalClient,
-  restGetChunk: mockRestGetChunk,
-  restListRepos: mockRestListRepos,
-  restHealthV1: mockRestHealthV1,
-  restGetFileSlice: mock(async () => ({
-    repo: "",
-    path: "",
-    start_line: 1,
-    end_line: 1,
-    content: "",
-    source: "file",
-  })),
-}));
+const mockClient = {
+  getChunk: mockGetChunk,
+  listRepos: mockListRepos,
+  healthV1: mockHealthV1,
+} as unknown as KBClient;
 
 describe("get_metadata tool", () => {
   it("fetches chunk metadata successfully", async () => {
-    const { handler } = makeGetMetadata();
+    const { handler } = makeGetMetadata(mockClient);
 
     const result = await handler({ chunk_id: "chunk-123" });
 
@@ -62,7 +53,7 @@ describe("get_metadata tool", () => {
   });
 
   it("includes metadata in response", async () => {
-    const { handler } = makeGetMetadata();
+    const { handler } = makeGetMetadata(mockClient);
 
     const result = await handler({ chunk_id: "chunk-123" });
 
@@ -71,18 +62,18 @@ describe("get_metadata tool", () => {
   });
 
   it("has correct tool definition", () => {
-    const { definition } = makeGetMetadata();
+    const { definition } = makeGetMetadata(mockClient);
 
     expect(definition.name).toBe("metadata_get");
     expect(definition.description).toContain("metadata");
   });
 
   it("handles errors gracefully", async () => {
-    mockRestGetChunk.mockImplementationOnce(async () => {
+    mockGetChunk.mockImplementationOnce(async () => {
       throw new Error("Not found");
     });
 
-    const { handler } = makeGetMetadata();
+    const { handler } = makeGetMetadata(mockClient);
     const result = await handler({ chunk_id: "bad" });
 
     expect(result.isError).toBe(true);
@@ -91,7 +82,7 @@ describe("get_metadata tool", () => {
 
 describe("list_repos tool", () => {
   it("returns list of repositories", async () => {
-    const { handler } = makeListRepos();
+    const { handler } = makeListRepos(mockClient);
 
     const result = await handler({});
 
@@ -100,25 +91,25 @@ describe("list_repos tool", () => {
   });
 
   it("has correct tool definition", () => {
-    const { definition } = makeListRepos();
+    const { definition } = makeListRepos(mockClient);
 
     expect(definition.name).toBe("repos_list");
     expect(definition.description).toContain("repo");
   });
 
   it("handles errors gracefully", async () => {
-    mockRestListRepos.mockImplementationOnce(async () => {
+    mockListRepos.mockImplementationOnce(async () => {
       throw new Error("API error");
     });
 
-    const { handler } = makeListRepos();
+    const { handler } = makeListRepos(mockClient);
     const result = await handler({});
 
     expect(result.isError).toBe(true);
   });
 
   it("includes metadata", async () => {
-    const { handler } = makeListRepos();
+    const { handler } = makeListRepos(mockClient);
 
     const result = await handler({});
 
@@ -129,7 +120,7 @@ describe("list_repos tool", () => {
 
 describe("kb_health tool", () => {
   it("returns health status", async () => {
-    const { handler } = makeKbHealth();
+    const { handler } = makeKbHealth(mockClient);
 
     const result = await handler({});
 
@@ -137,7 +128,7 @@ describe("kb_health tool", () => {
   });
 
   it("supports check parameter", async () => {
-    const { handler } = makeKbHealth();
+    const { handler } = makeKbHealth(mockClient);
 
     const result = await handler({ check: "deep" });
 
@@ -145,18 +136,18 @@ describe("kb_health tool", () => {
   });
 
   it("has correct tool definition", () => {
-    const { definition } = makeKbHealth();
+    const { definition } = makeKbHealth(mockClient);
 
     expect(definition.name).toBe("health");
     expect(definition.description).toContain("health");
   });
 
   it("handles errors gracefully", async () => {
-    mockRestHealthV1.mockImplementationOnce(async () => {
+    mockHealthV1.mockImplementationOnce(async () => {
       throw new Error("Service unavailable");
     });
 
-    const { handler } = makeKbHealth();
+    const { handler } = makeKbHealth(mockClient);
     const result = await handler({});
 
     expect(result.isError).toBe(true);
@@ -165,7 +156,7 @@ describe("kb_health tool", () => {
 
 describe("store_info tool", () => {
   it("returns store information", async () => {
-    const { handler } = makeStoreInfo();
+    const { handler } = makeStoreInfo(mockClient);
 
     const result = await handler({});
 
@@ -173,14 +164,14 @@ describe("store_info tool", () => {
   });
 
   it("has correct tool definition", () => {
-    const { definition } = makeStoreInfo();
+    const { definition } = makeStoreInfo(mockClient);
 
     expect(definition.name).toBe("store_info");
   });
 
   it("handles errors gracefully", async () => {
     // Mock implementation will be called
-    const { handler } = makeStoreInfo();
+    const { handler } = makeStoreInfo(mockClient);
     const result = await handler({});
 
     // Should still work or handle error

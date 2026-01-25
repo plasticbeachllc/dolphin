@@ -1,6 +1,7 @@
 """Tests for helper method extraction."""
 
 import asyncio
+from typing import Generator
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,7 @@ from kb.store import LanceDBStore, SQLiteMetadataStore
 
 
 @pytest.fixture
-def pipeline(tmp_path: Path) -> IngestionPipeline:
+def pipeline(tmp_path: Path) -> Generator[IngestionPipeline, None, None]:
     """Create a pipeline."""
     store_root = tmp_path / "store"
     store_root.mkdir()
