@@ -7,11 +7,6 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from "bun:test";
 import {
-  restSearch,
-  restGetChunk,
-  restGetFileSlice,
-  restListRepos,
-  restHealthV1,
   type SearchRequestBody,
   type SearchResponse,
   type ChunkResponse,
@@ -21,8 +16,20 @@ import {
   type RestError,
 } from "../../rest/client.js";
 
+import {
+  restSearch,
+  restGetChunk,
+  restGetFileSlice,
+  restListRepos,
+  restHealthV1,
+} from "../../rest/client.ts?bypass";
+
 // Store original fetch
 const originalFetch = globalThis.fetch;
+
+// Ensure we are testing the REAL client implementation
+// Using the ?bypass query param ensures we get a fresh module instance, ignoring mocks
+// pointing to .js or plain .ts
 
 describe("rest/client", () => {
   // Reset fetch after each test
@@ -50,6 +57,8 @@ describe("rest/client", () => {
 
       let capturedRequest: Request | undefined;
       globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+        console.log("DEBUG: Mock fetch called");
+        console.log("DEBUG: Mock Returning:", JSON.stringify(mockResponse));
         capturedRequest = new Request(input, init);
         return new Response(JSON.stringify(mockResponse), {
           status: 200,

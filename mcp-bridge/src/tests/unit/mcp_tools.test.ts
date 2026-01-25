@@ -34,7 +34,10 @@ const mockRestHealthV1 = mock(async () => ({
   version: "1.0.0",
 }));
 
+import * as originalClient from "../../rest/client.ts";
+
 mock.module("../../rest/client.js", () => ({
+  ...originalClient,
   restGetChunk: mockRestGetChunk,
   restListRepos: mockRestListRepos,
   restHealthV1: mockRestHealthV1,

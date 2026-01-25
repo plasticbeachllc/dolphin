@@ -55,7 +55,7 @@ export function transformHits(params: {
     const snippetStart =
       snippetInfo?.start ??
       hit.snippet_start_line ??
-      (typeof chunkStart === "number" ? chunkStart : 1);
+      (typeof chunkStart === "number" ? chunkStart : undefined);
     const snippetEnd =
       snippetInfo?.end ??
       hit.snippet_end_line ??

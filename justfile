@@ -77,7 +77,12 @@ test-kb TYPE="all":
 # Run MCP Bridge tests only
 test-mcp TYPE="all":
 	@echo "🌉 Running MCP Bridge {{TYPE}} tests..."
-	@just _bun-test mcp-bridge {{TYPE}}
+	@if [ "{{TYPE}}" = "all" ]; then \
+		just _bun-test mcp-bridge unit && \
+		just _bun-test mcp-bridge integration; \
+	else \
+		just _bun-test mcp-bridge {{TYPE}}; \
+	fi
 	@echo "   ✅ MCP Bridge {{TYPE}} tests passed"
 
 # Run all TypeScript tests

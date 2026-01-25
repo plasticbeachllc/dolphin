@@ -161,7 +161,7 @@ class TestAsyncIndexingFlow:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
         repo = sql_store.get_repo_by_name("test-repo")
         assert repo is not None
 
@@ -240,7 +240,7 @@ def goodbye():
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
         repo = sql_store.get_repo_by_name("test-repo")
         assert repo is not None
 
@@ -315,7 +315,7 @@ def function_{i}():
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
         repo = sql_store.get_repo_by_name("test-repo")
         assert repo is not None
 
@@ -397,7 +397,7 @@ class TestTaskStatusTracking:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
         sql_store.get_repo_by_name("test-repo")
 
         # Create test file
@@ -453,10 +453,10 @@ class TestTaskStatusTracking:
         workspace2 = temp_dir / "workspace2"
         workspace2.mkdir()
 
-        sql_store.record_repo(name="repo1", path=workspace1, default_embed_model="large")
+        sql_store.record_repo(name="repo1", path=workspace1, default_embed_model="small")
 
         sql_store.get_repo_by_name("repo1")
-        sql_store.record_repo(name="repo2", path=workspace2, default_embed_model="large")
+        sql_store.record_repo(name="repo2", path=workspace2, default_embed_model="small")
 
         sql_store.get_repo_by_name("repo2")
 
@@ -515,7 +515,7 @@ class TestErrorHandling:
         workspace = temp_dir / "test_workspace"
         workspace.mkdir()
 
-        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="large")
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
         sql_store.get_repo_by_name("test-repo")
 
         client = create_api_client()

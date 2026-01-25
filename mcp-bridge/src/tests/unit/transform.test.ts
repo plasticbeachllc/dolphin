@@ -17,7 +17,11 @@ const mockRestListRepos = mock(async () => ({
   ] as RepoInfo[],
 }));
 
+// Import original client to preserve other exports
+import * as originalClient from "../../rest/client.ts";
+
 mock.module("../../rest/client.js", () => ({
+  ...originalClient,
   restListRepos: mockRestListRepos,
 }));
 

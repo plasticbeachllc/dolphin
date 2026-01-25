@@ -31,7 +31,7 @@ describe("file.lines", () => {
     expect(res.content[0].text).toContain("L1-L10");
 
     // Check resource block exists with code content
-    const resourceBlock = res.content.find((c) => c.type === "resource");
+    const resourceBlock = res.content.find((c: any) => c.type === "resource");
     expect(resourceBlock).toBeDefined();
     expect(resourceBlock?.resource?.uri).toContain("kb://");
     expect(resourceBlock?.resource?.text).toBeDefined();
@@ -43,7 +43,7 @@ describe("file.lines", () => {
 
     expect(res.isError).toBe(false);
     // The resource block should have proper MIME type for TypeScript
-    const resourceBlock = res.content.find((c) => c.type === "resource");
+    const resourceBlock = res.content.find((c: any) => c.type === "resource");
     expect(resourceBlock?.resource?.mimeType).toBe("text/x-typescript");
   });
 

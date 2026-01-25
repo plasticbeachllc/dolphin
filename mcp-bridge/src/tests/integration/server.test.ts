@@ -26,7 +26,7 @@ describe("createServer", () => {
       StdioServerTransport: class {},
     }));
 
-    mock.module("../util/logger.js", () => ({
+    mock.module("../../util/logger.js", () => ({
       initLogger: async () => {},
       logDebug: () => {},
       logInfo: () => {
@@ -36,7 +36,7 @@ describe("createServer", () => {
       logError: () => {},
     }));
 
-    mock.module("../util/config.js", () => ({
+    mock.module("../../util/config.js", () => ({
       CONFIG: {
         SERVER_NAME: "test-server",
         SERVER_VERSION: "1.2.3",
@@ -57,12 +57,12 @@ describe("createServer", () => {
       validateConfig: () => [],
     }));
 
-    mock.module("./tools/index.js", () => ({
+    mock.module("../../mcp/tools/index.js", () => ({
       tools: [],
     }));
 
     try {
-      const { createServer } = await import(`../mcp/server.js?test=${Date.now()}`);
+      const { createServer } = await import(`../../mcp/server.js?test=${Date.now()}`);
 
       await createServer();
 
@@ -96,7 +96,7 @@ describe("createServer", () => {
       StdioServerTransport: class {},
     }));
 
-    mock.module("../util/logger.js", () => ({
+    mock.module("../../util/logger.js", () => ({
       initLogger: async () => {},
       logDebug: () => {},
       logInfo: () => {},
@@ -104,7 +104,7 @@ describe("createServer", () => {
       logError: () => {},
     }));
 
-    mock.module("../util/config.js", () => ({
+    mock.module("../../util/config.js", () => ({
       CONFIG: {
         SERVER_NAME: "test-server",
         SERVER_VERSION: "1.2.3",
@@ -125,7 +125,7 @@ describe("createServer", () => {
       validateConfig: () => [],
     }));
 
-    mock.module("./tools/index.js", () => ({
+    mock.module("../../mcp/tools/index.js", () => ({
       tools: [
         {
           definition: {
@@ -140,7 +140,7 @@ describe("createServer", () => {
     }));
 
     try {
-      const { createServer } = await import(`../mcp/server.js?test=${Date.now()}`);
+      const { createServer } = await import(`../../mcp/server.js?test=${Date.now()}`);
 
       await createServer();
 

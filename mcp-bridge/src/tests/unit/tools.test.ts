@@ -20,7 +20,10 @@ const mockRestGetChunk = mock(async () => ({
   lang: "typescript",
 }));
 
+import * as originalClient from "../../rest/client.ts";
+
 mock.module("../../rest/client.js", () => ({
+  ...originalClient,
   restGetChunk: mockRestGetChunk,
   restGetFileSlice: mock(async () => ({
     repo: "r",

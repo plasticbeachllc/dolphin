@@ -27,7 +27,7 @@ endpoint = "127.0.0.1:7777"
 
 [embedding]
 provider = "stub"
-default_embed_model = "large"
+default_embed_model = "small"
 
 [retrieval]
 score_cutoff = 0.005
@@ -513,7 +513,7 @@ def registered_test_repo(mock_kb_stores, temp_dir):
     workspace_path.mkdir()
 
     # Register repo
-    sql_store.record_repo(name="test-repo", path=workspace_path, default_embed_model="large")
+    sql_store.record_repo(name="test-repo", path=workspace_path, default_embed_model="small")
 
     # Get repo info
     repo = sql_store.get_repo_by_name("test-repo")
