@@ -513,6 +513,7 @@ class IngestionPipeline:
                 )
 
                 # Determine language and chunk the file using repo config
+                print(f"Indexing file: {path}", flush=True)
                 language = detect_language_from_extension(file_path) or "text"
                 try:
                     text = file_path.read_text(encoding="utf-8", errors="ignore")
@@ -1005,6 +1006,7 @@ class IngestionPipeline:
                             
                         chunks = res.chunks
                         path = str(res.file_path.relative_to(root))
+                        print(f"Indexing file: {path}", flush=True)
                         
                         # Graph Extraction (Main Thread)
                         if self.graph_store and not dry_run:

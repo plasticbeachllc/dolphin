@@ -156,15 +156,10 @@ START_TIME=$(date +%s)
 
 # Run profiling with py-spy and pv progress bar
 echo "Starting indexing..."
-(py-spy record \
-  --format speedscope \
-  --output "$PROFILE_FILE" \
-  --rate 100 \
-  --subprocesses \
-  -- uv run dolphin kb index "$REPO_NAME" 2>&1 | \
+  uv run dolphin kb index "$REPO_NAME" --full --force --parallel 2>&1 | \
   tee "$LOG_FILE" | \
-  grep --line-buffered "Chunked.*into.*chunks" | \
-  pv -l -s "$FILE_COUNT" -N "🐬 Indexing files" > /dev/null)
+  grep --line-buffered "Indexing file:" | \
+  pv -l -s "$FILE_COUNT" -N "🐬 Indexing files" > /dev/null
 
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
@@ -173,12 +168,12 @@ echo ""
 # Generate flame graph (reindex for flamegraph)
 echo ""
 echo "Generating flame graph (reindexing)..."
-py-spy record \
-  --format flamegraph \
-  --output "$FLAMEGRAPH_FILE" \
-  --rate 100 \
-  --subprocesses \
-  -- uv run dolphin kb index "$REPO_NAME" --full --force 2>&1 > /dev/null
+# py-spy record \
+#   --format flamegraph \
+#   --output "$FLAMEGRAPH_FILE" \
+#   --rate 100 \
+#   --subprocesses \
+#   -- uv run dolphin kb index "$REPO_NAME" --full --force --no-parallel 2>&1 > /dev/null
 
 echo ""
 echo "========================================="
