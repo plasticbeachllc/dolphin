@@ -251,7 +251,7 @@ include_graph_context = true
     connected = False
     while time.time() - start_time < 10:
         try:
-            r = httpx.get(f"{api_url}/health", timeout=1)
+            r = httpx.get(f"{api_url}/v1/health", timeout=1)
             if r.status_code == 200:
                 connected = True
                 break

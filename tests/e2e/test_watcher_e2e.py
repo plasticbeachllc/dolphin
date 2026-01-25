@@ -65,7 +65,18 @@ default_embed_model = "small"
     # 2. Add Repo via CLI (using subprocess)
     # This populates the DB with the repo
     subprocess.run(
-        ["dolphin", "kb", "add-repo", "test-repo", str(git_repo), "--default-embed-model", "small"], env=env, check=True
+        [
+            "dolphin",
+            "kb",
+            "add-repo",
+            "test-repo",
+            str(git_repo),
+            "--default-embed-model",
+            "small",
+            "--no-index",
+        ],
+        env=env,
+        check=True,
     )
 
     # 3. Start Server with --watch
