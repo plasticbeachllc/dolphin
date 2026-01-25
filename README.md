@@ -19,6 +19,8 @@ uv pip install pb-dolphin
 export OPENAI_API_KEY="sk-your-key-here"
 ```
 
+The accompanying [MCP server](#mcp-configuration) is available at `bunx dolphin-mcp`.
+
 #### Optional: Cross-Encoder Reranking (~2GB additional)
 
 For advanced search quality improvement (+20-30% MRR):
@@ -101,6 +103,7 @@ At the repo root:
 
 ### Key Features
 
+- **File-Watch Indexing** - Indexing is triggered automatically when files change by default
 - **Language-Aware Chunking** - Code parsing for Python, TypeScript, JavaScript, Markdown
 - **Semantic Search**
   - OpenAI embeddings with LanceDB vector storage
@@ -148,7 +151,7 @@ export OPENAI_API_KEY="sk-your-openai-api-key-here"
 
 ### API Key Management
 
-Dolphin automatically manages a per-user KB API key for securing Knowledge Base endpoints. **No manual configuration is required for typical desktop/CLI usage.**
+For security and future-proofing,Dolphin automatically manages a KB API key for securing Knowledge Base HTTP endpoints.
 
 **Auto-Provisioning:**
 
@@ -168,16 +171,6 @@ export DOLPHIN_KB_API_KEY="your-custom-key-here"
 
 Environment variables take precedence over the file-based key.
 
-### Post-Commit Hook (recommended)
-
-Add this line to the repo's `.git/postcommit` file, inserting the actual repo name.
-
-```
-uv run dolphin index {repo-name}
-```
-
-Since the indexer walks the git diff, your repository index will always remain fresh.
-
 ## MCP Configuration
 
 The small companion MCP interface can be run via `bun` without install. Add to your favorite AI application's config:
@@ -195,9 +188,7 @@ The small companion MCP interface can be run via `bun` without install. Add to y
 
 Set `DOLPHIN_API_URL` if your KB server is not running at `http://127.0.0.1:7777`.
 
-**Note:** In development, make sure you are running the HTTP retrieval server: `uv run dolphin serve`
-
-MCP uses the `/v1` KB endpoints and includes the `X-API-Key` header automatically when the key is available. The key is auto-provisioned to `~/.dolphin/kb_api_key` by `dolphin init`, `dolphin serve`, and `bunx dolphin-mcp`.
+**Note:** Make sure you are running the HTTP retrieval server: `uv run dolphin serve`
 
 Available MCP tools: `search`, `chunk_get`, `file_lines`, `store_info`, `metadata_get`, `repos_list`, `health`
 
@@ -260,6 +251,24 @@ Restart the API server to apply changes:
 uv run dolphin serve
 ```
 
+### File-Watching
+
+The Dolphin server includes an integrated file watcher that keeps your Knowledge Bank synchronized in real-time.
+
+- **Automatic**: When you run `dolphin serve`, it automatically starts watching all registered repositories.
+- **Git-Aware**: The indexer respects `.gitignore` rules. The watcher handles Git branch switching, updating the index to match the new working tree.
+- **Custom Control**: You can explicitly specify which repos to watch with `--watch <repo-name>` or disable watching via `--no-watch`. If watching is disabled, indexing can be manually triggered via `dolphin index <name>`.
+
+### Configuring Embedding Models
+
+Dolphin uses a consistent embedding model across your repositories to simplify global search. The embedding model can be configured globally in your `config.toml`:
+
+```toml
+default_embed_model = "large"  # Options: "small" or "large"
+```
+
+Currently only [OpenAI embeddings](https://platform.openai.com/docs/guides/embeddings) are supported.
+
 ## Development Status
 
 **Current**: Release candidate (v0.2.0) for Knowledge Bank + MCP
@@ -270,29 +279,18 @@ uv run dolphin serve
 - ✅ Cross-encoder reranking support
 - ✅ Hybrid search (BM25 + Vector)
 
-**Upcoming**:
-
-- Performance optimization
-- Production hardening
-- Evaluation framework
-- Expanded language support
-
 ## Requirements
 
 - Python ≥3.12
 - OpenAI API key (for embeddings)
 - Bun (for MCP bridge)
 - Git (for repository scanning)
+- uv (for Python dependencies)
 
 ## Testing
 
 ```bash
-# Run all tests
-uv run pytest
-
-# Run specific test suite
-uv run pytest tests/unit/
-uv run pytest tests/integration/
+just test
 ```
 
 See [docs/TESTING.md](docs/TESTING.md) for complete testing procedures.
@@ -338,12 +336,6 @@ dolphin kb index <repo-name> --full --force
 - Check MCP bridge logs: `tail -f mcp-bridge/logs/mcp.log`
 - Verify Bun is installed: `bun --version`
 
-**High embedding costs:**
-
-- Use `small` embedding model (1536d instead of 3072d)
-- Check session costs: `dolphin kb status <repo-name>`
-- Use stub provider for testing (no OpenAI calls)
-
 For detailed troubleshooting, performance tips, and development workflows, see [AGENTS.md](AGENTS.md).
 
 ## Publication
@@ -371,23 +363,16 @@ The following components are under active development and not part of the stable
 
 ### Agent Core
 
-- Location: `agent-core/`
-- Tooling: Bun (`bun.lockb`)
-- Commands: `cd agent-core && bun install && bun test`
+An LLM orchestrator which directly leverages the Knowledge Bank to improve discovery, planning, and execution for AI agents.
 
 ### VS Code Extension
 
-Current version: [`0.1.0`](vscode-extension/package.json:5) - `dolphin`
-
-Dolphin includes a VS Code extension that provides an AI coding assistant with Knowledge Bank integration.
-
-The extension manages the KB server lifecycle automatically.
+Provides an interface for Agent Core and the Knowledge Bank capability. The extension manages the KB server lifecycle automatically.
 
 #### Features
 
 - **AI Chat Interface**: Interact with Claude AI directly in VS Code
 - **Knowledge Bank Integration**: Automatically searches your indexed codebase for context
-- **Dual Authentication**: Supports both Claude CLI (subscription) and API key modes
 - **Real-time Streaming**: See AI responses as they're generated
 - **Tool Call Visualization**: Monitor Knowledge Bank searches and other tool executions
 
@@ -407,24 +392,6 @@ cd ../..
 
 # 3. Launch Extension Development Host
 # Open vscode-extension folder in VS Code and press F5
-```
-
-#### Authentication
-
-The extension supports two authentication modes:
-
-**Option A: Claude CLI (No API Costs)**
-
-```bash
-npm install -g @anthropic-ai/claude-code
-claude
-# Select: "1. Claude account with subscription"
-```
-
-**Option B: API Key**
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 **⚠️ Note**: Knowledge Bank + MCP are release-candidate quality; experimental components remain under active development. Use at your own risk.

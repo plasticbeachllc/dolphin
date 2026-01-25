@@ -344,7 +344,7 @@ tail -f ~/.dolphin/knowledge_store/logs/
 1. Update version in `pyproject.toml`
 2. Update CHANGELOG.md with changes
 3. Update version references in documentation
-4. Tag release: `git tag v0.1.X`
+4. Tag release: `git tag py-v0.2.0` (see PUBLISH.md for component prefixes)
 5. Build: `just build`
 6. Deploy: `just deploy-prod`
 
