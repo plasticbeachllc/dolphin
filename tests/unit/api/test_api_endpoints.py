@@ -95,6 +95,20 @@ class TestSearchEndpoint:
         data = response.json()
         assert "hits" in data
         assert len(data["hits"]) > 0
+        assert data["meta"]["max_snippets"] == 0
+
+    def test_search_v1_max_snippets_overrides_include_snippets(self, kb_api_client):
+        """Explicit max_snippets should override include_snippets fallback."""
+        response = kb_api_client.post(
+            "/v1/search",
+            json={"query": "test", "include_snippets": True, "max_snippets": 0},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        hit = data["hits"][0]
+        assert "snippet" not in hit
+        assert data["meta"]["max_snippets"] == 0
 
     def test_search_v1_unknown_repo_returns_404(self, kb_api_client):
         """Unknown repos should return a 404 with a helpful message."""
@@ -307,6 +321,7 @@ class TestApiKeyMiddleware:
         assert req.repos is None
         assert req.top_k == 8
         assert req.max_snippet_tokens == 240
+        assert req.max_snippets is None
         # embed_model removed - now uses global config
 
     def test_search_request_with_all_fields(self):

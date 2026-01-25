@@ -243,7 +243,8 @@ class SearchRequest(BaseModel):
     ann_nprobes: int | None = None
     ann_refine_factor: int | None = None
     # top_k controls total results; max_snippets controls how many hits return a snippet payload.
-    max_snippets: int = Field(default=0, ge=0, le=_API_LIMITS.max_top_k)
+    # Use None for "unset" to allow include_snippets legacy behavior.
+    max_snippets: int | None = Field(default=None, ge=0, le=_API_LIMITS.max_top_k)
     include_snippets: bool = False
     # Graph context enrichment (enabled by default for better context)
     include_graph_context: bool = _DEFAULT_CONFIG.api.include_graph_context
@@ -367,8 +368,8 @@ async def search(request: SearchRequest) -> dict[str, Any]:
     latency_ms = int((perf_counter() - started) * 1000)
 
     snippet_limit = request.max_snippets
-    if snippet_limit <= 0 and request.include_snippets:
-        snippet_limit = len(hits_list)
+    if snippet_limit is None:
+        snippet_limit = len(hits_list) if request.include_snippets else 0
     snippet_limit = max(0, min(int(snippet_limit), len(hits_list)))
 
     if snippet_limit > 0 and _sql_store is not None:
