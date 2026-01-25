@@ -6,11 +6,15 @@ including knowledge base management, API serving, and persona management.
 
 from __future__ import annotations
 
+import asyncio
 import os
+import sys
 from pathlib import Path
 from typing import Annotated
 
 import typer
+import uvicorn
+from rich import print as rprint
 
 # Import kb CLI functions for top-level commands
 # Import subcommand apps
@@ -347,14 +351,65 @@ def reset_all(
 def serve(
     host: Annotated[str, typer.Option("--host", help="Host to bind to")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", help="Port to bind to")] = 7777,
+    watch: Annotated[list[str] | None, typer.Option("--watch", help="Repositories to watch")] = None,
 ) -> None:
     """Start the dolphin API server."""
-    import uvicorn
+
+    # Configure watcher environment variables BEFORE starting uvicorn
+    if watch:
+        repo_list = [r for r in watch if r.strip()]
+        if repo_list:
+            os.environ["DOLPHIN_WATCH_REPOS"] = ",".join(repo_list)
+            rprint(f"[green]Configured to watch repositories: {', '.join(repo_list)}[/green]")
 
     if not os.environ.get("DOLPHIN_API_KEY") and not os.environ.get("DOLPHIN_KB_API_KEY"):
         os.environ["DOLPHIN_API_KEY"] = get_or_create_kb_api_key()
 
     uvicorn.run("kb.api.server:app_with_lifespan", host=host, port=port, reload=False)
+
+
+async def _watch_repo(repo_name: str) -> None:
+    """Async implementation of watch command."""
+    try:
+        from kb.config import load_config
+        from kb.ingest.pipeline import IngestionPipeline
+        from kb.ingest.watcher import RepoWatcher
+        from kb.store import LanceDBStore, SQLiteMetadataStore
+        from kb.store.graph_store import GraphStore
+
+        config = load_config()
+
+        # Construct proper paths for store initialization
+        store_root = config.resolved_store_root()
+        lancedb_path = store_root / "lancedb"
+        metadata_path = store_root / "metadata.db"
+
+        # Initialize stores with proper paths
+        lancedb = LanceDBStore(lancedb_path)
+        metadata = SQLiteMetadataStore(metadata_path)
+
+        # Initialize pipeline
+        pipeline = IngestionPipeline(
+            config=config, lancedb=lancedb, metadata=metadata, graph_store=GraphStore(metadata_path)
+        )
+
+        watcher = RepoWatcher(repo_name, config, pipeline)
+        await watcher.watch()
+    except Exception as e:
+        rprint(f"[red]Watcher failed: {e}[/red]")
+        sys.exit(1)
+
+
+@app.command()
+def watch(
+    repo_name: Annotated[str, typer.Argument(help="Name of repository to watch")],
+) -> None:
+    """Start file watcher for a repository (standalone)."""
+    rprint(f"[bold blue]Starting watcher for {repo_name}...[/bold blue]")
+    try:
+        asyncio.run(_watch_repo(repo_name))
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        rprint("\n[yellow]Watcher stopped.[/yellow]")
 
 
 @app.command()

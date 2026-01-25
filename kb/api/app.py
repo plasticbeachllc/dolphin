@@ -94,6 +94,11 @@ def set_pipeline(pipeline):
     _pipeline = pipeline
 
 
+def get_pipeline():
+    """Get the current ingestion pipeline."""
+    return _pipeline
+
+
 def reset_pipeline():
     """Reset the ingestion pipeline to None (for testing)."""
     global _pipeline
