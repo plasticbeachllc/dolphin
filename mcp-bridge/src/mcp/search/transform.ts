@@ -39,7 +39,7 @@ export async function getReposByName(
   }
   const repoList = await (client ? client.listRepos(signal) : restListRepos(signal));
   const reposByName = new Map(repoList.repos.map((r) => [r.name, r]));
-  
+
   // Only cache if using the default global client
   if (!client) {
     repoCache = { ts: Date.now(), reposByName };

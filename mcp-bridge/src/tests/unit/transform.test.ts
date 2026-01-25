@@ -238,7 +238,7 @@ describe("getReposByName", () => {
     } as unknown as KBClient;
 
     const resultB = await getReposByName(undefined, mockClientB);
-    
+
     // With the bug, this would be /clientA/path1 because cache was hit
     // With the fix, this should be /clientB/path1 because cache is bypassed
     expect(resultB.get("repo1")?.path).toBe("/clientB/path1");
