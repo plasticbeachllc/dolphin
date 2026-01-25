@@ -12,9 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.2.0] - Under Development
-
 ## [0.2.0] - 2026-01-25
+
+This release focuses the release-targeted surface on the Knowledge Bank (Python) and the versioned KB REST API.
 
 ### Added
 
