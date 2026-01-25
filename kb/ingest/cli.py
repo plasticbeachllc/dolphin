@@ -55,6 +55,7 @@ def init(
     target = config_path or DEFAULT_CONFIG_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
     created = False
+
     # Load existing or template content
     if target.exists():
         typer.echo(f"Config already exists at {target}")
@@ -83,15 +84,6 @@ def init(
         # Patch the template string before writing
         # We assume the template has `default_embed_model = "large"` or similar
         # A simple replace works for the template
-        if 'default_embed_model = "large"' in config_content:
-            config_content = config_content.replace(
-                'default_embed_model = "large"',
-                f'default_embed_model = "{model_choice}"',
-            )
-        elif 'default_embed_model = "small"' in config_content:
-            config_content = config_content.replace(
-                'default_embed_model = "small"',
-                f'default_embed_model = "{model_choice}"',
             )
 
         target.write_text(config_content, encoding="utf-8")
@@ -124,6 +116,9 @@ def init(
 def add_repo(
     name: str = typer.Argument(..., help="Logical name for the repository."),
     path: Path = typer.Argument(..., help="Absolute path to the repository root."),
+    default_embed_model: str = typer.Option(
+        None, "--default-embed-model", help="Default embedding model (small|large)."
+    ),
 ) -> None:
     """Register or update a repository in the metadata store."""
     repo_path = path.expanduser().resolve()
@@ -132,15 +127,22 @@ def add_repo(
         raise typer.Exit(code=2)
 
     config = load_config()
-    # Use the global default model from config
-    model = config.default_embed_model
+    
+    # Use provided model or fall back to global default
+    if default_embed_model:
+        model = default_embed_model.strip().lower()
+        if model not in {"small", "large"}:
+            typer.echo("Error: --default-embed-model must be 'small' or 'large'.")
+            raise typer.Exit(code=2)
+    else:
+        model = config.default_embed_model
 
     metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
     metadata.initialize()
     metadata.record_repo(name=name, path=repo_path, default_embed_model=model)
 
     typer.echo(f"Repository registered: name='{name}', path='{repo_path}'")
-    
+
     # Note: We rely on 'kb index' to handle any model mismatch if this was an update
     # to an existing repo that had a different model.
 
