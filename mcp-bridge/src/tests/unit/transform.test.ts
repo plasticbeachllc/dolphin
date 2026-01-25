@@ -215,4 +215,32 @@ describe("getReposByName", () => {
     expect(result.get("repo1")?.path).toBe("/path1");
     expect(result.get("repo2")?.path).toBe("/path2");
   });
+
+  it("does not pollute cache when client provided", async () => {
+    // Reset any previous cache state (though we can't easily reset the module-level variable without reloading)
+    // We rely on the fact that if the bug exists, the cache is global.
+
+    // First call with Client A
+    const mockClientA = {
+      listRepos: mock(async () => ({
+        repos: [{ name: "repo1", path: "/clientA/path1" }] as RepoInfo[],
+      })),
+    } as unknown as KBClient;
+
+    const resultA = await getReposByName(undefined, mockClientA);
+    expect(resultA.get("repo1")?.path).toBe("/clientA/path1");
+
+    // Second call with Client B
+    const mockClientB = {
+      listRepos: mock(async () => ({
+        repos: [{ name: "repo1", path: "/clientB/path1" }] as RepoInfo[],
+      })),
+    } as unknown as KBClient;
+
+    const resultB = await getReposByName(undefined, mockClientB);
+    
+    // With the bug, this would be /clientA/path1 because cache was hit
+    // With the fix, this should be /clientB/path1 because cache is bypassed
+    expect(resultB.get("repo1")?.path).toBe("/clientB/path1");
+  });
 });

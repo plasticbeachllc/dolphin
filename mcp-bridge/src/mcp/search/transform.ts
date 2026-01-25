@@ -32,12 +32,18 @@ export async function getReposByName(
   signal?: AbortSignal,
   client?: KBClient
 ): Promise<Map<string, RepoInfo>> {
-  if (repoCache && !isRepoCacheExpired(repoCache)) {
+  // If a client is provided, we must skip the global cache to avoid cross-client pollution
+  // (e.g. one client pointing to dev vs prod, or different test mocks).
+  if (!client && repoCache && !isRepoCacheExpired(repoCache)) {
     return repoCache.reposByName;
   }
   const repoList = await (client ? client.listRepos(signal) : restListRepos(signal));
   const reposByName = new Map(repoList.repos.map((r) => [r.name, r]));
-  repoCache = { ts: Date.now(), reposByName };
+  
+  // Only cache if using the default global client
+  if (!client) {
+    repoCache = { ts: Date.now(), reposByName };
+  }
   return reposByName;
 }
 
