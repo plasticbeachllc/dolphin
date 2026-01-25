@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from kb.config import KBConfig
-from kb.embeddings.provider import set_default_provider
+from kb.embeddings.provider import EmbeddingProvider, set_default_provider
 from kb.ingest.pipeline import IngestionPipeline
 from kb.store import LanceDBStore, SQLiteMetadataStore
 
@@ -31,7 +31,7 @@ def mock_pipeline(tmp_path: Path) -> IngestionPipeline:
     lancedb.initialize_collections()
 
     # Mock Provider
-    class MockProvider:
+    class MockProvider(EmbeddingProvider):
         def embed_texts(self, model, texts):
             # Return dummy vectors
             return [[0.1] * 1536 for _ in texts]

@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from kb.config import KBConfig
-from kb.embeddings.provider import set_default_provider
+from kb.embeddings.provider import EmbeddingProvider, set_default_provider
 from kb.ingest.dynamic_pool import WorkloadEstimator
 from kb.ingest.pipeline import IngestionPipeline
 from kb.store import LanceDBStore, SQLiteMetadataStore
@@ -25,7 +25,7 @@ def pipeline(tmp_path: Path) -> IngestionPipeline:
     lancedb = LanceDBStore(store_root / "lancedb")
     lancedb.initialize_collections()
 
-    class MockProvider:
+    class MockProvider(EmbeddingProvider):
         def embed_texts(self, model, texts):
             return [[0.1] * 1536 for _ in texts]
 
