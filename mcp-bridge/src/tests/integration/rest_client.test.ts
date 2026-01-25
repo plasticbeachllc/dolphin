@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { startMockRest } from "./mockServer.js";
-import { restSearch, restGetChunk, restGetFileSlice, restListRepos } from "../rest/client.js";
+import { restSearch, restGetChunk, restGetFileSlice, restListRepos } from "../../rest/client.js";
 
 let stop: () => Promise<void>;
 

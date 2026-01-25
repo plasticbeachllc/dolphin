@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, mock } from "bun:test";
 import { startMockRest } from "./mockServer.js";
-import { makeSearchKnowledge } from "../mcp/tools/search_knowledge.js";
-import { initLogger } from "../util/logger.js";
-import { CONFIG } from "../util/config.js";
+import { makeSearchKnowledge } from "../../mcp/tools/search_knowledge.js";
+import { initLogger } from "../../util/logger.js";
+import { CONFIG } from "../../util/config.js";
 
 let stop: () => Promise<void>;
 

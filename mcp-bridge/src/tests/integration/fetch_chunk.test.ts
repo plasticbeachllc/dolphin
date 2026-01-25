@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { startMockRest } from "./mockServer.js";
-import { makeChunkGet } from "../mcp/tools/chunk_get.js";
-import { initLogger } from "../util/logger.js";
+import { makeChunkGet } from "../../mcp/tools/chunk_get.js";
+import { initLogger } from "../../util/logger.js";
 
 let stop: () => Promise<void>;
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { startMockRest } from "./mockServer.js";
-import { makeListRepos } from "../mcp/tools/list_repos.js";
-import { initLogger } from "../util/logger.js";
+import { makeListRepos } from "../../mcp/tools/list_repos.js";
+import { initLogger } from "../../util/logger.js";
 
 let stop: () => Promise<void>;
 

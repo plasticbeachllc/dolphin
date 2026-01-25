@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { startMockRest } from "./mockServer.js";
-import { initLogger } from "../util/logger.js";
+import { initLogger } from "../../util/logger.js";
 
 let stop: () => Promise<void>;
 let makeStoreInfo: typeof import("../mcp/tools/store_info.js").makeStoreInfo;

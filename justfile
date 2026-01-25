@@ -56,16 +56,51 @@ check-typescript:
 	@echo "   ✅ linting  passed"
 
 # ==============================================================================
-# Testing - Main Commands
+# Testing - Unified Commands
 # ==============================================================================
 
-# Run tests for CORE modules
+# Run tests (TYPE: unit, integration, e2e, or all)
+test TYPE="all":
+	@echo "🧪 Running {{TYPE}} tests..."
+	@echo ""
+	@just _test-kb {{TYPE}}
+	@just _test-ts {{TYPE}}
+	@echo ""
+	@echo "✅ All {{TYPE}} tests passed!"
+
+# Run Python (kb) tests only (TYPE: unit, integration, e2e, or all)
+test-kb TYPE="all":
+	@echo "🐍 Running Python {{TYPE}} tests..."
+	@just _test-kb {{TYPE}}
+	@echo "   ✅ Python {{TYPE}} tests passed"
+
+# Run MCP Bridge tests only (TYPE: unit, integration, or all)  
+test-mcp TYPE="all":
+	@echo "🌉 Running MCP Bridge {{TYPE}} tests..."
+	@just _test-mcp-bridge {{TYPE}}
+	@echo "   ✅ MCP Bridge {{TYPE}} tests passed"
+
+# Run all TypeScript tests (TYPE: unit, integration, or all)
+test-ts TYPE="all":
+	@echo "📘 Running TypeScript {{TYPE}} tests..."
+	@just _test-agent-core {{TYPE}}
+	@just _test-mcp-bridge {{TYPE}}
+	@just _test-shared
+	@echo "   ✅ TypeScript {{TYPE}} tests passed"
+
+# Run tests with coverage
+test-cov:
+	@echo "📊 Running tests with coverage..."
+	@uv run pytest tests/ --cov=kb --cov-report=html --cov-report=term-missing
+	@echo "✅ Coverage report generated at tests/reports/htmlcov/"
+
+# Run tests for CORE modules (CI compatibility)
 test-core:
 	@echo "Testing core dolphin functions..."
-	echo ""
-	@just test-python all
-	@just test-mcp-bridge
-	@just test-shared
+	@echo ""
+	@just test-kb all
+	@just test-mcp all
+	@just _test-shared
 	@echo ""
 	@echo "✅ Core tests passed!"
 
@@ -73,60 +108,56 @@ test-core:
 test-all:
 	@echo "🚀 Running ALL tests across all projects..."
 	@echo ""
-	@just test-python all
-	@just test-agent-core all
-	@just test-mcp-bridge
-	@just test-shared
+	@just test all
 	@just test-webview
 	@echo ""
 	@echo "✅ All tests passed!"
 
-# Run all unit tests across all projects
-test-unit-all:
-	@echo "⚡ Running all unit tests..."
-	@echo ""
-	@just test-python unit
-	@just test-agent-core unit
-	@just test-shared
-	@just test-webview
-	@echo ""
-	@echo "✅ All unit tests passed!"
+# ==============================================================================
+# Testing - Internal Helpers (prefixed with _)
+# ==============================================================================
 
-# Run all integration tests across all projects
-test-integration-all:
-	@echo "🔗 Running all integration tests..."
-	@echo ""
-	@just test-python integration
-	@just test-agent-core integration
-	@just test-mcp-bridge
-	@just test-extension integration
-	@echo ""
-	@echo "✅ All integration tests passed!"
+# Internal: Run Python (kb) tests
+_test-kb TYPE: setup-python
+	@if [ "{{TYPE}}" = "all" ]; then \
+		uv run pytest tests/ -q --tb=short || (echo "   ❌ Python tests failed"; exit 1); \
+	elif [ "{{TYPE}}" = "unit" ]; then \
+		uv run pytest tests/unit/ -q --tb=short || (echo "   ❌ Python unit tests failed"; exit 1); \
+	elif [ "{{TYPE}}" = "integration" ]; then \
+		uv run pytest tests/integration/ -q --tb=short || (echo "   ❌ Python integration tests failed"; exit 1); \
+	elif [ "{{TYPE}}" = "e2e" ]; then \
+		uv run pytest tests/e2e/ -q --tb=short || (echo "   ❌ Python e2e tests failed"; exit 1); \
+	else \
+		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
+	fi
 
-test-integration-headless:
-	@rm -f /tmp/.X99-lock
-	@export DISPLAY=":99.0"
-	@Xvfb :99 -screen 0 1024x768x24 &
-	@sleep 3
-	@echo "🔗 Running all integration tests..."
-	@echo ""
-	@just test-python integration
-	@just test-agent-core integration
-	@just test-mcp-bridge
-	@just test-extension integration
-	@echo ""
-	@echo "✅ All integration tests passed!"
+# Internal: Run Agent Core tests
+_test-agent-core TYPE:
+	@if [ "{{TYPE}}" = "all" ]; then \
+		cd agent-core && bun test --bail || (echo "   ❌ Agent Core tests failed"; exit 1); \
+	elif [ "{{TYPE}}" = "unit" ]; then \
+		cd agent-core && bun test tests/unit/ --bail || (echo "   ❌ Agent Core unit tests failed"; exit 1); \
+	elif [ "{{TYPE}}" = "integration" ] || [ "{{TYPE}}" = "e2e" ]; then \
+		cd agent-core && bun test tests/integration/ --bail || (echo "   ❌ Agent Core integration tests failed"; exit 1); \
+	else \
+		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
+	fi
 
-# Run all e2e tests across all projects (will require VS Code host)
-test-e2e-all:
-	@echo "🎯 Running all E2E tests..."
-	@echo ""
-	@just test-python e2e
-	@just test-agent-core e2e
-	@just test-extension e2e
-	@just test-playwright
-	@echo ""
-	@echo "✅ All E2E tests passed!"
+# Internal: Run MCP Bridge tests
+_test-mcp-bridge TYPE:
+	@if [ "{{TYPE}}" = "all" ]; then \
+		cd mcp-bridge && bun test || (echo "   ❌ MCP Bridge tests failed"; exit 1); \
+	elif [ "{{TYPE}}" = "unit" ]; then \
+		cd mcp-bridge && bun test src/tests/unit/ || (echo "   ❌ MCP Bridge unit tests failed"; exit 1); \
+	elif [ "{{TYPE}}" = "integration" ] || [ "{{TYPE}}" = "e2e" ]; then \
+		cd mcp-bridge && bun test src/tests/integration/ || (echo "   ❌ MCP Bridge integration tests failed"; exit 1); \
+	else \
+		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, or all"; exit 1; \
+	fi
+
+# Internal: Run shared package tests
+_test-shared:
+	@cd shared && bun test || (echo "   ❌ Shared package tests failed"; exit 1)
 
 # ==============================================================================
 # Testing - Per-Project Commands

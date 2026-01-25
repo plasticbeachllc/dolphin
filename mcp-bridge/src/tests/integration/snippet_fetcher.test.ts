@@ -5,8 +5,8 @@ import {
   requestsFromHits,
   type SnippetFetchRequest,
   type SnippetFetchResult,
-} from "../mcp/tools/snippet_fetcher.js";
-import { initLogger } from "../util/logger.js";
+} from "../../mcp/tools/snippet_fetcher.js";
+import { initLogger } from "../../util/logger.js";
 
 let stop: () => Promise<void>;
 

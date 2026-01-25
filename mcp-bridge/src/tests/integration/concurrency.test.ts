@@ -4,8 +4,8 @@ import {
   type TaskResult,
   type ConcurrencyPoolOptions,
   delay,
-} from "../util/concurrency.js";
-import { initLogger } from "../util/logger.js";
+} from "../../util/concurrency.js";
+import { initLogger } from "../../util/logger.js";
 
 // Clean up logs before tests
 beforeAll(async () => {

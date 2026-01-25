@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { getOrCreateKbApiKey, resolveKbApiKey, getKbKeyPath } from "../../../shared/kb-auth";
+import { getOrCreateKbApiKey, resolveKbApiKey, getKbKeyPath } from "../../../../shared/kb-auth";
 
 /**
  * Integration tests for MCP Bridge KB API key handling.

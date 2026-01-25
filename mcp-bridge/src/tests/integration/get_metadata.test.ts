@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { startMockRest } from "./mockServer.js";
-import { makeGetMetadata } from "../mcp/tools/get_metadata.js";
-import { initLogger } from "../util/logger.js";
+import { makeGetMetadata } from "../../mcp/tools/get_metadata.js";
+import { initLogger } from "../../util/logger.js";
 
 let stop: () => Promise<void>;
 

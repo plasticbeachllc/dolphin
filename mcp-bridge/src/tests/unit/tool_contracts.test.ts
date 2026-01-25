@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { tools } from "../mcp/tools/registry.js";
+import { tools } from "../../mcp/tools/registry.js";
 
 describe("tool contracts", () => {
   it("all registered tools expose required metadata", () => {

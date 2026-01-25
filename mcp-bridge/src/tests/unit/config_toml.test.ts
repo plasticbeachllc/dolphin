@@ -16,7 +16,7 @@ function resetEnv() {
 
 function importConfig() {
   const cacheBuster = `${Date.now()}-${Math.random()}`;
-  return import(`../util/config.js?test=${cacheBuster}`);
+  return import(`../../util/config.js?test=${cacheBuster}`);
 }
 
 afterEach(() => {
