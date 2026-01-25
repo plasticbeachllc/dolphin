@@ -140,14 +140,14 @@ def add_repo(
     metadata.record_repo(name=name, path=repo_path, default_embed_model=model)
 
     typer.echo(f"Repository registered: name='{name}', path='{repo_path}'")
-
+    
     # Note: We rely on 'kb index' to handle any model mismatch if this was an update
     # to an existing repo that had a different model.
 
-    # Only prompt for indexing in interactive mode (skip in tests or if --no-index)
+    # Only prompt for indexing in interactive mode
     import sys
 
-    if not no_index and sys.stdin is not None and sys.stdin.isatty():
+    if sys.stdin is not None and sys.stdin.isatty():
         if typer.confirm(f"Do you want to index '{name}' now?", default=False):
             typer.echo(f"Starting index for {name}...")
             pipeline = _build_pipeline(config)
