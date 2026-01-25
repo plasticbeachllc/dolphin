@@ -1070,7 +1070,7 @@ class IngestionPipeline:
                 total_items=len(changed_files), worker_count=actual_workers, min_batch=10, max_batch=100
             )
             print(f"Using batch size: {batch_size} for {len(changed_files)} files and {actual_workers} workers")
-            with pool:
+            with pool as executor:
                 # Process in batches to manage memory and flow
                 for i in range(0, len(changed_files), batch_size):
                     batch_paths = changed_files[i : i + batch_size]
@@ -1125,7 +1125,7 @@ class IngestionPipeline:
                             continue
 
                     # Execute Parallel Parsing
-                    parse_results = parse_files_parallel(parse_jobs, pool=pool)
+                    parse_results = parse_files_parallel(parse_jobs, pool=executor)
 
                     # Sequential Processing of Results (dedup, graph, queuing)
                     embedding_tasks = []  # Collect embedding futures for concurrent processing

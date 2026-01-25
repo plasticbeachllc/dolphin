@@ -364,12 +364,11 @@ tail -f ~/.dolphin/knowledge_store/logs/
 ```bash
 # Install dependencies
 uv sync --group test
-cd mcp-bridge && bun install && cd ..
-cd agent-core && bun install && cd ..
+bun install          # Install all TypeScript dependencies (root workspace)
 
 # Or use Justfile
 just venv            # Create venv and install Python deps
-just bun-install     # Install Bun deps for mcp-bridge
+just bun-install     # Install Bun deps for workspaces
 ```
 
 ### Initialize Knowledge Base
