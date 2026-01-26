@@ -5,6 +5,7 @@ set dotenv-load
 
 # Variables
 HOME := env('HOME')
+BENCHMARK_RESULTS_DIR := "artifacts/benchmarks"
 
 list:
 	just -l
@@ -14,19 +15,11 @@ list:
 # ==============================================================================
 
 # Set up the entire project
-setup: setup-env setup-python
+setup: setup-python
 
 # ==============================================================================
 # Environment Management
 # ==============================================================================
-
-# Check for .env file and required variables
-setup-env:
-	@# Check if .env file exists, if not, create it from the template
-	@[ -f .env ] || (echo "Creating .env from .env.template..."; cp .env.example .env)
-	@# Check if OPENAI_API_KEY is set and not empty
-	@test -n "${OPENAI_API_KEY}" || (echo "❌ Error: OPENAI_API_KEY is not set in .env file. Please add it and try again."; exit 1)
-	@echo "✅ Environment is configured."
 
 # Install Python dependencies from pyproject.toml
 setup-python:
@@ -63,239 +56,223 @@ check-typescript:
 	@echo "   ✅ linting  passed"
 
 # ==============================================================================
-# Testing - Main Commands
+# Testing - Unified Commands
 # ==============================================================================
+
+# Run tests (TYPE: unit, integration, e2e, or all)
+test TYPE="all":
+	@echo "🧪 Running {{TYPE}} tests..."
+	@just _pytest {{TYPE}}
+	# @just _bun-test agent-core {{TYPE}}
+	@just _bun-test mcp-bridge {{TYPE}}
+	@just _bun-test shared all
+	@echo "✅ All {{TYPE}} tests passed!"
+
+# Run Python (kb) tests only
+test-kb TYPE="all":
+	@echo "🐍 Running Python {{TYPE}} tests..."
+	@just _pytest {{TYPE}}
+	@echo "   ✅ Python {{TYPE}} tests passed"
+
+# Run MCP Bridge tests only
+test-mcp TYPE="all":
+	@echo "🌉 Running MCP Bridge {{TYPE}} tests..."
+	@if [ "{{TYPE}}" = "all" ]; then \
+		just _bun-test mcp-bridge unit && \
+		just _bun-test mcp-bridge integration; \
+	else \
+		just _bun-test mcp-bridge {{TYPE}}; \
+	fi
+	@echo "   ✅ MCP Bridge {{TYPE}} tests passed"
+
+# Run all TypeScript tests
+test-ts TYPE="all":
+	@echo "📘 Running TypeScript {{TYPE}} tests..."
+	@just _bun-test agent-core {{TYPE}}
+	@just _bun-test mcp-bridge {{TYPE}}
+	@just _bun-test shared all
+	@echo "   ✅ TypeScript {{TYPE}} tests passed"
+
+# Run tests with coverage (disable parallel execution for accurate coverage)
+test-cov:
+	@uv run pytest -n0 tests/ --cov=kb --cov-report=html --cov-report=term-missing
+
+# Show the slowest tests (helps keep runtime regressions visible)
+test-slowest TYPE="all" N="30" MIN="0.2":
+	@echo "🐢 Slowest {{N}} tests (min={{MIN}}s)..."
+	@just _pytest_slowest {{TYPE}} {{N}} {{MIN}}
+
+# Run tests for CORE modules (CI compatibility)
+test-core:
+	@echo "Testing core dolphin functions..."
+	@just test-kb all
+	@just test-mcp all
+	@just _bun-test shared all
+	@echo "✅ Core tests passed!"
 
 # Run ALL tests across all projects
 test-all:
-	@echo "🚀 Running ALL tests across all projects..."
-	@echo ""
-	@just test-python all
-	@just test-agent-core all
-	@just test-mcp-bridge
-	@just test-shared
+	@echo "🚀 Running ALL tests..."
+	@just test all
 	@just test-webview
-	@just test-extension all
-	@echo ""
 	@echo "✅ All tests passed!"
 
-# Run the Codex-friendly test suite (skips VS Code host requirements)
-test-all-headless:
-	@echo "🚀 Running tests that do NOT require VS Code/Electron..."
-	@echo ""
-	@rm -f /tmp/.X99-lock
-	@export DISPLAY=":99.0"
-	@Xvfb :99 -screen 0 1024x768x24 &
-	@sleep 3
-	@just test-python all
-	@just test-agent-core all
-	@just test-mcp-bridge
-	@just test-shared
-	@just test-webview
-	@just test-extension-all
-	@echo ""
-	@echo "✅ All non-VSCode tests passed!"
-
-# Stub for VS Code extension tests (not available in headless CI)
-test-extension-all:
-	@echo "⚠️ VS Code extension tests are skipped in headless environments."
-
-# Run all unit tests across all projects
-test-unit-all:
-	@echo "⚡ Running all unit tests..."
-	@echo ""
-	@just test-python unit
-	@just test-agent-core unit
-	@just test-shared
-	@just test-webview
-	@just test-extension unit
-	@echo ""
-	@echo "✅ All unit tests passed!"
-
-# Run all integration tests across all projects
-test-integration-all:
-	@echo "🔗 Running all integration tests..."
-	@echo ""
-	@just test-python integration
-	@just test-agent-core integration
-	@just test-mcp-bridge
-	@just test-extension integration
-	@echo ""
-	@echo "✅ All integration tests passed!"
-
-test-integration-headless:
-	@rm -f /tmp/.X99-lock
-	@export DISPLAY=":99.0"
-	@Xvfb :99 -screen 0 1024x768x24 &
-	@sleep 3
-	@echo "🔗 Running all integration tests..."
-	@echo ""
-	@just test-python integration
-	@just test-agent-core integration
-	@just test-mcp-bridge
-	@just test-extension integration
-	@echo ""
-	@echo "✅ All integration tests passed!"
-
-# Run all e2e tests across all projects (will require VS Code host)
-test-e2e-all:
-	@echo "🎯 Running all E2E tests..."
-	@echo ""
-	@just test-python e2e
-	@just test-agent-core e2e
-	@just test-extension e2e
-	@just test-playwright
-	@echo ""
-	@echo "✅ All E2E tests passed!"
-
-just test-e2e-headless:
-	@echo "🎯 Running all E2E tests..."
-	@echo ""
-	@rm -f /tmp/.X99-lock
-	@export DISPLAY=":99.0"
-	@Xvfb :99 -screen 0 1024x768x24 &
-	@sleep 3
-	@just test-python e2e
-	@just test-agent-core e2e
-	@just test-extension e2e
-	@echo ""
-	@echo "✅ All E2E tests passed!"
+# Run FULL test suite (including slow/integration tests) with fail-fast checks
+test-full:
+	@echo "🚀 Running FULL test suite (unskipping all tests)..."
+	@# 1. Check for OPENAI_API_KEY
+	@if [ -z "$OPENAI_API_KEY" ]; then echo "❌ OPENAI_API_KEY is not set"; exit 1; fi
+	@# 2. Check OpenAI API validity (simple connection check)
+	@echo "🔍 Checking OpenAI API connectivity..."
+	@curl -s -f -o /dev/null -H "Authorization: Bearer $OPENAI_API_KEY" https://api.openai.com/v1/models || (echo "❌ Invalid OPENAI_API_KEY or API unreachable"; exit 1)
+	@# 3. Check Redis
+	@echo "🔍 Checking Redis connectivity..."
+	@redis-cli ping >/dev/null 2>&1 || (echo "❌ Redis is not running (required for full tests)"; exit 1)
+	@# 4. Run tests with all flags enabled
+	@export DOLPHIN_TEST_FULL=1; \
+	 just test all
 
 # ==============================================================================
-# Testing - Per-Project Commands
+# Testing - Internal Helpers
 # ==============================================================================
 
-# Run Python tests (TYPE: unit, integration, e2e, or all)
-test-python TYPE="all": setup-python
-	@echo "🐍 Running Python {{TYPE}} tests..."
-	@if [ "{{TYPE}}" = "all" ]; then \
-		uv run pytest tests/ -q --tb=short || (echo "   ❌ Python tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "unit" ]; then \
-		uv run pytest tests/unit/ -q --tb=short || (echo "   ❌ Python unit tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "integration" ]; then \
-		uv run pytest tests/integration/ -q --tb=short || (echo "   ❌ Python integration tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "e2e" ]; then \
-		uv run pytest tests/e2e/ -q --tb=short || (echo "   ❌ Python e2e tests failed"; exit 1); \
-	else \
-		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
+# Internal: Generic pytest runner (TYPE: unit, integration, e2e, or all)
+_pytest TYPE: setup-python
+	#!/usr/bin/env bash
+	set -euo pipefail
+	case "{{TYPE}}" in
+		all)         dir="tests/" ;;
+		unit)        dir="tests/unit/" ;;
+		integration) dir="tests/integration/" ;;
+		e2e)         dir="tests/e2e/" ;;
+		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
+	esac
+	uv run pytest "$dir" -q --tb=short
+
+# Internal: pytest runner with duration reporting
+_pytest_slowest TYPE N MIN: setup-python
+	#!/usr/bin/env bash
+	set -euo pipefail
+	case "{{TYPE}}" in
+		all)         dir="tests/" ;;
+		unit)        dir="tests/unit/" ;;
+		integration) dir="tests/integration/" ;;
+		e2e)         dir="tests/e2e/" ;;
+		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
+	esac
+	uv run pytest "$dir" -q --tb=short --durations="{{N}}" --durations-min="{{MIN}}"
+
+# Internal: Generic bun test runner (PROJECT: agent-core, mcp-bridge, shared)
+_bun-test PROJECT TYPE:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	if [ "{{PROJECT}}" = "shared" ]; then
+		cd shared && bun test
+		exit 0
 	fi
+	case "{{TYPE}}" in
+		all)         dir="" ;;
+		unit)        dir="tests/unit/" ;;
+		integration|e2e) dir="tests/integration/" ;;
+		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
+	esac
+	if [ "{{PROJECT}}" = "mcp-bridge" ] && [ -n "$dir" ]; then
+		dir="src/tests/${dir#tests/}"
+	fi
+	cd "{{PROJECT}}" && bun test $dir --bail
+
+# ==============================================================================
+# Testing - Per-Project Commands (aliases to internal helpers)
+# ==============================================================================
+
+# Run Python tests
+test-python TYPE="all": (_pytest TYPE)
 	@echo "   ✅ Python {{TYPE}} tests passed"
 
-# Run Python domain tests (TYPE: unit, integration, e2e, or all)
+# Run Python domain tests
 test-python-domain DOMAIN TYPE="all": setup-python
-	@echo "🐍 Running Python {{DOMAIN}} {{TYPE}} tests..."
-	@if [ "{{TYPE}}" = "all" ]; then \
-		uv run pytest tests/unit/{{DOMAIN}}/ tests/integration/{{DOMAIN}}/ -v --tb=short 2>/dev/null || \
-		uv run pytest tests/unit/{{DOMAIN}}/ -v --tb=short 2>/dev/null || \
-		uv run pytest tests/integration/{{DOMAIN}}/ -v --tb=short || \
-		(echo "   ❌ No tests found for domain {{DOMAIN}}"; exit 1); \
-	elif [ "{{TYPE}}" = "unit" ]; then \
-		uv run pytest tests/unit/{{DOMAIN}}/ -v --tb=short || (echo "   ❌ Unit tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "integration" ]; then \
-		uv run pytest tests/integration/{{DOMAIN}}/ -v --tb=short || (echo "   ❌ Integration tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "e2e" ]; then \
-		uv run pytest tests/e2e/{{DOMAIN}}/ -v --tb=short || (echo "   ❌ E2E tests failed"; exit 1); \
-	else \
-		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
-	fi
-	@echo "   ✅ {{DOMAIN}} {{TYPE}} tests passed"
-
-# Run Agent Core tests (TYPE: unit, integration, e2e, or all)
-test-agent-core TYPE="all":
-	@echo "🤖 Running Agent Core {{TYPE}} tests..."
-	@if [ "{{TYPE}}" = "all" ]; then \
-		cd agent-core && bun test --bail || (echo "   ❌ Agent Core tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "unit" ]; then \
-		cd agent-core && bun test tests/unit/ --bail || (echo "   ❌ Agent Core unit tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "integration" ]; then \
-		cd agent-core && bun test tests/integration/ --bail || (echo "   ❌ Agent Core integration tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "e2e" ]; then \
-		cd agent-core && bun test tests/integration/e2e/ --bail || (echo "   ❌ Agent Core e2e tests failed"; exit 1); \
-	else \
-		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
-	fi
-	@echo "   ✅ Agent Core {{TYPE}} tests passed"
-
-# Run Agent Core domain tests (TYPE: unit, integration, or all)
-test-agent-core-domain DOMAIN TYPE="all":
-	@echo "🤖 Running Agent Core {{DOMAIN}} {{TYPE}} tests..."
-	@if [ "{{TYPE}}" = "all" ]; then \
-		cd agent-core && (bun test tests/unit/{{DOMAIN}}/ tests/integration/{{DOMAIN}}/ --bail 2>/dev/null || \
-		bun test tests/unit/{{DOMAIN}}/ --bail 2>/dev/null || \
-		bun test tests/integration/{{DOMAIN}}/ --bail) || (echo "   ❌ No tests found for domain {{DOMAIN}}"; exit 1); \
-	elif [ "{{TYPE}}" = "unit" ]; then \
-		cd agent-core && bun test tests/unit/{{DOMAIN}}/ --bail || (echo "   ❌ Unit tests failed"; exit 1); \
-	elif [ "{{TYPE}}" = "integration" ]; then \
-		cd agent-core && bun test tests/integration/{{DOMAIN}}/ --bail || (echo "   ❌ Integration tests failed"; exit 1); \
-	else \
-		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, or all"; exit 1; \
-	fi
-	@echo "   ✅ {{DOMAIN}} {{TYPE}} tests passed"
-
-# Run VSCode Extension tests (TYPE: unit, integration, e2e, or all)
-test-extension TYPE="all":
-	@echo "📦 Running VSCode Extension {{TYPE}} tests..."
-	@cd vscode-extension && npm run compile >/dev/null
-	if [ "{{TYPE}}" = "all" ]; then \
-		(cd vscode-extension && npm run test:all) || { echo "   ❌ Extension tests failed"; exit 1; }; \
-	elif [ "{{TYPE}}" = "unit" ]; then \
-		(cd vscode-extension && npm run test:unit) || { echo "   ❌ Extension unit tests failed"; exit 1; }; \
-	elif [ "{{TYPE}}" = "integration" ]; then \
-		(cd vscode-extension && npm run test:integration) || { echo "   ❌ Extension integration tests failed"; exit 1; }; \
-	elif [ "{{TYPE}}" = "e2e" ]; then \
-		(cd vscode-extension && npm run test:e2e) || { echo "   ❌ Extension e2e tests failed"; exit 1; }; \
-	else \
-		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
-	fi; \
-	echo "   ✅ Extension {{TYPE}} tests passed"
-
-# Run VSCode Extension domain tests (TYPE: unit, integration, e2e, or all)
-test-extension-domain DOMAIN TYPE="all":
-	@echo "📦 Running Extension {{DOMAIN}} {{TYPE}} tests..."
-	@cd vscode-extension && npm run compile >/dev/null
-	if [ "{{TYPE}}" = "all" ]; then \
-		FILES=$$(cd vscode-extension && find out/test/suite -path "*{{DOMAIN}}*" -name '*.test.js'); \
-		if [ -z "$$FILES" ]; then echo "   ❌ No tests found for {{DOMAIN}}"; exit 1; fi; \
-		cd vscode-extension && npm run test:all -- --run $$FILES || { echo "   ❌ Tests failed"; exit 1; }; \
-	elif [ "{{TYPE}}" = "unit" ]; then \
-		FILES=$$(cd vscode-extension && find out/test/suite/unit/{{DOMAIN}} -name '*.test.js' 2>/dev/null); \
-		if [ -z "$$FILES" ]; then echo "   ❌ No unit tests found for {{DOMAIN}}"; exit 1; fi; \
-		cd vscode-extension && npm run test:unit -- --run $$FILES || { echo "   ❌ Unit tests failed"; exit 1; }; \
-	elif [ "{{TYPE}}" = "integration" ]; then \
-		FILES=$$(cd vscode-extension && find out/test/suite/integration/{{DOMAIN}} -name '*.test.js' 2>/dev/null); \
-		if [ -z "$$FILES" ]; then echo "   ❌ No integration tests found for {{DOMAIN}}"; exit 1; fi; \
-		cd vscode-extension && npm run test:integration -- --run $$FILES || { echo "   ❌ Integration tests failed"; exit 1; }; \
-	elif [ "{{TYPE}}" = "e2e" ]; then \
-		FILES=$$(cd vscode-extension && find out/test/suite/e2e/{{DOMAIN}} -name '*.test.js' 2>/dev/null); \
-		if [ -z "$$FILES" ]; then echo "   ❌ No e2e tests found for {{DOMAIN}}"; exit 1; fi; \
-		cd vscode-extension && npm run test:e2e -- --run $$FILES || { echo "   ❌ E2E tests failed"; exit 1; }; \
-	else \
-		echo "   ❌ Invalid TYPE: {{TYPE}}. Use: unit, integration, e2e, or all"; exit 1; \
-	fi; \
+	#!/usr/bin/env bash
+	set -euo pipefail
+	echo "🐍 Running Python {{DOMAIN}} {{TYPE}} tests..."
+	case "{{TYPE}}" in
+		all)         uv run pytest tests/unit/{{DOMAIN}}/ tests/integration/{{DOMAIN}}/ -v --tb=short 2>/dev/null || \
+		             uv run pytest tests/unit/{{DOMAIN}}/ -v --tb=short 2>/dev/null || \
+		             uv run pytest tests/integration/{{DOMAIN}}/ -v --tb=short ;;
+		unit)        uv run pytest tests/unit/{{DOMAIN}}/ -v --tb=short ;;
+		integration) uv run pytest tests/integration/{{DOMAIN}}/ -v --tb=short ;;
+		e2e)         uv run pytest tests/e2e/{{DOMAIN}}/ -v --tb=short ;;
+		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
+	esac
 	echo "   ✅ {{DOMAIN}} {{TYPE}} tests passed"
 
-# Run MCP Bridge tests (all are integration tests)
-test-mcp-bridge:
-	@echo "🌉 Running MCP Bridge tests..."
-	@cd mcp-bridge && bun test || (echo "   ❌ MCP Bridge tests failed"; exit 1)
+# Run Agent Core tests
+test-agent-core TYPE="all": (_bun-test "agent-core" TYPE)
+	@echo "   ✅ Agent Core {{TYPE}} tests passed"
+
+# Run Agent Core domain tests
+test-agent-core-domain DOMAIN TYPE="all":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	echo "🤖 Running Agent Core {{DOMAIN}} {{TYPE}} tests..."
+	case "{{TYPE}}" in
+		all)         cd agent-core && (bun test tests/unit/{{DOMAIN}}/ tests/integration/{{DOMAIN}}/ --bail 2>/dev/null || \
+		             bun test tests/unit/{{DOMAIN}}/ --bail 2>/dev/null || \
+		             bun test tests/integration/{{DOMAIN}}/ --bail) ;;
+		unit)        cd agent-core && bun test tests/unit/{{DOMAIN}}/ --bail ;;
+		integration) cd agent-core && bun test tests/integration/{{DOMAIN}}/ --bail ;;
+		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
+	esac
+	echo "   ✅ {{DOMAIN}} {{TYPE}} tests passed"
+
+# Run VSCode Extension tests
+test-extension TYPE="all":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	echo "📦 Running VSCode Extension {{TYPE}} tests..."
+	cd vscode-extension && npm run compile >/dev/null
+	case "{{TYPE}}" in
+		all)         npm run test:all ;;
+		unit)        npm run test:unit ;;
+		integration) npm run test:integration ;;
+		e2e)         npm run test:e2e ;;
+		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
+	esac
+	echo "   ✅ Extension {{TYPE}} tests passed"
+
+# Run VSCode Extension domain tests
+test-extension-domain DOMAIN TYPE="all":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	echo "📦 Running Extension {{DOMAIN}} {{TYPE}} tests..."
+	cd vscode-extension && npm run compile >/dev/null
+	case "{{TYPE}}" in
+		all)         target="out/test/suite" ;;
+		unit)        target="out/test/suite/unit/{{DOMAIN}}" ;;
+		integration) target="out/test/suite/integration/{{DOMAIN}}" ;;
+		e2e)         target="out/test/suite/e2e/{{DOMAIN}}" ;;
+		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
+	esac
+	FILES=$(find "$target" -path "*{{DOMAIN}}*" -name '*.test.js' 2>/dev/null || true)
+	[ -z "$FILES" ] && { echo "❌ No tests found for {{DOMAIN}}"; exit 1; }
+	npm run test:{{TYPE}} -- --run $FILES
+	echo "   ✅ {{DOMAIN}} {{TYPE}} tests passed"
+
+# Run MCP Bridge tests
+test-mcp-bridge: (_bun-test "mcp-bridge" "all")
 	@echo "   ✅ MCP Bridge tests passed"
 
-# Run shared package tests (bun)
-test-shared:
-	@echo "📦 Running shared package tests..."
-	@cd shared && bun test || (echo "   ❌ Shared package tests failed"; exit 1)
+# Run shared package tests
+test-shared: (_bun-test "shared" "all")
 	@echo "   ✅ Shared package tests passed"
 
-# Run Webview tests (all are unit tests)
+# Run Webview tests
 test-webview:
-	@echo "🎨 Running Webview tests..."
-	@cd vscode-extension/webview && bun test || (echo "   ❌ Webview tests failed"; exit 1)
+	@cd vscode-extension/webview && bun test
 	@echo "   ✅ Webview tests passed"
 
-# Run Playwright UI/E2E tests for the webview/extension shell
+# Run Playwright UI/E2E tests
 test-playwright:
-	@echo "🎭 Running Playwright UI tests..."
-	@cd vscode-extension/playwright && npm test || (echo "   ❌ Playwright tests failed"; exit 1)
+	@cd vscode-extension/playwright && npm test
 	@echo "   ✅ Playwright tests passed"
 
 # ==============================================================================
@@ -304,13 +281,8 @@ test-playwright:
 
 # Run specific test file
 test-file FILE: setup-python
-	@echo "🧪 Running specific test file: {{FILE}}"
 	@uv run pytest {{FILE}} -v
 
-# Run Python tests with coverage
-test-coverage: setup-python
-	@echo "🧪 Running Python tests with coverage..."
-	@uv run pytest -n0 --cov=kb --cov-report=html --cov-report=term-missing
 
 
 # ==============================================================================
@@ -375,7 +347,7 @@ api:
 
 # Health check for API server
 health:
-	curl -s http://127.0.0.1:7777/v1/health || echo "API server not running"
+	curl -s http://127.0.0.1:7777/health || echo "API server not running"
 
 # ==============================================================================
 # Logs & Development
@@ -438,50 +410,50 @@ swe-bench-status:
 # Run SWE-Bench Lite evaluation (file identification task)
 eval-swe-bench REPOS="*" LIMIT="":
 	@echo "Running SWE-Bench Lite evaluation..."
-	@mkdir -p results
+	@mkdir -p {{BENCHMARK_RESULTS_DIR}}
 	uv run python scripts/eval_swe_bench.py \
-		--dataset test-data/swe_bench_instances.json \
+		--dataset benchmarks/test-data/swe_bench_instances.json \
 		{{if REPOS != "*" { "--repos " + REPOS } else { "" } }} \
 		{{if LIMIT != "" { "--limit " + LIMIT } else { "" } }} \
-		--output results/swe_bench_eval.json
-	@echo "✅ Results saved to results/swe_bench_eval.json"
+		--output {{BENCHMARK_RESULTS_DIR}}/swe_bench_eval.json
+	@echo "✅ Results saved to {{BENCHMARK_RESULTS_DIR}}/swe_bench_eval.json"
 
 # Run SWE-Bench evaluation with verbose output
 eval-swe-bench-verbose REPOS="*":
-	@mkdir -p results
+	@mkdir -p {{BENCHMARK_RESULTS_DIR}}
 	uv run python scripts/eval_swe_bench.py \
-		--dataset test-data/swe_bench_instances.json \
+		--dataset benchmarks/test-data/swe_bench_instances.json \
 		{{if REPOS != "*" { "--repos " + REPOS } else { "" } }} \
-		--output results/swe_bench_eval.json \
+		--output {{BENCHMARK_RESULTS_DIR}}/swe_bench_eval.json \
 		--verbose
 
 # Quick SWE-Bench smoke test (10 instances)
 eval-swe-bench-quick:
 	@echo "Running quick SWE-Bench smoke test..."
-	@mkdir -p results
+	@mkdir -p {{BENCHMARK_RESULTS_DIR}}
 	uv run python scripts/eval_swe_bench.py \
-		--dataset test-data/swe_bench_instances.json \
+		--dataset benchmarks/test-data/swe_bench_instances.json \
 		--limit 10 \
-		--output results/swe_bench_quick.json
+		--output {{BENCHMARK_RESULTS_DIR}}/swe_bench_quick.json
 
 # Golden Scenarios Evaluation (Flask)
 # ------------------------------------------------------------------------------
 
 # Run custom golden scenario evaluation
-eval-golden SCENARIOS="golden-scenarios-flask":
+eval-golden SCENARIOS="benchmarks/golden-scenarios/evals/flask":
 	@echo "Running golden scenario evaluation..."
-	@mkdir -p results
+	@mkdir -p {{BENCHMARK_RESULTS_DIR}}
 	uv run python scripts/eval_retrieval.py \
 		--scenarios {{SCENARIOS}} \
-		--output results/golden_eval.json
-	@echo "✅ Results saved to results/golden_eval.json"
+		--output {{BENCHMARK_RESULTS_DIR}}/golden_eval.json
+	@echo "✅ Results saved to {{BENCHMARK_RESULTS_DIR}}/golden_eval.json"
 
 # Run golden scenarios with verbose output
-eval-golden-verbose SCENARIOS="golden-scenarios-flask":
-	@mkdir -p results
+eval-golden-verbose SCENARIOS="benchmarks/golden-scenarios/evals/flask":
+	@mkdir -p {{BENCHMARK_RESULTS_DIR}}
 	uv run python scripts/eval_retrieval.py \
 		--scenarios {{SCENARIOS}} \
-		--output results/golden_eval.json \
+		--output {{BENCHMARK_RESULTS_DIR}}/golden_eval.json \
 		--verbose
 
 # Setup Flask test repo for golden scenarios
@@ -504,12 +476,12 @@ flask-setup:
 # Run ANN parameter benchmarks
 benchmark-ann QUERIES="50" ITERATIONS="50":
 	@echo "Running ANN parameter benchmarks..."
-	@mkdir -p results
+	@mkdir -p {{BENCHMARK_RESULTS_DIR}}
 	uv run python scripts/benchmark_ann.py \
 		--queries {{QUERIES}} \
 		--iterations {{ITERATIONS}} \
-		--output results/ann_benchmark.json
-	@echo "✅ Results saved to results/ann_benchmark.json"
+		--output {{BENCHMARK_RESULTS_DIR}}/ann_benchmark.json
+	@echo "✅ Results saved to {{BENCHMARK_RESULTS_DIR}}/ann_benchmark.json"
 
 # Combined Benchmarks
 # ------------------------------------------------------------------------------
@@ -528,9 +500,9 @@ benchmark-full:
 	@just benchmark-ann 20 20
 	@echo ""
 	@echo "✅ Full benchmark complete!"
-	@echo "   - SWE-Bench: results/swe_bench_quick.json"
-	@echo "   - Golden: results/golden_eval.json"
-	@echo "   - ANN: results/ann_benchmark.json"
+	@echo "   - SWE-Bench: {{BENCHMARK_RESULTS_DIR}}/swe_bench_quick.json"
+	@echo "   - Golden: {{BENCHMARK_RESULTS_DIR}}/golden_eval.json"
+	@echo "   - ANN: {{BENCHMARK_RESULTS_DIR}}/ann_benchmark.json"
 
 # Quick benchmark for CI (fast smoke tests)
 benchmark-quick:
@@ -540,7 +512,7 @@ benchmark-quick:
 	@echo "✅ Quick benchmark complete"
 
 # Compare evaluations against baseline
-compare-eval BASELINE="results/baseline_eval.json" CURRENT="results/golden_eval.json":
+compare-eval BASELINE="{{BENCHMARK_RESULTS_DIR}}/baseline_eval.json" CURRENT="{{BENCHMARK_RESULTS_DIR}}/golden_eval.json":
 	@echo "Comparing evaluation results..."
 	uv run python scripts/compare_eval.py \
 		{{BASELINE}} \
@@ -550,119 +522,10 @@ compare-eval BASELINE="results/baseline_eval.json" CURRENT="results/golden_eval.
 # Save current results as baseline
 save-baseline:
 	@echo "Saving current results as baseline..."
-	@mkdir -p results/baselines
-	@cp results/golden_eval.json results/baselines/baseline_$(shell date +%Y%m%d_%H%M%S).json
-	@cp results/golden_eval.json results/baseline_eval.json
+	@mkdir -p {{BENCHMARK_RESULTS_DIR}}/baselines
+	@cp {{BENCHMARK_RESULTS_DIR}}/golden_eval.json {{BENCHMARK_RESULTS_DIR}}/baselines/baseline_$(shell date +%Y%m%d_%H%M%S).json
+	@cp {{BENCHMARK_RESULTS_DIR}}/golden_eval.json {{BENCHMARK_RESULTS_DIR}}/baseline_eval.json
 	@echo "✅ Baseline saved"
-
-# ==============================================================================
-# Cleanup Commands
-# ==============================================================================
-
-# Clean all repositories and data (preserves config)
-reset-all:
-	@echo "⚠️  This will remove ALL repositories and data from the knowledge store."
-	@echo "Configuration will be preserved."
-	@echo ""
-	uv run dolphin kb reset-all
-
-# Force reset without confirmation (dangerous!)
-reset-all-force:
-	@echo "🔥 Force resetting ALL repositories..."
-	uv run dolphin kb reset-all --force
-
-# Nuclear option: Delete entire knowledge store directory
-store-clean:
-	@echo "💣 This will DELETE ~/.dolphin/knowledge_store"
-	@echo "This removes EVERYTHING including configuration!"
-	@echo "Press Ctrl-C to abort or wait 5 seconds to continue..."
-	sleep 5
-	rm -rf ~/.dolphin/knowledge_store
-	@echo "✅ Knowledge store directory deleted."
-	@echo "Run 'just init' to reinitialize."
-
-# ==============================================================================
-# CLI Tool Development & Building
-# ==============================================================================
-
-# Install all CLI tools in development mode
-install-cli-tools:
-	@echo "Installing CLI tools in development mode..."
-	@uv pip install -e .
-
-# Build all CLI tools (creates standalone binaries/scripts)
-build-cli-tools: build
-	@echo "Building CLI tools for version {{VERSION}}..."
-	@echo "✅ Using existing build from dist/ directory"
-
-# Install MCP bridge dependencies
-install-mcp-bridge:
-	@echo "Installing MCP bridge dependencies..."
-	@cd mcp-bridge && bun install
-
-# Build MCP bridge
-build-mcp-bridge:
-	@echo "Building MCP bridge..."
-	@cd mcp-bridge && bun build
-
-# Reinstall all tools (full rebuild)
-reinstall-all: install-cli-tools install-mcp-bridge build-mcp-bridge
-	@echo "✅ All CLI tools and MCP bridge reinstalled"
-
-# ==============================================================================
-# VSCode Extension Building
-# ==============================================================================
-
-# Build webview UI
-ext-build-webview:
-	@echo "🎨 Building webview UI..."
-	@cd vscode-extension/webview && bun run build
-
-# Compile extension TypeScript
-ext-compile:
-	@echo "📦 Compiling extension TypeScript..."
-	@cd vscode-extension && npm run compile
-
-# Bundle uv binaries for all platforms
-ext-bundle-uv:
-	@echo "🐍 Bundling uv binaries..."
-	@bash scripts/bundle-uv.sh
-
-# Build extension (webview + compile)
-ext-build: ext-build-webview ext-compile
-	@echo "✅ Extension built successfully"
-
-# Build extension for production (includes bundled uv)
-ext-build-prod: ext-bundle-uv ext-build
-	@echo "✅ Extension built for production with bundled uv"
-
-# Package extension for all platforms
-ext-package: ext-build-prod
-	@echo "📦 Packaging extension for all platforms..."
-	@cd vscode-extension && npm run package
-
-# Package extension for specific platform (darwin-arm64, darwin-x64, linux-x64, win32-x64)
-ext-package-platform platform: ext-build-prod
-	@echo "📦 Packaging extension for {{platform}}..."
-	@cd vscode-extension && vsce package --target {{platform}}
-
-# Clean extension build artifacts
-ext-clean:
-	@echo "🧹 Cleaning extension build artifacts..."
-	@rm -rf vscode-extension/out
-	@rm -rf vscode-extension/webview/build
-	@rm -rf vscode-extension/dist/uv
-	@rm -f vscode-extension/*.vsix
-
-# Install extension dependencies
-ext-install:
-	@echo "📥 Installing extension dependencies..."
-	@cd vscode-extension && npm install
-	@cd vscode-extension/webview && bun install
-
-# Full extension setup (install + build)
-ext-setup: ext-install ext-build
-	@echo "✅ Extension setup complete"
 
 # ==============================================================================
 # Deployment

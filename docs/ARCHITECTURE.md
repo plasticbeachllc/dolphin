@@ -2,8 +2,8 @@
 
 Technical architecture and implementation status for the Dolphin AI enablement platform.
 
-**Version**: 0.1.13
-**Status**: Beta (Production Ready for Core Components)
+**Version**: 0.2.0
+**Status**: Beta (KB + MCP Release Candidate; Experimental Components in Progress)
 **Last Updated**: 2025-11-13 (WP2 Agent-Core V2 Consolidation Complete)
 
 ---
@@ -47,31 +47,28 @@ Dolphin is a full-stack AI enablement platform that combines semantic code retri
 ┌───────────────────────────────────────────────────────────────┐
 │                      User Interfaces                          │
 ├──────────────┬──────────────┬──────────────┬─────────────────┤
-│ VSCode Ext   │Claude Desktop│  CLI (kb)    │  Direct REST    │
-│ (Svelte UI)  │ / OpenAI UX  │  (Python)    │  (curl/bun)     │
+│ VSCode Ext   │ Claude Code  |  CLI (kb)    │  Direct REST    │
+│ (Svelte UI)  │ / Codex UX   │  (Python)    │  (curl/bun)     │
 └──────┬───────┴──────┬───────┴──────┬───────┴──────┬──────────┘
        │              │              │              │
-       │ JSON-RPC     │ MCP stdio    │              │ HTTP
-       ▼              ▼              ▼              ▼
-┌──────────────┐  ┌───────────────────────────────────────────┐
-│ Agent Core   │  │      MCP Bridge (TypeScript/Bun)          │
-│ (Bun/TS)     │  │  • 6 MCP Tools                            │
-│ • Provider-agnostic LLM API (Claude/OpenAI) │  │  • REST Client          │
-│ • KB Mgmt    │  │  • Content Truncation (50KB)              │
-│ • Task Plan  │  │  • Type-safe interfaces                   │
-│ • Storage    │  └──────────────────┬────────────────────────┘
-└──────┬───────┘                     │
-       │                             │ HTTP
-       │ HTTP                        │
-       └─────────────┬───────────────┘
-                     ▼
+       │ JSON-RPC     │ MCP stdio    │ HTTP         │ HTTP
+       ▼              ▼              │              │
+┌──────────────┐  ┌───────────────┐  │              │
+│ Agent Core   │  │  MCP Bridge   │  │              │
+│ (Bun/TS)     │  │ (TypeScript)  │  │              │
+│ • LLM APIs   │  │ • MCP Tools   │  |              |
+│ • KB Mgmt    │->│ • Context     │  |              │
+│ • Task Plan  │  │ • Truncation  │  │              │
+│ • Storage    │  │ • Type-safe   │  │              │
+└──────┬───────┘  └──────┬────────┘  │              │
+       │ HTTP            │ HTTP      │              │
+       ▼                 ▼           ▼              ▼
 ┌──────────────────────────────────────────────────────────────┐
-│              REST API (Python/FastAPI)                        │
-│  • 5 Endpoints                                                │
-│  • Search Backend (Hybrid BM25 + Vector)                      │
-│  • Embedding Pipeline                                         │
-│  • Rank Fusion & MMR                                          │
-│  • Cross-Encoder Reranking (optional)                         │
+│              REST API (Python/FastAPI)                       │
+│  • Search Backend (Hybrid BM25 + Vector)                     │
+│  • Embedding Pipeline                                        │
+│  • Rank Fusion & MMR                                         │
+│  • Cross-Encoder Reranking (optional)                        │
 └──────────────────────────┬───────────────────────────────────┘
                            │
         ┌──────────────────┼──────────────────┐
@@ -98,54 +95,7 @@ Repository → Scanner → Chunker → Deduplicator → Embedder → Storage
 ```
 Query → Embed → Vector Search → Re-rank → Snippet → Response
          │          │              │          │         │
-     OpenAI    LanceDB KNN    Fusion     Truncate   JSON/MCP
-```
-
----
-
-## KB Lifecycle Management
-
-### Production Deployment Strategy
-
-**Current State (Development):**
-
-- KB server runs separately (`uv run dolphin serve`)
-- Extension connects to existing KB on localhost:8000
-- Manual two-step startup process
-
-**Target State (Production):**
-
-- KB server auto-starts when extension activates
-- Zero-configuration user experience
-- Automatic process lifecycle management
-
-**Implementation:** See [`KB-LIFECYCLE-MANAGEMENT.md`](KB-LIFECYCLE-MANAGEMENT.md) for detailed implementation plan.
-
-### KBManager Enhancement
-
-**Location:** [`agent-core/src/kb/manager.ts`](../agent-core/src/kb/manager.ts)
-
-**New Capabilities:**
-
-- **Health Check:** Detect KB server on localhost:8000
-- **Auto-Start:** Spawn KB subprocess if not running
-- **Lifecycle Management:** Track and cleanup KB process
-- **Error Recovery:** Graceful degradation and restart logic
-
-**Startup Flow:**
-
-```
-Extension Activation
-  ↓
-KBManager.start()
-  ↓
-Check localhost:8000/health
-  ├─ Running? → Use existing
-  └─ Not running? → Spawn subprocess
-      ↓
-  Poll /health (500ms, max 30s)
-      ↓
-  KB Ready ✅
+     OpenAI    LanceDB KNN       Fusion   Truncate   JSON/MCP
 ```
 
 ---
@@ -171,6 +121,7 @@ Check localhost:8000/health
 - Automatic backend initialization on startup
 - OpenAI + Stub embedding providers
 - LanceDB vector search with fixed-size vectors
+- `/v1/*` endpoints require `X-API-Key`; `/v1/health` remains unauthenticated for quick checks
 - **Maximal Marginal Relevance (MMR)** for result diversity
 - Multi-level caching (Redis + in-memory) for performance
 - Path traversal security protection
@@ -189,19 +140,20 @@ Check localhost:8000/health
 
 **Tools Implemented**:
 
-| Tool                    | Purpose                             | Status |
-| ----------------------- | ----------------------------------- | ------ |
-| `search_knowledge`      | Semantic code search with citations | ✅     |
-| `fetch_chunk`           | Retrieve chunk by ID                | ✅     |
-| `fetch_lines`           | Retrieve file slice by line range   | ✅     |
-| `get_vector_store_info` | Get store metadata and stats        | ✅     |
-| `get_metadata`          | Get chunk metadata without content  | ✅     |
-| `open_in_editor`        | Open file in user's editor          | ✅     |
+| Tool           | Purpose                             | Status |
+| -------------- | ----------------------------------- | ------ |
+| `search`       | Semantic code search with citations | ✅     |
+| `chunk.get`    | Retrieve chunk by ID                | ✅     |
+| `file.lines`   | Retrieve file slice by line range   | ✅     |
+| `store.info`   | Get store metadata and stats        | ✅     |
+| `metadata.get` | Get chunk metadata without content  | ✅     |
+| `repos.list`   | List indexed repositories           | ✅     |
+| `health`       | Check KB REST API health            | ✅     |
 
 **Key Features**:
 
-- MCP Protocol 2025-06-18 compliance
-- 50KB content budget with multi-stage trimming
+- MCP Protocol 2025-11-25 compliance
+- ~70KB content budget with multi-stage trimming
 - Structured error responses with remediation hints
 - JSONL logging to `mcp-bridge/logs/mcp.log`
 - Full TypeScript types with Zod validation
@@ -211,6 +163,8 @@ Check localhost:8000/health
 
 - `mcp-bridge/src/index.ts` - MCP server entry point
 - `mcp-bridge/src/mcp/tools/` - Tool implementations
+- `mcp-bridge/src/mcp/tools/registry.ts` - Tool registry + validation
+- `mcp-bridge/src/mcp/tools/schema.ts` - Zod-to-JSON schema builder
 - `mcp-bridge/src/rest/client.ts` - REST API client
 - `mcp-bridge/kb-cli.ts` - CLI wrapper
 
@@ -666,6 +620,7 @@ Columns:
 5. Post-process
    ├─ Apply score_cutoff filter
    ├─ Apply MMR reranking (if enabled)
+   ├─ Limit snippet payloads to max_snippets hits
    ├─ Truncate snippets to max_snippet_tokens
    ├─ Fetch metadata from SQLite
    └─ Build response
@@ -714,7 +669,7 @@ Columns:
 - ✅ All 6 MCP tools implemented
 - ✅ Unit test framework with mock REST server
 - ✅ JSONL logging with rotation
-- ✅ Content truncation (50KB budget)
+- ✅ Content truncation (~70KB budget)
 - ✅ Error handling with remediation hints
 - ✅ Published to npm as `dolphin-mcp`
 
@@ -733,7 +688,7 @@ Columns:
 
 ### 🚧 EP-11 In Progress: Architect Mode KB Discovery
 
-> For the unified KB API key design and status, see `docs/API_KEY_PLAN.md` (covers auto-provisioning, env overrides, and client behavior across CLI, Agent Core, VS Code, and MCP bridge).
+> For KB API key setup and env overrides (`DOLPHIN_API_KEY`, `~/.dolphin/kb_api_key`), see `README.md`.
 
 **Phase 1 (Foundation) - Completed ✅:**
 
@@ -820,9 +775,9 @@ Columns:
 
 ```bash
 # Python tests
-pytest tests/unit/ -v                    # Unit tests
-pytest tests/integration/ -v             # Integration tests
-pytest --cov=kb/src                    # With coverage
+uv run pytest tests/unit/ -v             # Unit tests
+uv run pytest tests/integration/ -v      # Integration tests
+uv run pytest --cov=kb                  # With coverage
 
 # TypeScript tests
 cd mcp-bridge && bun test                # All MCP tests
@@ -991,15 +946,14 @@ cd mcp-bridge && bun run test-integration.ts
 
 - [README](../README.md) - Project overview and user documentation
 - [AGENTS.md](../AGENTS.md) - Developer guidelines and troubleshooting
-- [TESTING.md](../TESTING.md) - Testing procedures
-- [ACCESSIBILITY.md](ACCESSIBILITY.md) - Accessibility compliance guide
+- [TESTING.md](TESTING.md) - Testing procedures
 - [PROFILING.md](PROFILING.md) - Performance profiling guide
-- [Main codebase](../kb/src/) - Python implementation
+- [Main codebase](../kb/) - Python implementation
 - [MCP Bridge](../mcp-bridge/) - TypeScript implementation
 
 ---
 
-**Status**: ✅ Production Ready
+**Status**: Release Candidate (KB + MCP)
 **Test Coverage**: 243+ tests passing
-**Version**: 1.0.0
+**Version**: 0.2.0
 **Date**: 2025-11-12

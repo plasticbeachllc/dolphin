@@ -1,5 +1,6 @@
 """Integration tests for indexing functionality."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -345,7 +346,10 @@ class TestIndexingPerformance:
             assert result["session_id"] is not None
 
 
-@pytest.mark.skip(reason="Requires actual external services")
+@pytest.mark.skipif(
+    os.environ.get("DOLPHIN_TEST_FULL") != "1",
+    reason="Requires actual external services - set DOLPHIN_TEST_FULL=1 to run",
+)
 class TestIndexingWithExternalServices:
     """Integration tests that require external services (marked as skip by default)."""
 

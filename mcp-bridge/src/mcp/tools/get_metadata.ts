@@ -1,10 +1,13 @@
 import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { restGetChunk } from "../../rest/client.js";
+import { restGetChunk, KBClient } from "../../rest/client.js";
 import { logInfo, logError } from "../../util/logger.js";
+import { buildToolInputSchema } from "./schema.js";
+import { TOOL_VERSION } from "./version.js";
+import { normalizeToolError, formatToolErrorText } from "./error.js";
 
 /**
- * get_metadata tool analysis:
+ * metadata_get tool analysis:
  * - Single request tool: fetches metadata for one chunk by chunk_id
  * - No parallelization needed: only makes one restGetChunk() call
  * - Performance is optimal: one request = one response
@@ -13,26 +16,24 @@ import { logInfo, logError } from "../../util/logger.js";
 
 const INPUT_SHAPE = { chunk_id: z.string() };
 const INPUT = z.object(INPUT_SHAPE);
+const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 
-const GET_METADATA_JSON_SCHEMA: Tool["inputSchema"] = {
-  type: "object",
-  properties: {
-    chunk_id: { type: "string" },
-  },
-  required: ["chunk_id"],
-};
-
-export function makeGetMetadata(): {
+export function makeGetMetadata(client?: KBClient): {
   definition: Tool;
+  inputSchema: typeof INPUT;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: any;
-  inputSchema: typeof INPUT_SHAPE;
 } {
   const definition: Tool = {
-    name: "get_metadata",
-    description: "Return metadata for a chunk by chunk_id.",
-    inputSchema: GET_METADATA_JSON_SCHEMA,
-    annotations: { title: "Chunk Metadata", readOnlyHint: true, idempotentHint: true },
+    name: "metadata_get",
+    description: "Fetch chunk metadata without content.",
+    inputSchema: INPUT_SCHEMA,
+    annotations: {
+      title: "Get Chunk Metadata",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   };
 
   const handler = async (args: unknown, signal?: AbortSignal): Promise<CallToolResult> => {
@@ -40,29 +41,53 @@ export function makeGetMetadata(): {
     try {
       const argsObj = args as { input?: unknown } | undefined;
       const input = INPUT.parse(argsObj?.input ?? args);
-      const chunk = await restGetChunk(input.chunk_id, signal);
+      const chunk = await (client
+        ? client.getChunk(input.chunk_id, signal)
+        : restGetChunk(input.chunk_id, signal));
       // Drop content to keep response small
       const { content: _content, ...meta } = chunk;
-      await logInfo("get_metadata", "get_metadata success", { latency_ms: Date.now() - started });
-      return { content: [{ type: "text", text: "Metadata ready." }], isError: false, data: meta };
+      const metaJson = "```json\n" + JSON.stringify(meta) + "\n```";
+      await logInfo("metadata_get", "metadata_get success", { latency_ms: Date.now() - started });
+      return {
+        content: [
+          { type: "text", text: "Metadata ready." },
+          { type: "text", text: metaJson },
+        ],
+        isError: false,
+        _meta: {
+          tool_version: TOOL_VERSION,
+          latency_ms: Date.now() - started,
+          warnings: [],
+        },
+      };
     } catch (e: unknown) {
-      const error = e instanceof Error ? e : new Error(String(e));
-      const err = (e as { error?: { code: string; message: string } })?.error
-        ? (e as { error: { code: string; message: string } })
-        : { error: { code: "unexpected_error", message: error.message } };
-      await logError("get_metadata", "get_metadata error", {
-        error_code: err.error.code,
-        message: err.error.message,
+      const { error: toolError, upstream } = normalizeToolError(
+        e,
+        "Verify chunk_id or re-run search."
+      );
+      await logError("metadata_get", "metadata_get error", {
+        error_code: toolError.code,
+        message: toolError.message,
       });
       const content: CallToolResult["content"] = [
         {
           type: "text",
-          text: `${err.error.message} Remediation: verify chunk_id or re-run search.`,
+          text: formatToolErrorText(toolError),
         },
       ];
-      return { content, isError: true, _meta: { upstream: err } };
+      return {
+        content,
+        isError: true,
+        _meta: {
+          error: toolError,
+          upstream,
+          tool_version: TOOL_VERSION,
+          latency_ms: Date.now() - started,
+          warnings: [],
+        },
+      };
     }
   };
 
-  return { definition, handler, inputSchema: INPUT_SHAPE };
+  return { definition, inputSchema: INPUT, handler };
 }

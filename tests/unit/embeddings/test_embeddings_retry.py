@@ -17,28 +17,35 @@ def test_embed_texts_with_retry_success_after_retries(monkeypatch):
             return [[0.0] * dim for _ in range(n)]
 
         @with_retry(max_attempts=3, delays=(0.01, 0.01))
-        def embed_texts(self, model, texts):  # type: ignore[override]
+        def embed_texts(self, model, texts):
             self.calls += 1
             if self.calls < 3:
                 raise RuntimeError("temporary failure")
             return self._zeroes(self.model_dimensions[model], len(texts))
 
     # Swap default provider using the new context-aware API
+    # Swap default provider using the new context-aware API
     flaky = FlakyProvider()
     set_default_provider(flaky)
 
-    vecs = embed_texts_with_retry("small", ["a", "b"])
-    assert len(vecs) == 2
-    assert flaky.calls == 3
+    try:
+        vecs = embed_texts_with_retry("small", ["a", "b"])
+        assert len(vecs) == 2
+        assert flaky.calls == 3
+    finally:
+        set_default_provider(EmbeddingProvider())
 
 
 def test_embed_texts_with_retry_exhausts_attempts(monkeypatch):
     class AlwaysFailProvider(EmbeddingProvider):
         @with_retry(max_attempts=2, delays=(0.01,))
-        def embed_texts(self, model, texts):  # type: ignore[override]
+        def embed_texts(self, model, texts):
             raise RuntimeError("hard failure")
 
     set_default_provider(AlwaysFailProvider())
 
-    with pytest.raises(RuntimeError):
-        embed_texts_with_retry("small", ["a"])
+    try:
+        with pytest.raises(RuntimeError):
+            embed_texts_with_retry("small", ["a"])
+    finally:
+        set_default_provider(EmbeddingProvider())

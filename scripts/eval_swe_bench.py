@@ -102,7 +102,7 @@ def evaluate_instance(
             query=problem_statement,
             repos=[instance["repo"]],
             top_k=top_k * 3,  # Get more results, then collapse to files
-            embed_model=embed_model,  # Use model from repo config
+            # Use model from repo config
         )
 
         results = backend.search(request)
@@ -206,7 +206,7 @@ def main():
     parser.add_argument(
         "--dataset",
         type=Path,
-        default=Path("test-data/swe_bench_instances.json"),
+        default=Path("benchmarks/test-data/swe_bench_instances.json"),
         help="Path to SWE-Bench instances",
     )
     parser.add_argument("--repos", nargs="+", help="Filter to specific repos (e.g., django/django)")
@@ -257,7 +257,7 @@ def main():
     )
 
     # Load repo configuration to get embed models
-    repo_config_path = Path("test-data/swe_bench_repos.json")
+    repo_config_path = Path("benchmarks/test-data/swe_bench_repos.json")
     repo_models = {}
     if repo_config_path.exists():
         with open(repo_config_path) as f:
@@ -280,7 +280,7 @@ def main():
         repo_root = args.repos_dir / repo.replace("/", "__")
 
         # Get embed model for this repo (default to small if not configured)
-        embed_model = repo_models.get(repo, "small")
+        repo_models.get(repo, "small")
 
         if not args.verbose:
             print(
@@ -293,7 +293,6 @@ def main():
             instance,
             backend,
             repo_root,
-            embed_model=embed_model,
             top_k=args.top_k,
             verbose=args.verbose,
         )

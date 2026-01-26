@@ -16,7 +16,8 @@ Dolphin is a semantic code search and knowledge management system for AI interfa
 
 - [README.md](README.md) - Project overview, quick start, and user guide
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - Technical architecture and implementation status
-- [TESTING.md](TESTING.md) - Testing setup and procedures
+- [docs/TESTING.md](docs/TESTING.md) - Testing setup and procedures (canonical test reference)
+- [docs/BENCHMARKING.md](docs/BENCHMARKING.md) - Benchmarking procedures and performance targets
 
 ## Core Principles for Agents
 
@@ -343,7 +344,7 @@ tail -f ~/.dolphin/knowledge_store/logs/
 1. Update version in `pyproject.toml`
 2. Update CHANGELOG.md with changes
 3. Update version references in documentation
-4. Tag release: `git tag v0.1.X`
+4. Tag release: `git tag py-v0.2.0` (see PUBLISH.md for component prefixes)
 5. Build: `just build`
 6. Deploy: `just deploy-prod`
 
@@ -363,12 +364,11 @@ tail -f ~/.dolphin/knowledge_store/logs/
 ```bash
 # Install dependencies
 uv sync --group test
-cd mcp-bridge && bun install && cd ..
-cd agent-core && bun install && cd ..
+bun install          # Install all TypeScript dependencies (root workspace)
 
 # Or use Justfile
 just venv            # Create venv and install Python deps
-just bun-install     # Install Bun deps for mcp-bridge
+just bun-install     # Install Bun deps for workspaces
 ```
 
 ### Initialize Knowledge Base
@@ -419,8 +419,10 @@ uv run dolphin search "query"
 KB_REPOS=my-repo uv run dolphin search "query"  # Filter by repo
 
 # REST API
-curl -X POST http://127.0.0.1:7777/search \
+export DOLPHIN_API_KEY="$(cat ~/.dolphin/kb_api_key)"
+curl -X POST http://127.0.0.1:7777/v1/search \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $DOLPHIN_API_KEY" \
   -d '{"query": "test", "top_k": 5}'
 
 # Using Justfile
@@ -518,8 +520,10 @@ uv run dolphin kb status
 uv run dolphin kb index my-repo --full --force
 
 # Try with lower score cutoff
-curl -X POST http://127.0.0.1:7777/search \
+export DOLPHIN_API_KEY="$(cat ~/.dolphin/kb_api_key)"
+curl -X POST http://127.0.0.1:7777/v1/search \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $DOLPHIN_API_KEY" \
   -d '{"query": "test", "score_cutoff": 0.0, "top_k": 10}'
 ```
 
@@ -694,7 +698,10 @@ overlap_tokens = 64     # Balance between context and duplication
 KB_REPOS=api-server uv run dolphin search "auth"
 
 # Filter by path prefix in API call
-curl -X POST http://127.0.0.1:7777/search \
+export DOLPHIN_API_KEY="$(cat ~/.dolphin/kb_api_key)"
+curl -X POST http://127.0.0.1:7777/v1/search \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $DOLPHIN_API_KEY" \
   -d '{"query": "auth", "repos": ["api-server"], "path_prefix": ["src/"]}'
 ```
 
@@ -746,7 +753,8 @@ uv run dolphin kb status my-repo
 
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) - System design and status
 - [README.md](README.md) - Project overview and quick start
-- [TESTING.md](TESTING.md) - Testing procedures
+- [docs/TESTING.md](docs/TESTING.md) - Testing procedures (canonical test reference)
+- [BENCHMARKING.md](docs/BENCHMARKING.md) - Benchmarking guide
 
 **For issues:**
 

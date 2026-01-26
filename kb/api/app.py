@@ -6,30 +6,77 @@ from collections.abc import Awaitable, Iterable, Sequence
 from inspect import isawaitable
 from pathlib import Path
 from time import perf_counter
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..api_key import load_kb_api_key
-from ..store.sqlite_meta import generate_fts_content_id
+from ..config import KBConfig, load_config
+from ..store.sqlite_meta import SQLiteMetadataStore, generate_fts_content_id
 from .task_queue import TaskStatus, get_task_queue
 from .utils import GitRepository, validate_path_within_repo
 
 # Constants
 EMBEDDING_BATCH_SIZE = 128
 ESTIMATED_TOKENS_PER_CHUNK = 200
-CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_:-]+$")
 
-app = FastAPI(title="Unified Knowledge Store", version="0.1.0")
+app = FastAPI(title="Unified Knowledge Store", version="0.2.0")
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    errors = exc.errors()
+
+    unknown_fields: list[str] = []
+    for err in errors:
+        err_type = str(err.get("type", ""))
+        if err_type in {"value_error.extra", "extra_forbidden"}:
+            loc = err.get("loc") or ()
+            if isinstance(loc, (list, tuple)) and loc:
+                field = loc[-1]
+                if isinstance(field, str):
+                    unknown_fields.append(field)
+
+    remediation = "Fix the request body and try again."
+    if unknown_fields:
+        uniq = sorted(set(unknown_fields))
+        remediation = f"Remove unsupported field(s): {', '.join(uniq)}."
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": {
+                "code": "invalid_request",
+                "message": "Request validation failed.",
+                "remediation": remediation,
+                "details": errors,
+            },
+            # Backwards-compatible FastAPI-style detail.
+            "detail": errors,
+        },
+    )
+
+
+def _load_default_config() -> KBConfig:
+    try:
+        return load_config()
+    except Exception:
+        return KBConfig()
+
+
+_DEFAULT_CONFIG = _load_default_config()
+_API_LIMITS = _DEFAULT_CONFIG.api
 
 # Add CORS middleware to allow requests from VSCode webviews
 # Note: CORSMiddleware is a class, not a factory function, but FastAPI's add_middleware
 # accepts both. We need to help the type checker by explicitly typing this.
 app.add_middleware(
-    cast(type, CORSMiddleware),  # type: ignore[arg-type]
+    cast(type, CORSMiddleware),
     allow_origins=[
         "vscode-webview://*",
         "http://localhost:3000",  # Development only
@@ -45,15 +92,15 @@ app.add_middleware(
 async def validate_api_key(request: Request, call_next):
     """Validate API key for protected endpoints.
 
-    All /v1/ endpoints require authentication via X-API-Key header.
+    All /v1/ endpoints (except /v1/health) require authentication via X-API-Key header.
     The API key must match the configured KB key, which may come from:
     - DOLPHIN_API_KEY environment variable (primary)
     - DOLPHIN_KB_API_KEY environment variable (legacy / override)
     - Managed key file (~/.dolphin/kb_api_key)
-    Health check endpoint (/health) remains public for monitoring.
+    Health check endpoint (/v1/health) remains public for monitoring.
     """
     # Protect all /v1/ endpoints with API key authentication
-    if request.url.path.startswith("/v1/"):
+    if request.url.path.startswith("/v1/") and request.url.path != "/v1/health":
         api_key = request.headers.get("X-API-Key")
         expected_key = load_kb_api_key()
 
@@ -82,6 +129,11 @@ def set_pipeline(pipeline):
     _pipeline = pipeline
 
 
+def get_pipeline():
+    """Get the current ingestion pipeline."""
+    return _pipeline
+
+
 def reset_pipeline():
     """Reset the ingestion pipeline to None (for testing)."""
     global _pipeline
@@ -96,27 +148,115 @@ def reset_stores():
     _pipeline = None
 
 
+def _enrich_hits_with_snippets(
+    hits: list[dict[str, object]],
+    request: SearchRequest,
+    sql_store: SQLiteMetadataStore,
+) -> list[dict[str, object]]:
+    repo_root_cache: dict[str, Path] = {}
+    file_lines_cache: dict[tuple[str, str], list[str]] = {}
+
+    for hit in hits:
+        existing_snippet = hit.get("snippet")
+        if isinstance(existing_snippet, str) and existing_snippet:
+            continue
+
+        repo = hit.get("repo")
+        path = hit.get("path")
+        start_line = hit.get("start_line")
+        end_line = hit.get("end_line")
+
+        if not repo or not path:
+            continue
+        if not isinstance(start_line, (int, float, str, bytes, bytearray)) or not isinstance(
+            end_line, (int, float, str, bytes, bytearray)
+        ):
+            continue
+
+        repo_name = str(repo)
+        path_str = str(path)
+
+        if repo_name not in repo_root_cache:
+            repo_info = sql_store.get_repo_by_name(repo_name)
+            if not repo_info:
+                continue
+            repo_root_cache[repo_name] = Path(repo_info["root_path"])
+
+        repo_root = repo_root_cache[repo_name]
+        full_path = validate_path_within_repo(repo_root / path_str, repo_root)
+
+        if not full_path.exists() or not full_path.is_file():
+            continue
+
+        cache_key = (repo_name, path_str)
+        if cache_key not in file_lines_cache:
+            try:
+                with open(full_path, encoding="utf-8") as fh:
+                    file_lines_cache[cache_key] = fh.readlines()
+            except UnicodeDecodeError:
+                continue
+
+        lines = file_lines_cache.get(cache_key, [])
+        if not lines:
+            continue
+
+        total_lines = len(lines)
+        try:
+            start_int = int(start_line)
+            end_int = int(end_line)
+        except (TypeError, ValueError):
+            continue
+        context_before = request.context_lines_before or 0
+        context_after = request.context_lines_after or 0
+
+        snippet_start = max(1, start_int - context_before)
+        snippet_end = min(total_lines, end_int + context_after)
+
+        snippet = "".join(lines[snippet_start - 1 : snippet_end])
+        hit["snippet"] = snippet
+        hit["snippet_start_line"] = snippet_start
+        hit["snippet_end_line"] = snippet_end
+
+    return hits
+
+
 class SearchRequest(BaseModel):
+    class Config:
+        extra = "forbid"
+
     query: str
     repos: list[str] | None = None
     path_prefix: list[str] | None = None
     exclude_paths: list[str] | None = None
     exclude_patterns: list[str] | None = None
-    top_k: int = 8
-    max_snippet_tokens: int = 240
-    embed_model: str = "large"
-    score_cutoff: float | None = 0.0
-    # Defaults set to None so backend can fall back to global config when unspecified
-    mmr_enabled: bool | None = None
-    mmr_lambda: float | None = None
+    top_k: int = Field(default=_DEFAULT_CONFIG.retrieval.top_k, ge=1, le=_API_LIMITS.max_top_k)
+    max_snippet_tokens: int = Field(
+        default=_DEFAULT_CONFIG.retrieval.max_snippet_tokens,
+        ge=1,
+        le=_API_LIMITS.max_snippet_tokens,
+    )
+    # embed_model removed: always use global default
+    score_cutoff: float | None = _DEFAULT_CONFIG.retrieval.score_cutoff
+    mmr_enabled: bool | None = _DEFAULT_CONFIG.retrieval.mmr_enabled
+    mmr_lambda: float | None = _DEFAULT_CONFIG.retrieval.mmr_lambda
     ann_strategy: str | None = None
     ann_nprobes: int | None = None
     ann_refine_factor: int | None = None
+    # top_k controls total results; max_snippets controls how many hits return a snippet payload.
+    max_snippets: int = Field(default=0, ge=0, le=_API_LIMITS.max_top_k)
     # Graph context enrichment (enabled by default for better context)
-    include_graph_context: bool = True
+    include_graph_context: bool = _DEFAULT_CONFIG.api.include_graph_context
     # Leading/trailing line context (disabled by default for backwards compatibility)
-    context_lines_before: int = 0
-    context_lines_after: int = 0
+    context_lines_before: int = Field(
+        default=_DEFAULT_CONFIG.api.context_lines_before,
+        ge=0,
+        le=_API_LIMITS.max_context_lines,
+    )
+    context_lines_after: int = Field(
+        default=_DEFAULT_CONFIG.api.context_lines_after,
+        ge=0,
+        le=_API_LIMITS.max_context_lines,
+    )
 
 
 class SearchBackend(Protocol):
@@ -155,9 +295,40 @@ def reset_search_backend() -> None:
     set_search_backend(None)
 
 
-@app.get("/health")
+def _get_system_stats() -> dict[str, Any]:
+    """Gather system resource statistics."""
+    stats = {}
+    try:
+        import resource
+        import shutil
+
+        # Disk usage
+        config = _load_default_config()
+        total, used, free = shutil.disk_usage(config.store_root)
+        stats["disk"] = {
+            "total_gb": round(total / (2**30), 2),
+            "free_gb": round(free / (2**30), 2),
+            "percent_free": round((free / total) * 100, 1),
+        }
+
+        # Memory usage (RSS)
+        usage = resource.getrusage(resource.RUSAGE_SELF)
+        # ru_maxrss is in bytes on macOS/BSD and kilobytes on Linux
+        import sys
+
+        divisor = (1024 * 1024) if sys.platform == "darwin" else 1024
+        stats["memory"] = {"rss_mb": round(usage.ru_maxrss / divisor, 2)}
+    except Exception as e:
+        import logging
+
+        logging.warning("Failed to collect system stats", exc_info=e)
+        stats["error"] = "failed_to_collect"
+
+    return stats
+
+
 async def health(check: str = Query(default="shallow")) -> dict[str, object]:
-    """Health check endpoint with optional deep checks."""
+    """Health check logic with optional deep checks."""
     if check == "shallow":
         return {"status": "ok"}
 
@@ -182,13 +353,26 @@ async def health(check: str = Query(default="shallow")) -> dict[str, object]:
     else:
         checks["embeddings"] = "not_configured"
 
+    # System stats
+    checks["system"] = _get_system_stats()
+
     return {"status": "ok", "checks": checks}
 
 
-@app.post("/search")
-async def search(request: SearchRequest) -> dict[str, object]:
-    """Dispatch the search request to the configured backend."""
+@app.get("/v1/health")
+async def health_v1(check: str = Query(default="shallow")) -> dict[str, object]:
+    """Health check endpoint (v1)."""
+    return await health(check)
+
+
+async def search(request: SearchRequest) -> dict[str, Any]:
+    """Search implementation used by the versioned API."""
     backend = get_search_backend()
+
+    if request.repos and _sql_store is not None:
+        missing = [repo for repo in request.repos if not _sql_store.get_repo_by_name(repo)]
+        if missing:
+            raise HTTPException(status_code=404, detail=f"Repository not found: {', '.join(missing)}")
 
     # Extract ANN configuration from request if provided
     if hasattr(request, "ann_strategy") and request.ann_strategy:
@@ -210,18 +394,34 @@ async def search(request: SearchRequest) -> dict[str, object]:
     raw_hits = backend.search(request)
     hits: Iterable[dict[str, object]]
     if isawaitable(raw_hits):
-        hits = await raw_hits  # type: ignore[assignment]
+        hits = await raw_hits
     else:
         hits = raw_hits
     hits_list = list(hits)
     latency_ms = int((perf_counter() - started) * 1000)
 
+    snippet_limit = request.max_snippets
+    snippet_limit = max(0, min(int(snippet_limit), len(hits_list)))
+
+    if snippet_limit > 0 and _sql_store is not None:
+        hits_list[:snippet_limit] = _enrich_hits_with_snippets(hits_list[:snippet_limit], request, _sql_store)
+
+    if snippet_limit < len(hits_list):
+        for hit in hits_list[snippet_limit:]:
+            hit.pop("snippet", None)
+            hit.pop("snippet_start_line", None)
+            hit.pop("snippet_end_line", None)
+            hit.pop("snippet_tokens", None)
+            hit.pop("total_tokens", None)
+            hit.pop("truncated", None)
+
     # Include ANN config in response meta if it was used
     meta = {
         "top_k": request.top_k,
-        "model": request.embed_model,
+        "model": _DEFAULT_CONFIG.default_embed_model,
         "latency_ms": latency_ms,
         "max_snippet_tokens": request.max_snippet_tokens,
+        "max_snippets": snippet_limit,
         "mmr_enabled": request.mmr_enabled,
         "mmr_lambda": request.mmr_lambda,
     }
@@ -239,7 +439,12 @@ async def search(request: SearchRequest) -> dict[str, object]:
     }
 
 
-@app.get("/repos")
+@app.post("/v1/search")
+async def search_v1(request: SearchRequest) -> dict[str, object]:
+    """Dispatch the search request to the configured backend (v1)."""
+    return await search(request)
+
+
 async def list_repos() -> dict[str, list[dict[str, object]]]:
     """List all registered repositories with metadata."""
     if _sql_store is None:
@@ -285,7 +490,12 @@ async def list_repos() -> dict[str, list[dict[str, object]]]:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
-@app.get("/chunks/{chunk_id}")
+@app.get("/v1/repos")
+async def list_repos_v1() -> dict[str, list[dict[str, object]]]:
+    """List all registered repositories with metadata (v1)."""
+    return await list_repos()
+
+
 async def fetch_chunk(chunk_id: str) -> dict[str, object]:
     """Fetch a specific chunk by ID."""
     if _sql_store is None or _lance_store is None:
@@ -296,31 +506,40 @@ async def fetch_chunk(chunk_id: str) -> dict[str, object]:
         raise HTTPException(status_code=400, detail="Invalid chunk_id format")
 
     try:
-        import lancedb
-
-        # Connect to LanceDB and search for the chunk by ID
-        db = lancedb.connect(_lance_store.root.as_posix())
-
-        # Try both small and large tables
         metadata = None
-        for table_name in ["chunks_small", "chunks_large"]:
-            try:
-                table = db.open_table(table_name)
-                # Query by ID
-                results = table.search().where(f"id = '{chunk_id}'").limit(1).to_list()
-
-                if results:
-                    metadata = results[0]
-                    break
-            except Exception:
-                continue
+        # Try finding the chunk in either model (small/large) using the store helper
+        for model_name in ["small", "large"]:
+            found = _lance_store.get_chunk_by_id(chunk_id, model=model_name)
+            if found:
+                metadata = found
+                break
 
         if not metadata:
             raise HTTPException(status_code=404, detail=f"Chunk not found: {chunk_id}")
 
-        # Fetch content from FTS table via SQL store
-        content_map = _sql_store.get_chunk_contents([chunk_id])
-        content = content_map.get(chunk_id, "")
+        # Fetch content.
+        # If we have metadata, we have text_hash, repo, path.
+        # We can construct the deterministic FTS content ID.
+        content = ""
+        text_hash = metadata.get("text_hash")
+        repo_name = metadata.get("repo")
+        path = metadata.get("path")
+
+        if text_hash and repo_name and path:
+            # Get repo_id and file_id
+            repo_info = _sql_store.get_repo_by_name(repo_name)
+            if repo_info:
+                repo_id = repo_info["id"]
+                file_id = _sql_store.get_file_id(repo_id, path)
+                if file_id:
+                    fts_content_id = generate_fts_content_id(repo_id, file_id, text_hash)
+                    content_map = _sql_store.get_chunk_contents([fts_content_id])
+                    content = content_map.get(fts_content_id, "")
+
+        # Fallback: if content logic above failed (e.g. repo not found), try using chunk_id directly
+        if not content:
+            content_map = _sql_store.get_chunk_contents([chunk_id])
+            content = content_map.get(chunk_id, "")
 
         return {
             "chunk_id": metadata.get("id"),
@@ -349,7 +568,12 @@ async def fetch_chunk(chunk_id: str) -> dict[str, object]:
         raise HTTPException(status_code=500, detail=f"Error fetching chunk: {str(e)}")
 
 
-@app.get("/file")
+@app.get("/v1/chunks/{chunk_id}")
+async def fetch_chunk_v1(chunk_id: str) -> dict[str, object]:
+    """Fetch a specific chunk by ID (v1)."""
+    return await fetch_chunk(chunk_id)
+
+
 async def fetch_file_slice(
     repo: str = Query(..., description="Repository name"),
     path: str = Query(..., description="File path relative to repo root"),
@@ -359,6 +583,9 @@ async def fetch_file_slice(
     """Fetch a slice of a file by line range."""
     if _sql_store is None:
         raise HTTPException(status_code=503, detail="SQL store not initialized")
+
+    if start > end:
+        raise HTTPException(status_code=400, detail=f"Invalid range: start ({start}) > end ({end})")
 
     try:
         # Get repo info
@@ -423,6 +650,17 @@ async def fetch_file_slice(
 
         logging.error(f"Error reading file: {full_path}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
+
+
+@app.get("/v1/file")
+async def fetch_file_slice_v1(
+    repo: str = Query(..., description="Repository name"),
+    path: str = Query(..., description="File path relative to repo root"),
+    start: int = Query(1, description="Start line (1-indexed, inclusive)"),
+    end: int = Query(..., description="End line (1-indexed, inclusive)"),
+) -> dict[str, object]:
+    """Fetch a slice of a file by line range (v1)."""
+    return await fetch_file_slice(repo=repo, path=path, start=start, end=end)
 
 
 class RegisterRepoRequest(BaseModel):
@@ -600,6 +838,26 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
         raise HTTPException(status_code=500, detail=f"Failed to register repository: {str(e)}")
 
 
+@app.post("/v1/admin/reload")
+async def admin_reload_backend() -> dict[str, str]:
+    """Reload the search backend and store connections.
+
+    This is used by the indexing CLI to notify the server that the index has changed.
+    """
+    # Import here to avoid circular dependency with server.py
+    # server.py imports app.py, so app.py cannot import server.py at top level
+    try:
+        from .server import reload_search_backend
+
+        reload_search_backend()
+        return {"status": "ok", "message": "Search backend reloaded"}
+    except Exception as e:
+        import logging
+
+        logging.error("Failed to reload backend", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Reload failed: {str(e)}")
+
+
 @app.post("/v1/admin/rebuild-fts5")
 async def rebuild_fts5() -> dict[str, str]:
     """Rebuild the FTS5 table with updated schema.
@@ -739,7 +997,6 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             import logging
 
             logger = logging.getLogger(__name__)
-            logger.info(f"[DEBUG] File {filepath}: extracted {len(chunks)} chunks")
 
             # Compute text_hash for each chunk
             for chunk in chunks:
@@ -747,7 +1004,6 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
 
             # Build desired map
             desired = build_desired_map(chunks)
-            logger.info(f"[DEBUG] File {filepath}: desired map has {len(desired)} unique hashes")
             desired_row_ids: set[str] = set()
 
             # Deduplicate by text_hash
@@ -757,13 +1013,26 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             )
             new_hashes = {c.text_hash for c in changed_chunks}
             skipped_occurrences = len(unchanged_chunks)
-            logger.info(
-                f"[DEBUG] File {filepath}: {len(changed_chunks)} changed, "
+            logger.debug(
+                f"File {filepath}: {len(changed_chunks)} changed, "
                 f"{len(unchanged_chunks)} unchanged, {len(new_hashes)} new hashes"
             )
 
             # Embed only new hashes (batched to avoid redundant requests)
             text_hash_to_embedding: dict = {}
+
+            # For unchanged chunks, we need to recover their vectors from LanceDB
+            # to prevent them from being lost when row IDs change (due to location changes)
+            if unchanged_chunks:
+                unchanged_hashes = {c.text_hash for c in unchanged_chunks}
+                try:
+                    existing_vectors = _lance_store.get_vectors_by_hashes(
+                        repo_name, unchanged_hashes, model=embed_model
+                    )
+                    text_hash_to_embedding.update(existing_vectors)
+                except Exception as e:
+                    logger.warning(f"Failed to recover vectors for unchanged chunks: {e}")
+
             if new_hashes:
                 hashes_list = sorted(new_hashes)
                 for i in range(0, len(hashes_list), EMBEDDING_BATCH_SIZE):
@@ -778,10 +1047,6 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
 
             # Upsert metadata and locations
             mapping = _sql_store.ensure_content_rows_for_file(repo_id, file_id, embed_model, list(desired.keys()))
-            logger.info(
-                f"[DEBUG] File {filepath}: ensure_content_rows_for_file returned mapping with {len(mapping)} entries"
-            )
-
             for h, occs in desired.items():
                 cid = mapping.get(h)
                 if cid:
@@ -854,17 +1119,12 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                         }
                     )
 
-            logger.info(
-                f"[DEBUG] File {filepath}: prepared {len(payload)} LanceDB vectors and {len(fts_chunks)} FTS5 chunks"
-            )
-
             if payload:
                 _lance_store.upsert_chunks(repo_name, payload, model=embed_model)
 
             # Index chunks in FTS5 for BM25 search
             if fts_chunks:
                 _sql_store.bulk_index_chunks_for_fts(fts_chunks)
-                logger.info(f"[DEBUG] File {filepath}: indexed {len(fts_chunks)} chunks in FTS5")
 
             # Prune any stale vectors for this file/model
             if desired_row_ids:

@@ -144,42 +144,44 @@ class TestAddRepoCommand:
         assert result.exit_code == 2
 
     def test_add_repo_with_small_embed_model(self, tmp_path, git_repo):
-        """Test add-repo with small embedding model."""
+        """Test add-repo uses global config for embedding model."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
         self._set_store_root(config_path, tmp_path / "store")
-        self._set_store_root(config_path, tmp_path / "store")
 
+        # No longer pass --default-embed-model, it uses global config
         result = runner.invoke(
             app,
-            ["add-repo", "test-repo", str(git_repo), "--default-embed-model", "small"],
+            ["add-repo", "test-repo", str(git_repo)],
             env={"DOLPHIN_CONFIG_PATH": str(config_path)},
         )
 
         assert result.exit_code == 0
-        assert "default_embed_model='small'" in result.stdout
+        assert "Repository registered" in result.stdout
 
     def test_add_repo_with_large_embed_model(self, tmp_path, git_repo):
-        """Test add-repo with large embedding model."""
+        """Test add-repo uses global config for embedding model."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
         self._set_store_root(config_path, tmp_path / "store")
 
+        # No longer pass --default-embed-model, it uses global config
         result = runner.invoke(
             app,
-            ["add-repo", "test-repo", str(git_repo), "--default-embed-model", "large"],
+            ["add-repo", "test-repo", str(git_repo)],
             env={"DOLPHIN_CONFIG_PATH": str(config_path)},
         )
 
         assert result.exit_code == 0
-        assert "default_embed_model='large'" in result.stdout
+        assert "Repository registered" in result.stdout
 
     def test_add_repo_rejects_invalid_embed_model(self, tmp_path, git_repo):
-        """Test that add-repo rejects invalid embedding model."""
+        """Test that embedding model is now set globally, not per-repo."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
         self._set_store_root(config_path, tmp_path / "store")
 
+        # Flag no longer exists - testing it should fail
         result = runner.invoke(
             app,
             [
@@ -193,7 +195,7 @@ class TestAddRepoCommand:
         )
 
         assert result.exit_code == 2
-        assert "must be 'small' or 'large'" in result.stdout
+        # Exit code 2 means the command failed (flag doesn't exist)
 
     def test_add_repo_expands_tilde_in_path(self, tmp_path, monkeypatch):
         """Test that add-repo expands ~ in path."""
@@ -400,3 +402,6 @@ class TestConfigTemplate:
         assert len(template) > 0
         # Should have some expected config keys
         assert any(key in template for key in ["store_root", "endpoint", "embedding"])
+        assert "[api]" in template
+        assert "[graph]" in template
+        assert "[mcp]" in template

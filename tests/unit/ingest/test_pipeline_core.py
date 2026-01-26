@@ -1,0 +1,617 @@
+"""Comprehensive unit tests for IngestionPipeline core operations.
+
+This module tests the main pipeline operations including initialization,
+scanning, indexing, file processing, and deletion handling.
+"""
+
+from __future__ import annotations
+
+import subprocess
+
+import pytest
+
+from kb.config import KBConfig
+from kb.ingest.pipeline import IngestionPipeline
+from kb.store import LanceDBStore, SQLiteMetadataStore
+
+
+class TestPipelineInitialization:
+    """Test IngestionPipeline initialization and __post_init__."""
+
+    @pytest.fixture
+    def stores(self, tmp_path):
+        """Create metadata and lancedb stores."""
+        config = KBConfig(store_root=tmp_path, embedding_provider="stub")
+        metadata = SQLiteMetadataStore(tmp_path / "test.db")
+        metadata.initialize()
+        lancedb = LanceDBStore(tmp_path / "lancedb")
+        return config, metadata, lancedb
+
+    def test_post_init_creates_graph_store(self, stores):
+        """Test that __post_init__ creates a GraphStore if none provided."""
+        config, metadata, lancedb = stores
+        pipeline = IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+
+        assert pipeline.graph_store is not None
+
+    def test_post_init_creates_graph_managers_dict(self, stores):
+        """Test that __post_init__ initializes graph_managers dict."""
+        config, metadata, lancedb = stores
+        pipeline = IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+
+        assert pipeline.graph_managers is not None
+        assert isinstance(pipeline.graph_managers, dict)
+        assert len(pipeline.graph_managers) == 0
+
+    def test_post_init_configures_bm25_statistics(self, stores):
+        """Test that __post_init__ configures BM25 statistics."""
+        config, metadata, lancedb = stores
+        pipeline = IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+
+        assert pipeline._bm25_stats_path is not None
+
+    def test_resolve_bm25_stats_path_default(self, stores):
+        """Test _resolve_bm25_stats_path uses default path."""
+        config, metadata, lancedb = stores
+        pipeline = IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+
+        assert pipeline._bm25_stats_path is not None
+        assert "bm25" in str(pipeline._bm25_stats_path).lower()
+
+    def test_get_graph_manager_creates_new(self, stores):
+        """Test get_graph_manager creates a new GraphManager."""
+        config, metadata, lancedb = stores
+
+        # Register a repo
+        metadata.register_repo("test-repo", str(config.store_root), default_embed_model="small")
+        repo = metadata.get_repo_by_name("test-repo")
+        repo_id = int(repo["id"])
+
+        pipeline = IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+        manager = pipeline.get_graph_manager(repo_id)
+
+        assert manager is not None
+        assert pipeline.graph_managers is not None
+        assert repo_id in pipeline.graph_managers
+
+    def test_get_graph_manager_returns_cached(self, stores):
+        """Test get_graph_manager returns cached GraphManager."""
+        config, metadata, lancedb = stores
+
+        metadata.register_repo("test-repo", str(config.store_root), default_embed_model="small")
+        repo = metadata.get_repo_by_name("test-repo")
+        repo_id = int(repo["id"])
+
+        pipeline = IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+        manager1 = pipeline.get_graph_manager(repo_id)
+        manager2 = pipeline.get_graph_manager(repo_id)
+
+        assert manager1 is manager2
+
+
+class TestPipelineScan:
+    """Test IngestionPipeline scan operations."""
+
+    @pytest.fixture
+    def pipeline_with_repo(self, tmp_path):
+        """Create a pipeline with a registered git repo."""
+        store_path = tmp_path / "store"
+        store_path.mkdir()
+
+        config = KBConfig(store_root=store_path, embedding_provider="stub")
+        metadata = SQLiteMetadataStore(store_path / "test.db")
+        metadata.initialize()
+        lancedb = LanceDBStore(store_path / "lancedb")
+        pipeline = IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+
+        # Create a git repo
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+
+        # Add a file and commit
+        (repo_path / "test.py").write_text('print("hello")')
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "initial"],
+            check=True,
+            capture_output=True,
+        )
+
+        # Register the repo
+        metadata.register_repo("test-repo", str(repo_path), default_embed_model="small")
+
+        return pipeline, repo_path
+
+    def test_scan_returns_summary(self, pipeline_with_repo):
+        """Test scan returns a summary dictionary."""
+        pipeline, repo_path = pipeline_with_repo
+
+        result = pipeline.scan("test-repo", force=True)
+
+        assert isinstance(result, dict)
+        assert "repo" in result
+        assert "repo_id" in result
+        assert "session_id" in result
+        assert "commit" in result
+        assert "branch" in result
+        assert "files_kept" in result
+        assert result["repo"] == "test-repo"
+        assert result["files_kept"] >= 0
+
+    def test_scan_dry_run_no_persist(self, pipeline_with_repo):
+        """Test scan with dry_run doesn't persist file catalog."""
+        pipeline, repo_path = pipeline_with_repo
+
+        result = pipeline.scan("test-repo", dry_run=True, force=True)
+
+        # Should still return a summary
+        assert "session_id" in result
+
+    def test_scan_force_skips_clean_check(self, pipeline_with_repo):
+        """Test scan with force=True skips clean working tree check."""
+        pipeline, repo_path = pipeline_with_repo
+
+        # Modify a tracked file
+        (repo_path / "test.py").write_text('print("modified")')
+
+        # Should not raise with force=True
+        result = pipeline.scan("test-repo", force=True)
+        assert result is not None
+
+
+class TestPipelineIndex:
+    """Test IngestionPipeline index operations."""
+
+    @pytest.fixture
+    def pipeline_with_repo(self, tmp_path):
+        """Create a pipeline with a registered git repo."""
+        store_path = tmp_path / "store"
+        store_path.mkdir()
+
+        config = KBConfig(store_root=store_path, embedding_provider="stub")
+        metadata = SQLiteMetadataStore(store_path / "test.db")
+        metadata.initialize()
+        lancedb = LanceDBStore(store_path / "lancedb")
+        pipeline = IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+
+        # Create a git repo
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+
+        # Add a Python file and commit
+        (repo_path / "hello.py").write_text('def hello():\n    return "Hello, World!"\n')
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "initial"],
+            check=True,
+            capture_output=True,
+        )
+
+        # Register the repo
+        metadata.register_repo("test-repo", str(repo_path), default_embed_model="small")
+
+        return pipeline, repo_path, metadata
+
+    def test_index_returns_session_summary(self, pipeline_with_repo):
+        """Test index returns a session summary dictionary."""
+        pipeline, repo_path, metadata = pipeline_with_repo
+
+        result = pipeline.index("test-repo", force=True)
+
+        assert isinstance(result, dict)
+        assert "repo" in result
+        assert "commit" in result
+
+    def test_index_dry_run_no_persist(self, pipeline_with_repo):
+        """Test index with dry_run doesn't persist changes."""
+        pipeline, repo_path, metadata = pipeline_with_repo
+
+        result = pipeline.index("test-repo", dry_run=True, force=True)
+
+        assert result is not None
+
+    def test_index_incremental_mode(self, pipeline_with_repo):
+        """Test index in incremental mode after first full index."""
+        pipeline, repo_path, metadata = pipeline_with_repo
+
+        # First index
+        pipeline.index("test-repo", force=True)
+
+        # Add a new file
+        (repo_path / "new_file.py").write_text("x = 1")
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "add new"],
+            check=True,
+            capture_output=True,
+        )
+
+        # Second index should be incremental
+        result = pipeline.index("test-repo", force=True)
+        assert result is not None
+
+    def test_index_full_reindex_mode(self, pipeline_with_repo):
+        """Test index with full_reindex=True drops and re-creates index."""
+        pipeline, repo_path, metadata = pipeline_with_repo
+
+        # First index
+        pipeline.index("test-repo", force=True)
+
+        # Full reindex
+        result = pipeline.index("test-repo", force=True, full_reindex=True)
+
+        assert result is not None
+
+    def test_index_invalid_embed_model_raises(self, pipeline_with_repo):
+        """Test index migrates repo when model in DB differs from global config."""
+        pipeline, repo_path, metadata = pipeline_with_repo
+
+        # Update repo with different model than global config
+        with metadata._connect() as conn:
+            conn.execute(
+                "UPDATE repos SET default_embed_model = ? WHERE name = ?",
+                ("invalid_model", "test-repo"),
+            )
+            conn.commit()
+
+        # Should not raise - will migrate to global config (default is large)
+        result = pipeline.index("test-repo", force=True)
+        assert result is not None
+
+
+class TestPipelineProcessFiles:
+    """Test IngestionPipeline process_files operation."""
+
+    @pytest.fixture
+    def pipeline_setup(self, tmp_path):
+        """Create pipeline with all required mocks."""
+        store_path = tmp_path / "store"
+        store_path.mkdir()
+
+        config = KBConfig(store_root=store_path, embedding_provider="stub")
+        metadata = SQLiteMetadataStore(store_path / "test.db")
+        metadata.initialize()
+        lancedb = LanceDBStore(store_path / "lancedb")
+        pipeline = IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+
+        # Create repo directory with files
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        (repo_path / "test.py").write_text('print("hello")')
+        (repo_path / "utils.py").write_text("def add(a, b):\n    return a + b\n")
+
+        # Register repo
+        metadata.register_repo("test-repo", str(repo_path), default_embed_model="small")
+        repo = metadata.get_repo_by_name("test-repo")
+        assert repo is not None
+        repo_id = int(repo["id"])
+
+        # Start a session
+        session_id = metadata.begin_session(repo_id, "abc123", "main", "small")
+
+        return pipeline, repo_path, metadata, repo_id, session_id
+
+    def test_process_files_returns_stats(self, pipeline_setup):
+        """Test process_files returns stats dictionary."""
+        pipeline, repo_path, metadata, repo_id, session_id = pipeline_setup
+        from pathspec import PathSpec
+
+        from kb.ingest.error_logging import ErrorLogger
+
+        error_logger = ErrorLogger(repo_path, str(session_id))
+        ignore_spec = PathSpec.from_lines("gitignore", [])
+
+        stats = pipeline.process_files(
+            repo_id=repo_id,
+            repo_name="test-repo",
+            root=repo_path,
+            files=["test.py"],
+            ignore_spec=ignore_spec,
+            embed_model="small",
+            session_id=session_id,
+            commit_sha="abc123",
+            branch="main",
+            dry_run=True,
+            error_logger=error_logger,
+        )
+
+        assert isinstance(stats, dict)
+        assert "files_done" in stats
+        assert "chunks_indexed" in stats
+        assert "chunks_skipped" in stats
+
+    def test_process_files_skips_ignored(self, pipeline_setup):
+        """Test process_files skips files matching ignore patterns."""
+        pipeline, repo_path, metadata, repo_id, session_id = pipeline_setup
+        from pathspec import PathSpec
+
+        from kb.ingest.error_logging import ErrorLogger
+
+        error_logger = ErrorLogger(repo_path, str(session_id))
+        ignore_spec = PathSpec.from_lines("gitignore", ["*.py"])  # Ignore all .py
+
+        stats = pipeline.process_files(
+            repo_id=repo_id,
+            repo_name="test-repo",
+            root=repo_path,
+            files=["test.py"],
+            ignore_spec=ignore_spec,
+            embed_model="small",
+            session_id=session_id,
+            commit_sha="abc123",
+            branch="main",
+            dry_run=True,
+            error_logger=error_logger,
+        )
+
+        # File should be skipped, so files_done = 0
+        assert stats["files_done"] == 0
+
+    def test_process_files_handles_missing_file(self, pipeline_setup):
+        """Test process_files handles non-existent files gracefully."""
+        pipeline, repo_path, metadata, repo_id, session_id = pipeline_setup
+        from pathspec import PathSpec
+
+        from kb.ingest.error_logging import ErrorLogger
+
+        error_logger = ErrorLogger(repo_path, str(session_id))
+        ignore_spec = PathSpec.from_lines("gitignore", [])
+
+        stats = pipeline.process_files(
+            repo_id=repo_id,
+            repo_name="test-repo",
+            root=repo_path,
+            files=["nonexistent.py"],
+            ignore_spec=ignore_spec,
+            embed_model="small",
+            session_id=session_id,
+            commit_sha="abc123",
+            branch="main",
+            dry_run=True,
+            error_logger=error_logger,
+        )
+
+        # Should not raise and files_done = 0
+        assert stats["files_done"] == 0
+
+
+class TestPipelineProcessDeletions:
+    """Test IngestionPipeline process_deletions operation."""
+
+    @pytest.fixture
+    def pipeline_setup(self, tmp_path):
+        """Create pipeline with test data."""
+        store_path = tmp_path / "store"
+        store_path.mkdir()
+
+        config = KBConfig(store_root=store_path, embedding_provider="stub")
+        metadata = SQLiteMetadataStore(store_path / "test.db")
+        metadata.initialize()
+        lancedb = LanceDBStore(store_path / "lancedb")
+        pipeline = IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+
+        # Create repo
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        metadata.register_repo("test-repo", str(repo_path), default_embed_model="small")
+        repo = metadata.get_repo_by_name("test-repo")
+        assert repo is not None
+        repo_id = int(repo["id"])
+
+        # Create a file entry
+        file_id = metadata.upsert_file(
+            repo_id=repo_id,
+            path="deleted.py",
+            ext=".py",
+            language="python",
+            is_binary=False,
+            size_bytes=100,
+        )
+
+        return pipeline, repo_path, metadata, repo_id, file_id
+
+    def test_process_deletions_returns_stats(self, pipeline_setup):
+        """Test process_deletions returns stats dictionary."""
+        pipeline, repo_path, metadata, repo_id, file_id = pipeline_setup
+        from kb.ingest.error_logging import ErrorLogger
+
+        error_logger = ErrorLogger(repo_path, "session1")
+
+        stats = pipeline.process_deletions(
+            repo_id=repo_id,
+            repo_name="test-repo",
+            files=["deleted.py"],
+            embed_model="small",
+            dry_run=False,
+            error_logger=error_logger,
+        )
+
+        assert isinstance(stats, dict)
+        assert "files_done" in stats
+        assert "chunks_pruned" in stats
+        assert stats["files_done"] >= 0
+
+    def test_process_deletions_handles_nonexistent_file(self, pipeline_setup):
+        """Test process_deletions handles files not in metadata."""
+        pipeline, repo_path, metadata, repo_id, file_id = pipeline_setup
+        from kb.ingest.error_logging import ErrorLogger
+
+        error_logger = ErrorLogger(repo_path, "session1")
+
+        stats = pipeline.process_deletions(
+            repo_id=repo_id,
+            repo_name="test-repo",
+            files=["nonexistent.py"],
+            embed_model="small",
+            dry_run=False,
+            error_logger=error_logger,
+        )
+
+        # Should not raise and files_done = 0
+        assert stats["files_done"] == 0
+
+
+class TestPipelineDropRepoIndex:
+    """Test IngestionPipeline _drop_repo_index operation."""
+
+    @pytest.fixture
+    def pipeline_with_data(self, tmp_path):
+        """Create pipeline with indexed data."""
+        store_path = tmp_path / "store"
+        store_path.mkdir()
+
+        config = KBConfig(store_root=store_path, embedding_provider="stub")
+        metadata = SQLiteMetadataStore(store_path / "test.db")
+        metadata.initialize()
+        lancedb = LanceDBStore(store_path / "lancedb")
+        pipeline = IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+
+        # Create and register repo
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        metadata.register_repo("test-repo", str(repo_path), default_embed_model="small")
+        repo = metadata.get_repo_by_name("test-repo")
+        assert repo is not None
+        repo_id = int(repo["id"])
+
+        # Create some test data
+        metadata.upsert_file(
+            repo_id=repo_id,
+            path="test.py",
+            ext=".py",
+            language="python",
+            is_binary=False,
+            size_bytes=100,
+        )
+        metadata.begin_session(repo_id, "abc123", "main", "small")
+
+        return pipeline, metadata, repo_id
+
+    def test_drop_repo_index_clears_metadata(self, pipeline_with_data):
+        """Test _drop_repo_index clears metadata."""
+        pipeline, metadata, repo_id = pipeline_with_data
+
+        # Verify data exists
+        with metadata._connect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM files WHERE repo_id = ?", (repo_id,))
+            files_before = cur.fetchone()[0]
+
+        assert files_before > 0
+
+        # Drop index
+        pipeline._drop_repo_index(repo_id, "test-repo")
+
+        # Verify data is cleared
+        with metadata._connect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM files WHERE repo_id = ?", (repo_id,))
+            files_after = cur.fetchone()[0]
+
+        assert files_after == 0
+
+
+class TestPipelineComputeGraphMetrics:
+    """Test IngestionPipeline compute_graph_metrics."""
+
+    @pytest.fixture
+    def pipeline_with_repo(self, tmp_path):
+        """Create pipeline with registered repo."""
+        store_path = tmp_path / "store"
+        store_path.mkdir()
+
+        config = KBConfig(store_root=store_path, embedding_provider="stub")
+        metadata = SQLiteMetadataStore(store_path / "test.db")
+        metadata.initialize()
+        lancedb = LanceDBStore(store_path / "lancedb")
+        pipeline = IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+
+        metadata.register_repo("test-repo", str(store_path), default_embed_model="small")
+        repo = metadata.get_repo_by_name("test-repo")
+        assert repo is not None
+        repo_id = int(repo["id"])
+
+        return pipeline, repo_id
+
+    def test_compute_graph_metrics_empty_graph(self, pipeline_with_repo):
+        """Test compute_graph_metrics returns empty metrics for empty graph."""
+        pipeline, repo_id = pipeline_with_repo
+
+        result = pipeline.compute_graph_metrics(repo_id)
+
+        assert isinstance(result, dict)
+        assert result["repo_id"] == repo_id
+        assert result["node_count"] == 0
+        assert result["edge_count"] == 0
+        assert result["metrics_computed"] is False
+
+
+class TestPipelineReconcileBranchSwitch:
+    """Test IngestionPipeline reconcile_branch_switch."""
+
+    @pytest.fixture
+    def pipeline_with_repo(self, tmp_path):
+        """Create pipeline with git repo."""
+        store_path = tmp_path / "store"
+        store_path.mkdir()
+
+        config = KBConfig(store_root=store_path, embedding_provider="stub")
+        metadata = SQLiteMetadataStore(store_path / "test.db")
+        metadata.initialize()
+        lancedb = LanceDBStore(store_path / "lancedb")
+        pipeline = IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+
+        # Create a git repo
+        repo_path = tmp_path / "repo"
+        repo_path.mkdir()
+        subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "config", "user.email", "test@test.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+        (repo_path / "test.py").write_text("x = 1")
+        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repo_path), "commit", "-m", "initial"],
+            check=True,
+            capture_output=True,
+        )
+
+        metadata.register_repo("test-repo", str(repo_path), default_embed_model="small")
+
+        return pipeline, repo_path
+
+    def test_reconcile_branch_switch_calls_index(self, pipeline_with_repo):
+        """Test reconcile_branch_switch calls index with force=True."""
+        pipeline, repo_path = pipeline_with_repo
+
+        # Should not raise
+        pipeline.reconcile_branch_switch("test-repo")

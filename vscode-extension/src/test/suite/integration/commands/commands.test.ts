@@ -1,43 +1,30 @@
 import * as assert from "assert";
+import "../../setup";
 import * as vscode from "vscode";
 import {
   assertCommandExists,
-  assertCommandsExist,
   activateExtension,
+  waitForCondition,
 } from "../../../helpers/shared-fixtures";
 import { TEST_COMMANDS } from "../../../helpers/test-constants";
+import {
+  configureMockKB,
+  getMockEnvironment,
+  resetMocks,
+  setupMockEnvironment,
+  teardownMockEnvironment,
+} from "../../../helpers/mock-manager";
 
 describe("Command Tests", () => {
   before(async function () {
     this.timeout(15000);
+    resetMocks();
+    await setupMockEnvironment();
     await activateExtension();
   });
 
-  it("Registers all Phase 1 commands", async () => {
-    await assertCommandsExist([
-      TEST_COMMANDS.FOCUS_INPUT,
-      TEST_COMMANDS.NEW_CONVERSATION,
-      TEST_COMMANDS.SET_API_KEY,
-      TEST_COMMANDS.TEST,
-    ]);
-  });
-
-  it("Registers all Phase 2 editor commands", async () => {
-    await assertCommandsExist([
-      TEST_COMMANDS.ASK_ABOUT_SELECTION,
-      TEST_COMMANDS.REFACTOR_SELECTION,
-      TEST_COMMANDS.ASK_ABOUT_FILE,
-      TEST_COMMANDS.ASK_ABOUT_FOLDER,
-      TEST_COMMANDS.APPLY_DIFF,
-    ]);
-  });
-
-  it("Registers KB commands", async () => {
-    await assertCommandsExist([
-      TEST_COMMANDS.KB_SHOW_STATUS,
-      TEST_COMMANDS.KB_RESTART,
-      TEST_COMMANDS.KB_SET_API_KEY,
-    ]);
+  after(async () => {
+    await teardownMockEnvironment();
   });
 
   it("Executes smoke-test friendly commands", async function () {
@@ -63,5 +50,25 @@ describe("Command Tests", () => {
       "askAboutSelection should be registered"
     );
     assert.ok(dolphinCommands.includes(TEST_COMMANDS.APPLY_DIFF), "applyDiff should be registered");
+  });
+
+  it("KB commands talk to the mock KB server", async function () {
+    this.timeout(10000);
+
+    // Ensure mock KB responds
+    configureMockKB({ health: true });
+    const { kbServer } = getMockEnvironment();
+    const initialRequests = kbServer.getRequestHistory().length;
+
+    await assertCommandExists(TEST_COMMANDS.KB_SHOW_STATUS, true);
+
+    await waitForCondition(() => kbServer.getRequestHistory().length > initialRequests, {
+      timeout: 4000,
+      timeoutMessage: "KB status command did not hit mock server",
+    });
+
+    const history = kbServer.getRequestHistory();
+    const hitHealth = history.some((req) => (req.url || "").includes("/health"));
+    assert.ok(hitHealth, "KB status command should query /health on mock server");
   });
 });

@@ -44,7 +44,7 @@ try:
         "repo_instances": dict(repo_instances),
     }
 
-    output_path = Path("test-data/swe_bench_analysis.json")
+    output_path = Path("benchmarks/test-data/swe_bench_analysis.json")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(output_path, "w") as f:

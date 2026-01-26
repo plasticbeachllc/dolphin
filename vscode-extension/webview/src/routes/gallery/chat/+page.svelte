@@ -162,7 +162,7 @@ Would you like me to search the codebase for any existing authentication pattern
 	// Tool call examples with different states
 	const toolCallExamples = [
 		{
-			tool: 'search_knowledge',
+			tool: 'search',
 			input: { 
 				query: 'authentication implementation react',
 				repos: ['dolphin'],
@@ -748,7 +748,7 @@ Single line break above.`,
 					/>
 					
 					<ToolCallCard
-						tool="search_knowledge"
+						tool="search"
 						input={{ query: "authentication security patterns", top_k: 10 }}
 						result={{ total_results: 10, search_time_ms: 156 }}
 						status="success"

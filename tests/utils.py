@@ -24,7 +24,7 @@ def wait_for_endpoint(endpoint_url, timeout=30, interval=1):
             if response.ok:
                 print(" up!")
                 return
-        except requests.exceptions.RequestException:  # type: ignore[attr-defined]
+        except requests.exceptions.RequestException:
             # Ignore connection errors, timeouts, etc. and continue polling.
             pass
         print(".", end="", flush=True)

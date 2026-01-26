@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import multiprocessing as mp
 from collections.abc import Iterable
+from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from pathlib import Path
 
@@ -35,7 +36,7 @@ def _process_file_batch(
     Returns:
         List of FileCandidate objects for valid files
     """
-    spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
+    spec = PathSpec.from_lines("gitignore", ignore_patterns)
     candidates: list[FileCandidate] = []
 
     for rel in file_paths:
@@ -90,6 +91,7 @@ def scan_repo_parallel(
     ignores: Iterable[str],
     num_workers: int | None = None,
     batch_size: int = 100,
+    pool: ProcessPoolExecutor | None = None,
 ) -> list[FileCandidate]:
     """Scan a git repo for candidate files using parallel processing.
 
@@ -101,6 +103,7 @@ def scan_repo_parallel(
         ignores: Iterable of ignore patterns
         num_workers: Number of worker processes (default: CPU count)
         batch_size: Number of files per batch (default: 100)
+        pool: Optional shared executor to use
 
     Returns:
         List of FileCandidate objects
@@ -124,11 +127,11 @@ def scan_repo_parallel(
         return []
 
     # Determine number of workers
-    if num_workers is None:
+    if pool is None and num_workers is None:
         num_workers = min(mp.cpu_count(), 8)  # Cap at 8 to avoid overhead
 
-    # For small repos, use sequential processing
-    if len(rel_paths) < batch_size * 2:
+    # For small repos, use sequential processing if no pool provided
+    if pool is None and len(rel_paths) < batch_size * 2:
         from .scanner import scan_repo
 
         return scan_repo(root, ignores)
@@ -150,10 +153,16 @@ def scan_repo_parallel(
     all_candidates: list[FileCandidate] = []
 
     try:
-        with mp.Pool(processes=num_workers) as pool:
-            # Process batches and collect results
-            for batch_candidates in pool.imap_unordered(process_batch, batches):
+        if pool:
+            # Use shared executor
+            # Note: ProcessPoolExecutor map returns iterator, but order is preserved
+            for batch_candidates in pool.map(process_batch, batches):
                 all_candidates.extend(batch_candidates)
+        else:
+            with mp.Pool(processes=num_workers) as mp_pool:
+                # Process batches and collect results
+                for batch_candidates in mp_pool.imap_unordered(process_batch, batches):
+                    all_candidates.extend(batch_candidates)
     except Exception as e:
         # Fall back to sequential processing on error
         import logging

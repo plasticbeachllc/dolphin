@@ -6,7 +6,7 @@ import re
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 

@@ -19,6 +19,15 @@ jobs:
         working-directory: ./mcp-bridge
         run: bun install
 
+      - name: Validate tag matches version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#mcp-v}"
+          PROJECT_VERSION="$(node -p "JSON.parse(require('fs').readFileSync('./mcp-bridge/package.json','utf8')).version")"
+          if [ "$TAG_VERSION" != "$PROJECT_VERSION" ]; then
+            echo "Tag version ($TAG_VERSION) does not match mcp-bridge/package.json ($PROJECT_VERSION)"
+            exit 1
+          fi
+
       - name: Build package
         working-directory: ./mcp-bridge
         run: bun run build

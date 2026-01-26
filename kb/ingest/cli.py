@@ -1,10 +1,15 @@
 # from __future__ import annotations
+import asyncio
 import os
+import sys
 from pathlib import Path
 from typing import cast
 
 import typer
 from pathspec import PathSpec
+from rich import box
+from rich.console import Console
+from rich.table import Table
 
 from ..config import DEFAULT_CONFIG_PATH, KBConfig, load_config
 from ..embeddings.provider import create_provider, set_default_provider
@@ -53,12 +58,57 @@ def init(
     target = config_path or DEFAULT_CONFIG_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
     created = False
+
+    # Load existing or template content
+    console = Console()
     if target.exists():
-        typer.echo(f"Config already exists at {target}")
+        console.print(f"[dim]Config already exists at {target}[/dim]")
+        config_content = target.read_text(encoding="utf-8")
     else:
-        target.write_text(_read_config_template(), encoding="utf-8")
-        typer.echo(f"Created knowledge store config at {target}")
+        config_content = _read_config_template()
         created = True
+
+    # Prompt for default embedding model if we are creating new or purely interactive
+    # (Simple approach: we just append/replace the setting in the TOML string?
+    #  Or we just guide the user. For a robust CLI, let's just write the file first.)
+
+    # If creating fresh, let's ask for preference
+    if created and sys.stdin is not None and sys.stdin.isatty():
+        model_choice = (
+            typer.prompt(
+                "Select default embedding model",
+                default="large",
+                show_choices=True,
+                type=str,
+            )
+            .strip()
+            .lower()
+        )
+
+        if model_choice not in ("small", "large"):
+            model_choice = "large"
+            console.print("[yellow]Invalid choice, defaulting to 'large'.[/yellow]")
+
+        # Patch the template string before writing
+        # We assume the template has `default_embed_model = "large"` or similar
+        # A simple replace works for the template
+        if 'default_embed_model = "large"' in config_content:
+            config_content = config_content.replace(
+                'default_embed_model = "large"',
+                f'default_embed_model = "{model_choice}"',
+            )
+        elif 'default_embed_model = "small"' in config_content:
+            config_content = config_content.replace(
+                'default_embed_model = "small"',
+                f'default_embed_model = "{model_choice}"',
+            )
+
+        target.write_text(config_content, encoding="utf-8")
+        console.print(f"Created knowledge store config at [bold green]{target}[/bold green]")
+    elif created:
+        # Non-interactive, write default
+        target.write_text(config_content, encoding="utf-8")
+        console.print(f"Created knowledge store config at [bold green]{target}[/bold green]")
 
     # Load config and initialize storage backends.
     config = load_config(target)
@@ -67,45 +117,55 @@ def init(
 
     metadata = SQLiteMetadataStore(store_root / "metadata.db")
     metadata.initialize()
-    typer.echo(f"SQLite initialized at {metadata.db_path}")
+    console.print(f"SQLite initialized at [bold cyan]{metadata.db_path}[/bold cyan]")
 
     lancedb = LanceDBStore(store_root / "lancedb")
     lancedb.initialize_collections()
-    typer.echo(f"LanceDB root initialized at {lancedb.root}")
+    console.print(f"LanceDB root initialized at [bold cyan]{lancedb.root}[/bold cyan]")
 
     if created:
-        typer.echo("Initialization complete. You can now run 'kb add-repo' and 'kb index'.")
+        console.print("Initialization complete. You can now run [bold]kb add-repo[/bold] and [bold]kb index[/bold].")
     else:
-        typer.echo("Initialization verified. Nothing else to do.")
+        console.print("[green]Initialization verified. Nothing else to do.[/green]")
 
 
 @app.command("add-repo")
 def add_repo(
     name: str = typer.Argument(..., help="Logical name for the repository."),
     path: Path = typer.Argument(..., help="Absolute path to the repository root."),
-    default_embed_model: str = typer.Option(
-        "large",
-        "--default-embed-model",
-        help="Default embedding model for the Repo (small|large).",
-    ),
+    no_index: bool = typer.Option(False, "--no-index", help="Skip indexing prompt."),
 ) -> None:
     """Register or update a repository in the metadata store."""
-    model = default_embed_model.strip().lower()
-    if model not in {"small", "large"}:
-        typer.echo("Error: --default-embed-model must be 'small' or 'large'.")
-        raise typer.Exit(code=2)
-
     repo_path = path.expanduser().resolve()
     if not repo_path.exists() or not repo_path.is_dir():
         typer.echo(f"Error: path does not exist or is not a directory: {repo_path}")
         raise typer.Exit(code=2)
 
     config = load_config()
+    # Use the global default model from config
+    model = config.default_embed_model
+
     metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
     metadata.initialize()
     metadata.record_repo(name=name, path=repo_path, default_embed_model=model)
 
-    typer.echo(f"Repository registered: name='{name}', path='{repo_path}', default_embed_model='{model}'")
+    typer.echo(f"Repository registered: name='{name}', path='{repo_path}'")
+
+    # Note: We rely on 'kb index' to handle any model mismatch if this was an update
+    # to an existing repo that had a different model.
+
+    # Only prompt for indexing in interactive mode (skip in tests or if --no-index)
+    import sys
+
+    if not no_index and sys.stdin is not None and sys.stdin.isatty():
+        if typer.confirm(f"Do you want to index '{name}' now?", default=False):
+            typer.echo(f"Starting index for {name}...")
+            pipeline = _build_pipeline(config)
+            try:
+                pipeline.index(name, dry_run=False, force=False)
+                typer.echo(f"✅ Indexing complete for {name}")
+            except Exception as e:
+                typer.echo(f"❌ Indexing failed: {e}", err=True)
 
 
 @app.command()
@@ -114,6 +174,8 @@ def index(
     dry_run: bool = typer.Option(False, "--dry-run", help="Run without persisting."),
     force: bool = typer.Option(False, "--force", help="Bypass clean working tree check."),
     full: bool = typer.Option(False, "--full", help="Process all files instead of incremental diff."),
+    parallel: bool = typer.Option(True, "--parallel/--no-parallel", help="Use parallel indexing (default: True)."),
+    workers: int | None = typer.Option(None, "--workers", "-w", help="Number of worker processes (default: auto)."),
 ) -> None:
     """Run the full indexing pipeline for the specified repository.
 
@@ -136,15 +198,56 @@ def index(
 
     pipeline = _build_pipeline(config)
     try:
-        result = pipeline.index(name, dry_run=dry_run, force=force, full_reindex=full)
+        if parallel:
+            # Run async parallel indexing
+            typer.echo(f"Starting parallel indexing for {name} (workers={workers or 'auto'})...")
+            result = asyncio.run(
+                pipeline.index_parallel(name, dry_run=dry_run, force=force, full_reindex=full, max_workers=workers)
+            )
+        else:
+            # Legacy sequential indexing
+            typer.echo(f"Starting sequential indexing for {name}...")
+            result = pipeline.index(name, dry_run=dry_run, force=force, full_reindex=full)
+
     except Exception as e:
         typer.echo(f"Indexing failed: {e}")
+        import traceback
+
+        traceback.print_exc()
         raise
+
     typer.echo(f"Index complete for {name}: session={result.get('session_id')}")
     typer.echo(f"  files_indexed: {result.get('files_indexed')}")
     typer.echo(f"  chunks_indexed: {result.get('chunks_indexed')}")
     typer.echo(f"  chunks_skipped: {result.get('chunks_skipped')}")
     typer.echo(f"  vectors_written: {result.get('vectors_written')}")
+
+    # Notify server to reload
+    _notify_server_reload(config)
+
+
+def _notify_server_reload(config: KBConfig) -> None:
+    """Notify the running server to reload its backend."""
+    import requests
+
+    from ..api_key import load_kb_api_key
+
+    endpoint = f"http://{config.endpoint}/v1/admin/reload"
+    try:
+        api_key = load_kb_api_key()
+    except Exception:
+        # API key might not exist yet if only indexing
+        return
+
+    try:
+        response = requests.post(endpoint, headers={"X-API-Key": api_key}, timeout=2.0)
+        if response.status_code == 200:
+            typer.echo(f"🔄 Server notified: {response.json().get('message')}")
+        elif response.status_code != 404:  # Ignore 404 if old server running
+            typer.echo(f"⚠️  Server reload failed: {response.status_code}", err=True)
+    except requests.RequestException:
+        # Server probably not running, which is fine
+        pass
 
 
 @app.command()
@@ -157,24 +260,38 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
 
     # Get aggregate counts
     summary = metadata.summarize()
-    typer.echo("\n📊 Knowledge Store Summary:")
-    typer.echo(f"  Total repositories: {summary['repos']}")
-    typer.echo(f"  Total files: {summary['files']}")
-    typer.echo(f"  Total chunks: {summary['chunks']}")
+
+    console = Console()
+
+    # Summary Table
+    console.print("\n[bold]📊 Knowledge Store Summary[/bold]")
+    summary_table = Table(show_header=False, box=box.SIMPLE)
+    summary_table.add_column("Metric", style="cyan")
+    summary_table.add_column("Value", style="bold white")
+    summary_table.add_row("Total Repositories", str(summary["repos"]))
+    summary_table.add_row("Total Files", str(summary["files"]))
+    summary_table.add_row("Total Chunks", str(summary["chunks"]))
+    console.print(summary_table)
 
     # List all registered repositories
     repos = metadata.list_all_repos()
     if repos:
-        typer.echo("\n📚 Registered Repositories:")
-        for repo in repos:
-            typer.echo(f"\n  • {repo['name']}")
-            typer.echo(f"    Path: {repo['root_path']}")
-            typer.echo(f"    Embed Model: {repo['default_embed_model']}")
-            typer.echo(f"    Created: {repo['created_at']}")
-    else:
-        typer.echo("\n  No repositories registered.")
+        console.print("\n[bold]📚 Registered Repositories[/bold]")
+        repo_table = Table(box=box.ROUNDED)
+        repo_table.add_column("Name", style="green")
+        repo_table.add_column("Path", style="dim")
+        repo_table.add_column("Embed Model")
+        repo_table.add_column("Created", style="dim")
 
-    typer.echo()
+        for repo in repos:
+            repo_table.add_row(
+                repo["name"], str(repo["root_path"]), repo["default_embed_model"], str(repo["created_at"])
+            )
+        console.print(repo_table)
+    else:
+        console.print("\n[yellow]No repositories registered.[/yellow]")
+
+    console.print()
 
 
 @app.command("prune-ignored")
@@ -240,7 +357,7 @@ def prune_ignored(
     ignore_patterns.add("bun.lock")
     ignore_patterns.add("**/bun.lock")
 
-    ignore_spec = PathSpec.from_lines("gitwildmatch", ignore_patterns)
+    ignore_spec = PathSpec.from_lines("gitignore", ignore_patterns)
 
     # Debug: show which patterns we're using
     if dry_run:
@@ -511,7 +628,6 @@ def search(
     path_prefix: list[str] | None = typer.Option(None, "--path", "-p", help="Filter by path prefix."),
     top_k: int = typer.Option(8, "--top-k", "-k", help="Number of results to return."),
     score_cutoff: float = typer.Option(0.0, "--score-cutoff", "-s", help="Minimum similarity score."),
-    embed_model: str = typer.Option("large", "--embed-model", "-m", help="Embedding model to use (small|large)."),
     show_content: bool = typer.Option(False, "--show-content", "-c", help="Display code snippets."),
 ) -> None:
     """Search indexed code semantically (local backend).
@@ -531,6 +647,7 @@ def search(
         backend = create_search_backend(
             store_root=config.resolved_store_root(),
             embedding_provider_type=config.embedding_provider,
+            default_embed_model=config.default_embed_model,
             hybrid_search_enabled=True,
         )
 
@@ -541,7 +658,6 @@ def search(
             path_prefix=path_prefix,
             top_k=top_k,
             score_cutoff=score_cutoff,
-            embed_model=embed_model,
         )
 
         # Execute search

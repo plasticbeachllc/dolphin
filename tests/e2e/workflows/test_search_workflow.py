@@ -29,7 +29,6 @@ def _run_search(
     request = SearchRequest(
         query=query,
         top_k=top_k,
-        embed_model=embed_model,
         repos=[repo_name],
         include_graph_context=False,
         **overrides,

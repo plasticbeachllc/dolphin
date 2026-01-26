@@ -72,7 +72,11 @@ def extract_graph_from_file(
     try:
         # Type narrowing: we've checked hasattr for extract_graph_data
         extract_fn = getattr(chunker_module, "extract_graph_data")
-        nodes, edges = extract_fn(text)
+        if lang_key == "svelte":
+            component_name = file_path.stem or file_path.name
+            nodes, edges = extract_fn(text, component_name)
+        else:
+            nodes, edges = extract_fn(text)
         return nodes, edges
     except Exception as e:
         # Log but don't fail - graph extraction is optional
@@ -252,7 +256,7 @@ def cleanup_graph_for_file(graph_store: GraphStore, file_id: int) -> tuple[int, 
     edges_deleted = 0
 
     try:
-        with graph_store._connect() as conn, closing(conn.cursor()) as cur:  # type: ignore[attr-defined]
+        with graph_store._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 (
                     "WITH nodes AS (SELECT id FROM code_nodes WHERE file_id = ?) "

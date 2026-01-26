@@ -397,13 +397,13 @@ def main():
     parser.add_argument(
         "--config",
         type=Path,
-        default=Path("test-data/swe_bench_repos.json"),
+        default=Path("benchmarks/test-data/swe_bench_repos.json"),
         help="Repo configuration file",
     )
     parser.add_argument(
         "--state-file",
         type=Path,
-        default=Path("test-data/swe_bench_state.json"),
+        default=Path("benchmarks/test-data/swe_bench_state.json"),
         help="State tracking file",
     )
 

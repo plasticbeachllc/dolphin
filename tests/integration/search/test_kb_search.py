@@ -2,26 +2,23 @@
 
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
-
-from kb.api.app import app
 from kb.hashing import hash_text
 from tests.kb_utils import FIXTURE_REPO_ROOT, kb_backend_context
 
 
-def test_search_returns_provenance_rich_snippets():
+def test_search_returns_provenance_rich_snippets(kb_api_client):
     """Golden test verifying /v1/search returns provenance-rich snippets."""
     target_file = FIXTURE_REPO_ROOT / "src" / "widgets.py"
     expected_hash = hash_text(target_file.read_text(encoding="utf-8"))
 
     with kb_backend_context(commit_sha="abc12345") as _backend:
-        client = TestClient(app)
         payload = {
             "query": "calibration metrics",
             "top_k": 3,
             "max_snippet_tokens": 12,
+            "max_snippets": 1,
         }
-        response = client.post("/search", json=payload)
+        response = kb_api_client.post("/v1/search", json=payload)
         assert response.status_code == 200, f"Unexpected status: {response.status_code}"
         data = response.json()
 

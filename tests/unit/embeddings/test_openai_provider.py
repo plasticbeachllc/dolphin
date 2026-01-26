@@ -198,19 +198,27 @@ class TestProviderFactory:
             custom_provider = OpenAIEmbeddingProvider(api_key="test-key")
             set_default_provider(custom_provider)
 
-            # Test that convenience function uses new default
-            mock_response = Mock()
-            mock_response.data = [Mock(embedding=[0.9] * 1536)]
-            custom_provider.client.embeddings.create.return_value = mock_response  # type: ignore[assignment]
+            try:
+                # Test that convenience function uses new default
+                mock_response = Mock()
+                mock_response.data = [Mock(embedding=[0.9] * 1536)]
+                custom_provider.client.embeddings.create.return_value = mock_response  # type: ignore[assignment]
 
-            result = embed_texts("small", ["test"])
-            assert result[0] == [0.9] * 1536
+                result = embed_texts("small", ["test"])
+                assert result[0] == [0.9] * 1536
+            finally:
+                set_default_provider(EmbeddingProvider())
 
 
 class TestIntegration:
     """Integration tests (can be skipped if no API key available)."""
 
-    @pytest.mark.skipif(not os.environ.get("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set")
+    @pytest.mark.integration
+    @pytest.mark.slow
+    @pytest.mark.skipif(
+        not (os.environ.get("DOLPHIN_TEST_FULL") == "1" and os.environ.get("OPENAI_API_KEY")),
+        reason="Set DOLPHIN_TEST_FULL=1 and OPENAI_API_KEY to run real OpenAI integration test",
+    )
     def test_real_openai_api(self):
         """Test real OpenAI API call (requires valid API key)."""
         provider = OpenAIEmbeddingProvider()

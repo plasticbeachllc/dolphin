@@ -4,10 +4,12 @@ import logging
 from collections.abc import Iterable
 from pathlib import Path
 
+from pathspec import PathSpec
+
 try:
     import tomllib  # Python 3.11+
 except ImportError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore[import-not-found,no-redef]
+    import tomli as tomllib
 
 _log = logging.getLogger(__name__)
 
@@ -152,3 +154,51 @@ def load_repo_ignores(repo_root: Path) -> tuple[set[str], set[str]]:
         # On parse issues, fail closed (no additional repo ignores)
         _log.warning("Failed to load repo ignore configuration from %s", cfg, exc_info=True)
         return set(), set()
+
+
+def build_ignore_pathspec(config_ignore: Iterable[str], config_exceptions: Iterable[str], repo_root: Path) -> PathSpec:
+    """Build a complete PathSpec for ignoring files during indexing.
+
+    This consolidates the ignore spec building logic used by both the ingestion pipeline
+    and the file watcher. It merges:
+    - Config-level ignore patterns
+    - Config-level exceptions
+    - Repo-level patterns from .dolphin/config.toml
+    - Security-sensitive patterns (credentials, keys, etc.)
+
+    Args:
+        config_ignore: Global ignore patterns from KBConfig
+        config_exceptions: Global ignore exceptions from KBConfig
+        repo_root: Root path of the repository
+
+    Returns:
+        PathSpec object ready for matching files
+    """
+    # Extra security patterns to always ignore
+    extra_security = {
+        "**/id_rsa",
+        "**/*.pem",
+        "**/.aws/**",
+        "**/gcloud/**",
+        "**/secrets/**",
+        "**/*keys.json",
+        "**/*service_account.json",
+        "**/*auth.json",
+    }
+
+    # Build base ignore patterns
+    ignore_patterns = build_ignore_set(config_ignore, config_exceptions)
+
+    # Merge repo-level ignores from .dolphin/config.toml
+    repo_level_patterns, repo_level_exceptions = load_repo_ignores(repo_root)
+    if repo_level_patterns:
+        ignore_patterns.update(repo_level_patterns)
+
+    # Apply repo-level exceptions
+    if repo_level_exceptions:
+        ignore_patterns = build_ignore_set(ignore_patterns, repo_level_exceptions)
+
+    # Add security patterns
+    ignore_patterns.update(extra_security)
+
+    return PathSpec.from_lines("gitignore", ignore_patterns)

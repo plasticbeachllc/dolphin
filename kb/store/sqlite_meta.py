@@ -141,7 +141,7 @@ class SQLiteMetadataStore:
         engine = create_engine(f"sqlite:///{self.db_path}")
 
         @event.listens_for(engine, "connect")
-        def _set_sqlite_pragma(dbapi_connection, connection_record):  # type: ignore[no-redef]
+        def _set_sqlite_pragma(dbapi_connection, connection_record):
             try:
                 dbapi_connection.execute("PRAGMA foreign_keys=ON")
             except Exception:
@@ -492,11 +492,12 @@ class SQLiteMetadataStore:
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 """
-                INSERT INTO repos (name, root_path, default_embed_model)
-                VALUES (?, ?, ?)
+                INSERT INTO repos (name, root_path, default_embed_model, created_at, updated_at)
+                VALUES (?, ?, ?, datetime('now'), datetime('now'))
                 ON CONFLICT(name) DO UPDATE SET
                   root_path=excluded.root_path,
                   default_embed_model=excluded.default_embed_model,
+                  created_at=COALESCE(repos.created_at, datetime('now')),
                   updated_at=datetime('now')
                 """,
                 (name, str(resolved_path), default_embed_model),
@@ -574,7 +575,9 @@ class SQLiteMetadataStore:
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 """
-                SELECT id, name, root_path, default_embed_model, created_at, updated_at
+                SELECT id, name, root_path, default_embed_model,
+                       COALESCE(created_at, updated_at) as created_at,
+                       updated_at
                 FROM repos
                 ORDER BY name
             """
@@ -752,7 +755,12 @@ class SQLiteMetadataStore:
         is_binary: bool,
         size_bytes: int | None,
     ) -> int:
-        """Insert or update a file row; return file id."""
+        """Insert or update a file row; return file id.
+
+        Note: We always query for the id after upsert because SQLite's lastrowid
+        is unreliable after ON CONFLICT DO UPDATE - it may return a stale value
+        from a previous INSERT instead of the correct id.
+        """
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 """
@@ -774,16 +782,25 @@ class SQLiteMetadataStore:
                     size_bytes,
                 ),
             )
-            file_id = int(cur.lastrowid)
-            if file_id == 0:
-                cur.execute(
-                    "SELECT id FROM files WHERE repo_id = ? AND path = ?",
-                    (int(repo_id), path),
-                )
-                row = cur.fetchone()
-                file_id = int(row[0]) if row else 0
+            # Always query for the id - don't rely on lastrowid which is unreliable
+            # after ON CONFLICT DO UPDATE (it may return stale value from previous INSERT)
+            cur.execute(
+                "SELECT id FROM files WHERE repo_id = ? AND path = ?",
+                (int(repo_id), path),
+            )
+            row = cur.fetchone()
+            if not row:
+                # This should never happen after a successful upsert
+                raise RuntimeError(f"Failed to find file after upsert: repo_id={repo_id}, path={path}")
+            file_id = int(row[0])
             conn.commit()
             return file_id
+
+    def delete_file(self, repo_id: int, file_id: int) -> None:
+        """Delete a file from the catalog."""
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute("DELETE FROM files WHERE id = ?", (int(file_id),))
+            conn.commit()
 
     def set_file_latest_commit(self, repo_id: int, path: str, commit_sha: str) -> None:
         """Update latest_commit_sha for a file."""
@@ -929,7 +946,18 @@ class SQLiteMetadataStore:
 
                 desired_map: dict[tuple[int, int], tuple[Any, Any, Any]] = {}
                 for d in desired_locations:
-                    desired_map[(int(d["start_line"]), int(d["end_line"]))] = (
+                    start_raw = d.get("start_line")
+                    end_raw = d.get("end_line")
+                    if not isinstance(start_raw, (int, float, str, bytes, bytearray)) or not isinstance(
+                        end_raw, (int, float, str, bytes, bytearray)
+                    ):
+                        continue
+                    try:
+                        start_line = int(start_raw)
+                        end_line = int(end_raw)
+                    except (TypeError, ValueError):
+                        continue
+                    desired_map[(start_line, end_line)] = (
                         d.get("symbol_kind"),
                         d.get("symbol_name"),
                         d.get("symbol_path"),
@@ -1093,6 +1121,7 @@ class SQLiteMetadataStore:
         """Ensure chunk_content rows exist for all hashes; return hash -> content_id mapping.
 
         Uses a single connection for efficiency and returns ids atomically via RETURNING.
+        Verifies file_id exists before INSERT to provide clear error handling.
         """
         import uuid
 
@@ -1101,6 +1130,22 @@ class SQLiteMetadataStore:
             return mapping
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
+                # Pre-check: Verify the file exists in the files table
+                # This provides a clearer error message than an FK constraint failure
+                cur.execute("SELECT id, path FROM files WHERE id = ?", (int(file_id),))
+                file_row = cur.fetchone()
+                if not file_row:
+                    # The file row doesn't exist - this shouldn't happen but can occur
+                    # due to race conditions or incomplete cleanup. Log and raise.
+                    logger.error(
+                        f"File id {file_id} not found in files table. "
+                        f"Cannot insert chunk_content rows. This indicates stale data or race condition."
+                    )
+                    raise ValueError(
+                        f"File id {file_id} does not exist in files table. "
+                        f"The file may have been deleted or not yet committed."
+                    )
+
                 for h in hashes:
                     cid = str(uuid.uuid4())
                     cur.execute(
@@ -1119,6 +1164,16 @@ class SQLiteMetadataStore:
                         cid = str(row[0])
                     mapping[h] = cid
                 conn.commit()
+            except sqlite3.IntegrityError as e:
+                conn.rollback()
+                # Provide more context for FK constraint failures
+                if "FOREIGN KEY constraint failed" in str(e):
+                    logger.error(
+                        f"FOREIGN KEY constraint failed inserting chunk_content. "
+                        f"repo_id={repo_id}, file_id={file_id}, embed_model={embed_model}. "
+                        f"This may indicate the file was deleted during processing."
+                    )
+                raise
             except Exception:
                 conn.rollback()
                 raise
@@ -1467,6 +1522,67 @@ class SQLiteMetadataStore:
                 "symbol_path": row[11],
             }
 
+    def get_chunk_locations_by_identity(
+        self,
+        repo_id: int,
+        file_id: int,
+        text_hash: str,
+        embed_model: str,
+    ) -> list[dict[str, Any]]:
+        """Get all locations for a chunk content identity."""
+
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            # We fetch all locations for the text_hash, regardless of embed_model,
+            # so we can fall back to other models if the requested one is missing.
+            cur.execute(
+                """
+                SELECT
+                    cl.content_id,
+                    cl.start_line,
+                    cl.end_line,
+                    cl.symbol_kind,
+                    cl.symbol_name,
+                    cl.symbol_path,
+                    cc.embed_model
+                FROM chunk_locations cl
+                JOIN chunk_content cc ON cl.content_id = cc.id
+                WHERE cc.repo_id = ? AND cc.file_id = ? AND cc.text_hash = ?
+                ORDER BY cl.start_line ASC
+                """,
+                (repo_id, file_id, text_hash),
+            )
+
+            # Group locations by embed_model
+            locations_by_model: dict[str, list[dict[str, Any]]] = {}
+            for row in cur.fetchall():
+                model = row[6]
+                if model not in locations_by_model:
+                    locations_by_model[model] = []
+
+                locations_by_model[model].append(
+                    {
+                        "content_id": str(row[0]),
+                        "start_line": int(row[1]) if row[1] is not None else None,
+                        "end_line": int(row[2]) if row[2] is not None else None,
+                        "symbol_kind": row[3],
+                        "symbol_name": row[4],
+                        "symbol_path": row[5],
+                        "embed_model": model,
+                    }
+                )
+
+            # Prefer the requested model, otherwise fall back to any available model
+            if embed_model in locations_by_model:
+                return locations_by_model[embed_model]
+
+            # Fallback: return the first available model's locations
+            # (sorting keys to be deterministic)
+            sorted_models = sorted(locations_by_model.keys())
+            if sorted_models:
+                return locations_by_model[sorted_models[0]]
+
+            return []
+
     def get_chunk_by_content_identity(
         self,
         repo_id: int,
@@ -1679,7 +1795,72 @@ class SQLiteMetadataStore:
         cur.execute("SELECT COUNT(*) FROM sessions WHERE repo_id = ?", (repo_id,))
         counts["sessions"] = cur.fetchone()[0]
 
+        if self._table_exists(cur, "file_snapshots"):
+            cur.execute("SELECT COUNT(*) FROM file_snapshots WHERE repo_id = ?", (repo_id,))
+            counts["file_snapshots"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "pending_changes"):
+            cur.execute("SELECT COUNT(*) FROM pending_changes WHERE repo_id = ?", (repo_id,))
+            counts["pending_changes"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "code_nodes"):
+            cur.execute("SELECT COUNT(*) FROM code_nodes WHERE repo_id = ?", (repo_id,))
+            counts["code_nodes"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "code_edges"):
+            cur.execute("SELECT COUNT(*) FROM code_edges WHERE repo_id = ?", (repo_id,))
+            counts["code_edges"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "node_aliases"):
+            cur.execute(
+                """
+                SELECT COUNT(*) FROM node_aliases
+                WHERE node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)
+            """,
+                (repo_id,),
+            )
+            counts["node_aliases"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "code_nodes_fts"):
+            cur.execute(
+                """
+                SELECT COUNT(*) FROM code_nodes_fts
+                WHERE node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)
+            """,
+                (repo_id,),
+            )
+            counts["code_nodes_fts"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "graph_metrics"):
+            cur.execute(
+                """
+                SELECT COUNT(*) FROM graph_metrics
+                WHERE node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)
+            """,
+                (repo_id,),
+            )
+            counts["graph_metrics"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "cross_repo_references"):
+            cur.execute("SELECT COUNT(*) FROM cross_repo_references WHERE source_repo_id = ?", (repo_id,))
+            counts["cross_repo_references"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "graph_snapshots"):
+            cur.execute("SELECT COUNT(*) FROM graph_snapshots WHERE repo_id = ?", (repo_id,))
+            counts["graph_snapshots"] = cur.fetchone()[0]
+
+        if self._table_exists(cur, "graph_cache_state"):
+            cur.execute("SELECT COUNT(*) FROM graph_cache_state WHERE repo_id = ?", (repo_id,))
+            counts["graph_cache_state"] = cur.fetchone()[0]
+
         return counts
+
+    def _table_exists(self, cur, table_name: str) -> bool:
+        cur.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?",
+            (table_name,),
+        )
+        return cur.fetchone() is not None
 
     def _cleanup_fts_entries_comprehensive(self, cur, repo_id: int, repo_name: str) -> dict:
         """Comprehensive FTS5 cleanup with multiple strategies."""
@@ -1743,6 +1924,84 @@ class SQLiteMetadataStore:
         cur.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
         return cur.rowcount
 
+    def _delete_file_snapshots_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "file_snapshots"):
+            return 0
+        cur.execute("DELETE FROM file_snapshots WHERE repo_id = ?", (repo_id,))
+        return cur.rowcount
+
+    def _delete_pending_changes_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "pending_changes"):
+            return 0
+        cur.execute("DELETE FROM pending_changes WHERE repo_id = ?", (repo_id,))
+        return cur.rowcount
+
+    def _delete_code_edges_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "code_edges"):
+            return 0
+        cur.execute("DELETE FROM code_edges WHERE repo_id = ?", (repo_id,))
+        return cur.rowcount
+
+    def _delete_node_aliases_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "node_aliases"):
+            return 0
+        cur.execute(
+            """
+            DELETE FROM node_aliases
+            WHERE node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)
+        """,
+            (repo_id,),
+        )
+        return cur.rowcount
+
+    def _delete_graph_metrics_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "graph_metrics"):
+            return 0
+        cur.execute(
+            """
+            DELETE FROM graph_metrics
+            WHERE node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)
+        """,
+            (repo_id,),
+        )
+        return cur.rowcount
+
+    def _delete_cross_repo_references_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "cross_repo_references"):
+            return 0
+        cur.execute("DELETE FROM cross_repo_references WHERE source_repo_id = ?", (repo_id,))
+        return cur.rowcount
+
+    def _delete_code_nodes_fts_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "code_nodes_fts"):
+            return 0
+        cur.execute(
+            """
+            DELETE FROM code_nodes_fts
+            WHERE node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)
+        """,
+            (repo_id,),
+        )
+        return cur.rowcount
+
+    def _delete_code_nodes_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "code_nodes"):
+            return 0
+        cur.execute("DELETE FROM code_nodes WHERE repo_id = ?", (repo_id,))
+        return cur.rowcount
+
+    def _delete_graph_snapshots_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "graph_snapshots"):
+            return 0
+        cur.execute("DELETE FROM graph_snapshots WHERE repo_id = ?", (repo_id,))
+        return cur.rowcount
+
+    def _delete_graph_cache_state_by_repo(self, cur, repo_id: int) -> int:
+        if not self._table_exists(cur, "graph_cache_state"):
+            return 0
+        cur.execute("DELETE FROM graph_cache_state WHERE repo_id = ?", (repo_id,))
+        return cur.rowcount
+
     def _delete_sessions_by_repo(self, cur, repo_id: int) -> int:
         """Delete all sessions for a repository."""
         cur.execute("DELETE FROM sessions WHERE repo_id = ?", (repo_id,))
@@ -1801,13 +2060,29 @@ class SQLiteMetadataStore:
                 # 3. Chunk content (foreign key to files)
                 content_deleted = self._delete_chunk_content_by_repo(cur, repo_id)
 
-                # 4. Files (foreign key to repos)
+                # 4. Code graph data (foreign keys to repos/files/nodes)
+                code_edges_deleted = self._delete_code_edges_by_repo(cur, repo_id)
+                node_aliases_deleted = self._delete_node_aliases_by_repo(cur, repo_id)
+                graph_metrics_deleted = self._delete_graph_metrics_by_repo(cur, repo_id)
+                cross_repo_refs_deleted = self._delete_cross_repo_references_by_repo(cur, repo_id)
+                code_nodes_fts_deleted = self._delete_code_nodes_fts_by_repo(cur, repo_id)
+                code_nodes_deleted = self._delete_code_nodes_by_repo(cur, repo_id)
+
+                # 5. File sync data (foreign keys to files)
+                file_snapshots_deleted = self._delete_file_snapshots_by_repo(cur, repo_id)
+                pending_changes_deleted = self._delete_pending_changes_by_repo(cur, repo_id)
+
+                # 6. Graph intelligence metadata (foreign key to repos)
+                graph_snapshots_deleted = self._delete_graph_snapshots_by_repo(cur, repo_id)
+                graph_cache_state_deleted = self._delete_graph_cache_state_by_repo(cur, repo_id)
+
+                # 7. Files (foreign key to repos)
                 files_deleted = self._delete_files_by_repo(cur, repo_id)
 
-                # 5. Sessions (foreign key to repos)
+                # 8. Sessions (foreign key to repos)
                 sessions_deleted = self._delete_sessions_by_repo(cur, repo_id)
 
-                # 6. Repository registration
+                # 9. Repository registration
                 repo_deleted = self._delete_repo_registration(cur, repo_id)
 
                 # Validate cleanup was comprehensive
@@ -1830,6 +2105,16 @@ class SQLiteMetadataStore:
                 "fts5_entries": fts_cleanup_stats,
                 "locations_deleted": locations_deleted,
                 "content_deleted": content_deleted,
+                "code_edges_deleted": code_edges_deleted,
+                "node_aliases_deleted": node_aliases_deleted,
+                "graph_metrics_deleted": graph_metrics_deleted,
+                "cross_repo_refs_deleted": cross_repo_refs_deleted,
+                "code_nodes_fts_deleted": code_nodes_fts_deleted,
+                "code_nodes_deleted": code_nodes_deleted,
+                "file_snapshots_deleted": file_snapshots_deleted,
+                "pending_changes_deleted": pending_changes_deleted,
+                "graph_snapshots_deleted": graph_snapshots_deleted,
+                "graph_cache_state_deleted": graph_cache_state_deleted,
                 "files_deleted": files_deleted,
                 "sessions_deleted": sessions_deleted,
                 "repo_deleted": repo_deleted,

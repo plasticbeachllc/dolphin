@@ -1,11 +1,11 @@
 """Integration tests for search functionality."""
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
-from kb.api.app import SearchRequest, reset_search_backend, set_search_backend
+from kb.api.app import SearchRequest, reset_search_backend, reset_stores, set_search_backend, set_stores
 from kb.store import LanceDBStore, SQLiteMetadataStore
 from tests.utils.mock_services import MockEmbeddingService
 
@@ -58,10 +58,12 @@ class TestSearchIntegration:
     def setup_method(self):
         """Set up test environment."""
         reset_search_backend()
+        reset_stores()
 
     def teardown_method(self):
         """Clean up test environment."""
         reset_search_backend()
+        reset_stores()
 
     @pytest.mark.asyncio
     async def test_search_basic_functionality(
@@ -78,26 +80,34 @@ class TestSearchIntegration:
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
+        set_stores(metadata_store, lancedb_store)
+
+        # Register repo used in test
+        metadata_store.initialize()
+        metadata_store.record_repo("test-repo", str(sample_repo_path), default_embed_model="small")
 
         # Test search with widget query
-        request = SearchRequest(query="widget class", repos=["test-repo"], top_k=5, embed_model="small")
+        request = SearchRequest(query="widget class", repos=["test-repo"], top_k=5)
 
         from kb.api.app import search
 
         response = await search(request)
 
         # Verify response structure
+        # Verify response structure
         assert "hits" in response
         assert "meta" in response
-        assert response["meta"]["top_k"] == 5
-        assert response["meta"]["model"] == "small"
+
+        meta = cast(dict[str, Any], response["meta"])
+        assert meta["top_k"] == 5
+        assert meta["model"] == "small"
 
         # Verify search results
-        hits = response["hits"]
+        hits = cast(list[dict[str, Any]], response["hits"])
         assert len(hits) == 1
         assert hits[0]["path"] == "src/widgets.py"
         assert hits[0]["language"] == "python"
-        assert "Widget" in hits[0]["text"]
+        assert "Widget" in str(hits[0]["text"])
 
     @pytest.mark.asyncio
     async def test_search_with_filters(
@@ -114,6 +124,11 @@ class TestSearchIntegration:
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
+        set_stores(metadata_store, lancedb_store)
+
+        # Register repo used in test
+        metadata_store.initialize()
+        metadata_store.record_repo("specific-repo", str(sample_repo_path), default_embed_model="small")
 
         # Test search with repository filter
         request = SearchRequest(
@@ -121,7 +136,6 @@ class TestSearchIntegration:
             repos=["specific-repo"],
             path_prefix=["docs/"],
             top_k=3,
-            embed_model="small",
         )
 
         from kb.api.app import search
@@ -129,7 +143,7 @@ class TestSearchIntegration:
         response = await search(request)
 
         # Verify response
-        hits = response["hits"]
+        hits = cast(list[dict[str, Any]], response["hits"])
         assert len(hits) == 1
         assert hits[0]["path"] == "docs/overview.md"
         assert hits[0]["language"] == "markdown"
@@ -149,17 +163,24 @@ class TestSearchIntegration:
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
+        set_stores(metadata_store, lancedb_store)
+
+        # Register repo used in test
+        metadata_store.initialize()
+        metadata_store.record_repo("test-repo", str(sample_repo_path), default_embed_model="small")
 
         # Test search with no matches
-        request = SearchRequest(query="nonexistent term", repos=["test-repo"], top_k=5, embed_model="small")
+        request = SearchRequest(query="nonexistent term", repos=["test-repo"], top_k=5)
 
         from kb.api.app import search
 
         response = await search(request)
 
         # Verify empty results
-        assert len(response["hits"]) == 0
-        assert response["meta"]["top_k"] == 5
+        hits = cast(list[dict[str, Any]], response["hits"])
+        meta = cast(dict[str, Any], response["meta"])
+        assert len(hits) == 0
+        assert meta["top_k"] == 5
 
     @pytest.mark.asyncio
     async def test_search_latency_measurement(
@@ -176,17 +197,23 @@ class TestSearchIntegration:
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
+        set_stores(metadata_store, lancedb_store)
+
+        # Register repo used in test
+        metadata_store.initialize()
+        metadata_store.record_repo("test-repo", str(sample_repo_path), default_embed_model="small")
 
         # Test search
-        request = SearchRequest(query="widget", repos=["test-repo"], top_k=5, embed_model="small")
+        request = SearchRequest(query="widget", repos=["test-repo"], top_k=5)
 
         from kb.api.app import search
 
         response = await search(request)
 
         # Verify latency measurement
-        assert "latency_ms" in response["meta"]
-        latency = response["meta"]["latency_ms"]
+        meta = cast(dict[str, Any], response["meta"])
+        assert "latency_ms" in meta
+        latency = meta["latency_ms"]
         assert isinstance(latency, int)
         assert latency >= 0
 
@@ -229,13 +256,19 @@ class TestSearchIntegration:
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
+        set_stores(metadata_store, lancedb_store)
+
+        # Register repos used in test
+        metadata_store.initialize()
+        metadata_store.record_repo("repo1", str(sample_repo_path / "repo1"), default_embed_model="small")
+        metadata_store.record_repo("repo2", str(sample_repo_path / "repo2"), default_embed_model="small")
+        metadata_store.record_repo("repo3", str(sample_repo_path / "repo3"), default_embed_model="small")
 
         # Test search with multiple repositories
         request = SearchRequest(
             query="widget",
             repos=["repo1", "repo2", "repo3"],
             top_k=10,
-            embed_model="small",
         )
 
         from kb.api.app import search
@@ -269,9 +302,14 @@ class TestSearchPerformance:
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
+        set_stores(metadata_store, lancedb_store)
+
+        # Register repo used in test
+        metadata_store.initialize()
+        metadata_store.record_repo("test-repo", str(sample_repo_path), default_embed_model="small")
 
         # Measure search performance
-        request = SearchRequest(query="test query", repos=["test-repo"], top_k=5, embed_model="small")
+        request = SearchRequest(query="test query", repos=["test-repo"], top_k=5)
 
         from kb.api.app import search
 
@@ -283,7 +321,8 @@ class TestSearchPerformance:
 
         # Verify response time is reasonable (under 100ms for mock)
         assert response_time_ms < 100
-        assert response["meta"]["latency_ms"] < 100
+        meta = cast(dict[str, Any], response["meta"])
+        assert meta["latency_ms"] < 100
 
     @pytest.mark.asyncio
     async def test_search_concurrent_requests(
@@ -303,6 +342,12 @@ class TestSearchPerformance:
         # Create and set mock search backend
         mock_backend = MockSearchBackend(metadata_store, lancedb_store)
         set_search_backend(mock_backend)
+        set_stores(metadata_store, lancedb_store)
+
+        # Register repos used in test
+        metadata_store.initialize()
+        for i in range(10):
+            metadata_store.record_repo(f"repo-{i}", str(sample_repo_path), default_embed_model="small")
 
         from kb.api.app import search
 
@@ -312,7 +357,6 @@ class TestSearchPerformance:
                 query=f"query {i}",
                 repos=[f"repo-{i % 3}"],
                 top_k=5,
-                embed_model="small",
             )
             for i in range(10)
         ]
@@ -320,7 +364,7 @@ class TestSearchPerformance:
         # Run concurrent searches
         start_time = time.time()
         tasks = [search(request) for request in requests]
-        results = await asyncio.gather(*tasks)
+        results = cast(list[dict[str, Any]], await asyncio.gather(*tasks))
         end_time = time.time()
 
         total_time_ms = (end_time - start_time) * 1000

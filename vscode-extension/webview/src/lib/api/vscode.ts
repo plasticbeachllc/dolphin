@@ -152,3 +152,6 @@ if (typeof window !== "undefined") {
   });
   console.log("[VSCode API] Global message listener registered");
 }
+
+// Convenience named export for components expecting a singleton VS Code API
+export const vscode = getVSCodeAPI();

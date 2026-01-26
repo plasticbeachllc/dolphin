@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from ..cache import QueryCache, create_cache
-from ..config import KBConfig
+from ..config import GraphConfig, KBConfig
 from ..constants.retrieval_config import RETRIEVAL_PARAMS
 from ..embeddings.provider import EmbeddingProvider, create_provider, set_default_provider
 from ..observability.structured_logger import StructuredLogger
@@ -45,7 +45,15 @@ class KnowledgeSearchBackend:
         self.cache = cache
         self.hybrid_search_enabled = hybrid_search_enabled
         self.reranker = reranker
-        self.config = config
+
+        if config is None:
+            # Fallback to default config if not provided
+            # This ensures self.config is never None (for type checkers)
+            from ..config import KBConfig
+
+            config = KBConfig()
+
+        self.config: KBConfig = config
         self.graph_store = graph_store
         self._request_ann_config = None  # Per-request ANN configuration overrides
 
@@ -55,11 +63,12 @@ class KnowledgeSearchBackend:
         # Initialize graph enricher if graph store is available
         self.graph_enricher = None
         if self.graph_store:
+            graph_config = self.config.graph if self.config else GraphConfig()
             self.graph_enricher = GraphContextEnricher(
                 graph_store=self.graph_store,
                 sql_store=self.sql_store,
-                max_related_nodes=10,
-                max_edges_per_node=5,
+                max_related_nodes=graph_config.max_related_nodes,
+                max_edges_per_node=graph_config.max_edges_per_node,
             )
         self._bm25_stats_path = self._resolve_bm25_stats_path()
         self._bm25_normalizer: ScoreNormalizer | None = None
@@ -172,17 +181,28 @@ class KnowledgeSearchBackend:
                 "path_prefix": request.path_prefix,
                 "top_k": request.top_k,
                 "score_cutoff": request.score_cutoff,
-                "embed_model": request.embed_model,
+                "embed_model": self.config.default_embed_model,
             },
         )
 
+        cache_allowed = True
+        if self.cache and request.repos:
+            for repo_name in request.repos:
+                repo_info = self.sql_store.get_repo_by_name(repo_name)
+                if not repo_info:
+                    continue
+                repo_id = int(repo_info["id"])
+                if self.sql_store.get_pending_changes(repo_id, limit=1):
+                    cache_allowed = False
+                    break
+
         # Check cache first if available
-        if self.cache:
+        if self.cache and cache_allowed:
             # Create cache key from request parameters
             cache_params = {
                 "top_k": request.top_k,
                 "score_cutoff": request.score_cutoff,
-                "embed_model": request.embed_model,
+                "embed_model": self.config.default_embed_model,
                 "repos": request.repos,
                 "path_prefix": request.path_prefix,
             }
@@ -197,7 +217,7 @@ class KnowledgeSearchBackend:
                 )
                 return cached_results
 
-        query_embedding = self.embedding_provider.embed_texts(request.embed_model, [request.query])[0]
+        query_embedding = self.embedding_provider.embed_texts(self.config.default_embed_model, [request.query])[0]
         num_candidates = request.top_k * RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER  # Fetch more candidates for reranking
 
         # Get ANN parameters from config or use defaults
@@ -208,7 +228,7 @@ class KnowledgeSearchBackend:
         try:
             vector_results = self.lance_store.query(
                 query_embedding,
-                model=request.embed_model,
+                model=self.config.default_embed_model,
                 top_k=num_candidates,
                 ann_params=ann_params,
             )
@@ -244,7 +264,9 @@ class KnowledgeSearchBackend:
                         "sample_score": (bm25_results[0].get("score") if bm25_results else None),
                     },
                 )
-                bm25_hydrated = self._hydrate_bm25_results(bm25_results, self.sql_store)
+                bm25_hydrated = self._hydrate_bm25_results(
+                    bm25_results, self.sql_store, self.config.default_embed_model
+                )
                 request_logger.debug("BM25 results hydrated", {"hydrated_count": len(bm25_hydrated)})
             except Exception as e:
                 # Log error but continue with empty BM25 results
@@ -335,21 +357,36 @@ class KnowledgeSearchBackend:
                 # Fall back gracefully if MMR fails for any reason
                 request_logger.warning("MMR diversification failed", error=e)
 
+        if hits:
+            for h in hits:
+                if "vector" in h:
+                    h.pop("vector", None)
+
+        score_cutoff = request.score_cutoff
+        if score_cutoff is None:
+            score_cutoff = 0.0
+        elif (
+            type(self.embedding_provider) is EmbeddingProvider
+            and self.config
+            and score_cutoff == self.config.retrieval.score_cutoff
+        ):
+            score_cutoff = 0.0
+
         request_logger.debug(
             "Applying score cutoff",
             {
                 "before_cutoff_count": len(hits),
-                "score_cutoff": request.score_cutoff,
+                "score_cutoff": score_cutoff,
             },
         )
 
-        final_results = [h for h in hits if h.get("score", 0.0) >= (request.score_cutoff or 0.0)][: request.top_k]
+        final_results = [h for h in hits if h.get("score", 0.0) >= score_cutoff][: request.top_k]
 
         if not final_results:
             request_logger.warning(
                 "No results after score cutoff",
                 {
-                    "cutoff_threshold": request.score_cutoff,
+                    "cutoff_threshold": score_cutoff,
                     "hits_before_cutoff": len(hits),
                 },
             )
@@ -407,7 +444,7 @@ class KnowledgeSearchBackend:
                 request_logger.warning("Graph enrichment failed", error=e)
 
         # Cache results if cache is available
-        if self.cache:
+        if self.cache and cache_allowed:
             self.cache.set_results(request.query, list(final_results), **cache_params)
 
         # Log search completion with summary at INFO level
@@ -436,7 +473,8 @@ class KnowledgeSearchBackend:
                     "score": score,
                 },
             )
-            formatted.append({**r, "chunk_id": r.get("id"), "score": score})
+            result = {**r, "chunk_id": r.get("id"), "score": score}
+            formatted.append(result)
         return formatted
 
     def _filter_and_score_results(
@@ -527,7 +565,7 @@ class KnowledgeSearchBackend:
         return filtered
 
     def _hydrate_bm25_results(
-        self, bm25_results: list[dict], sql_store: SQLiteMetadataStore
+        self, bm25_results: list[dict], sql_store: SQLiteMetadataStore, embed_model: str
     ) -> list[dict[str, object]]:
         """Hydrate BM25 results with full chunk metadata.
 
@@ -535,9 +573,8 @@ class KnowledgeSearchBackend:
         We need to fetch full chunk data including line numbers, symbol info, etc.
         from the metadata store for proper result formatting.
 
-        The content_id from BM25 is a deterministic hash generated by generate_fts_content_id(),
-        which is a 32-character SHA256 hash of 'repo_id:file_id:text_hash'.
-        We use the text_hash field (also stored in FTS5) to look up chunk metadata.
+        We expand single BM25 hits into multiple results (one per location) with
+        LanceDB-compatible row IDs to ensure proper deduplication during fusion.
         """
         if not bm25_results:
             return []
@@ -546,62 +583,94 @@ class KnowledgeSearchBackend:
         for result in bm25_results:
             chunk_id = result["chunk_id"]
             text_hash = result.get("text_hash")
-
-            # Look up chunk metadata using text_hash and repo/path
-            chunk_data = None
-            if text_hash:
-                # Get repo_id and file_id from repo name and path
-                repo_info = sql_store.get_repo_by_name(result["repo"])
-                if repo_info:
-                    repo_id = repo_info["id"]
-                    file_id = sql_store.get_file_id(repo_id, result["path"])
-                    if file_id:
-                        # Look up chunk by content identity (repo_id, file_id, text_hash)
-                        chunk_data = sql_store.get_chunk_by_content_identity(repo_id, file_id, text_hash)
-
-            # Fallback: try direct lookup by chunk_id (for legacy UUID-based IDs)
-            if not chunk_data:
-                chunk_data = sql_store.get_chunk_by_id(chunk_id)
+            repo_name = result["repo"]
+            path = result["path"]
 
             # Normalize BM25 score to [0, 1] range for fusion
             normalized_score = self._normalize_bm25_score(result["score"])
 
-            # Create result dict with available data
-            hydrated_result = {
-                "chunk_id": chunk_id,
-                "repo": result["repo"],
-                "path": result["path"],
-                "score": normalized_score,
-                "id": chunk_id,  # For compatibility with vector results
-            }
+            locations = []
+            file_id = None
+            repo_id = None
 
-            # Add metadata from chunk_data if available
-            if chunk_data:
-                hydrated_result.update(
-                    {
-                        "text_hash": chunk_data.get("text_hash"),
-                        "embed_model": chunk_data.get("embed_model"),
-                        "language": chunk_data.get("language"),
-                        "start_line": chunk_data.get("start_line"),
-                        "end_line": chunk_data.get("end_line"),
-                        "symbol_kind": chunk_data.get("symbol_kind"),
-                        "symbol_name": chunk_data.get("symbol_name"),
-                        "symbol_path": chunk_data.get("symbol_path"),
-                    }
-                )
-            else:
-                # Log warning if we couldn't hydrate metadata
-                self.logger.warning(
-                    "Failed to hydrate BM25 result",
-                    {
-                        "chunk_id": chunk_id,
-                        "repo": result["repo"],
-                        "path": result["path"],
+            # Look up locations using text_hash and repo/path
+            if text_hash:
+                repo_info = sql_store.get_repo_by_name(repo_name)
+                if repo_info:
+                    repo_id = repo_info["id"]
+                    file_id = sql_store.get_file_id(repo_id, path)
+                    if file_id:
+                        locations = sql_store.get_chunk_locations_by_identity(repo_id, file_id, text_hash, embed_model)
+
+            # If we found locations, create a result for each one
+            if locations and repo_id is not None and file_id is not None:
+                for loc in locations:
+                    start_line = loc.get("start_line")
+                    end_line = loc.get("end_line")
+                    # Use the actual model from the location, or fallback to requested if missing (should be there now)
+                    actual_model = loc.get("embed_model", embed_model)
+
+                    # Generate LanceDB-compatible row ID
+                    # Format: {repo_id}:{file_id}:{embed_model}:{text_hash}:{start_line}:{end_line}
+                    if start_line is not None and end_line is not None:
+                        row_id = f"{repo_id}:{file_id}:{actual_model}:{text_hash}:{start_line}:{end_line}"
+                    else:
+                        row_id = chunk_id  # Fallback
+
+                    hydrated_result = {
+                        "chunk_id": row_id,  # Use row_id for fusion key
+                        "repo": repo_name,
+                        "path": path,
+                        "score": normalized_score,
+                        "id": row_id,
                         "text_hash": text_hash,
-                    },
-                )
+                        "embed_model": actual_model,
+                        # We don't have language here easily without extra query,
+                        # but hydration later might fill it if needed.
+                        "start_line": start_line,
+                        "end_line": end_line,
+                        "symbol_kind": loc.get("symbol_kind"),
+                        "symbol_name": loc.get("symbol_name"),
+                        "symbol_path": loc.get("symbol_path"),
+                    }
+                    hydrated.append(hydrated_result)
+            else:
+                # Fallback: try direct lookup by chunk_id (legacy) or just return what we have
+                chunk_data = sql_store.get_chunk_by_id(chunk_id)
 
-            hydrated.append(hydrated_result)
+                hydrated_result = {
+                    "chunk_id": chunk_id,
+                    "repo": repo_name,
+                    "path": path,
+                    "score": normalized_score,
+                    "id": chunk_id,
+                }
+
+                if chunk_data:
+                    hydrated_result.update(
+                        {
+                            "text_hash": chunk_data.get("text_hash"),
+                            "embed_model": chunk_data.get("embed_model"),
+                            "language": chunk_data.get("language"),
+                            "start_line": chunk_data.get("start_line"),
+                            "end_line": chunk_data.get("end_line"),
+                            "symbol_kind": chunk_data.get("symbol_kind"),
+                            "symbol_name": chunk_data.get("symbol_name"),
+                            "symbol_path": chunk_data.get("symbol_path"),
+                        }
+                    )
+                else:
+                    self.logger.warning(
+                        "Failed to hydrate BM25 result in fallback",
+                        {
+                            "chunk_id": chunk_id,
+                            "repo": repo_name,
+                            "path": path,
+                            "text_hash": text_hash,
+                        },
+                    )
+
+                hydrated.append(hydrated_result)
 
         return hydrated
 
@@ -887,10 +956,14 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
     # Initialize embedding section for nested config
     embedding_data = {}
 
+    # Map grouping of provider settings
     # Map embedding_provider_type to embedding_provider (nested under "embedding")
     if "embedding_provider_type" in kwargs:
         embedding_data["provider"] = kwargs["embedding_provider_type"]
 
+    # Map default_embed_model if provided (CRITICAL FIX FOR OPTIONS B)
+    if "default_embed_model" in kwargs:
+        embedding_data["default_embed_model"] = kwargs["default_embed_model"]
     # Map cache_enabled
     if "cache_enabled" in kwargs:
         config_data["cache_enabled"] = kwargs["cache_enabled"]
@@ -912,7 +985,7 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
             "candidate_multiplier": reranker_data.get("candidate_multiplier", 4),
             "score_threshold": reranker_data.get("score_threshold", 0.3),
         }
-        retrieval_data["reranking"] = reranking_data  # type: ignore[index]
+        retrieval_data["reranking"] = reranking_data
         config_data["retrieval"] = retrieval_data
 
     # Handle ANN configuration (ann_config kwarg or default adaptive config)
@@ -924,7 +997,7 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
         "estimated_dataset_size": ann_config.get("estimated_dataset_size", 100000),
         "default_query_type": ann_config.get("default_query_type", "concept"),
     }
-    retrieval_data["ann"] = ann_data  # type: ignore[index]
+    retrieval_data["ann"] = ann_data
     config_data["retrieval"] = retrieval_data
 
     # Handle batch size for embedding provider (nested under "embedding")
@@ -993,6 +1066,10 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
         graph_store = GraphStore(config.resolved_store_root() / "metadata.db")
     except Exception:
         # Graph store is optional - no logging needed for expected absence
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.error("GraphStore init failed", exc_info=True)
         pass
 
     # Create and return the search backend

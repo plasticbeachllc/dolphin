@@ -20,20 +20,32 @@
   import { kbActions } from '$lib/stores/kb-store';
   
   // Message type matching MessageList expectations
-  interface Message {
-    type?: "tool_call" | "thinking";
-    role?: "user" | "assistant";
-    content?: string;
-    timestamp?: string;
-    tool?: string;
-    input?: Record<string, any>;
-    result?: Record<string, any>;
-    error?: string;
+  type ToolCallMessage = {
+    type: "tool_call";
+    tool: string;
+    input: Record<string, unknown>;
+    result?: unknown;
+    error?: unknown;
     status?: "running" | "success" | "error";
     executionTime?: number;
     toolId?: string;
     diff?: FileDiff;
-  }
+  };
+
+  type ThinkingMessage = { type: "thinking"; role: "assistant" };
+
+  type ChatMessage = {
+    role: "user" | "assistant";
+    content: string;
+    timestamp?: string;
+  };
+
+  type Message = ToolCallMessage | ThinkingMessage | ChatMessage;
+  
+  const isThinkingMessage = (m: Message): m is ThinkingMessage =>
+    "type" in m && m.type === "thinking";
+  const isToolCallMessage = (m: Message): m is ToolCallMessage =>
+    "type" in m && m.type === "tool_call";
   
   interface FileDiff {
     oldFileName: string;
@@ -71,9 +83,9 @@
   
   // Computed messages with thinking indicator
   let displayMessages = $derived(
-    isProcessing && !messages.some(m => m.type === 'thinking')
+    isProcessing && !messages.some(isThinkingMessage)
       ? [...messages, { type: 'thinking' as const, role: 'assistant' as const }]
-      : messages.filter(m => m.type !== 'thinking')
+      : messages.filter(m => !isThinkingMessage(m))
   );
 
   // Track when persisted state has been restored to avoid overwriting it
@@ -163,7 +175,7 @@
         case 'content_delta':
           // Append content to last assistant message or create new one
           const lastMsg = messages[messages.length - 1];
-          if (lastMsg && lastMsg.role === 'assistant') {
+          if (lastMsg && 'role' in lastMsg && 'content' in lastMsg && lastMsg.role === 'assistant') {
             messages = [...messages.slice(0, -1), {
               ...lastMsg,
               content: (lastMsg.content || '') + event.delta
@@ -179,10 +191,10 @@
           
         case 'tool_call_started':
           messages = [...messages, {
-            type: 'tool_call' as const,
+            type: 'tool_call',
             tool: event.tool,
-            input: event.input,
-            status: 'running' as const,
+            input: event.input as Record<string, unknown>,
+            status: 'running',
             toolId: event.toolId
           }];
           break;
@@ -190,23 +202,16 @@
         case 'tool_call_completed':
           // Find and update the tool call message
           messages = messages.map(msg => {
-            if (msg.toolId === event.toolId) {
+            if (isToolCallMessage(msg) && msg.toolId === event.toolId) {
               const newStatus: "success" | "error" = event.error ? 'error' : 'success';
-              const updatedMsg: Message = {
-                type: msg.type,
-                role: msg.role,
-                content: msg.content,
-                timestamp: msg.timestamp,
-                tool: msg.tool,
-                input: msg.input,
+              return {
+                ...msg,
                 result: event.result,
                 error: event.error,
                 status: newStatus,
                 executionTime: event.executionTime,
-                toolId: msg.toolId,
                 diff: event.diff
               };
-              return updatedMsg;
             }
             return msg;
           });
@@ -254,16 +259,16 @@
         case 'conversation_loaded':
           // When a conversation is loaded, restore messages and navigate to chat
           console.log('[App] Conversation loaded:', event.conversation);
-          if (event.conversation && event.conversation.messages) {
-            // Convert conversation messages to UI message format
-            messages = event.conversation.messages.map((msg: any) => ({
-              role: msg.role,
-              content: msg.content,
-              timestamp: new Date(msg.timestamp || Date.now()).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-            }));
-            hasUserSentMessage = messages.length > 0;
-            showLogo = false;
-          }
+          const rawMessages = Array.isArray((event as any).conversation?.messages)
+            ? (event as any).conversation.messages
+            : [];
+          messages = rawMessages.map((msg: any) => ({
+            role: msg.role,
+            content: msg.content,
+            timestamp: new Date(msg.timestamp || Date.now()).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+          })) as Message[];
+          hasUserSentMessage = messages.length > 0;
+          showLogo = false;
           // Navigate to chat view
           currentView = '/';
           // Show branch info if present

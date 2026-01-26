@@ -14,13 +14,6 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 10s
 
-  # Agent Core (Bun/TypeScript)
-  - job_name: 'agent-core'
-    static_configs:
-      - targets: ['host.docker.internal:9091']
-    metrics_path: '/metrics'
-    scrape_interval: 10s
-
   # MCP Bridge (Bun/TypeScript)
   - job_name: 'mcp-bridge'
     static_configs:

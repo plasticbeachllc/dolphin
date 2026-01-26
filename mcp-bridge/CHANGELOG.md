@@ -5,73 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - Under Development
+## [0.2.0] - 2026-01-25
+
+This release focuses the release-targeted surface on the MCP bridge and its contract with the KB `/v1/*` API.
 
 ### Added
 
-#### 🛠️ New File System Tools
-
-- **`file_write`** - Write content to files with atomic operation and optional backup
-  - Automatic parent directory creation
-  - Optional backup before overwriting
-  - Atomic write operations for data integrity
-  - Configurable backup behavior
-
-- **`read_files`** - Batch file reading with partial failure handling
-  - Read multiple files in a single request (up to 50 files)
-  - Configurable max file size (default: 1MB per file)
-  - Partial failure support (continue on error or fail-fast)
-  - Efficient bulk operations
-
-#### 🧠 Context Enrichment & Intelligence
-
-- **Graph-based code intelligence** integration
+- `KBClient` REST wrapper to enable dependency injection and more reliable unit/integration testing.
+- Search output improvements (formatting + payload trimming) and request options:
+  - Optional snippets, with configurable `context_lines_before` / `context_lines_after`
+  - Support for filters like `exclude_paths`, `exclude_patterns`, `score_cutoff`, `max_snippets`, and `embed_model`
+- Standardized MCP tool set:
+  - `search`
+  - `chunk_get`
+  - `file_lines`
+  - `store_info`
+  - `metadata_get`
+  - `repos_list`
+  - `health`
+  - `open_in_editor`
+- Graph-based code intelligence integration:
   - Support for `include_graph_context` parameter in search queries
   - Entity relationship enrichment (calls, imports, inheritance)
   - Cross-file dependency context
   - Enhanced search results with structural understanding
-
-- **Context line expansion**
-  - `context_lines_before` and `context_lines_after` parameters
-  - Configurable context window (0-10 lines)
-  - Better code comprehension with surrounding context
-  - Maintains performance with bounded expansion
-
-#### 🔧 Enhanced Search Capabilities
-
-- **JSON-RPC protocol support** (in addition to MCP stdio)
-  - Enables integration with more AI platforms
-  - Standardized request/response format
-  - Better error handling and structured responses
-  - Backward compatible with existing MCP stdio clients
-
-- **Advanced search parameters**
-  - `exclude_paths` - Filter out specific file paths from results
-  - `exclude_patterns` - Pattern-based exclusion (glob patterns)
-  - `mmr_enabled` - Toggle Maximal Marginal Relevance
-  - `mmr_lambda` - Configure MMR diversity parameter (0-1)
-  - `score_cutoff` - Minimum relevance threshold
-  - `deadline_ms` - Per-query timeout configuration
-
-- **Embedding model selection**
-  - `embed_model` parameter: "small" (1536d) or "large" (3072d)
-  - Dynamic model selection per query
-  - Backward compatible with default model
-
-#### 📊 Improved Observability
-
-- **Enhanced logging and debugging**
-  - Structured JSONL logging for all tool operations
-  - Request/response tracking with correlation IDs
-  - Performance metrics for each tool call
-  - Error context and stack traces
+- Context line expansion via `context_lines_before` / `context_lines_after`.
+- JSON-RPC protocol support (in addition to MCP stdio).
+- Advanced search parameters: `exclude_paths`, `exclude_patterns`, `mmr_enabled`, `mmr_lambda`, `score_cutoff`.
+- Enhanced logging and debugging with structured JSONL and correlation IDs.
 
 ### Changed
 
-- **Breaking**: Minimum required kb API version is now 1.0.0
-- **Tool response format** now includes graph context when available
-- **Search results** enriched with entity relationships
-- **Error messages** more detailed with actionable remediation steps
+- **Breaking**: Minimum required KB API version is now 0.2.0.
+- REST client targets KB `/v1` endpoints for search, repos, chunks, and file slices.
+- **Breaking**: Cursor-based pagination and `deadline_ms` are not supported in v0.2.0 (clients must not send them).
+- **Breaking**: Removed legacy `include_snippets` from KB search requests; use `max_snippets`.
+- Tool response format now includes graph context when available.
+- Search results enriched with entity relationships.
+- Error messages provide actionable remediation guidance.
 
 ### Improved
 
@@ -119,7 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Parallel snippet fetching** with configurable concurrency for `search_knowledge` tool
+- **Parallel snippet fetching** with configurable concurrency for `search` tool
 - Configuration options for concurrency control:
   - `MAX_CONCURRENT_SNIPPET_FETCH` (default: 8, range: 1-12)
   - `SNIPPET_FETCH_TIMEOUT_MS` (default: 2000ms, range: 500-10000ms)
@@ -139,11 +110,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release of dolphin-mcp
 - MCP server implementation for Dolphin semantic code search
 - Tools:
-  - `search_knowledge` - Semantic search across indexed repositories
-  - `fetch_chunk` - Fetch code chunks by ID
-  - `fetch_lines` - Fetch file slices by line range
-  - `get_vector_store_info` - Repository metadata
-  - `get_metadata` - Chunk metadata
+  - `search` - Semantic search across indexed repositories
+  - `chunk.get` - Fetch code chunks by ID
+  - `file.lines` - Fetch file slices by line range
+  - `store.info` - Repository metadata
+  - `metadata.get` - Chunk metadata
   - `open_in_editor` - Generate VS Code URIs
 - Support for Continue.dev and Claude Desktop
 - JSONL logging to `logs/mcp.log`

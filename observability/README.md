@@ -2,9 +2,10 @@
 
 ## Overview
 
-Lightweight observability stack for debugging and monitoring Dolphin services during development. Provides distributed tracing, log aggregation, and latency monitoring.
+Lightweight observability stack for debugging and monitoring Dolphin core services during development. Provides distributed tracing, log aggregation, and latency monitoring.
 
 **Purpose**: Development debugging and performance analysis
+**Scope**: MCP bridge + KB HTTP/indexing services (no VSCode extension required)
 **Status**: Phase 1 - Core Infrastructure
 
 ## Architecture
@@ -26,12 +27,13 @@ Lightweight observability stack for debugging and monitoring Dolphin services du
 │              └──────────────┘                    │
 └──────────────────────────────────────────────────┘
                       │
-   ┌──────────────────┼──────────────────┐
-   │                  │                  │
-┌──▼────────┐  ┌──────▼──────┐  ┌───────▼──────┐
-│  KB API   │  │ Agent Core  │  │  MCP Bridge  │
-│   :8000   │  │   :9091     │  │    :9092     │
-└───────────┘  └─────────────┘  └──────────────┘
+         ┌────────────┼────────────┐
+         │            │            │
+     ┌───▼────┐   ┌────▼────┐   ┌──▼──────┐
+     │ KB API │   │ Indexer │   │  MCP    │
+     │ :8000  │   │ (CLI)   │   │ Bridge  │
+     └────────┘   └─────────┘   │  :9092  │
+                                └─────────┘
 ```
 
 ## Quick Start
@@ -72,7 +74,21 @@ curl http://localhost:8000/metrics
 curl http://localhost:8000/health
 ```
 
-### 4. View in Grafana
+### 4. Start MCP Bridge (optional but supported)
+
+```bash
+cd mcp-bridge
+bun run --hot src/index.ts
+```
+
+### 5. Run Indexing (optional)
+
+```bash
+# From project root
+uv run dolphin kb index <repo-name>
+```
+
+### 6. View in Grafana
 
 1. Open http://localhost:3000
 2. Go to "Dolphin Debugging Dashboard"
@@ -88,7 +104,7 @@ curl http://localhost:8000/health
 - **Port**: 9090
 - **Retention**: 7 days
 - **Scrape Interval**: 15 seconds
-- **Targets**: KB API (:8000), Agent Core (:9091), MCP Bridge (:9092)
+- **Targets**: KB API (:8000), MCP Bridge (:9092)
 
 ### Jaeger (Distributed Tracing)
 
@@ -102,7 +118,9 @@ curl http://localhost:8000/health
 - **Port**: 3100
 - **Format**: JSONL (structured logs)
 - **Retention**: 30 days
-- **Use**: Search and filter logs from all services
+- **Use**: Search and filter logs from core services
+- **Captured by default**: `mcp-bridge/logs/mcp.log`
+- **Optional**: Drop JSONL logs into `observability/logs/` to ship via Promtail
 
 ### Grafana (Visualization)
 
@@ -115,6 +133,10 @@ curl http://localhost:8000/health
   - Backend latency breakdown
   - Live error logs
   - Link to Jaeger traces
+
+## No VSCode Extension Required
+
+The stack is designed to work with the standalone MCP bridge, KB HTTP server, and indexing pipeline. If you run the VSCode extension, it can also emit data, but it is not required for this stack to function.
 
 ## KB API Metrics
 
@@ -204,7 +226,8 @@ await traced(SpanNames.CLAUDE_REQUEST, async (span) => {
 import { createMetricsServer, metricsCounters } from "@dolphin/shared/observability";
 
 // Start metrics server (Bun runtime only)
-createMetricsServer(9091);
+// Update observability/prometheus/prometheus.yml if you choose a different port.
+createMetricsServer(9092);
 
 // Metrics auto-increment on tool calls
 metricsCounters.toolInvocations.inc({ tool: "file_read" });

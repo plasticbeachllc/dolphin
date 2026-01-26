@@ -6,15 +6,20 @@ including knowledge base management, API serving, and persona management.
 
 from __future__ import annotations
 
+import asyncio
 import os
+import sys
 from pathlib import Path
 from typing import Annotated
 
 import typer
+import uvicorn
+from rich import print as rprint
 
 # Import kb CLI functions for top-level commands
 # Import subcommand apps
 from kb.api_key import get_or_create_kb_api_key
+from kb.config import load_config
 from kb.ingest.cli import (
     add_repo as kb_add_repo,
     app as kb_app,
@@ -26,6 +31,7 @@ from kb.ingest.cli import (
     status as kb_status,
 )
 from kb.observability import StructuredLogger
+from kb.store import SQLiteMetadataStore
 
 
 def get_version() -> str:
@@ -35,7 +41,7 @@ def get_version() -> str:
 
         return version("pb-dolphin")
     except Exception:
-        return "unkown"  # Fallback version
+        return "unknown"  # Fallback version
 
 
 def version_callback(version: bool = False) -> None:
@@ -95,12 +101,9 @@ def init(
 def add_repo(
     name: str = typer.Argument(..., help="Logical name for the repository."),
     path: Path = typer.Argument(..., help="Absolute path to the repository root."),
-    default_embed_model: str = typer.Option(
-        "large", "--default-embed-model", help="Default embedding model (small|large)."
-    ),
 ) -> None:
     """Register or update a repository in the metadata store."""
-    kb_add_repo(name=name, path=path, default_embed_model=default_embed_model)
+    kb_add_repo(name=name, path=path)
 
 
 @app.command()
@@ -203,7 +206,6 @@ def _search_local(
             path_prefix=path_prefix,
             top_k=top_k,
             score_cutoff=score_cutoff,
-            embed_model=embed_model,
         )
 
         # Execute search
@@ -229,16 +231,17 @@ def _search_remote(
     import requests
     import requests.exceptions  # Import the exceptions module explicitly
 
+    from kb.api_key import load_kb_api_key
     from kb.config import load_config
 
     config = load_config()
-    endpoint = f"http://{config.endpoint}/search"
+    endpoint = f"http://{config.endpoint}/v1/search"
 
     payload = {
         "query": query,
         "top_k": top_k,
         "score_cutoff": score_cutoff,
-        "embed_model": embed_model,
+        # Note: embed_model is not sent - server always uses global default
     }
 
     if repos:
@@ -247,7 +250,20 @@ def _search_remote(
         payload["path_prefix"] = path_prefix
 
     try:
-        response = requests.post(endpoint, json=payload, timeout=30)
+        api_key = load_kb_api_key()
+        if not api_key:
+            typer.echo(
+                "Error: No KB API key configured. Set DOLPHIN_API_KEY (or DOLPHIN_KB_API_KEY) to match the server.",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        response = requests.post(
+            endpoint,
+            json=payload,
+            headers={"X-API-Key": api_key},
+            timeout=30,
+        )
         response.raise_for_status()
 
         result = response.json()
@@ -347,9 +363,41 @@ def reset_all(
 def serve(
     host: Annotated[str, typer.Option("--host", help="Host to bind to")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", help="Port to bind to")] = 7777,
+    watch: Annotated[list[str] | None, typer.Option("--watch", help="Repositories to watch")] = None,
+    no_watch: bool = typer.Option(False, "--no-watch", help="Disable automatic file watching"),
 ) -> None:
     """Start the dolphin API server."""
-    import uvicorn
+
+    # Configure watcher environment variables BEFORE starting uvicorn
+    # Default behavior: watch all repos unless disabled or specific repos requested
+    repo_list: list[str] = []
+
+    if no_watch:
+        # Explicitly disabled
+        repo_list = []
+    elif watch:
+        # User specified specific repos
+        repo_list = [r for r in watch if r.strip()]
+    else:
+        # Default: watch all registered repos
+        try:
+            config = load_config()
+            metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+            metadata.initialize()
+            repos = metadata.list_all_repos()
+            repo_list = [repo["name"] for repo in repos]
+        except Exception as e:
+            rprint(f"[yellow]Warning: Failed to list repos for automatic watching: {e}[/yellow]")
+
+    # Deduplicate
+    repo_list = sorted(list(set(repo_list)))
+
+    if repo_list:
+        os.environ["DOLPHIN_WATCH_REPOS"] = ",".join(repo_list)
+        rprint(f"[green]Configured to watch repositories: {', '.join(repo_list)}[/green]")
+    elif "DOLPHIN_WATCH_REPOS" in os.environ:
+        # If no repos to watch, clear the env var to prevent inheriting it
+        del os.environ["DOLPHIN_WATCH_REPOS"]
 
     if not os.environ.get("DOLPHIN_API_KEY") and not os.environ.get("DOLPHIN_KB_API_KEY"):
         os.environ["DOLPHIN_API_KEY"] = get_or_create_kb_api_key()
@@ -357,9 +405,54 @@ def serve(
     uvicorn.run("kb.api.server:app_with_lifespan", host=host, port=port, reload=False)
 
 
+async def _watch_repo(repo_name: str) -> None:
+    """Async implementation of watch command."""
+    try:
+        from kb.config import load_config
+        from kb.ingest.pipeline import IngestionPipeline
+        from kb.ingest.watcher import RepoWatcher
+        from kb.store import LanceDBStore, SQLiteMetadataStore
+        from kb.store.graph_store import GraphStore
+
+        config = load_config()
+
+        # Construct proper paths for store initialization
+        store_root = config.resolved_store_root()
+        lancedb_path = store_root / "lancedb"
+        metadata_path = store_root / "metadata.db"
+
+        # Initialize stores with proper paths
+        lancedb = LanceDBStore(lancedb_path)
+        metadata = SQLiteMetadataStore(metadata_path)
+
+        # Initialize pipeline
+        pipeline = IngestionPipeline(
+            config=config, lancedb=lancedb, metadata=metadata, graph_store=GraphStore(metadata_path)
+        )
+
+        watcher = RepoWatcher(repo_name, config, pipeline)
+        await watcher.watch()
+    except Exception as e:
+        _log.error("Watcher failed", error=e)
+        sys.exit(1)
+
+
+@app.command()
+def watch(
+    repo_name: Annotated[str, typer.Argument(help="Name of repository to watch")],
+) -> None:
+    """Start file watcher for a repository (standalone)."""
+    rprint(f"[bold blue]Starting watcher for {repo_name}...[/bold blue]")
+    try:
+        asyncio.run(_watch_repo(repo_name))
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        rprint("\n[yellow]Watcher stopped.[/yellow]")
+
+
 @app.command()
 def config(
     show: bool = typer.Option(False, "--show", help="Show current configuration"),
+    check: bool = typer.Option(False, "--check", help="Validate configuration settings"),
 ) -> None:
     """Manage dolphin configuration."""
     if show:
@@ -371,9 +464,49 @@ def config(
         typer.echo(f"  Endpoint: {config.endpoint}")
         typer.echo(f"  Default embed model: {config.default_embed_model}")
         typer.echo(f"  Embedding provider: {config.embedding_provider}")
+    elif check:
+        # Validate configuration
+        try:
+            import shutil
+
+            from kb.config import load_config
+
+            config = load_config()
+            rprint("\n[bold]Configuration Validation[/bold]")
+
+            # Check 1: Store Root
+            store_root = config.resolved_store_root()
+            if store_root.exists():
+                rprint(f"✅ Store Root: [green]{store_root}[/green]")
+                if os.access(store_root, os.W_OK):
+                    rprint("(Writable)")
+                else:
+                    rprint("[red](Not Writable)[/red]")
+            else:
+                rprint(f"❌ Store Root: [red]{store_root} (Does not exist)[/red]")
+
+            # Check 2: API Keys
+            if config.embedding_provider == "openai":
+                if os.environ.get(config.openai_api_key_env):
+                    rprint(f"✅ OpenAI API Key: [green]Present ({config.openai_api_key_env})[/green]")
+                else:
+                    rprint(f"❌ OpenAI API Key: [red]Missing ({config.openai_api_key_env})[/red]")
+            else:
+                rprint(f"ℹ️  Provider: {config.embedding_provider}")
+
+            # Check 3: Dependencies (Simple check)
+            if shutil.which("uv"):
+                rprint("✅ 'uv' command: [green]Found[/green]")
+            else:
+                rprint("⚠️  'uv' command: [yellow]Not found (Recommended)[/yellow]")
+
+        except Exception as e:
+            rprint(f"[red]Validation failed: {e}[/red]")
+            raise typer.Exit(1)
     else:
         typer.echo("Use 'dolphin init' to initialize configuration")
         typer.echo("Use 'dolphin config --show' to view current config")
+        typer.echo("Use 'dolphin config --check' to validate config")
 
 
 def main() -> None:

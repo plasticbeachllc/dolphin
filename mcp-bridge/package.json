@@ -1,6 +1,6 @@
 {
   "name": "dolphin-mcp",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "MCP server for Dolphin semantic code search - works with Continue.dev, Claude Desktop, and other MCP clients",
   "author": "tdc93",
   "private": false,
@@ -19,19 +19,20 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.22.0",
-    "zod": "^4.1.12",
-    "zod-to-json-schema": "^3.24.6"
+    "@modelcontextprotocol/sdk": "^1.25.3",
+    "@iarna/toml": "^2.2.5",
+    "zod": "~3.24.0",
+    "zod-to-json-schema": "~3.24.0"
   },
   "devDependencies": {
-    "@types/node": "^24.10.1",
-    "eslint": "^9.39.1",
+    "@types/node": "^24.10.9",
+    "eslint": "^9.39.2",
     "eslint-config-standard-with-typescript": "^43.0.1",
     "eslint-plugin-import": "^2.32.0",
-    "eslint-plugin-n": "^17.23.1",
+    "eslint-plugin-n": "^17.23.2",
     "eslint-plugin-promise": "^7.2.1",
-    "@typescript-eslint/eslint-plugin": "^8.46.4",
-    "@typescript-eslint/parser": "^8.46.4",
+    "@typescript-eslint/eslint-plugin": "^8.53.1",
+    "@typescript-eslint/parser": "^8.53.1",
     "typescript": "^5.9.3"
   },
   "keywords": [

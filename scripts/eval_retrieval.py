@@ -174,7 +174,6 @@ def evaluate_scenario(scenario: GoldenScenario, backend: KnowledgeSearchBackend,
     request = SearchRequest(
         query=scenario.query,
         top_k=top_k,
-        embed_model="large",
         repos=repos,
     )
 
@@ -275,7 +274,7 @@ def main():
     parser.add_argument(
         "--scenarios",
         type=Path,
-        default=Path("golden-scenarios"),
+        default=Path("benchmarks/golden-scenarios"),
         help="Path to scenarios file or directory",
     )
     parser.add_argument(

@@ -1,15 +1,21 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { tools } from "./tools/index.js";
-import { initLogger, logInfo } from "../util/logger.js";
+import { initLogger, logInfo, logWarn } from "../util/logger.js";
+import { CONFIG, getConfigSummary, validateConfig } from "../util/config.js";
 
 export async function createServer(): Promise<void> {
   // Initialize file logger (no stdout pollution)
   await initLogger();
 
-  // Get server info from environment or package defaults
-  const SERVER_NAME = process.env.SERVER_NAME || "dolphin-mcp";
-  const SERVER_VERSION = process.env.SERVER_VERSION || "1.0.0";
+  const SERVER_NAME = CONFIG.SERVER_NAME;
+  const SERVER_VERSION = CONFIG.SERVER_VERSION;
+  const MCP_PROTOCOL_VERSION = CONFIG.MCP_PROTOCOL_VERSION;
+  const configWarnings = validateConfig();
+  await logInfo("config", "MCP config loaded", { config: getConfigSummary() });
+  if (configWarnings.length > 0) {
+    await logWarn("config", "MCP config warnings", { warnings: configWarnings });
+  }
 
   const server = new McpServer(
     {
@@ -26,12 +32,20 @@ export async function createServer(): Promise<void> {
 
   // Register tools
   for (const tool of tools) {
-    server.registerTool(
+    // MCP SDK types can be extremely deep here; keep runtime behavior while avoiding TS instantiation blowups.
+    const registerTool = server.registerTool.bind(server) as unknown as (
+      name: string,
+      meta: Record<string, unknown>,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      handler: any
+    ) => void;
+    registerTool(
       tool.definition.name,
       {
         title: tool.definition.annotations?.title,
         description: tool.definition.description,
-        inputSchema: tool.inputSchema,
+        inputSchema: tool.inputSchema ?? {},
+
         annotations: tool.definition.annotations,
       },
       tool.handler
@@ -42,5 +56,5 @@ export async function createServer(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  logInfo("server_start", "MCP server started", { protocolVersion: "2025-06-18" });
+  logInfo("server_start", "MCP server started", { protocolVersion: MCP_PROTOCOL_VERSION });
 }

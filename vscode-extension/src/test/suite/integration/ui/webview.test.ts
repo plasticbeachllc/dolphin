@@ -1,3 +1,4 @@
+import "../../setup";
 import * as assert from "assert";
 import * as fs from "fs";
 import * as path from "path";
@@ -8,12 +9,23 @@ import {
   waitForCondition,
   waitForWebviewReady,
 } from "../../../helpers/shared-fixtures";
+import {
+  resetMocks,
+  setupMockEnvironment,
+  teardownMockEnvironment,
+} from "../../../helpers/mock-manager";
 
 describe("Webview Tests", () => {
   before(async function () {
     this.timeout(15000);
+    resetMocks();
+    await setupMockEnvironment();
     await activateExtension();
     await waitForWebviewReady(TEST_TIMEOUTS.WEBVIEW_READY);
+  });
+
+  after(async () => {
+    await teardownMockEnvironment();
   });
 
   it("Should be able to focus Dolphin chat view", async function () {

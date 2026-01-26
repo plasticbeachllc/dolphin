@@ -1,18 +1,52 @@
 """Pytest configuration and shared fixtures for KB pipeline tests."""
 
+import os
+import shutil
 import tempfile
 from collections.abc import Generator
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tests.kb_utils import FIXTURE_REPO_ROOT, InMemoryKBBackend
+if TYPE_CHECKING:
+    from tests.kb_utils import InMemoryKBBackend
+
+_TEST_CONFIG_ENV = "DOLPHIN_CONFIG_PATH"
+# Keep tests deterministic by avoiding user-level configs.
+_xdist_worker = os.environ.get("PYTEST_XDIST_WORKER") or "main"
+_test_config_dir = Path(tempfile.mkdtemp(prefix=f"dolphin-test-config-{_xdist_worker}-"))
+_test_config_path = _test_config_dir / "config.toml"
+_test_config_path.write_text(
+    """
+[storage]
+store_root = "/tmp/dolphin-test-store-{worker}"
+
+[server]
+endpoint = "127.0.0.1:7777"
+
+[embedding]
+provider = "stub"
+default_embed_model = "small"
+
+[retrieval]
+score_cutoff = 0.005
+top_k = 8
+max_snippet_tokens = 240
+mmr_enabled = true
+mmr_lambda = 0.7
+""".lstrip().format(worker=_xdist_worker),
+    encoding="utf-8",
+)
+os.environ[_TEST_CONFIG_ENV] = str(_test_config_path)
 
 
 @pytest.fixture(scope="session")
 def sample_repo_path() -> Path:
     """Path to the sample repository fixture."""
+    from tests.kb_utils import FIXTURE_REPO_ROOT
+
     return FIXTURE_REPO_ROOT
 
 
@@ -33,8 +67,10 @@ def temp_db_path(temp_dir: Path) -> Generator[Path, None, None]:
 
 
 @pytest.fixture
-def in_memory_backend(sample_repo_path: Path) -> InMemoryKBBackend:
+def in_memory_backend(sample_repo_path: Path) -> "InMemoryKBBackend":
     """In-memory backend for fast testing."""
+    from tests.kb_utils import InMemoryKBBackend
+
     return InMemoryKBBackend(sample_repo_path)
 
 
@@ -58,6 +94,28 @@ def mock_embedding_service():
     return MockEmbeddingService()
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _disable_retry_sleeps_for_tests() -> Generator[None, None, None]:
+    """Avoid real sleeps from retry/backoff logic during tests."""
+    import kb.ingest.error_logging as error_logging
+
+    mp = pytest.MonkeyPatch()
+    mp.setattr(error_logging, "_sleep", lambda _seconds: None)
+    try:
+        yield
+    finally:
+        mp.undo()
+
+
+@pytest.fixture(autouse=True)
+def _reset_embedding_provider_after_test() -> Generator[None, None, None]:
+    """Ensure embedding provider changes do not leak across tests."""
+    yield
+    from kb.embeddings.provider import EmbeddingProvider, set_default_provider
+
+    set_default_provider(EmbeddingProvider())
+
+
 def init_test_git_repo(repo_path: Path) -> None:
     """Initialize a git repository with test-friendly defaults.
 
@@ -74,14 +132,34 @@ def init_test_git_repo(repo_path: Path) -> None:
     subprocess.run(["git", "-C", str(repo_path), "config", "user.name", "Test User"], check=True)
     # Disable GPG signing for this repo only (not globally)
     subprocess.run(["git", "-C", str(repo_path), "config", "commit.gpgsign", "false"], check=True)
+    # Create initial commit so HEAD is valid
+    subprocess.run(["git", "-C", str(repo_path), "commit", "--allow-empty", "-m", "Initial commit"], check=True)
+
+
+@pytest.fixture(scope="session")
+def _git_template_dir(tmp_path_factory) -> Path:
+    """Create a template git repo once per session.
+
+    This optimization avoids running `git init` and `git config` (subprocess calls)
+    for every single test that needs a repo, reducing overhead significantly.
+    """
+    # Create valid path for template
+    template_dir = tmp_path_factory.mktemp("git_template")
+    # Initialize the repo in this persistent temp dir
+    init_test_git_repo(template_dir)
+    return template_dir
 
 
 @pytest.fixture
-def git_repo(temp_dir: Path) -> Generator[Path, None, None]:
-    """Create a git repository for testing with proper cleanup."""
+def git_repo(temp_dir: Path, _git_template_dir: Path) -> Generator[Path, None, None]:
+    """Create a git repository for testing with proper cleanup.
+
+    Implementation: Copies a pre-initialized template repo to the test's
+    temp dir instead of running slow git commands.
+    """
     repo_path = temp_dir / "test_repo"
-    repo_path.mkdir()
-    init_test_git_repo(repo_path)
+    # Copy from template is drastically faster than subprocess git calls
+    shutil.copytree(_git_template_dir, repo_path, dirs_exist_ok=True)
     yield repo_path
     # Cleanup is handled by temp_dir context manager
 
@@ -358,6 +436,7 @@ def pytest_configure(config):
         "markers",
         "integration: mark test as an integration test (uses real dependencies)",
     )
+    config.addinivalue_line("markers", "e2e: mark test as an end-to-end test")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -476,7 +555,7 @@ def registered_test_repo(mock_kb_stores, temp_dir):
     workspace_path.mkdir()
 
     # Register repo
-    sql_store.record_repo(name="test-repo", path=workspace_path, default_embed_model="large")
+    sql_store.record_repo(name="test-repo", path=workspace_path, default_embed_model="small")
 
     # Get repo info
     repo = sql_store.get_repo_by_name("test-repo")

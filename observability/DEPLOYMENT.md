@@ -51,6 +51,8 @@ You should see:
 - ✅ dolphin-promtail
 - ✅ dolphin-grafana (port 3000)
 
+**Log shipping note**: Promtail watches `mcp-bridge/logs/*.log` and `observability/logs/*.jsonl` by default.
+
 ### 3. Access Web UIs
 
 | Service    | URL                    | Credentials                                  |
@@ -80,6 +82,19 @@ curl http://localhost:8000/metrics
 curl http://localhost:8000/health
 ```
 
+### 6. Start MCP Bridge (optional but supported)
+
+```bash
+cd mcp-bridge
+bun run --hot src/index.ts
+```
+
+### 7. Run Indexing (optional)
+
+```bash
+uv run dolphin kb index <repo-name>
+```
+
 ## Configuration
 
 ### Environment Variables
@@ -100,6 +115,10 @@ LOG_LEVEL=INFO
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=your_secure_password_here
 ```
+
+## No VSCode Extension Required
+
+The observability stack is built to work with the core MCP bridge, KB HTTP server, and indexing pipeline. The VSCode extension is optional and not required to collect metrics or logs.
 
 ### Customize Prometheus Scrape Targets
 

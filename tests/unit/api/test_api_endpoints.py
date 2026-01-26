@@ -38,7 +38,7 @@ class TestHealthEndpoint:
     def test_health_shallow_check(self):
         """Test shallow health check returns ok."""
         client = TestClient(app)
-        response = client.get("/health")
+        response = client.get("/v1/health")
 
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
@@ -46,7 +46,7 @@ class TestHealthEndpoint:
     def test_health_shallow_check_explicit(self):
         """Test shallow check with explicit query param."""
         client = TestClient(app)
-        response = client.get("/health?check=shallow")
+        response = client.get("/v1/health?check=shallow")
 
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
@@ -54,12 +54,19 @@ class TestHealthEndpoint:
     def test_health_deep_check_no_stores(self):
         """Test deep health check without stores configured."""
         client = TestClient(app)
-        response = client.get("/health?check=deep")
+        response = client.get("/v1/health?check=deep")
 
         assert response.status_code == 200
         data = response.json()
         # Should have status and checks
         assert "status" in data or "lancedb" in data
+
+    def test_health_v1_shallow_check(self, kb_api_client):
+        """Test /v1/health with API key."""
+        response = kb_api_client.get("/v1/health")
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
 
 
 class TestSearchEndpoint:
@@ -74,43 +81,110 @@ class TestSearchEndpoint:
         """Clean up after each test."""
         reset_search_backend()
 
-    def test_search_basic_query(self):
-        """Test basic search query."""
+    def test_search_requires_api_key(self):
+        """All /v1 endpoints (except /v1/health) require an API key."""
         client = TestClient(app)
-        response = client.post("/search", json={"query": "test function"})
+        response = client.post("/v1/search", json={"query": "test function"})
+        assert response.status_code == 401
+
+    def test_search_v1_basic_query(self, kb_api_client):
+        """Test /v1/search with API key."""
+        response = kb_api_client.post("/v1/search", json={"query": "test function"})
 
         assert response.status_code == 200
         data = response.json()
         assert "hits" in data
         assert len(data["hits"]) > 0
+        assert data["meta"]["max_snippets"] == 0
 
-    def test_search_with_repos_filter(self):
+    def test_search_v1_unknown_repo_returns_404(self, kb_api_client):
+        """Unknown repos should return a 404 with a helpful message."""
+        response = kb_api_client.post(
+            "/v1/search",
+            json={"query": "test", "repos": ["does-not-exist"]},
+        )
+
+        assert response.status_code == 404
+        assert "Repository not found" in response.json().get("detail", "")
+
+    def test_search_with_repos_filter(self, kb_api_client, registered_test_repo):
         """Test search with repos filter."""
-        client = TestClient(app)
-        response = client.post("/search", json={"query": "test", "repos": ["repo1", "repo2"]})
+        response = kb_api_client.post(
+            "/v1/search",
+            json={"query": "test", "repos": [registered_test_repo["name"]]},
+        )
 
         assert response.status_code == 200
 
-    def test_search_with_top_k(self):
+    def test_search_with_top_k(self, kb_api_client):
         """Test search with custom top_k."""
-        client = TestClient(app)
-        response = client.post("/search", json={"query": "test", "top_k": 20})
+        response = kb_api_client.post("/v1/search", json={"query": "test", "top_k": 20})
 
         assert response.status_code == 200
 
-    def test_search_with_path_prefix(self):
+    def test_search_with_path_prefix(self, kb_api_client):
         """Test search with path_prefix filter."""
-        client = TestClient(app)
-        response = client.post("/search", json={"query": "test", "path_prefix": ["src/", "lib/"]})
+        response = kb_api_client.post("/v1/search", json={"query": "test", "path_prefix": ["src/", "lib/"]})
 
         assert response.status_code == 200
 
-    def test_search_missing_query_fails(self):
+    def test_search_missing_query_fails(self, kb_api_client):
         """Test that missing query field fails validation."""
-        client = TestClient(app)
-        response = client.post("/search", json={})
+        response = kb_api_client.post("/v1/search", json={})
 
         assert response.status_code == 422  # Validation error
+
+    def test_search_v1_snippets_with_context(self, mock_kb_stores, tmp_path, monkeypatch):
+        """Test v1 search snippet enrichment with context lines."""
+        sql_store, lance_store = mock_kb_stores
+        set_stores(sql_store, lance_store)
+
+        repo_root = tmp_path / "repo"
+        repo_root.mkdir()
+        file_path = repo_root / "test.py"
+        file_path.write_text("line1\nline2\nline3\nline4\n", encoding="utf-8")
+
+        sql_store.record_repo(name="test-repo", path=repo_root, default_embed_model="large")
+
+        class BackendNoSnippet:
+            def search(self, request: SearchRequest):
+                return [
+                    {
+                        "repo": "test-repo",
+                        "path": "test.py",
+                        "start_line": 2,
+                        "end_line": 3,
+                        "score": 0.9,
+                        "chunk_id": "c1",
+                    }
+                ]
+
+        set_search_backend(BackendNoSnippet())
+
+        test_key = "test-api-key-12345"
+        monkeypatch.setenv("DOLPHIN_API_KEY", test_key)
+        client = TestClient(app)
+        client.headers = {"X-API-Key": test_key}
+
+        response = client.post(
+            "/v1/search",
+            json={
+                "query": "test",
+                "max_snippets": 1,
+                "context_lines_before": 1,
+                "context_lines_after": 1,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        hit = data["hits"][0]
+        assert hit["snippet"] == "line1\nline2\nline3\nline4\n"
+        assert hit["snippet_start_line"] == 1
+        assert hit["snippet_end_line"] == 4
+
+        reset_search_backend()
+        reset_stores()
 
 
 class TestReposEndpoint:
@@ -120,10 +194,9 @@ class TestReposEndpoint:
         """Reset stores before each test."""
         reset_stores()
 
-    def test_repos_endpoint_exists(self):
+    def test_repos_endpoint_exists(self, kb_api_client):
         """Test /v1/repos endpoint exists."""
-        client = TestClient(app)
-        response = client.get("/repos")
+        response = kb_api_client.get("/v1/repos")
 
         # Should work even without stores, or return 404/503 if not configured
         assert response.status_code in [200, 404, 500, 503]
@@ -132,10 +205,9 @@ class TestReposEndpoint:
 class TestChunkEndpoint:
     """Test /v1/chunks/{id} endpoint."""
 
-    def test_chunk_endpoint_exists(self):
+    def test_chunk_endpoint_exists(self, kb_api_client):
         """Test /v1/chunks/{id} endpoint exists."""
-        client = TestClient(app)
-        response = client.get("/chunks/123")
+        response = kb_api_client.get("/v1/chunks/123")
 
         # Should exist, may error without data or return 404/503 if not configured
         assert response.status_code in [200, 404, 422, 500, 503]
@@ -144,10 +216,9 @@ class TestChunkEndpoint:
 class TestFileEndpoint:
     """Test /v1/file endpoint."""
 
-    def test_file_endpoint_requires_params(self):
+    def test_file_endpoint_requires_params(self, kb_api_client):
         """Test /v1/file endpoint requires parameters."""
-        client = TestClient(app)
-        response = client.get("/file")
+        response = kb_api_client.get("/v1/file")
 
         # Should require repo and path params
         assert response.status_code == 422
@@ -236,8 +307,8 @@ class TestApiKeyMiddleware:
         assert req.query == "test"
         assert req.repos is None
         assert req.top_k == 8
-        assert req.max_snippet_tokens == 240
-        assert req.embed_model == "large"
+        # embed_model removed - now uses global config
+        assert req.max_snippets == 0
 
     def test_search_request_with_all_fields(self):
         """Test SearchRequest with all fields."""
@@ -247,7 +318,6 @@ class TestApiKeyMiddleware:
             path_prefix=["src/"],
             top_k=20,
             max_snippet_tokens=500,
-            embed_model="small",
             score_cutoff=0.5,
         )
 
@@ -256,7 +326,7 @@ class TestApiKeyMiddleware:
         assert req.path_prefix == ["src/"]
         assert req.top_k == 20
         assert req.max_snippet_tokens == 500
-        assert req.embed_model == "small"
+        # embed_model removed - now uses global config
         assert req.score_cutoff == 0.5
 
 

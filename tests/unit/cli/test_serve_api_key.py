@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import os
-import sys
-import types
 from pathlib import Path
 from typing import Any
 
@@ -33,10 +31,11 @@ def test_serve_sets_api_key_when_missing(monkeypatch: pytest.MonkeyPatch, temp_h
         captured["reload"] = reload
         captured["env_key"] = os.environ.get("DOLPHIN_API_KEY")
 
-    stub = types.SimpleNamespace(run=fake_run)
-    monkeypatch.setitem(sys.modules, "uvicorn", stub)
+    # Use unittest.mock.patch to avoid uvicorn's logging configuration
+    from unittest.mock import patch
 
-    cli.serve()
+    with patch("uvicorn.run", side_effect=fake_run):
+        cli.serve()
 
     key_path = get_kb_key_path()
     assert key_path.exists(), "serve should create the per-user key file"
@@ -57,7 +56,8 @@ def test_serve_respects_env_override(monkeypatch: pytest.MonkeyPatch, temp_home:
         assert os.environ.get("DOLPHIN_API_KEY") == "existing-key"
         assert not get_kb_key_path().exists(), "No file should be created when env override is present"
 
-    stub = types.SimpleNamespace(run=fake_run)
-    monkeypatch.setitem(sys.modules, "uvicorn", stub)
+    # Use unittest.mock.patch to avoid uvicorn's logging configuration
+    from unittest.mock import patch
 
-    cli.serve()
+    with patch("uvicorn.run", side_effect=fake_run):
+        cli.serve()

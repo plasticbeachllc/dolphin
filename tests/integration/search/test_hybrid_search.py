@@ -327,7 +327,9 @@ class TestSearchRequestHandling:
     def test_different_embed_models(self, hybrid_backend):
         """Test hybrid search with different embedding models."""
         for model in ["small", "large"]:
-            request = SearchRequest(query="test", embed_model=model)
+            request = SearchRequest(
+                query="test",
+            )
 
             mock_results = [{"id": "test1", "_distance": 0.5, "repo": "test", "path": "test.py"}]
 

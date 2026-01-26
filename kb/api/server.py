@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import sys
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
-from pathlib import Path
 
 from fastapi import FastAPI
 
 from ..config import KBConfig, load_config
-from .app import app, reset_search_backend, set_pipeline, set_search_backend, set_stores
+
+# Note on Environment Variable Management:
+# This server expects environment variables (e.g., OPENAI_API_KEY, DOLPHIN_CONFIG_PATH)
+# to be provided by the host environment (shell, Docker, etc.).
+# Auto-loading via .env files is intentionally excluded to maintain
+# consistency across different deployment environments.
+from .app import app, get_pipeline, reset_search_backend, set_pipeline, set_search_backend, set_stores
 from .middleware.metrics import metrics_endpoint, prometheus_middleware
 from .search_backend import create_search_backend
 
@@ -24,31 +29,8 @@ logging.basicConfig(
 )
 
 
-# Load environment variables from .env file if it exists
-def load_env_file():
-    """Load environment variables from .env file if it exists."""
-    env_file = Path(__file__).parent.parent.parent.parent / ".env"
-    if env_file.exists():
-        print(f"📄 Loading environment variables from {env_file}", file=sys.stderr)
-        try:
-            # Simple .env parser
-            with open(env_file) as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        key, value = line.split("=", 1)
-                        os.environ[key.strip()] = value.strip().strip("\"'")
-        except Exception as e:
-            print(f"⚠️  Failed to load .env file: {e}", file=sys.stderr)
-    else:
-        print(f"ℹ️  No .env file found at {env_file}", file=sys.stderr)
-
-
 def initialize_search_backend() -> None:
     """Initialize and configure the search backend and ingestion pipeline based on config."""
-    # Load environment variables from .env file
-    load_env_file()
-
     config: KBConfig = load_config()
     store_root = config.resolved_store_root()
     provider_type = config.embedding_provider
@@ -78,6 +60,7 @@ def initialize_search_backend() -> None:
     backend = create_search_backend(
         store_root=store_root,
         embedding_provider_type=provider_type,
+        default_embed_model=config.default_embed_model,
         cache_enabled=config.cache_enabled,
         redis_url=config.redis_url,
         reranker_config=config.retrieval.reranking.__dict__,
@@ -108,33 +91,24 @@ def initialize_search_backend() -> None:
     print("✅ Ingestion pipeline ready", file=sys.stderr)
 
 
-# Initialize search backend when module loads (before uvicorn starts)
-print("🚀 Initializing KB server...", file=sys.stderr)
-try:
-    initialize_search_backend()
-except FileNotFoundError:
-    print(
-        "⚠️  No KB configuration found at import time. Call initialize_search_backend() after creating a config.",
-        file=sys.stderr,
-    )
+def reload_search_backend() -> None:
+    """Reload the search backend and stores to pick up index changes."""
+    print("🔄 Reloading search backend...", file=sys.stderr)
+    try:
+        # Reset existing backend first to force fresh connections
+        reset_search_backend()
+        initialize_search_backend()
+        print("✅ Search backend reloaded successfully", file=sys.stderr)
+    except Exception as e:
+        print(f"❌ Failed to reload search backend: {e}", file=sys.stderr)
+        raise
+
 
 # Add Prometheus metrics middleware to the app
 app.middleware("http")(prometheus_middleware)
 
 # Add metrics endpoint to the app
 app.get("/metrics")(metrics_endpoint)
-
-
-# Add health check endpoint to the app
-@app.get("/health")
-async def health_check():
-    """Enhanced health check with component status."""
-    return {
-        "status": "healthy",
-        "version": "1.0.0",
-        "timestamp": datetime.now(UTC).isoformat(),
-        "components": {"api": "healthy"},
-    }
 
 
 # Store embedding provider reference for cleanup
@@ -147,12 +121,58 @@ async def lifespan_handler(app_instance: FastAPI):
     """Manage application lifespan (startup and shutdown)."""
     global _embedding_provider
 
-    # Startup is handled by module-level initialization (line 95-96)
-    # This keeps existing behavior where backend is ready before uvicorn starts
+    # Startup: Initialize backend/pipeline if not already initialized.
+    # Avoid module import-time side effects (important for test collection and xdist).
+    if get_pipeline() is None:
+        print("🚀 Initializing KB server...", file=sys.stderr)
+        try:
+            initialize_search_backend()
+        except FileNotFoundError:
+            print(
+                "⚠️  No KB configuration found. Create a config, then call initialize_search_backend().",
+                file=sys.stderr,
+            )
+
+    # Start watchers if configured
+    watch_tasks = []
+    watch_repos = os.environ.get("DOLPHIN_WATCH_REPOS")
+    if watch_repos:
+        repo_names = [r.strip() for r in watch_repos.split(",") if r.strip()]
+        if repo_names:
+            print(f"👀 Starting watchers for repositories: {', '.join(repo_names)}", file=sys.stderr)
+            try:
+                from ..ingest.watcher import RepoWatcher
+
+                pipeline = get_pipeline()
+                if pipeline:
+                    config = load_config()
+                    for repo_name in repo_names:
+                        watcher = RepoWatcher(repo_name, config, pipeline)
+                        task = asyncio.create_task(watcher.watch())
+                        watch_tasks.append(task)
+                else:
+                    print("⚠️  Pipeline not initialized, cannot start watchers", file=sys.stderr)
+            except ImportError as e:
+                print(f"⚠️  Failed to import RepoWatcher: {e}", file=sys.stderr)
+            except Exception as e:
+                print(f"⚠️  Failed to start watchers: {e}", file=sys.stderr)
+
     yield  # Application is running
 
     # Shutdown: Clean up resources
     print("🛑 Shutting down KB server...", file=sys.stderr)
+
+    # Cancel watcher tasks
+    if watch_tasks:
+        print(f"🛑 Stopping {len(watch_tasks)} watchers...", file=sys.stderr)
+        for task in watch_tasks:
+            task.cancel()
+        try:
+            await asyncio.wait(watch_tasks, timeout=5.0)
+        except TimeoutError:
+            print("⚠️  Watchers did not stop gracefully", file=sys.stderr)
+        except Exception as e:
+            print(f"⚠️  Error stopping watchers: {e}", file=sys.stderr)
 
     # Close embedding provider if it has async client
     if _embedding_provider and hasattr(_embedding_provider, "close"):

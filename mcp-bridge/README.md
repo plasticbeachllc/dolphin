@@ -3,7 +3,7 @@
 [![NPM Version](https://img.shields.io/npm/v/dolphin-mcp.svg)](https://www.npmjs.com/package/dolphin-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-MCP server for Dolphin semantic code search. Conforms to [MCP spec](https://modelcontextprotocol.io/).
+MCP server for Dolphin semantic code search. Conforms to [MCP spec](https://modelcontextprotocol.io/) and targets the `/v1` KB API endpoints.
 
 ## Quick Start
 
@@ -56,10 +56,11 @@ Add to `claude_desktop_config.json`:
 
 ## Environment Variables
 
-| Variable          | Default                 | Description                              |
-| ----------------- | ----------------------- | ---------------------------------------- |
-| `DOLPHIN_API_URL` | `http://127.0.0.1:7777` | Dolphin API endpoint                     |
-| `LOG_LEVEL`       | `info`                  | Logging level (debug, info, warn, error) |
+| Variable           | Default                 | Description                              |
+| ------------------ | ----------------------- | ---------------------------------------- |
+| `DOLPHIN_API_URL`  | `http://127.0.0.1:7777` | Dolphin API base URL                     |
+| `KB_REST_BASE_URL` | unset                   | Alias for `DOLPHIN_API_URL` (tests/CI)   |
+| `LOG_LEVEL`        | `info`                  | Logging level (debug, info, warn, error) |
 
 ### API Key Authentication
 
@@ -85,7 +86,7 @@ Environment variables take precedence over the file-based key.
 
 ### Parallel Snippet Fetching Configuration
 
-These variables control the performance optimization for parallel snippet fetching in `search_knowledge`:
+These variables control the performance optimization for parallel snippet fetching in `search`:
 
 | Variable                       | Default | Description                        | Recommended Range |
 | ------------------------------ | ------- | ---------------------------------- | ----------------- |
@@ -121,9 +122,22 @@ SNIPPET_FETCH_RETRY_ATTEMPTS=2
 
 ## Available Tools
 
-### `search_knowledge`
+### Tool Output Shape
 
-Semantically query code and docs across indexed repositories and return ranked snippets with citations.
+All tools return MCP `content` blocks. Success responses include `_meta` with `tool_version`, `latency_ms`, and `warnings`. Errors set `isError: true` and include `_meta.error`:
+
+```json
+{
+  "code": "string",
+  "message": "string",
+  "remediation": "string",
+  "details": {}
+}
+```
+
+### `search`
+
+Semantically query code and docs across indexed repositories and return many ranked candidates with follow-up-ready identifiers and citations.
 
 ```json
 {
@@ -133,9 +147,25 @@ Semantically query code and docs across indexed repositories and return ranked s
   "exclude_paths": ["string"],
   "exclude_patterns": ["string"],
   "top_k": "number (1-100)",
-  "max_snippets": "number",
+  "max_snippets": "number (top-N results to include snippet text for)",
+  "top_context_n": "number (top-N snippet results to include extra context for)",
   "embed_model": "small | large",
-  "score_cutoff": "number"
+  "score_cutoff": "number",
+  "mmr_enabled": "boolean",
+  "mmr_lambda": "number (0-1)",
+  "context_lines_before": "number (0-10)",
+  "context_lines_after": "number (0-10)",
+  "include_graph_context": "boolean",
+  "output_mode": "prompt_ready | resources | both",
+  "include_prompt_ready": "boolean",
+  "include_resource_text": "boolean",
+  "include_hits_json": "boolean",
+  "include_warnings_in_text": "boolean",
+  "include_abs_paths": "boolean",
+  "include_vscode_uris": "boolean",
+  "ann_strategy": "speed | accuracy | adaptive | custom",
+  "ann_nprobes": "number",
+  "ann_refine_factor": "number"
 }
 ```
 
@@ -158,7 +188,7 @@ Semantically query code and docs across indexed repositories and return ranked s
 }
 ```
 
-### `fetch_chunk`
+### `chunk.get`
 
 Fetch a chunk by chunk_id and return fenced code with citation.
 
@@ -168,7 +198,17 @@ Fetch a chunk by chunk_id and return fenced code with citation.
 }
 ```
 
-### `fetch_lines`
+### `metadata.get`
+
+Fetch chunk metadata without returning the full content.
+
+```json
+{
+  "chunk_id": "string (required)"
+}
+```
+
+### `file.lines`
 
 Fetch a file slice [start, end] inclusive from disk and return fenced code with citation.
 
@@ -181,7 +221,7 @@ Fetch a file slice [start, end] inclusive from disk and return fenced code with 
 }
 ```
 
-### `get_vector_store_info`
+### `store.info`
 
 Report namespaces, dims, limits, and approximate counts.
 
@@ -189,16 +229,21 @@ Report namespaces, dims, limits, and approximate counts.
 {}
 ```
 
-### `open_in_editor`
+### `repos.list`
 
-Compute a vscode://file URI for a repo path and optional position.
+List indexed repositories with their absolute root paths and approximate file/chunk counts.
+
+```json
+{}
+```
+
+### `health`
+
+Check Knowledge Base REST API health (`/v1/health`).
 
 ```json
 {
-  "repo": "string (required)",
-  "path": "string (required)",
-  "line": "number (1-indexed)",
-  "column": "number (1-indexed)"
+  "check": "shallow | deep"
 }
 ```
 

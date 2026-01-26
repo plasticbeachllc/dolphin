@@ -1,13 +1,12 @@
 #!/usr/bin/env bun
 import { createServer } from "./mcp/server.js";
-import { getOrCreateKbApiKey } from "../../../shared/kb-auth";
+import { getOrCreateKbApiKey } from "../../shared/kb-auth";
+import { CONFIG } from "./util/config.js";
 
-// Environment variable configuration
-const DOLPHIN_API_URL =
-  process.env.DOLPHIN_API_URL || process.env.KB_REST_BASE_URL || "http://127.0.0.1:7777";
-const LOG_LEVEL = process.env.LOG_LEVEL || "info";
-const SERVER_NAME = process.env.SERVER_NAME || "dolphin-mcp";
-const SERVER_VERSION = process.env.SERVER_VERSION || "1.0.0";
+const DOLPHIN_API_URL = CONFIG.DOLPHIN_API_URL;
+const LOG_LEVEL = CONFIG.LOG_LEVEL;
+const SERVER_NAME = CONFIG.SERVER_NAME;
+const SERVER_VERSION = CONFIG.SERVER_VERSION;
 
 // Validate critical configuration
 if (!DOLPHIN_API_URL || DOLPHIN_API_URL.trim() === "") {

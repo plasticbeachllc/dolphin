@@ -1,5 +1,7 @@
 import { CONFIG } from "../util/config.js";
 import { resolveKbApiKey } from "../../../shared/kb-auth";
+import type { SearchRequestBody } from "./schemas.js";
+export type { SearchRequestBody } from "./schemas.js";
 
 export interface RestError {
   error: {
@@ -9,28 +11,6 @@ export interface RestError {
     remediation?: string;
   };
 }
-
-export interface SearchRequestBody {
-  query: string;
-  repos?: string[];
-  path_prefix?: string[];
-  exclude_paths?: string[];
-  exclude_patterns?: string[];
-  top_k?: number;
-  max_snippets?: number;
-  deadline_ms?: number;
-  embed_model?: "small" | "large";
-  score_cutoff?: number;
-  mmr_enabled?: boolean;
-  mmr_lambda?: number;
-  cursor?: string;
-  include_prompt_ready?: boolean;
-  ann_strategy?: "speed" | "accuracy" | "adaptive" | "custom";
-  ann_nprobes?: number;
-  ann_refine_factor?: number;
-  include_graph_context?: boolean;
-}
-
 export interface SearchHit {
   repo: string;
   path: string;
@@ -52,9 +32,8 @@ export interface SearchResponse {
     model?: string;
     latency_ms?: number;
     timing?: { embedding_ms?: number; search_ms?: number; processing_ms?: number };
-    cursor?: string;
     estimated_total?: number;
-    complete?: boolean;
+    max_snippets?: number;
     warnings?: string[];
   };
   prompt_ready?: string;
@@ -84,117 +63,147 @@ export interface FileSliceResponse {
   _meta?: { warnings?: string[] };
 }
 
-function getBaseUrl(): string {
-  // Read env vars dynamically to support test mock server
-  // Mock server sets KB_REST_BASE_URL after module load
-  return process.env.KB_REST_BASE_URL || process.env.DOLPHIN_API_URL || CONFIG.DOLPHIN_API_URL;
-}
-
 let KB_API_KEY: string | undefined;
 
-function getKbApiKey(): string | undefined {
-  if (KB_API_KEY !== undefined) {
+export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+export class KBClient {
+  private readonly _fetch?: FetchLike;
+  private readonly _baseUrl?: string;
+
+  constructor(options?: { fetch?: FetchLike; baseUrl?: string }) {
+    this._fetch = options?.fetch;
+    this._baseUrl = options?.baseUrl;
+  }
+
+  private _getBaseUrl(): string {
+    if (this._baseUrl) return this._baseUrl;
+    // Read env vars dynamically to support test mock server
+    // Mock server sets KB_REST_BASE_URL after module load
+    return process.env.KB_REST_BASE_URL || process.env.DOLPHIN_API_URL || CONFIG.DOLPHIN_API_URL;
+  }
+
+  private _getKbApiKey(): string | undefined {
+    if (KB_API_KEY !== undefined) {
+      return KB_API_KEY;
+    }
+    const envKey =
+      process.env.DOLPHIN_API_KEY?.trim() || process.env.DOLPHIN_KB_API_KEY?.trim() || "";
+    if (envKey) {
+      KB_API_KEY = envKey;
+      return KB_API_KEY;
+    }
+
+    KB_API_KEY = resolveKbApiKey({ readOnly: true });
     return KB_API_KEY;
   }
-  const envKey =
-    process.env.DOLPHIN_API_KEY?.trim() || process.env.DOLPHIN_KB_API_KEY?.trim() || "";
-  if (envKey) {
-    KB_API_KEY = envKey;
-    return KB_API_KEY;
-  }
 
-  KB_API_KEY = resolveKbApiKey({ readOnly: true });
-  return KB_API_KEY;
-}
+  private async _doFetch<T>(path: string, init?: RequestInit, signal?: AbortSignal): Promise<T> {
+    const headers = new Headers(init?.headers);
+    headers.set("Content-Type", "application/json");
+    headers.set("Accept", "application/json");
+    headers.set("X-Client", "mcp");
 
-async function doFetch<T>(path: string, init?: RequestInit, signal?: AbortSignal): Promise<T> {
-  const headers = new Headers(init?.headers);
-  headers.set("Content-Type", "application/json");
-  headers.set("Accept", "application/json");
-  headers.set("X-Client", "mcp");
+    const kbKey = this._getKbApiKey();
+    if (kbKey) {
+      headers.set("X-API-Key", kbKey);
+    }
 
-  const kbKey = getKbApiKey();
-  if (kbKey) {
-    headers.set("X-API-Key", kbKey);
-  }
+    const baseUrl = this._getBaseUrl();
+    const fetchFn = this._fetch ?? globalThis.fetch.bind(globalThis);
+    const res = await fetchFn(baseUrl + path, { ...init, headers, signal });
+    const text = await res.text();
 
-  const baseUrl = getBaseUrl();
-  const res = await fetch(baseUrl + path, { ...init, headers, signal });
-  const text = await res.text();
-
-  // Be robust to non-JSON upstream responses (e.g., "Internal Server Error")
-  let json: unknown = {};
-  try {
-    json = text ? JSON.parse(text) : {};
-  } catch (parseErr: unknown) {
-    const snippet = text?.slice(0, 200) ?? "";
-    const error = parseErr instanceof Error ? parseErr : new Error(String(parseErr));
-    const rawMsg = error.message;
-    const normalizedMsg =
-      typeof rawMsg === "string" ? rawMsg.replace(/^JSON Parse error:\s*/i, "") : String(rawMsg);
-    const err: RestError = {
-      error: {
-        code: "invalid_json",
-        message: `JSON parse error: ${normalizedMsg}`,
-        remediation:
-          "Upstream returned non-JSON. Inspect server logs, verify endpoints and filters, or increase deadline_ms/top_k.",
-        details: { status: res.status, statusText: res.statusText, body_snippet: snippet },
-      },
-    };
-    throw err;
-  }
-
-  if (!res.ok) {
-    // Ensure a structured error even if upstream returned plain text
-    if (!(json as { error?: unknown })?.error) {
+    // Be robust to non-JSON upstream responses (e.g., "Internal Server Error")
+    let json: unknown = {};
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch (parseErr: unknown) {
+      const snippet = text?.slice(0, 200) ?? "";
+      const error = parseErr instanceof Error ? parseErr : new Error(String(parseErr));
+      const rawMsg = error.message;
+      const normalizedMsg =
+        typeof rawMsg === "string" ? rawMsg.replace(/^JSON Parse error:\s*/i, "") : String(rawMsg);
       const err: RestError = {
         error: {
-          code: "upstream_error",
-          message: `HTTP ${res.status} ${res.statusText}`,
+          code: "invalid_json",
+          message: `JSON parse error: ${normalizedMsg}`,
           remediation:
-            "Check repo names with /repos, adjust filters, or increase deadline_ms/top_k. See server logs.",
-          details: { body_snippet: (text || "").slice(0, 200) },
+            "Upstream returned non-JSON. Inspect server logs, verify endpoints/filters, or reduce response size (top_k/max_snippets).",
+          details: { status: res.status, statusText: res.statusText, body_snippet: snippet },
         },
       };
       throw err;
     }
-    throw json as RestError;
+
+    if (!res.ok) {
+      // Ensure a structured error even if upstream returned plain text
+      if (!(json as { error?: unknown })?.error) {
+        const err: RestError = {
+          error: {
+            code: "upstream_error",
+            message: `HTTP ${res.status} ${res.statusText}`,
+            remediation:
+              "Check repo names with /v1/repos, adjust filters, or reduce response size (top_k/max_snippets). See server logs.",
+            details: { body_snippet: (text || "").slice(0, 200) },
+          },
+        };
+        throw err;
+      }
+      throw json as RestError;
+    }
+
+    return json as T;
   }
 
-  return json as T;
-}
+  async search(body: SearchRequestBody, signal?: AbortSignal): Promise<SearchResponse> {
+    return await this._doFetch<SearchResponse>(
+      "/v1/search",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+      signal
+    );
+  }
 
-export async function restSearch(
-  body: SearchRequestBody,
-  signal?: AbortSignal
-): Promise<SearchResponse> {
-  return await doFetch<SearchResponse>(
-    "/search",
-    {
-      method: "POST",
-      body: JSON.stringify(body),
-    },
-    signal
-  );
-}
+  async getChunk(id: string, signal?: AbortSignal): Promise<ChunkResponse> {
+    return await this._doFetch<ChunkResponse>(
+      `/v1/chunks/${encodeURIComponent(id)}`,
+      { method: "GET" },
+      signal
+    );
+  }
 
-export async function restGetChunk(id: string, signal?: AbortSignal): Promise<ChunkResponse> {
-  return await doFetch<ChunkResponse>(
-    `/chunks/${encodeURIComponent(id)}`,
-    { method: "GET" },
-    signal
-  );
-}
+  async getFileSlice(
+    repo: string,
+    path: string,
+    start: number,
+    end: number,
+    signal?: AbortSignal
+  ): Promise<FileSliceResponse> {
+    const q = new URLSearchParams({ repo, path, start: String(start), end: String(end) });
+    return await this._doFetch<FileSliceResponse>(
+      `/v1/file?${q.toString()}`,
+      { method: "GET" },
+      signal
+    );
+  }
 
-export async function restGetFileSlice(
-  repo: string,
-  path: string,
-  start: number,
-  end: number,
-  signal?: AbortSignal
-): Promise<FileSliceResponse> {
-  const q = new URLSearchParams({ repo, path, start: String(start), end: String(end) });
-  return await doFetch<FileSliceResponse>(`/file?${q.toString()}`, { method: "GET" }, signal);
+  async listRepos(signal?: AbortSignal): Promise<{ repos: RepoInfo[] }> {
+    return await this._doFetch<{ repos: RepoInfo[] }>("/v1/repos", { method: "GET" }, signal);
+  }
+
+  async healthV1(check?: "shallow" | "deep", signal?: AbortSignal): Promise<HealthResponse> {
+    const q = new URLSearchParams();
+    if (check) q.set("check", check);
+    const suffix = q.toString();
+    return await this._doFetch<HealthResponse>(
+      `/v1/health${suffix ? `?${suffix}` : ""}`,
+      { method: "GET" },
+      signal
+    );
+  }
 }
 
 export interface RepoInfo {
@@ -204,6 +213,44 @@ export interface RepoInfo {
   files?: number;
   chunks?: number;
 }
+
+export interface HealthResponse {
+  status?: string;
+  version?: string;
+  [key: string]: unknown;
+}
+
+// Global instance for backward compatibility
+const globalClient = new KBClient();
+
+export async function restSearch(
+  body: SearchRequestBody,
+  signal?: AbortSignal
+): Promise<SearchResponse> {
+  return globalClient.search(body, signal);
+}
+
+export async function restGetChunk(id: string, signal?: AbortSignal): Promise<ChunkResponse> {
+  return globalClient.getChunk(id, signal);
+}
+
+export async function restGetFileSlice(
+  repo: string,
+  path: string,
+  start: number,
+  end: number,
+  signal?: AbortSignal
+): Promise<FileSliceResponse> {
+  return globalClient.getFileSlice(repo, path, start, end, signal);
+}
+
 export async function restListRepos(signal?: AbortSignal): Promise<{ repos: RepoInfo[] }> {
-  return await doFetch<{ repos: RepoInfo[] }>("/repos", { method: "GET" }, signal);
+  return globalClient.listRepos(signal);
+}
+
+export async function restHealthV1(
+  check?: "shallow" | "deep",
+  signal?: AbortSignal
+): Promise<HealthResponse> {
+  return globalClient.healthV1(check, signal);
 }

@@ -81,7 +81,7 @@ indexed_chunks_total = Gauge("kb_indexed_chunks_total", "Total number of indexed
 
 # System info
 kb_info = Info("kb_api", "Knowledge Bank API information")
-kb_info.info({"version": "1.0.0", "python_version": "3.12"})
+kb_info.info({"version": "0.2.0", "python_version": "3.12"})
 
 # ============================================================================
 # Middleware

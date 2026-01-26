@@ -31,16 +31,77 @@ export interface LogEntry {
   timestamp: string;
   level: LogLevel;
   message: string;
-  component: string;
   trace_id?: string;
   span_id?: string;
+  context: LogMetadata;
+  error?: {
+    type: string;
+    message: string;
+    traceback?: string;
+  };
   [key: string]: any;
 }
 
-export class Logger {
-  constructor(private component: string) {}
+export interface LoggerOptions {
+  sink?: (line: string, level: LogLevel) => void;
+  minLevel?: LogLevel;
+}
 
-  private formatEntry(level: LogLevel, message: string, meta: LogMetadata = {}): string {
+const LEVEL_RANK: Record<LogLevel, number> = {
+  [LogLevel.DEBUG]: 10,
+  [LogLevel.INFO]: 20,
+  [LogLevel.WARN]: 30,
+  [LogLevel.ERROR]: 40,
+};
+
+function normalizeLevel(raw?: string): LogLevel {
+  const normalized = (raw || "info").toLowerCase();
+  switch (normalized) {
+    case "debug":
+      return LogLevel.DEBUG;
+    case "warn":
+      return LogLevel.WARN;
+    case "error":
+      return LogLevel.ERROR;
+    default:
+      return LogLevel.INFO;
+  }
+}
+
+export class Logger {
+  private sink: (line: string, level: LogLevel) => void;
+  private minLevel: LogLevel;
+
+  constructor(
+    private component: string,
+    opts: LoggerOptions = {}
+  ) {
+    this.sink = opts.sink ?? ((line, level) => this.writeToConsole(line, level));
+    this.minLevel = opts.minLevel ?? normalizeLevel(process.env.LOG_LEVEL);
+  }
+
+  private shouldLog(level: LogLevel): boolean {
+    return LEVEL_RANK[level] >= LEVEL_RANK[this.minLevel];
+  }
+
+  private writeToConsole(line: string, level: LogLevel) {
+    if (level === LogLevel.WARN) {
+      console.warn(line);
+      return;
+    }
+    if (level === LogLevel.ERROR) {
+      console.error(line);
+      return;
+    }
+    console.log(line);
+  }
+
+  private formatEntry(
+    level: LogLevel,
+    message: string,
+    meta: LogMetadata = {},
+    error?: Error
+  ): string {
     const span = trace.getSpan(context.active());
     const spanContext = span?.spanContext();
 
@@ -48,13 +109,23 @@ export class Logger {
       timestamp: new Date().toISOString(),
       level,
       message,
-      component: this.component,
       ...(spanContext && {
         trace_id: spanContext.traceId,
         span_id: spanContext.spanId,
       }),
-      ...this.sanitizeMeta(meta),
+      context: {
+        component: this.component,
+        ...this.sanitizeMeta(meta),
+      },
     };
+
+    if (error) {
+      entry.error = {
+        type: error.name,
+        message: error.message,
+        traceback: error.stack,
+      };
+    }
 
     return JSON.stringify(entry);
   }
@@ -93,38 +164,29 @@ export class Logger {
   }
 
   debug(message: string, meta?: LogMetadata) {
-    console.log(this.formatEntry(LogLevel.DEBUG, message, meta));
+    if (!this.shouldLog(LogLevel.DEBUG)) return;
+    this.sink(this.formatEntry(LogLevel.DEBUG, message, meta), LogLevel.DEBUG);
   }
 
   info(message: string, meta?: LogMetadata) {
-    console.log(this.formatEntry(LogLevel.INFO, message, meta));
+    if (!this.shouldLog(LogLevel.INFO)) return;
+    this.sink(this.formatEntry(LogLevel.INFO, message, meta), LogLevel.INFO);
   }
 
   warn(message: string, meta?: LogMetadata) {
-    console.warn(this.formatEntry(LogLevel.WARN, message, meta));
+    if (!this.shouldLog(LogLevel.WARN)) return;
+    this.sink(this.formatEntry(LogLevel.WARN, message, meta), LogLevel.WARN);
   }
 
   error(message: string, error?: Error, meta?: LogMetadata) {
-    const errorMeta = error
-      ? {
-          error_message: error.message,
-          error_stack: error.stack,
-          error_name: error.name,
-        }
-      : {};
-
-    console.error(
-      this.formatEntry(LogLevel.ERROR, message, {
-        ...errorMeta,
-        ...meta,
-      })
-    );
+    if (!this.shouldLog(LogLevel.ERROR)) return;
+    this.sink(this.formatEntry(LogLevel.ERROR, message, meta, error), LogLevel.ERROR);
   }
 }
 
 /**
  * Factory function to create a logger for a component.
  */
-export function createLogger(component: string): Logger {
-  return new Logger(component);
+export function createLogger(component: string, options?: LoggerOptions): Logger {
+  return new Logger(component, options);
 }

@@ -201,8 +201,13 @@ def _extract_symbols(root, source: str) -> list[Symbol]:
     - class_definition → kind='class', name='ClassName'
     - function_definition → kind='function'
     - function_definition inside class → kind='method', path='Class.method'
+
+    Note: tree-sitter returns byte offsets, not character offsets.
+    We must use source_bytes for slicing to handle multi-byte UTF-8 chars.
     """
     results: list[Symbol] = []
+    # Convert to bytes for correct slicing (tree-sitter uses byte offsets)
+    source_bytes = source.encode("utf-8")
 
     class_stack: list[str] = []
 
@@ -213,7 +218,8 @@ def _extract_symbols(root, source: str) -> list[Symbol]:
             name_node = node.child_by_field_name("name")
             class_name = None
             if name_node is not None:
-                class_name = source[name_node.start_byte : name_node.end_byte]
+                # Use bytes slicing and decode to handle multi-byte UTF-8 chars
+                class_name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf-8")
             class_stack.append(class_name or "<class>")
             # Record class symbol itself
             results.append(
@@ -237,7 +243,8 @@ def _extract_symbols(root, source: str) -> list[Symbol]:
             name_node = node.child_by_field_name("name")
             func_name = None
             if name_node is not None:
-                func_name = source[name_node.start_byte : name_node.end_byte]
+                # Use bytes slicing and decode to handle multi-byte UTF-8 chars
+                func_name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf-8")
             if class_stack:
                 # method
                 symbol_path = f"{class_stack[-1]}.{func_name or '<method>'}"
@@ -324,12 +331,18 @@ def extract_graph_data(source: str) -> tuple[list[GraphNode], list[GraphEdge]]:
 
 
 def _extract_edges(root, source: str, edges: list[GraphEdge]):
-    """Extract graph edges (imports, calls, inheritance) from Python AST."""
+    """Extract graph edges (imports, calls, inheritance) from Python AST.
+
+    Note: tree-sitter returns byte offsets, not character offsets.
+    We must use source_bytes for slicing to handle multi-byte UTF-8 chars.
+    """
+    # Convert to bytes for correct slicing (tree-sitter uses byte offsets)
+    source_bytes = source.encode("utf-8")
 
     def node_text(n) -> str:
         if n is None:
             return ""
-        return source[n.start_byte : n.end_byte]
+        return source_bytes[n.start_byte : n.end_byte].decode("utf-8")
 
     def visit(node, current_context: str | None = None):
         """Visit nodes and extract edges."""
