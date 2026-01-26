@@ -24,31 +24,9 @@ logging.basicConfig(
 )
 
 
-# Load environment variables from .env file if it exists
-def load_env_file():
-    """Load environment variables from .env file if it exists."""
-    env_file = Path(__file__).parent.parent.parent.parent / ".env"
-    if env_file.exists():
-        print(f"📄 Loading environment variables from {env_file}", file=sys.stderr)
-        try:
-            # Simple .env parser
-            with open(env_file) as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        key, value = line.split("=", 1)
-                        os.environ[key.strip()] = value.strip().strip("\"'")
-        except Exception as e:
-            print(f"⚠️  Failed to load .env file: {e}", file=sys.stderr)
-    else:
-        print(f"ℹ️  No .env file found at {env_file}", file=sys.stderr)
-
 
 def initialize_search_backend() -> None:
     """Initialize and configure the search backend and ingestion pipeline based on config."""
-    # Load environment variables from .env file
-    load_env_file()
-
     config: KBConfig = load_config()
     store_root = config.resolved_store_root()
     provider_type = config.embedding_provider
