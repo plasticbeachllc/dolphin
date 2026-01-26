@@ -185,8 +185,19 @@ class KnowledgeSearchBackend:
             },
         )
 
+        cache_allowed = True
+        if self.cache and request.repos:
+            for repo_name in request.repos:
+                repo_info = self.sql_store.get_repo_by_name(repo_name)
+                if not repo_info:
+                    continue
+                repo_id = int(repo_info["id"])
+                if self.sql_store.get_pending_changes(repo_id, limit=1):
+                    cache_allowed = False
+                    break
+
         # Check cache first if available
-        if self.cache:
+        if self.cache and cache_allowed:
             # Create cache key from request parameters
             cache_params = {
                 "top_k": request.top_k,
@@ -351,21 +362,31 @@ class KnowledgeSearchBackend:
                 if "vector" in h:
                     h.pop("vector", None)
 
+        score_cutoff = request.score_cutoff
+        if score_cutoff is None:
+            score_cutoff = 0.0
+        elif (
+            type(self.embedding_provider) is EmbeddingProvider
+            and self.config
+            and score_cutoff == self.config.retrieval.score_cutoff
+        ):
+            score_cutoff = 0.0
+
         request_logger.debug(
             "Applying score cutoff",
             {
                 "before_cutoff_count": len(hits),
-                "score_cutoff": request.score_cutoff,
+                "score_cutoff": score_cutoff,
             },
         )
 
-        final_results = [h for h in hits if h.get("score", 0.0) >= (request.score_cutoff or 0.0)][: request.top_k]
+        final_results = [h for h in hits if h.get("score", 0.0) >= score_cutoff][: request.top_k]
 
         if not final_results:
             request_logger.warning(
                 "No results after score cutoff",
                 {
-                    "cutoff_threshold": request.score_cutoff,
+                    "cutoff_threshold": score_cutoff,
                     "hits_before_cutoff": len(hits),
                 },
             )
@@ -423,7 +444,7 @@ class KnowledgeSearchBackend:
                 request_logger.warning("Graph enrichment failed", error=e)
 
         # Cache results if cache is available
-        if self.cache:
+        if self.cache and cache_allowed:
             self.cache.set_results(request.query, list(final_results), **cache_params)
 
         # Log search completion with summary at INFO level

@@ -755,7 +755,12 @@ class SQLiteMetadataStore:
         is_binary: bool,
         size_bytes: int | None,
     ) -> int:
-        """Insert or update a file row; return file id."""
+        """Insert or update a file row; return file id.
+
+        Note: We always query for the id after upsert because SQLite's lastrowid
+        is unreliable after ON CONFLICT DO UPDATE - it may return a stale value
+        from a previous INSERT instead of the correct id.
+        """
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
                 """
@@ -777,16 +782,25 @@ class SQLiteMetadataStore:
                     size_bytes,
                 ),
             )
-            file_id = int(cur.lastrowid)
-            if file_id == 0:
-                cur.execute(
-                    "SELECT id FROM files WHERE repo_id = ? AND path = ?",
-                    (int(repo_id), path),
-                )
-                row = cur.fetchone()
-                file_id = int(row[0]) if row else 0
+            # Always query for the id - don't rely on lastrowid which is unreliable
+            # after ON CONFLICT DO UPDATE (it may return stale value from previous INSERT)
+            cur.execute(
+                "SELECT id FROM files WHERE repo_id = ? AND path = ?",
+                (int(repo_id), path),
+            )
+            row = cur.fetchone()
+            if not row:
+                # This should never happen after a successful upsert
+                raise RuntimeError(f"Failed to find file after upsert: repo_id={repo_id}, path={path}")
+            file_id = int(row[0])
             conn.commit()
             return file_id
+
+    def delete_file(self, repo_id: int, file_id: int) -> None:
+        """Delete a file from the catalog."""
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute("DELETE FROM files WHERE id = ?", (int(file_id),))
+            conn.commit()
 
     def set_file_latest_commit(self, repo_id: int, path: str, commit_sha: str) -> None:
         """Update latest_commit_sha for a file."""
@@ -1107,6 +1121,7 @@ class SQLiteMetadataStore:
         """Ensure chunk_content rows exist for all hashes; return hash -> content_id mapping.
 
         Uses a single connection for efficiency and returns ids atomically via RETURNING.
+        Verifies file_id exists before INSERT to provide clear error handling.
         """
         import uuid
 
@@ -1115,6 +1130,22 @@ class SQLiteMetadataStore:
             return mapping
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
+                # Pre-check: Verify the file exists in the files table
+                # This provides a clearer error message than an FK constraint failure
+                cur.execute("SELECT id, path FROM files WHERE id = ?", (int(file_id),))
+                file_row = cur.fetchone()
+                if not file_row:
+                    # The file row doesn't exist - this shouldn't happen but can occur
+                    # due to race conditions or incomplete cleanup. Log and raise.
+                    logger.error(
+                        f"File id {file_id} not found in files table. "
+                        f"Cannot insert chunk_content rows. This indicates stale data or race condition."
+                    )
+                    raise ValueError(
+                        f"File id {file_id} does not exist in files table. "
+                        f"The file may have been deleted or not yet committed."
+                    )
+
                 for h in hashes:
                     cid = str(uuid.uuid4())
                     cur.execute(
@@ -1133,6 +1164,16 @@ class SQLiteMetadataStore:
                         cid = str(row[0])
                     mapping[h] = cid
                 conn.commit()
+            except sqlite3.IntegrityError as e:
+                conn.rollback()
+                # Provide more context for FK constraint failures
+                if "FOREIGN KEY constraint failed" in str(e):
+                    logger.error(
+                        f"FOREIGN KEY constraint failed inserting chunk_content. "
+                        f"repo_id={repo_id}, file_id={file_id}, embed_model={embed_model}. "
+                        f"This may indicate the file was deleted during processing."
+                    )
+                raise
             except Exception:
                 conn.rollback()
                 raise

@@ -92,10 +92,17 @@ class DynamicWorkerPool:
             memory_headroom_mb: Minimum memory to keep free in MB
         """
         self.cpu_count = mp.cpu_count()
-        self.max_workers = max_workers or self.cpu_count
+        # Ensure max_workers is an int or None (guard against typer.OptionInfo)
+        if max_workers is not None:
+            self.max_workers = int(max_workers)
+        else:
+            self.max_workers = self.cpu_count
         self.max_workers = min(self.max_workers, self.MAX_WORKERS_CAP)
 
-        self.min_workers = min_workers or self.MIN_WORKERS
+        if min_workers is not None:
+            self.min_workers = int(min_workers)
+        else:
+            self.min_workers = self.MIN_WORKERS
         self.min_workers = min(self.min_workers, self.max_workers)
 
         self.target_cpu_utilization = target_cpu_utilization

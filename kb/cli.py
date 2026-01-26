@@ -241,7 +241,7 @@ def _search_remote(
         "query": query,
         "top_k": top_k,
         "score_cutoff": score_cutoff,
-        "embed_model": embed_model,
+        # Note: embed_model is not sent - server always uses global default
     }
 
     if repos:

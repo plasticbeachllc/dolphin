@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Column, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 # =====================
@@ -27,7 +27,7 @@ class Session(SQLModel, table=True):
     __tablename__ = "sessions"
 
     id: int | None = Field(default=None, primary_key=True)
-    repo_id: int = Field(foreign_key="repos.id")
+    repo_id: int = Field(sa_column=Column(Integer, ForeignKey("repos.id", ondelete="CASCADE"), nullable=False))
 
     commit_sha: str
     branch: str
@@ -56,7 +56,7 @@ class File(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    repo_id: int = Field(foreign_key="repos.id")
+    repo_id: int = Field(sa_column=Column(Integer, ForeignKey("repos.id", ondelete="CASCADE"), nullable=False))
 
     path: str
     ext: str | None = Field(default=None)
@@ -86,8 +86,8 @@ class ChunkContent(SQLModel, table=True):
     # Stable id for content (UUID string)
     id: str = Field(primary_key=True)
 
-    repo_id: int = Field(foreign_key="repos.id")
-    file_id: int = Field(foreign_key="files.id")
+    repo_id: int = Field(sa_column=Column(Integer, ForeignKey("repos.id", ondelete="CASCADE"), nullable=False))
+    file_id: int = Field(sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), nullable=False))
 
     text_hash: str
     embed_model: str
@@ -110,7 +110,9 @@ class ChunkLocation(SQLModel, table=True):
 
     id: str = Field(primary_key=True)
 
-    content_id: str = Field(foreign_key="chunk_content.id")
+    content_id: str = Field(
+        sa_column=Column(String, ForeignKey("chunk_content.id", ondelete="CASCADE"), nullable=False)
+    )
 
     start_line: int
     end_line: int
@@ -156,8 +158,8 @@ class CodeNode(SQLModel, table=True):
     qualified_name: str  # Full path (e.g., "myapp.utils.math.calculate_total")
 
     # Location
-    repo_id: int = Field(foreign_key="repos.id")
-    file_id: int = Field(foreign_key="files.id")
+    repo_id: int = Field(sa_column=Column(Integer, ForeignKey("repos.id", ondelete="CASCADE"), nullable=False))
+    file_id: int = Field(sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), nullable=False))
     start_line: int
     end_line: int
 
@@ -219,7 +221,9 @@ class CodeEdge(SQLModel, table=True):
         sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False)
     )
     edge_type: str  # 'calls', 'imports', 'inherits', 'implements', 'depends_on_table', etc.
-    repo_id: int = Field(foreign_key="repos.id")  # Repository reference for filtering
+    repo_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("repos.id", ondelete="CASCADE"), nullable=False)
+    )  # Repository reference for filtering
 
     # Context
     line_number: int | None = Field(default=None)  # Where this relationship occurs in source
@@ -250,7 +254,7 @@ class NodeAlias(SQLModel, table=True):
 
     # References - CASCADE DELETE to remove aliases when node is deleted
     node_id: str = Field(sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False))
-    file_id: int = Field(foreign_key="files.id")
+    file_id: int = Field(sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), nullable=False))
 
     # Alias information
     alias_name: str  # Imported/aliased name
@@ -274,7 +278,7 @@ class CrossRepoReference(SQLModel, table=True):
     source_node_id: str = Field(
         sa_column=Column(String, ForeignKey("code_nodes.id", ondelete="CASCADE"), nullable=False)
     )
-    source_repo_id: int = Field(foreign_key="repos.id")
+    source_repo_id: int = Field(sa_column=Column(Integer, ForeignKey("repos.id", ondelete="CASCADE"), nullable=False))
 
     # Target (external reference)
     target_package: str  # npm package, pip package, etc.
@@ -283,7 +287,7 @@ class CrossRepoReference(SQLModel, table=True):
     reference_type: str  # 'import', 'call', 'type_reference'
 
     # Location
-    file_id: int = Field(foreign_key="files.id")
+    file_id: int = Field(sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), nullable=False))
     line_number: int | None = Field(default=None)
 
     # Lifecycle
@@ -307,7 +311,7 @@ class PendingChange(SQLModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    repo_id: int = Field(foreign_key="repos.id")
+    repo_id: int = Field(sa_column=Column(Integer, ForeignKey("repos.id", ondelete="CASCADE"), nullable=False))
     file_path: str
     change_type: str  # 'created', 'modified', 'deleted', 'renamed'
     old_path: str | None = Field(default=None)  # For rename operations
@@ -325,8 +329,10 @@ class FileSnapshot(SQLModel, table=True):
         Index("idx_file_snapshots_repo", "repo_id"),
     )
 
-    file_id: int = Field(primary_key=True, foreign_key="files.id")
-    repo_id: int = Field(foreign_key="repos.id")
+    file_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), primary_key=True, nullable=False)
+    )
+    repo_id: int = Field(sa_column=Column(Integer, ForeignKey("repos.id", ondelete="CASCADE"), nullable=False))
     path: str
     mtime_ns: int  # Modification time in nanoseconds
     size_bytes: int
@@ -372,7 +378,7 @@ class GraphSnapshot(SQLModel, table=True):
     __table_args__ = (Index("ix_graph_snapshots_repo_commit", "repo_id", "commit_sha"),)
 
     id: int | None = Field(default=None, primary_key=True)
-    repo_id: int = Field(foreign_key="repos.id")
+    repo_id: int = Field(sa_column=Column(Integer, ForeignKey("repos.id", ondelete="CASCADE"), nullable=False))
     commit_sha: str
     commit_message: str | None = Field(default=None)
     commit_timestamp: str | None = Field(default=None)
@@ -387,7 +393,9 @@ class GraphCacheState(SQLModel, table=True):
 
     __tablename__ = "graph_cache_state"
 
-    repo_id: int = Field(primary_key=True, foreign_key="repos.id")
+    repo_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("repos.id", ondelete="CASCADE"), primary_key=True, nullable=False)
+    )
     commit_sha: str = Field(default="")
     last_rebuild_at: str | None = Field(default=None)
     node_count: int = Field(default=0)
