@@ -665,6 +665,9 @@ class IngestionPipeline:
                             total_pruned += pruned_count
                         self.lancedb.prune_file_rows(repo_name, path, model=model_name)
 
+                    # Delete file record
+                    self.metadata.delete_file(repo_id, file_id)
+
                     # Clean up graph data for deleted file
                     edges_deleted = 0
                     nodes_deleted = 0

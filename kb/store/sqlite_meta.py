@@ -796,6 +796,12 @@ class SQLiteMetadataStore:
             conn.commit()
             return file_id
 
+    def delete_file(self, repo_id: int, file_id: int) -> None:
+        """Delete a file from the catalog."""
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute("DELETE FROM files WHERE id = ?", (int(file_id),))
+            conn.commit()
+
     def set_file_latest_commit(self, repo_id: int, path: str, commit_sha: str) -> None:
         """Update latest_commit_sha for a file."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
