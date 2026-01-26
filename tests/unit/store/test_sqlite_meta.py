@@ -83,6 +83,7 @@ def test_upsert_file_returns_existing_id_on_conflict(tmp_path):
     repo_path.mkdir()
     store.record_repo("test-repo", repo_path)
     repo = store.get_repo_by_name("test-repo")
+    assert repo is not None
     repo_id = repo["id"]
 
     file_a_id = store.upsert_file(
