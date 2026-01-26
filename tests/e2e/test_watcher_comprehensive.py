@@ -3,8 +3,8 @@ import socket
 import sqlite3
 import subprocess
 import time
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator, Tuple
 
 import pytest
 import requests
@@ -38,7 +38,7 @@ def wait_for_api_result(base_url: str, query: str, filename: str, timeout: int =
             resp = requests.post(
                 f"{base_url}/v1/search",
                 json={"query": query, "repos": ["test-repo"]},
-                headers={"X-API-Key": "test-key"}
+                headers={"X-API-Key": "test-key"},
             )
             if resp.status_code == 200:
                 results = resp.json().get("results", [])
@@ -53,7 +53,7 @@ def wait_for_api_result(base_url: str, query: str, filename: str, timeout: int =
 @pytest.mark.e2e
 class TestWatcherComprehensive:
     @pytest.fixture(scope="function")
-    def server_setup(self, git_repo: Path, temp_db_path: Path) -> Generator[Tuple[str, Path, Path], None, None]:
+    def server_setup(self, git_repo: Path, temp_db_path: Path) -> Generator[tuple[str, Path, Path], None, None]:
         """
         Setup a fresh dolphin server watching a fresh git repo for each test.
         Returns: (base_url, repo_path, store_root)
@@ -118,7 +118,7 @@ default_embed_model = "small"
                 server_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 server_process.kill()
-            
+
             # Print logs on failure (can be inspected if test fails)
             if server_process.returncode not in (0, -15):
                 stdout, stderr = server_process.communicate()
@@ -166,7 +166,7 @@ default_embed_model = "small"
     def test_create_and_search(self, server_setup):
         """Test file creation is detected and indexed."""
         base_url, repo_path, store_root = server_setup
-        
+
         # Create file
         filename = "unique_msg.txt"
         unique_content = "banana_stand_money"
@@ -261,7 +261,7 @@ provider = "stub"
             ["dolphin", "kb", "add-repo", "test-repo", str(git_repo), "--no-index"],
             env=env,
             check=True,
-            capture_output=True
+            capture_output=True,
         )
 
         # 4. Start Server
@@ -270,19 +270,20 @@ provider = "stub"
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True
+            text=True,
         )
 
         try:
             base_url = f"http://{SERVER_HOST}:{port}"
             assert wait_for_server(f"{base_url}/health"), "Server failed to start"
-            
+
             # Wait for control file
             assert self._wait_for_file_in_db(store_root, "control.txt"), "Control file not indexed"
 
             # Verify ignored file NOT in DB
-            assert not self._wait_for_file_in_db(store_root, ignored_file, timeout=2), \
+            assert not self._wait_for_file_in_db(store_root, ignored_file, timeout=2), (
                 f"Ignored file {ignored_file} WAS indexed (startup check)"
+            )
         finally:
             server_process.terminate()
             try:
