@@ -121,7 +121,7 @@ jobs:
       - name: Install just
         uses: extractions/setup-just@v3
 
-      - name: Run consolidated E2E suite (requires VSCode host)
+      - name: Run consolidated E2E suite
         env:
           DISPLAY: :99.0
         run: |
