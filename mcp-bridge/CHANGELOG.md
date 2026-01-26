@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed OpenTelemetry missing dependency declaration.
+
+## [0.2.1] - 2026-01-25
+
+### Fixed
+
 - Bun entry point fixed to enable tool call via `bunx`.
 
 ## [0.2.0] - 2026-01-25
