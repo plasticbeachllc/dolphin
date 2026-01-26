@@ -107,6 +107,15 @@ def _disable_retry_sleeps_for_tests() -> Generator[None, None, None]:
         mp.undo()
 
 
+@pytest.fixture(autouse=True)
+def _reset_embedding_provider_after_test() -> Generator[None, None, None]:
+    """Ensure embedding provider changes do not leak across tests."""
+    yield
+    from kb.embeddings.provider import EmbeddingProvider, set_default_provider
+
+    set_default_provider(EmbeddingProvider())
+
+
 def init_test_git_repo(repo_path: Path) -> None:
     """Initialize a git repository with test-friendly defaults.
 
