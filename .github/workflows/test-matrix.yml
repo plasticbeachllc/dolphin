@@ -28,7 +28,7 @@ jobs:
         uses: oven-sh/setup-bun@v1
 
       - name: Install just
-        run: sudo apt-get update && sudo apt-get install -y just
+        uses: extractions/setup-just@v3
 
       - name: Setup Python
         run: uv python install
@@ -66,7 +66,7 @@ jobs:
         uses: oven-sh/setup-bun@v1
 
       - name: Install just
-        run: sudo apt-get update && sudo apt-get install -y just
+        uses: extractions/setup-just@v3
 
       - name: Setup Python
         run: uv python install
@@ -119,16 +119,11 @@ jobs:
         run: bun install
 
       - name: Install just
-        run: sudo apt-get update && sudo apt-get install -y just
-
-      - name: Install Xvfb (for headless VSCode)
-        run: sudo apt-get install -y xvfb
+        uses: extractions/setup-just@v3
 
       - name: Run consolidated E2E suite (requires VSCode host)
         env:
           DISPLAY: :99.0
         run: |
-          Xvfb :99 -screen 0 1024x768x24 &
-          sleep 3
           just test-kb e2e
           just test-mcp e2e
