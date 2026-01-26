@@ -2,6 +2,7 @@ import asyncio
 import concurrent.futures
 import datetime
 import logging
+import time
 from pathlib import Path
 
 from watchfiles import Change, awatch
@@ -43,6 +44,7 @@ class RepoWatcher:
         self.ignore_spec = build_ignore_pathspec(self.config.ignore, self.config.ignore_exceptions, self.root)
 
         self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        self._last_missing_cleanup = 0.0
 
     async def watch(self):
         """Start watching the repository for changes."""
@@ -234,14 +236,27 @@ class RepoWatcher:
         to_process = []  # modified or added
         to_delete = []
         change_ids = []
+        has_added = False
 
         for c in changes:
             change_ids.append(c["id"])
             file_path = c["file_path"]
-            if c["change_type"] == "deleted":
+            change_type = c["change_type"]
+            if change_type == "added":
+                has_added = True
+            if change_type == "deleted":
                 to_delete.append(file_path)
             else:
                 to_process.append(file_path)
+
+        # Treat missing files in to_process as deletions (rename/create+delete races).
+        existing_process = []
+        for path in to_process:
+            if (self.root / path).exists():
+                existing_process.append(path)
+            else:
+                to_delete.append(path)
+        to_process = existing_process
 
         # Start a micro-session
         # We need commit_sha and branch for the session
@@ -284,6 +299,21 @@ class RepoWatcher:
                     error_logger=error_logger,
                 )
 
+            # Fallback cleanup: if we saw adds but no delete events, prune missing DB files.
+            if has_added and (time.time() - self._last_missing_cleanup) > 5.0:
+                missing_paths = self._find_missing_files_in_db()
+                missing_paths = [p for p in missing_paths if p not in to_delete]
+                if missing_paths:
+                    self.pipeline.process_deletions(
+                        repo_id=self.repo_id,
+                        repo_name=self.repo_name,
+                        files=missing_paths,
+                        embed_model=self.embed_model,
+                        dry_run=False,
+                        error_logger=error_logger,
+                    )
+                self._last_missing_cleanup = time.time()
+
             # Mark processed
             self.metadata.mark_changes_processed(change_ids)
 
@@ -294,3 +324,17 @@ class RepoWatcher:
         except Exception as e:
             logger.error(f"Error processing batch: {e}", exc_info=True)
             self.metadata.set_session_status(session_id, "failed")
+
+    def _find_missing_files_in_db(self) -> list[str]:
+        """Return file paths that exist in metadata but not on disk."""
+        missing = []
+        try:
+            for entry in self.metadata.get_all_files_for_repo(self.repo_id):
+                path = entry.get("path")
+                if not path:
+                    continue
+                if not (self.root / path).exists():
+                    missing.append(path)
+        except Exception as e:
+            logger.warning(f"Failed to scan for missing files: {e}")
+        return missing
