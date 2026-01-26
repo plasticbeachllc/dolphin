@@ -44,7 +44,6 @@ dependencies = [
     "markdown-it-py",
     "pathspec",
     "pyyaml",
-    "python-dotenv",
     "sqlite-utils",
     "watchfiles>=0.21.0",
     # Graph intelligence dependencies (Phase 1)

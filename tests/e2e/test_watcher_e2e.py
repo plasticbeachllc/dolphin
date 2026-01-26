@@ -66,6 +66,8 @@ default_embed_model = "small"
     # This populates the DB with the repo
     subprocess.run(
         [
+            "uv",
+            "run",
             "dolphin",
             "kb",
             "add-repo",
@@ -80,7 +82,7 @@ default_embed_model = "small"
     # 3. Start Server with --watch
     # We use subprocess to run "dolphin serve"
     server_process = subprocess.Popen(
-        ["dolphin", "serve", "--port", str(e2e_port), "--watch", "test-repo"],
+        ["uv", "run", "dolphin", "serve", "--port", str(e2e_port), "--watch", "test-repo"],
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

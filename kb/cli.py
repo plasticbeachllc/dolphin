@@ -41,7 +41,7 @@ def get_version() -> str:
 
         return version("pb-dolphin")
     except Exception:
-        return "unkown"  # Fallback version
+        return "unknown"  # Fallback version
 
 
 def version_callback(version: bool = False) -> None:

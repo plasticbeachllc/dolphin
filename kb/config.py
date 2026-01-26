@@ -107,7 +107,7 @@ class RetrievalConfig:
     score_cutoff: float = 0.15
     top_k: int = 8
     max_snippet_tokens: int = 240
-    mmr_enabled: bool = True
+    mmr_enabled: bool = False
     mmr_lambda: float = 0.7
     bm25_normalization: BM25NormalizationRuntimeConfig = field(default_factory=BM25NormalizationRuntimeConfig)
 
