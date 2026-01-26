@@ -161,6 +161,8 @@ class RepoWatcher:
                 cur = conn.cursor()
                 for change_type, path in changes:
                     c_type_str = type_map.get(change_type, "modified")
+                    if c_type_str != "deleted" and not (self.root / path).exists():
+                        c_type_str = "deleted"
 
                     # Check if already pending
                     cur.execute(
@@ -235,10 +237,11 @@ class RepoWatcher:
 
         for c in changes:
             change_ids.append(c["id"])
+            file_path = c["file_path"]
             if c["change_type"] == "deleted":
-                to_delete.append(c["file_path"])
+                to_delete.append(file_path)
             else:
-                to_process.append(c["file_path"])
+                to_process.append(file_path)
 
         # Start a micro-session
         # We need commit_sha and branch for the session

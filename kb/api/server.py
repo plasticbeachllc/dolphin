@@ -11,6 +11,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from ..config import KBConfig, load_config
+
+# Note on Environment Variable Management:
+# This server expects environment variables (e.g., OPENAI_API_KEY, DOLPHIN_CONFIG_PATH)
+# to be provided by the host environment (shell, Docker, etc.).
+# Auto-loading via .env files is intentionally excluded to maintain
+# consistency across different deployment environments.
 from .app import app, get_pipeline, reset_search_backend, set_pipeline, set_search_backend, set_stores
 from .middleware.metrics import metrics_endpoint, prometheus_middleware
 from .search_backend import create_search_backend
@@ -54,6 +60,7 @@ def initialize_search_backend() -> None:
     backend = create_search_backend(
         store_root=store_root,
         embedding_provider_type=provider_type,
+        default_embed_model=config.default_embed_model,
         cache_enabled=config.cache_enabled,
         redis_url=config.redis_url,
         reranker_config=config.retrieval.reranking.__dict__,

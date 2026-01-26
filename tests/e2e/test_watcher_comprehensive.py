@@ -41,7 +41,7 @@ def wait_for_api_result(base_url: str, query: str, filename: str, timeout: int =
                 headers={"X-API-Key": "test-key"},
             )
             if resp.status_code == 200:
-                results = resp.json().get("results", [])
+                results = resp.json().get("hits", [])
                 if any(filename in r.get("path", "") for r in results):
                     return True
         except Exception:
@@ -114,16 +114,9 @@ default_embed_model = "small"
             yield base_url, git_repo, store_root
         finally:
             server_process.terminate()
-            try:
-                server_process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                server_process.kill()
-
-            # Print logs on failure (can be inspected if test fails)
-            if server_process.returncode not in (0, -15):
-                stdout, stderr = server_process.communicate()
-                print(f"Server Stdout:\n{stdout}")
-                print(f"Server Stderr:\n{stderr}")
+            stdout, stderr = server_process.communicate()
+            print(f"--- Server Stdout ---\n{stdout}")
+            print(f"--- Server Stderr ---\n{stderr}")
 
     def _wait_for_file_in_db(self, store_root: Path, file_path: str, timeout: int = 10) -> bool:
         """Helper to wait for a file to appear in the DB."""
