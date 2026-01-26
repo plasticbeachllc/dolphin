@@ -756,7 +756,7 @@ class SQLiteMetadataStore:
         size_bytes: int | None,
     ) -> int:
         """Insert or update a file row; return file id.
-        
+
         Note: We always query for the id after upsert because SQLite's lastrowid
         is unreliable after ON CONFLICT DO UPDATE - it may return a stale value
         from a previous INSERT instead of the correct id.
@@ -1139,7 +1139,7 @@ class SQLiteMetadataStore:
                         f"File id {file_id} does not exist in files table. "
                         f"The file may have been deleted or not yet committed."
                     )
-                
+
                 for h in hashes:
                     cid = str(uuid.uuid4())
                     cur.execute(

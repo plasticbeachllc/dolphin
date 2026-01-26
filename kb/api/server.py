@@ -7,7 +7,6 @@ import logging
 import os
 import sys
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 
@@ -22,7 +21,6 @@ logging.basicConfig(
     format="[%(levelname)s] [%(name)s] %(message)s",
     stream=sys.stderr,
 )
-
 
 
 def initialize_search_backend() -> None:
