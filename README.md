@@ -271,7 +271,7 @@ Currently only [OpenAI embeddings](https://platform.openai.com/docs/guides/embed
 
 ## Development Status
 
-**Current**: Release candidate (v0.2.0) for Knowledge Bank + MCP
+**Current**: Release candidates: (v0.2.0) Knowledge Bank + (v0.2.1) MCP
 
 - ✅ Core indexing and search pipeline
 - ✅ Language-aware chunking (Python, TS, JS, Markdown)
