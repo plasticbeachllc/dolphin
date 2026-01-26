@@ -1,6 +1,6 @@
 {
   "name": "dolphin-mcp",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "MCP server for Dolphin semantic code search - works with Continue.dev, Claude Desktop, and other MCP clients",
   "author": "tdc93",
   "private": false,
@@ -19,6 +19,7 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
     "@modelcontextprotocol/sdk": "^1.25.3",
     "@iarna/toml": "^2.2.5",
     "zod": "~3.24.0",
