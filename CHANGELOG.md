@@ -230,7 +230,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - JSONL structured logging for analysis
   - Warning detection and reporting
 
-
 #### 📚 Enhanced Knowledge Base Core
 
 - **Advanced Language-Aware Chunking**

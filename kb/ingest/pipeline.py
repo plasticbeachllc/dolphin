@@ -1187,9 +1187,7 @@ class IngestionPipeline:
                                 text = res.file_path.read_text(encoding="utf-8", errors="ignore")
                                 language = detect_language_from_extension(res.file_path) or "text"  # Re-detect
 
-                                nodes, edges = extract_graph_from_file(
-                                    res.file_path, language, text, vars(repo_config)
-                                )
+                                nodes, edges = extract_graph_from_file(res.file_path, language, text, vars(repo_config))
                                 if nodes or edges:
                                     # Need file_id...
                                     file_id = self.metadata.get_file_id(repo_id, path)
