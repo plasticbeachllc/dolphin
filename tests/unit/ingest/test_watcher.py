@@ -172,13 +172,15 @@ class TestRepoWatcher:
 
     @patch("kb.ingest.watcher.get_current_branch_state")
     @patch("kb.ignores.build_ignore_pathspec")
-    async def test_process_pending_sync(self, mock_build_ignore, mock_get_branch, mock_pipeline, config):
+    async def test_process_pending_sync(self, mock_build_ignore, mock_get_branch, mock_pipeline, config, tmp_path):
         from pathspec import PathSpec
 
         mock_build_ignore.return_value = PathSpec.from_lines("gitignore", [])
         mock_get_branch.return_value = BranchState(branch="main", commit_sha="123")
 
         watcher = RepoWatcher("repo", config, mock_pipeline)
+        watcher.root = tmp_path
+        (tmp_path / "file.py").write_text("print('ok')")
 
         # Mock pending changes
         mock_pipeline.metadata.get_pending_changes.return_value = [
