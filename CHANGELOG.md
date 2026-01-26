@@ -230,9 +230,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - JSONL structured logging for analysis
   - Warning detection and reporting
 
-#### 📘 Documentation and Process
-
-- Standardized all testing guidance into the canonical `docs/TESTING.md`, consolidating backend/extension/MCP/observability instructions and adding a post-merge verification checklist to keep releases linted, tested, and reflected in the changelog.
 
 #### 📚 Enhanced Knowledge Base Core
 

@@ -182,7 +182,7 @@ def build_ignore_pathspec(config_ignore: Iterable[str], config_exceptions: Itera
         "**/gcloud/**",
         "**/secrets/**",
         "**/*keys.json",
-        "*/*service_account.json",
+        "**/*service_account.json",
         "**/*auth.json",
     }
 

@@ -8,6 +8,7 @@ import pytest
 
 from kb.config import KBConfig
 from kb.embeddings.provider import EmbeddingProvider, set_default_provider
+from kb.ingest.parallel_parser import ParseResult
 from kb.ingest.pipeline import IngestionPipeline
 from kb.store import LanceDBStore, SQLiteMetadataStore
 
@@ -115,3 +116,44 @@ async def test_incremental_parallel_update(mock_pipeline, sample_repo):
 
     assert result["files_indexed"] == 1
     assert result["chunks_indexed"] > 0
+
+
+@pytest.mark.asyncio
+async def test_parallel_indexing_uses_repo_chunking_config(mock_pipeline, sample_repo, monkeypatch):
+    """Ensure parallel indexing respects repo chunking config."""
+    config_dir = sample_repo / ".dolphin"
+    config_dir.mkdir()
+    (config_dir / "chunking_config.toml").write_text(
+        "\n".join(
+            [
+                "default_window_size = 600",
+                "overlap_pct = 0.25",
+                "",
+                "[per_language]",
+                "python = 123",
+                "markdown = 321",
+                "",
+            ]
+        )
+    )
+
+    captured_jobs = []
+
+    def fake_parse_files_parallel(jobs, num_workers=None, pool=None):
+        captured_jobs.extend(jobs)
+        return [ParseResult(file_path=job.file_path, chunks=[], success=True) for job in jobs]
+
+    monkeypatch.setattr("kb.ingest.pipeline.parse_files_parallel", fake_parse_files_parallel)
+
+    mock_pipeline.metadata.record_repo(name="test_repo", path=sample_repo, default_embed_model="small")
+
+    await mock_pipeline.index_parallel("test_repo", dry_run=True, full_reindex=True, max_workers=1)
+
+    assert captured_jobs
+    assert all(job.overlap_pct == 0.25 for job in captured_jobs)
+    python_jobs = [job for job in captured_jobs if job.language == "python"]
+    markdown_jobs = [job for job in captured_jobs if job.language == "markdown"]
+    assert python_jobs
+    assert markdown_jobs
+    assert all(job.token_target == 123 for job in python_jobs)
+    assert all(job.token_target == 321 for job in markdown_jobs)

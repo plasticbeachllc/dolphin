@@ -353,8 +353,6 @@ async def health(check: str = Query(default="shallow")) -> dict[str, object]:
     else:
         checks["embeddings"] = "not_configured"
 
-        checks["embeddings"] = "not_configured"
-
     # System stats
     checks["system"] = _get_system_stats()
 

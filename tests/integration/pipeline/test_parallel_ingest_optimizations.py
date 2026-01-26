@@ -14,8 +14,12 @@ from kb.chunkers.types import Chunk
 from kb.embeddings.adaptive_batching import AdaptiveBatcher, create_adaptive_batches
 from kb.hashing import hash_text
 from kb.ingest.incremental import compute_chunk_diff
-from kb.ingest.parallel_parser import ParallelChunkCache, ParseJob, parse_files_parallel
+from kb.ingest.parallel_parser import ParallelChunkCache, ParseJob, ParseResult, parse_files_parallel
 from kb.ingest.parallel_scanner import scan_repo_parallel
+from kb.ingest.optimized_pipeline import OptimizedIngestionPipeline
+from kb.store import LanceDBStore, SQLiteMetadataStore
+from kb.config import KBConfig
+from kb.embeddings.provider import EmbeddingProvider
 
 
 class TestParallelScanning:
@@ -217,7 +221,6 @@ class TestAdaptiveBatching:
             min_batch_size=5,
             max_batch_size=50,
         )
-
         batches = list(batcher.create_batches(texts))
 
         # Should create multiple batches
@@ -267,6 +270,94 @@ class TestAdaptiveBatching:
         # Large chunk should be in its own batch or small batch
         for batch in batches:
             assert len(batch) >= 1
+
+
+def test_optimized_pipeline_uses_repo_chunking_config(tmp_path, monkeypatch):
+    """Ensure optimized pipeline respects repo chunking config."""
+    import subprocess
+
+    repo_dir = tmp_path / "test_repo"
+    repo_dir.mkdir()
+
+    subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=repo_dir,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"],
+        cwd=repo_dir,
+        check=True,
+        capture_output=True,
+    )
+
+    (repo_dir / "file1.py").write_text("def foo():\n    pass\n")
+    (repo_dir / "file2.md").write_text("# Hello\nWorld\n")
+
+    config_dir = repo_dir / ".dolphin"
+    config_dir.mkdir()
+    (config_dir / "chunking_config.toml").write_text(
+        "\n".join(
+            [
+                "default_window_size = 600",
+                "overlap_pct = 0.25",
+                "",
+                "[per_language]",
+                "python = 123",
+                "markdown = 321",
+                "",
+            ]
+        )
+    )
+
+    captured_jobs = []
+
+    def fake_parse_files_parallel(jobs, num_workers=None, pool=None):
+        captured_jobs.extend(jobs)
+        return [ParseResult(file_path=job.file_path, chunks=[], success=True) for job in jobs]
+
+    monkeypatch.setattr("kb.ingest.optimized_pipeline.parse_files_parallel", fake_parse_files_parallel)
+
+    store_root = tmp_path / "store"
+    store_root.mkdir()
+    metadata = SQLiteMetadataStore(store_root / "metadata.db")
+    metadata.initialize()
+    lancedb = LanceDBStore(store_root / "lancedb")
+    lancedb.initialize_collections()
+
+    class MockProvider(EmbeddingProvider):
+        def embed_texts(self, model, texts):
+            return [[0.1] * 1536 for _ in texts]
+
+    config = KBConfig(
+        store_root=store_root,
+        embedding_provider="openai",
+        openai_api_key_env="OPENAI_API_KEY",
+    )
+
+    pipeline = OptimizedIngestionPipeline(
+        config=config,
+        lancedb=lancedb,
+        metadata=metadata,
+        embedding_provider=MockProvider(),
+        enable_parallel=True,
+        enable_incremental=False,
+        enable_ast_cache=False,
+        num_workers=1,
+    )
+
+    pipeline.index_repository(repo_root=repo_dir, repo_name="test_repo", incremental=False)
+
+    assert captured_jobs
+    assert all(job.overlap_pct == 0.25 for job in captured_jobs)
+    python_jobs = [job for job in captured_jobs if job.language == "python"]
+    markdown_jobs = [job for job in captured_jobs if job.language == "markdown"]
+    assert python_jobs
+    assert markdown_jobs
+    assert all(job.token_target == 123 for job in python_jobs)
+    assert all(job.token_target == 321 for job in markdown_jobs)
 
 
 class TestASTCache:

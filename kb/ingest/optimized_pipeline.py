@@ -149,6 +149,9 @@ class OptimizedIngestionPipeline:
         # Phase 2: Parse and chunk files (with parallel parsing and AST cache)
         print("Parsing and chunking files...")
         parse_start = time.time()
+        from ..chunkers.repo_config import load_repo_chunking_config
+
+        repo_config = load_repo_chunking_config(repo_root)
 
         parse_jobs: list[ParseJob] = []
         files_skipped = 0
@@ -184,8 +187,8 @@ class OptimizedIngestionPipeline:
                     content=content,
                     language=candidate.language,
                     model=str(self.config.embedding_model if hasattr(self.config, "embedding_model") else "small"),
-                    token_target=400,
-                    overlap_pct=0.10,
+                    token_target=repo_config.get_window_size_for_language(candidate.language),
+                    overlap_pct=repo_config.overlap_pct,
                 )
             )
 

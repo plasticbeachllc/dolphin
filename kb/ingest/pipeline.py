@@ -1093,7 +1093,9 @@ class IngestionPipeline:
             print(f"Processing {len(changed_files)} files...")
 
             batch_size = 50
-            repo_config = None  # Lazy loaded
+            from ..chunkers.repo_config import load_repo_chunking_config
+
+            repo_config = load_repo_chunking_config(root)
 
             # Create dynamic pool
             pool = DynamicWorkerPool(max_workers=max_workers)
@@ -1151,8 +1153,8 @@ class IngestionPipeline:
                                     content=text,
                                     language=language,
                                     model=embed_model,
-                                    token_target=512,  # Should assume from config
-                                    overlap_pct=0.1,
+                                    token_target=repo_config.get_window_size_for_language(language),
+                                    overlap_pct=repo_config.overlap_pct,
                                 )
                             )
                         except Exception as e:
@@ -1182,17 +1184,11 @@ class IngestionPipeline:
                                 # But we have it in ParseJob... reusing here would require mapping back
                                 # Re-reading might be safer or pass through ParseResult?
                                 # Let's assume re-read is cached by OS or cheap enough.
-                                # Actually we should start loading repo_config once
-                                if repo_config is None:
-                                    from ..chunkers.repo_config import load_repo_chunking_config
-
-                                    repo_config = load_repo_chunking_config(root)
-
                                 text = res.file_path.read_text(encoding="utf-8", errors="ignore")
                                 language = detect_language_from_extension(res.file_path) or "text"  # Re-detect
 
                                 nodes, edges = extract_graph_from_file(
-                                    res.file_path, language, text, vars(repo_config) if repo_config else None
+                                    res.file_path, language, text, vars(repo_config)
                                 )
                                 if nodes or edges:
                                     # Need file_id...
