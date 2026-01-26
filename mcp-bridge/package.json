@@ -6,11 +6,11 @@
   "private": false,
   "type": "module",
   "bin": {
-    "dolphin-mcp": "./dist/cli.js"
+    "dolphin-mcp": "./dist/mcp-bridge/src/cli.js"
   },
   "scripts": {
     "build": "bun x tsc -p tsconfig.json",
-    "start": "bun run dist/cli.js",
+    "start": "bun run dist/mcp-bridge/src/cli.js",
     "dev": "bun run --hot src/index.ts",
     "lint": "bun x eslint .",
     "clean": "rm -rf dist",
