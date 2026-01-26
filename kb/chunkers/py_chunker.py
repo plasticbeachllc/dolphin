@@ -201,7 +201,7 @@ def _extract_symbols(root, source: str) -> list[Symbol]:
     - class_definition → kind='class', name='ClassName'
     - function_definition → kind='function'
     - function_definition inside class → kind='method', path='Class.method'
-    
+
     Note: tree-sitter returns byte offsets, not character offsets.
     We must use source_bytes for slicing to handle multi-byte UTF-8 chars.
     """
@@ -332,7 +332,7 @@ def extract_graph_data(source: str) -> tuple[list[GraphNode], list[GraphEdge]]:
 
 def _extract_edges(root, source: str, edges: list[GraphEdge]):
     """Extract graph edges (imports, calls, inheritance) from Python AST.
-    
+
     Note: tree-sitter returns byte offsets, not character offsets.
     We must use source_bytes for slicing to handle multi-byte UTF-8 chars.
     """
