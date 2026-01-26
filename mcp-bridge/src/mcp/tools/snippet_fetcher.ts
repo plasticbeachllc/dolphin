@@ -95,10 +95,13 @@ export async function fetchSnippetsInParallel(
           const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
           const abortFromSignal = () => controller.abort();
 
+          const canListen = Boolean(
+            signal && typeof (signal as AbortSignal).addEventListener === "function"
+          );
           if (signal) {
             if (signal.aborted) {
               controller.abort();
-            } else {
+            } else if (canListen) {
               signal.addEventListener("abort", abortFromSignal);
             }
           }
@@ -148,7 +151,7 @@ export async function fetchSnippetsInParallel(
             clearTimeout(timeoutId);
             return { result, metadata };
           } finally {
-            if (signal) {
+            if (signal && canListen) {
               signal.removeEventListener("abort", abortFromSignal);
             }
             clearTimeout(timeoutId);
