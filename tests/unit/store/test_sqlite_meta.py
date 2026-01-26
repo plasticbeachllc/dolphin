@@ -6,8 +6,8 @@ Tests basic database operations using the correct API
 
 import pytest
 
-from kb.store.sqlite_meta import SQLiteMetadataStore
 from kb.store.connection_pool import close_connection_pool, get_connection_pool
+from kb.store.sqlite_meta import SQLiteMetadataStore
 
 
 @pytest.fixture
@@ -89,9 +89,7 @@ def test_upsert_file_returns_existing_id_on_conflict(tmp_path):
     file_a_id = store.upsert_file(
         repo_id=repo_id, path="src/a.py", ext=".py", language="python", is_binary=False, size_bytes=10
     )
-    store.upsert_file(
-        repo_id=repo_id, path="src/b.py", ext=".py", language="python", is_binary=False, size_bytes=20
-    )
+    store.upsert_file(repo_id=repo_id, path="src/b.py", ext=".py", language="python", is_binary=False, size_bytes=20)
     file_a_id_again = store.upsert_file(
         repo_id=repo_id, path="src/a.py", ext=".py", language="python", is_binary=False, size_bytes=30
     )
