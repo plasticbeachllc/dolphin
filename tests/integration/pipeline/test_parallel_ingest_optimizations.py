@@ -11,15 +11,15 @@ import pytest
 
 from kb.cache.ast_cache import ASTCache
 from kb.chunkers.types import Chunk
+from kb.config import KBConfig
 from kb.embeddings.adaptive_batching import AdaptiveBatcher, create_adaptive_batches
+from kb.embeddings.provider import EmbeddingProvider
 from kb.hashing import hash_text
 from kb.ingest.incremental import compute_chunk_diff
+from kb.ingest.optimized_pipeline import OptimizedIngestionPipeline
 from kb.ingest.parallel_parser import ParallelChunkCache, ParseJob, ParseResult, parse_files_parallel
 from kb.ingest.parallel_scanner import scan_repo_parallel
-from kb.ingest.optimized_pipeline import OptimizedIngestionPipeline
 from kb.store import LanceDBStore, SQLiteMetadataStore
-from kb.config import KBConfig
-from kb.embeddings.provider import EmbeddingProvider
 
 
 class TestParallelScanning:
