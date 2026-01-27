@@ -13,6 +13,7 @@ import pytest
 from kb.config import KBConfig
 from kb.ingest.pipeline import IngestionPipeline
 from kb.store import LanceDBStore, SQLiteMetadataStore
+import kb.ingest.pipeline as ingest_pipeline
 
 
 class TestPipelineInitialization:
@@ -279,6 +280,52 @@ class TestPipelineIndex:
         # Should not raise - will migrate to global config (default is large)
         result = pipeline.index("test-repo", force=True)
         assert result is not None
+
+    def test_index_sets_session_failed_on_error(self, pipeline_with_repo, monkeypatch):
+        """Test index marks the session as failed when an error occurs."""
+        pipeline, repo_path, metadata = pipeline_with_repo
+
+        def _raise_error(*args, **kwargs):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(pipeline, "process_files", _raise_error)
+
+        with pytest.raises(RuntimeError, match="boom"):
+            pipeline.index("test-repo", force=True)
+
+        repo = metadata.get_repo_by_name("test-repo")
+        repo_id = repo["id"]
+        with metadata._connect() as conn:
+            row = conn.execute(
+                "SELECT status, notes FROM sessions WHERE repo_id = ? ORDER BY id DESC LIMIT 1",
+                (repo_id,),
+            ).fetchone()
+        assert row is not None
+        assert row[0] == "failed"
+        assert "boom" in (row[1] or "")
+
+    def test_index_sets_session_aborted_on_keyboard_interrupt(self, pipeline_with_repo, monkeypatch):
+        """Test index marks the session as aborted on KeyboardInterrupt."""
+        pipeline, repo_path, metadata = pipeline_with_repo
+
+        def _raise_interrupt(*args, **kwargs):
+            raise KeyboardInterrupt()
+
+        monkeypatch.setattr(pipeline, "process_files", _raise_interrupt)
+
+        with pytest.raises(KeyboardInterrupt):
+            pipeline.index("test-repo", force=True)
+
+        repo = metadata.get_repo_by_name("test-repo")
+        repo_id = repo["id"]
+        with metadata._connect() as conn:
+            row = conn.execute(
+                "SELECT status, notes FROM sessions WHERE repo_id = ? ORDER BY id DESC LIMIT 1",
+                (repo_id,),
+            ).fetchone()
+        assert row is not None
+        assert row[0] == "aborted"
+        assert "interrupted" in (row[1] or "")
 
 
 class TestPipelineProcessFiles:
@@ -615,3 +662,54 @@ class TestPipelineReconcileBranchSwitch:
 
         # Should not raise
         pipeline.reconcile_branch_switch("test-repo")
+
+
+@pytest.mark.asyncio
+async def test_index_parallel_sets_session_failed_on_error(tmp_path, monkeypatch):
+    """Test index_parallel marks the session failed when parsing fails."""
+    store_path = tmp_path / "store"
+    store_path.mkdir()
+
+    config = KBConfig(store_root=store_path, embedding_provider="stub")
+    metadata = SQLiteMetadataStore(store_path / "test.db")
+    metadata.initialize()
+    lancedb = LanceDBStore(store_path / "lancedb")
+    pipeline = IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo_path), "config", "user.email", "test@test.com"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_path), "config", "user.name", "Test"],
+        check=True,
+        capture_output=True,
+    )
+    (repo_path / "hello.py").write_text('def hello():\n    return "Hello, World!"\n')
+    subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "initial"], check=True, capture_output=True)
+
+    metadata.register_repo("test-repo", str(repo_path), default_embed_model="small")
+
+    def _raise_parse(*args, **kwargs):
+        raise RuntimeError("parse fail")
+
+    monkeypatch.setattr(ingest_pipeline, "parse_files_parallel", _raise_parse)
+
+    with pytest.raises(RuntimeError, match="parse fail"):
+        await pipeline.index_parallel("test-repo", force=True)
+
+    repo = metadata.get_repo_by_name("test-repo")
+    repo_id = repo["id"]
+    with metadata._connect() as conn:
+        row = conn.execute(
+            "SELECT status, notes FROM sessions WHERE repo_id = ? ORDER BY id DESC LIMIT 1",
+            (repo_id,),
+        ).fetchone()
+    assert row is not None
+    assert row[0] == "failed"
+    assert "parse fail" in (row[1] or "")
