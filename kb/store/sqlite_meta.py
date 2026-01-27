@@ -665,9 +665,7 @@ class SQLiteMetadataStore:
                     (repo_id, commit_sha, branch, embed_model, created_at),
                 )
             except sqlite3.IntegrityError as exc:
-                raise ActiveSessionError(
-                    f"Active indexing session already running for repo_id={repo_id}"
-                ) from exc
+                raise ActiveSessionError(f"Active indexing session already running for repo_id={repo_id}") from exc
             conn.commit()
             return int(cur.lastrowid)
 
