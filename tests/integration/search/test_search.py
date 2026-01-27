@@ -18,38 +18,44 @@ class MockSearchBackend:
         self.lancedb_store = lancedb_store
         self.search_calls = []
 
-    def search(self, request: SearchRequest) -> list[dict[str, Any]]:
+    def search(self, request: SearchRequest) -> tuple[list[dict[str, Any]], str | None]:
         """Mock search implementation that returns predictable results."""
         self.search_calls.append(request)
 
         # Return mock search results based on query
         if "widget" in request.query.lower():
-            return [
-                {
-                    "path": "src/widgets.py",
-                    "start_line": 1,
-                    "end_line": 10,
-                    "text": "class Widget: ...",
-                    "score": 0.95,
-                    "language": "python",
-                    "symbol_name": "Widget",
-                    "symbol_kind": "class",
-                }
-            ]
+            return (
+                [
+                    {
+                        "path": "src/widgets.py",
+                        "start_line": 1,
+                        "end_line": 10,
+                        "text": "class Widget: ...",
+                        "score": 0.95,
+                        "language": "python",
+                        "symbol_name": "Widget",
+                        "symbol_kind": "class",
+                    }
+                ],
+                None,
+            )
         elif "overview" in request.query.lower():
-            return [
-                {
-                    "path": "docs/overview.md",
-                    "start_line": 1,
-                    "end_line": 5,
-                    "text": "# Overview\n\nThis is the project overview.",
-                    "score": 0.88,
-                    "language": "markdown",
-                    "heading_h1": "Overview",
-                }
-            ]
+            return (
+                [
+                    {
+                        "path": "docs/overview.md",
+                        "start_line": 1,
+                        "end_line": 5,
+                        "text": "# Overview\n\nThis is the project overview.",
+                        "score": 0.88,
+                        "language": "markdown",
+                        "heading_h1": "Overview",
+                    }
+                ],
+                None,
+            )
         else:
-            return []
+            return [], None
 
 
 class TestSearchIntegration:

@@ -97,7 +97,7 @@ class TestRerankerIntegration:
             patch.object(rerank_backend.sql_store, "bm25_search", return_value=[]),
         ):
             # Should complete without error even with no results
-            results = rerank_backend.search(request)
+            results, _ = rerank_backend.search(request)
             assert isinstance(results, list)
 
         # The test passes if reranking is properly initialized and search works

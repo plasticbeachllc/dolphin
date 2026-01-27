@@ -45,7 +45,8 @@ def _run_search(
         repos=[repo_name],
         include_graph_context=False,
     )
-    return backend.search(request)
+    results, _ = backend.search(request)
+    return results
 
 
 class TestCachePerformance:

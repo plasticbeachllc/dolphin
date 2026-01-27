@@ -14,17 +14,20 @@ class MockSearchBackend:
 
     def search(self, request: SearchRequest):
         """Return mock search results."""
-        return [
-            {
-                "repo": "test-repo",
-                "path": "test.py",
-                "start_line": 1,
-                "end_line": 10,
-                "score": 0.95,
-                "snippet": "def test(): pass",
-                "provenance": {"commit": "abc123", "text_hash": "hash123"},
-            }
-        ]
+        return (
+            [
+                {
+                    "repo": "test-repo",
+                    "path": "test.py",
+                    "start_line": 1,
+                    "end_line": 10,
+                    "score": 0.95,
+                    "snippet": "def test(): pass",
+                    "provenance": {"commit": "abc123", "text_hash": "hash123"},
+                }
+            ],
+            None,
+        )
 
 
 class TestHealthEndpoint:
@@ -148,16 +151,19 @@ class TestSearchEndpoint:
 
         class BackendNoSnippet:
             def search(self, request: SearchRequest):
-                return [
-                    {
-                        "repo": "test-repo",
-                        "path": "test.py",
-                        "start_line": 2,
-                        "end_line": 3,
-                        "score": 0.9,
-                        "chunk_id": "c1",
-                    }
-                ]
+                return (
+                    [
+                        {
+                            "repo": "test-repo",
+                            "path": "test.py",
+                            "start_line": 2,
+                            "end_line": 3,
+                            "score": 0.9,
+                            "chunk_id": "c1",
+                        }
+                    ],
+                    None,
+                )
 
         set_search_backend(BackendNoSnippet())
 

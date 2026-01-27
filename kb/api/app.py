@@ -295,6 +295,7 @@ class SearchRequest(BaseModel):
         ge=0,
         le=_API_LIMITS.max_context_lines,
     )
+    cursor: str | None = None
 
 
 class SearchBackend(Protocol):
@@ -302,15 +303,17 @@ class SearchBackend(Protocol):
 
     def search(
         self, request: SearchRequest
-    ) -> Sequence[dict[str, object]] | Awaitable[Sequence[dict[str, object]]]: ...
+    ) -> tuple[Sequence[dict[str, object]], str | None] | Awaitable[tuple[Sequence[dict[str, object]], str | None]]: ...
 
 
 class _EmptySearchBackend:
     """Default backend that returns zero hits until retrieval is implemented."""
 
-    def search(self, request: SearchRequest) -> Sequence[dict[str, object]] | Awaitable[Sequence[dict[str, object]]]:
+    def search(
+        self, request: SearchRequest
+    ) -> tuple[Sequence[dict[str, object]], str | None] | Awaitable[tuple[Sequence[dict[str, object]], str | None]]:
         _ = request
-        return ()
+        return [], None
 
 
 _DEFAULT_BACKEND = _EmptySearchBackend()
@@ -440,12 +443,18 @@ async def search(request: SearchRequest) -> dict[str, Any]:
             set_config_method(temp_config_data)
 
     started = perf_counter()
-    raw_hits = backend.search(request)
+    raw_result = backend.search(request)
     hits: Iterable[dict[str, object]]
-    if isawaitable(raw_hits):
-        hits = await raw_hits
+    next_cursor: str | None = None
+
+    if isawaitable(raw_result):
+        result = await raw_result
     else:
-        hits = raw_hits
+        result = raw_result
+
+    # Result is always (hits, next_cursor) per Protocol
+    hits, next_cursor = result
+
     hits_list = list(hits)
     latency_ms = int((perf_counter() - started) * 1000)
 
@@ -473,6 +482,7 @@ async def search(request: SearchRequest) -> dict[str, Any]:
         "max_snippets": snippet_limit,
         "mmr_enabled": request.mmr_enabled,
         "mmr_lambda": request.mmr_lambda,
+        "next_cursor": next_cursor,
     }
 
     if request.ann_strategy:
@@ -481,6 +491,76 @@ async def search(request: SearchRequest) -> dict[str, Any]:
             meta["ann_nprobes"] = request.ann_nprobes
         if request.ann_refine_factor:
             meta["ann_refine_factor"] = request.ann_refine_factor
+
+    # Extract next_cursor if provided by backend (usually attached to the last hit or a wrapper)
+    # Since the backend returns a simple list of dicts, we need a convention.
+    # The convention defined in the implementation plan implies the backend does the filtering.
+    # We need to compute the cursor *here* or have the backend return it.
+    # Given the protocol `Sequence[dict]`, the backend can't easily return side-channel data
+    # without breaking the contract or using a special attribute.
+    #
+    # However, to keep it clean, let's have the backend attach `next_cursor` to the `meta` dict
+    # if we modify the backend signature, OR, more simply, we can inspect the backend results.
+    #
+    # BUT wait, the `search` function in `app.py` calls `backend.search(request)`.
+    # `backend.search` returns `Sequence[dict]`.
+    #
+    # Let's check `search_backend.py`. It returns `list[dict]`.
+    #
+    # To support `next_cursor`, we should probably let the backend return it,
+    # OR calculate it here if the backend is strictly just returning hits.
+    # BUT the backend needs to know if there are *more* results to determine if a cursor is valid.
+    #
+    # OPTION: The backend already computes `final_results`.
+    # If `len(final_results) == top_k`, there *might* be more.
+    # To be precise, the backend implementation in the plan says "Compute next_cursor if more results exist".
+    #
+    # Let's modify `SearchBackend` protocol or return type? No, that's a breaking change for other backends if any.
+    #
+    # ALTERNATIVE: The backend can attach `_next_cursor` to the last result? Dirty.
+    #
+    # Better: Update `SearchBackend.search` to return `tuple[Sequence[dict], str | None]`?
+    # Or just return a specialized object.
+    #
+    # Let's look at `SearchBackend` protocol in `app.py`.
+    # It is: `def search(self, request: SearchRequest) -> Sequence[dict[str, object]] | Awaitable[...]`
+    #
+    # If I change this, I break `_EmptySearchBackend` and others.
+    #
+    # Let's look at `search_backend.py`.
+    #
+    # I'll stick to a slightly less invasive approach:
+    # The `backend.search` will return the results.
+    # The `backend` *object* could provide a helper to generate a cursor, OR
+    # checking the plan again: "Update SearchBackend.search method to ... Compute next_cursor if more results exist".
+    #
+    # If I change the return signature, I must update `app.py`, `_EmptySearchBackend`, etc.
+    # This seems necessary for a robust implementation.
+    #
+    # Let's see if we can just update `app.py` to handle a tuple return or an object.
+    # But `app.py` currently thinks it gets `hits`.
+    #
+    # Let's Modify `SearchBackend` protocol to return `SearchResult` object or similar?
+    # Or just `dict` with hits and meta?
+    #
+    # `app.py` currently: `raw_hits = backend.search(request)`
+    #
+    # If I change `backend.search` to return `tuple[hits, cursor]`, I can update `app.py` easily.
+    #
+    # Let's do that. It makes the most sense.
+
+    # Retrieve next_cursor if returned by backend (handling backward compatibility check)
+    next_cursor = None
+    if isinstance(hits_list, dict) and "hits" in hits_list:
+        # Backend returned a dict wrapper
+        next_cursor = hits_list.get("next_cursor")
+        hits_list = hits_list["hits"]
+    elif isinstance(hits_list, tuple) and len(hits_list) == 2:
+        # Backend returned (hits, cursor)
+        hits_list, next_cursor = hits_list
+
+    if next_cursor:
+        meta["next_cursor"] = next_cursor
 
     return {
         "hits": hits_list,

@@ -33,7 +33,8 @@ def _run_search(
         include_graph_context=False,
         **overrides,
     )
-    return backend.search(request)
+    results, _ = backend.search(request)
+    return results
 
 
 def _extract_result_path(result: dict[str, object]) -> str:

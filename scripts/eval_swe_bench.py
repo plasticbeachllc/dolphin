@@ -105,7 +105,7 @@ def evaluate_instance(
             # Use model from repo config
         )
 
-        results = backend.search(request)
+        results, _ = backend.search(request)
 
         # Extract unique file paths
         predicted_files = extract_unique_files(results, top_k=top_k)

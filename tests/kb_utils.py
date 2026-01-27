@@ -59,7 +59,7 @@ class InMemoryKBBackend:
                 text_hash=hash_text(text),
             )
 
-    def search(self, request: SearchRequest) -> Sequence[dict[str, object]]:
+    def search(self, request: SearchRequest) -> tuple[Sequence[dict[str, object]], str | None]:
         """Perform a naive substring search across the loaded chunks."""
         scope = {s.lower() for s in request.repos or []}
         query = request.query.lower()
@@ -92,7 +92,7 @@ class InMemoryKBBackend:
                     },
                 }
             )
-        return matches[: request.top_k]
+        return matches[: request.top_k], None
 
 
 def _build_snippet(
