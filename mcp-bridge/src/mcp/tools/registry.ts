@@ -6,6 +6,7 @@ import { makeFileLines } from "./file_lines.js";
 import { makeStoreInfo } from "./store_info.js";
 import { makeGetMetadata } from "./get_metadata.js";
 import { makeListRepos } from "./list_repos.js";
+import { makeOpenRef } from "./open_ref.js";
 import { makeKbHealth } from "./kb_health.js";
 import { TOOL_VERSION } from "./version.js";
 
@@ -57,6 +58,7 @@ export const tools: ToolRegistration[] = validateTools([
   { ...makeSearchKnowledge(), version: TOOL_VERSION },
   { ...makeChunkGet(), version: TOOL_VERSION },
   { ...makeFileLines(), version: TOOL_VERSION },
+  { ...makeOpenRef(), version: TOOL_VERSION },
   { ...makeListRepos(), version: TOOL_VERSION },
   { ...makeKbHealth(), version: TOOL_VERSION },
   { ...makeStoreInfo(), version: TOOL_VERSION },
