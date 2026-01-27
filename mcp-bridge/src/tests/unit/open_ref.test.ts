@@ -63,4 +63,42 @@ describe("open_ref tool", () => {
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain("File not found");
     });
+
+    test("handles malformed kb:// URI as chunk_id", async () => {
+        // A URI without line numbers should fall through to chunk_get logic
+        const mockClient = {
+            getFileSlice: mock(() => Promise.resolve({})),
+            getChunk: mock(() => Promise.resolve({
+                chunk_id: "kb://my-repo/file.txt", // weird chunk ID but valid string
+                repo: "my-repo",
+                path: "file.txt",
+                start_line: 1,
+                end_line: 10,
+                content: "content", 
+                lang: "text",
+                resource_link: "kb://my-repo/file.txt#L1-L10"
+            }))
+        };
+
+        const { handler } = makeOpenRef(mockClient as any);
+        // This looks like a URI but doesn't match the REGEX (missing #L...-L...)
+        // So it should be treated as a chunk ID
+        const result = await handler({ ref: "kb://my-repo/file.txt" }); 
+
+        expect(mockClient.getChunk).toHaveBeenCalledWith("kb://my-repo/file.txt", undefined);
+        expect(mockClient.getFileSlice).not.toHaveBeenCalled();
+        expect(result.isError).toBe(false);
+    });
+
+    test("handles empty string", async () => {
+         const mockClient = {
+            getFileSlice: mock(() => Promise.resolve({})),
+            getChunk: mock(() => Promise.reject(new Error("Chunk not found")))
+        };
+        const { handler } = makeOpenRef(mockClient as any);
+        const result = await handler({ ref: "" });
+        
+        // Empty string matches nothing, goes to chunk_get, returns error
+        expect(result.isError).toBe(true);
+    });
 });
