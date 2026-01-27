@@ -1283,7 +1283,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
         import traceback
 
         error_msg = f"{str(e)}\n{traceback.format_exc()}"
-        if session_id is not None and _sql_store is not None:
+        if session_id is not None:
             _sql_store.set_session_status(session_id, "failed", notes=str(e))
         await task_queue.update_task(task_id, status=TaskStatus.FAILED, error=error_msg)
 

@@ -10,10 +10,10 @@ import subprocess
 
 import pytest
 
+import kb.ingest.pipeline as ingest_pipeline
 from kb.config import KBConfig
 from kb.ingest.pipeline import IngestionPipeline
 from kb.store import LanceDBStore, SQLiteMetadataStore
-import kb.ingest.pipeline as ingest_pipeline
 
 
 class TestPipelineInitialization:
