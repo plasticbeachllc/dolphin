@@ -206,7 +206,7 @@ def _enrich_hits_with_snippets(
             end_int = int(end_line)
         except (TypeError, ValueError):
             continue
-        
+
         context_before = request.context_lines_before or 0
         context_after = request.context_lines_after or 0
 
@@ -214,11 +214,11 @@ def _enrich_hits_with_snippets(
         # Match range
         match_start_idx = max(0, start_int - 1)
         match_end_idx = min(total_lines, end_int)
-        
+
         # Context ranges
         before_start_idx = max(0, match_start_idx - context_before)
         before_end_idx = match_start_idx
-        
+
         after_start_idx = match_end_idx
         after_end_idx = min(total_lines, match_end_idx + context_after)
 
@@ -231,7 +231,7 @@ def _enrich_hits_with_snippets(
         total_chars = len(text_content) + len(before_content) + len(after_content)
         max_tokens = request.max_snippet_tokens
         estimated_tokens = total_chars / 4.0
-        
+
         truncated = False
         if estimated_tokens > max_tokens:
             truncated = True
@@ -246,7 +246,7 @@ def _enrich_hits_with_snippets(
             "text": text_content,
             "context_before": before_content,
             "context_after": after_content,
-            "truncated": truncated
+            "truncated": truncated,
         }
 
         hit["snippet"] = snippet_obj

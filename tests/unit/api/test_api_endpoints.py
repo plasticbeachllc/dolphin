@@ -186,7 +186,7 @@ class TestSearchEndpoint:
         assert snippet["context_after"] == "line4\n"
         assert snippet["start_line"] == 1
         assert snippet["end_line"] == 4
-        
+
         assert "snippet_start_line" not in hit
         assert "snippet_end_line" not in hit
 
@@ -195,6 +195,7 @@ class TestSearchEndpoint:
 
         reset_search_backend()
         reset_stores()
+
 
 class TestReposEndpoint:
     """Test /v1/repos endpoint."""
