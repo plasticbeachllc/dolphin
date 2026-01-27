@@ -179,9 +179,19 @@ class TestSearchEndpoint:
         assert response.status_code == 200
         data = response.json()
         hit = data["hits"][0]
-        assert hit["snippet"] == "line1\nline2\nline3\nline4\n"
-        assert hit["snippet_start_line"] == 1
-        assert hit["snippet_end_line"] == 4
+        snippet = hit["snippet"]
+        assert isinstance(snippet, dict)
+        assert snippet["text"] == "line2\nline3\n"
+        assert snippet["context_before"] == "line1\n"
+        assert snippet["context_after"] == "line4\n"
+        assert snippet["start_line"] == 1
+        assert snippet["end_line"] == 4
+
+        assert "snippet_start_line" not in hit
+        assert "snippet_end_line" not in hit
+
+        reset_search_backend()
+        reset_stores()
 
         reset_search_backend()
         reset_stores()

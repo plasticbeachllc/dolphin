@@ -18,6 +18,10 @@ from kb.security import PathValidator
 from kb.store.connection_pool import SQLiteConnectionPool, get_connection_pool
 
 
+class ActiveSessionError(RuntimeError):
+    """Raised when attempting to start an indexing session while another is active."""
+
+
 class RepoRecord(TypedDict):
     """Type for repository record dictionaries."""
 
@@ -215,6 +219,9 @@ class SQLiteMetadataStore:
                         # Validate table schema
                         self._validate_table_schema(cur, table)
 
+                    # Ensure single-writer enforcement for indexing sessions
+                    self._ensure_active_session_index(cur)
+
                     logger.info("[SQLiteMeta] Table validation complete, creating FTS5 tables...")
 
                     # Robust FTS5 creation with version checking
@@ -317,6 +324,19 @@ class SQLiteMetadataStore:
         missing_cols = required_cols - actual_cols
         if missing_cols:
             raise RuntimeError(f"Table {table_name} missing required columns: {missing_cols}")
+
+    def _ensure_active_session_index(self, cur) -> None:
+        """Ensure the active-session unique index exists to enforce single-writer behavior."""
+        try:
+            cur.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_active_repo
+                ON sessions(repo_id)
+                WHERE status NOT IN ('succeeded', 'failed', 'aborted')
+                """
+            )
+        except sqlite3.OperationalError as exc:
+            logger.warning("[SQLiteMeta] Failed to create active-session index: %s", exc)
 
     def _create_fts5_table_safe(self, cur) -> None:
         """Safely create FTS5 table with version and feature detection."""
@@ -524,7 +544,7 @@ class SQLiteMetadataStore:
                 """
                 SELECT id, repo_id, commit_sha, branch, embed_model, status,
                        files_indexed, chunks_indexed, vectors_written, chunks_skipped, chunks_pruned,
-                       created_at, ended_at
+                       created_at, ended_at, notes
                 FROM sessions WHERE id = ?
                 """,
                 (int(session_id),),
@@ -546,6 +566,7 @@ class SQLiteMetadataStore:
                 "chunks_pruned": int(row[10]),
                 "created_at": row[11],
                 "ended_at": row[12],
+                "notes": row[13],
             }
 
     def summarize(self) -> dict[str, int]:
@@ -616,18 +637,35 @@ class SQLiteMetadataStore:
         from datetime import datetime
 
         with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute(
+                """
+                SELECT id, status FROM sessions
+                WHERE repo_id = ? AND status NOT IN ('succeeded', 'failed', 'aborted')
+                LIMIT 1
+                """,
+                (repo_id,),
+            )
+            active = cur.fetchone()
+            if active:
+                raise ActiveSessionError(
+                    f"Active indexing session already running for repo_id={repo_id} (session {active[0]})"
+                )
+
             # Use ISO format timestamp for consistency with other timestamp fields
             created_at = datetime.now(UTC).isoformat()
 
-            cur.execute(
-                """
-                INSERT INTO sessions (repo_id, commit_sha, branch, embed_model, status,
-                                     files_indexed, chunks_indexed, vectors_written, chunks_skipped, chunks_pruned,
-                                     created_at)
-                VALUES (?, ?, ?, ?, 'running', 0, 0, 0, 0, 0, ?)
-                """,
-                (repo_id, commit_sha, branch, embed_model, created_at),
-            )
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO sessions (repo_id, commit_sha, branch, embed_model, status,
+                                         files_indexed, chunks_indexed, vectors_written, chunks_skipped, chunks_pruned,
+                                         created_at)
+                    VALUES (?, ?, ?, ?, 'running', 0, 0, 0, 0, 0, ?)
+                    """,
+                    (repo_id, commit_sha, branch, embed_model, created_at),
+                )
+            except sqlite3.IntegrityError as exc:
+                raise ActiveSessionError(f"Active indexing session already running for repo_id={repo_id}") from exc
             conn.commit()
             return int(cur.lastrowid)
 
@@ -1764,6 +1802,44 @@ class SQLiteMetadataStore:
             terminated = cur.rowcount
             conn.commit()
             return terminated
+
+    def abort_stale_sessions(self, *, repo_id: int | None = None, reason: str) -> int:
+        """Abort any active sessions (typically after crash recovery)."""
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            params: tuple[Any, ...]
+            if repo_id is None:
+                params = (reason, reason)
+                cur.execute(
+                    """
+                    UPDATE sessions
+                    SET status = 'aborted',
+                        ended_at = datetime('now'),
+                        notes = CASE
+                            WHEN notes IS NULL OR notes = '' THEN ?
+                            ELSE notes || ' | ' || ?
+                        END
+                    WHERE status NOT IN ('succeeded', 'failed', 'aborted')
+                    """,
+                    params,
+                )
+            else:
+                params = (reason, reason, repo_id)
+                cur.execute(
+                    """
+                    UPDATE sessions
+                    SET status = 'aborted',
+                        ended_at = datetime('now'),
+                        notes = CASE
+                            WHEN notes IS NULL OR notes = '' THEN ?
+                            ELSE notes || ' | ' || ?
+                        END
+                    WHERE repo_id = ? AND status NOT IN ('succeeded', 'failed', 'aborted')
+                    """,
+                    params,
+                )
+            aborted = cur.rowcount
+            conn.commit()
+            return aborted
 
     def _get_repo_data_counts(self, cur, repo_id: int, repo_name: str) -> dict:
         """Collect counts of all data that will be deleted for validation."""
