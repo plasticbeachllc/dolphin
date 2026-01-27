@@ -130,7 +130,7 @@ log_level = "debug"
 
     expect(CONFIG.DOLPHIN_API_URL).toBe("http://127.0.0.1:7777");
     expect(CONFIG.SERVER_NAME).toBe("dolphin-mcp");
-    expect(CONFIG.SERVER_VERSION).toBe("0.2.0");
+    expect(CONFIG.SERVER_VERSION).toBe("0.2.3");
     expect(CONFIG.MCP_PROTOCOL_VERSION).toBe("2025-11-25");
     expect(CONFIG.LOG_LEVEL).toBe("info");
   });
