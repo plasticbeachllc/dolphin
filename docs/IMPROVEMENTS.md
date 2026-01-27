@@ -213,6 +213,8 @@ These are already present in the repo (see `README.md`, `CHANGELOG.md`, and the 
 
 - After a forced kill mid-index, restart processes pending changes and does not corrupt metadata.
 
+**Status**: ✅ Implemented (single-writer enforcement, startup recovery aborts stale sessions, pending changes resume)
+
 ### 10) Retrieval tuning workflow: reproducible evals + CI regression gates
 
 **Why it matters**

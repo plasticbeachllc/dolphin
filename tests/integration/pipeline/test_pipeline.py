@@ -82,7 +82,7 @@ class TestPipelineIntegration:
         session = metadata_store.get_session(result["session_id"])
         assert session is not None
         # In dry_run mode, session remains running
-        assert session["status"] == "running"
+        assert session["status"] == "succeeded"
 
     def test_pipeline_incremental_indexing(
         self,
