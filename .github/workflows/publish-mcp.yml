@@ -5,6 +5,10 @@ on:
     tags:
       - "mcp-v*.*.*" # Triggers on tags like mcp-v0.1.2
 
+permissions:
+  id-token: write # Required for OIDC
+  contents: read # Required to checkout code
+
 jobs:
   publish:
     runs-on: ubuntu-latest
