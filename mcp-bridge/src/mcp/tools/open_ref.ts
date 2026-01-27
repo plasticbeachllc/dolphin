@@ -65,7 +65,7 @@ export function makeOpenRef(client?: KBClient): {
         const res = await (client
           ? client.getFileSlice(repo, path, start, end, signal)
           : restGetFileSlice(repo, path, start, end, signal));
-        
+
         const mime = mimeFromLangOrPath(res.lang, res.path);
         warnings = res._meta?.warnings ?? [];
 
@@ -82,24 +82,22 @@ export function makeOpenRef(client?: KBClient): {
         ];
       } else {
         // Handle as Chunk ID
-        const chunk = await (client
-          ? client.getChunk(ref, signal)
-          : restGetChunk(ref, signal));
-        
+        const chunk = await (client ? client.getChunk(ref, signal) : restGetChunk(ref, signal));
+
         const mime = mimeFromLangOrPath(chunk.lang, chunk.path);
-        
+
         content = [
           {
             type: "text",
             text: `Chunk ${chunk.chunk_id} — ${chunk.repo}/${chunk.path}#L${chunk.start_line}-L${chunk.end_line}`,
           },
-          { 
-            type: "resource", 
-            resource: { 
-              uri: chunk.resource_link, 
-              mimeType: mime, 
-              text: chunk.content 
-            } 
+          {
+            type: "resource",
+            resource: {
+              uri: chunk.resource_link,
+              mimeType: mime,
+              text: chunk.content,
+            },
           },
         ];
       }
