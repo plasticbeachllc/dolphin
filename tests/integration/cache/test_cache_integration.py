@@ -5,9 +5,19 @@ import subprocess
 import uuid
 import tempfile
 from pathlib import Path
-
 import pytest
 
+from fastapi.testclient import TestClient
+
+from kb.api.app import (
+    app,
+    reset_pipeline,
+    reset_search_backend,
+    reset_stores,
+    set_pipeline,
+    set_search_backend,
+    set_stores,
+)
 from kb.api.search_backend import create_search_backend
 from kb.cache import QueryCache, create_cache
 from kb.config import KBConfig
@@ -297,6 +307,77 @@ class TestCacheInvalidationOnReindex:
         pipeline.index(repo_name, dry_run=False, force=True, full_reindex=True)
 
         assert cache.get_results("query", repos=[repo_name]) is None
+
+
+class TestCacheInvalidationAPI:
+    """API-level cache invalidation coverage."""
+
+    def test_reindex_invalidates_cached_search_results(self, temp_dir: Path, monkeypatch: pytest.MonkeyPatch):
+        store_root = temp_dir / "api_store"
+        store_root.mkdir(parents=True, exist_ok=True)
+
+        backend = create_search_backend(
+            store_root=store_root,
+            embedding_provider_type="stub",
+            cache_enabled=True,
+        )
+
+        backend.lance_store.query = lambda *args, **kwargs: []  # Avoid vector-only hits in test.
+        pipeline = IngestionPipeline(backend.config, backend.lance_store, backend.sql_store, cache=backend.cache)
+
+        set_search_backend(backend)
+        set_stores(backend.sql_store, backend.lance_store)
+        set_pipeline(pipeline)
+
+        try:
+            repo_path = temp_dir / "api_repo"
+            repo_path.mkdir()
+            init_test_git_repo(repo_path)
+            (repo_path / "code.py").write_text("def alpha(): return 'alpha'")
+            subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+            subprocess.run(
+                ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True
+            )
+
+            backend.sql_store.record_repo(name="api-repo", path=repo_path, default_embed_model="small")
+            pipeline.index("api-repo", dry_run=False, force=True, full_reindex=True)
+
+            test_api_key = "test-api-key-12345"
+            monkeypatch.setenv("DOLPHIN_API_KEY", test_api_key)
+            client = TestClient(app)
+            client.headers = {"X-API-Key": test_api_key}
+
+            response = client.post(
+                "/v1/search",
+                json={"query": "beta", "repos": ["api-repo"], "top_k": 5, "max_snippets": 1},
+            )
+            assert response.status_code == 200
+            assert response.json()["hits"] == []
+
+            (repo_path / "code.py").write_text(
+                """
+def alpha(): return 'alpha'
+def beta(): return 'beta'
+"""
+            )
+            subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Add beta"], check=True, capture_output=True)
+
+            response = client.post("/v1/repos/api-repo/reindex", json={"mode": "incremental"})
+            assert response.status_code == 200
+
+            response = client.post(
+                "/v1/search",
+                json={"query": "beta", "repos": ["api-repo"], "top_k": 5, "max_snippets": 1},
+            )
+            assert response.status_code == 200
+            hits = response.json()["hits"]
+            assert hits
+            assert any("beta" in str(hit.get("snippet", "")).lower() for hit in hits)
+        finally:
+            reset_search_backend()
+            reset_stores()
+            reset_pipeline()
 
 
 @pytest.mark.skipif(
