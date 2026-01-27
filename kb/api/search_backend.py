@@ -418,11 +418,7 @@ class KnowledgeSearchBackend:
 
                     # Remove temporary fields to avoid inflating payload
                     for h in hits:
-                        if "query_vector" in h:
-                            try:
-                                del h["query_vector"]
-                            except Exception:
-                                pass
+                        h.pop("query_vector", None)
             except Exception as e:
                 # Fall back gracefully if MMR fails for any reason
                 request_logger.warning("MMR diversification failed", error=e)

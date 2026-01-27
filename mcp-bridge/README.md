@@ -187,6 +187,8 @@ Semantically query code and docs across indexed repositories and return many ran
 }
 ```
 
+Note: `embed_model` is no longer a supported search parameter; model selection is configured in the KB/repo settings.
+
 **Filtering Options**:
 
 - `repos`: Include only specific repositories
