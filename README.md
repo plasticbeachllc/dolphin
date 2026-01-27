@@ -110,6 +110,8 @@ At the repo root:
   - Hybrid approximate nn vector + BM25 keyword search with RRF scoring
   - Re-ranking with cross-encoder
   - MMR relevancy enhancement
+  - Cursor-based pagination for deep result traversal
+  - Structured snippet objects with precise context
 - **Interfaces**
   - `dolphin` CLI app
   - FastAPI server with search, retrieval, and metadata endpoints
@@ -271,13 +273,15 @@ Currently only [OpenAI embeddings](https://platform.openai.com/docs/guides/embed
 
 ## Development Status
 
-**Current**: Release candidates: (v0.2.0) Knowledge Bank + (v0.2.1) MCP
+**Current**: Release candidates: (v0.2.1) Knowledge Bank + (v0.2.3) MCP
 
 - ✅ Core indexing and search pipeline
 - ✅ Language-aware chunking (Python, TS, JS, Markdown)
 - ✅ REST API with MCP bridge available at `bunx dolphin-mcp`
 - ✅ Cross-encoder reranking support
 - ✅ Hybrid search (BM25 + Vector)
+- ✅ Cursor-based pagination
+- ✅ Structured snippets & Graph Context
 
 ## Requirements
 
@@ -344,8 +348,8 @@ For detailed troubleshooting, performance tips, and development workflows, see [
 
 Current versions:
 
-- **Python Package (PyPI)**: [`0.2.0`](pyproject.toml:7) - `pb-dolphin`
-- **MCP Bridge (npm)**: [`0.2.0`](mcp-bridge/package.json:3) - `dolphin-mcp`
+- **Python Package (PyPI)**: [`0.2.1`](pyproject.toml:7) - `pb-dolphin`
+- **MCP Bridge (npm)**: [`0.2.3`](mcp-bridge/package.json:3) - `dolphin-mcp`
 
 ### License
 

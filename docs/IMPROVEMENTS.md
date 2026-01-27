@@ -14,6 +14,8 @@ These are already present in the repo (see `README.md`, `CHANGELOG.md`, and the 
 - **Chunk/content dedup** based on `text_hash` and content/location separation (`kb/ingest/dedup.py`, `kb/store/sql_models.py`).
 - **Graph context enrichment** can be included in search responses (`kb/api/app.py` request model).
 - **API filters already supported**: `repos`, `path_prefix`, `exclude_paths`, `exclude_patterns`, ANN tuning params, snippet sizing, context lines, etc. (`kb/api/app.py`).
+- **Cursor-based Pagination**: Stateless deep pagination via `cursor` and `next_cursor` tokens.
+- **Structured Snippets**: Rich snippet objects with distinct `text`, `context_before`, `context_after` fields.
 
 ## 0.2.1 (Patch) — Low-Risk, High-Impact
 
@@ -108,6 +110,8 @@ These are already present in the repo (see `README.md`, `CHANGELOG.md`, and the 
 - Repeated “page 2, page 3” calls do not repeat hits.
 - Cursor is opaque and validated server-side.
 
+**Status**: ✅ Implemented in v0.2.1 (shared SHA-256 cursor hash, stable sort)
+
 ### 5) Tighten “negative filtering” and path normalization semantics
 
 **Why it matters**
@@ -194,6 +198,8 @@ These are already present in the repo (see `README.md`, `CHANGELOG.md`, and the 
 - Snippets are consistent across vector-only hits and BM25 hits.
 - The server never returns more than `max_snippet_tokens` per snippet and respects `max_snippets`.
 
+**Status**: ✅ Implemented in v0.2.1 (Snippet object with context_before/after/text)
+
 ### 9) Make indexing sessions crash-safe and resumable (single-writer per repo)
 
 **Why it matters**
@@ -246,7 +252,7 @@ These are suggestions specifically for the **MCP “dolphin” server** UX and e
 
 ### 0.2.1 (Patch) — Higher leverage UX fixes
 
-- **Return snippets by default (small)**: `search` often returns results where `snippet_range.included=false`, forcing a follow-up `file_lines` call for basic inspection. Default to a short snippet (e.g., 3–8 lines) and allow callers to disable it.
+- **Return snippets by default (small)**: `search` often returns results where `snippet_range.included=false`, forcing a follow-up `file_lines` call for basic inspection. Default to a short snippet (e.g., 3–8 lines) and allow callers to disable it. ✅ Implemented
 - **Fix confusing snippet messaging**: avoid messages like “Showing snippets for top 0/N results” when snippets are disabled by config/params; instead report the reason (e.g., `max_snippets=0`) in `meta`.
 - **Output shaping controls**: add `compact=true` and/or `fields=[...]` so callers can request just `{path, start_line, end_line, score, snippet}` to prevent large JSON payloads and truncation in downstream clients.
 - **Stable identifiers in responses**: standardize what `chunk_id` represents across the MCP surface (SQL content id vs Lance row id vs FTS id), or return them as separate fields (`content_id`, `vector_id`, `fts_id`) to remove ambiguity.

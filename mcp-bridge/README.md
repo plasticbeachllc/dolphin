@@ -183,7 +183,9 @@ Semantically query code and docs across indexed repositories and return many ran
   "include_vscode_uris": "boolean",
   "ann_strategy": "speed | accuracy | adaptive | custom",
   "ann_nprobes": "number",
-  "ann_refine_factor": "number"
+  "ann_nprobes": "number",
+  "ann_refine_factor": "number",
+  "compact": "boolean"
 }
 ```
 
@@ -247,6 +249,16 @@ Report namespaces, dims, limits, and approximate counts.
 
 ```json
 {}
+```
+
+### `open_ref`
+
+Open a reference (kb:// URI or chunk_id) and return the content. Use this to follow up on search results.
+
+```json
+{
+  "ref": "string (kb://... URI or chunk_id)"
+}
 ```
 
 ### `repos.list`
