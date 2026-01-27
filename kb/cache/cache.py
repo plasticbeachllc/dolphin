@@ -270,9 +270,7 @@ class QueryCache:
                 index_key = self._repo_index_key(repo)
                 keys = self.redis.smembers(index_key)
                 if keys:
-                    cache_keys = [
-                        key.decode() if isinstance(key, (bytes, bytearray)) else key for key in keys
-                    ]
+                    cache_keys = [key.decode() if isinstance(key, (bytes, bytearray)) else key for key in keys]
                     pipeline = self.redis.pipeline()
                     pipeline.delete(*cache_keys)
                     pipeline.delete(index_key)
