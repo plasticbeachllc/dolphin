@@ -215,8 +215,13 @@ export function buildSummary(params: {
 
   const summaryParts = [
     `Found ${k} result${k === 1 ? "" : "s"}${rcount > 0 ? ` across ${rcount} repo${rcount === 1 ? "" : "s"}` : ""}.`,
-    `Showing snippets for top ${params.snippetsIncluded}/${k} results.`,
   ];
+
+  if (params.snippetsIncluded > 0) {
+    summaryParts.push(`Showing snippets for top ${params.snippetsIncluded}/${k} results.`);
+  } else {
+    summaryParts.push("Snippets disabled or none found.");
+  }
   if (typeof params.estimatedTotal === "number")
     summaryParts.push(`~${params.estimatedTotal} estimated results.`);
 
@@ -239,16 +244,16 @@ export type HitsJson = {
     repo: string;
     path: string;
     lang?: string;
-    chunk_range: { start_line: number | undefined; end_line: number | undefined };
-    snippet_range: { start_line: number; end_line: number; included: boolean };
-    uris: {
+    chunk_range?: { start_line: number | undefined; end_line: number | undefined };
+    snippet_range?: { start_line: number; end_line: number; included: boolean };
+    uris?: {
       chunk: string;
       snippet: string;
       vscode: string | null;
       abs_path: string | null;
       repo_root: string | null;
     };
-    followups: {
+    followups?: {
       chunk_get: { chunk_id: string };
       file_lines: { repo: string; path: string; start: number; end: number };
     };
@@ -268,12 +273,26 @@ export function buildHitsJsonObject(params: {
   meta: SearchResultWithHits["meta"];
   topK: number;
   warningEntries: WarningEntry[];
+  compact?: boolean;
 }): HitsJson {
   return {
     schema_version: HITS_JSON_SCHEMA_VERSION,
     query: params.query,
     hits: params.hits.map((h, i) => {
       const hit = h as ExtendedSearchHit;
+
+      const baseHit = {
+        rank: i + 1,
+        chunk_id: hit.chunk_id,
+        score: hit.score,
+        repo: hit.repo,
+        path: hit.path,
+      };
+
+      if (params.compact) {
+        return baseHit;
+      }
+
       const chunkStart = hit._chunk_start_line ?? hit.start_line;
       const chunkEnd = hit._chunk_end_line ?? hit.end_line;
       const snippetStart = hit._context_start_line ?? hit.start_line;
@@ -284,12 +303,9 @@ export function buildHitsJsonObject(params: {
         start: snippetStart,
         end: snippetEnd,
       };
+
       return {
-        rank: i + 1,
-        chunk_id: hit.chunk_id,
-        score: hit.score,
-        repo: hit.repo,
-        path: hit.path,
+        ...baseHit,
         lang: hit.lang,
         chunk_range: { start_line: chunkStart, end_line: chunkEnd },
         snippet_range: {

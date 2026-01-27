@@ -238,6 +238,26 @@ describe("buildSummary", () => {
     expect(result).not.toContain("Warnings:");
     expect(result).not.toContain("test_warning");
   });
+
+  it("indicates when snippets are not shown", () => {
+    const result = buildSummary({
+      hits: createMockHits(1),
+      snippetsIncluded: 0,
+      includeWarningsInText: false,
+      warningEntries: [],
+    });
+    expect(result).toContain("Snippets disabled or none found");
+  });
+
+  it("indicates when snippets are shown", () => {
+    const result = buildSummary({
+      hits: createMockHits(1),
+      snippetsIncluded: 1,
+      includeWarningsInText: false,
+      warningEntries: [],
+    });
+    expect(result).toContain("Showing snippets for top 1/1 results");
+  });
 });
 
 describe("buildHitsJsonObject", () => {
@@ -296,10 +316,10 @@ describe("buildHitsJsonObject", () => {
       warningEntries: [],
     });
 
-    expect(result.hits[0].chunk_range.start_line).toBe(12);
-    expect(result.hits[0].chunk_range.end_line).toBe(18);
-    expect(result.hits[0].snippet_range.start_line).toBe(8);
-    expect(result.hits[0].snippet_range.end_line).toBe(22);
+    expect(result.hits[0].chunk_range!.start_line).toBe(12);
+    expect(result.hits[0].chunk_range!.end_line).toBe(18);
+    expect(result.hits[0].snippet_range!.start_line).toBe(8);
+    expect(result.hits[0].snippet_range!.end_line).toBe(22);
   });
 
   it("includes followup hints for each hit", () => {
@@ -312,9 +332,9 @@ describe("buildHitsJsonObject", () => {
     });
 
     const hit = result.hits[0];
-    expect(hit.followups.chunk_get.chunk_id).toBe("chunk-123");
-    expect(hit.followups.file_lines.repo).toBe("test-repo");
-    expect(hit.followups.file_lines.path).toBe("src/test.ts");
+    expect(hit.followups!.chunk_get.chunk_id).toBe("chunk-123");
+    expect(hit.followups!.file_lines.repo).toBe("test-repo");
+    expect(hit.followups!.file_lines.path).toBe("src/test.ts");
   });
 
   it("includes URIs", () => {
@@ -331,9 +351,9 @@ describe("buildHitsJsonObject", () => {
       warningEntries: [],
     });
 
-    expect(result.hits[0].uris.vscode).toBe("vscode://file/src/test.ts:10");
-    expect(result.hits[0].uris.abs_path).toBe("/home/user/src/test.ts");
-    expect(result.hits[0].uris.repo_root).toBe("/home/user");
+    expect(result.hits[0].uris!.vscode).toBe("vscode://file/src/test.ts:10");
+    expect(result.hits[0].uris!.abs_path).toBe("/home/user/src/test.ts");
+    expect(result.hits[0].uris!.repo_root).toBe("/home/user");
   });
 
   it("includes meta with warnings", () => {
@@ -348,6 +368,33 @@ describe("buildHitsJsonObject", () => {
     expect(result.meta.estimated_total).toBe(50);
     expect(result.meta.model).toBe("large");
     expect(result.meta.warnings).toHaveLength(1);
+  });
+
+  it("returns simplified object when compact is true", () => {
+    const hits = [createMockHit()];
+    const meta = { top_k: 10, estimated_total: 100 };
+    const result = buildHitsJsonObject({
+      query: "test",
+      hits: hits,
+      meta: meta as any,
+      topK: 10,
+      warningEntries: [],
+      compact: true,
+    });
+
+    const hit = result.hits[0];
+    // Essential fields
+    expect(hit.chunk_id).toBe("chunk-123");
+    expect(hit.repo).toBe("test-repo");
+    expect(hit.path).toBe("src/test.ts");
+    expect(hit.score).toBe(0.85);
+
+    // Omitted fields
+    expect((hit as any).uris).toBeUndefined();
+    expect((hit as any).followups).toBeUndefined();
+    expect((hit as any).lang).toBeUndefined();
+    expect((hit as any).chunk_range).toBeUndefined();
+    expect((hit as any).snippet_range).toBeUndefined();
   });
 });
 
