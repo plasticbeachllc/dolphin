@@ -704,6 +704,7 @@ async def test_index_parallel_sets_session_failed_on_error(tmp_path, monkeypatch
         await pipeline.index_parallel("test-repo", force=True)
 
     repo = metadata.get_repo_by_name("test-repo")
+    assert repo is not None
     repo_id = repo["id"]
     with metadata._connect() as conn:
         row = conn.execute(
