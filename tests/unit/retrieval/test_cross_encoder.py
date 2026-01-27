@@ -9,13 +9,15 @@ from kb.retrieval.cross_encoder_rerank import CrossEncoderReranker
 class TestCrossEncoderReranker(unittest.TestCase):
     def test_initialization_with_mock_model(self):
         """Test initialization with test-model (no external dependency needed)."""
-        reranker = CrossEncoderReranker(model_name="test-model")
-        self.assertTrue(reranker.enabled)
-        self.assertIsNotNone(reranker.model)
+        # Even if sentence-transformers is NOT available, test-model should work
+        with patch("kb.retrieval.cross_encoder_rerank._SENTENCE_TRANSFORMERS_AVAILABLE", False):
+            reranker = CrossEncoderReranker(model_name="test-model")
+            self.assertTrue(reranker.enabled)
+            self.assertIsNotNone(reranker.model)
 
-        # Verify mock model behavior
-        scores = reranker.model.predict([["q", "d"]])
-        self.assertEqual(scores, [0.5])
+            # Verify mock model behavior
+            scores = reranker.model.predict([["q", "d"]])
+            self.assertEqual(scores, [0.5])
 
     def test_rerank_basic(self):
         """Test basic reranking functionality."""
@@ -89,3 +91,12 @@ class TestCrossEncoderReranker(unittest.TestCase):
 
         self.assertTrue(reranker.enabled)
         mock_cls.assert_called_with("real-model")
+
+    @patch("kb.retrieval.cross_encoder_rerank._SENTENCE_TRANSFORMERS_AVAILABLE", True)
+    @patch("kb.retrieval.cross_encoder_rerank._CrossEncoder")
+    def test_real_model_loading_with_device(self, mock_cls):
+        """Test loading a 'real' model with device argument."""
+        reranker = CrossEncoderReranker(model_name="real-model", device="cpu")
+
+        self.assertTrue(reranker.enabled)
+        mock_cls.assert_called_with("real-model", device="cpu")
