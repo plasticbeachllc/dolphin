@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.3] - 2026-01-26
 
+### Added
+
+- **New Tool**: Introduced `open_ref` tool to unify resolution of `kb://` URIs and chunk IDs, streamlining navigation/references.
+
 ### Fixed
 
 - **Version Bump**: Release preparation for 0.2.3.
