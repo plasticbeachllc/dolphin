@@ -207,8 +207,8 @@ def _enrich_hits_with_snippets(
         except (TypeError, ValueError):
             continue
 
-        context_before = request.context_lines_before or 0
-        context_after = request.context_lines_after or 0
+        context_before = request.context_lines_before
+        context_after = request.context_lines_after
 
         # Calculate ranges (1-indexed input, converted to 0-indexed slice)
         # Match range
