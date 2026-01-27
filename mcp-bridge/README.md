@@ -62,6 +62,25 @@ Add to `claude_desktop_config.json`:
 | `KB_REST_BASE_URL` | unset                   | Alias for `DOLPHIN_API_URL` (tests/CI)   |
 | `LOG_LEVEL`        | `info`                  | Logging level (debug, info, warn, error) |
 
+### TOML Configuration File
+
+The MCP bridge reads `~/.dolphin/config.toml` (or `DOLPHIN_CONFIG_PATH`) and supports:
+
+- `[mcp]` base settings (`api_url`, `server_name`, `server_version`, `protocol_version`, `log_level`)
+- `[mcp.limits]`, `[mcp.snippet_fetch]`, `[mcp.logging]`, `[mcp.response]`, `[mcp.search]`
+
+### Config & Diagnostics Commands
+
+These commands emit machine-readable JSON by default (designed for LLMs and tooling):
+
+```bash
+# Print effective config + sources + diagnostics
+dolphin-mcp config --print
+
+# Run configuration checks (no side effects)
+dolphin-mcp doctor
+```
+
 ### API Key Authentication
 
 **Auto-Provisioning (Recommended):**

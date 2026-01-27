@@ -158,6 +158,7 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 - JSONL logging to `mcp-bridge/logs/mcp.log`
 - Full TypeScript types with Zod validation
 - AbortSignal support for cancellation
+- Schema-validated MCP config (env + TOML) with `dolphin-mcp config --print` and `dolphin-mcp doctor` for machine-readable diagnostics
 
 **Files**:
 

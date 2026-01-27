@@ -287,4 +287,30 @@ shrunk_snippet_char_cap = 2000
     expect(CONFIG.RESPONSE_LIMITS.MIN_SNIPPET_CHAR_FLOOR).toBe(5000);
     expect(CONFIG.RESPONSE_LIMITS.SHRUNK_SNIPPET_CHAR_CAP).toBe(5000);
   });
+
+  it("emits diagnostics for unknown keys and invalid types", async () => {
+    const home = mkdtempSync(join(tmpdir(), "dolphin-home-"));
+    const configPath = writeConfig(
+      home,
+      `
+[mcp]
+server_name = 123
+unknown_key = "oops"
+
+[mcp.limits]
+top_k_max = "not-a-number"
+`
+    );
+
+    process.env.DOLPHIN_CONFIG_PATH = configPath;
+    delete process.env.DOLPHIN_API_URL;
+    delete process.env.KB_REST_BASE_URL;
+
+    const { loadConfig } = await importConfig();
+    const result = loadConfig();
+
+    const codes = result.diagnostics.map((diag: { code: string }) => diag.code);
+    expect(codes).toContain("unknown_key");
+    expect(codes).toContain("invalid_type");
+  });
 });
