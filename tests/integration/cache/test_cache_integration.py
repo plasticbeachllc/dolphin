@@ -1,14 +1,55 @@
 """Integration tests for cache with search backend and embedding provider."""
 
 import os
+import subprocess
 import tempfile
+import uuid
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
+from fastapi.testclient import TestClient
 
+from kb.api.app import (
+    app,
+    reset_pipeline,
+    reset_search_backend,
+    reset_stores,
+    set_pipeline,
+    set_search_backend,
+    set_stores,
+)
 from kb.api.search_backend import create_search_backend
-from kb.cache import create_cache
+from kb.cache import QueryCache, create_cache
 from kb.config import KBConfig
+from kb.ingest.pipeline import IngestionPipeline
+from kb.store import LanceDBStore, SQLiteMetadataStore
+from tests.conftest import init_test_git_repo
+
+
+def _setup_repo(temp_dir: Path) -> Path:
+    repo_path = temp_dir / "invalidate_repo"
+    repo_path.mkdir()
+    init_test_git_repo(repo_path)
+    (repo_path / "code.py").write_text("def original(): return 'original'")
+    subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
+    return repo_path
+
+
+def _setup_pipeline(temp_dir: Path, cache: QueryCache) -> tuple[IngestionPipeline, str]:
+    repo_path = _setup_repo(temp_dir)
+    db_path = temp_dir / "invalidate_cache.db"
+    metadata_store = SQLiteMetadataStore(db_path)
+    metadata_store.initialize()
+    lancedb_store = LanceDBStore(f"memory://invalidate_cache_{uuid.uuid4().hex}")
+    config = KBConfig(default_embed_model="small")
+
+    metadata_store.record_repo(name="invalidate-repo", path=repo_path, default_embed_model="small")
+
+    pipeline = IngestionPipeline(config, lancedb_store, metadata_store, cache=cache)
+    pipeline.index("invalidate-repo", dry_run=False, force=True)
+    return pipeline, "invalidate-repo"
 
 
 class TestCacheWithSearchBackend:
@@ -239,6 +280,105 @@ class TestCacheStatistics:
 
         stats = cache.get_stats()
         assert stats["total_requests"] == 0
+
+
+class TestCacheInvalidationOnReindex:
+    """Test reindex invalidates cached search results."""
+
+    def test_reindex_invalidation_in_memory(self, temp_dir: Path):
+        cache = QueryCache()
+        pipeline, repo_name = _setup_pipeline(temp_dir, cache)
+
+        cache.set_results("query", [{"id": "1"}], repos=[repo_name])
+        assert cache.get_results("query", repos=[repo_name]) is not None
+
+        pipeline.index(repo_name, dry_run=False, force=True, full_reindex=True)
+
+        assert cache.get_results("query", repos=[repo_name]) is None
+
+    def test_reindex_invalidation_redis(self, temp_dir: Path):
+        fakeredis = pytest.importorskip("fakeredis")
+        redis_client = fakeredis.FakeRedis()
+        cache = QueryCache(redis_client=redis_client)
+        pipeline, repo_name = _setup_pipeline(temp_dir, cache)
+
+        cache.set_results("query", [{"id": "1"}], repos=[repo_name])
+        assert cache.get_results("query", repos=[repo_name]) is not None
+
+        pipeline.index(repo_name, dry_run=False, force=True, full_reindex=True)
+
+        assert cache.get_results("query", repos=[repo_name]) is None
+
+
+class TestCacheInvalidationAPI:
+    """API-level cache invalidation coverage."""
+
+    def test_reindex_invalidates_cached_search_results(self, temp_dir: Path, monkeypatch: pytest.MonkeyPatch):
+        store_root = temp_dir / "api_store"
+        store_root.mkdir(parents=True, exist_ok=True)
+
+        backend = create_search_backend(
+            store_root=store_root,
+            embedding_provider_type="stub",
+            cache_enabled=True,
+        )
+
+        cast(Any, backend.lance_store).query = lambda *args, **kwargs: []  # Avoid vector-only hits in test.
+        pipeline = IngestionPipeline(backend.config, backend.lance_store, backend.sql_store, cache=backend.cache)
+
+        set_search_backend(backend)
+        set_stores(backend.sql_store, backend.lance_store)
+        set_pipeline(pipeline)
+
+        try:
+            repo_path = temp_dir / "api_repo"
+            repo_path.mkdir()
+            init_test_git_repo(repo_path)
+            (repo_path / "code.py").write_text("def alpha(): return 'alpha'")
+            subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+            subprocess.run(
+                ["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True
+            )
+
+            backend.sql_store.record_repo(name="api-repo", path=repo_path, default_embed_model="small")
+            pipeline.index("api-repo", dry_run=False, force=True, full_reindex=True)
+
+            test_api_key = "test-api-key-12345"
+            monkeypatch.setenv("DOLPHIN_API_KEY", test_api_key)
+            client = TestClient(app)
+            client.headers = {"X-API-Key": test_api_key}
+
+            response = client.post(
+                "/v1/search",
+                json={"query": "beta", "repos": ["api-repo"], "top_k": 5, "max_snippets": 1},
+            )
+            assert response.status_code == 200
+            assert response.json()["hits"] == []
+
+            (repo_path / "code.py").write_text(
+                """
+def alpha(): return 'alpha'
+def beta(): return 'beta'
+"""
+            )
+            subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Add beta"], check=True, capture_output=True)
+
+            response = client.post("/v1/repos/api-repo/reindex", json={"mode": "incremental"})
+            assert response.status_code == 200
+
+            response = client.post(
+                "/v1/search",
+                json={"query": "beta", "repos": ["api-repo"], "top_k": 5, "max_snippets": 1},
+            )
+            assert response.status_code == 200
+            hits = response.json()["hits"]
+            assert hits
+            assert any("beta" in str(hit.get("snippet", "")).lower() for hit in hits)
+        finally:
+            reset_search_backend()
+            reset_stores()
+            reset_pipeline()
 
 
 @pytest.mark.skipif(

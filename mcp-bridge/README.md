@@ -62,6 +62,25 @@ Add to `claude_desktop_config.json`:
 | `KB_REST_BASE_URL` | unset                   | Alias for `DOLPHIN_API_URL` (tests/CI)   |
 | `LOG_LEVEL`        | `info`                  | Logging level (debug, info, warn, error) |
 
+### TOML Configuration File
+
+The MCP bridge reads `~/.dolphin/config.toml` (or `DOLPHIN_CONFIG_PATH`) and supports:
+
+- `[mcp]` base settings (`api_url`, `server_name`, `server_version`, `protocol_version`, `log_level`)
+- `[mcp.limits]`, `[mcp.snippet_fetch]`, `[mcp.logging]`, `[mcp.response]`, `[mcp.search]`
+
+### Config & Diagnostics Commands
+
+These commands emit machine-readable JSON by default (designed for LLMs and tooling):
+
+```bash
+# Print effective config + sources + diagnostics
+dolphin-mcp config --print
+
+# Run configuration checks (no side effects)
+dolphin-mcp doctor
+```
+
 ### API Key Authentication
 
 **Auto-Provisioning (Recommended):**
@@ -149,7 +168,6 @@ Semantically query code and docs across indexed repositories and return many ran
   "top_k": "number (1-100)",
   "max_snippets": "number (top-N results to include snippet text for)",
   "top_context_n": "number (top-N snippet results to include extra context for)",
-  "embed_model": "small | large",
   "score_cutoff": "number",
   "mmr_enabled": "boolean",
   "mmr_lambda": "number (0-1)",
@@ -168,6 +186,8 @@ Semantically query code and docs across indexed repositories and return many ran
   "ann_refine_factor": "number"
 }
 ```
+
+Note: `embed_model` is no longer a supported search parameter; model selection is configured in the KB/repo settings.
 
 **Filtering Options**:
 

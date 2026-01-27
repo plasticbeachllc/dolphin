@@ -23,6 +23,7 @@ export const SEARCH_INPUT = SearchRequestSchema.extend({
   include_warnings_in_text: z.boolean().optional(),
   include_abs_paths: z.boolean().optional(),
   include_vscode_uris: z.boolean().optional(),
+  compact: z.boolean().optional(),
 }).strict();
 export const SEARCH_INPUT_SCHEMA = buildToolInputSchema(SEARCH_INPUT);
 
@@ -43,6 +44,7 @@ export type SearchOptions = {
   includeGraphContext: boolean;
   contextLinesBefore: number;
   contextLinesAfter: number;
+  compact: boolean;
 };
 
 export function parseSearchInput(args: unknown): SearchInput {
@@ -53,7 +55,9 @@ export function parseSearchInput(args: unknown): SearchInput {
 export function resolveSearchOptions(input: SearchInput): SearchOptions {
   const repos = input.repos?.map((r) => r.trim());
   const topK = input.top_k ?? CONFIG.SEARCH_DEFAULTS.TOP_K;
-  const snippetsTopNRequested = input.max_snippets ?? CONFIG.SEARCH_DEFAULTS.SNIPPETS_TOP_N;
+
+  // Default to 3 snippets if not specified, to provide context by default without overwhelming
+  const snippetsTopNRequested = input.max_snippets ?? 3;
   const snippetsTopN = Math.max(0, Math.min(topK, snippetsTopNRequested));
   const topContextNRequested = input.top_context_n ?? CONFIG.SEARCH_DEFAULTS.TOP_CONTEXT_N;
   const topContextN = Math.max(0, Math.min(snippetsTopN, topContextNRequested));
@@ -81,6 +85,8 @@ export function resolveSearchOptions(input: SearchInput): SearchOptions {
     input.context_lines_before ?? CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_BEFORE;
   const contextLinesAfter = input.context_lines_after ?? CONFIG.SEARCH_DEFAULTS.CONTEXT_LINES_AFTER;
 
+  const compact = input.compact ?? false;
+
   return {
     repos,
     topK,
@@ -96,5 +102,6 @@ export function resolveSearchOptions(input: SearchInput): SearchOptions {
     includeGraphContext,
     contextLinesBefore,
     contextLinesAfter,
+    compact,
   };
 }

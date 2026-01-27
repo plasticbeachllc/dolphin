@@ -36,7 +36,7 @@
     },
     "mcp-bridge": {
       "name": "dolphin-mcp",
-      "version": "0.2.1",
+      "version": "0.2.3",
       "bin": {
         "dolphin-mcp": "./dist/mcp-bridge/src/cli.js",
       },

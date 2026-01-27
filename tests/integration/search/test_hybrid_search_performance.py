@@ -73,12 +73,12 @@ class HybridSearchValidator:
 
             # Test hybrid search
             hybrid_request = SearchRequest(query=query, top_k=5)
-            hybrid_results = self.backend.search(hybrid_request)
+            hybrid_results, _ = self.backend.search(hybrid_request)
             hybrid_ids = {r.get("chunk_id") or r.get("id") for r in hybrid_results}
 
             # Test vector-only search
             vector_request = SearchRequest(query=query, top_k=5)
-            vector_results = self.vector_only_backend.search(vector_request)
+            vector_results, _ = self.vector_only_backend.search(vector_request)
             vector_ids = {r.get("chunk_id") or r.get("id") for r in vector_results}
 
             # Calculate precision@5

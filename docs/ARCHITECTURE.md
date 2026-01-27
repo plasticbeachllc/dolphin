@@ -158,6 +158,7 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 - JSONL logging to `mcp-bridge/logs/mcp.log`
 - Full TypeScript types with Zod validation
 - AbortSignal support for cancellation
+- Schema-validated MCP config (env + TOML) with `dolphin-mcp config --print` and `dolphin-mcp doctor` for machine-readable diagnostics
 
 **Files**:
 
@@ -470,6 +471,12 @@ CREATE TABLE sessions (
   estimated_cost_usd REAL
 );
 ```
+
+Notes:
+
+- Sessions transition `running` → `succeeded` / `failed` / `aborted`.
+- Startup recovery aborts any non-terminal sessions with a note.
+- A unique partial index enforces a single active session per repo.
 
 #### files
 
@@ -920,7 +927,7 @@ cd mcp-bridge && bun run test-integration.ts
 
 - **Parallel indexing**: Worker pool for multi-file embedding
 - **Distributed storage**: Separate LanceDB/SQLite for multi-machine setup
-- **Caching**: Query result caching with TTL
+- **Caching**: Query result caching with TTL and repo-scoped invalidation (Redis + in-memory)
 
 ### Quality
 

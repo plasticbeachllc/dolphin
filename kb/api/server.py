@@ -73,6 +73,16 @@ def initialize_search_backend() -> None:
     global _embedding_provider
     _embedding_provider = backend.embedding_provider
 
+    # Crash recovery: abort any sessions left running from prior processes
+    try:
+        aborted = backend.sql_store.abort_stale_sessions(
+            reason="Aborted on startup: previous indexing session did not complete cleanly"
+        )
+        if aborted:
+            print(f"⚠️  Aborted {aborted} stale indexing session(s) on startup", file=sys.stderr)
+    except Exception as e:
+        print(f"⚠️  Failed to abort stale sessions: {e}", file=sys.stderr)
+
     print(f"✅ Search backend ready (store: {store_root})", file=sys.stderr)
 
     # Initialize ingestion pipeline for full reindex operations
@@ -86,6 +96,7 @@ def initialize_search_backend() -> None:
         lancedb=backend.lance_store,
         metadata=backend.sql_store,
         graph_store=GraphStore(backend.sql_store.db_path),
+        cache=backend.cache,
     )
     set_pipeline(pipeline)
     print("✅ Ingestion pipeline ready", file=sys.stderr)

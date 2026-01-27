@@ -12,6 +12,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+---
+
+## [0.2.1] - 2026-01-26
+
+### Added
+
+- **Cursor-based Pagination**: Implemented cursor-based pagination for search results (`next_cursor`), enabling efficient and stateless deep pagination.
+- **Atomic Indexing**: Indexing sessions are now atomic; changes are only committed upon successful completion, preventing partial index states.
+- **Structured Snippets**: Search results now return structured snippet objects with distinct `text`, `context_before`, and `context_after` fields instead of flat strings.
+
+### Fixed
+
+- **IPC Memory Leak**: Resolved a critical memory leak in the IPC layer.
+- **Cache Invalidation**: Fixed issues with cache invalidation to ensure stale data is properly cleared.
+
+### Changed
+
+- **Search Backend**: Refactored the search backend signature to return a tuple of `(results, next_cursor)`, standardizing pagination handling across backends.
+
 ## [0.2.0] - 2026-01-25
 
 ### Added

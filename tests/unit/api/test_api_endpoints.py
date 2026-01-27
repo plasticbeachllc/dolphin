@@ -14,17 +14,20 @@ class MockSearchBackend:
 
     def search(self, request: SearchRequest):
         """Return mock search results."""
-        return [
-            {
-                "repo": "test-repo",
-                "path": "test.py",
-                "start_line": 1,
-                "end_line": 10,
-                "score": 0.95,
-                "snippet": "def test(): pass",
-                "provenance": {"commit": "abc123", "text_hash": "hash123"},
-            }
-        ]
+        return (
+            [
+                {
+                    "repo": "test-repo",
+                    "path": "test.py",
+                    "start_line": 1,
+                    "end_line": 10,
+                    "score": 0.95,
+                    "snippet": "def test(): pass",
+                    "provenance": {"commit": "abc123", "text_hash": "hash123"},
+                }
+            ],
+            None,
+        )
 
 
 class TestHealthEndpoint:
@@ -148,16 +151,19 @@ class TestSearchEndpoint:
 
         class BackendNoSnippet:
             def search(self, request: SearchRequest):
-                return [
-                    {
-                        "repo": "test-repo",
-                        "path": "test.py",
-                        "start_line": 2,
-                        "end_line": 3,
-                        "score": 0.9,
-                        "chunk_id": "c1",
-                    }
-                ]
+                return (
+                    [
+                        {
+                            "repo": "test-repo",
+                            "path": "test.py",
+                            "start_line": 2,
+                            "end_line": 3,
+                            "score": 0.9,
+                            "chunk_id": "c1",
+                        }
+                    ],
+                    None,
+                )
 
         set_search_backend(BackendNoSnippet())
 
@@ -179,9 +185,19 @@ class TestSearchEndpoint:
         assert response.status_code == 200
         data = response.json()
         hit = data["hits"][0]
-        assert hit["snippet"] == "line1\nline2\nline3\nline4\n"
-        assert hit["snippet_start_line"] == 1
-        assert hit["snippet_end_line"] == 4
+        snippet = hit["snippet"]
+        assert isinstance(snippet, dict)
+        assert snippet["text"] == "line2\nline3\n"
+        assert snippet["context_before"] == "line1\n"
+        assert snippet["context_after"] == "line4\n"
+        assert snippet["start_line"] == 1
+        assert snippet["end_line"] == 4
+
+        assert "snippet_start_line" not in hit
+        assert "snippet_end_line" not in hit
+
+        reset_search_backend()
+        reset_stores()
 
         reset_search_backend()
         reset_stores()

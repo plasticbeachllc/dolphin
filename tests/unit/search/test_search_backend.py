@@ -77,7 +77,7 @@ class TestKnowledgeSearchBackend:
         ]
 
         request = SearchRequest(query="test", top_k=10)
-        results = basic_backend.search(request)
+        results, _ = basic_backend.search(request)
 
         expected_bm25_id = "1:2:small:hash2:1:10"
         assert len(results) == 2
@@ -122,13 +122,13 @@ class TestKnowledgeSearchBackend:
 
         # Use low cutoff (0.0) to accept RRF scores (~0.016)
         request = SearchRequest(query="test", score_cutoff=0.0)
-        results = basic_backend.search(request)
+        results, _ = basic_backend.search(request)
 
         assert len(results) == 2  # Both should pass with RRF scores
 
         # Test high cutoff that filters out results
         request_high_cutoff = SearchRequest(query="test", score_cutoff=0.5)
-        results_high = basic_backend.search(request_high_cutoff)
+        results_high, _ = basic_backend.search(request_high_cutoff)
 
         # RRF scores (~0.016) should be below 0.5 cutoff, so no results
         assert len(results_high) == 0
@@ -253,6 +253,89 @@ class TestKnowledgeSearchBackend:
                 max_edges_per_node=1,
             )
 
+    def test_search_pagination_flow(self, basic_backend):
+        """Test cursor-based pagination flow."""
+        embedding_provider, lance_store, sql_store = (
+            basic_backend.embedding_provider,
+            basic_backend.lance_store,
+            basic_backend.sql_store,
+        )
+
+        embedding_provider.embed_texts.return_value = [[0.1] * 1536]
+
+        # Create 20 mock results with decreasing scores
+        all_results = []
+        for i in range(20):
+            all_results.append(
+                {
+                    "id": f"chunk_{i}",
+                    "_distance": 0.1 * (i + 1),  # Increasing distance -> decreasing score
+                    "repo": "repo",
+                    "path": f"file_{i}.py",
+                }
+            )
+
+        # Mock lance store to return ALL results initially (simulating candidate pool)
+        # In real backend, we rely on candidate_multiplier, but here we just mock the return
+        lance_store.query.return_value = all_results
+
+        sql_store.bm25_search.return_value = []  # vector only for simplicity
+
+        # Page 1: Top 5
+        request = SearchRequest(query="test", top_k=5)
+        results, next_cursor = basic_backend.search(request)
+
+        assert len(results) == 5
+        assert next_cursor is not None
+        assert results[0]["chunk_id"] == "chunk_0"
+        assert results[4]["chunk_id"] == "chunk_4"
+
+        # Page 2: Next 5 using cursor
+        request_page_2 = SearchRequest(query="test", top_k=5, cursor=next_cursor)
+        results_2, next_cursor_2 = basic_backend.search(request_page_2)
+
+        assert len(results_2) == 5
+        assert next_cursor_2 is not None
+        assert results_2[0]["chunk_id"] == "chunk_5"
+
+        # Page 3: Next 5 using cursor 2
+        request_page_3 = SearchRequest(query="test", top_k=5, cursor=next_cursor_2)
+        results_3, next_cursor_3 = basic_backend.search(request_page_3)
+
+        assert len(results_3) == 5
+        assert next_cursor_3 is not None
+        assert results_3[0]["chunk_id"] == "chunk_10"
+
+        # Page 4: Verify distinctness from Page 1
+        page1_ids = {r["chunk_id"] for r in results}
+        page2_ids = {r["chunk_id"] for r in results_2}
+        assert page1_ids.isdisjoint(page2_ids)
+
+    def test_search_cursor_integrity(self, basic_backend):
+        """Test invalid cursor handling."""
+        embedding_provider, lance_store, _sql_store = (
+            basic_backend.embedding_provider,
+            basic_backend.lance_store,
+            basic_backend.sql_store,
+        )
+        embedding_provider.embed_texts.return_value = [[0.1] * 1536]
+        lance_store.query.return_value = [{"id": "c1", "_distance": 0.1, "repo": "r", "path": "p"}]
+
+        # Case 1: Tampered/Invalid Base64
+        request = SearchRequest(query="test", top_k=5, cursor="invalid_base64!@#")
+        # Should log warning and treat as no cursor (return page 1)
+        results, _ = basic_backend.search(request)
+        assert len(results) == 1
+
+        # Case 2: Query mismatch (cursor from "test", request for "other")
+        # Generate valid cursor for "test"
+        valid_cursor = basic_backend._encode_cursor("test", 0.9, "c1")
+
+        request_mismatch = SearchRequest(query="other", top_k=5, cursor=valid_cursor)
+        # Should detect hash mismatch and ignore cursor
+        results_mismatch, _ = basic_backend.search(request_mismatch)
+        assert len(results_mismatch) == 1
+
 
 @pytest.fixture
 def real_backend(tmp_path: Path):
@@ -347,7 +430,7 @@ class TestSearchBackendIntegration:
                 logging.info(f"  FTS content_id: {row[0]}, content: {row[1][:50]}...")
 
         request = SearchRequest(query="test", top_k=5)
-        results = real_backend.search(request)
+        results, _ = real_backend.search(request)
 
         logging.info(f"Test: Search returned {len(results)} results")
         for i, result in enumerate(results):

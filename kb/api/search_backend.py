@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
 import os
 import random
 import time
@@ -93,6 +96,36 @@ class KnowledgeSearchBackend:
         except Exception as exc:  # pragma: no cover - defensive
             self.logger.warning("Failed to enable BM25 statistics collection", error=exc)
 
+    def _encode_cursor(self, query: str, last_score: float, last_chunk_id: str) -> str:
+        """Encode cursor with query hash validation."""
+        query_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()[:8]
+        payload = {
+            "q": query_hash,
+            "s": last_score,
+            "i": last_chunk_id,
+        }
+        json_str = json.dumps(payload)
+        return base64.urlsafe_b64encode(json_str.encode("utf-8")).decode("utf-8")
+
+    def _decode_cursor(self, cursor: str, query: str) -> dict[str, Any] | None:
+        """Decode cursor and validate query hash."""
+        if not cursor:
+            return None
+        try:
+            json_str = base64.urlsafe_b64decode(cursor.encode("utf-8")).decode("utf-8")
+            payload = json.loads(json_str)
+
+            # Validate query integrity
+            expected_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()[:8]
+            if payload.get("q") != expected_hash:
+                self.logger.warning("Cursor query hash mismatch")
+                return None
+
+            return payload
+        except Exception:
+            self.logger.warning("Invalid cursor format")
+            return None
+
     def _load_bm25_stats(self) -> BM25Statistics | None:
         if not self._bm25_stats_path or not self._bm25_stats_path.exists():
             return None
@@ -163,7 +196,7 @@ class KnowledgeSearchBackend:
             self._bm25_normalizer = SigmoidNormalizer(RETRIEVAL_PARAMS.BM25_SCORE_NORMALIZATION_FACTOR)
             return float(self._bm25_normalizer.normalize(score))
 
-    def search(self, request: SearchRequest) -> Sequence[dict[str, object]]:
+    def search(self, request: SearchRequest) -> tuple[Sequence[dict[str, object]], str | None]:
         # Generate correlation ID for this search request
         correlation_id = f"search_{uuid.uuid4().hex[:8]}"
         start_time = time.time()
@@ -215,10 +248,18 @@ class KnowledgeSearchBackend:
                         "cache_hit": True,
                     },
                 )
-                return cached_results
+                return cached_results, None
 
         query_embedding = self.embedding_provider.embed_texts(self.config.default_embed_model, [request.query])[0]
-        num_candidates = request.top_k * RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER  # Fetch more candidates for reranking
+        # Fetch more candidates for reranking when enabled; otherwise use the default multiplier.
+        try:
+            rerank_multiplier = int(self.config.retrieval.reranking.candidate_multiplier)
+        except (ValueError, TypeError) as e:
+            request_logger.warning("Invalid rerank candidate_multiplier config, falling back to default", error=e)
+            rerank_multiplier = RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER
+        if not self.reranker:
+            rerank_multiplier = RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER
+        num_candidates = request.top_k * rerank_multiplier
 
         # Get ANN parameters from config or use defaults
         ann_params = self._get_ann_params(request)
@@ -309,8 +350,19 @@ class KnowledgeSearchBackend:
 
         # UNCOMMENTED AND CORRECTED RERANKING LOGIC
         if self.reranker and hits:
+            try:
+                cfg_rerank_threshold = self.config.retrieval.reranking.score_threshold
+            except (AttributeError, KeyError, ValueError, TypeError) as e:
+                request_logger.warning("Invalid rerank score_threshold config, falling back to None", error=e)
+                cfg_rerank_threshold = None
             docs_to_rerank = self._hydrate_docs_for_reranking(hits, self.sql_store)
-            reranked_docs = self.reranker.rerank(request.query, docs_to_rerank, top_k=request.top_k)
+            reranked_docs = self.reranker.rerank(
+                request.query,
+                docs_to_rerank,
+                top_k=request.top_k,
+                text_field="content",
+                score_threshold=cfg_rerank_threshold,
+            )
             # The reranked_docs now have the final score. We need to merge them back
             # while preserving the order and original hits.
             reranked_ids = {doc["chunk_id"] for doc in reranked_docs}
@@ -331,28 +383,75 @@ class KnowledgeSearchBackend:
 
         if mmr_enabled and hits:
             try:
-                # Provide per-candidate vectors for diversity if available (fallback handled in ranker)
-                for h in hits:
-                    if "query_vector" not in h:
-                        vec = h.get("vector")
-                        if isinstance(vec, list) and vec:
-                            h["query_vector"] = vec
-
-                hits = maximal_marginal_relevance(
-                    query_vector=query_embedding,  # computed earlier
-                    candidates=hits,
-                    top_k=request.top_k,
-                    lambda_param=mmr_lambda,
-                    id_field="chunk_id",
-                )
-
-                # Remove temporary fields to avoid inflating payload
+                # Provide per-candidate vectors for diversity. Vector search hits often have a
+                # `vector` field, but fused BM25-only hits typically don't. When candidates lack
+                # vectors, MMR silently degrades into a mostly relevance-only ordering.
+                missing_by_repo: dict[str, set[str]] = {}
+                missing_total = 0
                 for h in hits:
                     if "query_vector" in h:
-                        try:
-                            del h["query_vector"]
-                        except Exception:
-                            pass
+                        continue
+                    vec = h.get("vector")
+                    if isinstance(vec, list) and vec:
+                        h["query_vector"] = vec
+                        continue
+                    repo_name = h.get("repo")
+                    text_hash = h.get("text_hash")
+                    if isinstance(repo_name, str) and isinstance(text_hash, str) and text_hash:
+                        missing_by_repo.setdefault(repo_name, set()).add(text_hash)
+                    missing_total += 1
+
+                hydrated_total = 0
+                if missing_by_repo:
+                    for repo_name, hashes in missing_by_repo.items():
+                        vectors_by_hash = self.lance_store.get_vectors_by_hashes(
+                            repo_name, hashes, model=self.config.default_embed_model
+                        )
+                        if not vectors_by_hash:
+                            continue
+                        for h in hits:
+                            if "query_vector" in h:
+                                continue
+                            if h.get("repo") != repo_name:
+                                continue
+                            text_hash = h.get("text_hash")
+                            if not isinstance(text_hash, str):
+                                continue
+                            vec = vectors_by_hash.get(text_hash)
+                            if isinstance(vec, list) and vec:
+                                h["query_vector"] = vec
+                                hydrated_total += 1
+
+                if missing_total:
+                    request_logger.debug(
+                        "MMR candidate vector hydration",
+                        {
+                            "missing_before": missing_total,
+                            "hydrated": hydrated_total,
+                            "missing_after": sum(1 for h in hits if "query_vector" not in h),
+                        },
+                    )
+
+                # If we still don't have enough candidate vectors, skip MMR to avoid a misleading
+                # "diversification" pass that can't actually compute similarity between docs.
+                vector_count = sum(1 for h in hits if isinstance(h.get("query_vector"), list) and h.get("query_vector"))
+                if vector_count < 2:
+                    request_logger.debug(
+                        "Skipping MMR: insufficient candidate vectors",
+                        {"vector_count": vector_count, "hits_count": len(hits)},
+                    )
+                else:
+                    hits = maximal_marginal_relevance(
+                        query_vector=query_embedding,  # computed earlier
+                        candidates=hits,
+                        top_k=request.top_k,
+                        lambda_param=mmr_lambda,
+                        id_field="chunk_id",
+                    )
+
+                    # Remove temporary fields to avoid inflating payload
+                    for h in hits:
+                        h.pop("query_vector", None)
             except Exception as e:
                 # Fall back gracefully if MMR fails for any reason
                 request_logger.warning("MMR diversification failed", error=e)
@@ -361,6 +460,28 @@ class KnowledgeSearchBackend:
             for h in hits:
                 if "vector" in h:
                     h.pop("vector", None)
+
+        # Decode cursor if present
+        cursor_data = self._decode_cursor(request.cursor, request.query) if request.cursor else None
+        last_score = cursor_data["s"] if cursor_data else None
+        last_chunk_id = cursor_data["i"] if cursor_data else None
+
+        # Sort hits deterministically (Score DESC, Chunk ID ASC) for stable pagination
+        # Note: RRF/MMR/etc usually sort by score, but stability requires ID tie-breaker.
+        hits.sort(key=lambda x: (-float(x.get("score", 0.0)), x.get("chunk_id", "")))
+
+        # Filter by cursor if present (skip results seen in previous pages)
+        if last_score is not None and last_chunk_id is not None:
+            filtered_hits = []
+            for h in hits:
+                s = float(h.get("score", 0.0))
+                c_id = h.get("chunk_id", "")
+                # We want results *after* (last_score, last_chunk_id)
+                # Since score is DESC, "after" means:
+                # score < last_score OR (score == last_score AND chunk_id > last_chunk_id)
+                if s < last_score or (abs(s - last_score) < 1e-9 and c_id > last_chunk_id):
+                    filtered_hits.append(h)
+            hits = filtered_hits
 
         score_cutoff = request.score_cutoff
         if score_cutoff is None:
@@ -380,23 +501,38 @@ class KnowledgeSearchBackend:
             },
         )
 
-        final_results = [h for h in hits if h.get("score", 0.0) >= score_cutoff][: request.top_k]
+        # Filter by score cutoff
+        hits = [h for h in hits if h.get("score", 0.0) >= score_cutoff]
 
-        if not final_results:
+        if not hits:
             request_logger.warning(
                 "No results after score cutoff",
                 {
                     "cutoff_threshold": score_cutoff,
-                    "hits_before_cutoff": len(hits),
+                    "hits_before_cutoff": len(hits),  # Note: this is post-cursor-filter count
                 },
             )
-        else:
+
+        # Slice valid results
+        final_results = hits[: request.top_k]
+
+        if hits:
             request_logger.debug(
-                "Results after score cutoff",
+                "Results after score cutoff and slicing",
                 {
                     "results_count": len(final_results),
                     "first_result_score": final_results[0].get("score"),
                 },
+            )
+
+        # Generate next cursor if there are more results
+        next_cursor = None
+        if len(hits) > request.top_k:
+            last_hit = final_results[-1]
+            next_cursor = self._encode_cursor(
+                request.query,
+                float(last_hit.get("score", 0.0)),
+                str(last_hit.get("chunk_id", "")),
             )
 
         # Hydrate content for all final results
@@ -458,7 +594,7 @@ class KnowledgeSearchBackend:
             },
         )
 
-        return final_results
+        return final_results, next_cursor
 
     def _format_vector_results(self, vector_results: list[dict]) -> list[dict[str, object]]:
         formatted = []
@@ -1058,6 +1194,7 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
         reranker = CrossEncoderReranker(
             model_name=config.retrieval.reranking.model,
             device=config.retrieval.reranking.device,
+            batch_size=config.retrieval.reranking.batch_size,
         )
 
     # Create graph store

@@ -51,4 +51,17 @@ describe("tool registry validation", () => {
 
     expect(() => validateTools([broken])).toThrow(/missing description/i);
   });
+
+  it("exports valid default tools including open_ref", async () => {
+    // Dynamic import to avoid side-effects during other tests if any
+    const { tools } = await import("../../mcp/tools/registry.js");
+
+    expect(tools.length).toBeGreaterThan(0);
+    const openRef = tools.find((t) => t.definition.name === "open_ref");
+    expect(openRef).toBeDefined();
+    expect(openRef?.definition.inputSchema).toBeDefined();
+
+    // Ensure all exported tools are valid (validateTools calls this internally, but good to double check)
+    expect(() => validateTools(tools)).not.toThrow();
+  });
 });

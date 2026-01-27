@@ -40,7 +40,7 @@ class TestSearchAPI:
     def test_search_basic(self, client_with_backend):
         with patch("kb.api.app.get_search_backend") as mock_get_backend:
             mock_backend = MagicMock()
-            mock_backend.search.return_value = [{"chunk_id": "1"}]
+            mock_backend.search.return_value = ([{"chunk_id": "1"}], None)
             mock_get_backend.return_value = mock_backend
 
             response = client_with_backend.post("/v1/search", json={"query": "test"})

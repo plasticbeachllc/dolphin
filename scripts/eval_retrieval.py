@@ -178,7 +178,7 @@ def evaluate_scenario(scenario: GoldenScenario, backend: KnowledgeSearchBackend,
     )
 
     try:
-        results = backend.search(request)
+        results, _ = backend.search(request)
     except Exception as e:
         return {
             "id": scenario.id,

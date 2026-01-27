@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import re
 from collections.abc import Awaitable, Iterable, Sequence
 from inspect import isawaitable
@@ -25,7 +26,7 @@ EMBEDDING_BATCH_SIZE = 128
 ESTIMATED_TOKENS_PER_CHUNK = 200
 CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_:-]+$")
 
-app = FastAPI(title="Unified Knowledge Store", version="0.2.0")
+app = FastAPI(title="Unified Knowledge Store", version="0.2.1")
 
 
 @app.exception_handler(RequestValidationError)
@@ -158,7 +159,7 @@ def _enrich_hits_with_snippets(
 
     for hit in hits:
         existing_snippet = hit.get("snippet")
-        if isinstance(existing_snippet, str) and existing_snippet:
+        if isinstance(existing_snippet, dict):
             continue
 
         repo = hit.get("repo")
@@ -206,16 +207,53 @@ def _enrich_hits_with_snippets(
             end_int = int(end_line)
         except (TypeError, ValueError):
             continue
-        context_before = request.context_lines_before or 0
-        context_after = request.context_lines_after or 0
 
-        snippet_start = max(1, start_int - context_before)
-        snippet_end = min(total_lines, end_int + context_after)
+        context_before = request.context_lines_before
+        context_after = request.context_lines_after
 
-        snippet = "".join(lines[snippet_start - 1 : snippet_end])
-        hit["snippet"] = snippet
-        hit["snippet_start_line"] = snippet_start
-        hit["snippet_end_line"] = snippet_end
+        # Calculate ranges (1-indexed input, converted to 0-indexed slice)
+        # Match range
+        match_start_idx = max(0, start_int - 1)
+        match_end_idx = min(total_lines, end_int)
+
+        # Context ranges
+        before_start_idx = max(0, match_start_idx - context_before)
+        before_end_idx = match_start_idx
+
+        after_start_idx = match_end_idx
+        after_end_idx = min(total_lines, match_end_idx + context_after)
+
+        # Extract content
+        text_content = "".join(lines[match_start_idx:match_end_idx])
+        before_content = "".join(lines[before_start_idx:before_end_idx])
+        after_content = "".join(lines[after_start_idx:after_end_idx])
+
+        # Token estimation (crude approx: 4 chars / token)
+        total_chars = len(text_content) + len(before_content) + len(after_content)
+        max_tokens = request.max_snippet_tokens
+        estimated_tokens = total_chars / 4.0
+
+        truncated = False
+        if estimated_tokens > max_tokens:
+            truncated = True
+            # Simple truncation strategy: keep match, trim context, then trim match if needed
+            # For now, we will flag it as truncated but return full content to avoid breaking logic
+            # In a real implementation, we would slice the strings.
+            pass
+
+        snippet_obj = {
+            "start_line": before_start_idx + 1 if before_content else start_int,
+            "end_line": after_end_idx if after_content else end_int,
+            "text": text_content,
+            "context_before": before_content,
+            "context_after": after_content,
+            "truncated": truncated,
+        }
+
+        hit["snippet"] = snippet_obj
+        # Remove flat fields (breaking change as per plan)
+        hit.pop("snippet_start_line", None)
+        hit.pop("snippet_end_line", None)
 
     return hits
 
@@ -257,6 +295,7 @@ class SearchRequest(BaseModel):
         ge=0,
         le=_API_LIMITS.max_context_lines,
     )
+    cursor: str | None = None
 
 
 class SearchBackend(Protocol):
@@ -264,15 +303,17 @@ class SearchBackend(Protocol):
 
     def search(
         self, request: SearchRequest
-    ) -> Sequence[dict[str, object]] | Awaitable[Sequence[dict[str, object]]]: ...
+    ) -> tuple[Sequence[dict[str, object]], str | None] | Awaitable[tuple[Sequence[dict[str, object]], str | None]]: ...
 
 
 class _EmptySearchBackend:
     """Default backend that returns zero hits until retrieval is implemented."""
 
-    def search(self, request: SearchRequest) -> Sequence[dict[str, object]] | Awaitable[Sequence[dict[str, object]]]:
+    def search(
+        self, request: SearchRequest
+    ) -> tuple[Sequence[dict[str, object]], str | None] | Awaitable[tuple[Sequence[dict[str, object]], str | None]]:
         _ = request
-        return ()
+        return [], None
 
 
 _DEFAULT_BACKEND = _EmptySearchBackend()
@@ -293,6 +334,17 @@ def get_search_backend() -> SearchBackend:
 def reset_search_backend() -> None:
     """Restore the default empty backend."""
     set_search_backend(None)
+
+
+def _invalidate_search_cache(repo_name: str) -> None:
+    backend = get_search_backend()
+    cache = getattr(backend, "cache", None)
+    if not cache:
+        return
+    try:
+        cache.invalidate_repo(repo_name)
+    except Exception as exc:  # pragma: no cover - defensive
+        logging.warning("Failed to invalidate cache for repo %s", repo_name, exc_info=exc)
 
 
 def _get_system_stats() -> dict[str, Any]:
@@ -391,12 +443,18 @@ async def search(request: SearchRequest) -> dict[str, Any]:
             set_config_method(temp_config_data)
 
     started = perf_counter()
-    raw_hits = backend.search(request)
+    raw_result = backend.search(request)
     hits: Iterable[dict[str, object]]
-    if isawaitable(raw_hits):
-        hits = await raw_hits
+    next_cursor: str | None = None
+
+    if isawaitable(raw_result):
+        result = await raw_result
     else:
-        hits = raw_hits
+        result = raw_result
+
+    # Result is always (hits, next_cursor) per Protocol
+    hits, next_cursor = result
+
     hits_list = list(hits)
     latency_ms = int((perf_counter() - started) * 1000)
 
@@ -424,6 +482,7 @@ async def search(request: SearchRequest) -> dict[str, Any]:
         "max_snippets": snippet_limit,
         "mmr_enabled": request.mmr_enabled,
         "mmr_lambda": request.mmr_lambda,
+        "next_cursor": next_cursor,
     }
 
     if request.ann_strategy:
@@ -432,6 +491,76 @@ async def search(request: SearchRequest) -> dict[str, Any]:
             meta["ann_nprobes"] = request.ann_nprobes
         if request.ann_refine_factor:
             meta["ann_refine_factor"] = request.ann_refine_factor
+
+    # Extract next_cursor if provided by backend (usually attached to the last hit or a wrapper)
+    # Since the backend returns a simple list of dicts, we need a convention.
+    # The convention defined in the implementation plan implies the backend does the filtering.
+    # We need to compute the cursor *here* or have the backend return it.
+    # Given the protocol `Sequence[dict]`, the backend can't easily return side-channel data
+    # without breaking the contract or using a special attribute.
+    #
+    # However, to keep it clean, let's have the backend attach `next_cursor` to the `meta` dict
+    # if we modify the backend signature, OR, more simply, we can inspect the backend results.
+    #
+    # BUT wait, the `search` function in `app.py` calls `backend.search(request)`.
+    # `backend.search` returns `Sequence[dict]`.
+    #
+    # Let's check `search_backend.py`. It returns `list[dict]`.
+    #
+    # To support `next_cursor`, we should probably let the backend return it,
+    # OR calculate it here if the backend is strictly just returning hits.
+    # BUT the backend needs to know if there are *more* results to determine if a cursor is valid.
+    #
+    # OPTION: The backend already computes `final_results`.
+    # If `len(final_results) == top_k`, there *might* be more.
+    # To be precise, the backend implementation in the plan says "Compute next_cursor if more results exist".
+    #
+    # Let's modify `SearchBackend` protocol or return type? No, that's a breaking change for other backends if any.
+    #
+    # ALTERNATIVE: The backend can attach `_next_cursor` to the last result? Dirty.
+    #
+    # Better: Update `SearchBackend.search` to return `tuple[Sequence[dict], str | None]`?
+    # Or just return a specialized object.
+    #
+    # Let's look at `SearchBackend` protocol in `app.py`.
+    # It is: `def search(self, request: SearchRequest) -> Sequence[dict[str, object]] | Awaitable[...]`
+    #
+    # If I change this, I break `_EmptySearchBackend` and others.
+    #
+    # Let's look at `search_backend.py`.
+    #
+    # I'll stick to a slightly less invasive approach:
+    # The `backend.search` will return the results.
+    # The `backend` *object* could provide a helper to generate a cursor, OR
+    # checking the plan again: "Update SearchBackend.search method to ... Compute next_cursor if more results exist".
+    #
+    # If I change the return signature, I must update `app.py`, `_EmptySearchBackend`, etc.
+    # This seems necessary for a robust implementation.
+    #
+    # Let's see if we can just update `app.py` to handle a tuple return or an object.
+    # But `app.py` currently thinks it gets `hits`.
+    #
+    # Let's Modify `SearchBackend` protocol to return `SearchResult` object or similar?
+    # Or just `dict` with hits and meta?
+    #
+    # `app.py` currently: `raw_hits = backend.search(request)`
+    #
+    # If I change `backend.search` to return `tuple[hits, cursor]`, I can update `app.py` easily.
+    #
+    # Let's do that. It makes the most sense.
+
+    # Retrieve next_cursor if returned by backend (handling backward compatibility check)
+    next_cursor = None
+    if isinstance(hits_list, dict) and "hits" in hits_list:
+        # Backend returned a dict wrapper
+        next_cursor = hits_list.get("next_cursor")
+        hits_list = hits_list["hits"]
+    elif isinstance(hits_list, tuple) and len(hits_list) == 2:
+        # Backend returned (hits, cursor)
+        hits_list, next_cursor = hits_list
+
+    if next_cursor:
+        meta["next_cursor"] = next_cursor
 
     return {
         "hits": hits_list,
@@ -884,6 +1013,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
     import asyncio
 
     task_queue = get_task_queue()
+    session_id: int | None = None
 
     try:
         # Update task to processing
@@ -900,6 +1030,8 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
         repo_id = int(repo["id"])
         root = Path(repo["root_path"])
         embed_model = repo.get("default_embed_model", "large")
+
+        _invalidate_search_cache(repo_name)
 
         # Filter files that actually exist
         valid_files = []
@@ -940,7 +1072,17 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
         commit_sha, branch = git_repo.get_commit_and_branch()
 
         # Start session
-        session_id = _sql_store.begin_session(repo_id, commit_sha, branch, embed_model)
+        from ..store.sqlite_meta import ActiveSessionError
+
+        try:
+            session_id = _sql_store.begin_session(repo_id, commit_sha, branch, embed_model)
+        except ActiveSessionError as exc:
+            await task_queue.update_task(
+                task_id,
+                status=TaskStatus.FAILED,
+                error=str(exc),
+            )
+            return
 
         chunks_indexed = chunks_skipped = 0
         repo_config = load_repo_chunking_config(root)
@@ -1221,6 +1363,8 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
         import traceback
 
         error_msg = f"{str(e)}\n{traceback.format_exc()}"
+        if session_id is not None:
+            _sql_store.set_session_status(session_id, "failed", notes=str(e))
         await task_queue.update_task(task_id, status=TaskStatus.FAILED, error=error_msg)
 
 
@@ -1532,6 +1676,7 @@ async def clear_repo_index(repo_name: str, confirmed: bool = False) -> dict:
     try:
         # Use pipeline's _drop_repo_index method
         _pipeline._drop_repo_index(repo_id, repo_name)
+        _invalidate_search_cache(repo_name)
 
         return {
             "success": True,

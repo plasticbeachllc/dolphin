@@ -114,6 +114,10 @@ default_embed_model = "small"
             yield base_url, git_repo, store_root
         finally:
             server_process.terminate()
+            try:
+                server_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                server_process.kill()
             stdout, stderr = server_process.communicate()
             print(f"--- Server Stdout ---\n{stdout}")
             print(f"--- Server Stderr ---\n{stderr}")
