@@ -26,7 +26,7 @@ This release focuses the release-targeted surface on the MCP bridge and its cont
 - `KBClient` REST wrapper to enable dependency injection and more reliable unit/integration testing.
 - Search output improvements (formatting + payload trimming) and request options:
   - Optional snippets, with configurable `context_lines_before` / `context_lines_after`
-  - Support for filters like `exclude_paths`, `exclude_patterns`, `score_cutoff`, `max_snippets`, and `embed_model`
+  - Support for filters like `exclude_paths`, `exclude_patterns`, `score_cutoff`, and `max_snippets`
 - Standardized MCP tool set:
   - `search`
   - `chunk_get`
@@ -52,6 +52,7 @@ This release focuses the release-targeted surface on the MCP bridge and its cont
 - REST client targets KB `/v1` endpoints for search, repos, chunks, and file slices.
 - **Breaking**: Cursor-based pagination and `deadline_ms` are not supported in v0.2.0 (clients must not send them).
 - **Breaking**: Removed legacy `include_snippets` from KB search requests; use `max_snippets`.
+- **Breaking**: Removed `embed_model` filter from the `search` tool; use repository/default embed model configuration instead.
 - Tool response format now includes graph context when available.
 - Search results enriched with entity relationships.
 - Error messages provide actionable remediation guidance.
