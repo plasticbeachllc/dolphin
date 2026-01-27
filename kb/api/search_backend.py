@@ -98,7 +98,7 @@ class KnowledgeSearchBackend:
 
     def _encode_cursor(self, query: str, last_score: float, last_chunk_id: str) -> str:
         """Encode cursor with query hash validation."""
-        query_hash = hashlib.md5(query.encode("utf-8")).hexdigest()[:8]
+        query_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()[:8]
         payload = {
             "q": query_hash,
             "s": last_score,
