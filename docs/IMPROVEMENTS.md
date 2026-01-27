@@ -34,6 +34,7 @@ These are already present in the repo (see `README.md`, `CHANGELOG.md`, and the 
 - Add an integration test that proves “reindex invalidates cached search results” for both in-memory and Redis modes.
 
 **Status (done)**
+
 - `QueryCache` is now the single search-result cache; `QueryResultCache` has been retired.
 - Redis invalidation uses a repo → cache-key index; in-memory uses the same index.
 - Integration tests cover reindex invalidation in-memory and via fakeredis.
