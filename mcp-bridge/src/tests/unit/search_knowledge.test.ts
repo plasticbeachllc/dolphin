@@ -9,18 +9,18 @@ const mockExecuteSearch = mock(async () => ({
     model: "small",
     top_k: 20,
     max_snippets: 5,
-    latency_ms: 10
-  }
+    latency_ms: 10,
+  },
 }));
 
 const mockFetchSnippets = mock(async () => ({
   snippetsByHitIndex: new Map(),
-  snippetFailures: []
+  snippetFailures: [],
 }));
 
 const mockTransformHits = mock(() => ({
   hits: [],
-  escapedPathCount: 0
+  escapedPathCount: 0,
 }));
 
 const mockBuildSummary = mock(() => "Search Summary");
@@ -29,16 +29,16 @@ const mockBuildHitsJsonObject = mock(() => ({}));
 // Setup mocks - Bun hoists these to run before imports
 mock.module("../../mcp/search/rest.js", () => ({
   buildSearchRequestBody: (input: any) => ({ query: input.query }),
-  executeSearch: mockExecuteSearch
+  executeSearch: mockExecuteSearch,
 }));
 
 mock.module("../../mcp/search/snippets.js", () => ({
-  fetchSnippetsForHits: mockFetchSnippets
+  fetchSnippetsForHits: mockFetchSnippets,
 }));
 
 mock.module("../../mcp/search/transform.js", () => ({
   getReposByName: mock(async () => new Map()),
-  transformHits: mockTransformHits
+  transformHits: mockTransformHits,
 }));
 
 mock.module("../../mcp/search/format.js", () => ({
@@ -46,11 +46,11 @@ mock.module("../../mcp/search/format.js", () => ({
   buildWarnings: () => ({ warnings: [], warningEntries: [] }),
   buildSummary: mockBuildSummary,
   buildHitsJsonObject: mockBuildHitsJsonObject,
-  buildHitsJsonText: () => "{}"
+  buildHitsJsonText: () => "{}",
 }));
 
 mock.module("../../mcp/search/trim.js", () => ({
-  applyPayloadTrimming: mock(async () => {})
+  applyPayloadTrimming: mock(async () => {}),
 }));
 
 describe("search_knowledge tool", () => {
@@ -68,16 +68,16 @@ describe("search_knowledge tool", () => {
         model: "small",
         top_k: 20,
         max_snippets: 5,
-        latency_ms: 10
-      }
+        latency_ms: 10,
+      },
     });
     mockFetchSnippets.mockResolvedValue({
-        snippetsByHitIndex: new Map(),
-        snippetFailures: []
+      snippetsByHitIndex: new Map(),
+      snippetFailures: [],
     });
     mockTransformHits.mockReturnValue({
-        hits: [],
-        escapedPathCount: 0
+      hits: [],
+      escapedPathCount: 0,
     });
   });
 
@@ -105,7 +105,7 @@ describe("search_knowledge tool", () => {
   it("handles empty results gracefully", async () => {
     mockExecuteSearch.mockResolvedValueOnce({
       hits: [],
-      meta: { estimated_total: 0, model: "small", latency_ms: 5 }
+      meta: { estimated_total: 0, model: "small", latency_ms: 5 },
     });
 
     const { handler } = makeSearchKnowledge();
@@ -128,27 +128,29 @@ describe("search_knowledge tool", () => {
     const { handler } = makeSearchKnowledge();
     const result = await handler({ query: "test", include_prompt_ready: true });
 
-    expect(result.content.some((c: any) => c.type === "text" && c.text === "Prompt Ready")).toBe(true);
+    expect(result.content.some((c: any) => c.type === "text" && c.text === "Prompt Ready")).toBe(
+      true
+    );
   });
 
   it("includes resource text when requested and hits exist", async () => {
     // Setup hits with snippets
     const mockHit = {
-        snippet: "code snippet",
-        resource_link: "kb://repo/file",
-        lang: "python",
-        path: "file.py"
+      snippet: "code snippet",
+      resource_link: "kb://repo/file",
+      lang: "python",
+      path: "file.py",
     };
 
     mockTransformHits.mockReturnValueOnce({
-        hits: [mockHit],
-        escapedPathCount: 0
+      hits: [mockHit],
+      escapedPathCount: 0,
     });
 
     // Also executeSearch should return hits that are then passed to transformHits
     mockExecuteSearch.mockResolvedValueOnce({
       hits: [{}], // raw hits
-      meta: { estimated_total: 1, model: "small" }
+      meta: { estimated_total: 1, model: "small" },
     });
 
     const { handler } = makeSearchKnowledge();
@@ -157,7 +159,7 @@ describe("search_knowledge tool", () => {
     const resource = result.content.find((c: any) => c.type === "resource");
     expect(resource).toBeDefined();
     if (resource && resource.type === "resource") {
-        expect(resource.resource.text).toBe("code snippet");
+      expect(resource.resource.text).toBe("code snippet");
     }
   });
 
@@ -175,11 +177,11 @@ describe("search_knowledge tool", () => {
     const { handler } = makeSearchKnowledge();
 
     try {
-        await handler({}); // Missing query
-        expect(true).toBe(false); // Should fail
+      await handler({}); // Missing query
+      expect(true).toBe(false); // Should fail
     } catch (e) {
-        // Zod error expected
-        expect(e).toBeDefined();
+      // Zod error expected
+      expect(e).toBeDefined();
     }
   });
 });
