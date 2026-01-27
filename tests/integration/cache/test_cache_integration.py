@@ -2,11 +2,12 @@
 
 import os
 import subprocess
-import uuid
 import tempfile
+import uuid
 from pathlib import Path
-import pytest
+from typing import Any, cast
 
+import pytest
 from fastapi.testclient import TestClient
 
 from kb.api.app import (
@@ -322,7 +323,7 @@ class TestCacheInvalidationAPI:
             cache_enabled=True,
         )
 
-        backend.lance_store.query = lambda *args, **kwargs: []  # Avoid vector-only hits in test.
+        cast(Any, backend.lance_store).query = lambda *args, **kwargs: []  # Avoid vector-only hits in test.
         pipeline = IngestionPipeline(backend.config, backend.lance_store, backend.sql_store, cache=backend.cache)
 
         set_search_backend(backend)

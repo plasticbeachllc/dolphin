@@ -34,7 +34,7 @@ These are already present in the repo (see `README.md`, `CHANGELOG.md`, and the 
 **Status (done)**
 - `QueryCache` is now the single search-result cache; `QueryResultCache` has been retired.
 - Redis invalidation uses a repo → cache-key index; in-memory uses the same index.
-- Integration tests cover reindex invalidation in-memory and via fakeredis.
+- Integration tests cover reindex invalidation in-memory, via fakeredis, and via FastAPI `/v1/repos/{repo}/reindex` → `/v1/search`.
 
 **Acceptance criteria**
 - After `POST /v1/repos/{repo}/reindex` (or any indexing path), the next `/v1/search` against that repo does not return stale content.
