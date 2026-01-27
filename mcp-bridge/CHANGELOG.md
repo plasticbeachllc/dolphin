@@ -26,7 +26,7 @@ This release focuses the release-targeted surface on the MCP bridge and its cont
 - `KBClient` REST wrapper to enable dependency injection and more reliable unit/integration testing.
 - Search output improvements (formatting + payload trimming) and request options:
   - Optional snippets, with configurable `context_lines_before` / `context_lines_after`
-  - Support for filters like `exclude_paths`, `exclude_patterns`, `score_cutoff`, `max_snippets`, and `embed_model`
+  - Support for filters like `exclude_paths`, `exclude_patterns`, `score_cutoff`, and `max_snippets`
 - Standardized MCP tool set:
   - `search`
   - `chunk_get`

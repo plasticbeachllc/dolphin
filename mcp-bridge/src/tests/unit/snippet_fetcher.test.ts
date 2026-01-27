@@ -250,6 +250,26 @@ describe("fetchSnippetsInParallel", () => {
     expect(results).toBeDefined();
   });
 
+  it("does not crash when provided a non-standard abort signal", async () => {
+    // Some MCP runtimes pass a truthy "signal" object that is not a real AbortSignal.
+    // We should treat it as best-effort and not throw.
+    mockGetFileSlice.mockImplementation(async () => ({
+      repo: "r",
+      path: "p.ts",
+      start_line: 1,
+      end_line: 10,
+      content: "ok",
+      source: "file",
+    }));
+
+    const requests: SnippetFetchRequest[] = [{ repo: "r", path: "p.ts", startLine: 1, endLine: 10 }];
+
+    const fakeSignal = { aborted: false } as unknown as AbortSignal;
+    const results = await fetchSnippetsInParallel(requests, { signal: fakeSignal, client: mockClient });
+
+    expect(results[0]?.content).toBe("ok");
+  });
+
   it("handles timeout correctly", async () => {
     mockGetFileSlice.mockImplementation(async () => {
       // Simulate slow response

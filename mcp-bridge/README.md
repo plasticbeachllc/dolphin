@@ -168,7 +168,6 @@ Semantically query code and docs across indexed repositories and return many ran
   "top_k": "number (1-100)",
   "max_snippets": "number (top-N results to include snippet text for)",
   "top_context_n": "number (top-N snippet results to include extra context for)",
-  "embed_model": "small | large",
   "score_cutoff": "number",
   "mmr_enabled": "boolean",
   "mmr_lambda": "number (0-1)",

@@ -218,7 +218,14 @@ class KnowledgeSearchBackend:
                 return cached_results
 
         query_embedding = self.embedding_provider.embed_texts(self.config.default_embed_model, [request.query])[0]
-        num_candidates = request.top_k * RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER  # Fetch more candidates for reranking
+        # Fetch more candidates for reranking when enabled; otherwise use the default multiplier.
+        try:
+            rerank_multiplier = int(self.config.retrieval.reranking.candidate_multiplier)
+        except Exception:
+            rerank_multiplier = RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER
+        if not self.reranker:
+            rerank_multiplier = RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER
+        num_candidates = request.top_k * rerank_multiplier
 
         # Get ANN parameters from config or use defaults
         ann_params = self._get_ann_params(request)
@@ -309,8 +316,18 @@ class KnowledgeSearchBackend:
 
         # UNCOMMENTED AND CORRECTED RERANKING LOGIC
         if self.reranker and hits:
+            try:
+                cfg_rerank_threshold = self.config.retrieval.reranking.score_threshold
+            except Exception:
+                cfg_rerank_threshold = None
             docs_to_rerank = self._hydrate_docs_for_reranking(hits, self.sql_store)
-            reranked_docs = self.reranker.rerank(request.query, docs_to_rerank, top_k=request.top_k)
+            reranked_docs = self.reranker.rerank(
+                request.query,
+                docs_to_rerank,
+                top_k=request.top_k,
+                text_field="content",
+                score_threshold=cfg_rerank_threshold,
+            )
             # The reranked_docs now have the final score. We need to merge them back
             # while preserving the order and original hits.
             reranked_ids = {doc["chunk_id"] for doc in reranked_docs}
@@ -331,28 +348,79 @@ class KnowledgeSearchBackend:
 
         if mmr_enabled and hits:
             try:
-                # Provide per-candidate vectors for diversity if available (fallback handled in ranker)
-                for h in hits:
-                    if "query_vector" not in h:
-                        vec = h.get("vector")
-                        if isinstance(vec, list) and vec:
-                            h["query_vector"] = vec
-
-                hits = maximal_marginal_relevance(
-                    query_vector=query_embedding,  # computed earlier
-                    candidates=hits,
-                    top_k=request.top_k,
-                    lambda_param=mmr_lambda,
-                    id_field="chunk_id",
-                )
-
-                # Remove temporary fields to avoid inflating payload
+                # Provide per-candidate vectors for diversity. Vector search hits often have a
+                # `vector` field, but fused BM25-only hits typically don't. When candidates lack
+                # vectors, MMR silently degrades into a mostly relevance-only ordering.
+                missing_by_repo: dict[str, set[str]] = {}
+                missing_total = 0
                 for h in hits:
                     if "query_vector" in h:
-                        try:
-                            del h["query_vector"]
-                        except Exception:
-                            pass
+                        continue
+                    vec = h.get("vector")
+                    if isinstance(vec, list) and vec:
+                        h["query_vector"] = vec
+                        continue
+                    repo_name = h.get("repo")
+                    text_hash = h.get("text_hash")
+                    if isinstance(repo_name, str) and isinstance(text_hash, str) and text_hash:
+                        missing_by_repo.setdefault(repo_name, set()).add(text_hash)
+                    missing_total += 1
+
+                hydrated_total = 0
+                if missing_by_repo:
+                    for repo_name, hashes in missing_by_repo.items():
+                        vectors_by_hash = self.lance_store.get_vectors_by_hashes(
+                            repo_name, hashes, model=self.config.default_embed_model
+                        )
+                        if not vectors_by_hash:
+                            continue
+                        for h in hits:
+                            if "query_vector" in h:
+                                continue
+                            if h.get("repo") != repo_name:
+                                continue
+                            text_hash = h.get("text_hash")
+                            if not isinstance(text_hash, str):
+                                continue
+                            vec = vectors_by_hash.get(text_hash)
+                            if isinstance(vec, list) and vec:
+                                h["query_vector"] = vec
+                                hydrated_total += 1
+
+                if missing_total:
+                    request_logger.debug(
+                        "MMR candidate vector hydration",
+                        {
+                            "missing_before": missing_total,
+                            "hydrated": hydrated_total,
+                            "missing_after": sum(1 for h in hits if "query_vector" not in h),
+                        },
+                    )
+
+                # If we still don't have enough candidate vectors, skip MMR to avoid a misleading
+                # "diversification" pass that can't actually compute similarity between docs.
+                vector_count = sum(1 for h in hits if isinstance(h.get("query_vector"), list) and h.get("query_vector"))
+                if vector_count < 2:
+                    request_logger.debug(
+                        "Skipping MMR: insufficient candidate vectors",
+                        {"vector_count": vector_count, "hits_count": len(hits)},
+                    )
+                else:
+                    hits = maximal_marginal_relevance(
+                        query_vector=query_embedding,  # computed earlier
+                        candidates=hits,
+                        top_k=request.top_k,
+                        lambda_param=mmr_lambda,
+                        id_field="chunk_id",
+                    )
+
+                    # Remove temporary fields to avoid inflating payload
+                    for h in hits:
+                        if "query_vector" in h:
+                            try:
+                                del h["query_vector"]
+                            except Exception:
+                                pass
             except Exception as e:
                 # Fall back gracefully if MMR fails for any reason
                 request_logger.warning("MMR diversification failed", error=e)
@@ -1058,6 +1126,7 @@ def create_search_backend(store_root: Path, **kwargs) -> KnowledgeSearchBackend:
         reranker = CrossEncoderReranker(
             model_name=config.retrieval.reranking.model,
             device=config.retrieval.reranking.device,
+            batch_size=config.retrieval.reranking.batch_size,
         )
 
     # Create graph store
