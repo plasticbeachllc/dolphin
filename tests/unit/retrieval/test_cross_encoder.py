@@ -16,7 +16,7 @@ class TestCrossEncoderReranker(unittest.TestCase):
             self.assertIsNotNone(reranker.model)
 
             # Verify mock model behavior
-            scores = reranker.model.predict([["q", "d"]])
+            scores = reranker.model.predict([["q", "d"]])  # type: ignore
             self.assertEqual(scores, [0.5])
 
     def test_rerank_basic(self):
@@ -24,7 +24,7 @@ class TestCrossEncoderReranker(unittest.TestCase):
         reranker = CrossEncoderReranker(model_name="test-model")
 
         # Mock the predict method to return specific scores
-        reranker.model.predict = MagicMock(return_value=[0.9, 0.1, 0.5])
+        reranker.model.predict = MagicMock(return_value=[0.9, 0.1, 0.5])  # type: ignore
 
         results = [
             {"id": 1, "text": "doc1"},
@@ -46,7 +46,7 @@ class TestCrossEncoderReranker(unittest.TestCase):
     def test_rerank_threshold(self):
         """Test filtering by score threshold."""
         reranker = CrossEncoderReranker(model_name="test-model")
-        reranker.model.predict = MagicMock(return_value=[0.9, 0.1, 0.5])
+        reranker.model.predict = MagicMock(return_value=[0.9, 0.1, 0.5])  # type: ignore
 
         results = [
             {"id": 1, "text": "doc1"},

@@ -1,7 +1,7 @@
 """Unit tests for graph context enrichment."""
 
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from kb.retrieval.graph_context import GraphContextEnricher, format_graph_context_for_llm
 from kb.store.graph_store import GraphStore
@@ -152,24 +152,9 @@ class TestGraphContextEnricher(unittest.TestCase):
         """Test that duplicate relationships are removed."""
         # Setup minimal mocks to reach _deduplicate_relationships
         rels = [
-            {
-                "type": "calls",
-                "direction": "outgoing",
-                "target": {"qualified_name": "foo"},
-                "line_number": 10
-            },
-            {
-                "type": "calls",
-                "direction": "outgoing",
-                "target": {"qualified_name": "foo"},
-                "line_number": 10
-            },
-            {
-                "type": "calls",
-                "direction": "outgoing",
-                "target": {"qualified_name": "bar"},
-                "line_number": 12
-            }
+            {"type": "calls", "direction": "outgoing", "target": {"qualified_name": "foo"}, "line_number": 10},
+            {"type": "calls", "direction": "outgoing", "target": {"qualified_name": "foo"}, "line_number": 10},
+            {"type": "calls", "direction": "outgoing", "target": {"qualified_name": "bar"}, "line_number": 12},
         ]
 
         deduped = self.enricher._deduplicate_relationships(rels)
@@ -185,7 +170,7 @@ class TestGraphContextEnricher(unittest.TestCase):
                     "type": "function",
                     "qualified_name": "module.process",
                     "signature": "def process()",
-                    "line_range": [10, 20]
+                    "line_range": [10, 20],
                 }
             ],
             "relationships": [
@@ -193,9 +178,9 @@ class TestGraphContextEnricher(unittest.TestCase):
                     "type": "calls",
                     "direction": "outgoing",
                     "target": {"qualified_name": "utils.helper"},
-                    "line_number": 15
+                    "line_number": 15,
                 }
-            ]
+            ],
         }
 
         formatted = format_graph_context_for_llm(context)

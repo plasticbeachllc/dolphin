@@ -2,12 +2,13 @@
 
 import unittest
 
-from kb.graph_intelligence.data_flow import DataFlowAnalyzer, VariableReference
+from kb.graph_intelligence.data_flow import DataFlowAnalyzer
 from kb.graph_intelligence.models import EdgeType, GraphNode, NodeType
 
 
 class MockNode:
     """Mock tree-sitter Node."""
+
     def __init__(self, type_name, text=None, start_point=(0, 0), end_point=(0, 0), children=None):
         self.type = type_name
         self.text = text.encode("utf8") if text else None
@@ -51,36 +52,43 @@ class TestDataFlowAnalyzer(unittest.TestCase):
             start_line=0,
             end_line=3,
             repo_id=1,
-            file_id=1,
             file_path="foo.py",
             language="python",
-            commit_sha="sha",
-            branch="main"
         )
 
         # Tree structure
         # assignment (x = 1)
-        x_assign = MockNode("assignment", start_point=(1, 0), children=[
-            MockNode("identifier", "x", start_point=(1, 0)),  # left
-            MockNode("integer", "1", start_point=(1, 4))      # right
-        ])
+        x_assign = MockNode(
+            "assignment",
+            start_point=(1, 0),
+            children=[
+                MockNode("identifier", "x", start_point=(1, 0)),  # left
+                MockNode("integer", "1", start_point=(1, 4)),  # right
+            ],
+        )
 
         # assignment (y = x)
-        y_assign = MockNode("assignment", start_point=(2, 0), children=[
-            MockNode("identifier", "y", start_point=(2, 0)),  # left
-            MockNode("identifier", "x", start_point=(2, 4))   # right (use)
-        ])
+        y_assign = MockNode(
+            "assignment",
+            start_point=(2, 0),
+            children=[
+                MockNode("identifier", "y", start_point=(2, 0)),  # left
+                MockNode("identifier", "x", start_point=(2, 4)),  # right (use)
+            ],
+        )
 
         # Function body
         foo_body = MockNode("block", start_point=(0, 10), end_point=(3, 0), children=[x_assign, y_assign])
 
         # Function definition (root)
-        root = MockNode("function_definition", start_point=(0, 0), end_point=(3, 0), children=[
-            MockNode("identifier", "foo"),
-            foo_body
-        ])
+        root = MockNode(
+            "function_definition",
+            start_point=(0, 0),
+            end_point=(3, 0),
+            children=[MockNode("identifier", "foo"), foo_body],
+        )
 
-        edges = self.analyzer.extract_data_flow_python(root, [foo_def], repo_id=1)
+        edges = self.analyzer.extract_data_flow_python(root, [foo_def], repo_id=1)  # type: ignore
 
         # Expect one USES edge: x is defined and used within the same function
         self.assertEqual(len(edges), 1)
@@ -109,11 +117,8 @@ class TestDataFlowAnalyzer(unittest.TestCase):
             start_line=0,
             end_line=2,
             repo_id=1,
-            file_id=1,
             file_path="module.py",
             language="python",
-            commit_sha="sha",
-            branch="main"
         )
 
         consumer_def = GraphNode(
@@ -124,37 +129,43 @@ class TestDataFlowAnalyzer(unittest.TestCase):
             start_line=4,
             end_line=6,
             repo_id=1,
-            file_id=1,
             file_path="module.py",
             language="python",
-            commit_sha="sha",
-            branch="main"
         )
 
         # Tree
-        x_assign = MockNode("assignment", start_point=(1, 0), children=[
-            MockNode("identifier", "x", start_point=(1, 0)),
-            MockNode("integer", "1")
-        ])
+        x_assign = MockNode(
+            "assignment",
+            start_point=(1, 0),
+            children=[MockNode("identifier", "x", start_point=(1, 0)), MockNode("integer", "1")],
+        )
         producer_body = MockNode("block", start_point=(0, 10), end_point=(2, 0), children=[x_assign])
-        producer_node = MockNode("function_definition", start_point=(0, 0), end_point=(2, 0), children=[
-            MockNode("identifier", "producer"),
-            producer_body
-        ])
+        producer_node = MockNode(
+            "function_definition",
+            start_point=(0, 0),
+            end_point=(2, 0),
+            children=[MockNode("identifier", "producer"), producer_body],
+        )
 
-        y_assign = MockNode("assignment", start_point=(5, 0), children=[
-            MockNode("identifier", "y", start_point=(5, 0)),
-            MockNode("identifier", "x", start_point=(5, 4))  # Usage of x
-        ])
+        y_assign = MockNode(
+            "assignment",
+            start_point=(5, 0),
+            children=[
+                MockNode("identifier", "y", start_point=(5, 0)),
+                MockNode("identifier", "x", start_point=(5, 4)),  # Usage of x
+            ],
+        )
         consumer_body = MockNode("block", start_point=(4, 10), end_point=(6, 0), children=[y_assign])
-        consumer_node = MockNode("function_definition", start_point=(4, 0), end_point=(6, 0), children=[
-            MockNode("identifier", "consumer"),
-            consumer_body
-        ])
+        consumer_node = MockNode(
+            "function_definition",
+            start_point=(4, 0),
+            end_point=(6, 0),
+            children=[MockNode("identifier", "consumer"), consumer_body],
+        )
 
         root = MockNode("module", children=[producer_node, consumer_node])
 
-        edges = self.analyzer.extract_data_flow_python(root, [producer_def, consumer_def], repo_id=1)
+        edges = self.analyzer.extract_data_flow_python(root, [producer_def, consumer_def], repo_id=1)  # type: ignore
 
         self.assertEqual(len(edges), 1)
         edge = edges[0]
@@ -174,35 +185,33 @@ class TestDataFlowAnalyzer(unittest.TestCase):
             start_line=0,
             end_line=5,
             repo_id=1,
-            file_id=1,
             file_path="test.py",
             language="python",
-            commit_sha="sha",
-            branch="main"
         )
 
         # x = 1
-        x_assign = MockNode("assignment", start_point=(1, 0), children=[
-            MockNode("identifier", "x", start_point=(1, 0)),
-            MockNode("integer", "1")
-        ])
+        x_assign = MockNode(
+            "assignment",
+            start_point=(1, 0),
+            children=[MockNode("identifier", "x", start_point=(1, 0)), MockNode("integer", "1")],
+        )
 
         # y = x
-        y_assign = MockNode("assignment", start_point=(2, 0), children=[
-            MockNode("identifier", "y", start_point=(2, 0)),
-            MockNode("identifier", "x", start_point=(2, 4))
-        ])
+        y_assign = MockNode(
+            "assignment",
+            start_point=(2, 0),
+            children=[MockNode("identifier", "y", start_point=(2, 0)), MockNode("identifier", "x", start_point=(2, 4))],
+        )
 
         # Function body
         body = MockNode("block", start_point=(0, 10), end_point=(5, 0), children=[x_assign, y_assign])
 
         # Function def
-        root = MockNode("function_definition", start_point=(0, 0), end_point=(5, 0), children=[
-            MockNode("identifier", "func"),
-            body
-        ])
+        root = MockNode(
+            "function_definition", start_point=(0, 0), end_point=(5, 0), children=[MockNode("identifier", "func"), body]
+        )
 
-        refs = self.analyzer._find_python_variable_references(root, [func_def])
+        refs = self.analyzer._find_python_variable_references(root, [func_def])  # type: ignore
 
         # Expected: x definition, y definition, x usage, and func name (counted as inside func)
         self.assertEqual(len(refs), 4)
