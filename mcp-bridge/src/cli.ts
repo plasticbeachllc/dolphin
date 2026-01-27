@@ -164,7 +164,10 @@ async function handleDoctorCommand(args: string[]) {
 
   if (checkKb) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 2000);
+    const timer = setTimeout(
+      () => controller.abort(),
+      Number.isFinite(timeoutMs) ? timeoutMs : 2000
+    );
     const client = new KBClient({ baseUrl: result.config.DOLPHIN_API_URL });
     try {
       const health = await client.healthV1("shallow", controller.signal);
