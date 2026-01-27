@@ -1013,6 +1013,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
     import asyncio
 
     task_queue = get_task_queue()
+    session_id: int | None = None
 
     try:
         # Update task to processing
@@ -1071,7 +1072,17 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
         commit_sha, branch = git_repo.get_commit_and_branch()
 
         # Start session
-        session_id = _sql_store.begin_session(repo_id, commit_sha, branch, embed_model)
+        from ..store.sqlite_meta import ActiveSessionError
+
+        try:
+            session_id = _sql_store.begin_session(repo_id, commit_sha, branch, embed_model)
+        except ActiveSessionError as exc:
+            await task_queue.update_task(
+                task_id,
+                status=TaskStatus.FAILED,
+                error=str(exc),
+            )
+            return
 
         chunks_indexed = chunks_skipped = 0
         repo_config = load_repo_chunking_config(root)
@@ -1352,6 +1363,8 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
         import traceback
 
         error_msg = f"{str(e)}\n{traceback.format_exc()}"
+        if session_id is not None:
+            _sql_store.set_session_status(session_id, "failed", notes=str(e))
         await task_queue.update_task(task_id, status=TaskStatus.FAILED, error=error_msg)
 
 
