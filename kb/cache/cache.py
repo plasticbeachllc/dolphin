@@ -9,9 +9,12 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from typing import Any
 
 _log = logging.getLogger(__name__)
+
+_REPO_INDEX_PREFIX = "repo_index"
 
 
 class QueryCache:
@@ -48,6 +51,8 @@ class QueryCache:
 
         # Fallback in-memory cache if Redis not available
         self._memory_cache: dict[str, tuple[Any, float]] = {}
+        self._repo_index: dict[str, set[str]] = {}
+        self._key_repos: dict[str, set[str]] = {}
 
         # Cache statistics
         self.stats = {
@@ -68,6 +73,62 @@ class QueryCache:
         """
         combined = "|".join(parts)
         return hashlib.sha256(combined.encode()).hexdigest()[:16]
+
+    def _repo_index_key(self, repo: str) -> str:
+        return f"{_REPO_INDEX_PREFIX}:{repo}"
+
+    def _extract_repos(self, params: dict[str, Any]) -> list[str]:
+        repos: list[str] = []
+        raw_repos = params.get("repos")
+        if isinstance(raw_repos, str):
+            repos.append(raw_repos)
+        elif isinstance(raw_repos, list):
+            repos.extend([repo for repo in raw_repos if isinstance(repo, str)])
+        repo = params.get("repo")
+        if isinstance(repo, str):
+            repos.append(repo)
+        # Remove duplicates while preserving order
+        seen: set[str] = set()
+        ordered = []
+        for repo_name in repos:
+            if repo_name not in seen:
+                seen.add(repo_name)
+                ordered.append(repo_name)
+        return ordered
+
+    def _get_memory_value(self, cache_key: str) -> Any | None:
+        cached = self._memory_cache.get(cache_key)
+        if not cached:
+            return None
+        value, expires_at = cached
+        if expires_at <= time.time():
+            self._memory_cache.pop(cache_key, None)
+            self._remove_key_from_repo_index(cache_key)
+            return None
+        return value
+
+    def _remove_key_from_repo_index(self, cache_key: str) -> None:
+        repos = self._key_repos.pop(cache_key, set())
+        for repo in repos:
+            repo_keys = self._repo_index.get(repo)
+            if repo_keys:
+                repo_keys.discard(cache_key)
+                if not repo_keys:
+                    self._repo_index.pop(repo, None)
+
+    def _index_result_key(self, cache_key: str, params: dict[str, Any]) -> None:
+        repos = self._extract_repos(params)
+        if not repos:
+            return
+        if self.redis:
+            for repo in repos:
+                index_key = self._repo_index_key(repo)
+                self.redis.sadd(index_key, cache_key)
+                self.redis.expire(index_key, self.result_ttl)
+        else:
+            for repo in repos:
+                self._repo_index.setdefault(repo, set()).add(cache_key)
+            self._key_repos.setdefault(cache_key, set()).update(repos)
 
     def get_embedding(self, query: str, model: str) -> list[float] | None:
         """Get cached embedding for a query.
@@ -92,8 +153,8 @@ class QueryCache:
                     return json.loads(cached)
             else:
                 # In-memory fallback
-                if cache_key in self._memory_cache:
-                    value, _ = self._memory_cache[cache_key]
+                value = self._get_memory_value(cache_key)
+                if value is not None:
                     self.stats["embedding_hits"] += 1
                     return value
 
@@ -121,9 +182,7 @@ class QueryCache:
             if self.redis:
                 self.redis.setex(cache_key, self.embedding_ttl, json.dumps(embedding))
             else:
-                # In-memory fallback (no TTL enforcement)
-                import time
-
+                # In-memory fallback
                 self._memory_cache[cache_key] = (
                     embedding,
                     time.time() + self.embedding_ttl,
@@ -157,8 +216,8 @@ class QueryCache:
                     return json.loads(cached)
             else:
                 # In-memory fallback
-                if cache_key in self._memory_cache:
-                    value, _ = self._memory_cache[cache_key]
+                value = self._get_memory_value(cache_key)
+                if value is not None:
                     self.stats["result_hits"] += 1
                     return value
 
@@ -186,11 +245,11 @@ class QueryCache:
         try:
             if self.redis:
                 self.redis.setex(cache_key, self.result_ttl, json.dumps(results))
+                self._index_result_key(cache_key, params)
             else:
                 # In-memory fallback
-                import time
-
                 self._memory_cache[cache_key] = (results, time.time() + self.result_ttl)
+                self._index_result_key(cache_key, params)
 
         except Exception as e:
             _log.warning("Cache write error for results: %s", e)
@@ -208,30 +267,23 @@ class QueryCache:
 
         try:
             if self.redis:
-                # Scan for all result keys containing this repo
-                pattern = f"results:*{repo}*"
-                for key in self.redis.scan_iter(match=pattern):
-                    self.redis.delete(key)
+                index_key = self._repo_index_key(repo)
+                keys = self.redis.smembers(index_key)
+                if keys:
+                    cache_keys = [key.decode() if isinstance(key, (bytes, bytearray)) else key for key in keys]
+                    pipeline = self.redis.pipeline()
+                    pipeline.delete(*cache_keys)
+                    pipeline.delete(index_key)
+                    pipeline.execute()
+                else:
+                    self.redis.delete(index_key)
                 _log.info("Invalidated cache for repo: %s", repo)
             else:
-                # In-memory: find and delete only results with matching repo
-                # Need to check the params JSON in each key to match repo
-                keys_to_delete = []
-                for key in self._memory_cache.keys():
-                    if key.startswith("results:"):
-                        # The key contains a hash of query+params, but we need to check
-                        # the actual cached data. For in-memory cache, we'll use a
-                        # conservative approach: only delete if we can confirm it's this repo
-                        try:
-                            # Check if the params contain this repo
-                            if repo in key:
-                                keys_to_delete.append(key)
-                        except Exception:
-                            continue
-
-                for key in keys_to_delete:
-                    del self._memory_cache[key]
-
+                keys = list(self._repo_index.get(repo, set()))
+                for key in keys:
+                    self._memory_cache.pop(key, None)
+                    self._remove_key_from_repo_index(key)
+                self._repo_index.pop(repo, None)
                 _log.info("Invalidated cache for repo: %s", repo)
 
         except Exception as e:
@@ -245,12 +297,14 @@ class QueryCache:
         try:
             if self.redis:
                 # Clear all dolphin cache keys
-                for pattern in ["embed:*", "results:*"]:
+                for pattern in ["embed:*", "results:*", f"{_REPO_INDEX_PREFIX}:*"]:
                     for key in self.redis.scan_iter(match=pattern):
                         self.redis.delete(key)
                 _log.info("Cache cleared")
             else:
                 self._memory_cache.clear()
+                self._repo_index.clear()
+                self._key_repos.clear()
 
         except Exception as e:
             _log.warning("Cache clear error: %s", e)

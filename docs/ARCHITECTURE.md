@@ -921,7 +921,7 @@ cd mcp-bridge && bun run test-integration.ts
 
 - **Parallel indexing**: Worker pool for multi-file embedding
 - **Distributed storage**: Separate LanceDB/SQLite for multi-machine setup
-- **Caching**: Query result caching with TTL
+- **Caching**: Query result caching with TTL and repo-scoped invalidation (Redis + in-memory)
 
 ### Quality
 
