@@ -116,7 +116,7 @@ class KnowledgeSearchBackend:
             payload = json.loads(json_str)
 
             # Validate query integrity
-            expected_hash = hashlib.md5(query.encode("utf-8")).hexdigest()[:8]
+            expected_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()[:8]
             if payload.get("q") != expected_hash:
                 self.logger.warning("Cursor query hash mismatch")
                 return None

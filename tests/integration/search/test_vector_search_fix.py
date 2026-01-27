@@ -89,7 +89,7 @@ def test_vector_search_with_populated_data(populated_backend):
     # No longer pass embed_model - uses global config
     request = SearchRequest(query="authentication", top_k=3)
 
-    results = backend.search(request)
+    results, _ = backend.search(request)
 
     assert results, "Vector search returned no results"
     assert results[0]["chunk_id"] == chunk_id
@@ -106,8 +106,8 @@ def test_hybrid_search_comparison(populated_hybrid_backend):
     vector_only = backend
     vector_only.hybrid_search_enabled = False
 
-    vector_results = vector_only.search(request)
-    hybrid_results = backend.search(request)
+    vector_results, _ = vector_only.search(request)
+    hybrid_results, _ = backend.search(request)
 
     assert vector_results, "Vector-only search should return results"
     assert hybrid_results, "Hybrid search should return results"
