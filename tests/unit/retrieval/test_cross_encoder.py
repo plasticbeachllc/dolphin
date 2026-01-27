@@ -69,10 +69,6 @@ class TestCrossEncoderReranker(unittest.TestCase):
     @patch("kb.retrieval.cross_encoder_rerank._SENTENCE_TRANSFORMERS_AVAILABLE", False)
     def test_dependencies_missing(self):
         """Test behavior when dependencies are missing."""
-        # Force reload to pick up patched constant if needed, but here we just patch the class checking it
-        # The class checks the constant in __init__
-
-        # Since _SENTENCE_TRANSFORMERS_AVAILABLE is checked in __init__, we patch it there
         with patch("kb.retrieval.cross_encoder_rerank._SENTENCE_TRANSFORMERS_AVAILABLE", False):
             reranker = CrossEncoderReranker(model_name="real-model")
             self.assertFalse(reranker.enabled)

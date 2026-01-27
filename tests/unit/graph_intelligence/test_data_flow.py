@@ -1,7 +1,6 @@
 """Unit tests for data flow analysis."""
 
 import unittest
-from unittest.mock import MagicMock
 
 from kb.graph_intelligence.data_flow import DataFlowAnalyzer, VariableReference
 from kb.graph_intelligence.models import EdgeType, GraphNode, NodeType
@@ -83,22 +82,7 @@ class TestDataFlowAnalyzer(unittest.TestCase):
 
         edges = self.analyzer.extract_data_flow_python(root, [foo_def], repo_id=1)
 
-        # We expect one edge: y uses x? No, extract_data_flow_python links uses to definitions.
-        # But here both x and y are local variables.
-        # The analyzer links USES to DEFINITIONS.
-        # x is defined at line 1.
-        # x is used at line 2.
-        # Both are inside `foo`.
-        # The analyzer creates edges between FUNCTIONS.
-        # Since source and target are the same function, maybe it skips?
-
-        # Let's check logic:
-        # if ref.func_id: ...
-        #   target_id=def_ref.func_id
-        #   source_id=ref.func_id
-
-        # If source_id == target_id, it still creates an edge.
-
+        # Expect one USES edge: x is defined and used within the same function
         self.assertEqual(len(edges), 1)
         edge = edges[0]
         self.assertEqual(edge.source_id, "func-foo")
@@ -113,17 +97,9 @@ class TestDataFlowAnalyzer(unittest.TestCase):
         #     x = 1       (line 1)
         #
         # def consumer(): (lines 4-6)
-        #     y = x       (line 5) -> x is not defined here, assume global/outer
-
-        # But wait, the analyzer finds definitions by line number in `definitions` list.
-        # And it walks the tree to find `refs`.
-
-        # If `x` is defined in `producer`, `x` is a local variable of `producer`.
-        # If `consumer` uses `x`, it refers to a global `x` or it's an error in valid python,
-        # but structurally it might match if names match.
-
-        # The analyzer matches by name: `def_ref.var_name == ref.var_name`.
-        # So if `producer` defines `x` and `consumer` uses `x`, it links them.
+        #     y = x       (line 5)
+        #
+        # The analyzer matches variable names across functions.
 
         producer_def = GraphNode(
             id="func-producer",
@@ -228,25 +204,7 @@ class TestDataFlowAnalyzer(unittest.TestCase):
 
         refs = self.analyzer._find_python_variable_references(root, [func_def])
 
-        # for r in refs:
-        #     print(f"Ref: {r.var_name}, line={r.line}, def={r.is_definition}, mutation={r.is_mutation}, func={r.func_id}")
-
-        # Expected:
-        # 1. x definition
-        # 2. y definition
-        # 3. x usage
-        # 4. func usage (the function name itself inside the function definition node?)
-
-        # If the function name 'func' is considered a usage inside the function, that's what we have.
-        # But 'func' identifier is a child of 'function_definition'.
-        # Its parent is 'function_definition'.
-        # find_containing_func starts at parent.
-        # parent range is (0, 5), which is in def_map.
-        # So yes, 'func' is considered inside 'func'.
-
-        # We should filter out the function name from being a usage of itself?
-        # Or just accept it in the test.
-
+        # Expected: x definition, y definition, x usage, and func name (counted as inside func)
         self.assertEqual(len(refs), 4)
 
         # x definition
