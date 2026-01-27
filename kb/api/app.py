@@ -552,12 +552,12 @@ async def search(request: SearchRequest) -> dict[str, Any]:
     # Retrieve next_cursor if returned by backend (handling backward compatibility check)
     next_cursor = None
     if isinstance(hits_list, dict) and "hits" in hits_list:
-         # Backend returned a dict wrapper
-         next_cursor = hits_list.get("next_cursor")
-         hits_list = hits_list["hits"]
+        # Backend returned a dict wrapper
+        next_cursor = hits_list.get("next_cursor")
+        hits_list = hits_list["hits"]
     elif isinstance(hits_list, tuple) and len(hits_list) == 2:
-         # Backend returned (hits, cursor)
-         hits_list, next_cursor = hits_list
+        # Backend returned (hits, cursor)
+        hits_list, next_cursor = hits_list
 
     if next_cursor:
         meta["next_cursor"] = next_cursor

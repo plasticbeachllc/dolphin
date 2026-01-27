@@ -196,9 +196,7 @@ class KnowledgeSearchBackend:
             self._bm25_normalizer = SigmoidNormalizer(RETRIEVAL_PARAMS.BM25_SCORE_NORMALIZATION_FACTOR)
             return float(self._bm25_normalizer.normalize(score))
 
-    def search(
-        self, request: SearchRequest
-    ) -> tuple[Sequence[dict[str, object]], str | None]:
+    def search(self, request: SearchRequest) -> tuple[Sequence[dict[str, object]], str | None]:
         # Generate correlation ID for this search request
         correlation_id = f"search_{uuid.uuid4().hex[:8]}"
         start_time = time.time()
@@ -507,7 +505,7 @@ class KnowledgeSearchBackend:
         hits = [h for h in hits if h.get("score", 0.0) >= score_cutoff]
 
         if not hits:
-             request_logger.warning(
+            request_logger.warning(
                 "No results after score cutoff",
                 {
                     "cutoff_threshold": score_cutoff,

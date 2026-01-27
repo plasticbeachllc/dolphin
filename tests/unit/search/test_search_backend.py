@@ -266,18 +266,20 @@ class TestKnowledgeSearchBackend:
         # Create 20 mock results with decreasing scores
         all_results = []
         for i in range(20):
-            all_results.append({
-                "id": f"chunk_{i}",
-                "_distance": 0.1 * (i + 1), # Increasing distance -> decreasing score
-                "repo": "repo",
-                "path": f"file_{i}.py"
-            })
+            all_results.append(
+                {
+                    "id": f"chunk_{i}",
+                    "_distance": 0.1 * (i + 1),  # Increasing distance -> decreasing score
+                    "repo": "repo",
+                    "path": f"file_{i}.py",
+                }
+            )
 
         # Mock lance store to return ALL results initially (simulating candidate pool)
         # In real backend, we rely on candidate_multiplier, but here we just mock the return
         lance_store.query.return_value = all_results
 
-        sql_store.bm25_search.return_value = [] # vector only for simplicity
+        sql_store.bm25_search.return_value = []  # vector only for simplicity
 
         # Page 1: Top 5
         request = SearchRequest(query="test", top_k=5)
@@ -333,6 +335,8 @@ class TestKnowledgeSearchBackend:
         # Should detect hash mismatch and ignore cursor
         results_mismatch, _ = basic_backend.search(request_mismatch)
         assert len(results_mismatch) == 1
+
+
 @pytest.fixture
 def real_backend(tmp_path: Path):
     """Provides a backend with real stores for integration testing."""
