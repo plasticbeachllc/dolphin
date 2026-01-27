@@ -6,7 +6,7 @@ Tests session lifecycle, file operations, and database queries
 
 import pytest
 
-from kb.store.sqlite_meta import SQLiteMetadataStore
+from kb.store.sqlite_meta import ActiveSessionError, SQLiteMetadataStore
 
 
 @pytest.fixture
@@ -143,6 +143,63 @@ def test_get_last_successful_commit(meta_store, tmp_path):
 
     last_commit = meta_store.get_last_successful_commit(repo_id)
     assert last_commit == "commit1"
+
+
+def test_begin_session_blocks_active_session(meta_store, tmp_path):
+    """Test that starting a second session while one is active raises."""
+    repo_path = tmp_path / "test-repo"
+    repo_path.mkdir()
+    meta_store.record_repo("test-repo", repo_path)
+
+    repo = meta_store.get_repo_by_name("test-repo")
+    repo_id = repo["id"]
+
+    meta_store.begin_session(repo_id=repo_id, commit_sha="commit1", branch="main", embed_model="small")
+
+    with pytest.raises(ActiveSessionError):
+        meta_store.begin_session(repo_id=repo_id, commit_sha="commit2", branch="main", embed_model="small")
+
+
+def test_abort_stale_sessions_marks_aborted(meta_store, tmp_path):
+    """Test that stale sessions are aborted with notes."""
+    repo_path = tmp_path / "test-repo"
+    repo_path.mkdir()
+    meta_store.record_repo("test-repo", repo_path)
+
+    repo = meta_store.get_repo_by_name("test-repo")
+    repo_id = repo["id"]
+
+    session_id = meta_store.begin_session(repo_id=repo_id, commit_sha="commit1", branch="main", embed_model="small")
+
+    aborted = meta_store.abort_stale_sessions(repo_id=repo_id, reason="startup recovery")
+    assert aborted == 1
+
+    session = meta_store.get_session(session_id)
+    assert session is not None
+    assert session["status"] == "aborted"
+    assert session["notes"] == "startup recovery"
+
+
+def test_abort_stale_sessions_appends_notes(meta_store, tmp_path):
+    """Test abort_stale_sessions appends notes when already present."""
+    repo_path = tmp_path / "test-repo"
+    repo_path.mkdir()
+    meta_store.record_repo("test-repo", repo_path)
+
+    repo = meta_store.get_repo_by_name("test-repo")
+    repo_id = repo["id"]
+
+    session_id = meta_store.begin_session(repo_id=repo_id, commit_sha="commit1", branch="main", embed_model="small")
+    meta_store.set_session_status(session_id, "running", notes="in progress")
+
+    aborted = meta_store.abort_stale_sessions(repo_id=repo_id, reason="startup recovery")
+    assert aborted == 1
+
+    session = meta_store.get_session(session_id)
+    assert session is not None
+    assert session["status"] == "aborted"
+    assert "in progress" in (session["notes"] or "")
+    assert "startup recovery" in (session["notes"] or "")
 
 
 def test_repo_not_found(meta_store):

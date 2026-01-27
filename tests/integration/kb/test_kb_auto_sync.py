@@ -222,6 +222,71 @@ def goodbye():
         reset_stores()
         # Cleanup - no explicit close needed
 
+    def test_index_fails_when_active_session_exists(self, temp_dir, temp_db_path):
+        """Test indexing fails fast when another session is active."""
+        # Set up stores
+        sql_store = SQLiteMetadataStore(temp_db_path)
+        sql_store.initialize()
+
+        lance_dir = temp_dir / "lancedb"
+        lance_dir.mkdir()
+        lance_store = LanceDBVectorStore(lance_dir)
+
+        set_stores(sql_store, lance_store)
+
+        # Set up pipeline
+        pipeline = KBPipeline(sql_store, lance_store)
+        set_pipeline(pipeline)
+
+        # Create workspace and register
+        workspace = temp_dir / "test_workspace"
+        workspace.mkdir()
+
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
+        repo = sql_store.get_repo_by_name("test-repo")
+        assert repo is not None
+
+        # Create test file
+        test_file = workspace / "hello.py"
+        test_file.write_text("print('hello')")
+
+        # Create an active session to block indexing
+        sql_store.begin_session(repo_id=repo["id"], commit_sha="abc123", branch="main", embed_model="small")
+
+        # Queue indexing
+        client = create_api_client()
+        response = client.post(
+            "/v1/index",
+            json={"repo": "test-repo", "files": ["hello.py"], "incremental": True},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        task_id = data["task_id"]
+
+        # Poll for completion (max 10 seconds)
+        max_polls = 10
+        final_status = None
+        last_error = None
+
+        for _ in range(max_polls):
+            status_response = client.get(f"/v1/index/status/{task_id}")
+            status_data = status_response.json()
+            if status_data["status"] in ["completed", "failed"]:
+                final_status = status_data
+                break
+            time.sleep(1)
+
+        assert final_status is not None
+        assert final_status["status"] == "failed"
+        last_error = final_status.get("error")
+        assert last_error is not None
+        assert "Active indexing session" in last_error
+
+        # Cleanup
+        reset_pipeline()
+        reset_stores()
+
     def test_multiple_files_batch_indexing(self, temp_dir, temp_db_path):
         """Test indexing multiple files in a batch."""
         # Set up stores
