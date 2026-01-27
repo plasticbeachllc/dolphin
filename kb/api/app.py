@@ -303,7 +303,13 @@ class SearchBackend(Protocol):
 
     def search(
         self, request: SearchRequest
-    ) -> Sequence[dict[str, object]] | tuple[Sequence[dict[str, object]], str | None] | Awaitable[Sequence[dict[str, object]] | tuple[Sequence[dict[str, object]], str | None]]: ...
+    ) -> (
+        Sequence[dict[str, object]]
+        | tuple[Sequence[dict[str, object]], str | None]
+        | Awaitable[
+            Sequence[dict[str, object]] | tuple[Sequence[dict[str, object]], str | None]
+        ]
+    ): ...
 
 
 class _EmptySearchBackend:
@@ -539,7 +545,7 @@ async def search(request: SearchRequest) -> dict[str, Any]:
     # If I change `backend.search` to return `tuple[hits, cursor]`, I can update `app.py` easily.
     #
     # Let's do that. It makes the most sense.
-    
+
     # Retrieve next_cursor if returned by backend (handling backward compatibility check)
     next_cursor = None
     if isinstance(hits_list, dict) and "hits" in hits_list:

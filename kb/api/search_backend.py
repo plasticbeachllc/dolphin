@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
 import os
 import random
 import time
@@ -9,9 +12,6 @@ import uuid
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
-import base64
-import json
-import hashlib
 
 from ..cache import QueryCache, create_cache
 from ..config import GraphConfig, KBConfig
@@ -114,13 +114,13 @@ class KnowledgeSearchBackend:
         try:
             json_str = base64.urlsafe_b64decode(cursor.encode("utf-8")).decode("utf-8")
             payload = json.loads(json_str)
-            
+
             # Validate query integrity
             expected_hash = hashlib.md5(query.encode("utf-8")).hexdigest()[:8]
             if payload.get("q") != expected_hash:
                 self.logger.warning("Cursor query hash mismatch")
                 return None
-                
+
             return payload
         except Exception:
             self.logger.warning("Invalid cursor format")
@@ -196,7 +196,9 @@ class KnowledgeSearchBackend:
             self._bm25_normalizer = SigmoidNormalizer(RETRIEVAL_PARAMS.BM25_SCORE_NORMALIZATION_FACTOR)
             return float(self._bm25_normalizer.normalize(score))
 
-    def search(self, request: SearchRequest) -> Sequence[dict[str, object]]:
+    def search(
+        self, request: SearchRequest
+    ) -> Sequence[dict[str, object]] | tuple[Sequence[dict[str, object]], str | None]:
         # Generate correlation ID for this search request
         correlation_id = f"search_{uuid.uuid4().hex[:8]}"
         start_time = time.time()
