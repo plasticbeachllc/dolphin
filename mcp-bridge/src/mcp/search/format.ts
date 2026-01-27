@@ -216,7 +216,7 @@ export function buildSummary(params: {
   const summaryParts = [
     `Found ${k} result${k === 1 ? "" : "s"}${rcount > 0 ? ` across ${rcount} repo${rcount === 1 ? "" : "s"}` : ""}.`,
   ];
-  
+
   if (params.snippetsIncluded > 0) {
     summaryParts.push(`Showing snippets for top ${params.snippetsIncluded}/${k} results.`);
   } else {
@@ -280,7 +280,7 @@ export function buildHitsJsonObject(params: {
     query: params.query,
     hits: params.hits.map((h, i) => {
       const hit = h as ExtendedSearchHit;
-      
+
       const baseHit = {
         rank: i + 1,
         chunk_id: hit.chunk_id,

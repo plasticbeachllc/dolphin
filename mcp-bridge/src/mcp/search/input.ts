@@ -55,7 +55,7 @@ export function parseSearchInput(args: unknown): SearchInput {
 export function resolveSearchOptions(input: SearchInput): SearchOptions {
   const repos = input.repos?.map((r) => r.trim());
   const topK = input.top_k ?? CONFIG.SEARCH_DEFAULTS.TOP_K;
-  
+
   // Default to 3 snippets if not specified, to provide context by default without overwhelming
   const snippetsTopNRequested = input.max_snippets ?? 3;
   const snippetsTopN = Math.max(0, Math.min(topK, snippetsTopNRequested));
