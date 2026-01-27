@@ -95,6 +95,8 @@ export async function fetchSnippetsInParallel(
           const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
           const abortFromSignal = () => controller.abort();
 
+          // Some MCP runtimes provide a non-standard "signal" shape (truthy, with `aborted`,
+          // but without add/removeEventListener). Avoid crashing snippet fetching in that case.
           const canListen = Boolean(
             signal && typeof (signal as AbortSignal).addEventListener === "function"
           );
