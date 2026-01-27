@@ -37,7 +37,7 @@ export const CONFIG_LIMITS = {
 const DEFAULTS = {
   API_URL: "http://127.0.0.1:7777",
   SERVER_NAME: "dolphin-mcp",
-  SERVER_VERSION: "0.2.0",
+  SERVER_VERSION: "0.2.3",
   MCP_PROTOCOL_VERSION: "2025-11-25",
   LOG_LEVEL: "info",
   MCP_LIMITS: {
