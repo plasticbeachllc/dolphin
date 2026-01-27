@@ -106,6 +106,7 @@ export function makeSearchKnowledge(): {
         meta: transformedRes.meta,
         topK: options.topK,
         warningEntries,
+        compact: options.compact,
       });
 
       const hitsJsonText = buildHitsJsonText(hitsJsonObj);

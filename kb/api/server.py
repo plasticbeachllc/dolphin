@@ -96,6 +96,7 @@ def initialize_search_backend() -> None:
         lancedb=backend.lance_store,
         metadata=backend.sql_store,
         graph_store=GraphStore(backend.sql_store.db_path),
+        cache=backend.cache,
     )
     set_pipeline(pipeline)
     print("✅ Ingestion pipeline ready", file=sys.stderr)
