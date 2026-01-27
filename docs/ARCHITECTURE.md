@@ -472,6 +472,11 @@ CREATE TABLE sessions (
 );
 ```
 
+Notes:
+- Sessions transition `running` → `succeeded` / `failed` / `aborted`.
+- Startup recovery aborts any non-terminal sessions with a note.
+- A unique partial index enforces a single active session per repo.
+
 #### files
 
 ```sql

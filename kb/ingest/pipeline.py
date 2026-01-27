@@ -798,152 +798,160 @@ class IngestionPipeline:
         # Initialize error logger (lazy file creation on first error)
         error_logger = ErrorLogger(root, str(session_id))
 
-        # Build ignore spec using shared utility
-        from ..ignores import build_ignore_pathspec
-
-        ignore_spec = build_ignore_pathspec(self.config.ignore, self.config.ignore_exceptions, root)
-
-        # Determine changed files list
-        if full_reindex or last_success is None:
-            print(f"Full reindex mode: processing all tracked files for {repo_name}")
-            changed_files = get_all_tracked_files(root)
-            deleted_files = []
-        else:
-            print(f"Incremental mode: processing files changed since {last_success[:8]}")
-            changed_files = git_changed_files_modified_added(root, last_success, commit_sha)
-            deleted_files = git_changed_files_deleted(root, last_success, commit_sha)
-
-        # Initialize counters
-        files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
-        graph_nodes_created = graph_edges_created = 0
-
-        # Process modified/added files
-        stats = self.process_files(
-            repo_id=repo_id,
-            repo_name=repo_name,
-            root=root,
-            files=changed_files,
-            ignore_spec=ignore_spec,
-            embed_model=embed_model,
-            session_id=session_id,
-            commit_sha=commit_sha,
-            branch=branch,
-            dry_run=dry_run,
-            error_logger=error_logger,
-        )
-        files_done += stats["files_done"]
-        chunks_indexed += stats["chunks_indexed"]
-        chunks_skipped += stats["chunks_skipped"]
-        vectors_written += stats["vectors_written"]
-        chunks_pruned += stats["chunks_pruned"]
-        graph_nodes_created += stats["graph_nodes_created"]
-        graph_edges_created += stats["graph_edges_created"]
-
-        # Process deleted files
-        del_stats = self.process_deletions(
-            repo_id=repo_id,
-            repo_name=repo_name,
-            files=deleted_files,
-            embed_model=embed_model,
-            dry_run=dry_run,
-            error_logger=error_logger,
-        )
-        files_done += del_stats["files_done"]
-        chunks_pruned += del_stats["chunks_pruned"]
-
-        # Prune any ignored files that were previously indexed
-        # This handles files that were committed before being added to .gitignore
-        if not dry_run:
-            print(f"\nPruning previously-indexed ignored files for {repo_name}...")
-            all_files = self.metadata.get_all_files_for_repo(repo_id)
-            for file_record in all_files:
-                file_path = file_record["path"]
-                file_id = file_record["id"]
-
-                # Check if file matches ignore patterns
-                if ignore_spec.match_file(file_path):
-                    # Prune all content for this file across all embedding models
-                    for model in ["small", "large"]:
-                        pruned_count = self.metadata.prune_invalidated_content_for_file(
-                            repo_id, file_id, embed_model=model, current_hashes=set()
-                        )
-                        if pruned_count > 0:
-                            chunks_pruned += pruned_count
-                            print(f"  {file_path}: pruned {pruned_count} ignored chunks (model={model})")
-                        self.lancedb.prune_file_rows(repo_name, file_path, model=model)
-
-                    # Clean up graph data for ignored file
-                    edges_deleted = 0
-                    nodes_deleted = 0
-                    if self.graph_store:
-                        nodes_deleted, edges_deleted = cleanup_graph_for_file(self.graph_store, file_id)
-
-                    if self.graph_store and (edges_deleted > 0 or nodes_deleted > 0):
-                        graph_manager = self.get_graph_manager(repo_id)
-                        if edges_deleted > 0:
-                            graph_manager.on_edges_changed(edges_deleted)
-                        else:
-                            graph_manager.invalidate_cache()
-
-        # Update session counters
-        if not dry_run:
-            self.metadata.bump_session_counters(
-                session_id,
-                files_indexed=files_done,
-                chunks_indexed=chunks_indexed,
-                chunks_skipped=chunks_skipped,
-                vectors_written=vectors_written,
-                chunks_pruned=chunks_pruned,
-            )
-            self.metadata.set_session_status(session_id, "succeeded")
-            self._flush_bm25_statistics()
-        else:
-            print(f"Dry run: would have updated counters for session {session_id}")
-
-        # Update cache state with final counts after indexing
-        if not dry_run and self.graph_store:
-            graph_manager = self.get_graph_manager(repo_id)
-            # Force rebuild to get accurate total counts from database
-            # This ensures cache state reflects TOTAL graph size, not just incremental changes
-            graph_manager.get_graph(force_rebuild=True)
-            # Cache state is automatically updated in _rebuild_graph() with total counts
-
-        # Print summary
-        print(f"\nIndexing complete for {repo_name}:")
-        print(f"  Files processed: {files_done}")
-        print(f"  Chunks indexed: {chunks_indexed}")
-        print(f"  Chunks skipped (dedup): {chunks_skipped}")
-        print(f"  Chunks pruned (deleted): {chunks_pruned}")
-        print(f"  Vectors written: {vectors_written}")
-        if graph_nodes_created > 0 or graph_edges_created > 0:
-            print(f"  Graph nodes created: {graph_nodes_created}")
-            print(f"  Graph edges created: {graph_edges_created}")
-        print(f"  Session: {session_id}")
-
-        # Only mention error log if something was actually written
         try:
-            if error_logger.had_errors():
-                lp = error_logger.get_log_path()
-                if lp.exists() and lp.stat().st_size > 0:
-                    print(f"  Errors logged to: {lp}")
-        except Exception:
-            pass
+            # Build ignore spec using shared utility
+            from ..ignores import build_ignore_pathspec
 
-        return {
-            "repo": repo_name,
-            "repo_id": repo_id,
-            "session_id": session_id,
-            "commit": commit_sha,
-            "branch": branch,
-            "files_indexed": files_done,
-            "chunks_indexed": chunks_indexed,
-            "chunks_skipped": chunks_skipped,
-            "vectors_written": vectors_written,
-            "chunks_pruned": chunks_pruned,
-            "graph_nodes_created": graph_nodes_created,
-            "graph_edges_created": graph_edges_created,
-            "dry_run": dry_run,
-        }
+            ignore_spec = build_ignore_pathspec(self.config.ignore, self.config.ignore_exceptions, root)
+
+            # Determine changed files list
+            if full_reindex or last_success is None:
+                print(f"Full reindex mode: processing all tracked files for {repo_name}")
+                changed_files = get_all_tracked_files(root)
+                deleted_files = []
+            else:
+                print(f"Incremental mode: processing files changed since {last_success[:8]}")
+                changed_files = git_changed_files_modified_added(root, last_success, commit_sha)
+                deleted_files = git_changed_files_deleted(root, last_success, commit_sha)
+
+            # Initialize counters
+            files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
+            graph_nodes_created = graph_edges_created = 0
+
+            # Process modified/added files
+            stats = self.process_files(
+                repo_id=repo_id,
+                repo_name=repo_name,
+                root=root,
+                files=changed_files,
+                ignore_spec=ignore_spec,
+                embed_model=embed_model,
+                session_id=session_id,
+                commit_sha=commit_sha,
+                branch=branch,
+                dry_run=dry_run,
+                error_logger=error_logger,
+            )
+            files_done += stats["files_done"]
+            chunks_indexed += stats["chunks_indexed"]
+            chunks_skipped += stats["chunks_skipped"]
+            vectors_written += stats["vectors_written"]
+            chunks_pruned += stats["chunks_pruned"]
+            graph_nodes_created += stats["graph_nodes_created"]
+            graph_edges_created += stats["graph_edges_created"]
+
+            # Process deleted files
+            del_stats = self.process_deletions(
+                repo_id=repo_id,
+                repo_name=repo_name,
+                files=deleted_files,
+                embed_model=embed_model,
+                dry_run=dry_run,
+                error_logger=error_logger,
+            )
+            files_done += del_stats["files_done"]
+            chunks_pruned += del_stats["chunks_pruned"]
+
+            # Prune any ignored files that were previously indexed
+            # This handles files that were committed before being added to .gitignore
+            if not dry_run:
+                print(f"\nPruning previously-indexed ignored files for {repo_name}...")
+                all_files = self.metadata.get_all_files_for_repo(repo_id)
+                for file_record in all_files:
+                    file_path = file_record["path"]
+                    file_id = file_record["id"]
+
+                    # Check if file matches ignore patterns
+                    if ignore_spec.match_file(file_path):
+                        # Prune all content for this file across all embedding models
+                        for model in ["small", "large"]:
+                            pruned_count = self.metadata.prune_invalidated_content_for_file(
+                                repo_id, file_id, embed_model=model, current_hashes=set()
+                            )
+                            if pruned_count > 0:
+                                chunks_pruned += pruned_count
+                                print(f"  {file_path}: pruned {pruned_count} ignored chunks (model={model})")
+                            self.lancedb.prune_file_rows(repo_name, file_path, model=model)
+
+                        # Clean up graph data for ignored file
+                        edges_deleted = 0
+                        nodes_deleted = 0
+                        if self.graph_store:
+                            nodes_deleted, edges_deleted = cleanup_graph_for_file(self.graph_store, file_id)
+
+                        if self.graph_store and (edges_deleted > 0 or nodes_deleted > 0):
+                            graph_manager = self.get_graph_manager(repo_id)
+                            if edges_deleted > 0:
+                                graph_manager.on_edges_changed(edges_deleted)
+                            else:
+                                graph_manager.invalidate_cache()
+
+            # Update session counters
+            if not dry_run:
+                self.metadata.bump_session_counters(
+                    session_id,
+                    files_indexed=files_done,
+                    chunks_indexed=chunks_indexed,
+                    chunks_skipped=chunks_skipped,
+                    vectors_written=vectors_written,
+                    chunks_pruned=chunks_pruned,
+                )
+                self.metadata.set_session_status(session_id, "succeeded")
+                self._flush_bm25_statistics()
+            else:
+                self.metadata.set_session_status(session_id, "succeeded", notes="dry_run")
+                print(f"Dry run: would have updated counters for session {session_id}")
+
+            # Update cache state with final counts after indexing
+            if not dry_run and self.graph_store:
+                graph_manager = self.get_graph_manager(repo_id)
+                # Force rebuild to get accurate total counts from database
+                # This ensures cache state reflects TOTAL graph size, not just incremental changes
+                graph_manager.get_graph(force_rebuild=True)
+                # Cache state is automatically updated in _rebuild_graph() with total counts
+
+            # Print summary
+            print(f"\nIndexing complete for {repo_name}:")
+            print(f"  Files processed: {files_done}")
+            print(f"  Chunks indexed: {chunks_indexed}")
+            print(f"  Chunks skipped (dedup): {chunks_skipped}")
+            print(f"  Chunks pruned (deleted): {chunks_pruned}")
+            print(f"  Vectors written: {vectors_written}")
+            if graph_nodes_created > 0 or graph_edges_created > 0:
+                print(f"  Graph nodes created: {graph_nodes_created}")
+                print(f"  Graph edges created: {graph_edges_created}")
+            print(f"  Session: {session_id}")
+
+            # Only mention error log if something was actually written
+            try:
+                if error_logger.had_errors():
+                    lp = error_logger.get_log_path()
+                    if lp.exists() and lp.stat().st_size > 0:
+                        print(f"  Errors logged to: {lp}")
+            except Exception:
+                pass
+
+            return {
+                "repo": repo_name,
+                "repo_id": repo_id,
+                "session_id": session_id,
+                "commit": commit_sha,
+                "branch": branch,
+                "files_indexed": files_done,
+                "chunks_indexed": chunks_indexed,
+                "chunks_skipped": chunks_skipped,
+                "vectors_written": vectors_written,
+                "chunks_pruned": chunks_pruned,
+                "graph_nodes_created": graph_nodes_created,
+                "graph_edges_created": graph_edges_created,
+                "dry_run": dry_run,
+            }
+        except KeyboardInterrupt:
+            self.metadata.set_session_status(session_id, "aborted", notes="interrupted")
+            raise
+        except Exception as exc:
+            self.metadata.set_session_status(session_id, "failed", notes=str(exc))
+            raise
 
     def _setup_parallel_session(
         self,
@@ -1422,6 +1430,12 @@ class IngestionPipeline:
                 except Exception as e:
                     error_logger.log_file_error(f"deleted: {path}", e)
 
+        except KeyboardInterrupt:
+            self.metadata.set_session_status(session_id, "aborted", notes="interrupted")
+            raise
+        except Exception as exc:
+            self.metadata.set_session_status(session_id, "failed", notes=str(exc))
+            raise
         finally:
             await embedding_queue.stop()
 
@@ -1437,6 +1451,8 @@ class IngestionPipeline:
             )
             self.metadata.set_session_status(session_id, "succeeded")
             self._flush_bm25_statistics()
+        else:
+            self.metadata.set_session_status(session_id, "succeeded", notes="dry_run")
 
         # Graph cache updates
         if not dry_run and self.graph_store:

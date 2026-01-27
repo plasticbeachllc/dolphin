@@ -11,6 +11,7 @@ from ..config import KBConfig
 from ..ingest.branch_tracker import detect_branch_switch, get_current_branch_state
 from ..ingest.error_logging import ErrorLogger
 from ..ingest.pipeline import IngestionPipeline
+from ..store.sqlite_meta import ActiveSessionError
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,16 @@ class RepoWatcher:
     async def watch(self):
         """Start watching the repository for changes."""
         print(f"Starting watcher for {self.repo_name} at {self.root}")
+
+        try:
+            aborted = self.metadata.abort_stale_sessions(
+                repo_id=self.repo_id,
+                reason="Aborted on startup: previous watcher session did not complete cleanly",
+            )
+            if aborted:
+                print(f"⚠️  Aborted {aborted} stale session(s) for {self.repo_name}")
+        except Exception as e:
+            logger.warning(f"Failed to abort stale sessions for {self.repo_name}: {e}")
 
         # Perform startup sync to ensure index is up to date with HEAD
         # We use force=True to allow dirty working tree (since we are watching for edits)
@@ -268,7 +279,11 @@ class RepoWatcher:
             commit_sha = "unknown"
             branch = "unknown"
 
-        session_id = self.metadata.begin_session(self.repo_id, commit_sha, branch, self.embed_model)
+        try:
+            session_id = self.metadata.begin_session(self.repo_id, commit_sha, branch, self.embed_model)
+        except ActiveSessionError as e:
+            logger.warning(f"Skipping pending change processing for {self.repo_name}: {e}")
+            return
         error_logger = ErrorLogger(self.root, str(session_id))
 
         try:
