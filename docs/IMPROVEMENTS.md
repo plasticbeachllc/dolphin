@@ -9,7 +9,7 @@ These are already present in the repo (see `README.md`, `CHANGELOG.md`, and the 
 - **Hybrid retrieval**: vector + BM25 with **RRF** fusion (`kb/api/search_backend.py`, `kb/store/sqlite_meta.py`, `kb/constants/retrieval_config.py`).
 - **Optional cross-encoder reranking** (feature-flagged via deps/config): `kb/retrieval/cross_encoder_rerank.py`.
 - **MMR** diversity pass (`kb/api/search_backend.py`, `kb/retrieval/rankers.py`).
-- **Query/result caching** (in-memory + optional Redis) (`kb/cache/cache.py`) and a separate LRU/TTL cache implementation (`kb/cache/query_cache.py`).
+- **Query/result caching** (in-memory + optional Redis) (`kb/cache/cache.py`).
 - **Repo watching + incremental change capture** via `watchfiles` and a persisted `pending_changes` table (`kb/ingest/watcher.py`) plus branch switch handling.
 - **Chunk/content dedup** based on `text_hash` and content/location separation (`kb/ingest/dedup.py`, `kb/store/sql_models.py`).
 - **Graph context enrichment** can be included in search responses (`kb/api/app.py` request model).
@@ -17,7 +17,7 @@ These are already present in the repo (see `README.md`, `CHANGELOG.md`, and the 
 
 ## 0.2.1 (Patch) — Low-Risk, High-Impact
 
-### 1) Fix / harden cache invalidation semantics (Redis + in-memory)
+### 1) Fix / harden cache invalidation semantics (Redis + in-memory) ✅
 
 **Why it matters**
 
@@ -32,6 +32,12 @@ These are already present in the repo (see `README.md`, `CHANGELOG.md`, and the 
 - Decide on a single canonical cache for search results:
   - Either (a) promote `QueryResultCache` and delete/retire `QueryCache` result caching, or (b) fold `QueryResultCache` features (LRU, TTL, per-repo invalidation) into `QueryCache`.
 - Add an integration test that proves “reindex invalidates cached search results” for both in-memory and Redis modes.
+
+**Status (done)**
+
+- `QueryCache` is now the single search-result cache; `QueryResultCache` has been retired.
+- Redis invalidation uses a repo → cache-key index; in-memory uses the same index.
+- Integration tests cover reindex invalidation in-memory, via fakeredis, and via FastAPI `/v1/repos/{repo}/reindex` → `/v1/search`.
 
 **Acceptance criteria**
 

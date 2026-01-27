@@ -168,7 +168,6 @@ Semantically query code and docs across indexed repositories and return many ran
   "top_k": "number (1-100)",
   "max_snippets": "number (top-N results to include snippet text for)",
   "top_context_n": "number (top-N snippet results to include extra context for)",
-  "embed_model": "small | large",
   "score_cutoff": "number",
   "mmr_enabled": "boolean",
   "mmr_lambda": "number (0-1)",
@@ -187,6 +186,8 @@ Semantically query code and docs across indexed repositories and return many ran
   "ann_refine_factor": "number"
 }
 ```
+
+Note: `embed_model` is no longer a supported search parameter; model selection is configured in the KB/repo settings.
 
 **Filtering Options**:
 

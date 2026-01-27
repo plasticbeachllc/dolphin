@@ -10,6 +10,7 @@ from typing import Any
 
 from pathspec import PathSpec
 
+from ..cache import QueryCache
 from ..chunkers.registry import chunk_file as chunk_file_with_config, detect_language_from_extension
 from ..config import KBConfig
 from ..constants.retrieval_config import RETRIEVAL_PARAMS
@@ -55,6 +56,7 @@ class IngestionPipeline:
     metadata: SQLiteMetadataStore
     graph_store: GraphStore | None = None
     graph_managers: dict[int, GraphManager] | None = None  # repo_id -> GraphManager
+    cache: QueryCache | None = None
 
     def __post_init__(self):
         """Initialize graph store if not provided."""
@@ -106,6 +108,14 @@ class IngestionPipeline:
             self.metadata.configure_bm25_statistics(self._bm25_stats_path)
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning("Failed to enable BM25 statistics collection", exc_info=exc)
+
+    def _invalidate_cache_for_repo(self, repo_name: str, *, dry_run: bool) -> None:
+        if dry_run or not self.cache:
+            return
+        try:
+            self.cache.invalidate_repo(repo_name)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Failed to invalidate cache for repo %s", repo_name, exc_info=exc)
 
     def _flush_bm25_statistics(self) -> None:
         if not hasattr(self.metadata, "flush_bm25_statistics"):
@@ -737,6 +747,8 @@ class IngestionPipeline:
         repo_id = int(repo["id"])
         root = Path(repo["root_path"])
 
+        self._invalidate_cache_for_repo(repo_name, dry_run=dry_run)
+
         # Phase 2 Option B: Global Standardization
         # Target model is ALWAYS the global config default
         target_model = self.config.default_embed_model.strip().lower()
@@ -1078,6 +1090,8 @@ class IngestionPipeline:
             changed_files,
             deleted_files,
         ) = self._setup_parallel_session(repo_name, force, full_reindex, dry_run, max_workers)
+
+        self._invalidate_cache_for_repo(repo_name, dry_run=dry_run)
 
         # Counters
         files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
