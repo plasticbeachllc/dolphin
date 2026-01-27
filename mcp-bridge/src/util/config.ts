@@ -364,9 +364,7 @@ function addDiagnostic(
 
 function pathToString(path: (string | number)[]): string {
   if (!path.length) return "";
-  return path
-    .map((segment) => (typeof segment === "number" ? `[${segment}]` : segment))
-    .join(".");
+  return path.map((segment) => (typeof segment === "number" ? `[${segment}]` : segment)).join(".");
 }
 
 function attachZodIssues(
@@ -805,12 +803,7 @@ function parseEnvConfig(env: NodeJS.ProcessEnv): {
     "env"
   );
 
-  const kbRestUrl = parseUrlField(
-    env.KB_REST_BASE_URL,
-    diagnostics,
-    "env.KB_REST_BASE_URL",
-    "env"
-  );
+  const kbRestUrl = parseUrlField(env.KB_REST_BASE_URL, diagnostics, "env.KB_REST_BASE_URL", "env");
   const dolphinApiUrl = parseUrlField(
     env.DOLPHIN_API_URL,
     diagnostics,
@@ -894,19 +887,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ConfigLoadResu
   const configPath = envParsed.configPath ?? DEFAULT_CONFIG_PATH;
   const tomlParsed = parseTomlConfig(configPath);
 
-  const diagnostics: ConfigDiagnostic[] = [
-    ...envParsed.diagnostics,
-    ...tomlParsed.diagnostics,
-  ];
+  const diagnostics: ConfigDiagnostic[] = [...envParsed.diagnostics, ...tomlParsed.diagnostics];
 
   const mcpEnv = envParsed.config.mcp ?? {};
   const mcpToml = tomlParsed.config.mcp ?? {};
 
-  const apiUrlResolved = resolveValue(
-    mcpEnv.api_url,
-    mcpToml.api_url,
-    DEFAULTS.API_URL
-  );
+  const apiUrlResolved = resolveValue(mcpEnv.api_url, mcpToml.api_url, DEFAULTS.API_URL);
   const serverNameResolved = resolveValue(
     mcpEnv.server_name,
     mcpToml.server_name,
@@ -922,11 +908,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ConfigLoadResu
     mcpToml.protocol_version,
     DEFAULTS.MCP_PROTOCOL_VERSION
   );
-  const logLevelResolved = resolveValue(
-    mcpEnv.log_level,
-    mcpToml.log_level,
-    DEFAULTS.LOG_LEVEL
-  );
+  const logLevelResolved = resolveValue(mcpEnv.log_level, mcpToml.log_level, DEFAULTS.LOG_LEVEL);
 
   const topKMaxResolved = resolveValue(
     mcpEnv.limits?.top_k_max,
@@ -1198,9 +1180,9 @@ export const CONFIG_DIAGNOSTICS = CONFIG_LOAD.diagnostics;
  * Validate current configuration and return any warnings
  */
 export function validateConfig(): string[] {
-  return CONFIG_DIAGNOSTICS
-    .filter((diag) => diag.level === "warn" || diag.level === "error")
-    .map((diag) => `${diag.path ? `${diag.path}: ` : ""}${diag.message}`);
+  return CONFIG_DIAGNOSTICS.filter((diag) => diag.level === "warn" || diag.level === "error").map(
+    (diag) => `${diag.path ? `${diag.path}: ` : ""}${diag.message}`
+  );
 }
 
 /**

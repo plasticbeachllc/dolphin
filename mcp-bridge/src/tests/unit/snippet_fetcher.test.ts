@@ -262,10 +262,15 @@ describe("fetchSnippetsInParallel", () => {
       source: "file",
     }));
 
-    const requests: SnippetFetchRequest[] = [{ repo: "r", path: "p.ts", startLine: 1, endLine: 10 }];
+    const requests: SnippetFetchRequest[] = [
+      { repo: "r", path: "p.ts", startLine: 1, endLine: 10 },
+    ];
 
     const fakeSignal = { aborted: false } as unknown as AbortSignal;
-    const results = await fetchSnippetsInParallel(requests, { signal: fakeSignal, client: mockClient });
+    const results = await fetchSnippetsInParallel(requests, {
+      signal: fakeSignal,
+      client: mockClient,
+    });
 
     expect(results[0]?.content).toBe("ok");
   });
