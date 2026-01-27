@@ -26,7 +26,7 @@ EMBEDDING_BATCH_SIZE = 128
 ESTIMATED_TOKENS_PER_CHUNK = 200
 CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_:-]+$")
 
-app = FastAPI(title="Unified Knowledge Store", version="0.2.0")
+app = FastAPI(title="Unified Knowledge Store", version="0.2.1")
 
 
 @app.exception_handler(RequestValidationError)
