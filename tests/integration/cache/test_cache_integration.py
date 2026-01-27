@@ -1,14 +1,44 @@
 """Integration tests for cache with search backend and embedding provider."""
 
 import os
+import subprocess
+import uuid
 import tempfile
 from pathlib import Path
 
 import pytest
 
 from kb.api.search_backend import create_search_backend
-from kb.cache import create_cache
+from kb.cache import QueryCache, create_cache
 from kb.config import KBConfig
+from kb.ingest.pipeline import IngestionPipeline
+from kb.store import LanceDBStore, SQLiteMetadataStore
+from tests.conftest import init_test_git_repo
+
+
+def _setup_repo(temp_dir: Path) -> Path:
+    repo_path = temp_dir / "invalidate_repo"
+    repo_path.mkdir()
+    init_test_git_repo(repo_path)
+    (repo_path / "code.py").write_text("def original(): return 'original'")
+    subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Initial commit"], check=True, capture_output=True)
+    return repo_path
+
+
+def _setup_pipeline(temp_dir: Path, cache: QueryCache) -> tuple[IngestionPipeline, str]:
+    repo_path = _setup_repo(temp_dir)
+    db_path = temp_dir / "invalidate_cache.db"
+    metadata_store = SQLiteMetadataStore(db_path)
+    metadata_store.initialize()
+    lancedb_store = LanceDBStore(f"memory://invalidate_cache_{uuid.uuid4().hex}")
+    config = KBConfig(default_embed_model="small")
+
+    metadata_store.record_repo(name="invalidate-repo", path=repo_path, default_embed_model="small")
+
+    pipeline = IngestionPipeline(config, lancedb_store, metadata_store, cache=cache)
+    pipeline.index("invalidate-repo", dry_run=False, force=True)
+    return pipeline, "invalidate-repo"
 
 
 class TestCacheWithSearchBackend:
@@ -239,6 +269,34 @@ class TestCacheStatistics:
 
         stats = cache.get_stats()
         assert stats["total_requests"] == 0
+
+
+class TestCacheInvalidationOnReindex:
+    """Test reindex invalidates cached search results."""
+
+    def test_reindex_invalidation_in_memory(self, temp_dir: Path):
+        cache = QueryCache()
+        pipeline, repo_name = _setup_pipeline(temp_dir, cache)
+
+        cache.set_results("query", [{"id": "1"}], repos=[repo_name])
+        assert cache.get_results("query", repos=[repo_name]) is not None
+
+        pipeline.index(repo_name, dry_run=False, force=True, full_reindex=True)
+
+        assert cache.get_results("query", repos=[repo_name]) is None
+
+    def test_reindex_invalidation_redis(self, temp_dir: Path):
+        fakeredis = pytest.importorskip("fakeredis")
+        redis_client = fakeredis.FakeRedis()
+        cache = QueryCache(redis_client=redis_client)
+        pipeline, repo_name = _setup_pipeline(temp_dir, cache)
+
+        cache.set_results("query", [{"id": "1"}], repos=[repo_name])
+        assert cache.get_results("query", repos=[repo_name]) is not None
+
+        pipeline.index(repo_name, dry_run=False, force=True, full_reindex=True)
+
+        assert cache.get_results("query", repos=[repo_name]) is None
 
 
 @pytest.mark.skipif(

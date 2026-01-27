@@ -162,9 +162,17 @@ class TestCacheInvalidation:
 
         cache.invalidate_repo("repo1")
 
-        # In-memory cache invalidation is conservative
-        # Just verify it doesn't crash
-        assert True
+        assert cache.get_results("q1", repo="repo1") is None
+        assert cache.get_results("q2", repo="repo2") is not None
+
+    def test_invalidate_multi_repo_entry(self):
+        """Verify invalidation removes multi-repo cached results."""
+        cache = QueryCache()
+        cache.set_results("q1", [{"id": "1"}], repos=["repo1", "repo2"])
+
+        cache.invalidate_repo("repo1")
+
+        assert cache.get_results("q1", repos=["repo1", "repo2"]) is None
 
     def test_clear_all(self):
         """Verify complete cache clear."""
@@ -386,6 +394,7 @@ class TestEdgeCases:
     def test_zero_ttl(self):
         """Test cache with zero TTL."""
         cache = create_cache(embedding_ttl=0, result_ttl=0)
-        # Should still work (TTL enforcement is up to Redis/expiry logic)
         cache.set_embedding("q", "small", [0.1])
-        assert cache.get_embedding("q", "small") == [0.1]
+        cache.set_results("q", [{"id": "1"}])
+        assert cache.get_embedding("q", "small") is None
+        assert cache.get_results("q") is None
