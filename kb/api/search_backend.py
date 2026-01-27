@@ -319,7 +319,8 @@ class KnowledgeSearchBackend:
         if self.reranker and hits:
             try:
                 cfg_rerank_threshold = self.config.retrieval.reranking.score_threshold
-            except Exception:
+            except (AttributeError, KeyError, ValueError, TypeError) as e:
+                request_logger.warning("Invalid rerank score_threshold config, falling back to None", error=e)
                 cfg_rerank_threshold = None
             docs_to_rerank = self._hydrate_docs_for_reranking(hits, self.sql_store)
             reranked_docs = self.reranker.rerank(
