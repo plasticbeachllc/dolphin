@@ -99,6 +99,24 @@ describe("resolveSearchOptions", () => {
     expect(options.snippetsTopN).toBeDefined();
     expect(options.snippetsTopN).toBeGreaterThan(0);
   });
+
+  it("defaults snippetsTopN to 3 when max_snippets is undefined", () => {
+    const input = parseSearchInput({ query: "test" });
+    const options = resolveSearchOptions(input);
+    expect(options.snippetsTopN).toBe(3);
+  });
+
+  it("respects explicit max_snippets", () => {
+    const input = parseSearchInput({ query: "test", max_snippets: 5 });
+    const options = resolveSearchOptions(input);
+    expect(options.snippetsTopN).toBe(5);
+  });
+
+  it("respects explicit max_snippets=0", () => {
+    const input = parseSearchInput({ query: "test", max_snippets: 0 });
+    const options = resolveSearchOptions(input);
+    expect(options.snippetsTopN).toBe(0);
+  });
 });
 
 describe("buildSearchRequestBody", () => {
