@@ -198,7 +198,7 @@ class KnowledgeSearchBackend:
 
     def search(
         self, request: SearchRequest
-    ) -> Sequence[dict[str, object]] | tuple[Sequence[dict[str, object]], str | None]:
+    ) -> tuple[Sequence[dict[str, object]], str | None]:
         # Generate correlation ID for this search request
         correlation_id = f"search_{uuid.uuid4().hex[:8]}"
         start_time = time.time()
@@ -250,7 +250,7 @@ class KnowledgeSearchBackend:
                         "cache_hit": True,
                     },
                 )
-                return cached_results
+                return cached_results, None
 
         query_embedding = self.embedding_provider.embed_texts(self.config.default_embed_model, [request.query])[0]
         # Fetch more candidates for reranking when enabled; otherwise use the default multiplier.

@@ -303,21 +303,17 @@ class SearchBackend(Protocol):
 
     def search(
         self, request: SearchRequest
-    ) -> (
-        Sequence[dict[str, object]]
-        | tuple[Sequence[dict[str, object]], str | None]
-        | Awaitable[
-            Sequence[dict[str, object]] | tuple[Sequence[dict[str, object]], str | None]
-        ]
-    ): ...
+    ) -> tuple[Sequence[dict[str, object]], str | None] | Awaitable[tuple[Sequence[dict[str, object]], str | None]]: ...
 
 
 class _EmptySearchBackend:
     """Default backend that returns zero hits until retrieval is implemented."""
 
-    def search(self, request: SearchRequest) -> Sequence[dict[str, object]] | Awaitable[Sequence[dict[str, object]]]:
+    def search(
+        self, request: SearchRequest
+    ) -> tuple[Sequence[dict[str, object]], str | None] | Awaitable[tuple[Sequence[dict[str, object]], str | None]]:
         _ = request
-        return ()
+        return [], None
 
 
 _DEFAULT_BACKEND = _EmptySearchBackend()
@@ -447,12 +443,18 @@ async def search(request: SearchRequest) -> dict[str, Any]:
             set_config_method(temp_config_data)
 
     started = perf_counter()
-    raw_hits = backend.search(request)
+    raw_result = backend.search(request)
     hits: Iterable[dict[str, object]]
-    if isawaitable(raw_hits):
-        hits = await raw_hits
+    next_cursor: str | None = None
+
+    if isawaitable(raw_result):
+        result = await raw_result
     else:
-        hits = raw_hits
+        result = raw_result
+
+    # Result is always (hits, next_cursor) per Protocol
+    hits, next_cursor = result
+
     hits_list = list(hits)
     latency_ms = int((perf_counter() - started) * 1000)
 
@@ -480,6 +482,7 @@ async def search(request: SearchRequest) -> dict[str, Any]:
         "max_snippets": snippet_limit,
         "mmr_enabled": request.mmr_enabled,
         "mmr_lambda": request.mmr_lambda,
+        "next_cursor": next_cursor,
     }
 
     if request.ann_strategy:
