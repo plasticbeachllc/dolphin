@@ -221,7 +221,8 @@ class KnowledgeSearchBackend:
         # Fetch more candidates for reranking when enabled; otherwise use the default multiplier.
         try:
             rerank_multiplier = int(self.config.retrieval.reranking.candidate_multiplier)
-        except Exception:
+        except (ValueError, TypeError) as e:
+            request_logger.warning("Invalid rerank candidate_multiplier config, falling back to default", error=e)
             rerank_multiplier = RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER
         if not self.reranker:
             rerank_multiplier = RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER
