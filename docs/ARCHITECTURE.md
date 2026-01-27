@@ -2,7 +2,7 @@
 
 Technical architecture and implementation status for the Dolphin AI enablement platform.
 
-**Version**: 0.2.0
+**Version**: 0.2.1
 **Status**: Beta (KB + MCP Release Candidate; Experimental Components in Progress)
 **Last Updated**: 2025-11-13 (WP2 Agent-Core V2 Consolidation Complete)
 
@@ -123,6 +123,8 @@ Query → Embed → Vector Search → Re-rank → Snippet → Response
 - LanceDB vector search with fixed-size vectors
 - `/v1/*` endpoints require `X-API-Key`; `/v1/health` remains unauthenticated for quick checks
 - **Maximal Marginal Relevance (MMR)** for result diversity
+- **Cursor-based Pagination** for deep result traversal
+- **Structured Snippets** with precise context windowing
 - Multi-level caching (Redis + in-memory) for performance
 - Path traversal security protection
 - Comprehensive error handling
