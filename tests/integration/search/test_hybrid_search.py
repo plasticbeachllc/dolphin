@@ -125,7 +125,7 @@ class TestHybridSearchExecution:
         ]
 
         with patch.object(populated_backend.lance_store, "query", return_value=mock_vector_results):
-            results = populated_backend.search(request)
+            results, _ = populated_backend.search(request)
 
         assert isinstance(results, list)
         # Should have results from both vector and BM25 search
@@ -146,7 +146,7 @@ class TestHybridSearchExecution:
         ]
 
         with patch.object(populated_backend.lance_store, "query", return_value=mock_vector_results):
-            results = populated_backend.search(request)
+            results, _ = populated_backend.search(request)
 
         assert isinstance(results, list)
         assert len(results) >= 1
@@ -159,7 +159,7 @@ class TestHybridSearchExecution:
             patch.object(hybrid_backend.lance_store, "query", return_value=[]),
             patch.object(hybrid_backend.sql_store, "bm25_search", return_value=[]),
         ):
-            results = hybrid_backend.search(request)
+            results, _ = hybrid_backend.search(request)
 
         assert isinstance(results, list)
         assert len(results) == 0
@@ -186,7 +186,7 @@ class TestHybridSearchExecution:
         ]
 
         with patch.object(populated_backend.lance_store, "query", return_value=mock_vector_results):
-            results = populated_backend.search(request)
+            results, _ = populated_backend.search(request)
 
         assert isinstance(results, list)
         # Should filter out low-scoring results
@@ -203,7 +203,7 @@ class TestBM25Integration:
 
         # Mock empty vector search, rely only on BM25
         with patch.object(populated_backend.lance_store, "query", return_value=[]):
-            results = populated_backend.search(request)
+            results, _ = populated_backend.search(request)
 
         assert isinstance(results, list)
         # BM25 should find chunks containing "UserController"
@@ -220,7 +220,7 @@ class TestBM25Integration:
         ]
 
         with patch.object(populated_backend.lance_store, "query", return_value=mock_vector_results):
-            results = populated_backend.search(request)
+            results, _ = populated_backend.search(request)
 
         assert isinstance(results, list)
         # Results should be from the specified repository
@@ -249,7 +249,7 @@ class TestErrorHandling:
                 return_value=[{"id": "vec1", "_distance": 0.5}],
             ),
         ):
-            results = hybrid_backend.search(request)
+            results, _ = hybrid_backend.search(request)
             # Should still return the vector result
             assert len(results) == 1
             assert results[0]["chunk_id"] == "vec1"
@@ -270,7 +270,7 @@ class TestErrorHandling:
             patch.object(hybrid_backend.sql_store, "bm25_search", return_value=mock_bm25_results),
             patch.object(hybrid_backend, "_hydrate_bm25_results", return_value=mock_bm25_results),
         ):
-            results = hybrid_backend.search(request)
+            results, _ = hybrid_backend.search(request)
             # Should return BM25 results
             assert len(results) >= 1
 
@@ -290,7 +290,7 @@ class TestErrorHandling:
                 side_effect=Exception("FTS Error"),
             ),
         ):
-            results = hybrid_backend.search(request)
+            results, _ = hybrid_backend.search(request)
             # Should return empty list, not crash
             assert isinstance(results, list)
             assert len(results) == 0
@@ -318,7 +318,7 @@ class TestSearchRequestHandling:
                 patch.object(hybrid_backend.lance_store, "query", return_value=mock_results),
                 patch.object(hybrid_backend.sql_store, "bm25_search", return_value=[]),
             ):
-                results = hybrid_backend.search(request)
+                results, _ = hybrid_backend.search(request)
 
             assert isinstance(results, list)
             # Should not return more than top_k results
@@ -337,7 +337,7 @@ class TestSearchRequestHandling:
                 patch.object(hybrid_backend.lance_store, "query", return_value=mock_results),
                 patch.object(hybrid_backend.sql_store, "bm25_search", return_value=[]),
             ):
-                results = hybrid_backend.search(request)
+                results, _ = hybrid_backend.search(request)
 
             assert isinstance(results, list)
             assert len(results) >= 1
@@ -365,7 +365,7 @@ class TestPerformanceCharacteristics:
             patch.object(hybrid_backend.sql_store, "bm25_search", return_value=mock_bm25_results),
             patch.object(hybrid_backend, "_hydrate_bm25_results", return_value=mock_bm25_results),
         ):
-            results = hybrid_backend.search(request)
+            results, _ = hybrid_backend.search(request)
 
         # Results should be fused from both sources
         assert isinstance(results, list)
