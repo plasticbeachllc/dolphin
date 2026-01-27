@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import re
 from collections.abc import Awaitable, Iterable, Sequence
 from inspect import isawaitable
@@ -330,6 +331,17 @@ def get_search_backend() -> SearchBackend:
 def reset_search_backend() -> None:
     """Restore the default empty backend."""
     set_search_backend(None)
+
+
+def _invalidate_search_cache(repo_name: str) -> None:
+    backend = get_search_backend()
+    cache = getattr(backend, "cache", None)
+    if not cache:
+        return
+    try:
+        cache.invalidate_repo(repo_name)
+    except Exception as exc:  # pragma: no cover - defensive
+        logging.warning("Failed to invalidate cache for repo %s", repo_name, exc_info=exc)
 
 
 def _get_system_stats() -> dict[str, Any]:
@@ -937,6 +949,8 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
         repo_id = int(repo["id"])
         root = Path(repo["root_path"])
         embed_model = repo.get("default_embed_model", "large")
+
+        _invalidate_search_cache(repo_name)
 
         # Filter files that actually exist
         valid_files = []
@@ -1569,6 +1583,7 @@ async def clear_repo_index(repo_name: str, confirmed: bool = False) -> dict:
     try:
         # Use pipeline's _drop_repo_index method
         _pipeline._drop_repo_index(repo_id, repo_name)
+        _invalidate_search_cache(repo_name)
 
         return {
             "success": True,

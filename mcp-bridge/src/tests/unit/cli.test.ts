@@ -345,5 +345,4 @@ describe("cli", () => {
     expect(createServerCalled).toBe(false);
     expect(errors.join("\n")).toContain("Missing DOLPHIN_API_KEY");
   });
-
 });
