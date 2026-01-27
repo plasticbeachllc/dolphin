@@ -31,7 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Search Backend**: Refactored the search backend signature to return a tuple of `(results, next_cursor)`, standardizing pagination handling across backends.
 
-
 ## [0.2.0] - 2026-01-25
 
 ### Added
