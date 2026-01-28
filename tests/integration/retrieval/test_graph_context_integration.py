@@ -23,10 +23,7 @@ class TestGraphContextIntegration(unittest.TestCase):
 
         # Initialize enricher
         self.enricher = GraphContextEnricher(
-            graph_store=self.graph_store,
-            sql_store=self.sql_store,
-            max_related_nodes=5,
-            max_edges_per_node=5
+            graph_store=self.graph_store, sql_store=self.sql_store, max_related_nodes=5, max_edges_per_node=5
         )
 
         # Setup base data
@@ -47,12 +44,7 @@ class TestGraphContextIntegration(unittest.TestCase):
         # 2. Create File
         self.file_path = "src/main.py"
         self.file_id = self.sql_store.upsert_file(
-            repo_id=self.repo_id,
-            path=self.file_path,
-            ext=".py",
-            language="python",
-            is_binary=False,
-            size_bytes=100
+            repo_id=self.repo_id, path=self.file_path, ext=".py", language="python", is_binary=False, size_bytes=100
         )
 
         # 3. Create Graph Nodes
@@ -68,7 +60,7 @@ class TestGraphContextIntegration(unittest.TestCase):
             language="python",
             commit_sha="abc",
             branch="main",
-            signature="def main():"
+            signature="def main():",
         )
 
         # Node 2: Function 'helper'
@@ -83,7 +75,7 @@ class TestGraphContextIntegration(unittest.TestCase):
             language="python",
             commit_sha="abc",
             branch="main",
-            signature="def helper():"
+            signature="def helper():",
         )
 
         # 4. Create Edge: main calls helper
@@ -93,20 +85,14 @@ class TestGraphContextIntegration(unittest.TestCase):
             edge_type="calls",
             repo_id=self.repo_id,
             line_number=15,
-            commit_sha="abc"
+            commit_sha="abc",
         )
 
     def test_enrich_with_real_db(self):
         """Test enrichment using a real SQLite database populated with data."""
         # Simulate a search result hitting the 'main' function
         results = [
-            {
-                "repo": "test-repo",
-                "path": "src/main.py",
-                "start_line": 12,
-                "end_line": 15,
-                "text": "calling helper()"
-            }
+            {"repo": "test-repo", "path": "src/main.py", "start_line": 12, "end_line": 15, "text": "calling helper()"}
         ]
 
         enriched = self.enricher.enrich_search_results(results)
@@ -134,13 +120,7 @@ class TestGraphContextIntegration(unittest.TestCase):
         """Test search result that falls outside any graph node."""
         # Search result outside of any node
         results = [
-            {
-                "repo": "test-repo",
-                "path": "src/main.py",
-                "start_line": 100,
-                "end_line": 110,
-                "text": "some other code"
-            }
+            {"repo": "test-repo", "path": "src/main.py", "start_line": 100, "end_line": 110, "text": "some other code"}
         ]
 
         enriched = self.enricher.enrich_search_results(results)
