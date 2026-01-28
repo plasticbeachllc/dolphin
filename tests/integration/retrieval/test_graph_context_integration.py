@@ -144,13 +144,11 @@ class TestGraphContextIntegration(unittest.TestCase):
 
         enriched = self.enricher.enrich_search_results(results)
         # Should not have graph_context
-        if "graph_context" in enriched[0]:
-             self.assertIsNone(enriched[0]["graph_context"])
+        self.assertNotIn("graph_context", enriched[0])
 
     def test_enrich_invalid_repo(self):
         """Test search result with non-existent repository."""
         results = [{"repo": "non-existent", "path": "src/main.py", "start_line": 10, "end_line": 20}]
         enriched = self.enricher.enrich_search_results(results)
         # Should handle gracefully and not crash
-        if "graph_context" in enriched[0]:
-             self.assertIsNone(enriched[0]["graph_context"])
+        self.assertNotIn("graph_context", enriched[0])

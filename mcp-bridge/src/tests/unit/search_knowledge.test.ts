@@ -105,7 +105,13 @@ describe("search_knowledge tool", () => {
   it("handles empty results gracefully", async () => {
     mockExecuteSearch.mockResolvedValueOnce({
       hits: [],
-      meta: { estimated_total: 0, model: "small", latency_ms: 5 },
+      meta: {
+        estimated_total: 0,
+        model: "small",
+        latency_ms: 5,
+        top_k: 20,
+        max_snippets: 5,
+      },
     });
 
     const { handler } = makeSearchKnowledge();
@@ -150,7 +156,13 @@ describe("search_knowledge tool", () => {
     // Also executeSearch should return hits that are then passed to transformHits
     mockExecuteSearch.mockResolvedValueOnce({
       hits: [{}], // raw hits
-      meta: { estimated_total: 1, model: "small" },
+      meta: {
+        estimated_total: 1,
+        model: "small",
+        top_k: 20,
+        max_snippets: 5,
+        latency_ms: 10,
+      },
     });
 
     const { handler } = makeSearchKnowledge();
@@ -176,12 +188,9 @@ describe("search_knowledge tool", () => {
   it("validates input using schema", async () => {
     const { handler } = makeSearchKnowledge();
 
-    try {
-      await handler({}); // Missing query
-      expect(true).toBe(false); // Should fail
-    } catch (e) {
-      // Zod error expected
-      expect(e).toBeDefined();
-    }
+    // Input validation error is caught and returned as isError: true
+    const result = await handler({});
+    expect(result.isError).toBe(true);
+    expect(result._meta?.error).toBeDefined();
   });
 });
