@@ -41,6 +41,7 @@ class TestGraphContextIntegration(unittest.TestCase):
         repo_path.mkdir()
         self.sql_store.register_repo(name="test-repo", path=repo_path)
         repo_info = self.sql_store.get_repo_by_name("test-repo")
+        assert repo_info is not None
         self.repo_id = repo_info["id"]
 
         # 2. Create File
