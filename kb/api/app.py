@@ -1091,6 +1091,28 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
         import hashlib
 
         initial_snapshots = {}
+        files_to_upsert = []
+
+        # Pre-collect metadata for batch upsert
+        for filepath in valid_files:
+            file_path = root / filepath
+            try:
+                stat = file_path.stat()
+                files_to_upsert.append(
+                    {
+                        "path": filepath,
+                        "ext": file_path.suffix,
+                        "language": None,
+                        "is_binary": False,
+                        "size_bytes": stat.st_size,
+                    }
+                )
+            except Exception:
+                continue
+
+        # Batch upsert files and get ID mapping
+        # This prevents N+1 DB writes in the main loop
+        path_to_id = _sql_store.upsert_files_batch(repo_id, files_to_upsert)
 
         for idx, filepath in enumerate(valid_files, 1):
             # Update progress with current file and yield to event loop
@@ -1111,15 +1133,11 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
             except Exception:
                 continue  # Skip file if we can't read it
 
-            # Resolve or upsert file_id
-            file_id = _sql_store.upsert_file(
-                repo_id=repo_id,
-                path=filepath,
-                ext=file_path.suffix,
-                language=None,  # Will be detected by chunker
-                is_binary=False,
-                size_bytes=file_path.stat().st_size,
-            )
+            # Resolve file_id from batch result
+            file_id = path_to_id.get(filepath)
+            if not file_id:
+                # File might have been deleted between batch upsert prep and now
+                continue
 
             # Determine language and chunk the file
             language = detect_language_from_extension(file_path) or "text"

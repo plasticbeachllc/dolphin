@@ -834,6 +834,71 @@ class SQLiteMetadataStore:
             conn.commit()
             return file_id
 
+    def upsert_files_batch(self, repo_id: int, files: list[dict]) -> dict[str, int]:
+        """Bulk upsert file rows and return path -> id mapping.
+
+        Handles batching to respect SQLite limits.
+        Args:
+            repo_id: Repository ID
+            files: List of dicts with keys: path, ext, language, is_binary, size_bytes
+        """
+        if not files:
+            return {}
+
+        batch_size = 500  # Conservative batch size
+        result_map = {}
+
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            for i in range(0, len(files), batch_size):
+                batch = files[i : i + batch_size]
+
+                # Prepare data for executemany
+                data = []
+                for f in batch:
+                    data.append(
+                        (
+                            int(repo_id),
+                            f["path"],
+                            f.get("ext"),
+                            f.get("language"),
+                            1 if f.get("is_binary") else 0,
+                            f.get("size_bytes"),
+                        )
+                    )
+
+                # Upsert
+                cur.executemany(
+                    """
+                    INSERT INTO files (repo_id, path, ext, language, is_binary, size_bytes)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(repo_id, path) DO UPDATE SET
+                      ext=excluded.ext,
+                      language=excluded.language,
+                      is_binary=excluded.is_binary,
+                      size_bytes=excluded.size_bytes,
+                      updated_at=datetime('now')
+                    """,
+                    data,
+                )
+
+                # Fetch IDs
+                paths_in_batch = [f["path"] for f in batch]
+                placeholders = ",".join(["?"] * len(paths_in_batch))
+                # Parameters for SELECT: repo_id followed by all paths
+                params = [int(repo_id)] + paths_in_batch
+
+                cur.execute(
+                    f"SELECT path, id FROM files WHERE repo_id = ? AND path IN ({placeholders})",
+                    tuple(params),
+                )
+
+                for row in cur.fetchall():
+                    result_map[row[0]] = int(row[1])
+
+            conn.commit()
+
+        return result_map
+
     def delete_file(self, repo_id: int, file_id: int) -> None:
         """Delete a file from the catalog."""
         with self._connect() as conn, closing(conn.cursor()) as cur:

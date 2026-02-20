@@ -461,7 +461,7 @@ def cleanup_test_repos():
                 store.initialize()
 
                 # Get all repos
-                with store._get_connection() as conn:  # type: ignore[attr-defined]
+                with store._connect() as conn:  # type: ignore[attr-defined]
                     cursor = conn.execute("SELECT id, name FROM repos")
                     repos = cursor.fetchall()
 
