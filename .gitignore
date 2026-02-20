@@ -27,6 +27,7 @@ artifacts/
 .ruff_cache
 .uv-cache
 .venv
+.pytest_cache
 
 # Python cache
 __pycache__/
