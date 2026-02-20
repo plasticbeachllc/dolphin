@@ -4,7 +4,7 @@ Technical architecture and implementation status for the Dolphin AI enablement p
 
 **Version**: 0.2.1
 **Status**: Beta (KB + MCP Release Candidate; Experimental Components in Progress)
-**Last Updated**: 2025-11-13 (WP2 Agent-Core V2 Consolidation Complete)
+**Last Updated**: 2026-02-20 (Indexing metadata write-path batching update)
 
 ---
 
@@ -654,6 +654,7 @@ Columns:
 - ✅ Per-repository configuration system
 - ✅ Content-based deduplication
 - ✅ Idempotent ingestion (safe re-runs)
+- ✅ Batch file-metadata upserts during indexing to avoid per-file N+1 SQLite writes
 
 ### ✅ Phase 7 Complete: REST API & Advanced Search
 

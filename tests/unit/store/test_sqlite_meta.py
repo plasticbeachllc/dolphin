@@ -98,6 +98,56 @@ def test_upsert_file_returns_existing_id_on_conflict(tmp_path):
     close_connection_pool(db_path)
 
 
+def test_upsert_files_batch_returns_ids_and_updates_existing(meta_store, tmp_path):
+    """Batch upsert should return stable IDs and update file metadata on conflict."""
+    repo_path = tmp_path / "test-repo"
+    repo_path.mkdir()
+    meta_store.record_repo("test-repo", repo_path)
+    repo = meta_store.get_repo_by_name("test-repo")
+    repo_id = repo["id"]
+
+    result_map = meta_store.upsert_files_batch(
+        repo_id=repo_id,
+        files=[
+            {"path": "src/a.py", "ext": ".py", "language": "python", "is_binary": False, "size_bytes": 10},
+            {"path": "src/b.py", "ext": ".py", "language": "python", "is_binary": False, "size_bytes": 20},
+        ],
+        batch_size=1,
+    )
+    assert set(result_map.keys()) == {"src/a.py", "src/b.py"}
+    assert all(file_id > 0 for file_id in result_map.values())
+
+    original_a_id = result_map["src/a.py"]
+
+    updated_result_map = meta_store.upsert_files_batch(
+        repo_id=repo_id,
+        files=[
+            {"path": "src/a.py", "ext": ".py", "language": "python", "is_binary": False, "size_bytes": 99},
+        ],
+    )
+    assert updated_result_map["src/a.py"] == original_a_id
+
+    file_a = meta_store.get_file_by_path(repo_id, "src/a.py")
+    assert file_a is not None
+    assert file_a["size_bytes"] == 99
+
+
+def test_upsert_files_batch_rejects_non_positive_batch_size(meta_store, tmp_path):
+    """Batch upsert should validate batch_size input."""
+    repo_path = tmp_path / "test-repo"
+    repo_path.mkdir()
+    meta_store.record_repo("test-repo", repo_path)
+    repo = meta_store.get_repo_by_name("test-repo")
+    repo_id = repo["id"]
+
+    with pytest.raises(ValueError, match="batch_size must be positive"):
+        meta_store.upsert_files_batch(
+            repo_id=repo_id,
+            files=[{"path": "src/a.py", "ext": ".py", "language": "python", "is_binary": False, "size_bytes": 10}],
+            batch_size=0,
+        )
+
+
 def test_get_file_by_path(meta_store, tmp_path):
     """Test retrieving a file by path."""
     repo_path = tmp_path / "test-repo"

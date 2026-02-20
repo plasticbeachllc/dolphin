@@ -1107,7 +1107,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                         "size_bytes": stat.st_size,
                     }
                 )
-            except Exception:
+            except (FileNotFoundError, PermissionError, OSError):
                 continue
 
         # Batch upsert files and get ID mapping
@@ -1130,7 +1130,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                     "size_bytes": stat.st_size,
                     "content_hash": hashlib.sha256(file_bytes).hexdigest(),
                 }
-            except Exception:
+            except (FileNotFoundError, PermissionError, OSError):
                 continue  # Skip file if we can't read it
 
             # Resolve file_id from batch result

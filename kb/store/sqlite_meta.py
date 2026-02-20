@@ -834,18 +834,20 @@ class SQLiteMetadataStore:
             conn.commit()
             return file_id
 
-    def upsert_files_batch(self, repo_id: int, files: list[dict]) -> dict[str, int]:
+    def upsert_files_batch(self, repo_id: int, files: list[dict], batch_size: int = 500) -> dict[str, int]:
         """Bulk upsert file rows and return path -> id mapping.
 
         Handles batching to respect SQLite limits.
         Args:
             repo_id: Repository ID
             files: List of dicts with keys: path, ext, language, is_binary, size_bytes
+            batch_size: Number of rows to upsert per transaction batch
         """
         if not files:
             return {}
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
 
-        batch_size = 500  # Conservative batch size
         result_map = {}
 
         with self._connect() as conn, closing(conn.cursor()) as cur:
@@ -853,18 +855,17 @@ class SQLiteMetadataStore:
                 batch = files[i : i + batch_size]
 
                 # Prepare data for executemany
-                data = []
-                for f in batch:
-                    data.append(
-                        (
-                            int(repo_id),
-                            f["path"],
-                            f.get("ext"),
-                            f.get("language"),
-                            1 if f.get("is_binary") else 0,
-                            f.get("size_bytes"),
-                        )
+                data = [
+                    (
+                        int(repo_id),
+                        f["path"],
+                        f.get("ext"),
+                        f.get("language"),
+                        1 if f.get("is_binary") else 0,
+                        f.get("size_bytes"),
                     )
+                    for f in batch
+                ]
 
                 # Upsert
                 cur.executemany(
