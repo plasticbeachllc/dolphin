@@ -113,7 +113,7 @@ def _extract_graph_context_blocks(content: list[dict[str, Any]]) -> list[str]:
 
 FIXTURE_CASES = [
     ("mcp_graph_response.json", True, 1, 1, ["graphstore"]),
-    ("mcp_graph_response_multi_repo.json", True, 2, 2, ["graphstore", "agentbridge"]),
+    ("mcp_graph_response_multi_repo.json", True, 2, 2, ["graphstore", "mcpserver"]),
     ("mcp_graph_response_no_context.json", False, 0, 1, []),
 ]
 
