@@ -422,7 +422,8 @@ async def search(request: SearchRequest) -> dict[str, Any]:
     backend = get_search_backend()
 
     if request.repos and _sql_store is not None:
-        missing = [repo for repo in request.repos if not _sql_store.get_repo_by_name(repo)]
+        existing = _sql_store.check_repos_exist(request.repos)
+        missing = [repo for repo in request.repos if repo not in existing]
         if missing:
             raise HTTPException(status_code=404, detail=f"Repository not found: {', '.join(missing)}")
 

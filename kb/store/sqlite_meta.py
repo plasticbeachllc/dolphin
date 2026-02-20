@@ -632,6 +632,19 @@ class SQLiteMetadataStore:
                 "default_embed_model": str(row[2]),
             }
 
+    def check_repos_exist(self, names: list[str]) -> set[str]:
+        """Return a set of repo names that exist in the database."""
+        if not names:
+            return set()
+        placeholders = ",".join(["?"] * len(names))
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute(
+                f"SELECT name FROM repos WHERE name IN ({placeholders})",
+                tuple(names),
+            )
+            rows = cur.fetchall()
+            return {str(row[0]) for row in rows}
+
     def begin_session(self, repo_id: int, commit_sha: str, branch: str, embed_model: str) -> int:
         """Create a new ingestion session and return its id."""
         from datetime import datetime
