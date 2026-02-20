@@ -36,6 +36,6 @@ jobs:
         working-directory: ./mcp-bridge
         run: bun run build
 
-      - name: Publish to npm
+      - name: Publish package
         working-directory: ./mcp-bridge
-        run: npm publish
+        run: bun publish --access public

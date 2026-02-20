@@ -63,7 +63,6 @@ check-typescript:
 test TYPE="all":
 	@echo "🧪 Running {{TYPE}} tests..."
 	@just _pytest {{TYPE}}
-	# @just _bun-test agent-core {{TYPE}}
 	@just _bun-test mcp-bridge {{TYPE}}
 	@just _bun-test shared all
 	@echo "✅ All {{TYPE}} tests passed!"
@@ -88,7 +87,6 @@ test-mcp TYPE="all":
 # Run all TypeScript tests
 test-ts TYPE="all":
 	@echo "📘 Running TypeScript {{TYPE}} tests..."
-	@just _bun-test agent-core {{TYPE}}
 	@just _bun-test mcp-bridge {{TYPE}}
 	@just _bun-test shared all
 	@echo "   ✅ TypeScript {{TYPE}} tests passed"
@@ -114,7 +112,6 @@ test-core:
 test-all:
 	@echo "🚀 Running ALL tests..."
 	@just test all
-	@just test-webview
 	@echo "✅ All tests passed!"
 
 # Run FULL test suite (including slow/integration tests) with fail-fast checks
@@ -162,7 +159,7 @@ _pytest_slowest TYPE N MIN: setup-python
 	esac
 	uv run pytest "$dir" -q --tb=short --durations="{{N}}" --durations-min="{{MIN}}"
 
-# Internal: Generic bun test runner (PROJECT: agent-core, mcp-bridge, shared)
+# Internal: Generic bun test runner (PROJECT: mcp-bridge, shared)
 _bun-test PROJECT TYPE:
 	#!/usr/bin/env bash
 	set -euo pipefail
@@ -205,58 +202,6 @@ test-python-domain DOMAIN TYPE="all": setup-python
 	esac
 	echo "   ✅ {{DOMAIN}} {{TYPE}} tests passed"
 
-# Run Agent Core tests
-test-agent-core TYPE="all": (_bun-test "agent-core" TYPE)
-	@echo "   ✅ Agent Core {{TYPE}} tests passed"
-
-# Run Agent Core domain tests
-test-agent-core-domain DOMAIN TYPE="all":
-	#!/usr/bin/env bash
-	set -euo pipefail
-	echo "🤖 Running Agent Core {{DOMAIN}} {{TYPE}} tests..."
-	case "{{TYPE}}" in
-		all)         cd agent-core && (bun test tests/unit/{{DOMAIN}}/ tests/integration/{{DOMAIN}}/ --bail 2>/dev/null || \
-		             bun test tests/unit/{{DOMAIN}}/ --bail 2>/dev/null || \
-		             bun test tests/integration/{{DOMAIN}}/ --bail) ;;
-		unit)        cd agent-core && bun test tests/unit/{{DOMAIN}}/ --bail ;;
-		integration) cd agent-core && bun test tests/integration/{{DOMAIN}}/ --bail ;;
-		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
-	esac
-	echo "   ✅ {{DOMAIN}} {{TYPE}} tests passed"
-
-# Run VSCode Extension tests
-test-extension TYPE="all":
-	#!/usr/bin/env bash
-	set -euo pipefail
-	echo "📦 Running VSCode Extension {{TYPE}} tests..."
-	cd vscode-extension && npm run compile >/dev/null
-	case "{{TYPE}}" in
-		all)         npm run test:all ;;
-		unit)        npm run test:unit ;;
-		integration) npm run test:integration ;;
-		e2e)         npm run test:e2e ;;
-		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
-	esac
-	echo "   ✅ Extension {{TYPE}} tests passed"
-
-# Run VSCode Extension domain tests
-test-extension-domain DOMAIN TYPE="all":
-	#!/usr/bin/env bash
-	set -euo pipefail
-	echo "📦 Running Extension {{DOMAIN}} {{TYPE}} tests..."
-	cd vscode-extension && npm run compile >/dev/null
-	case "{{TYPE}}" in
-		all)         target="out/test/suite" ;;
-		unit)        target="out/test/suite/unit/{{DOMAIN}}" ;;
-		integration) target="out/test/suite/integration/{{DOMAIN}}" ;;
-		e2e)         target="out/test/suite/e2e/{{DOMAIN}}" ;;
-		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
-	esac
-	FILES=$(find "$target" -path "*{{DOMAIN}}*" -name '*.test.js' 2>/dev/null || true)
-	[ -z "$FILES" ] && { echo "❌ No tests found for {{DOMAIN}}"; exit 1; }
-	npm run test:{{TYPE}} -- --run $FILES
-	echo "   ✅ {{DOMAIN}} {{TYPE}} tests passed"
-
 # Run MCP Bridge tests
 test-mcp-bridge: (_bun-test "mcp-bridge" "all")
 	@echo "   ✅ MCP Bridge tests passed"
@@ -264,16 +209,6 @@ test-mcp-bridge: (_bun-test "mcp-bridge" "all")
 # Run shared package tests
 test-shared: (_bun-test "shared" "all")
 	@echo "   ✅ Shared package tests passed"
-
-# Run Webview tests
-test-webview:
-	@cd vscode-extension/webview && bun test
-	@echo "   ✅ Webview tests passed"
-
-# Run Playwright UI/E2E tests
-test-playwright:
-	@cd vscode-extension/playwright && npm test
-	@echo "   ✅ Playwright tests passed"
 
 # ==============================================================================
 # Testing - Utility Commands

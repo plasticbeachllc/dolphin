@@ -8,7 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Note**: This changelog covers only the Python package. For component-specific changes:
 
 - **MCP Bridge**: See [mcp-bridge/CHANGELOG.md](mcp-bridge/CHANGELOG.md)
-- **VSCode Extension (Experimental)**: See [vscode-extension/CHANGELOG.md](vscode-extension/CHANGELOG.md)
 
 ---
 
@@ -149,7 +148,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     3. `POST /v1/search` - Semantic search with configurable parameters (top_k, score_threshold, etc.)
     4. `GET /v1/chunks/{id}` - Retrieve specific chunk by ID with metadata
     5. `GET /v1/file` - Fetch file slices by line range with path traversal protection
-  - CORS middleware for VSCode webview integration
+  - CORS middleware for local development clients
   - Structured error responses with remediation hints
   - Request validation with Pydantic models
   - JSONL logging with automatic rotation
@@ -230,7 +229,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Secure environment variable handling for API keys
   - Secret file exclusion (`.env`, `.pem`, `.aws/`, etc.)
   - Input validation and sanitization
-  - CORS configuration for webview security
+  - CORS configuration for local development clients
 
 - **Robust Error Handling**
   - Comprehensive error messages with actionable guidance
@@ -345,7 +344,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     3. `POST /v1/search` - Semantic search with configurable parameters (top_k, score_threshold, etc.)
     4. `GET /v1/chunks/{id}` - Retrieve specific chunk by ID with metadata
     5. `GET /v1/file` - Fetch file slices by line range with path traversal protection
-  - CORS middleware for VSCode webview integration
+  - CORS middleware for local development clients
   - Structured error responses with remediation hints
   - Request validation with Pydantic models
   - JSONL logging with automatic rotation
@@ -426,7 +425,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Secure environment variable handling for API keys
   - Secret file exclusion (`.env`, `.pem`, `.aws/`, etc.)
   - Input validation and sanitization
-  - CORS configuration for webview security
+  - CORS configuration for local development clients
 
 - **Robust Error Handling**
   - Comprehensive error messages with actionable guidance

@@ -2,28 +2,14 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run Extension",
-      "type": "extensionHost",
+      "name": "Run MCP Bridge",
+      "type": "node",
       "request": "launch",
-      "args": [
-        "--disable-extensions",
-        "--extensionDevelopmentPath=${workspaceFolder}/vscode-extension"
-      ],
-      "outFiles": ["${workspaceFolder}/vscode-extension/out/**/*.js"],
-      "preLaunchTask": "npm: build:extension"
-    },
-    {
-      "name": "Run Extension + Debug Agent Core",
-      "type": "extensionHost",
-      "request": "launch",
-      "args": [
-        "--disable-extensions",
-        "--extensionDevelopmentPath=${workspaceFolder}/vscode-extension"
-      ],
-      "outFiles": [
-        "${workspaceFolder}/vscode-extension/out/**/*.js",
-        "${workspaceFolder}/agent-core/src/**/*.ts"
-      ]
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "src/index.ts"],
+      "cwd": "${workspaceFolder}/mcp-bridge",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
     }
   ]
 }

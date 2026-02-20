@@ -7,7 +7,7 @@ These tests validate the full file sync workflow:
 - Pending changes tracking across crashes
 
 Architecture Note:
-- TypeScript (VSCode extension) detects file changes and records them via API
+- TypeScript clients detect file changes and record them via API
 - Python (backend) processes the indexing queue and automatically marks
   changes as processed after successful indexing
 - The mark-processed endpoint exists for manual/admin intervention only

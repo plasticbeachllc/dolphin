@@ -2,21 +2,19 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "type": "npm",
-      "script": "compile",
-      "path": "vscode-extension/",
+      "type": "shell",
+      "command": "cd mcp-bridge && bun run build",
       "group": "build",
       "problemMatcher": "$tsc",
-      "label": "npm: build:extension"
+      "label": "build:mcp-bridge"
     },
     {
-      "type": "npm",
-      "script": "watch",
-      "path": "vscode-extension/",
+      "type": "shell",
+      "command": "cd mcp-bridge && bun run dev",
       "group": "build",
-      "problemMatcher": "$tsc-watch",
+      "problemMatcher": [],
       "isBackground": true,
-      "label": "npm: watch:extension"
+      "label": "dev:mcp-bridge"
     }
   ]
 }

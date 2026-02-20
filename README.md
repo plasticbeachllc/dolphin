@@ -93,12 +93,12 @@ dolphin serve
   - Tooling: Bun (`package.json`, `bun.lock`)
   - Commands: `cd mcp-bridge && bun install && bun test`
 - **Shared telemetry/IPC** (`shared/`)
-  - Tooling: npm (`package.json`, `node_modules/`)
-  - Commands: `cd shared && npm install && npm test`
+  - Tooling: Bun (`package.json`, `bun.lock`)
+  - Commands: `cd shared && bun install && bun test`
 
 At the repo root:
 
-- `package.json` acts as a workspace aggregator with convenience scripts (`npm run build:all`, `npm run lint:all`, `npm run format`).
+- `package.json` acts as a workspace aggregator with convenience scripts (`bun run build:all`, `bun run lint:all`, `bun run format`).
 - Use `just` targets (`just test-all`, `just check`) for the canonical, cross-project workflows.
 
 ### Key Features
@@ -358,44 +358,3 @@ MIT License
 ### Acknowledgments
 
 Built with [LanceDB](https://lancedb.com/), [OpenAI](https://openai.com/), [FastAPI](https://fastapi.tiangolo.com/), [Bun](https://bun.sh/), and lots of other tech.
-
----
-
-## Experimental Components (WIP)
-
-The following components are under active development and not part of the stable release scope.
-
-### Agent Core
-
-An LLM orchestrator which directly leverages the Knowledge Bank to improve discovery, planning, and execution for AI agents.
-
-### VS Code Extension
-
-Provides an interface for Agent Core and the Knowledge Bank capability. The extension manages the KB server lifecycle automatically.
-
-#### Features
-
-- **AI Chat Interface**: Interact with Claude AI directly in VS Code
-- **Knowledge Bank Integration**: Automatically searches your indexed codebase for context
-- **Real-time Streaming**: See AI responses as they're generated
-- **Tool Call Visualization**: Monitor Knowledge Bank searches and other tool executions
-
-#### Installation (Development)
-
-```bash
-# 1. Build the extension
-cd vscode-extension
-npm install
-npm run compile
-
-# 2. Build the webview
-cd webview
-bun install
-bun run build
-cd ../..
-
-# 3. Launch Extension Development Host
-# Open vscode-extension folder in VS Code and press F5
-```
-
-**⚠️ Note**: Knowledge Bank + MCP are release-candidate quality; experimental components remain under active development. Use at your own risk.

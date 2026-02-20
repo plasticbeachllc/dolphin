@@ -40,10 +40,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
       - name: Install dependencies (${{ matrix.project }})
         id: install
         working-directory: ${{ matrix.project }}
@@ -53,9 +51,9 @@ jobs:
             echo "No package.json found for ${{ matrix.project }}, skipping"
             exit 0
           fi
-          npm install --ignore-scripts
+          bun install --ignore-scripts
           echo "found=true" >> "$GITHUB_OUTPUT"
-      - name: Audit npm dependencies (${{ matrix.project }})
+      - name: Audit JS dependencies (${{ matrix.project }})
         if: steps.install.outputs.found == 'true'
         working-directory: ${{ matrix.project }}
-        run: npm audit --omit=dev --audit-level=high
+        run: bun audit

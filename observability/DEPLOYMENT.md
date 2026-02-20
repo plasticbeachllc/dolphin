@@ -4,7 +4,7 @@
 
 - Docker and Docker Compose installed
 - Python 3.12+ (for KB API)
-- Bun or Node.js 20+ (for TypeScript services)
+- Bun (for TypeScript services)
 - At least 2GB RAM for observability stack
 - 5GB disk space for logs/metrics
 
@@ -25,8 +25,6 @@ pip install prometheus-client opentelemetry-api opentelemetry-sdk opentelemetry-
 
 ```bash
 cd shared
-npm install
-# Or with bun
 bun install
 ```
 
@@ -116,9 +114,9 @@ GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=your_secure_password_here
 ```
 
-## No VSCode Extension Required
+## No IDE Extension Required
 
-The observability stack is built to work with the core MCP bridge, KB HTTP server, and indexing pipeline. The VSCode extension is optional and not required to collect metrics or logs.
+The observability stack is built to work with the core MCP bridge, KB HTTP server, and indexing pipeline. No IDE extension is required to collect metrics or logs.
 
 ### Customize Prometheus Scrape Targets
 

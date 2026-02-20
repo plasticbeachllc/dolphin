@@ -31,11 +31,6 @@ scrape_configs:
     static_configs:
       - targets: ['host.docker.internal:8420']
     metrics_path: '/metrics'
-
-  - job_name: 'agent-core'
-    static_configs:
-      - targets: ['host.docker.internal:3000']
-    metrics_path: '/metrics'
 EOF
 
 echo "✓ Created Prometheus configuration"
@@ -126,15 +121,6 @@ cat > monitoring/grafana/ep6-dashboard.json <<EOF
         ]
       },
       {
-        "title": "Extension Activation Time (s)",
-        "type": "gauge",
-        "targets": [
-          {
-            "expr": "extension_activation_duration_seconds"
-          }
-        ]
-      },
-      {
         "title": "Resource Usage",
         "type": "graph",
         "targets": [
@@ -166,7 +152,7 @@ echo ""
 echo "Next steps:"
 echo "  1. Configure Prometheus data source in Grafana"
 echo "  2. Import dashboard from monitoring/grafana/ep6-dashboard.json"
-echo "  3. Add metrics instrumentation to KB API and Agent Core"
+echo "  3. Add metrics instrumentation to KB API and MCP bridge"
 echo ""
 echo "To stop monitoring:"
 echo "  docker stop ep6-prometheus ep6-grafana"

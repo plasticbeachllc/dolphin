@@ -18,7 +18,6 @@ The Dolphin IPC module provides a production-ready communication layer with:
 ┌─────────────────────────────────────────────────────────────┐
 │                      Dolphin IPC Stack                       │
 ├─────────────────────────────────────────────────────────────┤
-│  Application Layer (agent-core, agent-core-v2)              │
 ├─────────────────────────────────────────────────────────────┤
 │  IPCTransport (method routing, request/response matching)   │
 ├─────────────────────────────────────────────────────────────┤
@@ -309,12 +308,10 @@ transport.onMethod("my_method", async (params) => {
 export DOLPHIN_IPC_FORMAT=msgpack
 ```
 
-2. **Restart both ends of IPC connection** (extension + agent-core)
 
 3. **Verify in logs:**
 
 ```
-[Agent Core] Ready and listening on stdin (using msgpack serialization)
 ```
 
 ## Debugging

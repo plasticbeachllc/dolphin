@@ -1,7 +1,7 @@
 """Integration tests for KB auto-sync functionality.
 
 These tests validate the full end-to-end flow:
-- VSCode Extension → Agent Core → KB API → Pipeline → Storage
+- Repository update → KB API → Pipeline → Storage
 """
 
 import os

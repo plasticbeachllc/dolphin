@@ -9,8 +9,6 @@
   },
   "files": [],
   "references": [
-    { "path": "./vscode-extension" },
-    { "path": "./agent-core" },
     { "path": "./shared" }
   ]
 }
