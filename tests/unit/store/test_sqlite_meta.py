@@ -56,6 +56,24 @@ def test_list_all_repos(meta_store, tmp_path):
     assert all("id" in r and "root_path" in r for r in repos)
 
 
+def test_check_repos_exist_chunks_large_name_list(meta_store, tmp_path):
+    """Test checking repo names uses chunking when names exceed SQLite variable limits."""
+    existing_names = ["existing-a", "existing-b", "existing-c"]
+    for name in existing_names:
+        repo_path = tmp_path / name
+        repo_path.mkdir()
+        meta_store.record_repo(name, repo_path)
+
+    names = [f"missing-{i}" for i in range(1200)]
+    names[1] = "existing-a"  # first chunk
+    names[905] = "existing-b"  # second chunk boundary
+    names[1199] = "existing-c"  # final element
+
+    found = meta_store.check_repos_exist(names)
+
+    assert found == set(existing_names)
+
+
 def test_upsert_file(meta_store, tmp_path):
     """Test upserting a file."""
     repo_path = tmp_path / "test-repo"

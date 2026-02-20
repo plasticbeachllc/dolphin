@@ -126,6 +126,17 @@ These are already present in the repo (see `README.md`, `CHANGELOG.md`, and the 
   - CLI filtering
 - Document the exact matching semantics (prefix vs glob) in `README.md` (small update).
 
+### 5a) Harden repo existence checks for large repository filters ✅
+
+**Why it matters**
+
+- Repo-filter validation paths that use `WHERE name IN (...)` can exceed SQLite's default `SQLITE_MAX_VARIABLE_NUMBER` (999) when users provide large repo name lists.
+
+**Status (done)**
+
+- `SQLiteMetadataStore.check_repos_exist` now chunks `names` into bounded query batches and merges results.
+- Added a regression unit test for `names` lists larger than 999 with matches spanning multiple chunks.
+
 ## 0.3.0 (Minor) — Bigger Wins / Some Schema & API Evolution
 
 ### 6) Stable chunk identifiers (align “chunk_id”, “content_id”, and URLs)
