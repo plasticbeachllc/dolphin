@@ -24,10 +24,6 @@ class TestDefaultIgnorePatterns:
         assert "build" in DEFAULT_IGNORE_PATTERNS
         assert ".venv" in DEFAULT_IGNORE_PATTERNS
 
-    def test_log_files_in_defaults(self):
-        """Test that log files are ignored by default."""
-        assert "*.log" in DEFAULT_IGNORE_PATTERNS
-
 
 class TestBuildIgnoreSet:
     """Test build_ignore_set function."""

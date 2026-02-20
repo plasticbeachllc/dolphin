@@ -1,0 +1,46 @@
+name: Publish VSCode Extension
+
+on:
+  push:
+    tags:
+      - "vscode-v*.*.*" # Triggers on tags like vscode-v0.1.0
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install extension dependencies
+        working-directory: ./vscode-extension
+        run: npm install
+
+      - name: Install webview dependencies
+        working-directory: ./vscode-extension/webview
+        run: bun install
+
+      - name: Build webview
+        working-directory: ./vscode-extension/webview
+        run: bun run build
+
+      - name: Validate tag matches version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#vscode-v}"
+          PROJECT_VERSION="$(node -p "JSON.parse(require('fs').readFileSync('./vscode-extension/package.json','utf8')).version")"
+          if [ "$TAG_VERSION" != "$PROJECT_VERSION" ]; then
+            echo "Tag version ($TAG_VERSION) does not match vscode-extension/package.json ($PROJECT_VERSION)"
+            exit 1
+          fi
+
+      - name: Publish extension
+        working-directory: ./vscode-extension
+        run: npx vsce publish --pat ${{ secrets.VSCE_TOKEN }}

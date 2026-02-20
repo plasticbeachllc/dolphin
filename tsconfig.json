@@ -8,5 +8,9 @@
     "forceConsistentCasingInFileNames": true
   },
   "files": [],
-  "references": [{ "path": "./shared" }]
+  "references": [
+    { "path": "./vscode-extension" },
+    { "path": "./agent-core" },
+    { "path": "./shared" }
+  ]
 }

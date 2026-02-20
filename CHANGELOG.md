@@ -8,33 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Note**: This changelog covers only the Python package. For component-specific changes:
 
 - **MCP Bridge**: See [mcp-bridge/CHANGELOG.md](mcp-bridge/CHANGELOG.md)
+- **VSCode Extension (Experimental)**: See [vscode-extension/CHANGELOG.md](vscode-extension/CHANGELOG.md)
 
 ---
 
 ---
-
-## [Unreleased]
-
-## [0.2.2] - 2026-02-20
-
-### Added
-
-- **Schema Version Tracking + Startup Auto-Migration**: Metadata startup now tracks `schema_version` and automatically applies pending migrations to canonical schema `v1`.
-- **CLI Query UX Upgrade**: `dolphin search` now supports compact default output, `--verbose` expanded output, stable `--json` mode, language filtering (`--lang`), exclusion filters, and snippet/context controls.
-- **Terminal UX Refresh**: `dolphin serve` and related CLI status output now use consistent rich-formatted status lines with clearer startup/shutdown/watcher context and actionable hints.
-- **Application Output Beautification**: Standardized user-facing CLI/server/indexing output with clearer status levels, compact progress lines, and actionable terminal hints.
-- **Logging Controls**: Added configurable log level (`DOLPHIN_LOG_LEVEL`) and opt-in traceback payloads (`DOLPHIN_LOG_TRACEBACK=1`) while keeping structured JSON log output stable.
-- **Cleaner Indexing Progress Output**: Removed duplicate `Indexing file:` lines and moved per-file chunker diagnostics to debug-level so default indexing output stays high-signal.
-
-### Fixed
-
-- **Foreign Key Deletion Ordering**: Reordered deleted-file processing to clean graph dependencies before deleting file records, preventing `FOREIGN KEY constraint failed` errors during incremental deletion handling in the ingestion pipeline.
-- **Canonical Schema Baseline (`v1`)**: Startup now auto-migrates metadata DBs to canonical schema `v1` and records `schema_version`, establishing `v1` as the only supported runtime schema for this release.
-- **Deleted-File Reliability**: Unified sync/parallel deletion cleanup flow, fixed `dry_run` deletion mutations, and added actionable FK failure diagnostics with dependent-row context.
-- **Graceful Server Shutdown**: Watcher shutdown now requests stop and explicitly closes watcher executors, preventing post-shutdown Ctrl-C hangs/noisy thread-exit traces.
-- **Default Ignore Coverage**: Added `*.log` and `*.log.*` to built-in ignore patterns and default config so log files are skipped by default.
-- **FK Deletion Diagnostics**: Corrected `graph_metrics` dependency diagnostics to join via `code_nodes` (no direct `file_id` lookup), preventing masked errors on FK failures.
-- **Migration Rebuild Stability**: Canonical schema table rebuilds now drop renamed legacy backup tables before index recreation to avoid SQLite index-name collisions during startup migration.
 
 ## [0.2.1] - 2026-01-26
 
@@ -171,7 +149,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     3. `POST /v1/search` - Semantic search with configurable parameters (top_k, score_threshold, etc.)
     4. `GET /v1/chunks/{id}` - Retrieve specific chunk by ID with metadata
     5. `GET /v1/file` - Fetch file slices by line range with path traversal protection
-  - CORS middleware for local development clients
+  - CORS middleware for VSCode webview integration
   - Structured error responses with remediation hints
   - Request validation with Pydantic models
   - JSONL logging with automatic rotation
@@ -252,7 +230,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Secure environment variable handling for API keys
   - Secret file exclusion (`.env`, `.pem`, `.aws/`, etc.)
   - Input validation and sanitization
-  - CORS configuration for local development clients
+  - CORS configuration for webview security
 
 - **Robust Error Handling**
   - Comprehensive error messages with actionable guidance
@@ -367,7 +345,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     3. `POST /v1/search` - Semantic search with configurable parameters (top_k, score_threshold, etc.)
     4. `GET /v1/chunks/{id}` - Retrieve specific chunk by ID with metadata
     5. `GET /v1/file` - Fetch file slices by line range with path traversal protection
-  - CORS middleware for local development clients
+  - CORS middleware for VSCode webview integration
   - Structured error responses with remediation hints
   - Request validation with Pydantic models
   - JSONL logging with automatic rotation
@@ -448,7 +426,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Secure environment variable handling for API keys
   - Secret file exclusion (`.env`, `.pem`, `.aws/`, etc.)
   - Input validation and sanitization
-  - CORS configuration for local development clients
+  - CORS configuration for webview security
 
 - **Robust Error Handling**
   - Comprehensive error messages with actionable guidance

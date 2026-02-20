@@ -5,18 +5,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Fixed
-
-- **Dependency Security Hardening**: Added root-workspace transitive overrides for MCP runtime dependency paths so SDK-adjacent advisories resolve to patched versions (`ajv@8.18.0`, `body-parser@2.2.2`, `qs@6.15.0`, `hono@4.12.0`).
-- **ReDoS Surface Reduction**: Forced `minimatch@10.2.2` via workspace override to remove known vulnerable minimatch ranges from the resolved graph.
-- **Audit Delta**: Reduced Bun audit findings from 11 advisories to 1 remaining advisory.
-
-### Known Issues
-
-- **Remaining Advisory (Tooling)**: `bun audit` still reports `ajv <8.18.0` because current ESLint (`eslint@9.x`) depends on `ajv@6.x`, which is incompatible with a hard `ajv@8` override. Lint and tests remain green; full removal requires lint-stack migration or upstream ESLint dependency changes.
-
 ## [0.2.3] - 2026-01-26
 
 ### Added

@@ -73,12 +73,13 @@ def _load_default_config() -> KBConfig:
 _DEFAULT_CONFIG = _load_default_config()
 _API_LIMITS = _DEFAULT_CONFIG.api
 
-# Add CORS middleware for local development clients.
+# Add CORS middleware to allow requests from VSCode webviews
 # Note: CORSMiddleware is a class, not a factory function, but FastAPI's add_middleware
 # accepts both. We need to help the type checker by explicitly typing this.
 app.add_middleware(
     cast(type, CORSMiddleware),
     allow_origins=[
+        "vscode-webview://*",
         "http://localhost:3000",  # Development only
     ],
     allow_credentials=True,
@@ -422,7 +423,7 @@ async def search(request: SearchRequest) -> dict[str, Any]:
 
     if request.repos and _sql_store is not None:
         existing = _sql_store.check_repos_exist(request.repos)
-        missing = sorted(list(set(request.repos) - existing))
+        missing = [repo for repo in request.repos if repo not in existing]
         if missing:
             raise HTTPException(status_code=404, detail=f"Repository not found: {', '.join(missing)}")
 
@@ -1695,7 +1696,7 @@ async def clear_repo_index(repo_name: str, confirmed: bool = False) -> dict:
 async def record_pending_changes(repo_name: str, request: PendingChangeRequest) -> dict:
     """Record pending file changes detected by file watcher.
 
-    This endpoint is called by clients when files are created, modified, or deleted.
+    This endpoint is called by the VSCode extension when files are created, modified, or deleted.
     Changes are persisted to survive crashes and restarts.
     """
     if _sql_store is None:
@@ -1786,7 +1787,7 @@ async def detect_drift(repo_name: str) -> DriftDetectionResponse:
     """Detect files that have changed since last indexing (drift detection).
 
     This endpoint compares current file state with snapshots taken during indexing
-    to identify files that were modified while clients were offline or during crashes.
+    to identify files that were modified while VSCode was closed or during crashes.
     """
     if _sql_store is None:
         raise HTTPException(status_code=503, detail="SQL store not initialized")

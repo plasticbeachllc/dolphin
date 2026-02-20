@@ -525,7 +525,8 @@ class GraphStore:
     def delete_nodes_for_file(self, file_id: int) -> int:
         """Delete all nodes for a file.
 
-        This will cascade delete edges and manually remove FTS entries.
+        This will cascade delete edges and FTS entries.
+        Edges are deleted both via CASCADE (if schema has it) and manually for compatibility.
 
         Args:
             file_id: File ID
@@ -535,6 +536,18 @@ class GraphStore:
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
+                # Delete edges (for backward compatibility with databases without CASCADE)
+                # This also handles edges where the target is being deleted
+                cur.execute(
+                    (
+                        "WITH nodes AS (SELECT id FROM code_nodes WHERE file_id = ?) "
+                        "DELETE FROM code_edges "
+                        "WHERE source_node_id IN (SELECT id FROM nodes) "
+                        "   OR target_node_id IN (SELECT id FROM nodes)"
+                    ),
+                    (file_id,),
+                )
+
                 # Delete from FTS5
                 cur.execute(
                     (
@@ -558,7 +571,8 @@ class GraphStore:
     def delete_nodes_for_repo(self, repo_id: int) -> int:
         """Delete all nodes for a repository.
 
-        This will cascade delete edges and manually remove FTS entries.
+        This will cascade delete edges and FTS entries.
+        Edges are deleted both via CASCADE (if schema has it) and manually for compatibility.
 
         Args:
             repo_id: Repository ID
@@ -568,6 +582,18 @@ class GraphStore:
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
+                # Delete edges (for backward compatibility with databases without CASCADE)
+                # This also handles edges where the target is being deleted
+                cur.execute(
+                    (
+                        "WITH nodes AS (SELECT id FROM code_nodes WHERE repo_id = ?) "
+                        "DELETE FROM code_edges "
+                        "WHERE source_node_id IN (SELECT id FROM nodes) "
+                        "   OR target_node_id IN (SELECT id FROM nodes)"
+                    ),
+                    (repo_id,),
+                )
+
                 # Delete from FTS5
                 cur.execute(
                     (

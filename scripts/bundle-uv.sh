@@ -1,12 +1,12 @@
 #!/bin/bash
-# Bundle uv binaries for all platforms into a distributable folder
+# Bundle uv binaries for all platforms into VSCode extension
 
 set -e
 
-DIST_DIR="dist/uv"
+DIST_DIR="vscode-extension/dist/uv"
 UV_VERSION="0.5.11"  # Latest stable version
 
-echo "🐬 Bundling uv binaries..."
+echo "🐬 Bundling uv binaries for VSCode extension..."
 echo "Version: ${UV_VERSION}"
 
 # Create dist directory

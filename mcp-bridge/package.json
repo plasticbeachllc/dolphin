@@ -15,7 +15,7 @@
     "lint": "bun x eslint .",
     "clean": "rm -rf dist",
     "test": "bun test ==serial ./src/tests --exclude dist",
-    "test:clean": "bun run clean && bun test --serial ./src/tests",
+    "test:clean": "npm run clean && bun test --serial ./src/tests",
     "prepublishOnly": "bun run build"
   },
   "dependencies": {

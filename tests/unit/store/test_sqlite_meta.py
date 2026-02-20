@@ -6,7 +6,6 @@ Tests basic database operations using the correct API
 
 import pytest
 
-from kb.migrations import LATEST_SCHEMA_VERSION
 from kb.store.connection_pool import close_connection_pool, get_connection_pool
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
@@ -55,24 +54,6 @@ def test_list_all_repos(meta_store, tmp_path):
 
     assert len(repos) == 3
     assert all("id" in r and "root_path" in r for r in repos)
-
-
-def test_check_repos_exist_chunks_large_name_list(meta_store, tmp_path):
-    """Test checking repo names uses chunking when names exceed SQLite variable limits."""
-    existing_names = ["existing-a", "existing-b", "existing-c"]
-    for name in existing_names:
-        repo_path = tmp_path / name
-        repo_path.mkdir()
-        meta_store.record_repo(name, repo_path)
-
-    names = [f"missing-{i}" for i in range(1200)]
-    names[1] = "existing-a"  # first chunk
-    names[905] = "existing-b"  # second chunk boundary
-    names[1199] = "existing-c"  # final element
-
-    found = meta_store.check_repos_exist(names)
-
-    assert found == set(existing_names)
 
 
 def test_upsert_file(meta_store, tmp_path):
@@ -241,84 +222,3 @@ def test_get_chunk_locations_fallback(meta_store, tmp_path):
     assert len(locations) == 1
     assert locations[0]["content_id"] == "uuid-large"
     assert locations[0]["start_line"] == 1
-
-
-def test_initialize_creates_schema_version_table(tmp_path):
-    """Initialization should create schema_version tracking metadata."""
-    db_path = tmp_path / "test.db"
-    store = SQLiteMetadataStore(db_path)
-    store.initialize()
-
-    with store._connect() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT version FROM schema_version WHERE id = 1")
-        row = cur.fetchone()
-
-    assert row is not None
-    assert int(row[0]) == LATEST_SCHEMA_VERSION
-
-
-def test_initialize_auto_applies_pending_schema_migrations(tmp_path, caplog):
-    """Startup should auto-apply pending migrations and emit a user-facing note."""
-    db_path = tmp_path / "test.db"
-    store = SQLiteMetadataStore(db_path)
-    store.initialize()
-
-    # Simulate an older schema version before next startup.
-    with store._connect() as conn:
-        cur = conn.cursor()
-        cur.execute("UPDATE schema_version SET version = 0, updated_at = datetime('now') WHERE id = 1")
-        conn.commit()
-
-    restarted_store = SQLiteMetadataStore(db_path)
-    with caplog.at_level("WARNING"):
-        restarted_store.initialize()
-
-    with restarted_store._connect() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT version FROM schema_version WHERE id = 1")
-        row = cur.fetchone()
-
-    assert row is not None
-    assert int(row[0]) == LATEST_SCHEMA_VERSION
-    assert any("Auto-applied startup migration(s) to canonical schema" in rec.message for rec in caplog.records)
-
-
-def test_collect_file_dependency_counts_handles_graph_metrics_query(meta_store, tmp_path):
-    """FK diagnostics should query graph_metrics via node_id without raising."""
-    repo_path = tmp_path / "dep-repo"
-    repo_path.mkdir()
-    meta_store.record_repo("dep-repo", repo_path)
-    repo = meta_store.get_repo_by_name("dep-repo")
-    assert repo is not None
-    repo_id = int(repo["id"])
-
-    file_id = meta_store.upsert_file(
-        repo_id=repo_id,
-        path="src/dependency.py",
-        ext=".py",
-        language="python",
-        is_binary=False,
-        size_bytes=64,
-    )
-
-    with meta_store._connect() as conn:
-        cur = conn.cursor()
-        # Ensure the table exists so the diagnostic query executes.
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS graph_metrics (
-                node_id TEXT PRIMARY KEY NOT NULL REFERENCES code_nodes(id) ON DELETE CASCADE,
-                pagerank REAL,
-                betweenness_centrality REAL,
-                in_degree INTEGER NOT NULL DEFAULT 0,
-                out_degree INTEGER NOT NULL DEFAULT 0,
-                cyclomatic_complexity INTEGER,
-                community_id INTEGER
-            )
-            """
-        )
-        conn.commit()
-
-        counts = meta_store._collect_file_dependency_counts(cur, file_id)
-        assert isinstance(counts, dict)

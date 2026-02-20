@@ -254,7 +254,7 @@ The penetration tests cover:
 Every pull request automatically triggers the `Security Scan` GitHub Action, which provides fast dependency vulnerability checks:
 
 - **Python**: `pip-audit` runs via `uv run` against the synced virtual environment to detect known CVEs before merge.
-- **JavaScript/TypeScript**: `bun audit` executes for the root workspace and `mcp-bridge/` to cover shipped bundles.
+- **JavaScript/TypeScript**: `npm audit --omit=dev --audit-level=high` executes for the root workspace, `agent-core/`, `mcp-bridge/`, and `vscode-extension/` packages to cover all shipped bundles.
 - Results are surfaced directly in the PR status checks so regressions are blocked until vulnerabilities are resolved or acknowledged.
 
 ### Manual Security Review

@@ -1,6 +1,6 @@
 // shared/types/events.ts
 
-// Client -> service request events
+// Extension → Agent Core
 export type ExtensionRequest =
   | {
       type: "send_message";
@@ -20,7 +20,7 @@ export type ExtensionRequest =
   | { type: "delete_conversation"; conversationId: string }
   | { type: "rename_conversation"; conversationId: string; newTitle: string };
 
-// Service -> client events
+// Agent Core → Extension
 // All events include an optional requestId for correlation/logging
 export interface ProviderAuthStatus {
   provider: string;

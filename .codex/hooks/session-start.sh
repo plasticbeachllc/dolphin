@@ -33,11 +33,12 @@ else
 fi
 
 if command -v bun >/dev/null 2>&1; then
-  for dir in mcp-bridge shared; do
-    if [ -f "$dir/package.json" ]; then
-      (cd "$dir" && bun install)
-    fi
-  done
+  if [ -f "agent-core/package.json" ]; then
+    (cd "agent-core" && bun install)
+  fi
+  if [ -f "mcp-bridge/package.json" ]; then
+    (cd "mcp-bridge" && bun install)
+  fi
 else
   echo "bun not found; skipping JS deps."
 fi

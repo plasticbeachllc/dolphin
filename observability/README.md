@@ -5,7 +5,7 @@
 Lightweight observability stack for debugging and monitoring Dolphin core services during development. Provides distributed tracing, log aggregation, and latency monitoring.
 
 **Purpose**: Development debugging and performance analysis
-**Scope**: MCP bridge + KB HTTP/indexing services
+**Scope**: MCP bridge + KB HTTP/indexing services (no VSCode extension required)
 **Status**: Phase 1 - Core Infrastructure
 
 ## Architecture
@@ -134,9 +134,9 @@ uv run dolphin kb index <repo-name>
   - Live error logs
   - Link to Jaeger traces
 
-## No IDE Extension Required
+## No VSCode Extension Required
 
-The stack is designed to work with the standalone MCP bridge, KB HTTP server, and indexing pipeline. It does not require any IDE extension to function.
+The stack is designed to work with the standalone MCP bridge, KB HTTP server, and indexing pipeline. If you run the VSCode extension, it can also emit data, but it is not required for this stack to function.
 
 ## KB API Metrics
 
@@ -395,7 +395,7 @@ Minimal overhead:
 
 ### Phase 2: Full Distributed Tracing
 
-- [ ] Integrate OpenTelemetry in additional service processes
+- [ ] Integrate OpenTelemetry in Agent Core
 - [ ] Add trace context to MCP protocol
 - [ ] Implement cross-service trace propagation
 - [ ] Create trace correlation dashboard

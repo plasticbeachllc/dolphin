@@ -45,26 +45,10 @@ class RepoWatcher:
         self.ignore_spec = build_ignore_pathspec(self.config.ignore, self.config.ignore_exceptions, self.root)
 
         self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        self._stop_event: asyncio.Event | None = None
-        self._executor_closed = False
         self._last_missing_cleanup = 0.0
-
-    def request_stop(self) -> None:
-        """Request watcher loop shutdown."""
-        if self._stop_event is not None:
-            self._stop_event.set()
-
-    def _shutdown_executor(self) -> None:
-        """Shutdown internal executor once to avoid lingering threads on process exit."""
-        if self._executor_closed:
-            return
-        self._executor.shutdown(wait=True, cancel_futures=True)
-        self._executor_closed = True
 
     async def watch(self):
         """Start watching the repository for changes."""
-        self._stop_event = asyncio.Event()
-        assert self._stop_event is not None
         print(f"Starting watcher for {self.repo_name} at {self.root}")
 
         try:
@@ -94,9 +78,11 @@ class RepoWatcher:
         # Process any pending changes from previous run first
         await self._process_pending_changes()
 
+        stop_event = asyncio.Event()
+
         try:
             # Main watch loop
-            async for changes in awatch(self.root, stop_event=self._stop_event, debounce=1000, step=500):
+            async for changes in awatch(self.root, stop_event=stop_event, debounce=1000, step=500):
                 # Check for branch switch
                 await self._check_branch_switch()
 
@@ -111,15 +97,8 @@ class RepoWatcher:
                 # Process changes
                 await self._process_pending_changes()
 
-        except asyncio.CancelledError:
-            logger.info("Watcher cancelled for %s", self.repo_name)
-            self.request_stop()
-            raise
         except Exception as e:
             logger.error(f"Watcher failed for {self.repo_name}: {e}", exc_info=True)
-        finally:
-            self.request_stop()
-            self._shutdown_executor()
 
     def _filter_changes(self, changes: set[tuple[Change, str]]) -> list[tuple[Change, str]]:
         filtered = []

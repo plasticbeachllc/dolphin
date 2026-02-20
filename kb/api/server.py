@@ -11,7 +11,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from ..config import KBConfig, load_config
-from ..terminal import print_hint, print_status
 
 # Note on Environment Variable Management:
 # This server expects environment variables (e.g., OPENAI_API_KEY, DOLPHIN_CONFIG_PATH)
@@ -39,26 +38,22 @@ def initialize_search_backend() -> None:
     if provider_type == "openai":
         api_key = os.environ.get(config.openai_api_key_env)
         if not api_key:
-            print_status(
-                f"{config.openai_api_key_env} not set. Falling back to stub embedding provider.",
-                level="warn",
-                stderr=True,
+            print(
+                f"⚠️  {config.openai_api_key_env} not set. Using stub provider.",
+                file=sys.stderr,
             )
             provider_type = "stub"
         else:
-            print_status(
-                f"Using OpenAI embedding provider from {config.openai_api_key_env}.",
-                level="success",
-                stderr=True,
+            print(
+                f"✅ Found {config.openai_api_key_env}, using OpenAI provider",
+                file=sys.stderr,
             )
             provider_kwargs["api_key"] = api_key
             provider_kwargs["batch_size"] = config.embedding_batch_size
 
-    print_status(
-        "Initializing search backend.",
-        level="step",
-        context={"provider": provider_type},
-        stderr=True,
+    print(
+        f"🔧 Initializing search backend with '{provider_type}' provider...",
+        file=sys.stderr,
     )
 
     # Correctly call the stable factory function
@@ -84,29 +79,14 @@ def initialize_search_backend() -> None:
             reason="Aborted on startup: previous indexing session did not complete cleanly"
         )
         if aborted:
-            print_status(
-                "Aborted stale indexing sessions from a previous process.",
-                level="warn",
-                context={"sessions": aborted},
-                stderr=True,
-            )
+            print(f"⚠️  Aborted {aborted} stale indexing session(s) on startup", file=sys.stderr)
     except Exception as e:
-        print_status(
-            "Failed to abort stale indexing sessions.",
-            level="warn",
-            context={"error": str(e)},
-            stderr=True,
-        )
+        print(f"⚠️  Failed to abort stale sessions: {e}", file=sys.stderr)
 
-    print_status(
-        "Search backend ready.",
-        level="success",
-        context={"store": store_root},
-        stderr=True,
-    )
+    print(f"✅ Search backend ready (store: {store_root})", file=sys.stderr)
 
     # Initialize ingestion pipeline for full reindex operations
-    print_status("Initializing ingestion pipeline.", level="step", stderr=True)
+    print("🔧 Initializing ingestion pipeline...", file=sys.stderr)
     from ..ingest.pipeline import IngestionPipeline
     from ..store.graph_store import GraphStore
 
@@ -119,24 +99,19 @@ def initialize_search_backend() -> None:
         cache=backend.cache,
     )
     set_pipeline(pipeline)
-    print_status("Ingestion pipeline ready.", level="success", stderr=True)
+    print("✅ Ingestion pipeline ready", file=sys.stderr)
 
 
 def reload_search_backend() -> None:
     """Reload the search backend and stores to pick up index changes."""
-    print_status("Reloading search backend.", level="step", stderr=True)
+    print("🔄 Reloading search backend...", file=sys.stderr)
     try:
         # Reset existing backend first to force fresh connections
         reset_search_backend()
         initialize_search_backend()
-        print_status("Search backend reloaded.", level="success", stderr=True)
+        print("✅ Search backend reloaded successfully", file=sys.stderr)
     except Exception as e:
-        print_status(
-            "Failed to reload search backend.",
-            level="error",
-            context={"error": str(e)},
-            stderr=True,
-        )
+        print(f"❌ Failed to reload search backend: {e}", file=sys.stderr)
         raise
 
 
@@ -160,30 +135,22 @@ async def lifespan_handler(app_instance: FastAPI):
     # Startup: Initialize backend/pipeline if not already initialized.
     # Avoid module import-time side effects (important for test collection and xdist).
     if get_pipeline() is None:
-        print_status("Initializing dolphin server runtime.", level="step", stderr=True)
+        print("🚀 Initializing KB server...", file=sys.stderr)
         try:
             initialize_search_backend()
         except FileNotFoundError:
-            print_status(
-                "No KB configuration found.",
-                level="warn",
-                stderr=True,
+            print(
+                "⚠️  No KB configuration found. Create a config, then call initialize_search_backend().",
+                file=sys.stderr,
             )
-            print_hint("Run `dolphin init` before starting the server.", stderr=True)
 
     # Start watchers if configured
-    watchers = []
     watch_tasks = []
     watch_repos = os.environ.get("DOLPHIN_WATCH_REPOS")
     if watch_repos:
         repo_names = [r.strip() for r in watch_repos.split(",") if r.strip()]
         if repo_names:
-            print_status(
-                "Starting repository watchers.",
-                level="step",
-                context={"repos": ",".join(repo_names)},
-                stderr=True,
-            )
+            print(f"👀 Starting watchers for repositories: {', '.join(repo_names)}", file=sys.stderr)
             try:
                 from ..ingest.watcher import RepoWatcher
 
@@ -192,90 +159,42 @@ async def lifespan_handler(app_instance: FastAPI):
                     config = load_config()
                     for repo_name in repo_names:
                         watcher = RepoWatcher(repo_name, config, pipeline)
-                        watchers.append(watcher)
                         task = asyncio.create_task(watcher.watch())
                         watch_tasks.append(task)
                 else:
-                    print_status(
-                        "Pipeline not initialized; skipping watcher startup.",
-                        level="warn",
-                        stderr=True,
-                    )
+                    print("⚠️  Pipeline not initialized, cannot start watchers", file=sys.stderr)
             except ImportError as e:
-                print_status(
-                    "Failed to import RepoWatcher; watcher startup skipped.",
-                    level="warn",
-                    context={"error": str(e)},
-                    stderr=True,
-                )
+                print(f"⚠️  Failed to import RepoWatcher: {e}", file=sys.stderr)
             except Exception as e:
-                print_status(
-                    "Failed to start watchers.",
-                    level="warn",
-                    context={"error": str(e)},
-                    stderr=True,
-                )
+                print(f"⚠️  Failed to start watchers: {e}", file=sys.stderr)
 
     yield  # Application is running
 
     # Shutdown: Clean up resources
-    print_status("Shutting down dolphin server runtime.", level="step", stderr=True)
+    print("🛑 Shutting down KB server...", file=sys.stderr)
 
     # Cancel watcher tasks
     if watch_tasks:
-        print_status(
-            "Stopping repository watchers.",
-            level="step",
-            context={"watchers": len(watch_tasks)},
-            stderr=True,
-        )
-        for watcher in watchers:
-            try:
-                watcher.request_stop()
-            except Exception as e:
-                print_status(
-                    "Watcher stop request failed.",
-                    level="warn",
-                    context={"error": str(e)},
-                    stderr=True,
-                )
-
-        done, pending = await asyncio.wait(watch_tasks, timeout=5.0)
-
-        if pending:
-            for task in pending:
-                task.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
-            print_status("Watchers did not stop gracefully before timeout.", level="warn", stderr=True)
-
-        for task in done:
-            try:
-                exc = task.exception()
-            except asyncio.CancelledError:
-                continue
-            if exc:
-                print_status(
-                    "Watcher exited with error during shutdown.",
-                    level="warn",
-                    context={"error": str(exc)},
-                    stderr=True,
-                )
+        print(f"🛑 Stopping {len(watch_tasks)} watchers...", file=sys.stderr)
+        for task in watch_tasks:
+            task.cancel()
+        try:
+            await asyncio.wait(watch_tasks, timeout=5.0)
+        except TimeoutError:
+            print("⚠️  Watchers did not stop gracefully", file=sys.stderr)
+        except Exception as e:
+            print(f"⚠️  Error stopping watchers: {e}", file=sys.stderr)
 
     # Close embedding provider if it has async client
     if _embedding_provider and hasattr(_embedding_provider, "close"):
         try:
             await _embedding_provider.close()
-            print_status("Closed embedding provider.", level="success", stderr=True)
+            print("✅ Closed embedding provider", file=sys.stderr)
         except Exception as e:
-            print_status(
-                "Failed to close embedding provider cleanly.",
-                level="warn",
-                context={"error": str(e)},
-                stderr=True,
-            )
+            print(f"⚠️  Failed to close embedding provider: {e}", file=sys.stderr)
 
     reset_search_backend()
-    print_status("Server shutdown complete.", level="success", stderr=True)
+    print("✅ KB server shutdown complete", file=sys.stderr)
 
 
 # Assign lifespan to the app
