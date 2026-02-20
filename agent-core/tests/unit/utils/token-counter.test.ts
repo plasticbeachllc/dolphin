@@ -47,4 +47,36 @@ describe("TokenCounter provider awareness", () => {
     expect(result.mode).toBe("estimate");
     expect(result.totalTokens).toBe(Math.ceil(text.length / 4));
   });
+
+  it("uses exact counting for the official OpenAI host when baseUrl is set", async () => {
+    const counter = new TokenCounter();
+    const text = "official endpoint should stay exact";
+
+    const encoder = encoding_for_model("gpt-3.5-turbo");
+    const expectedTokens = encoder.encode(text).length;
+    encoder.free();
+
+    const result = await counter.countExact([text], {
+      provider: "openai",
+      model: "gpt-3.5-turbo",
+      baseUrl: "https://api.openai.com/v1",
+    });
+
+    expect(result.mode).toBe("exact");
+    expect(result.totalTokens).toBe(expectedTokens);
+  });
+
+  it("rejects lookalike OpenAI hosts that only contain api.openai.com as a substring", async () => {
+    const counter = new TokenCounter();
+    const text = "lookalike endpoint should fallback";
+
+    const result = await counter.countExact([text], {
+      provider: "openai",
+      model: "gpt-3.5-turbo",
+      baseUrl: "https://api.openai.com.attacker.example/v1",
+    });
+
+    expect(result.mode).toBe("estimate");
+    expect(result.totalTokens).toBe(Math.ceil(text.length / 4));
+  });
 });

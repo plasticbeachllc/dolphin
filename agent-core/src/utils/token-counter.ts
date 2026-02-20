@@ -51,6 +51,12 @@ interface CacheEntry {
   lastAccessed: number;
 }
 
+type CountComputationResult =
+  | { kind: "cache"; tokens: number }
+  | { kind: "anthropic"; tokens: number; cacheKey: string; normalized: string }
+  | { kind: "openai"; tokens: number; cacheKey: string; normalized: string }
+  | { kind: "fallback"; tokens: number; provider: string };
+
 type CountTokensResponse = {
   input_tokens: number;
 };
@@ -203,17 +209,14 @@ export class TokenCounter implements TokenCounterLike {
     let usedExactAPI = false;
     let usedOpenAI = false;
 
-    const results = await Promise.all(
+    const results = await Promise.all<CountComputationResult>(
       texts.map(async (text) => {
         const normalized = text || "";
         const cacheKey = this.buildCacheKey(provider, resolvedModel, options?.baseUrl, normalized);
         const cached = this.readFromCache(cacheKey);
         if (cached !== null) {
-          cacheHits++;
-          return cached;
+          return { kind: "cache", tokens: cached };
         }
-
-        cacheMisses++;
 
         try {
           if (provider === "anthropic") {
@@ -222,15 +225,11 @@ export class TokenCounter implements TokenCounterLike {
             }
 
             const tokens = await this.client.countTokens(normalized, resolvedModel);
-            usedExactAPI = true;
-            this.metrics.anthropicCalls++;
-            this.writeToCache(cacheKey, tokens);
-            this.updateCalibration(normalized, tokens);
-            return tokens;
+            return { kind: "anthropic", tokens, cacheKey, normalized };
           }
 
           if (provider === "openai") {
-            if (options?.baseUrl && !options.baseUrl.includes("api.openai.com")) {
+            if (options?.baseUrl && !this.isOfficialOpenAIBaseUrl(options.baseUrl)) {
               throw new Error(
                 "Custom OpenAI-compatible base URL detected; using heuristic counter"
               );
@@ -240,31 +239,52 @@ export class TokenCounter implements TokenCounterLike {
               throw new Error("OpenAI token counting requires the model name");
             }
             const tokens = this.openaiClient.countTokens(normalized, resolvedModel);
-            usedOpenAI = true;
-            this.metrics.openaiCounts++;
-            this.writeToCache(cacheKey, tokens);
-            this.updateCalibration(normalized, tokens);
-            return tokens;
+            return { kind: "openai", tokens, cacheKey, normalized };
           }
 
           // Unknown provider: force heuristic fallback
           throw new Error(`Unsupported provider for exact token counting: ${provider}`);
         } catch (error) {
-          if (provider === "anthropic") {
-            this.metrics.anthropicErrors++;
-          } else if (provider === "openai") {
-            this.metrics.openaiErrors++;
-          }
           const estimate = this.estimateSingle(normalized);
           console.warn(
             "[TokenCounter] Falling back to heuristic token estimate due to API error:",
             error
           );
-          return estimate;
+          return { kind: "fallback", tokens: estimate, provider };
         }
       })
     );
-    perInput.push(...results);
+
+    for (const result of results) {
+      perInput.push(result.tokens);
+      switch (result.kind) {
+        case "cache":
+          cacheHits++;
+          break;
+        case "anthropic":
+          cacheMisses++;
+          usedExactAPI = true;
+          this.metrics.anthropicCalls++;
+          this.writeToCache(result.cacheKey, result.tokens);
+          this.updateCalibration(result.normalized, result.tokens);
+          break;
+        case "openai":
+          cacheMisses++;
+          usedOpenAI = true;
+          this.metrics.openaiCounts++;
+          this.writeToCache(result.cacheKey, result.tokens);
+          this.updateCalibration(result.normalized, result.tokens);
+          break;
+        case "fallback":
+          cacheMisses++;
+          if (result.provider === "anthropic") {
+            this.metrics.anthropicErrors++;
+          } else if (result.provider === "openai") {
+            this.metrics.openaiErrors++;
+          }
+          break;
+      }
+    }
 
     const totalTokens = perInput.reduce((sum, tokens) => sum + tokens, 0);
     this.metrics.cacheHits += cacheHits;
@@ -329,6 +349,15 @@ export class TokenCounter implements TokenCounterLike {
     const hash = createHash("sha1").update(text).digest("hex");
     const endpoint = baseUrl || "default";
     return `${provider}:${endpoint}:${model}:${hash}`;
+  }
+
+  private isOfficialOpenAIBaseUrl(baseUrl: string): boolean {
+    try {
+      const parsed = new URL(baseUrl);
+      return parsed.hostname.toLowerCase() === "api.openai.com";
+    } catch {
+      return false;
+    }
   }
 
   private readFromCache(key: string): number | null {
