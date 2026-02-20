@@ -236,10 +236,17 @@ if [ "$QUERY_TYPE" = "concurrent" ]; then
   # Concurrent load test with py-spy profiling
   echo "Spawning 10 concurrent search requests..."
   echo "Profiling API server process..."
+
+  # Create a sync file to coordinate start
+  SYNC_FILE="${OUTPUT_DIR}/start_signal"
+  rm -f "$SYNC_FILE"
   
   # Start background requests
   for i in {1..10}; do
     (
+      # Wait for start signal
+      while [ ! -f "$SYNC_FILE" ]; do sleep 0.1; done
+
       for query in "${QUERIES[@]}"; do
         curl -s -X POST http://localhost:$API_PORT/search \
           -H "Content-Type: application/json" \
@@ -249,14 +256,51 @@ if [ "$QUERY_TYPE" = "concurrent" ]; then
   done
   
   # Profile the API server during concurrent load
-  # TODO: ensure sleep statement doesn't cause us to miss the action, ensure record shouldn't be called prior to actual queries
-  sleep 1  # Let requests start
+  # We start py-spy first and wait for it to be ready before unleashing the requests
+  PYSPY_LOG="${OUTPUT_DIR}/pyspy_startup.log"
+  echo "Starting py-spy..."
   py-spy record \
     --pid $API_PID \
     --format speedscope \
     --output "$PROFILE_FILE" \
     --rate 100 \
-    --duration 30 || true
+    --duration 30 > "$PYSPY_LOG" 2>&1 &
+  PYSPY_PID=$!
+
+  # Wait for py-spy to initialize
+  echo "Waiting for py-spy to initialize..."
+  MAX_RETRIES=100 # 10 seconds
+  COUNT=0
+  PYSPY_READY=false
+
+  while [ $COUNT -lt $MAX_RETRIES ]; do
+    if grep -q "Sampling process" "$PYSPY_LOG" 2>/dev/null; then
+      PYSPY_READY=true
+      break
+    fi
+
+    # Check if py-spy died
+    if ! kill -0 $PYSPY_PID 2>/dev/null; then
+      echo "py-spy process died unexpectedly. Check $PYSPY_LOG for details."
+      break
+    fi
+
+    sleep 0.1
+    COUNT=$((COUNT+1))
+  done
+
+  if [ "$PYSPY_READY" = true ]; then
+    echo "py-spy is ready!"
+  else
+    echo "py-spy did not start properly or timed out. Proceeding with load test anyway."
+  fi
+
+  # Signal workers to start
+  touch "$SYNC_FILE"
+  echo "Started concurrent queries!"
+
+  # Wait for py-spy to finish
+  wait $PYSPY_PID || true
   
   # Generate flamegraph
   py-spy record \
