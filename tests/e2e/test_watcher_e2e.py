@@ -21,10 +21,12 @@ def wait_for_server(url: str, timeout: int = 15) -> bool:
     start = time.time()
     while time.time() - start < timeout:
         try:
-            requests.get(url)
-            return True
+            response = requests.get(url)
+            if response.status_code == 200:
+                return True
         except requests.ConnectionError:
-            time.sleep(0.5)
+            pass
+        time.sleep(0.5)
     return False
 
 
@@ -92,7 +94,7 @@ default_embed_model = "small"
     try:
         # Wait for valid status
         base_url = f"http://{e2e_host}:{e2e_port}"
-        assert wait_for_server(f"{base_url}/health"), "Server failed to start"
+        assert wait_for_server(f"{base_url}/v1/health"), "Server failed to start"
 
         # 4. Create a new file in the git repo (uncommitted)
         new_file = git_repo / "live_watch.py"
