@@ -203,66 +203,68 @@ export class TokenCounter implements TokenCounterLike {
     let usedExactAPI = false;
     let usedOpenAI = false;
 
-    for (const text of texts) {
-      const normalized = text || "";
-      const cacheKey = this.buildCacheKey(provider, resolvedModel, options?.baseUrl, normalized);
-      const cached = this.readFromCache(cacheKey);
-      if (cached !== null) {
-        cacheHits++;
-        perInput.push(cached);
-        continue;
-      }
-
-      cacheMisses++;
-
-      try {
-        if (provider === "anthropic") {
-          if (!this.client.isReady()) {
-            throw new Error("Anthropic client unavailable");
-          }
-
-          const tokens = await this.client.countTokens(normalized, resolvedModel);
-          usedExactAPI = true;
-          perInput.push(tokens);
-          this.metrics.anthropicCalls++;
-          this.writeToCache(cacheKey, tokens);
-          this.updateCalibration(normalized, tokens);
-          continue;
+    const results = await Promise.all(
+      texts.map(async (text) => {
+        const normalized = text || "";
+        const cacheKey = this.buildCacheKey(provider, resolvedModel, options?.baseUrl, normalized);
+        const cached = this.readFromCache(cacheKey);
+        if (cached !== null) {
+          cacheHits++;
+          return cached;
         }
 
-        if (provider === "openai") {
-          if (options?.baseUrl && !options.baseUrl.includes("api.openai.com")) {
-            throw new Error("Custom OpenAI-compatible base URL detected; using heuristic counter");
+        cacheMisses++;
+
+        try {
+          if (provider === "anthropic") {
+            if (!this.client.isReady()) {
+              throw new Error("Anthropic client unavailable");
+            }
+
+            const tokens = await this.client.countTokens(normalized, resolvedModel);
+            usedExactAPI = true;
+            this.metrics.anthropicCalls++;
+            this.writeToCache(cacheKey, tokens);
+            this.updateCalibration(normalized, tokens);
+            return tokens;
           }
 
-          if (!options?.model) {
-            throw new Error("OpenAI token counting requires the model name");
-          }
-          const tokens = this.openaiClient.countTokens(normalized, resolvedModel);
-          usedOpenAI = true;
-          perInput.push(tokens);
-          this.metrics.openaiCounts++;
-          this.writeToCache(cacheKey, tokens);
-          this.updateCalibration(normalized, tokens);
-          continue;
-        }
+          if (provider === "openai") {
+            if (options?.baseUrl && !options.baseUrl.includes("api.openai.com")) {
+              throw new Error(
+                "Custom OpenAI-compatible base URL detected; using heuristic counter"
+              );
+            }
 
-        // Unknown provider: force heuristic fallback
-        throw new Error(`Unsupported provider for exact token counting: ${provider}`);
-      } catch (error) {
-        if (provider === "anthropic") {
-          this.metrics.anthropicErrors++;
-        } else if (provider === "openai") {
-          this.metrics.openaiErrors++;
+            if (!options?.model) {
+              throw new Error("OpenAI token counting requires the model name");
+            }
+            const tokens = this.openaiClient.countTokens(normalized, resolvedModel);
+            usedOpenAI = true;
+            this.metrics.openaiCounts++;
+            this.writeToCache(cacheKey, tokens);
+            this.updateCalibration(normalized, tokens);
+            return tokens;
+          }
+
+          // Unknown provider: force heuristic fallback
+          throw new Error(`Unsupported provider for exact token counting: ${provider}`);
+        } catch (error) {
+          if (provider === "anthropic") {
+            this.metrics.anthropicErrors++;
+          } else if (provider === "openai") {
+            this.metrics.openaiErrors++;
+          }
+          const estimate = this.estimateSingle(normalized);
+          console.warn(
+            "[TokenCounter] Falling back to heuristic token estimate due to API error:",
+            error
+          );
+          return estimate;
         }
-        const estimate = this.estimateSingle(normalized);
-        perInput.push(estimate);
-        console.warn(
-          "[TokenCounter] Falling back to heuristic token estimate due to API error:",
-          error
-        );
-      }
-    }
+      })
+    );
+    perInput.push(...results);
 
     const totalTokens = perInput.reduce((sum, tokens) => sum + tokens, 0);
     this.metrics.cacheHits += cacheHits;
