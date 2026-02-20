@@ -207,7 +207,7 @@ default_embed_model = "small"
         assert self._wait_for_file_in_db(store_root, filename), "File not indexed initially"
 
         # Delete
-        time.sleep(1) # Give watcher a breather
+        time.sleep(1)  # Give watcher a breather
         (repo_path / filename).unlink()
 
         # Verify removal
@@ -224,7 +224,7 @@ default_embed_model = "small"
         assert self._wait_for_file_in_db(store_root, old_name), "Old file not indexed"
 
         # Rename
-        time.sleep(1) # Give watcher a breather
+        time.sleep(1)  # Give watcher a breather
         (repo_path / old_name).rename(repo_path / new_name)
 
         # Verify old gone, new present
