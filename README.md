@@ -1,13 +1,21 @@
-# 🐬 dolphin
+# Dolphin
 
 [![PyPi Version](https://img.shields.io/pypi/v/pb-dolphin.svg)](https://pypi.org/project/pb-dolphin/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A semantic code indexing and search system with multiple interfaces. This repository currently ships the Knowledge Bank (Python) and MCP server (TypeScript/Bun) as stable, release-targeted components.
+Blazing-fast, all-in-one semantic search for context efficiency in large codebases.
+
+Dolphin helps humans and AI agents find the right code quickly with semantic search, rich context retrieval, and different interface options (CLI, REST API, and MCP).
+
+## Why Dolphin
+
+- **Built for large repositories**: hybrid vector + keyword retrieval keeps search fast and relevant as codebases scale.
+- **All-in-one context management**: indexing, chunking, metadata, snippets, and graph context in one framework.
+- **Practical developer UX**: use from terminal, set up with MCP, or integrate however you like.
 
 ## Quick Start
 
-### Installation
+### 1) Install
 
 #### Core Installation (~200MB)
 
@@ -31,21 +39,21 @@ uv pip install "pb-dolphin[reranking]"
 
 See [Advanced Features](#advanced-features) for more information.
 
-### Basic Usage
+### 2) Index a repository
 
-We recommend using `uv run` to execute all commands for maximum compatibility.
+We recommend using `uv run` for Python command execution.
 
 ```bash
 # Initialize global knowledge store and index a repository
-dolphin init
-dolphin add-repo my-project /path/to/project
-dolphin index my-project
+uv run dolphin init
+uv run dolphin add-repo my-project /path/to/project
+uv run dolphin index my-project
 
 # Search your indexed code
-dolphin search "authentication logic"
+uv run dolphin search "authentication logic"
 
 # Start API server
-dolphin serve
+uv run dolphin serve
 ```
 
 ## Core Commands
@@ -83,23 +91,6 @@ dolphin serve
           │(Vectors)│                │(Metadata)│
           └─────────┘                └──────────┘
 ```
-
-### Repository Layout & Tooling
-
-- **Python backend (Knowledge Bank)** (`kb/`)
-  - Tooling: `uv` (`pyproject.toml`, `uv.lock`)
-  - Commands: `uv run dolphin ...`, `uv run pytest ...`
-- **MCP bridge** (`mcp-bridge/`)
-  - Tooling: Bun (`package.json`, `bun.lock`)
-  - Commands: `cd mcp-bridge && bun install && bun test`
-- **Shared telemetry/IPC** (`shared/`)
-  - Tooling: Bun (`package.json`, `bun.lock`)
-  - Commands: `cd shared && bun install && bun test`
-
-At the repo root:
-
-- `package.json` acts as a workspace aggregator with convenience scripts (`bun run build:all`, `bun run lint:all`, `bun run format`).
-- Use `just` targets (`just test-all`, `just check`) for the canonical, cross-project workflows.
 
 ### Key Features
 
