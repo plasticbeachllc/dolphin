@@ -62,7 +62,7 @@ uv run dolphin serve
 - `dolphin init --repo` - Create repo-specific config in current directory
 - `dolphin add-repo <name> <path>` - Register a repository for indexing
 - `dolphin index <name>` - Index a repository with language-aware chunking
-- `dolphin search <query>` - Search indexed code semantically
+- `dolphin search <query>` - Search indexed code semantically (compact by default, `--verbose` for details, `--json` for scripting)
 - `dolphin serve` - Start REST API server (port 7777)
 - `dolphin config --show` - Display current configuration
 
@@ -108,6 +108,12 @@ uv run dolphin serve
   - FastAPI server with search, retrieval, and metadata endpoints
   - MCP server implementation available at `bunx dolphin-mcp`
 - **Configuration** - Per-repo chunking and ignore configuration
+
+### Metadata Schema
+
+- Runtime metadata schema is canonical `v1`.
+- Startup automatically applies pending metadata migrations and logs a clear note when this happens.
+- `v1` is the only supported runtime schema for the current release line.
 
 ## Configuration
 
@@ -264,7 +270,7 @@ Currently only [OpenAI embeddings](https://platform.openai.com/docs/guides/embed
 
 ## Development Status
 
-**Current**: Release candidates: (v0.2.1) Knowledge Bank + (v0.2.3) MCP
+**Current**: Release candidates: (v0.2.2) Knowledge Bank + (v0.2.3) MCP
 
 - ✅ Core indexing and search pipeline
 - ✅ Language-aware chunking (Python, TS, JS, Markdown)
@@ -339,7 +345,7 @@ For detailed troubleshooting, performance tips, and development workflows, see [
 
 Current versions:
 
-- **Python Package (PyPI)**: [`0.2.1`](pyproject.toml:7) - `pb-dolphin`
+- **Python Package (PyPI)**: [`0.2.2`](pyproject.toml:7) - `pb-dolphin`
 - **MCP Bridge (npm)**: [`0.2.3`](mcp-bridge/package.json:3) - `dolphin-mcp`
 
 ### License

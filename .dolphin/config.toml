@@ -52,6 +52,8 @@ ignore = [
     "pytest.ini",
     "chunking_config.toml",
     ".dolphin/**",
+    "*.log",
+    "*.log.*",
 
     # Lock files
     "package-lock.json",

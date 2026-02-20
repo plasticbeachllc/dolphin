@@ -5,6 +5,7 @@
 - Target release: `pb-dolphin` `0.2.2`
 - MCP bridge: no version bump in this plan (already at `0.2.3`); only coordinate `0.2.4` if a KB contract change makes it necessary.
 - Startup behavior: metadata schema migrations run automatically at startup, with a clear user-facing note.
+- Schema support policy: schema `v1` is the first and only supported runtime schema for `pb-dolphin` `0.2.2`.
 - Query UX: default CLI output is compact and human-friendly; detailed internals stay behind `--verbose`.
 - Interactive query mode: explicitly out of scope for this release.
 
@@ -25,6 +26,54 @@
 - FK deletion-order regression has been fixed in ingestion deletion flow.
 - MCP graph fixture integration test expectation has been updated and integration suite is passing.
 - Changelog has pending unreleased entries and should be finalized during release PR.
+- MCP dependency hardening has reduced Bun audit findings from 11 to 1 remaining tooling advisory (`eslint` transitively requiring `ajv@6.x`).
+
+## Execution Status (as of 2026-02-20)
+
+- PR1 - Schema Versioning and Migration Framework: completed
+  - Added fresh migration registry and startup auto-migration path.
+  - Added schema version tracking table and startup migration note logging.
+  - Added unit coverage for schema version creation and pending migration auto-apply behavior.
+- PR2 - Canonical Migration Set for Existing Metadata: completed
+  - Added canonical `v1` migration to normalize known legacy table variants.
+  - Added migration coverage for alias-table normalization and FK cascade repair.
+  - Established `v1` as the only supported runtime schema in this release line.
+- PR3 - Deleted-File Reliability and Integrity Gates: completed
+  - Unified sync/async deleted-file handling through a shared cleanup path.
+  - Fixed `dry_run` deletion behavior to be non-mutating while still reporting intent.
+  - Added actionable FK-deletion diagnostics and integration assertions using `PRAGMA foreign_key_check`.
+  - Added regression coverage for bulk deleted-file cleanup across mixed embedding models.
+- PR4 - Query UX Upgrade (CLI Search): completed
+  - Default `dolphin search` output is now compact and high-signal.
+  - Added `--verbose` for expanded metadata/snippet output and stable `--json` output mode for scripting.
+  - Added normalized filter flags (`--repo`, `--path`, `--exclude-path`, `--exclude-pattern`, `--lang`) plus context/snippet options.
+  - Added CLI unit coverage for JSON schema, compact output, verbose rendering, and language filtering.
+- PR5 - Terminal Beautification and Logging Signal Cleanup: completed
+  - Added shared terminal status rendering utilities and wired `dolphin serve` + server lifecycle output to consistent high-signal rich formatting.
+  - Kept structured logger output JSON-only; removed `DOLPHIN_LOG_FORMAT` mode switching to avoid dual-format complexity.
+  - Reduced indexing progress noise by removing duplicate `Indexing file:` lines and keeping one per-file summary line.
+  - Demoted chunker per-file completion logs from `INFO` to `DEBUG` to keep default output focused.
+  - Improved shutdown reliability by adding explicit watcher stop + executor shutdown handling, preventing Ctrl-C double-interrupt hangs after server shutdown.
+  - Added `*.log` to code-level default ignore patterns so log files are excluded even when running without a generated config file.
+  - Added env-configurable log level (`DOLPHIN_LOG_LEVEL`) and opt-in traceback payloads (`DOLPHIN_LOG_TRACEBACK=1`).
+  - Reduced default logging noise by omitting traceback blobs unless explicitly requested.
+  - Added logger unit coverage for env-level wiring and traceback opt-in behavior.
+- PR6 - README and Docs Refresh: completed
+  - Refreshed README value proposition and quickstart with `uv run` command flow.
+  - Added practical CLI query examples (`--verbose`, `--json`, `--lang`, path/pattern filters).
+  - Documented canonical schema `v1` + startup auto-migration behavior in user docs and architecture notes.
+  - Updated testing guide with focused verification commands for schema/deletion/query/logging changes.
+- PR7 - Release Gate, Final QA, and v0.2.2 Cut: completed
+  - Executed full release matrix (Python unit/integration/e2e, lint/type, MCP bridge tests, shared tests) with green results.
+  - Finalized `CHANGELOG.md` entries for `0.2.2` including schema, deletion integrity, and CLI/logging UX updates.
+  - Bumped Python package version to `0.2.2` (`pyproject.toml`, `kb/__init__.py`).
+  - Addressed PR #151 review feedback: fixed invalid `graph_metrics` FK diagnostic query, removed CLI snippet magic number via constant, and fixed migration index-rename collision during table rebuilds.
+  - Added regression coverage for graph-metrics dependency diagnostics and node-aliases rebuild with legacy index-name collisions.
+- PR8 - MCP Dependency Security Hardening (post-v0.2.2 follow-up): in progress
+  - Promoted MCP SDK to `^1.26.0` (outside vulnerable `<=1.25.3` range).
+  - Added root workspace scoped overrides to force patched transitive runtime deps (`@modelcontextprotocol/sdk>ajv`, `>body-parser`, `>express>qs`, `>hono`, `>qs`) plus `minimatch@10.2.2`.
+  - Verified MCP build/tests/lint remain healthy after lockfile regeneration.
+  - Remaining advisory is tooling-only (`eslint` -> `ajv@6.x`) and requires lint-stack migration or upstream dependency movement for full elimination.
 
 ---
 
@@ -67,7 +116,7 @@ Introduce explicit metadata schema versioning and a migration runner with automa
 
 ### Objective
 
-Create concrete migrations to normalize legacy metadata schemas to the canonical model used by current code.
+Create concrete migrations to normalize bootstrap/legacy metadata schemas to canonical schema `v1`.
 
 ### Implementation Steps
 
@@ -92,7 +141,8 @@ Create concrete migrations to normalize legacy metadata schemas to the canonical
 
 ### Exit Criteria
 
-- Known legacy schema variants migrate to canonical schema successfully.
+- Known legacy schema variants migrate to canonical schema `v1` successfully.
+- Post-migration DB reports `schema_version = 1`.
 - Post-migration operations (index, delete, search) run without FK errors.
 
 ---
@@ -186,7 +236,9 @@ Improve terminal experience and ensure logs communicate clear signal to end user
 ### Expected File Touchpoints
 
 - `kb/cli.py`
-- `kb/logging/structured_logger.py` (and related logging utilities)
+- `kb/api/server.py`
+- `kb/observability/structured_logger.py` (and related logging utilities)
+- `kb/terminal.py`
 - `tests/unit/test_logging/test_structured_logger.py`
 - `tests/unit/cli/test_cli_smoke.py`
 

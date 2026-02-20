@@ -2,7 +2,7 @@
 
 Technical architecture and implementation status for Dolphin.
 
-**Version**: 0.2.1  
+**Version**: 0.2.2  
 **Status**: Beta (KB + MCP release components)  
 **Last Updated**: 2026-02-20
 
@@ -62,6 +62,20 @@ AI Client (MCP) / CLI / REST consumer
 ### Retrieval path
 
 `Query -> embed -> vector + BM25 -> fusion/rerank -> snippets -> API/MCP response`
+
+## Metadata Schema Contract
+
+- Metadata database tracks schema version in `schema_version` (singleton row).
+- Startup runs pending schema migrations automatically before normal initialization.
+- Canonical runtime schema is `v1`; this is the only supported runtime schema for the `0.2.2` release line.
+
+## CLI Query UX
+
+- `dolphin search` default output is compact and high-signal.
+- `--verbose` enables expanded metadata/snippets.
+- `--json` emits a stable, script-friendly result schema.
+- Common query filters are normalized across local/remote modes:
+  - `--repo`, `--path`, `--exclude-path`, `--exclude-pattern`, `--lang`
 
 ## Implementation Status
 

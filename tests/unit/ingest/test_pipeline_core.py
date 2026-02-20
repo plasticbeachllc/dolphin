@@ -554,6 +554,34 @@ class TestPipelineProcessDeletions:
         assert stats["files_done"] == 1
         assert call_order == ["graph", "delete"]
 
+    def test_process_deletions_dry_run_does_not_mutate(self, pipeline_setup, monkeypatch):
+        """Dry-run deletion should report intent without mutating data."""
+        pipeline, repo_path, metadata, repo_id, file_id = pipeline_setup
+        from kb.ingest.error_logging import ErrorLogger
+
+        pruned_models: list[str] = []
+
+        def fake_prune_invalidated_content_for_file(repo_id_arg, file_id_arg, embed_model, current_hashes):
+            pruned_models.append(embed_model)
+            return 1
+
+        monkeypatch.setattr(metadata, "prune_invalidated_content_for_file", fake_prune_invalidated_content_for_file)
+
+        error_logger = ErrorLogger(repo_path, "session1")
+        stats = pipeline.process_deletions(
+            repo_id=repo_id,
+            repo_name="test-repo",
+            files=["deleted.py"],
+            embed_model="small",
+            dry_run=True,
+            error_logger=error_logger,
+        )
+
+        assert stats["files_done"] == 1
+        assert stats["chunks_pruned"] == 0
+        assert pruned_models == []
+        assert metadata.get_file_id(repo_id, "deleted.py") == file_id
+
 
 class TestPipelineDropRepoIndex:
     """Test IngestionPipeline _drop_repo_index operation."""
