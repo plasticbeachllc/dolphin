@@ -82,7 +82,7 @@ class RepoWatcher:
 
         try:
             # Main watch loop
-            async for changes in awatch(self.root, stop_event=stop_event, debounce=1000, step=500):
+            async for changes in awatch(self.root, stop_event=stop_event, debounce=200, step=500):
                 # Check for branch switch
                 await self._check_branch_switch()
 

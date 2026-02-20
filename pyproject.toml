@@ -118,6 +118,9 @@ dev = [
     "ruff>=0.1.0",
     "twine>=6.2.0",
     "ty>=0.0.1a26",
+    # Security updates
+    "cryptography>=46.0.5",
+    "pip>=26.0",
 ]
 test = [
     "fakeredis>=2.32.0",

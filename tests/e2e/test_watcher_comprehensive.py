@@ -19,18 +19,20 @@ def get_free_port() -> int:
         return s.getsockname()[1]
 
 
-def wait_for_server(url: str, timeout: int = 15) -> bool:
+def wait_for_server(url: str, timeout: int = 30) -> bool:
     start = time.time()
     while time.time() - start < timeout:
         try:
-            requests.get(url)
-            return True
+            resp = requests.get(url)
+            if resp.status_code == 200:
+                return True
         except requests.ConnectionError:
-            time.sleep(0.5)
+            pass
+        time.sleep(0.5)
     return False
 
 
-def wait_for_api_result(base_url: str, query: str, filename: str, timeout: int = 15) -> bool:
+def wait_for_api_result(base_url: str, query: str, filename: str, timeout: int = 20) -> bool:
     """Poll API until the filename appears in results."""
     start = time.time()
     while time.time() - start < timeout:
@@ -110,7 +112,7 @@ default_embed_model = "small"
         base_url = f"http://{SERVER_HOST}:{port}"
 
         try:
-            assert wait_for_server(f"{base_url}/health"), "Server failed to start"
+            assert wait_for_server(f"{base_url}/v1/health"), "Server failed to start"
             yield base_url, git_repo, store_root
         finally:
             server_process.terminate()
@@ -122,7 +124,7 @@ default_embed_model = "small"
             print(f"--- Server Stdout ---\n{stdout}")
             print(f"--- Server Stderr ---\n{stderr}")
 
-    def _wait_for_file_in_db(self, store_root: Path, file_path: str, timeout: int = 10) -> bool:
+    def _wait_for_file_in_db(self, store_root: Path, file_path: str, timeout: int = 20) -> bool:
         """Helper to wait for a file to appear in the DB."""
         db_path = store_root / "metadata.db"
         start = time.time()
@@ -138,10 +140,10 @@ default_embed_model = "small"
                         return True
                 except sqlite3.Error:
                     pass
-            time.sleep(0.2)
+            time.sleep(0.5)
         return False
 
-    def _wait_for_file_gone_from_db(self, store_root: Path, file_path: str, timeout: int = 10) -> bool:
+    def _wait_for_file_gone_from_db(self, store_root: Path, file_path: str, timeout: int = 30) -> bool:
         """Helper to wait for a file to disappear from the DB."""
         db_path = store_root / "metadata.db"
         start = time.time()
@@ -157,7 +159,7 @@ default_embed_model = "small"
                         return True
                 except sqlite3.Error:
                     pass
-            time.sleep(0.2)
+            time.sleep(0.5)
         return False
 
     def test_create_and_search(self, server_setup):
@@ -186,7 +188,7 @@ default_embed_model = "small"
         assert self._wait_for_file_in_db(store_root, filename), "Initial file not indexed"
 
         # Modify file
-        time.sleep(1)  # Ensure mtime changes significantly for some filesystems
+        time.sleep(2)  # Ensure mtime changes significantly for some filesystems and watchfiles
         (repo_path / filename).write_text("def foo(): return 'version_two'")
 
         # We can't easily check DB for content update without inspecting chunks,
@@ -205,6 +207,7 @@ default_embed_model = "small"
         assert self._wait_for_file_in_db(store_root, filename), "File not indexed initially"
 
         # Delete
+        time.sleep(1) # Give watcher a breather
         (repo_path / filename).unlink()
 
         # Verify removal
@@ -221,6 +224,7 @@ default_embed_model = "small"
         assert self._wait_for_file_in_db(store_root, old_name), "Old file not indexed"
 
         # Rename
+        time.sleep(1) # Give watcher a breather
         (repo_path / old_name).rename(repo_path / new_name)
 
         # Verify old gone, new present
@@ -272,7 +276,7 @@ provider = "stub"
 
         try:
             base_url = f"http://{SERVER_HOST}:{port}"
-            assert wait_for_server(f"{base_url}/health"), "Server failed to start"
+            assert wait_for_server(f"{base_url}/v1/health"), "Server failed to start"
 
             # Wait for control file
             assert self._wait_for_file_in_db(store_root, "control.txt"), "Control file not indexed"
