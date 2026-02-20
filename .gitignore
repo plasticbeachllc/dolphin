@@ -53,12 +53,16 @@ shared/node_modules/
 benchmarks/golden-scenarios/node_modules/
 benchmarks/golden-scenarios/results/
 
+# Log files
+*.log
+*.log.*
+.pb_kb_logs/
+
 # State files
 .dolphin/state/
 
 # Node
 node_modules/
-*.log
 
 # TypeScript
 *.tsbuildinfo
