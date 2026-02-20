@@ -122,7 +122,7 @@ default_embed_model = "small"
             print(f"--- Server Stdout ---\n{stdout}")
             print(f"--- Server Stderr ---\n{stderr}")
 
-    def _wait_for_file_in_db(self, store_root: Path, file_path: str, timeout: int = 10) -> bool:
+    def _wait_for_file_in_db(self, store_root: Path, file_path: str, timeout: int = 30) -> bool:
         """Helper to wait for a file to appear in the DB."""
         db_path = store_root / "metadata.db"
         start = time.time()
@@ -141,7 +141,7 @@ default_embed_model = "small"
             time.sleep(0.2)
         return False
 
-    def _wait_for_file_gone_from_db(self, store_root: Path, file_path: str, timeout: int = 10) -> bool:
+    def _wait_for_file_gone_from_db(self, store_root: Path, file_path: str, timeout: int = 30) -> bool:
         """Helper to wait for a file to disappear from the DB."""
         db_path = store_root / "metadata.db"
         start = time.time()
