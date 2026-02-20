@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **MCP Graph Fixture Coverage Test**: Updated multi-repo graph fixture keyword expectations from `agentbridge` to `mcpserver` in `tests/integration/search/test_graph_mcp.py` so integration tests match current fixture content.
+- **Foreign Key Deletion Ordering**: Reordered deleted-file processing to clean graph dependencies before deleting file records, preventing `FOREIGN KEY constraint failed` errors during incremental deletion handling in the ingestion pipeline.
 
 ## [0.2.1] - 2026-01-26
 
