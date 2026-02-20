@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Schema Version Tracking + Startup Auto-Migration**: Metadata startup now tracks `schema_version` and automatically applies pending migrations to canonical schema `v1`.
 - **CLI Query UX Upgrade**: `dolphin search` now supports compact default output, `--verbose` expanded output, stable `--json` mode, language filtering (`--lang`), exclusion filters, and snippet/context controls.
 - **Terminal UX Refresh**: `dolphin serve` and related CLI status output now use consistent rich-formatted status lines with clearer startup/shutdown/watcher context and actionable hints.
+- **Application Output Beautification**: Standardized user-facing CLI/server/indexing output with clearer status levels, compact progress lines, and actionable terminal hints.
 - **Logging Controls**: Added configurable log level (`DOLPHIN_LOG_LEVEL`) and opt-in traceback payloads (`DOLPHIN_LOG_TRACEBACK=1`) while keeping structured JSON log output stable.
 - **Cleaner Indexing Progress Output**: Removed duplicate `Indexing file:` lines and moved per-file chunker diagnostics to debug-level so default indexing output stays high-signal.
 
@@ -31,7 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Canonical Schema Baseline (`v1`)**: Startup now auto-migrates metadata DBs to canonical schema `v1` and records `schema_version`, establishing `v1` as the only supported runtime schema for this release.
 - **Deleted-File Reliability**: Unified sync/parallel deletion cleanup flow, fixed `dry_run` deletion mutations, and added actionable FK failure diagnostics with dependent-row context.
 - **Graceful Server Shutdown**: Watcher shutdown now requests stop and explicitly closes watcher executors, preventing post-shutdown Ctrl-C hangs/noisy thread-exit traces.
-- **Default Ignore Coverage**: Added `*.log` to built-in ignore patterns so log files are skipped by default even before a user config file is created.
+- **Default Ignore Coverage**: Added `*.log` and `*.log.*` to built-in ignore patterns and default config so log files are skipped by default.
+- **FK Deletion Diagnostics**: Corrected `graph_metrics` dependency diagnostics to join via `code_nodes` (no direct `file_id` lookup), preventing masked errors on FK failures.
+- **Migration Rebuild Stability**: Canonical schema table rebuilds now drop renamed legacy backup tables before index recreation to avoid SQLite index-name collisions during startup migration.
 
 ## [0.2.1] - 2026-01-26
 
