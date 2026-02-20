@@ -70,7 +70,8 @@ async function handleConfigCommand(args: string[]) {
   const result = loadConfig();
   const ok = result.diagnostics.every((diag) => diag.level !== "error");
   if (format === "toml") {
-    process.stdout.write(`${tomlStringify(result.config as any)}\n`);
+    const tomlConfig = result.config as Parameters<typeof tomlStringify>[0];
+    process.stdout.write(`${tomlStringify(tomlConfig)}\n`);
     return;
   }
   if (format !== "json") {

@@ -26,6 +26,7 @@
 - FK deletion-order regression has been fixed in ingestion deletion flow.
 - MCP graph fixture integration test expectation has been updated and integration suite is passing.
 - Changelog has pending unreleased entries and should be finalized during release PR.
+- MCP dependency hardening has reduced Bun audit findings from 11 to 1 remaining tooling advisory (`eslint` transitively requiring `ajv@6.x`).
 
 ## Execution Status (as of 2026-02-20)
 
@@ -68,6 +69,11 @@
   - Bumped Python package version to `0.2.2` (`pyproject.toml`, `kb/__init__.py`).
   - Addressed PR #151 review feedback: fixed invalid `graph_metrics` FK diagnostic query, removed CLI snippet magic number via constant, and fixed migration index-rename collision during table rebuilds.
   - Added regression coverage for graph-metrics dependency diagnostics and node-aliases rebuild with legacy index-name collisions.
+- PR8 - MCP Dependency Security Hardening (post-v0.2.2 follow-up): in progress
+  - Promoted MCP SDK to `^1.26.0` (outside vulnerable `<=1.25.3` range).
+  - Added root workspace scoped overrides to force patched transitive runtime deps (`@modelcontextprotocol/sdk>ajv`, `>body-parser`, `>express>qs`, `>hono`, `>qs`) plus `minimatch@10.2.2`.
+  - Verified MCP build/tests/lint remain healthy after lockfile regeneration.
+  - Remaining advisory is tooling-only (`eslint` -> `ajv@6.x`) and requires lint-stack migration or upstream dependency movement for full elimination.
 
 ---
 
