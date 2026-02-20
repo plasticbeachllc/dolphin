@@ -111,7 +111,7 @@ py-spy record --format flamegraph --output flamegraph.svg --rate 100 -- uv run p
 
 ### clinic.js
 
-**Purpose**: Performance profiling for Node.js/Bun (Agent Core, Extension)
+**Purpose**: Performance profiling for Node.js/Bun (MCP bridge and shared tooling)
 
 **Key Features**:
 
@@ -122,11 +122,11 @@ py-spy record --format flamegraph --output flamegraph.svg --rate 100 -- uv run p
 **Usage**:
 
 ```bash
-# Profile extension activation
-clinic doctor -- node extension/dist/extension.js
+# Profile MCP bridge startup
+clinic doctor -- bun run mcp-bridge/src/index.ts
 
-# Profile with flame graph
-clinic flame -- bun run agent-core/src/main.ts
+# Profile MCP bridge with flame graph
+clinic flame -- bun run mcp-bridge/src/index.ts
 ```
 
 ### Prometheus + Grafana
@@ -436,22 +436,22 @@ async def search(request: SearchRequest):
             cache_misses.inc()
 ```
 
-**Agent Core** (`agent-core/src/main.ts`):
+**MCP bridge** (`mcp-bridge/src/index.ts`):
 
 ```typescript
 import { register, Counter, Histogram } from "prom-client";
 
 // Metrics
-const extensionActivationDuration = new Histogram({
-  name: "extension_activation_duration_seconds",
-  help: "Extension activation time",
+const mcpRequestDuration = new Histogram({
+  name: "mcp_request_duration_seconds",
+  help: "MCP request processing time",
 });
 
 // Usage
 const start = Date.now();
-await activateExtension();
+await handleRequest();
 const duration = (Date.now() - start) / 1000;
-extensionActivationDuration.observe(duration);
+mcpRequestDuration.observe(duration);
 ```
 
 #### 2. Expose Metrics Endpoints
@@ -466,7 +466,7 @@ def metrics():
     return Response(generate_latest(), media_type="text/plain")
 ```
 
-**Agent Core**:
+**MCP bridge**:
 
 ```typescript
 app.get("/metrics", (req, res) => {
@@ -612,8 +612,8 @@ sudo setcap cap_sys_ptrace=eip $(which py-spy)
 
 ```bash
 # Reinstall clinic globally
-npm uninstall -g clinic
-npm install -g clinic
+bun remove -g clinic
+bun add -g clinic
 
 # Verify installation
 clinic --version

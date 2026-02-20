@@ -335,7 +335,7 @@ def chunk_file(
         )
         enriched_chunks.append(enriched_chunk)
 
-    _log.info(
+    _log.debug(
         "Chunked %s into %d chunks (avg %d tokens)",
         rel_path,
         len(enriched_chunks),

@@ -13,7 +13,7 @@
       },
       {
         "type": "text",
-        "text": "#### Code Graph Context\n- Node: AgentBridge::start\n- Source: agent-core/src/bridge.ts:25-90\n- Edges:\n  - start → waitForReady\n  - start → handleCrash\n"
+        "text": "#### Code Graph Context\n- Node: MCPServer::run\n- Source: mcp-bridge/src/index.ts:1-60\n- Edges:\n  - run → registerTools\n  - run → serveStdio\n"
       },
       {
         "type": "resource",
@@ -23,9 +23,9 @@
       },
       {
         "type": "resource",
-        "href": "file:///workspace/agent-core/src/bridge.ts",
+        "href": "file:///workspace/mcp-bridge/src/index.ts",
         "mimeType": "text/x-typescript",
-        "text": "export class AgentBridge { ... }"
+        "text": "export function run() { ... }"
       }
     ]
   }

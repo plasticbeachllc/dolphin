@@ -3,33 +3,29 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "vscode-extension",
-    "vscode-extension/webview",
-    "vscode-extension/playwright",
-    "agent-core",
     "mcp-bridge",
     "shared"
   ],
   "scripts": {
-    "setup": "npm install && cd vscode-extension/webview && bun install && cd ../.. && cd agent-core && bun install && cd .. && cd mcp-bridge && bun install",
-    "build:extension": "cd vscode-extension && npm run compile",
-    "build:webview": "cd vscode-extension/webview && bun run build",
-    "build:agent": "cd agent-core && bun run build",
-    "build:all": "npm run build:extension && npm run build:webview && npm run build:agent",
-    "lint:all": "cd mcp-bridge && bun run lint && cd ../agent-core && bun run lint && cd ../vscode-extension && bun run lint",
-    "test:agent": "cd agent-core && bun test",
-    "test:mcp": "cd mcp-bridge && npm run test:clean",
-    "test:unit": "bun run test:agent && bun run test:mcp && cd vscode-extension && bun run test:unit",
-    "test:integration": "cd vscode-extension && bun run test:integration",
-    "test:e2e": "cd vscode-extension && npm run test:e2e && npm run test --workspace vscode-extension/playwright",
-    "test:extension:playwright": "npm run test --workspace vscode-extension/playwright",
-    "clean": "rm -rf vscode-extension/out vscode-extension/webview/build agent-core/dist",
-    "dev:extension": "cd vscode-extension && npm run watch",
-    "dev:webview": "cd vscode-extension/webview && bun run dev",
+    "setup": "bun install",
+    "build:all": "cd mcp-bridge && bun run build",
+    "lint:all": "cd mcp-bridge && bun run lint",
+    "test:mcp": "cd mcp-bridge && bun run test:clean",
+    "test:unit": "bun run test:mcp",
+    "guard:quick": "uv run ruff check && uv run ruff format --check && bun run lint:all && uv run pytest tests/unit/api/test_api_endpoints.py -q --maxfail=1 && cd mcp-bridge && bun test --serial ./src/tests/unit --bail && cd ../shared && bun test __tests__/kb-auth.test.ts ipc/__tests__/serialization.test.ts --bail",
+    "clean": "rm -rf mcp-bridge/dist shared/dist",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,svelte}\""
   },
   "devDependencies": {
     "prettier": "^3.6.2",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "@modelcontextprotocol/sdk>ajv": "8.18.0",
+    "@modelcontextprotocol/sdk>body-parser": "2.2.2",
+    "@modelcontextprotocol/sdk>express>qs": "6.15.0",
+    "@modelcontextprotocol/sdk>hono": "4.12.0",
+    "@modelcontextprotocol/sdk>qs": "6.15.0",
+    "minimatch": "10.2.2"
   }
 }
