@@ -308,10 +308,10 @@ transport.onMethod("my_method", async (params) => {
 export DOLPHIN_IPC_FORMAT=msgpack
 ```
 
-
 3. **Verify in logs:**
 
 ```
+
 ```
 
 ## Debugging

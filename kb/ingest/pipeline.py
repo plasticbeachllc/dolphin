@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import logging
+import sqlite3
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -126,6 +127,54 @@ class IngestionPipeline:
                 print(f"  BM25 score statistics written to {path}")
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning("Failed to flush BM25 statistics", exc_info=exc)
+
+    def _cleanup_deleted_file_dependencies(self, repo_id: int, repo_name: str, file_id: int, path: str) -> int:
+        """Clean dependent data for a deleted file before deleting the file row."""
+        total_pruned = 0
+        for model_name in ("small", "large"):
+            pruned_count = self.metadata.prune_invalidated_content_for_file(
+                repo_id,
+                file_id,
+                embed_model=model_name,
+                current_hashes=set(),
+            )
+            if pruned_count:
+                total_pruned += pruned_count
+            self.lancedb.prune_file_rows(repo_name, path, model=model_name)
+
+        edges_deleted = 0
+        nodes_deleted = 0
+        if self.graph_store:
+            nodes_deleted, edges_deleted = cleanup_graph_for_file(self.graph_store, file_id)
+
+        if self.graph_store and (edges_deleted > 0 or nodes_deleted > 0):
+            graph_manager = self.get_graph_manager(repo_id)
+            if edges_deleted > 0:
+                graph_manager.on_edges_changed(edges_deleted)
+            else:
+                graph_manager.invalidate_cache()
+
+        # Delete file record last so all dependent cleanup runs first.
+        self.metadata.delete_file(repo_id, file_id)
+        return total_pruned
+
+    def _format_deletion_error(self, path: str, file_id: int | None, exc: Exception) -> str:
+        """Format concise deletion errors with actionable context."""
+        if isinstance(exc, sqlite3.IntegrityError):
+            return (
+                f"Error processing deleted file {path}: foreign-key cleanup incomplete "
+                f"(file_id={file_id}). Ensure startup migration to canonical schema has run. "
+                f"Details: {exc}"
+            )
+        return f"Error processing deleted file {path}: {exc}"
+
+    def _format_index_summary(self, path: str, chunk_count: int, new_count: int, skipped_count: int) -> str:
+        """Format a single high-signal summary line for file indexing progress."""
+        if new_count <= 0:
+            return f"  {path}: unchanged ({chunk_count} chunks, {skipped_count} skipped)"
+        if skipped_count <= 0:
+            return f"  {path}: {chunk_count} chunks, {new_count} new"
+        return f"  {path}: {chunk_count} chunks, {new_count} new, {skipped_count} skipped"
 
     def compute_graph_metrics(self, repo_id: int) -> dict[str, Any]:
         """Compute and store graph metrics for a repository.
@@ -455,7 +504,6 @@ class IngestionPipeline:
                 )
 
                 # Determine language and chunk the file using repo config
-                print(f"Indexing file: {path}", flush=True)
                 language = detect_language_from_extension(file_path) or "text"
                 try:
                     text = file_path.read_text(encoding="utf-8", errors="ignore")
@@ -635,7 +683,7 @@ class IngestionPipeline:
                 stats["vectors_written"] += len(new_hashes)
 
                 # Log per-file summary
-                print(f"  {path}: {len(chunks)} chunks, {len(new_hashes)} new, {skipped_occurrences} skipped")
+                print(self._format_index_summary(path, len(chunks), len(new_hashes), skipped_occurrences))
 
             except Exception as e:
                 error_logger.log_file_error(path, e)
@@ -654,49 +702,32 @@ class IngestionPipeline:
         error_logger: ErrorLogger,
     ) -> dict[str, int]:
         """Process a list of deleted files."""
+        _ = embed_model  # Deletions always prune both models for correctness.
         stats = {
             "files_done": 0,
             "chunks_pruned": 0,
         }
 
         for path in files:
+            file_id: int | None = None
             try:
                 file_id = self.metadata.get_file_id(repo_id, path)
-                if file_id:
-                    total_pruned = 0
-                    for model_name in ("small", "large"):
-                        pruned_count = self.metadata.prune_invalidated_content_for_file(
-                            repo_id,
-                            file_id,
-                            embed_model=model_name,
-                            current_hashes=set(),
-                        )
-                        if pruned_count:
-                            total_pruned += pruned_count
-                        self.lancedb.prune_file_rows(repo_name, path, model=model_name)
+                if not file_id:
+                    continue
 
-                    # Clean up graph data for deleted file
-                    edges_deleted = 0
-                    nodes_deleted = 0
-                    if self.graph_store:
-                        nodes_deleted, edges_deleted = cleanup_graph_for_file(self.graph_store, file_id)
-
-                    if self.graph_store and (edges_deleted > 0 or nodes_deleted > 0):
-                        graph_manager = self.get_graph_manager(repo_id)
-                        if edges_deleted > 0:
-                            graph_manager.on_edges_changed(edges_deleted)
-                        else:
-                            graph_manager.invalidate_cache()
-
-                    # Delete file record after dependent cleanup
-                    self.metadata.delete_file(repo_id, file_id)
-
+                if dry_run:
                     stats["files_done"] += 1
-                    stats["chunks_pruned"] += total_pruned
-                    print(f"  {path}: deleted, {total_pruned} chunks pruned")
+                    print(f"  {path}: dry-run, would delete")
+                    continue
+
+                total_pruned = self._cleanup_deleted_file_dependencies(repo_id, repo_name, file_id, path)
+
+                stats["files_done"] += 1
+                stats["chunks_pruned"] += total_pruned
+                print(f"  {path}: deleted, {total_pruned} chunks pruned")
             except Exception as e:
                 error_logger.log_file_error(f"deleted: {path}", e)
-                print(f"Error processing deleted file {path}: {e}")
+                print(self._format_deletion_error(path, file_id, e))
                 continue
 
         return stats
@@ -1197,7 +1228,6 @@ class IngestionPipeline:
 
                         chunks = res.chunks
                         path = str(res.file_path.relative_to(root))
-                        print(f"Indexing file: {path}", flush=True)
 
                         # Graph Extraction (Main Thread)
                         if self.graph_store and not dry_run:
@@ -1277,6 +1307,7 @@ class IngestionPipeline:
                                     "path": path,
                                     "file_id": file_id,
                                     "new_hashes": new_hashes,
+                                    "skipped_occurrences": skipped_occurrences,
                                     "repo_id": repo_id,
                                     "embed_model": embed_model,
                                 }
@@ -1303,6 +1334,7 @@ class IngestionPipeline:
                             path = task_data["path"]
                             file_id = task_data["file_id"]
                             new_hashes = task_data["new_hashes"]
+                            skipped_occurrences = task_data["skipped_occurrences"]
                             repo_id = task_data["repo_id"]
                             embed_model = task_data["embed_model"]
 
@@ -1406,46 +1438,19 @@ class IngestionPipeline:
 
                             chunks_indexed += len(new_hashes)
                             files_done += 1
-                            print(f"  {path}: {len(chunks)} chunks, {len(new_hashes)} new")
+                            print(self._format_index_summary(path, len(chunks), len(new_hashes), skipped_occurrences))
 
-            # Process deleted files (same as sync)
-            for path in deleted_files:
-                # ... (Deletion logic)
-                try:
-                    file_id = self.metadata.get_file_id(repo_id, path)
-                    if file_id:
-                        total_pruned = 0
-                        for model_name in ("small", "large"):
-                            pruned_count = self.metadata.prune_invalidated_content_for_file(
-                                repo_id,
-                                file_id,
-                                embed_model=model_name,
-                                current_hashes=set(),
-                            )
-                            if pruned_count:
-                                total_pruned += pruned_count
-                            self.lancedb.prune_file_rows(repo_name, path, model=model_name)
-
-                        edges_deleted = 0
-                        nodes_deleted = 0
-                        if self.graph_store:
-                            nodes_deleted, edges_deleted = cleanup_graph_for_file(self.graph_store, file_id)
-
-                        if self.graph_store and (edges_deleted > 0 or nodes_deleted > 0):
-                            graph_manager = self.get_graph_manager(repo_id)
-                            if edges_deleted > 0:
-                                graph_manager.on_edges_changed(edges_deleted)
-                            else:
-                                graph_manager.invalidate_cache()
-
-                        # Delete file record after dependent cleanup
-                        self.metadata.delete_file(repo_id, file_id)
-
-                        files_done += 1
-                        chunks_pruned += total_pruned
-                        print(f"  {path}: deleted, {total_pruned} chunks pruned")
-                except Exception as e:
-                    error_logger.log_file_error(f"deleted: {path}", e)
+            # Process deleted files using shared sync/async-safe logic.
+            del_stats = self.process_deletions(
+                repo_id=repo_id,
+                repo_name=repo_name,
+                files=deleted_files,
+                embed_model=embed_model,
+                dry_run=dry_run,
+                error_logger=error_logger,
+            )
+            files_done += del_stats["files_done"]
+            chunks_pruned += del_stats["chunks_pruned"]
 
         except KeyboardInterrupt:
             self.metadata.set_session_status(session_id, "aborted", notes="interrupted")
