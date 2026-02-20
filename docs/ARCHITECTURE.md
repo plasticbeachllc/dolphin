@@ -68,6 +68,7 @@ AI Client (MCP) / CLI / REST consumer
 - ✅ Python KB backend: active
 - ✅ MCP bridge: active
 - ✅ Shared TS utilities: active
+- ✅ Metadata deletion compatibility: active (file deletion now cleans legacy non-cascade FK dependents before removing `files` rows)
 
 ## Testing Surface
 

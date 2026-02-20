@@ -23,7 +23,23 @@ just test-all
 just test-kb all
 just test-mcp all
 just test-shared
+bun run guard:quick
 ```
+
+## Pre-commit guardrails
+
+Install and enable local hooks:
+
+```bash
+uv run pre-commit install
+```
+
+Configured hooks run:
+
+- `uv run ruff check`
+- `uv run ruff format --check`
+- `bun run lint:all`
+- `bash scripts/precommit-smoke.sh` (small Python + MCP + shared smoke subset)
 
 ## Suite map
 
@@ -50,6 +66,10 @@ just test-shared
 
 - Unit tests use `MockTiktokenEncoding` (`tests/conftest.py`) to keep runs deterministic/offline.
 - Integration/E2E suites use real `cl100k_base` encoding and validate cached copies. Use `TIKTOKEN_FORCE_REFRESH=1 uv run pytest tests/integration/` if needed.
+
+### Deletion compatibility regression
+
+- Legacy metadata schemas with non-cascade FKs are covered by `uv run pytest tests/unit/store/test_sqlite_meta.py -k "delete_file_cleans_legacy_file_fk_tables" -v`.
 
 ### Cache validation quick hits
 

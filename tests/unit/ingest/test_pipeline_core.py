@@ -519,6 +519,41 @@ class TestPipelineProcessDeletions:
         # Should not raise and files_done = 0
         assert stats["files_done"] == 0
 
+    def test_process_deletions_cleans_graph_before_file_delete(self, pipeline_setup, monkeypatch):
+        """Graph cleanup should run before deleting the file row."""
+        pipeline, repo_path, metadata, repo_id, file_id = pipeline_setup
+        from kb.ingest.error_logging import ErrorLogger
+
+        call_order: list[str] = []
+
+        def fake_cleanup_graph_for_file(graph_store, cleanup_file_id):
+            call_order.append("graph")
+            assert cleanup_file_id == file_id
+            return 0, 0
+
+        original_delete_file = metadata.delete_file
+
+        def wrapped_delete_file(delete_repo_id, delete_file_id):
+            call_order.append("delete")
+            return original_delete_file(delete_repo_id, delete_file_id)
+
+        monkeypatch.setattr(ingest_pipeline, "cleanup_graph_for_file", fake_cleanup_graph_for_file)
+        monkeypatch.setattr(metadata, "delete_file", wrapped_delete_file)
+        pipeline.graph_store = object()
+
+        error_logger = ErrorLogger(repo_path, "session1")
+        stats = pipeline.process_deletions(
+            repo_id=repo_id,
+            repo_name="test-repo",
+            files=["deleted.py"],
+            embed_model="small",
+            dry_run=False,
+            error_logger=error_logger,
+        )
+
+        assert stats["files_done"] == 1
+        assert call_order == ["graph", "delete"]
+
 
 class TestPipelineDropRepoIndex:
     """Test IngestionPipeline _drop_repo_index operation."""

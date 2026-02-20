@@ -59,6 +59,7 @@ cd mcp-bridge && bun test
 cd shared && bun test
 uv run ruff check
 uv run ty check
+bun run guard:quick
 ```
 
 ## Architecture awareness

@@ -60,11 +60,16 @@ check-typescript:
 # ==============================================================================
 
 # Run tests (TYPE: unit, integration, e2e, or all)
+# Note: e2e currently applies to Python suites only.
 test TYPE="all":
 	@echo "🧪 Running {{TYPE}} tests..."
 	@just _pytest {{TYPE}}
-	@just _bun-test mcp-bridge {{TYPE}}
-	@just _bun-test shared all
+	@if [ "{{TYPE}}" != "e2e" ]; then \
+		just _bun-test mcp-bridge {{TYPE}}; \
+		just _bun-test shared all; \
+	else \
+		echo "   ℹ️  Skipping TypeScript tests for e2e (no TS e2e suite defined)"; \
+	fi
 	@echo "✅ All {{TYPE}} tests passed!"
 
 # Run Python (kb) tests only
@@ -73,7 +78,7 @@ test-kb TYPE="all":
 	@just _pytest {{TYPE}}
 	@echo "   ✅ Python {{TYPE}} tests passed"
 
-# Run MCP Bridge tests only
+# Run MCP Bridge tests only (TYPE: unit, integration, or all)
 test-mcp TYPE="all":
 	@echo "🌉 Running MCP Bridge {{TYPE}} tests..."
 	@if [ "{{TYPE}}" = "all" ]; then \
@@ -87,6 +92,7 @@ test-mcp TYPE="all":
 # Run all TypeScript tests
 test-ts TYPE="all":
 	@echo "📘 Running TypeScript {{TYPE}} tests..."
+	@if [ "{{TYPE}}" = "e2e" ]; then echo "❌ e2e is not a valid TypeScript test type"; exit 1; fi
 	@just _bun-test mcp-bridge {{TYPE}}
 	@just _bun-test shared all
 	@echo "   ✅ TypeScript {{TYPE}} tests passed"
@@ -170,7 +176,7 @@ _bun-test PROJECT TYPE:
 	case "{{TYPE}}" in
 		all)         dir="" ;;
 		unit)        dir="tests/unit/" ;;
-		integration|e2e) dir="tests/integration/" ;;
+		integration) dir="tests/integration/" ;;
 		*)           echo "❌ Invalid TYPE: {{TYPE}}"; exit 1 ;;
 	esac
 	if [ "{{PROJECT}}" = "mcp-bridge" ] && [ -n "$dir" ]; then

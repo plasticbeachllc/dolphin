@@ -7,11 +7,12 @@
     "shared"
   ],
   "scripts": {
-    "setup": "bun install && cd mcp-bridge && bun install && cd .. && cd shared && bun install",
+    "setup": "bun install",
     "build:all": "cd mcp-bridge && bun run build",
     "lint:all": "cd mcp-bridge && bun run lint",
     "test:mcp": "cd mcp-bridge && bun run test:clean",
     "test:unit": "bun run test:mcp",
+    "guard:quick": "uv run ruff check && uv run ruff format --check && bun run lint:all && uv run pytest tests/unit/api/test_api_endpoints.py -q --maxfail=1 && cd mcp-bridge && bun test --serial ./src/tests/unit --bail && cd ../shared && bun test __tests__/kb-auth.test.ts ipc/__tests__/serialization.test.ts --bail",
     "clean": "rm -rf mcp-bridge/dist shared/dist",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,svelte}\""
   },

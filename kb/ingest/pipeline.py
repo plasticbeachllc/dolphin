@@ -675,9 +675,6 @@ class IngestionPipeline:
                             total_pruned += pruned_count
                         self.lancedb.prune_file_rows(repo_name, path, model=model_name)
 
-                    # Delete file record
-                    self.metadata.delete_file(repo_id, file_id)
-
                     # Clean up graph data for deleted file
                     edges_deleted = 0
                     nodes_deleted = 0
@@ -690,6 +687,9 @@ class IngestionPipeline:
                             graph_manager.on_edges_changed(edges_deleted)
                         else:
                             graph_manager.invalidate_cache()
+
+                    # Delete file record after dependent cleanup
+                    self.metadata.delete_file(repo_id, file_id)
 
                     stats["files_done"] += 1
                     stats["chunks_pruned"] += total_pruned
@@ -1437,6 +1437,9 @@ class IngestionPipeline:
                                 graph_manager.on_edges_changed(edges_deleted)
                             else:
                                 graph_manager.invalidate_cache()
+
+                        # Delete file record after dependent cleanup
+                        self.metadata.delete_file(repo_id, file_id)
 
                         files_done += 1
                         chunks_pruned += total_pruned

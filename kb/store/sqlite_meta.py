@@ -837,7 +837,7 @@ class SQLiteMetadataStore:
     def delete_file(self, repo_id: int, file_id: int) -> None:
         """Delete a file from the catalog."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute("DELETE FROM files WHERE id = ?", (int(file_id),))
+            cur.execute("DELETE FROM files WHERE id = ? AND repo_id = ?", (int(file_id), int(repo_id)))
             conn.commit()
 
     def set_file_latest_commit(self, repo_id: int, path: str, commit_sha: str) -> None:
