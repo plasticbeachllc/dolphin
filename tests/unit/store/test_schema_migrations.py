@@ -191,3 +191,82 @@ def test_initialize_rebuilds_file_snapshots_with_cascade(tmp_path: Path) -> None
         row = cur.fetchone()
         assert row is not None
         assert int(row[0]) == 1
+
+
+def test_initialize_rebuilds_node_aliases_with_existing_index_names(tmp_path: Path) -> None:
+    """Migration should rebuild node_aliases even when legacy index names already exist."""
+    db_path = tmp_path / "test.db"
+    store = SQLiteMetadataStore(db_path)
+    store.initialize()
+
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    store.record_repo("repo", repo_path)
+    repo = store.get_repo_by_name("repo")
+    assert repo is not None
+    repo_id = int(repo["id"])
+
+    file_id = store.upsert_file(
+        repo_id=repo_id,
+        path="alias.py",
+        ext=".py",
+        language="python",
+        is_binary=False,
+        size_bytes=32,
+    )
+    node_id = "alias-node-id"
+    _insert_code_node(store, node_id=node_id, repo_id=repo_id, file_id=file_id)
+
+    with store._connect() as conn:
+        cur = conn.cursor()
+        cur.execute("DROP TABLE node_aliases")
+        cur.execute(
+            """
+            CREATE TABLE node_aliases (
+                id TEXT PRIMARY KEY NOT NULL,
+                node_id TEXT NOT NULL REFERENCES code_nodes(id),
+                file_id INTEGER NOT NULL REFERENCES files(id),
+                alias_name TEXT NOT NULL,
+                alias_qualified_name TEXT NOT NULL,
+                line_number INTEGER,
+                CONSTRAINT uq_node_alias_identity UNIQUE (node_id, file_id, alias_qualified_name)
+            )
+            """
+        )
+        cur.execute("CREATE INDEX ix_node_aliases_name ON node_aliases(alias_name)")
+        cur.execute("CREATE INDEX ix_node_aliases_qualified ON node_aliases(alias_qualified_name)")
+        cur.execute("CREATE INDEX ix_node_aliases_node ON node_aliases(node_id)")
+        cur.execute(
+            """
+            INSERT INTO node_aliases (
+                id, node_id, file_id, alias_name, alias_qualified_name, line_number
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("alias-1", node_id, file_id, "legacy_alias", "legacy.module.legacy_alias", 9),
+        )
+        cur.execute("UPDATE schema_version SET version = 0, updated_at = datetime('now') WHERE id = 1")
+        conn.commit()
+
+    restarted_store = SQLiteMetadataStore(db_path)
+    restarted_store.initialize()
+
+    with restarted_store._connect() as conn:
+        cur = conn.cursor()
+        fk_rows = cur.execute("PRAGMA foreign_key_list(node_aliases)").fetchall()
+        on_delete_map = {(str(row[2]), str(row[3])): str(row[6]).upper() for row in fk_rows}
+        assert on_delete_map[("code_nodes", "node_id")] == "CASCADE"
+        assert on_delete_map[("files", "file_id")] == "CASCADE"
+
+        cur.execute(
+            """
+            SELECT alias_name, alias_qualified_name, line_number
+            FROM node_aliases
+            WHERE id = ?
+            """,
+            ("alias-1",),
+        )
+        row = cur.fetchone()
+        assert row is not None
+        assert str(row[0]) == "legacy_alias"
+        assert str(row[1]) == "legacy.module.legacy_alias"
+        assert int(row[2]) == 9

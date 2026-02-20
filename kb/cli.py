@@ -73,6 +73,7 @@ app.add_typer(kb_app, name="kb", help="Knowledge base management commands")
 
 
 _log = StructuredLogger("kb.cli", {"component": "dolphin_cli"})
+MAX_SNIPPET_LINES_DISPLAY = 8
 
 
 # ==============================================================================
@@ -592,10 +593,10 @@ def _display_results(
             if isinstance(snippet_text, str) and snippet_text.strip():
                 lines = snippet_text.splitlines()
                 typer.echo("   ---")
-                for line in lines[:8]:
+                for line in lines[:MAX_SNIPPET_LINES_DISPLAY]:
                     typer.echo(f"   {line}")
-                if len(lines) > 8:
-                    typer.echo(f"   ... ({len(lines) - 8} more lines)")
+                if len(lines) > MAX_SNIPPET_LINES_DISPLAY:
+                    typer.echo(f"   ... ({len(lines) - MAX_SNIPPET_LINES_DISPLAY} more lines)")
                 typer.echo("   ---")
 
     if not verbose:

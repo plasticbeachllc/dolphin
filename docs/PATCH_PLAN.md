@@ -66,6 +66,8 @@
   - Executed full release matrix (Python unit/integration/e2e, lint/type, MCP bridge tests, shared tests) with green results.
   - Finalized `CHANGELOG.md` entries for `0.2.2` including schema, deletion integrity, and CLI/logging UX updates.
   - Bumped Python package version to `0.2.2` (`pyproject.toml`, `kb/__init__.py`).
+  - Addressed PR #151 review feedback: fixed invalid `graph_metrics` FK diagnostic query, removed CLI snippet magic number via constant, and fixed migration index-rename collision during table rebuilds.
+  - Added regression coverage for graph-metrics dependency diagnostics and node-aliases rebuild with legacy index-name collisions.
 
 ---
 

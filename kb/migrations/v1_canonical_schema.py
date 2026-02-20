@@ -43,9 +43,11 @@ def _rebuild_table(
     cur.execute(create_sql)
     cur.execute(insert_sql.format(old=backup_name))
     inserted = max(cur.rowcount, 0)
+    # Drop renamed legacy table before recreating indexes, because SQLite keeps
+    # index names on the renamed table and they can collide with canonical names.
+    cur.execute(f"DROP TABLE {backup_name}")
     for stmt in index_sql:
         cur.execute(stmt)
-    cur.execute(f"DROP TABLE {backup_name}")
     return inserted
 
 

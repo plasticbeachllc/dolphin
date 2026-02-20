@@ -955,7 +955,11 @@ class SQLiteMetadataStore:
             "chunk_content": "SELECT COUNT(*) FROM chunk_content WHERE file_id = ?",
             "code_nodes": "SELECT COUNT(*) FROM code_nodes WHERE file_id = ?",
             "node_aliases": "SELECT COUNT(*) FROM node_aliases WHERE file_id = ?",
-            "graph_metrics": "SELECT COUNT(*) FROM graph_metrics WHERE file_id = ?",
+            "graph_metrics": (
+                "SELECT COUNT(*) FROM graph_metrics gm "
+                "JOIN code_nodes cn ON gm.node_id = cn.id "
+                "WHERE cn.file_id = ?"
+            ),
             "file_snapshots": "SELECT COUNT(*) FROM file_snapshots WHERE file_id = ?",
         }
 
