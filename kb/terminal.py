@@ -63,4 +63,3 @@ def print_hint(message: str, *, stderr: bool = False) -> None:
     """Print a muted follow-up hint line."""
     console = _STDERR_CONSOLE if stderr else _STDOUT_CONSOLE
     console.print(f"[dim]Hint:[/dim] {message}")
-
