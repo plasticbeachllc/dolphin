@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **MCP Graph Fixture Coverage Test**: Updated multi-repo graph fixture keyword expectations from `agentbridge` to `mcpserver` in `tests/integration/search/test_graph_mcp.py` so integration tests match current fixture content.
+
 ## [0.2.1] - 2026-01-26
 
 ### Added
