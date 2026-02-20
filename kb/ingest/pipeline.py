@@ -235,9 +235,9 @@ class IngestionPipeline:
 
                 # 1. Delete code graph data (references code_nodes and files)
                 # Check table existence first to avoid swallowing real FK errors
-                if table_exists("code_node_aliases"):
+                if table_exists("node_aliases"):
                     cur.execute(
-                        "DELETE FROM code_node_aliases WHERE file_id IN (SELECT id FROM files WHERE repo_id = ?)",
+                        "DELETE FROM node_aliases WHERE file_id IN (SELECT id FROM files WHERE repo_id = ?)",
                         (repo_id,),
                     )
 

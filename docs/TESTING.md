@@ -67,10 +67,6 @@ Configured hooks run:
 - Unit tests use `MockTiktokenEncoding` (`tests/conftest.py`) to keep runs deterministic/offline.
 - Integration/E2E suites use real `cl100k_base` encoding and validate cached copies. Use `TIKTOKEN_FORCE_REFRESH=1 uv run pytest tests/integration/` if needed.
 
-### Deletion compatibility regression
-
-- Legacy metadata schemas with non-cascade FKs are covered by `uv run pytest tests/unit/store/test_sqlite_meta.py -k "delete_file_cleans_legacy_file_fk_tables" -v`.
-
 ### Cache validation quick hits
 
 - Unit cache tests: `uv run pytest tests/unit/test_cache.py -v`
