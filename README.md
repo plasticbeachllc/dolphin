@@ -105,7 +105,7 @@ uv run dolphin search "authentication logic"
   - `dolphin` CLI app
   - FastAPI server with search, retrieval, and metadata endpoints
   - MCP server implementation available at `bunx dolphin-mcp`
-- **Configuration** 
+- **Configuration**
   - Per-repo chunking and ignore configuration
 
 ## Configuration
