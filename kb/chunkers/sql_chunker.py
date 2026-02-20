@@ -135,7 +135,7 @@ def chunk_source(
 
         current_line = end_line + 1
 
-    _log.info("Chunked SQL into %d chunks (dialect: %s)", len(chunks), dialect)
+    _log.debug("Chunked SQL into %d chunks (dialect: %s)", len(chunks), dialect)
     return chunks
 
 

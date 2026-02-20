@@ -137,7 +137,7 @@ These are already present in the repo (see `README.md`, `CHANGELOG.md`, and the 
   - caching
   - “shareable” KB links
   - downstream annotation (“this hit was good/bad”)
-- Today, FTS5 content IDs have a deterministic migration (`kb/migrations/001_migrate_fts5_content_ids.py`), but `chunk_content.id` is a UUID in the SQLModel schema (`kb/store/sql_models.py`).
+- Today, canonical schema `v1` standardizes runtime metadata, but `chunk_content.id` is still UUID-based in the SQLModel schema (`kb/store/sql_models.py`).
 
 **What to do**
 

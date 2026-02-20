@@ -3,7 +3,10 @@
 [![PyPi Version](https://img.shields.io/pypi/v/pb-dolphin.svg)](https://pypi.org/project/pb-dolphin/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A semantic code indexing and search system with multiple interfaces. This repository currently ships the Knowledge Bank (Python) and MCP server (TypeScript/Bun) as stable, release-targeted components.
+Dolphin gives you fast, repository-scale semantic code retrieval with predictable operations.  
+It combines hybrid search (vector + BM25), deterministic metadata, and MCP/CLI/API surfaces so engineers and agents can answer codebase questions with line-level references instead of guesswork.
+
+This repository currently ships the Knowledge Bank (Python) and MCP server (TypeScript/Bun) as stable, release-targeted components.
 
 ## Quick Start
 
@@ -33,19 +36,35 @@ See [Advanced Features](#advanced-features) for more information.
 
 ### Basic Usage
 
-We recommend using `uv run` to execute all commands for maximum compatibility.
+We recommend using `uv run` to execute all Python commands for maximum compatibility.
 
 ```bash
 # Initialize global knowledge store and index a repository
-dolphin init
-dolphin add-repo my-project /path/to/project
-dolphin index my-project
+uv run dolphin init
+uv run dolphin add-repo my-project /path/to/project
+uv run dolphin index my-project
 
 # Search your indexed code
-dolphin search "authentication logic"
+uv run dolphin search "authentication logic"
 
 # Start API server
-dolphin serve
+uv run dolphin serve
+```
+
+### First Useful Queries (CLI)
+
+```bash
+# Compact default output
+uv run dolphin search "session lifecycle" --repo my-project --top-k 5
+
+# Verbose output with snippets + metadata
+uv run dolphin search "session lifecycle" --repo my-project --verbose --show-content
+
+# Script-friendly stable JSON
+uv run dolphin search "session lifecycle" --repo my-project --json
+
+# Language/path constrained query
+uv run dolphin search "session lifecycle" --repo my-project --lang py --path kb/ingest
 ```
 
 ## Core Commands
@@ -54,7 +73,7 @@ dolphin serve
 - `dolphin init --repo` - Create repo-specific config in current directory
 - `dolphin add-repo <name> <path>` - Register a repository for indexing
 - `dolphin index <name>` - Index a repository with language-aware chunking
-- `dolphin search <query>` - Search indexed code semantically
+- `dolphin search <query>` - Search indexed code semantically (compact by default, `--verbose` for details, `--json` for scripting)
 - `dolphin serve` - Start REST API server (port 7777)
 - `dolphin config --show` - Display current configuration
 
@@ -117,6 +136,12 @@ At the repo root:
   - FastAPI server with search, retrieval, and metadata endpoints
   - MCP server implementation available at `bunx dolphin-mcp`
 - **Configuration** - Per-repo chunking and ignore configuration
+
+### Metadata Schema
+
+- Runtime metadata schema is canonical `v1`.
+- Startup automatically applies pending metadata migrations and logs a clear note when this happens.
+- `v1` is the only supported runtime schema for the current release line.
 
 ## Configuration
 
@@ -273,7 +298,7 @@ Currently only [OpenAI embeddings](https://platform.openai.com/docs/guides/embed
 
 ## Development Status
 
-**Current**: Release candidates: (v0.2.1) Knowledge Bank + (v0.2.3) MCP
+**Current**: Release candidates: (v0.2.2) Knowledge Bank + (v0.2.3) MCP
 
 - ✅ Core indexing and search pipeline
 - ✅ Language-aware chunking (Python, TS, JS, Markdown)
@@ -348,7 +373,7 @@ For detailed troubleshooting, performance tips, and development workflows, see [
 
 Current versions:
 
-- **Python Package (PyPI)**: [`0.2.1`](pyproject.toml:7) - `pb-dolphin`
+- **Python Package (PyPI)**: [`0.2.2`](pyproject.toml:7) - `pb-dolphin`
 - **MCP Bridge (npm)**: [`0.2.3`](mcp-bridge/package.json:3) - `dolphin-mcp`
 
 ### License

@@ -6,6 +6,7 @@ Tests basic database operations using the correct API
 
 import pytest
 
+from kb.migrations import LATEST_SCHEMA_VERSION
 from kb.store.connection_pool import close_connection_pool, get_connection_pool
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
@@ -222,3 +223,44 @@ def test_get_chunk_locations_fallback(meta_store, tmp_path):
     assert len(locations) == 1
     assert locations[0]["content_id"] == "uuid-large"
     assert locations[0]["start_line"] == 1
+
+
+def test_initialize_creates_schema_version_table(tmp_path):
+    """Initialization should create schema_version tracking metadata."""
+    db_path = tmp_path / "test.db"
+    store = SQLiteMetadataStore(db_path)
+    store.initialize()
+
+    with store._connect() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT version FROM schema_version WHERE id = 1")
+        row = cur.fetchone()
+
+    assert row is not None
+    assert int(row[0]) == LATEST_SCHEMA_VERSION
+
+
+def test_initialize_auto_applies_pending_schema_migrations(tmp_path, caplog):
+    """Startup should auto-apply pending migrations and emit a user-facing note."""
+    db_path = tmp_path / "test.db"
+    store = SQLiteMetadataStore(db_path)
+    store.initialize()
+
+    # Simulate an older schema version before next startup.
+    with store._connect() as conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE schema_version SET version = 0, updated_at = datetime('now') WHERE id = 1")
+        conn.commit()
+
+    restarted_store = SQLiteMetadataStore(db_path)
+    with caplog.at_level("WARNING"):
+        restarted_store.initialize()
+
+    with restarted_store._connect() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT version FROM schema_version WHERE id = 1")
+        row = cur.fetchone()
+
+    assert row is not None
+    assert int(row[0]) == LATEST_SCHEMA_VERSION
+    assert any("Auto-applied startup migration(s) to canonical schema" in rec.message for rec in caplog.records)

@@ -50,6 +50,17 @@ Configured hooks run:
 - End-to-end: `tests/e2e/workflows/`
 - Run: `uv run pytest tests/unit/ -v`, `uv run pytest tests/integration/ -v`, `uv run pytest tests/e2e/workflows/ -v`
 
+### High-signal release checks (0.2.2 focus)
+
+- Schema migration + canonicalization:
+  - `uv run pytest tests/unit/store/test_schema_migrations.py tests/unit/store/test_sqlite_meta.py -v`
+- Deleted-file FK integrity:
+  - `uv run pytest tests/unit/ingest/test_pipeline_core.py -k process_deletions -v`
+  - `uv run pytest tests/integration/ingest/test_file_sync_integration.py -k bulk_deleted_files_cleanup_mixed_models_and_fk_integrity -v`
+- CLI query UX + logging signal:
+  - `uv run pytest tests/unit/cli/test_cli_query.py -v`
+  - `uv run pytest tests/unit/test_logging/test_structured_logger.py -v`
+
 ### MCP bridge
 
 - Integration: `mcp-bridge/src/tests/`

@@ -7,6 +7,7 @@ including knowledge base management, API serving, and persona management.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -14,7 +15,6 @@ from typing import Annotated
 
 import typer
 import uvicorn
-from rich import print as rprint
 
 # Import kb CLI functions for top-level commands
 # Import subcommand apps
@@ -32,6 +32,7 @@ from kb.ingest.cli import (
 )
 from kb.observability import StructuredLogger
 from kb.store import SQLiteMetadataStore
+from kb.terminal import print_hint, print_status
 
 
 def get_version() -> str:
@@ -156,34 +157,120 @@ def search(
     query: str = typer.Argument(..., help="Search query."),
     repos: list[str] | None = typer.Option(None, "--repo", "-r", help="Repository name(s) to search."),
     path_prefix: list[str] | None = typer.Option(None, "--path", "-p", help="Filter by path prefix."),
+    exclude_paths: list[str] | None = typer.Option(None, "--exclude-path", help="Exclude path prefix."),
+    exclude_patterns: list[str] | None = typer.Option(None, "--exclude-pattern", "-x", help="Exclude glob pattern."),
+    lang: list[str] | None = typer.Option(None, "--lang", help="Language filter (py, ts, js, md, etc.)."),
     top_k: int = typer.Option(8, "--top-k", "-k", help="Number of results to return."),
     score_cutoff: float = typer.Option(0.0, "--score-cutoff", "-s", help="Minimum similarity score."),
-    embed_model: str = typer.Option("large", "--embed-model", "-m", help="Embedding model to use (small|large)."),
+    max_snippets: int = typer.Option(0, "--max-snippets", help="Number of hits to include snippets for."),
+    context_before: int = typer.Option(0, "--context-before", help="Context lines before snippet match."),
+    context_after: int = typer.Option(0, "--context-after", help="Context lines after snippet match."),
+    include_graph_context: bool = typer.Option(
+        False,
+        "--graph-context/--no-graph-context",
+        help="Include graph context in search hits.",
+    ),
     local: bool = typer.Option(False, "--local", "-l", help="Use local backend (no server required)."),
-    show_content: bool = typer.Option(False, "--show-content", "-c", help="Display code snippets."),
+    show_content: bool = typer.Option(False, "--show-content", "-c", help="Display snippets in terminal output."),
+    verbose: bool = typer.Option(False, "--verbose", help="Show detailed hit metadata and snippets."),
+    json_output: bool = typer.Option(False, "--json", help="Emit stable JSON output for scripting."),
 ) -> None:
     """Search indexed code semantically.
 
     Examples:
-        dolphin search "authentication logic" --repo myapp
-        dolphin search "database migration" --path src/db --top-k 5
-        dolphin search "error handling" --local --show-content
+        dolphin search "authentication logic" --repo myapp --top-k 5
+        dolphin search "database migration" --path src/db --exclude-pattern "*.test.ts"
+        dolphin search "oauth callback" --lang py --verbose
+        dolphin search "cache invalidation" --json
     """
+    normalized_langs = [_normalize_lang_token(item) for item in (lang or []) if item and item.strip()]
+
+    # If language filtering is requested, fetch a broader candidate set and trim post-filter.
+    request_top_k = top_k
+    if normalized_langs:
+        request_top_k = min(max(top_k * 5, top_k), 100)
+
+    snippet_limit = max_snippets
+    if snippet_limit <= 0 and (show_content or verbose):
+        snippet_limit = min(top_k, 3)
+
     if local:
-        _search_local(query, repos, path_prefix, top_k, score_cutoff, embed_model, show_content)
+        hits, meta, sql_store = _search_local(
+            query=query,
+            repos=repos,
+            path_prefix=path_prefix,
+            exclude_paths=exclude_paths,
+            exclude_patterns=exclude_patterns,
+            top_k=request_top_k,
+            score_cutoff=score_cutoff,
+            max_snippets=snippet_limit,
+            context_before=context_before,
+            context_after=context_after,
+            include_graph_context=include_graph_context,
+        )
     else:
-        _search_remote(query, repos, path_prefix, top_k, score_cutoff, embed_model, show_content)
+        hits, meta, sql_store = _search_remote(
+            query=query,
+            repos=repos,
+            path_prefix=path_prefix,
+            exclude_paths=exclude_paths,
+            exclude_patterns=exclude_patterns,
+            top_k=request_top_k,
+            score_cutoff=score_cutoff,
+            max_snippets=snippet_limit,
+            context_before=context_before,
+            context_after=context_after,
+            include_graph_context=include_graph_context,
+        )
+
+    if normalized_langs:
+        hits = _apply_language_filter(hits, normalized_langs)
+
+    # Always trim back to user-requested top_k after optional post-filters.
+    hits = hits[:top_k]
+
+    if (show_content or verbose or json_output) and sql_store is not None:
+        _hydrate_missing_content(hits, sql_store)
+
+    if json_output:
+        _emit_search_json(
+            query=query,
+            hits=hits,
+            meta=meta,
+            local=local,
+            repos=repos,
+            path_prefix=path_prefix,
+            exclude_paths=exclude_paths,
+            exclude_patterns=exclude_patterns,
+            languages=normalized_langs,
+            top_k=top_k,
+        )
+        return
+
+    _display_results(
+        query=query,
+        hits=hits,
+        show_content=show_content,
+        verbose=verbose,
+        meta=meta,
+        languages=normalized_langs,
+    )
 
 
 def _search_local(
+    *,
     query: str,
     repos: list[str] | None,
     path_prefix: list[str] | None,
+    exclude_paths: list[str] | None,
+    exclude_patterns: list[str] | None,
     top_k: int,
     score_cutoff: float,
-    embed_model: str,
-    show_content: bool,
-) -> None:
+    max_snippets: int,
+    context_before: int,
+    context_after: int,
+    include_graph_context: bool,
+) -> tuple[list[dict[str, object]], dict[str, object], SQLiteMetadataStore | None]:
     """Search using local backend without API server."""
     from kb.api.app import SearchRequest
     from kb.api.search_backend import create_search_backend
@@ -204,14 +291,29 @@ def _search_local(
             query=query,
             repos=repos,
             path_prefix=path_prefix,
+            exclude_paths=exclude_paths,
+            exclude_patterns=exclude_patterns,
             top_k=top_k,
             score_cutoff=score_cutoff,
+            max_snippets=max_snippets,
+            context_lines_before=context_before,
+            context_lines_after=context_after,
+            include_graph_context=include_graph_context,
         )
 
         # Execute search
-        hits = list(backend.search(request))
-
-        _display_results(hits, show_content, backend.sql_store)
+        hits, next_cursor = backend.search(request)
+        result_hits = list(hits)
+        meta = {
+            "top_k": top_k,
+            "max_snippets": max_snippets,
+            "context_before": context_before,
+            "context_after": context_after,
+            "include_graph_context": include_graph_context,
+            "model": config.default_embed_model,
+            "next_cursor": next_cursor,
+        }
+        return result_hits, meta, backend.sql_store
 
     except Exception as e:
         typer.echo(f"Error: Local search failed: {e}", err=True)
@@ -219,14 +321,19 @@ def _search_local(
 
 
 def _search_remote(
+    *,
     query: str,
     repos: list[str] | None,
     path_prefix: list[str] | None,
+    exclude_paths: list[str] | None,
+    exclude_patterns: list[str] | None,
     top_k: int,
     score_cutoff: float,
-    embed_model: str,
-    show_content: bool,
-) -> None:
+    max_snippets: int,
+    context_before: int,
+    context_after: int,
+    include_graph_context: bool,
+) -> tuple[list[dict[str, object]], dict[str, object], SQLiteMetadataStore | None]:
     """Search using remote API server."""
     import requests
     import requests.exceptions  # Import the exceptions module explicitly
@@ -241,13 +348,20 @@ def _search_remote(
         "query": query,
         "top_k": top_k,
         "score_cutoff": score_cutoff,
-        # Note: embed_model is not sent - server always uses global default
+        "max_snippets": max_snippets,
+        "context_lines_before": context_before,
+        "context_lines_after": context_after,
+        "include_graph_context": include_graph_context,
     }
 
     if repos:
         payload["repos"] = repos
     if path_prefix:
         payload["path_prefix"] = path_prefix
+    if exclude_paths:
+        payload["exclude_paths"] = exclude_paths
+    if exclude_patterns:
+        payload["exclude_patterns"] = exclude_patterns
 
     try:
         api_key = load_kb_api_key()
@@ -268,8 +382,14 @@ def _search_remote(
 
         result = response.json()
         hits = result.get("hits", [])
-
-        _display_results(hits, show_content, None)
+        raw_meta = result.get("meta", {})
+        meta = dict(raw_meta) if isinstance(raw_meta, dict) else {}
+        meta.setdefault("top_k", top_k)
+        meta.setdefault("max_snippets", max_snippets)
+        meta.setdefault("context_before", context_before)
+        meta.setdefault("context_after", context_after)
+        meta.setdefault("include_graph_context", include_graph_context)
+        return list(hits), meta, None
 
     except requests.exceptions.ConnectionError:
         typer.echo("Error: Could not connect to dolphin API server.", err=True)
@@ -283,53 +403,203 @@ def _search_remote(
         raise typer.Exit(1)
 
 
-def _display_results(hits: list, show_content: bool, sql_store=None) -> None:
-    """Display search results with optional content."""
+_LANG_ALIASES: dict[str, str] = {
+    "py": "python",
+    "python": "python",
+    "ts": "typescript",
+    "typescript": "typescript",
+    "js": "javascript",
+    "javascript": "javascript",
+    "jsx": "javascript",
+    "tsx": "typescript",
+    "md": "markdown",
+    "markdown": "markdown",
+    "sql": "sql",
+    "svelte": "svelte",
+}
+
+
+def _normalize_lang_token(value: str) -> str:
+    token = value.strip().lower()
+    return _LANG_ALIASES.get(token, token)
+
+
+def _detect_hit_language(hit: dict[str, object]) -> str:
+    language = hit.get("language") or hit.get("lang")
+    if isinstance(language, str) and language.strip():
+        return _normalize_lang_token(language)
+
+    from kb.chunkers.registry import detect_language_from_extension
+
+    path = str(hit.get("path") or hit.get("file_path") or "")
+    detected = detect_language_from_extension(Path(path))
+    if isinstance(detected, str) and detected:
+        return _normalize_lang_token(detected)
+    return "unknown"
+
+
+def _apply_language_filter(hits: list[dict[str, object]], languages: list[str]) -> list[dict[str, object]]:
+    if not languages:
+        return hits
+    wanted = set(languages)
+    return [hit for hit in hits if _detect_hit_language(hit) in wanted]
+
+
+def _hydrate_missing_content(hits: list[dict[str, object]], sql_store: SQLiteMetadataStore) -> None:
+    chunk_ids: list[str] = []
+    for hit in hits:
+        if hit.get("content"):
+            continue
+        chunk_id = hit.get("chunk_id")
+        if isinstance(chunk_id, str) and chunk_id:
+            chunk_ids.append(chunk_id)
+
+    if not chunk_ids:
+        return
+
+    content_map = sql_store.get_chunk_contents(chunk_ids)
+    for hit in hits:
+        if hit.get("content"):
+            continue
+        chunk_id = hit.get("chunk_id")
+        if isinstance(chunk_id, str) and chunk_id in content_map:
+            hit["content"] = content_map[chunk_id]
+
+
+def _emit_search_json(
+    *,
+    query: str,
+    hits: list[dict[str, object]],
+    meta: dict[str, object],
+    local: bool,
+    repos: list[str] | None,
+    path_prefix: list[str] | None,
+    exclude_paths: list[str] | None,
+    exclude_patterns: list[str] | None,
+    languages: list[str],
+    top_k: int,
+) -> None:
+    normalized_hits: list[dict[str, object]] = []
+    for idx, hit in enumerate(hits, start=1):
+        normalized_hits.append(
+            {
+                "rank": idx,
+                "chunk_id": hit.get("chunk_id"),
+                "repo": hit.get("repo"),
+                "path": hit.get("path") or hit.get("file_path"),
+                "file_path": hit.get("file_path") or hit.get("path"),
+                "start_line": hit.get("start_line"),
+                "end_line": hit.get("end_line"),
+                "score": hit.get("score"),
+                "language": _detect_hit_language(hit),
+                "symbol_kind": hit.get("symbol_kind"),
+                "symbol_name": hit.get("symbol_name"),
+                "symbol_path": hit.get("symbol_path"),
+                "text_hash": hit.get("text_hash"),
+                "commit": hit.get("commit"),
+                "branch": hit.get("branch"),
+                "token_count": hit.get("token_count"),
+                "resource_link": hit.get("resource_link"),
+                "content": hit.get("content"),
+                "snippet": hit.get("snippet"),
+            }
+        )
+
+    payload = {
+        "query": query,
+        "mode": "local" if local else "remote",
+        "result_count": len(normalized_hits),
+        "filters": {
+            "repos": repos or [],
+            "path_prefix": path_prefix or [],
+            "exclude_paths": exclude_paths or [],
+            "exclude_patterns": exclude_patterns or [],
+            "lang": languages,
+            "top_k": top_k,
+        },
+        "meta": meta,
+        "hits": normalized_hits,
+    }
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+
+
+def _display_results(
+    *,
+    query: str,
+    hits: list[dict[str, object]],
+    show_content: bool,
+    verbose: bool,
+    meta: dict[str, object],
+    languages: list[str],
+) -> None:
+    """Display compact search results by default, verbose details on demand."""
     if not hits:
         typer.echo("No results found.")
         return
 
-    typer.echo(f"\n🔍 Found {len(hits)} result(s):\n")
+    typer.echo(f'Found {len(hits)} result(s) for "{query}"')
+    if languages:
+        typer.echo(f"Language filter: {', '.join(languages)}")
+    if verbose and meta:
+        top_k = meta.get("top_k")
+        model = meta.get("model")
+        latency = meta.get("latency_ms")
+        typer.echo(f"Meta: top_k={top_k} model={model} latency_ms={latency}")
+    typer.echo()
 
     for i, hit in enumerate(hits, 1):
-        score = hit.get("score", 0.0)
-        repo = hit.get("repo", "unknown")
-        path = hit.get("path", "unknown")
-        start_line = hit.get("start_line", 0)
-        end_line = hit.get("end_line", 0)
-
-        # Header
-        typer.secho(f"\n{i}. {repo}/{path}:{start_line}-{end_line}", fg="cyan", bold=True)
-        typer.echo(f"   Score: {score:.10f}")
-
-        # Symbol info
+        score_value = hit.get("score", 0.0)
+        score = float(score_value) if isinstance(score_value, (int, float)) else 0.0
+        repo = str(hit.get("repo", "unknown"))
+        path = str(hit.get("path") or hit.get("file_path") or "unknown")
+        start_line = hit.get("start_line")
+        end_line = hit.get("end_line")
+        language = _detect_hit_language(hit)
         symbol_name = hit.get("symbol_name")
         symbol_kind = hit.get("symbol_kind")
-        if symbol_name and symbol_kind:
-            typer.secho(f"   {symbol_kind}: {symbol_name}", fg="green")
+        symbol_part = ""
+        if isinstance(symbol_name, str) and symbol_name:
+            symbol_label = str(symbol_kind) if symbol_kind else "symbol"
+            symbol_part = f"{symbol_label}:{symbol_name}"
 
-        # Show content if requested
-        if show_content:
+        if isinstance(start_line, int) and isinstance(end_line, int):
+            location = f"{repo}/{path}:{start_line}-{end_line}"
+        else:
+            location = f"{repo}/{path}"
+
+        extras = [f"score={score:.4f}", f"lang={language}"]
+        if symbol_part:
+            extras.append(symbol_part)
+        typer.echo(f"{i}. {location}  " + "  ".join(extras))
+
+        if verbose:
             chunk_id = hit.get("chunk_id")
+            if chunk_id:
+                typer.echo(f"   chunk_id={chunk_id}")
+            resource_link = hit.get("resource_link")
+            if resource_link:
+                typer.echo(f"   resource={resource_link}")
+
+        if show_content or verbose:
+            snippet_obj = hit.get("snippet")
             content = hit.get("content")
+            snippet_text = None
+            if isinstance(snippet_obj, dict):
+                snippet_text = snippet_obj.get("text")
+            if not snippet_text and isinstance(content, str):
+                snippet_text = content
 
-            # Fetch content if not present and sql_store is available
-            if not content and chunk_id and sql_store:
-                content_map = sql_store.get_chunk_contents([chunk_id])
-                content = content_map.get(chunk_id, "")
-
-            if content:
-                typer.echo("\n   " + "─" * 70)
-                for line in content.splitlines()[:10]:  # Show first 10 lines
+            if isinstance(snippet_text, str) and snippet_text.strip():
+                lines = snippet_text.splitlines()
+                typer.echo("   ---")
+                for line in lines[:8]:
                     typer.echo(f"   {line}")
-                if len(content.splitlines()) > 10:
-                    typer.secho(
-                        f"   ... ({len(content.splitlines()) - 10} more lines)",
-                        fg="yellow",
-                    )
-                typer.echo("   " + "─" * 70)
+                if len(lines) > 8:
+                    typer.echo(f"   ... ({len(lines) - 8} more lines)")
+                typer.echo("   ---")
 
-    typer.echo()
+    if not verbose:
+        typer.echo("\nTip: pass --verbose for expanded metadata and snippets.")
 
 
 @app.command()
@@ -387,21 +657,36 @@ def serve(
             repos = metadata.list_all_repos()
             repo_list = [repo["name"] for repo in repos]
         except Exception as e:
-            rprint(f"[yellow]Warning: Failed to list repos for automatic watching: {e}[/yellow]")
+            print_status(
+                "Failed to list repositories for automatic watcher startup.",
+                level="warn",
+                context={"error": str(e)},
+            )
 
     # Deduplicate
     repo_list = sorted(list(set(repo_list)))
 
     if repo_list:
         os.environ["DOLPHIN_WATCH_REPOS"] = ",".join(repo_list)
-        rprint(f"[green]Configured to watch repositories: {', '.join(repo_list)}[/green]")
+        print_status(
+            "Configured repository watchers.",
+            level="success",
+            context={"repos": ",".join(repo_list)},
+        )
     elif "DOLPHIN_WATCH_REPOS" in os.environ:
         # If no repos to watch, clear the env var to prevent inheriting it
         del os.environ["DOLPHIN_WATCH_REPOS"]
+        print_status("Watcher configuration cleared (no repositories selected).", level="info")
 
     if not os.environ.get("DOLPHIN_API_KEY") and not os.environ.get("DOLPHIN_KB_API_KEY"):
         os.environ["DOLPHIN_API_KEY"] = get_or_create_kb_api_key()
+        print_status("Generated per-user API key for local server start.", level="success")
 
+    print_status(
+        "Starting API server.",
+        level="step",
+        context={"host": host, "port": port},
+    )
     uvicorn.run("kb.api.server:app_with_lifespan", host=host, port=port, reload=False)
 
 
@@ -442,11 +727,11 @@ def watch(
     repo_name: Annotated[str, typer.Argument(help="Name of repository to watch")],
 ) -> None:
     """Start file watcher for a repository (standalone)."""
-    rprint(f"[bold blue]Starting watcher for {repo_name}...[/bold blue]")
+    print_status("Starting standalone watcher.", level="step", context={"repo": repo_name})
     try:
         asyncio.run(_watch_repo(repo_name))
     except (KeyboardInterrupt, asyncio.CancelledError):
-        rprint("\n[yellow]Watcher stopped.[/yellow]")
+        print_status("Watcher stopped.", level="warn")
 
 
 @app.command()
@@ -472,36 +757,50 @@ def config(
             from kb.config import load_config
 
             config = load_config()
-            rprint("\n[bold]Configuration Validation[/bold]")
+            print_status("Configuration validation", level="step")
 
             # Check 1: Store Root
             store_root = config.resolved_store_root()
             if store_root.exists():
-                rprint(f"✅ Store Root: [green]{store_root}[/green]")
+                print_status("Store root exists.", level="success", context={"path": store_root})
                 if os.access(store_root, os.W_OK):
-                    rprint("(Writable)")
+                    print_status("Store root is writable.", level="success")
                 else:
-                    rprint("[red](Not Writable)[/red]")
+                    print_status("Store root is not writable.", level="error")
             else:
-                rprint(f"❌ Store Root: [red]{store_root} (Does not exist)[/red]")
+                print_status("Store root does not exist.", level="error", context={"path": store_root})
 
             # Check 2: API Keys
             if config.embedding_provider == "openai":
                 if os.environ.get(config.openai_api_key_env):
-                    rprint(f"✅ OpenAI API Key: [green]Present ({config.openai_api_key_env})[/green]")
+                    print_status(
+                        "OpenAI API key is present.",
+                        level="success",
+                        context={"env": config.openai_api_key_env},
+                    )
                 else:
-                    rprint(f"❌ OpenAI API Key: [red]Missing ({config.openai_api_key_env})[/red]")
+                    print_status(
+                        "OpenAI API key is missing.",
+                        level="error",
+                        context={"env": config.openai_api_key_env},
+                    )
+                    print_hint(f"Set `{config.openai_api_key_env}` before indexing/searching with OpenAI.")
             else:
-                rprint(f"ℹ️  Provider: {config.embedding_provider}")
+                print_status(
+                    "Embedding provider configured.",
+                    level="info",
+                    context={"provider": config.embedding_provider},
+                )
 
             # Check 3: Dependencies (Simple check)
             if shutil.which("uv"):
-                rprint("✅ 'uv' command: [green]Found[/green]")
+                print_status("`uv` command found in PATH.", level="success")
             else:
-                rprint("⚠️  'uv' command: [yellow]Not found (Recommended)[/yellow]")
+                print_status("`uv` command not found in PATH.", level="warn")
+                print_hint("Install uv to run dolphin commands consistently.")
 
         except Exception as e:
-            rprint(f"[red]Validation failed: {e}[/red]")
+            print_status("Configuration validation failed.", level="error", context={"error": str(e)})
             raise typer.Exit(1)
     else:
         typer.echo("Use 'dolphin init' to initialize configuration")
