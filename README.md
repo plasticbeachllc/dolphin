@@ -9,7 +9,7 @@ Dolphin helps humans and AI agents find the right code quickly with semantic sea
 
 ## Why Dolphin
 
-- **Built for large repositories**: hybrid vector + keyword retrieval keeps search fast and relevant as codebases scale.
+- **Search for large codebases**: hybrid vector + keyword retrieval keeps search fast and relevant as codebases scale.
 - **All-in-one context management**: indexing, chunking, metadata, snippets, and graph context in one framework.
 - **Practical developer UX**: use from terminal, set up with MCP, or integrate however you like.
 
@@ -17,7 +17,7 @@ Dolphin helps humans and AI agents find the right code quickly with semantic sea
 
 ### 1) Install
 
-#### Core Installation (~200MB)
+#### Core Installation
 
 ```bash
 # install with uv (recommended)
@@ -47,13 +47,12 @@ We recommend using `uv run` for Python command execution.
 # Initialize global knowledge store and index a repository
 uv run dolphin init
 uv run dolphin add-repo my-project /path/to/project
-uv run dolphin index my-project
-
-# Search your indexed code
-uv run dolphin search "authentication logic"
 
 # Start API server
 uv run dolphin serve
+
+# Search your indexed code
+uv run dolphin search "authentication logic"
 ```
 
 ## Core Commands
@@ -101,19 +100,13 @@ uv run dolphin serve
   - Hybrid approximate nn vector + BM25 keyword search with RRF scoring
   - Re-ranking with cross-encoder
   - MMR relevancy enhancement
-  - Cursor-based pagination for deep result traversal
   - Structured snippet objects with precise context
 - **Interfaces**
   - `dolphin` CLI app
   - FastAPI server with search, retrieval, and metadata endpoints
   - MCP server implementation available at `bunx dolphin-mcp`
-- **Configuration** - Per-repo chunking and ignore configuration
-
-### Metadata Schema
-
-- Runtime metadata schema is canonical `v1`.
-- Startup automatically applies pending metadata migrations and logs a clear note when this happens.
-- `v1` is the only supported runtime schema for the current release line.
+- **Configuration** 
+  - Per-repo chunking and ignore configuration
 
 ## Configuration
 
@@ -124,7 +117,7 @@ Dolphin uses a multi-level configuration system:
 
 ### Configuration TOMLs
 
-You can use `dolphin init` to initialize your global config and edit from there.
+Use `dolphin init` to initialize your global config.
 
 ```toml
 # ~/.dolphin/config.toml
@@ -139,7 +132,7 @@ top_k = 8
 score_cutoff = 0.0
 ```
 
-To generate a repo-specific config, use `dolphin init --repo` at the repository root.
+To generate a repo-specific config for chunking and ignore settings, use `dolphin init --repo` at the repository root.
 
 ### Environment Variables
 
@@ -150,13 +143,7 @@ export OPENAI_API_KEY="sk-your-openai-api-key-here"
 
 ### API Key Management
 
-For security and future-proofing,Dolphin automatically manages a KB API key for securing Knowledge Base HTTP endpoints.
-
-**Auto-Provisioning:**
-
-- Running `dolphin init` or `dolphin serve` automatically creates `~/.dolphin/kb_api_key`
-- The MCP bridge (`bunx dolphin-mcp`) auto-provisions the key on startup
-- The key is a 64-character hex string with file permissions set to `0600` (user-only)
+For security and future-proofing, Dolphin automatically manages a KB API key for securing Knowledge Base HTTP endpoints. Running `dolphin init` or `dolphin serve` automatically creates `~/.dolphin/kb_api_key`. The MCP bridge (`bunx dolphin-mcp`) auto-provisions the key on startup.The key is a 64-character hex string with file permissions set to `0600` (user-only)
 
 **Environment Variable Override (Advanced):**
 
@@ -172,7 +159,7 @@ Environment variables take precedence over the file-based key.
 
 ## MCP Configuration
 
-The small companion MCP interface can be run via `bun` without install. Add to your favorite AI application's config:
+The small companion MCP interface can be run using `bun` without install. Add to your favorite AI application's config:
 
 ```json
 {
@@ -185,33 +172,11 @@ The small companion MCP interface can be run via `bun` without install. Add to y
 }
 ```
 
-Set `DOLPHIN_API_URL` if your KB server is not running at `http://127.0.0.1:7777`.
-
 **Note:** Make sure you are running the HTTP retrieval server: `uv run dolphin serve`
 
+Set `DOLPHIN_API_URL` if your server is not running at `http://127.0.0.1:7777`.
+
 Available MCP tools: `search`, `chunk_get`, `file_lines`, `store_info`, `metadata_get`, `repos_list`, `health`
-
-## REST API
-
-```bash
-# Start server
-dolphin serve
-
-# Health check (unauthenticated)
-curl http://127.0.0.1:7777/v1/health
-
-# Most v1 endpoints require an API key
-export DOLPHIN_API_KEY="$(cat ~/.dolphin/kb_api_key)"
-
-# List repositories
-curl -H "X-API-Key: $DOLPHIN_API_KEY" http://127.0.0.1:7777/v1/repos
-
-# Search "authentication"
-curl -X POST http://127.0.0.1:7777/v1/search \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $DOLPHIN_API_KEY" \
-  -d '{"query": "authentication", "top_k": 5}'
-```
 
 ## Advanced Features
 
@@ -244,11 +209,7 @@ candidate_multiplier = 4  # Rerank top_k × multiplier candidates
 score_threshold = 0.3  # Minimum relevance score (0-1)
 ```
 
-Restart the API server to apply changes:
-
-```bash
-uv run dolphin serve
-```
+Restart the API server to apply changes.
 
 ### File-Watching
 
@@ -256,7 +217,6 @@ The Dolphin server includes an integrated file watcher that keeps your Knowledge
 
 - **Automatic**: When you run `dolphin serve`, it automatically starts watching all registered repositories.
 - **Git-Aware**: The indexer respects `.gitignore` rules. The watcher handles Git branch switching, updating the index to match the new working tree.
-- **Custom Control**: You can explicitly specify which repos to watch with `--watch <repo-name>` or disable watching via `--no-watch`. If watching is disabled, indexing can be manually triggered via `dolphin index <name>`.
 
 ### Configuring Embedding Models
 
@@ -267,18 +227,6 @@ default_embed_model = "large"  # Options: "small" or "large"
 ```
 
 Currently only [OpenAI embeddings](https://platform.openai.com/docs/guides/embeddings) are supported.
-
-## Development Status
-
-**Current**: Release candidates: (v0.2.2) Knowledge Bank + (v0.2.3) MCP
-
-- ✅ Core indexing and search pipeline
-- ✅ Language-aware chunking (Python, TS, JS, Markdown)
-- ✅ REST API with MCP bridge available at `bunx dolphin-mcp`
-- ✅ Cross-encoder reranking support
-- ✅ Hybrid search (BM25 + Vector)
-- ✅ Cursor-based pagination
-- ✅ Structured snippets & Graph Context
 
 ## Requirements
 
@@ -312,10 +260,10 @@ See [docs/TESTING.md](docs/TESTING.md) for complete testing procedures.
 curl http://127.0.0.1:7777/v1/health
 
 # Check indexed repositories
-dolphin kb status
+dolphin status
 
 # Re-index a repository
-dolphin kb index <repo-name> --full --force
+dolphin index <repo-name> --full --force
 ```
 
 ### Common Issues
@@ -327,14 +275,13 @@ dolphin kb index <repo-name> --full --force
 
 **No search results:**
 
-- Verify repositories are indexed: `dolphin kb status`
+- Verify repositories are indexed: `dolphin status`
 - Try with lower score cutoff in search parameters
-- Re-index: `dolphin kb index <repo-name> --full --force`
+- Re-index: `dolphin index <repo-name> --full --force`
 
 **MCP not connecting:**
 
 - Verify API server is running: `curl http://127.0.0.1:7777/v1/health`
-- Check MCP bridge logs: `tail -f mcp-bridge/logs/mcp.log`
 - Verify Bun is installed: `bun --version`
 
 For detailed troubleshooting, performance tips, and development workflows, see [AGENTS.md](AGENTS.md).
