@@ -52,6 +52,8 @@ DEFAULT_IGNORE_PATTERNS: tuple[str, ...] = (
     ".mypy_cache/**",
     ".pytest_cache",
     ".pytest_cache/**",
+    "*.log",
+    "*.log.*",
     ".DS_Store",
     "**/.DS_Store",
     ".continue",

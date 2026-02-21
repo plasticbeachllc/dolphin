@@ -7,7 +7,7 @@ These tests validate the full file sync workflow:
 - Pending changes tracking across crashes
 
 Architecture Note:
-- TypeScript (VSCode extension) detects file changes and records them via API
+- TypeScript clients detect file changes and record them via API
 - Python (backend) processes the indexing queue and automatically marks
   changes as processed after successful indexing
 - The mark-processed endpoint exists for manual/admin intervention only
@@ -21,7 +21,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from kb.api.app import app, reset_pipeline, reset_stores, set_pipeline, set_stores
+from kb.config import KBConfig
+from kb.ingest.error_logging import ErrorLogger
+from kb.ingest.pipeline import IngestionPipeline
 from kb.pipeline import KBPipeline
+from kb.store import LanceDBStore
 from kb.store.lancedb_vector import LanceDBVectorStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
@@ -741,3 +745,89 @@ class TestPendingChangesWorkflow:
         # Cleanup
         reset_pipeline()
         reset_stores()
+
+
+@pytest.mark.integration
+class TestDeletionIntegrity:
+    """Integration coverage for deleted-file cleanup correctness."""
+
+    def test_bulk_deleted_files_cleanup_mixed_models_and_fk_integrity(self, temp_dir, temp_db_path):
+        """Bulk deletions should prune both models and leave no FK violations."""
+        store_root = temp_dir / "store"
+        store_root.mkdir()
+
+        sql_store = SQLiteMetadataStore(temp_db_path)
+        sql_store.initialize()
+        lance_store = LanceDBStore(store_root / "lancedb")
+        pipeline = IngestionPipeline(
+            config=KBConfig(store_root=store_root, embedding_provider="stub"),
+            lancedb=lance_store,
+            metadata=sql_store,
+        )
+
+        workspace = temp_dir / "workspace"
+        workspace.mkdir()
+        sql_store.record_repo(name="test-repo", path=workspace, default_embed_model="small")
+        repo = sql_store.get_repo_by_name("test-repo")
+        assert repo is not None
+        repo_id = int(repo["id"])
+
+        deleted_paths: list[str] = []
+        expected_pruned = 0
+        for idx in range(3):
+            path = f"deleted_{idx}.py"
+            deleted_paths.append(path)
+
+            file_id = sql_store.upsert_file(
+                repo_id=repo_id,
+                path=path,
+                ext=".py",
+                language="python",
+                is_binary=False,
+                size_bytes=100 + idx,
+            )
+
+            # Seed metadata rows in both models to verify mixed-model cleanup.
+            small_hashes = [f"{path}:small:a", f"{path}:small:b"]
+            large_hashes = [f"{path}:large:a"]
+            sql_store.ensure_content_rows_for_file(repo_id, file_id, "small", small_hashes)
+            sql_store.ensure_content_rows_for_file(repo_id, file_id, "large", large_hashes)
+            expected_pruned += len(small_hashes) + len(large_hashes)
+
+            sql_store.upsert_file_snapshot(
+                file_id=file_id,
+                repo_id=repo_id,
+                path=path,
+                mtime_ns=idx + 1,
+                size_bytes=100 + idx,
+                content_hash=hashlib.sha256(path.encode("utf-8")).hexdigest(),
+            )
+
+        stats = pipeline.process_deletions(
+            repo_id=repo_id,
+            repo_name="test-repo",
+            files=deleted_paths,
+            embed_model="small",
+            dry_run=False,
+            error_logger=ErrorLogger(workspace, "deletion-integrity"),
+        )
+
+        assert stats["files_done"] == len(deleted_paths)
+        assert stats["chunks_pruned"] == expected_pruned
+
+        with sql_store._connect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM files WHERE repo_id = ?", (repo_id,))
+            remaining_files = int(cur.fetchone()[0])
+            assert remaining_files == 0
+
+            cur.execute("SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,))
+            remaining_content = int(cur.fetchone()[0])
+            assert remaining_content == 0
+
+            cur.execute("SELECT COUNT(*) FROM file_snapshots WHERE repo_id = ?", (repo_id,))
+            remaining_snapshots = int(cur.fetchone()[0])
+            assert remaining_snapshots == 0
+
+            fk_violations = cur.execute("PRAGMA foreign_key_check").fetchall()
+            assert fk_violations == []

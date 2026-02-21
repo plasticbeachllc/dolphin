@@ -14,12 +14,11 @@ else
 fi
 
 if command -v bun >/dev/null 2>&1; then
-  if [ -f "agent-core/package.json" ]; then
-    (cd "agent-core" && bun install --no-save)
-  fi
-  if [ -f "mcp-bridge/package.json" ]; then
-    (cd "mcp-bridge" && bun install --no-save)
-  fi
+  for dir in mcp-bridge shared; do
+    if [ -f "$dir/package.json" ]; then
+      (cd "$dir" && bun install --no-save)
+    fi
+  done
 else
   echo "bun not found; skipping JS refresh."
 fi

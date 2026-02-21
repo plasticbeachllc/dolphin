@@ -13,6 +13,7 @@ from typing import Any, TypedDict
 from sqlalchemy import event
 from sqlmodel import SQLModel, create_engine
 
+from kb.migrations import LATEST_SCHEMA_VERSION, SCHEMA_MIGRATIONS
 from kb.retrieval.bm25_stats import BM25StatisticsCollector
 from kb.security import PathValidator
 from kb.store.connection_pool import SQLiteConnectionPool, get_connection_pool
@@ -122,6 +123,7 @@ class SQLiteMetadataStore:
         self._bm25_stats_collector: BM25StatisticsCollector | None = None
         self._bm25_stats_path: Path | None = None
         self._connection_pool: SQLiteConnectionPool | None = None
+        self._applied_startup_migrations: list[str] = []
 
     def _get_connection_pool(self) -> SQLiteConnectionPool:
         """Lazily create (or fetch) the connection pool for this store."""
@@ -186,6 +188,18 @@ class SQLiteMetadataStore:
                 with self._connect() as conn, closing(conn.cursor()) as cur:
                     # Enable and verify foreign key constraints
                     cur.execute("PRAGMA foreign_keys = ON")
+
+                    # Apply pending schema migrations before integrity checks and
+                    # table validation to ensure startup is always on a canonical schema.
+                    applied_migrations = self._run_pending_schema_migrations(conn, cur)
+                    self._applied_startup_migrations = applied_migrations
+                    if applied_migrations:
+                        logger.warning(
+                            "[SQLiteMeta] Auto-applied startup migration(s) to canonical schema v%s: %s",
+                            LATEST_SCHEMA_VERSION,
+                            ", ".join(applied_migrations),
+                        )
+
                     cur.execute("PRAGMA foreign_key_check")
                     foreign_key_errors = cur.fetchall()
                     if foreign_key_errors:
@@ -204,6 +218,7 @@ class SQLiteMetadataStore:
                         "cross_repo_references": "Cross-repo references",
                         "pending_changes": "File sync pending changes",
                         "file_snapshots": "File sync snapshots",
+                        "schema_version": "Metadata schema version tracking",
                     }
 
                     for table, description in expected_tables.items():
@@ -267,6 +282,83 @@ class SQLiteMetadataStore:
         if self._bm25_stats_collector:
             self._bm25_stats_collector.record(score)
 
+    def _ensure_schema_version_table(self, cur) -> None:
+        """Ensure schema version tracking table exists with a singleton row."""
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_version (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                version INTEGER NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+            """
+        )
+        cur.execute(
+            """
+            INSERT INTO schema_version (id, version, updated_at)
+            VALUES (1, 0, datetime('now'))
+            ON CONFLICT(id) DO NOTHING
+            """
+        )
+
+    def _get_schema_version(self, cur) -> int:
+        """Fetch current metadata schema version."""
+        cur.execute("SELECT version FROM schema_version WHERE id = 1")
+        row = cur.fetchone()
+        if row is None:
+            raise RuntimeError("schema_version row missing after initialization")
+        return int(row[0])
+
+    def _set_schema_version(self, cur, version: int) -> None:
+        """Persist current metadata schema version."""
+        cur.execute(
+            """
+            UPDATE schema_version
+            SET version = ?, updated_at = datetime('now')
+            WHERE id = 1
+            """,
+            (int(version),),
+        )
+
+    def _run_pending_schema_migrations(self, conn, cur) -> list[str]:
+        """Apply all pending schema migrations in order."""
+        self._ensure_schema_version_table(cur)
+        current_version = self._get_schema_version(cur)
+
+        if current_version < 0:
+            raise RuntimeError(f"Invalid database schema version {current_version}.")
+
+        if current_version > LATEST_SCHEMA_VERSION:
+            raise RuntimeError(
+                f"Database schema version {current_version} is newer than supported "
+                f"version {LATEST_SCHEMA_VERSION}. Upgrade pb-dolphin."
+            )
+
+        applied: list[str] = []
+        for migration in SCHEMA_MIGRATIONS:
+            if migration.version <= current_version:
+                continue
+
+            logger.info(
+                "[SQLiteMeta] Applying schema migration v%s (%s)...",
+                migration.version,
+                migration.name,
+            )
+            note = migration.apply(conn)
+            self._set_schema_version(cur, migration.version)
+
+            label = f"v{migration.version}:{migration.name}"
+            if note:
+                label = f"{label} ({note})"
+            applied.append(label)
+            current_version = migration.version
+
+        return applied
+
+    def get_applied_startup_migrations(self) -> list[str]:
+        """Return migrations applied during the latest initialize() call."""
+        return list(self._applied_startup_migrations)
+
     def _validate_table_schema(self, cur, table_name: str) -> None:
         """Validate table schema integrity."""
         # S3 Fix: Whitelist table names to prevent SQL injection
@@ -282,6 +374,7 @@ class SQLiteMetadataStore:
             "cross_repo_references",
             "pending_changes",
             "file_snapshots",
+            "schema_version",
             "graph_metrics",
             "graph_snapshots",
             "graph_cache_state",
@@ -317,6 +410,8 @@ class SQLiteMetadataStore:
             required_cols = {"id", "repo_id", "file_id", "text_hash", "embed_model"}
         elif table_name == "chunk_locations":
             required_cols = {"id", "content_id", "start_line", "end_line"}
+        elif table_name == "schema_version":
+            required_cols = {"id", "version", "updated_at"}
         else:
             return  # Skip validation for unknown tables
 
@@ -837,8 +932,49 @@ class SQLiteMetadataStore:
     def delete_file(self, repo_id: int, file_id: int) -> None:
         """Delete a file from the catalog."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute("DELETE FROM files WHERE id = ?", (int(file_id),))
-            conn.commit()
+            try:
+                cur.execute("DELETE FROM files WHERE id = ? AND repo_id = ?", (int(file_id), int(repo_id)))
+                conn.commit()
+            except sqlite3.IntegrityError as exc:
+                conn.rollback()
+                dependency_counts = self._collect_file_dependency_counts(cur, int(file_id))
+                dependency_summary = (
+                    ", ".join(f"{table}={count}" for table, count in dependency_counts.items())
+                    if dependency_counts
+                    else "none detected"
+                )
+                raise RuntimeError(
+                    "Failed to delete file due to foreign key constraints "
+                    f"(repo_id={int(repo_id)}, file_id={int(file_id)}, dependents={dependency_summary}). "
+                    f"Ensure startup auto-migration to canonical schema v{LATEST_SCHEMA_VERSION} has run."
+                ) from exc
+
+    def _collect_file_dependency_counts(self, cur, file_id: int) -> dict[str, int]:
+        """Collect remaining dependent rows for a file on FK deletion failure."""
+        checks: dict[str, str] = {
+            "chunk_content": "SELECT COUNT(*) FROM chunk_content WHERE file_id = ?",
+            "code_nodes": "SELECT COUNT(*) FROM code_nodes WHERE file_id = ?",
+            "node_aliases": "SELECT COUNT(*) FROM node_aliases WHERE file_id = ?",
+            "graph_metrics": (
+                "SELECT COUNT(*) FROM graph_metrics gm JOIN code_nodes cn ON gm.node_id = cn.id WHERE cn.file_id = ?"
+            ),
+            "file_snapshots": "SELECT COUNT(*) FROM file_snapshots WHERE file_id = ?",
+        }
+
+        counts: dict[str, int] = {}
+        for table_name, sql in checks.items():
+            cur.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?",
+                (table_name,),
+            )
+            if cur.fetchone() is None:
+                continue
+            cur.execute(sql, (int(file_id),))
+            row = cur.fetchone()
+            count = int(row[0]) if row else 0
+            if count > 0:
+                counts[table_name] = count
+        return counts
 
     def set_file_latest_commit(self, repo_id: int, path: str, commit_sha: str) -> None:
         """Update latest_commit_sha for a file."""

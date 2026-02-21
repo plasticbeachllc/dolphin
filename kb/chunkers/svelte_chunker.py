@@ -207,7 +207,7 @@ def chunk_source(
         _log.warning("No chunks extracted, using fallback")
         return _fallback_chunking(source, model, token_target)
 
-    _log.info("Chunked Svelte component into %d chunks", len(chunks))
+    _log.debug("Chunked Svelte component into %d chunks", len(chunks))
     return chunks
 
 
