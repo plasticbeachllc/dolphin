@@ -15,12 +15,12 @@
     "lint": "bun x eslint .",
     "clean": "rm -rf dist",
     "test": "bun test ==serial ./src/tests --exclude dist",
-    "test:clean": "npm run clean && bun test --serial ./src/tests",
+    "test:clean": "bun run clean && bun test --serial ./src/tests",
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@modelcontextprotocol/sdk": "^1.25.3",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@iarna/toml": "^2.2.5",
     "zod": "~3.24.0",
     "zod-to-json-schema": "~3.24.0"

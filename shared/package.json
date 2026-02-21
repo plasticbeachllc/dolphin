@@ -5,10 +5,10 @@
   "main": "types/index.ts",
   "types": "types/index.ts",
   "scripts": {
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testMatch='**/ipc/__tests__/**/*.test.ts' --runInBand",
-    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testMatch='**/ipc/__tests__/**/*.test.ts' --watch",
-    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testMatch='**/ipc/__tests__/**/*.test.ts' --coverage",
-    "benchmark": "node --experimental-specifier-resolution=node --loader ts-node/esm ipc/benchmark.ts"
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
+    "benchmark": "bun run ipc/benchmark.ts"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",

@@ -7,13 +7,15 @@ on:
       - "develop"
       - "main"
 
+permissions:
+  contents: read
+
 jobs:
   unit-tests:
     name: Unit Tests
     strategy:
       matrix:
         python-version: ["3.12", "3.13"]
-        # node-version: ["20"]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -25,7 +27,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
 
       - name: Install just
         uses: extractions/setup-just@v3
@@ -50,7 +52,6 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.12", "3.13"]
-        # node-version: ["20"]
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && (github.base_ref == 'develop' || github.base_ref == 'main')
     needs: unit-tests
@@ -63,7 +64,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
 
       - name: Install just
         uses: extractions/setup-just@v3
@@ -82,12 +83,11 @@ jobs:
           just test-python integration
           just test-mcp integration
 
-  e2e-tests:
-    name: E2E Tests
+  kb-e2e-tests:
+    name: KB E2E Tests
     strategy:
       matrix:
         python-version: ["3.12", "3.13"]
-        node-version: ["20"]
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
     needs: integration-tests
@@ -97,12 +97,6 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: "npm"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -126,4 +120,3 @@ jobs:
           DISPLAY: :99.0
         run: |
           just test-kb e2e
-          just test-mcp e2e

@@ -89,7 +89,7 @@ class TestStructuredLogger:
         assert "error" in entry
         assert entry["error"]["type"] == "ValueError"
         assert entry["error"]["message"] == "Test error"
-        assert "traceback" in entry["error"]
+        assert "traceback" not in entry["error"]
 
     def test_error_logging(self, logger):
         """Test error level logging."""
@@ -212,6 +212,35 @@ class TestStructuredLogger:
         assert "level" in entry
         assert "message" in entry
         assert "context" in entry
+
+    def test_traceback_included_when_opted_in(self, monkeypatch):
+        """Traceback payload should be present when explicitly enabled."""
+        monkeypatch.setenv("DOLPHIN_LOG_TRACEBACK", "1")
+        logger = StructuredLogger("test.traceback")
+        log_output = StringIO()
+        handler = logging.StreamHandler(log_output)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        logger.logger.handlers.clear()
+        logger.logger.addHandler(handler)
+        logger.logger.setLevel(logging.DEBUG)
+        setattr(logger, "_test_output", log_output)
+
+        try:
+            raise RuntimeError("boom")
+        except RuntimeError as exc:
+            logger.error("with traceback", error=exc)
+
+        entry = self._get_log_entry(logger)
+        assert entry is not None
+        assert entry["error"]["type"] == "RuntimeError"
+        assert "traceback" in entry["error"]
+        assert "RuntimeError: boom" in entry["error"]["traceback"]
+
+    def test_log_level_loaded_from_env(self, monkeypatch):
+        """Logger level should honor DOLPHIN_LOG_LEVEL."""
+        monkeypatch.setenv("DOLPHIN_LOG_LEVEL", "WARNING")
+        logger = StructuredLogger("test.level")
+        assert logger.logger.level == logging.WARNING
 
     def test_timestamp_format(self, logger):
         """Test timestamp is in ISO format with Z suffix."""

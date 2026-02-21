@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import datetime
 import logging
 import re
@@ -19,7 +20,7 @@ from ..api_key import load_kb_api_key
 from ..config import KBConfig, load_config
 from ..store.sqlite_meta import SQLiteMetadataStore, generate_fts_content_id
 from .task_queue import TaskStatus, get_task_queue
-from .utils import GitRepository, validate_path_within_repo
+from .utils import GitRepository, normalize_repo_registration_path, validate_path_within_repo
 
 # Constants
 EMBEDDING_BATCH_SIZE = 128
@@ -73,13 +74,12 @@ def _load_default_config() -> KBConfig:
 _DEFAULT_CONFIG = _load_default_config()
 _API_LIMITS = _DEFAULT_CONFIG.api
 
-# Add CORS middleware to allow requests from VSCode webviews
+# Add CORS middleware for local development clients.
 # Note: CORSMiddleware is a class, not a factory function, but FastAPI's add_middleware
 # accepts both. We need to help the type checker by explicitly typing this.
 app.add_middleware(
     cast(type, CORSMiddleware),
     allow_origins=[
-        "vscode-webview://*",
         "http://localhost:3000",  # Development only
     ],
     allow_credentials=True,
@@ -930,22 +930,14 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
             message=f"Repository '{request.name}' already registered",
         )
 
-    # Validate path exists
-    repo_path = Path(request.path)
-    if not repo_path.exists():
-        raise HTTPException(status_code=400, detail=f"Path does not exist: {request.path}")
-
-    if not repo_path.is_dir():
-        raise HTTPException(status_code=400, detail=f"Path is not a directory: {request.path}")
+    # Normalize and sanitize request path. Existence/type checks occur at actual use sites.
+    normalized_repo_path = normalize_repo_registration_path(request.path)
 
     # Register the repository
     try:
-        # Resolve and normalize path (macOS /var -> /private/var handling)
-        resolved_path = repo_path.resolve()
-
         _sql_store.record_repo(
             name=request.name,
-            path=resolved_path,
+            path=normalized_repo_path,
             default_embed_model=request.default_embed_model,
         )
 
@@ -1695,7 +1687,7 @@ async def clear_repo_index(repo_name: str, confirmed: bool = False) -> dict:
 async def record_pending_changes(repo_name: str, request: PendingChangeRequest) -> dict:
     """Record pending file changes detected by file watcher.
 
-    This endpoint is called by the VSCode extension when files are created, modified, or deleted.
+    This endpoint is called by clients when files are created, modified, or deleted.
     Changes are persisted to survive crashes and restarts.
     """
     if _sql_store is None:
@@ -1786,7 +1778,7 @@ async def detect_drift(repo_name: str) -> DriftDetectionResponse:
     """Detect files that have changed since last indexing (drift detection).
 
     This endpoint compares current file state with snapshots taken during indexing
-    to identify files that were modified while VSCode was closed or during crashes.
+    to identify files that were modified while clients were offline or during crashes.
     """
     if _sql_store is None:
         raise HTTPException(status_code=503, detail="SQL store not initialized")
@@ -1799,7 +1791,7 @@ async def detect_drift(repo_name: str) -> DriftDetectionResponse:
     repo_id = int(repo["id"])
 
     try:
-        drift_events = _sql_store.detect_drift(repo_id)
+        drift_events = await asyncio.to_thread(_sql_store.detect_drift, repo_id)
 
         return DriftDetectionResponse(drift_events=drift_events, total=len(drift_events))
     except Exception as e:

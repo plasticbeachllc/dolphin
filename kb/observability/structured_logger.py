@@ -10,6 +10,7 @@ This module provides structured JSON logging with:
 
 import json
 import logging
+import os
 import re
 import traceback
 import unicodedata
@@ -71,6 +72,9 @@ class StructuredLogger:
     # JWT/Bearer tokens
     _JWT_PATTERN = re.compile(r"eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+")
 
+    _LOG_LEVEL_ENV = "DOLPHIN_LOG_LEVEL"
+    _LOG_TRACEBACK_ENV = "DOLPHIN_LOG_TRACEBACK"
+
     def __init__(self, name: str, default_context: dict[str, Any] | None = None):
         """Initialize structured logger.
 
@@ -80,13 +84,21 @@ class StructuredLogger:
         """
         self.logger = logging.getLogger(name)
         self.default_context = default_context or {}
+        self._include_traceback = os.environ.get(self._LOG_TRACEBACK_ENV, "0").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
 
         # Configure JSON formatter if not already configured
         if not self.logger.handlers:
             handler = logging.StreamHandler()
             handler.setFormatter(logging.Formatter("%(message)s"))  # Raw JSON output
             self.logger.addHandler(handler)
-            self.logger.setLevel(logging.INFO)
+            env_level = os.environ.get(self._LOG_LEVEL_ENV, "").strip().upper()
+            parsed_level = getattr(logging, env_level, None)
+            self.logger.setLevel(parsed_level if isinstance(parsed_level, int) else logging.INFO)
 
     def _extract_trace_context(self) -> dict[str, str]:
         """Extract OpenTelemetry trace context from current span.
@@ -248,13 +260,14 @@ class StructuredLogger:
 
         # Add error information if provided
         if error:
-            entry["error"] = {
+            error_payload: dict[str, Any] = {
                 "type": type(error).__name__,
                 "message": str(error),
-                "traceback": traceback.format_exc(),
             }
+            if self._include_traceback and error.__traceback__ is not None:
+                error_payload["traceback"] = "".join(traceback.TracebackException.from_exception(error).format())
+            entry["error"] = error_payload
 
-        # Log as JSON
         self.logger.log(level, json.dumps(entry))
 
     def debug(self, message: str, context: dict[str, Any] | None = None):
