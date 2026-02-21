@@ -1800,7 +1800,7 @@ async def detect_drift(repo_name: str) -> DriftDetectionResponse:
     repo_id = int(repo["id"])
 
     try:
-        drift_events = await asyncio.get_running_loop().run_in_executor(None, _sql_store.detect_drift, repo_id)
+        drift_events = await asyncio.to_thread(_sql_store.detect_drift, repo_id)
 
         return DriftDetectionResponse(drift_events=drift_events, total=len(drift_events))
     except Exception as e:
