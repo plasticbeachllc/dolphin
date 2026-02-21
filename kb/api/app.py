@@ -20,7 +20,7 @@ from ..api_key import load_kb_api_key
 from ..config import KBConfig, load_config
 from ..store.sqlite_meta import SQLiteMetadataStore, generate_fts_content_id
 from .task_queue import TaskStatus, get_task_queue
-from .utils import GitRepository, validate_path_within_repo
+from .utils import GitRepository, normalize_repo_registration_path, validate_path_within_repo
 
 # Constants
 EMBEDDING_BATCH_SIZE = 128
@@ -930,22 +930,14 @@ async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
             message=f"Repository '{request.name}' already registered",
         )
 
-    # Validate path exists
-    repo_path = Path(request.path)
-    if not repo_path.exists():
-        raise HTTPException(status_code=400, detail=f"Path does not exist: {request.path}")
-
-    if not repo_path.is_dir():
-        raise HTTPException(status_code=400, detail=f"Path is not a directory: {request.path}")
+    # Normalize and sanitize request path. Existence/type checks occur at actual use sites.
+    normalized_repo_path = normalize_repo_registration_path(request.path)
 
     # Register the repository
     try:
-        # Resolve and normalize path (macOS /var -> /private/var handling)
-        resolved_path = repo_path.resolve()
-
         _sql_store.record_repo(
             name=request.name,
-            path=resolved_path,
+            path=normalized_repo_path,
             default_embed_model=request.default_embed_model,
         )
 

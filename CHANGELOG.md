@@ -11,10 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
----
-
-## [Unreleased]
-
 ## [0.2.2] - 2026-02-20
 
 ### Added
@@ -25,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Application Output Beautification**: Standardized user-facing CLI/server/indexing output with clearer status levels, compact progress lines, and actionable terminal hints.
 - **Logging Controls**: Added configurable log level (`DOLPHIN_LOG_LEVEL`) and opt-in traceback payloads (`DOLPHIN_LOG_TRACEBACK=1`) while keeping structured JSON log output stable.
 - **Cleaner Indexing Progress Output**: Removed duplicate `Indexing file:` lines and moved per-file chunker diagnostics to debug-level so default indexing output stays high-signal.
+
+### Changed
+
+- **Non-Blocking Drift Detection**: `GET /v1/repos/{repo_name}/drift` now runs drift detection through `asyncio.to_thread(...)` so API workers do not block on synchronous store operations.
+- **Watcher Responsiveness**: Reduced watch debounce from 1000ms to 200ms to pick up repository file changes faster during watch mode.
 
 ### Fixed
 

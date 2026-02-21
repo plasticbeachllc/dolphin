@@ -591,18 +591,16 @@ class SQLiteMetadataStore:
 
         Uses raw sqlite3 for simplicity; models are already materialized.
 
-        Note: Resolves the path to handle macOS symlinks (/var -> /private/var)
-        to ensure path validation consistency across the system.
+        Note: Normalizes to an absolute path string without filesystem access.
 
         Args:
             name: Repository name
             path: Repository root path (Path object or string)
             default_embed_model: Default embedding model to use
         """
-        # Convert string to Path if needed and resolve to handle macOS symlinks
-        # This ensures consistency with PathValidator which also resolves paths
+        # Convert string to Path if needed and normalize without touching filesystem.
         path_obj = Path(path) if isinstance(path, str) else path
-        resolved_path = path_obj.resolve()
+        normalized_path = path_obj.expanduser().absolute()
 
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
@@ -615,7 +613,7 @@ class SQLiteMetadataStore:
                   created_at=COALESCE(repos.created_at, datetime('now')),
                   updated_at=datetime('now')
                 """,
-                (name, str(resolved_path), default_embed_model),
+                (name, str(normalized_path), default_embed_model),
             )
             conn.commit()
 

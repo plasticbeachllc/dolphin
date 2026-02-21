@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 
-from kb.api.utils import validate_path_within_repo
+from kb.api.utils import normalize_repo_registration_path, validate_path_within_repo
 
 
 class TestPathValidationSecurity:
@@ -238,3 +238,27 @@ class TestPathValidationSecurity:
         # Should work with exact case
         result = validate_path_within_repo(test_file, repo_root)
         assert result == test_file.resolve()
+
+
+class TestRepoRegistrationPathNormalization:
+    """Test normalization logic used by /v1/repos registration."""
+
+    def test_normalize_repo_path_relative_to_cwd(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        normalized = normalize_repo_registration_path("repo")
+        assert normalized == (tmp_path / "repo").absolute()
+
+    def test_normalize_repo_path_rejects_traversal_segment(self):
+        with pytest.raises(HTTPException) as exc_info:
+            normalize_repo_registration_path("../repo")
+        assert exc_info.value.status_code == 400
+
+    def test_normalize_repo_path_rejects_null_byte(self):
+        with pytest.raises(HTTPException) as exc_info:
+            normalize_repo_registration_path("bad\x00path")
+        assert exc_info.value.status_code == 400
+
+    def test_normalize_repo_path_expands_user(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        normalized = normalize_repo_registration_path("~/repo")
+        assert normalized == (tmp_path / "repo").absolute()

@@ -10,6 +10,30 @@ from fastapi import HTTPException
 from kb.security import PathValidationError, PathValidator
 
 
+def normalize_repo_registration_path(path_str: str) -> Path:
+    """Normalize repository registration path without filesystem access.
+
+    This intentionally avoids `exists()`, `is_dir()`, and `resolve()` on user input.
+    Code paths that need filesystem reads/writes should validate again at use time.
+    """
+    if not isinstance(path_str, str) or not path_str.strip():
+        raise HTTPException(status_code=400, detail="Path must be a non-empty string")
+
+    if "\x00" in path_str:
+        raise HTTPException(status_code=400, detail="Path contains null byte")
+
+    raw = path_str.strip()
+    candidate = Path(raw).expanduser()
+
+    # Reject obvious traversal segments up front.
+    if any(part == ".." for part in candidate.parts):
+        raise HTTPException(status_code=400, detail="Path traversal segments are not allowed")
+
+    # Normalize to an absolute path string without touching the filesystem.
+    normalized = candidate.absolute() if candidate.is_absolute() else (Path.cwd() / candidate).absolute()
+    return normalized
+
+
 def validate_path_within_repo(file_path: Path, repo_root: Path) -> Path:
     """Validate that file_path is within repo_root, return resolved path.
 
