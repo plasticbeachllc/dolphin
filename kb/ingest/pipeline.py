@@ -973,7 +973,7 @@ class IngestionPipeline:
                     if lp.exists() and lp.stat().st_size > 0:
                         print(f"  Errors logged to: {lp}")
             except Exception:
-                pass
+                logger.debug("Could not check error logger state.", exc_info=True)
 
             return {
                 "repo": repo_name,

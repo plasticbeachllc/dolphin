@@ -38,6 +38,7 @@ class QueryCache:
         embedding_ttl: int = 3600,
         result_ttl: int = 900,
         enabled: bool = True,
+        max_memory_entries: int = 10_000,
     ):
         """Initialize query cache.
 
@@ -46,13 +47,18 @@ class QueryCache:
             embedding_ttl: Time-to-live for embeddings in seconds (default: 1 hour)
             result_ttl: Time-to-live for results in seconds (default: 15 minutes)
             enabled: Whether caching is enabled (default: True)
+            max_memory_entries: Maximum number of entries in the in-memory fallback cache.
+                When the limit is reached, expired entries are evicted first; if still over
+                capacity, the soonest-to-expire entries are removed. (default: 10,000)
         """
         self.redis = redis_client
         self.embedding_ttl = embedding_ttl
         self.result_ttl = result_ttl
         self.enabled = enabled
+        self._max_memory_entries = max_memory_entries
 
-        # Fallback in-memory cache if Redis not available
+        # Fallback in-memory cache if Redis not available.
+        # Values are (payload, expires_at) tuples; bounded by _max_memory_entries.
         self._memory_cache: dict[str, tuple[Any, float]] = {}
         self._repo_index: dict[str, set[str]] = {}
         self._key_repos: dict[str, set[str]] = {}
@@ -127,6 +133,29 @@ class QueryCache:
                 if not repo_keys:
                     self._repo_index.pop(repo, None)
 
+    def _evict_memory_cache(self) -> None:
+        """Evict expired entries; if still over capacity, remove the soonest-to-expire entries."""
+        now = time.time()
+        # Phase 1: remove all entries whose TTL has passed.
+        expired = [k for k, (_, exp) in self._memory_cache.items() if exp <= now]
+        for key in expired:
+            self._memory_cache.pop(key, None)
+            self._remove_key_from_repo_index(key)
+
+        # Phase 2: if still at capacity, evict by soonest expiry until under 90% full.
+        if len(self._memory_cache) >= self._max_memory_entries:
+            target = max(0, int(self._max_memory_entries * 0.9))
+            overflow = len(self._memory_cache) - target
+            by_expiry = sorted(self._memory_cache.keys(), key=lambda k: self._memory_cache[k][1])
+            for key in by_expiry[:overflow]:
+                self._memory_cache.pop(key, None)
+                self._remove_key_from_repo_index(key)
+            _log.debug(
+                "In-memory cache eviction: removed %d entries (capacity=%d)",
+                overflow,
+                self._max_memory_entries,
+            )
+
     def _index_result_key(self, cache_key: str, params: dict[str, Any]) -> None:
         scopes = self._extract_repos(params)
         if not scopes:
@@ -183,6 +212,8 @@ class QueryCache:
                 self.redis.setex(cache_key, self.result_ttl, json.dumps(payload))
                 self._index_result_key(cache_key, params)
             else:
+                if len(self._memory_cache) >= self._max_memory_entries:
+                    self._evict_memory_cache()
                 self._memory_cache[cache_key] = (copy.deepcopy(payload), time.time() + self.result_ttl)
                 self._index_result_key(cache_key, params)
 
@@ -242,6 +273,8 @@ class QueryCache:
                 self.redis.setex(cache_key, self.embedding_ttl, json.dumps(embedding))
             else:
                 # In-memory fallback
+                if len(self._memory_cache) >= self._max_memory_entries:
+                    self._evict_memory_cache()
                 self._memory_cache[cache_key] = (
                     copy.deepcopy(embedding),
                     time.time() + self.embedding_ttl,
@@ -401,6 +434,7 @@ def create_cache(
     embedding_ttl: int = 3600,
     result_ttl: int = 900,
     enabled: bool = True,
+    max_memory_entries: int = 10_000,
 ) -> QueryCache:
     """Factory function to create a query cache.
 
@@ -442,4 +476,5 @@ def create_cache(
         embedding_ttl=embedding_ttl,
         result_ttl=result_ttl,
         enabled=enabled,
+        max_memory_entries=max_memory_entries,
     )

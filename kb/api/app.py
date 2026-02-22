@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import hmac
 import logging
 import re
 from collections.abc import Awaitable, Iterable, Sequence
@@ -21,6 +22,8 @@ from ..config import KBConfig, load_config
 from ..store.sqlite_meta import SQLiteMetadataStore, generate_fts_content_id
 from .task_queue import TaskStatus, get_task_queue
 from .utils import GitRepository, normalize_repo_registration_path, validate_path_within_repo
+
+_log = logging.getLogger(__name__)
 
 # Constants
 EMBEDDING_BATCH_SIZE = 128
@@ -68,6 +71,7 @@ def _load_default_config() -> KBConfig:
     try:
         return load_config()
     except Exception:
+        _log.warning("Failed to load config; using defaults.", exc_info=True)
         return KBConfig()
 
 
@@ -83,8 +87,8 @@ app.add_middleware(
         "http://localhost:3000",  # Development only
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["X-API-Key", "Content-Type", "Accept"],
 )
 
 
@@ -105,7 +109,7 @@ async def validate_api_key(request: Request, call_next):
         api_key = request.headers.get("X-API-Key")
         expected_key = load_kb_api_key()
 
-        if not api_key or api_key != expected_key:
+        if not api_key or not hmac.compare_digest(api_key, expected_key or ""):
             return JSONResponse({"error": "Unauthorized", "detail": "Valid API key required"}, status_code=401)
 
     return await call_next(request)
@@ -236,10 +240,28 @@ def _enrich_hits_with_snippets(
         truncated = False
         if estimated_tokens > max_tokens:
             truncated = True
-            # Simple truncation strategy: keep match, trim context, then trim match if needed
-            # For now, we will flag it as truncated but return full content to avoid breaking logic
-            # In a real implementation, we would slice the strings.
-            pass
+            max_chars = int(max_tokens * 4)
+            match_chars = len(text_content)
+
+            if match_chars >= max_chars:
+                # Match alone exceeds budget: truncate match, drop all context.
+                text_content = text_content[:max_chars]
+                before_content = ""
+                after_content = ""
+            else:
+                # Match fits; distribute remaining budget to context (context_before
+                # gets half, context_after gets the other half, then swap leftover).
+                remaining = max_chars - match_chars
+                before_budget = remaining // 2
+                after_budget = remaining - before_budget
+
+                # context_after: keep lines closest to the match (trim from the end).
+                if len(after_content) > after_budget:
+                    after_content = after_content[:after_budget]
+
+                # context_before: keep lines closest to the match (trim from the start).
+                if len(before_content) > before_budget:
+                    before_content = before_content[len(before_content) - before_budget :]
 
         snippet_obj = {
             "start_line": before_start_idx + 1 if before_content else start_int,
@@ -394,6 +416,7 @@ async def health(check: str = Query(default="shallow")) -> dict[str, object]:
             _lance_store.connect()
             checks["lancedb"] = "ok"
         except Exception:
+            _log.warning("LanceDB health check failed.", exc_info=True)
             checks["lancedb"] = "error"
     else:
         checks["lancedb"] = "not_configured"
@@ -568,10 +591,21 @@ async def search(request: SearchRequest) -> dict[str, Any]:
     if next_cursor:
         meta["next_cursor"] = next_cursor
 
-    return {
-        "hits": hits_list,
-        "meta": meta,
-    }
+    # Collect warnings for conditions the caller should know about.
+    warnings: list[str] = []
+    _backend = get_search_backend()
+    _reranker = getattr(_backend, "reranker", None)
+    if _reranker is not None and not _reranker.enabled:
+        _config = getattr(_backend, "config", None)
+        _rerank_cfg = getattr(_config, "reranking", None)
+        if _rerank_cfg and getattr(_rerank_cfg, "enabled", False):
+            reason = getattr(_reranker, "load_error", None) or "unknown reason"
+            warnings.append(f"Reranking is configured but unavailable: {reason}")
+
+    response: dict[str, Any] = {"hits": hits_list, "meta": meta}
+    if warnings:
+        response["warnings"] = warnings
+    return response
 
 
 @app.post("/v1/search")

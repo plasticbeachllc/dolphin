@@ -76,7 +76,7 @@ Fix: log at `error` level and raise; the database is not trustworthy without FK 
 
 #### P2/S — Path validation allows symlinks by default
 
-**File**: `kb/api/utils.py:39`
+**File**: `kb/api/utils.py:52`
 
 ```python
 validator = PathValidator(base_dir=repo_root, allow_symlinks=True)
@@ -367,11 +367,11 @@ self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
 On shutdown, `_executor.shutdown(wait=True)` should be called. If the watcher is stopped abruptly, in-flight indexing tasks may be interrupted mid-write, leaving partial state in SQLite and LanceDB.
 
-#### P2/S — SQLite transactions not explicitly bounded
+#### P3/S — SQLite transaction boundaries worth auditing
 
 **File**: `kb/store/sqlite_meta.py` (throughout)
 
-Many operations use `with conn:` (auto-commit mode) but run multiple `execute()` calls that should be atomic. If the process crashes between writes, partial updates are committed. Wrap multi-statement operations in explicit `BEGIN`/`COMMIT` blocks.
+The code pattern is `with self._connect() as conn` (the connection pool's context manager) — this yields the raw `sqlite3.Connection` and releases it back to the pool, but does **not** invoke `sqlite3.Connection` as a context manager, which is what provides automatic `BEGIN`/`COMMIT`/`ROLLBACK`. Python's `sqlite3` module does provide implicit transactions for DML in its default isolation mode, but this is a global per-connection setting rather than an explicit per-operation guarantee. For any method that executes multiple write statements that must be atomic, it is worth auditing whether the implicit transaction boundaries are sufficient or whether an explicit `BEGIN`/`COMMIT` block would make the intent clearer and the behaviour more robust.
 
 ---
 
@@ -404,7 +404,7 @@ Move to environment variables or a `.env` file excluded from version control.
 
 **File**: `.github/workflows/security-scan.yml:28`
 
-`CVE-2026-0994` (protobuf DoS) and `GHSA-7gcm-g887-7qv7` are ignored in CI with no documented rationale. Add comments in the workflow file explaining why each is acceptable, and create a `docs/SECURITY_EXCEPTIONS.md` tracking these.
+`CVE-2026-0994` (protobuf DoS, confirmed in `.github/workflows/security-scan.yml:26`) and `GHSA-7gcm-g887-7qv7` are ignored in CI. The workflow already has an inline comment for the protobuf CVE; neither exception has a dedicated rationale document. Add a `docs/SECURITY_EXCEPTIONS.md` that records the advisory, the upstream status, the accepted risk, and a target date for re-evaluation.
 
 #### P3/S — No application Dockerfile
 

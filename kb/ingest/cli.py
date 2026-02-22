@@ -1,5 +1,6 @@
 # from __future__ import annotations
 import asyncio
+import logging
 import os
 import sys
 from pathlib import Path
@@ -16,6 +17,8 @@ from ..embeddings.provider import create_provider, set_default_provider
 from ..ignores import build_ignore_set, load_repo_ignores
 from ..store import LanceDBStore, SQLiteMetadataStore
 from .pipeline import IngestionPipeline
+
+_log = logging.getLogger(__name__)
 
 app = typer.Typer(help="Unified knowledge store ingestion CLI.")
 
@@ -237,6 +240,7 @@ def _notify_server_reload(config: KBConfig) -> None:
         api_key = load_kb_api_key()
     except Exception:
         # API key might not exist yet if only indexing
+        _log.debug("Could not load API key; skipping server notification.", exc_info=True)
         return
 
     try:
@@ -290,6 +294,22 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
         console.print(repo_table)
     else:
         console.print("\n[yellow]No repositories registered.[/yellow]")
+
+    # Reranking status
+    console.print("\n[bold]🔍 Reranking[/bold]")
+    reranking_cfg = config.retrieval.reranking
+    if not reranking_cfg.enabled:
+        console.print("  [dim]Disabled (set reranking.enabled = true in config to enable)[/dim]")
+    else:
+        try:
+            from sentence_transformers import CrossEncoder as _CE  # noqa: F401
+
+            console.print(f"  [green]Enabled[/green] — model: {reranking_cfg.model}")
+        except ImportError:
+            console.print(
+                "  [red]Enabled in config but dependencies are missing.[/red]\n"
+                "  Install with: [bold]uv pip install pb-dolphin\\[reranking][/bold]"
+            )
 
     console.print()
 

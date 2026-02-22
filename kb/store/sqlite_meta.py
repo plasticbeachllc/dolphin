@@ -150,8 +150,13 @@ class SQLiteMetadataStore:
         def _set_sqlite_pragma(dbapi_connection, connection_record):
             try:
                 dbapi_connection.execute("PRAGMA foreign_keys=ON")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.error(
+                    "Failed to enable SQLite foreign key enforcement; referential integrity cannot be guaranteed: %s",
+                    exc,
+                    exc_info=True,
+                )
+                raise
 
         return engine
 
@@ -2026,7 +2031,7 @@ class SQLiteMetadataStore:
                             result[str(chunk_id)] = "\n".join(chunk_lines)
                     except Exception:
                         # If we can't read the file, skip this chunk
-                        pass
+                        logger.debug("Could not read file for chunk_id=%s; skipping.", chunk_id, exc_info=True)
 
             return result
 
