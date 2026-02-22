@@ -51,6 +51,7 @@ if not api_key or not hmac.compare_digest(api_key, expected_key or ""):
 ```
 
 Also missing:
+
 - **Rate limiting** on failed auth attempts (brute-force is trivial).
 - **Audit logging** of 401s (no record of who tried what).
 
@@ -92,14 +93,14 @@ Symlinks can escape the repo root. Consider `allow_symlinks=False` as the defaul
 
 The single largest code quality issue. Breakdown of the top offenders:
 
-| File | Count | Impact |
-|------|-------|--------|
-| `kb/store/lancedb_store.py` | 26 | Vector ops silently fail |
-| `kb/api/app.py` | 24 | Request-level failures hidden |
-| `kb/ingest/pipeline.py` | 12 | Indexing errors swallowed |
-| `kb/store/sqlite_meta.py` | 11 | DB integrity issues masked |
-| `kb/ingest/watcher.py` | 9 | File-watch failures undetected |
-| `kb/ingest/cli.py` | 9 | CLI errors lost |
+| File                        | Count | Impact                         |
+| --------------------------- | ----- | ------------------------------ |
+| `kb/store/lancedb_store.py` | 26    | Vector ops silently fail       |
+| `kb/api/app.py`             | 24    | Request-level failures hidden  |
+| `kb/ingest/pipeline.py`     | 12    | Indexing errors swallowed      |
+| `kb/store/sqlite_meta.py`   | 11    | DB integrity issues masked     |
+| `kb/ingest/watcher.py`      | 9     | File-watch failures undetected |
+| `kb/ingest/cli.py`          | 9     | CLI errors lost                |
 
 **Recommended approach** (incremental, not big-bang):
 
@@ -120,13 +121,13 @@ When the SQLite hash lookup fails, the fallback is `set()` — meaning every chu
 
 Several modules have grown past the point of easy comprehension:
 
-| File | Lines | Concern |
-|------|-------|---------|
-| `kb/store/sqlite_meta.py` | 3,073 | Metadata, FTS, sessions, snapshots, migrations — everything |
-| `kb/api/app.py` | 1,862 | Routes, enrichment, indexing logic, task processing |
-| `kb/ingest/pipeline.py` | 1,499 | Scanning, chunking, embedding, graph extraction |
-| `kb/api/search_backend.py` | 1,338 | Search orchestration, caching, BM25, vector search |
-| `kb/ingest/cli.py` | 986 | CLI commands with business logic interleaved |
+| File                       | Lines | Concern                                                     |
+| -------------------------- | ----- | ----------------------------------------------------------- |
+| `kb/store/sqlite_meta.py`  | 3,073 | Metadata, FTS, sessions, snapshots, migrations — everything |
+| `kb/api/app.py`            | 1,862 | Routes, enrichment, indexing logic, task processing         |
+| `kb/ingest/pipeline.py`    | 1,499 | Scanning, chunking, embedding, graph extraction             |
+| `kb/api/search_backend.py` | 1,338 | Search orchestration, caching, BM25, vector search          |
+| `kb/ingest/cli.py`         | 986   | CLI commands with business logic interleaved                |
 
 **Suggested decompositions**:
 
@@ -194,6 +195,7 @@ The `truncated` flag is set but the content is never actually truncated. Downstr
 **Files**: `kb/api/app.py:234` and `kb/ingest/async_embedder.py:67`
 
 Two different estimation heuristics:
+
 - `total_chars / 4.0` (app.py — character-based)
 - `len(t.split()) * 1.3` (async_embedder.py — word-based)
 
@@ -409,6 +411,7 @@ Move to environment variables or a `.env` file excluded from version control.
 #### P3/S — No application Dockerfile
 
 There's no Dockerfile for the Dolphin application itself — only for the observability stack. For teams wanting to deploy Dolphin as a container, provide a multi-stage Dockerfile with:
+
 1. A build stage (uv + bun)
 2. A slim runtime stage
 3. Health check instruction
@@ -464,18 +467,18 @@ When implementing fixes:
 
 ### Key file map
 
-| Area | Primary File | Lines | Notes |
-|------|-------------|-------|-------|
-| API routes | `kb/api/app.py` | 1,862 | Needs decomposition |
-| Search orchestration | `kb/api/search_backend.py` | 1,338 | Complex async dispatch |
-| SQLite metadata | `kb/store/sqlite_meta.py` | 3,073 | Largest module |
-| Vector store | `kb/store/lancedb_store.py` | 632 | Most bare exceptions |
-| Ingestion pipeline | `kb/ingest/pipeline.py` | 1,499 | Core indexing flow |
-| Configuration | `kb/config.py` | 474 | Dataclass-based |
-| Caching | `kb/cache/cache.py` | 446 | Unbounded in-memory |
-| Embeddings | `kb/embeddings/provider.py` | ~320 | OpenAI + stub |
-| CLI | `kb/cli.py` | 818 | User-facing entry |
-| File watcher | `kb/ingest/watcher.py` | ~400 | Async + threading |
+| Area                 | Primary File                | Lines | Notes                  |
+| -------------------- | --------------------------- | ----- | ---------------------- |
+| API routes           | `kb/api/app.py`             | 1,862 | Needs decomposition    |
+| Search orchestration | `kb/api/search_backend.py`  | 1,338 | Complex async dispatch |
+| SQLite metadata      | `kb/store/sqlite_meta.py`   | 3,073 | Largest module         |
+| Vector store         | `kb/store/lancedb_store.py` | 632   | Most bare exceptions   |
+| Ingestion pipeline   | `kb/ingest/pipeline.py`     | 1,499 | Core indexing flow     |
+| Configuration        | `kb/config.py`              | 474   | Dataclass-based        |
+| Caching              | `kb/cache/cache.py`         | 446   | Unbounded in-memory    |
+| Embeddings           | `kb/embeddings/provider.py` | ~320  | OpenAI + stub          |
+| CLI                  | `kb/cli.py`                 | 818   | User-facing entry      |
+| File watcher         | `kb/ingest/watcher.py`      | ~400  | Async + threading      |
 
 ### Running checks
 
