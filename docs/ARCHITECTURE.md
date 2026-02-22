@@ -71,6 +71,8 @@ AI Client (MCP) / CLI / REST consumer
 - Vector and BM25 branches execute concurrently inside `KnowledgeSearchBackend.search` to reduce end-to-end search latency.
 - BM25 hydration now uses bulk metadata lookups keyed by FTS content IDs (`SQLiteMetadataStore.get_bm25_hydration_map`) instead of per-hit lookups.
 - LanceDB vector indexes are managed explicitly and lazily per table in `LanceDBStore` (create once, reuse across queries).
+- Search result caching now fingerprints the full effective request shape (filters, ANN/MMR knobs, graph-context flag, cursor) to prevent cross-request cache collisions.
+- Repo reindex invalidation now clears both repo-scoped and global (unscoped) cached search entries to avoid stale cross-repo query results.
 
 ## Metadata Schema Contract
 

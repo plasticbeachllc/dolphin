@@ -82,6 +82,40 @@ class KnowledgeSearchBackend:
         self._search_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="kb-search")
         self._configure_bm25_statistics_collection()
 
+    @staticmethod
+    def _normalize_string_list(values: Sequence[str] | None) -> list[str]:
+        """Canonicalize list-like request fields for stable cache keys."""
+        if not values:
+            return []
+        # Order should not affect cache identity for set-like filters.
+        return sorted({str(value) for value in values if str(value)})
+
+    def _build_search_cache_params(self, request: SearchRequest) -> dict[str, Any]:
+        """Build a complete, canonical cache fingerprint for search results."""
+        return {
+            "cache_schema": 2,
+            "embed_model": self.config.default_embed_model,
+            "hybrid_search_enabled": bool(self.hybrid_search_enabled),
+            "reranking_enabled": bool(self.reranker is not None),
+            "config_ann_strategy": self.config.retrieval.ann.strategy,
+            "config_ann_metric": self.config.retrieval.ann.metric,
+            "config_mmr_enabled": bool(self.config.retrieval.mmr_enabled),
+            "config_mmr_lambda": self.config.retrieval.mmr_lambda,
+            "top_k": int(request.top_k),
+            "score_cutoff": request.score_cutoff,
+            "repos": self._normalize_string_list(request.repos),
+            "path_prefix": self._normalize_string_list(request.path_prefix),
+            "exclude_paths": self._normalize_string_list(request.exclude_paths),
+            "exclude_patterns": self._normalize_string_list(request.exclude_patterns),
+            "mmr_enabled": request.mmr_enabled,
+            "mmr_lambda": request.mmr_lambda,
+            "ann_strategy": request.ann_strategy,
+            "ann_nprobes": request.ann_nprobes,
+            "ann_refine_factor": request.ann_refine_factor,
+            "include_graph_context": bool(getattr(request, "include_graph_context", False)),
+            "cursor": request.cursor,
+        }
+
     def _resolve_bm25_stats_path(self) -> Path:
         env_override = os.environ.get("DOLPHIN_BM25_STATS_PATH")
         if env_override:
@@ -217,34 +251,35 @@ class KnowledgeSearchBackend:
                 return False
         return True
 
-    def _build_cache_params(self, request: SearchRequest) -> dict[str, object]:
-        """Build cache key parameters from request fields."""
-        return {
-            "top_k": request.top_k,
-            "score_cutoff": request.score_cutoff,
-            "embed_model": self.config.default_embed_model,
-            "repos": request.repos,
-            "path_prefix": request.path_prefix,
-        }
+    def _get_cached_results_if_available(
+        self,
+        request: SearchRequest,
+        *,
+        cache_allowed: bool | None = None,
+        cache_params: dict[str, Any] | None = None,
+    ) -> tuple[list[dict[str, object]], str | None] | None:
+        """Return cached results + cursor for a request when cache usage is allowed."""
+        if cache_allowed is None:
+            cache_allowed = self._is_cache_allowed(request)
 
-    def _get_cached_results_if_available(self, request: SearchRequest) -> list[dict[str, object]] | None:
-        """Return cached results for a request when cache usage is allowed."""
-        if not self._is_cache_allowed(request):
+        if not cache_allowed or not self.cache:
             return None
 
-        cache_params = self._build_cache_params(request)
-        return self.cache.get_results(request.query, **cache_params)
+        if cache_params is None:
+            cache_params = self._build_search_cache_params(request)
+
+        return self.cache.get_search_results(request.query, **cache_params)
 
     async def search_async(self, request: SearchRequest) -> tuple[Sequence[dict[str, object]], str | None]:
         """Execute search without blocking the event loop."""
         cache_allowed = await asyncio.to_thread(self._is_cache_allowed, request)
-        cache_params = self._build_cache_params(request) if cache_allowed else None
+        cache_params = self._build_search_cache_params(request) if cache_allowed else None
 
-        cached_results = None
+        cached_payload = None
         if cache_params is not None:
-            cached_results = await asyncio.to_thread(self.cache.get_results, request.query, **cache_params)
-        if cached_results is not None:
-            return cached_results, None
+            cached_payload = await asyncio.to_thread(self.cache.get_search_results, request.query, **cache_params)
+        if cached_payload is not None:
+            return cached_payload
 
         query_embedding = await self.embedding_provider.embed_texts_async(
             self.config.default_embed_model,
@@ -264,7 +299,7 @@ class KnowledgeSearchBackend:
         *,
         _query_embedding_override: list[float] | None = None,
         _skip_cache: bool = False,
-        _cache_state_override: tuple[bool, dict[str, object] | None] | None = None,
+        _cache_state_override: tuple[bool, dict[str, Any] | None] | None = None,
     ) -> tuple[Sequence[dict[str, object]], str | None]:
         # Generate correlation ID for this search request
         correlation_id = f"search_{uuid.uuid4().hex[:8]}"
@@ -289,14 +324,19 @@ class KnowledgeSearchBackend:
 
         if _cache_state_override is None:
             cache_allowed = self._is_cache_allowed(request)
-            cache_params = self._build_cache_params(request) if cache_allowed else None
+            cache_params = self._build_search_cache_params(request) if cache_allowed else None
         else:
             cache_allowed, cache_params = _cache_state_override
 
         # Check cache first if available unless caller already checked cache.
         if not _skip_cache:
-            cached_results = self._get_cached_results_if_available(request)
-            if cached_results is not None:
+            cached_payload = self._get_cached_results_if_available(
+                request,
+                cache_allowed=cache_allowed,
+                cache_params=cache_params,
+            )
+            if cached_payload is not None:
+                cached_results, cached_next_cursor = cached_payload
                 request_logger.info(
                     "Search completed (cache hit)",
                     {
@@ -304,7 +344,7 @@ class KnowledgeSearchBackend:
                         "cache_hit": True,
                     },
                 )
-                return cached_results, None
+                return cached_results, cached_next_cursor
 
         if _query_embedding_override is not None:
             query_embedding = _query_embedding_override
@@ -648,7 +688,12 @@ class KnowledgeSearchBackend:
 
         # Cache results if cache is available
         if self.cache and cache_allowed and cache_params is not None:
-            self.cache.set_results(request.query, list(final_results), **cache_params)
+            self.cache.set_search_results(
+                request.query,
+                list(final_results),
+                next_cursor=next_cursor,
+                **cache_params,
+            )
 
         # Log search completion with summary at INFO level
         duration_ms = (time.time() - start_time) * 1000
