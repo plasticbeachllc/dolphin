@@ -223,10 +223,11 @@ class TestRepoWatcher:
         mock_get_branch.return_value = BranchState(branch="main", commit_sha="123")
 
         watcher = RepoWatcher("repo", config, mock_pipeline)
-        watcher._seed_working_tree_changes = AsyncMock()
-        watcher._process_pending_changes = AsyncMock()
-
-        with patch.object(asyncio.get_event_loop(), "run_in_executor", new_callable=AsyncMock) as mock_run:
+        with (
+            patch.object(watcher, "_seed_working_tree_changes", new_callable=AsyncMock) as seed_mock,
+            patch.object(watcher, "_process_pending_changes", new_callable=AsyncMock) as process_mock,
+            patch.object(asyncio.get_event_loop(), "run_in_executor", new_callable=AsyncMock) as mock_run,
+        ):
             mock_run.side_effect = asyncio.CancelledError()
 
             with pytest.raises(asyncio.CancelledError):
@@ -234,5 +235,5 @@ class TestRepoWatcher:
 
         assert watcher._executor_closed
         assert watcher._stop_requested.is_set()
-        watcher._seed_working_tree_changes.assert_not_called()
-        watcher._process_pending_changes.assert_not_called()
+        seed_mock.assert_not_called()
+        process_mock.assert_not_called()
