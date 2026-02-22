@@ -215,7 +215,7 @@ class QueryCache:
                 value = self._get_memory_value(cache_key)
                 if value is not None:
                     self.stats["embedding_hits"] += 1
-                    return copy.deepcopy(value)
+                    return value
 
             self.stats["embedding_misses"] += 1
             return None
