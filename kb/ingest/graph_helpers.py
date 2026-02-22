@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from contextlib import closing
 from pathlib import Path
 from typing import Any
 
 from kb.chunkers.graph_types import GraphEdge as ChunkerGraphEdge, GraphNode as ChunkerGraphNode
 from kb.store.graph_store import GraphStore
+
+_log = logging.getLogger(__name__)
 
 
 def extract_graph_from_file(
@@ -42,8 +45,8 @@ def extract_graph_from_file(
     ):
         try:
             return _extract_with_intelligence(file_path, lang_key, text)
-        except Exception as e:
-            print(f"  Warning: Enhanced graph extraction failed for {file_path}, falling back to basic: {e}")
+        except Exception:
+            _log.warning("Enhanced graph extraction failed for %s, falling back to basic", file_path, exc_info=True)
 
     # Fall back to basic chunker extraction
     import kb.chunkers.py_chunker as py_chunker
@@ -78,9 +81,9 @@ def extract_graph_from_file(
         else:
             nodes, edges = extract_fn(text)
         return nodes, edges
-    except Exception as e:
+    except Exception:
         # Log but don't fail - graph extraction is optional
-        print(f"  Warning: Graph extraction failed for {file_path}: {e}")
+        _log.warning("Graph extraction failed for %s", file_path, exc_info=True)
         return [], []
 
 
@@ -199,8 +202,8 @@ def store_graph_data(
             )
             node_ids_map[node.qualified_name] = node_id
             nodes_created += 1
-        except Exception as e:
-            print(f"  Warning: Failed to store node {node.qualified_name}: {e}")
+        except Exception:
+            _log.warning("Failed to store node %s", node.qualified_name, exc_info=True)
 
     # Store edges
     for edge in edges:
@@ -233,8 +236,8 @@ def store_graph_data(
                     commit_sha=commit_sha,
                 )
                 edges_created += 1
-        except Exception as e:
-            print(f"  Warning: Failed to store edge {edge.source_name} -> {edge.target_name}: {e}")
+        except Exception:
+            _log.warning("Failed to store edge %s -> %s", edge.source_name, edge.target_name, exc_info=True)
 
     return {
         "nodes_created": nodes_created,
@@ -269,14 +272,14 @@ def cleanup_graph_for_file(graph_store: GraphStore, file_id: int) -> tuple[int, 
             row = cur.fetchone()
             if row is not None:
                 edges_deleted = int(row[0])
-    except Exception as e:
-        print(f"  Warning: Failed to calculate graph edge cleanup for file {file_id}: {e}")
+    except Exception:
+        _log.warning("Failed to calculate graph edge cleanup for file %s", file_id, exc_info=True)
 
     try:
         nodes_deleted = graph_store.delete_nodes_for_file(file_id)
         return nodes_deleted, edges_deleted
-    except Exception as e:
-        print(f"  Warning: Failed to clean up graph data for file {file_id}: {e}")
+    except Exception:
+        _log.warning("Failed to clean up graph data for file %s", file_id, exc_info=True)
         return 0, 0
 
 
@@ -292,6 +295,6 @@ def cleanup_graph_for_repo(graph_store: GraphStore, repo_id: int) -> int:
     """
     try:
         return graph_store.delete_nodes_for_repo(repo_id)
-    except Exception as e:
-        print(f"  Warning: Failed to clean up graph data for repo {repo_id}: {e}")
+    except Exception:
+        _log.warning("Failed to clean up graph data for repo %s", repo_id, exc_info=True)
         return 0

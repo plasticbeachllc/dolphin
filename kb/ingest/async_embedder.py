@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
@@ -54,8 +55,10 @@ class RateLimitedEmbedder:
         # State
         self.semaphore = asyncio.Semaphore(max_concurrent)
         self.last_request_time = 0.0
-        self.request_times: list[float] = []  # Rolling window for RPM
-        self.token_usage: list[tuple[float, float]] = []  # Rolling window for TPM
+        # Bounded deques prevent unbounded growth; maxlen caps at the RPM limit so
+        # the oldest entries are evicted automatically if pruning ever falls behind.
+        self.request_times: deque[float] = deque(maxlen=initial_rpm)  # Rolling window for RPM
+        self.token_usage: deque[tuple[float, float]] = deque(maxlen=initial_rpm)  # Rolling window for TPM
         self.backoff_until = 0.0
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
@@ -108,9 +111,12 @@ class RateLimitedEmbedder:
         while True:
             now = time.time()
 
-            # Prune old history (1 minute window)
-            self.request_times = [t for t in self.request_times if now - t < 60]
-            self.token_usage = [(t, k) for t, k in self.token_usage if now - t < 60]
+            # Evict entries older than the 1-minute rolling window from the left
+            # (deques are ordered oldest-first since entries are appended on the right).
+            while self.request_times and now - self.request_times[0] >= 60:
+                self.request_times.popleft()
+            while self.token_usage and now - self.token_usage[0][0] >= 60:
+                self.token_usage.popleft()
 
             current_rpm = len(self.request_times)
             current_tpm = sum(k for _, k in self.token_usage)

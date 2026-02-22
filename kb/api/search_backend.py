@@ -29,7 +29,7 @@ from ..retrieval.rankers import maximal_marginal_relevance, reciprocal_rank_fusi
 from ..store.graph_store import GraphStore
 from ..store.lancedb_store import LanceDBStore
 from ..store.sqlite_meta import SQLiteMetadataStore
-from .app import SearchRequest
+from .app import SearchRequest, SearchResultSet
 
 
 class KnowledgeSearchBackend:
@@ -270,7 +270,7 @@ class KnowledgeSearchBackend:
 
         return self.cache.get_search_results(request.query, **cache_params)
 
-    async def search_async(self, request: SearchRequest) -> tuple[Sequence[dict[str, object]], str | None]:
+    async def search_async(self, request: SearchRequest) -> SearchResultSet:
         """Execute search without blocking the event loop."""
         cache_allowed = await asyncio.to_thread(self._is_cache_allowed, request)
         cache_params = self._build_search_cache_params(request) if cache_allowed else None
@@ -300,7 +300,7 @@ class KnowledgeSearchBackend:
         _query_embedding_override: list[float] | None = None,
         _skip_cache: bool = False,
         _cache_state_override: tuple[bool, dict[str, Any] | None] | None = None,
-    ) -> tuple[Sequence[dict[str, object]], str | None]:
+    ) -> SearchResultSet:
         # Generate correlation ID for this search request
         correlation_id = f"search_{uuid.uuid4().hex[:8]}"
         start_time = time.time()
@@ -344,7 +344,7 @@ class KnowledgeSearchBackend:
                         "cache_hit": True,
                     },
                 )
-                return cached_results, cached_next_cursor
+                return SearchResultSet(cached_results, cached_next_cursor)
 
         if _query_embedding_override is not None:
             query_embedding = _query_embedding_override
@@ -706,7 +706,7 @@ class KnowledgeSearchBackend:
             },
         )
 
-        return final_results, next_cursor
+        return SearchResultSet(final_results, next_cursor)
 
     def _format_vector_results(self, vector_results: list[dict]) -> list[dict[str, object]]:
         formatted = []

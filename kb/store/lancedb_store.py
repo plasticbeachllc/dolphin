@@ -98,6 +98,7 @@ class LanceDBStore:
         try:
             table_list = db.list_tables()
         except Exception:
+            logger.debug("list_tables() unavailable, falling back to table_names()", exc_info=True)
             table_list = getattr(db, "table_names", lambda: [])()
         names: set[str] = set()
         for entry in table_list or []:
@@ -128,6 +129,7 @@ class LanceDBStore:
         try:
             table = db.open_table(table_name)
         except Exception:
+            logger.debug("Table '%s' not yet created; skipping index build.", table_name, exc_info=True)
             return
 
         try:
@@ -135,7 +137,7 @@ class LanceDBStore:
                 return
         except Exception:
             # If row count is unavailable, continue best-effort.
-            pass
+            logger.debug("count_rows() unavailable for '%s'; proceeding.", table_name, exc_info=True)
 
         # If index metadata exists, skip create call.
         try:
@@ -146,7 +148,7 @@ class LanceDBStore:
                         self._indexed_tables.add(table_name)
                     return
         except Exception:
-            pass
+            logger.debug("list_indices() failed for '%s'; will attempt creation.", table_name, exc_info=True)
 
         create_attempts = (
             lambda: table.create_index(vector_column_name="vector", metric=metric, replace=False),
@@ -289,9 +291,9 @@ class LanceDBStore:
                 id_list = ", ".join([repr(x) for x in ids_to_delete])
                 filter_expr = f"id in ({id_list})"
                 table.delete(filter_expr)
-            except Exception as e:
+            except Exception:
                 # If table doesn't exist or delete fails, we'll append anyway
-                print(f"Warning: Failed to delete existing rows: {e}")
+                logger.warning("Failed to delete existing rows before upsert; will append anyway.", exc_info=True)
 
         # Append new rows
         # Convert data to PyArrow table with explicit schema to avoid casting issues
@@ -340,7 +342,7 @@ class LanceDBStore:
                     raise append_error
         except Exception as e:
             # If table doesn't exist, create it with the data directly
-            print(f"Table {table_name} not found, creating it from data")
+            logger.debug("Table '%s' not found; creating from data.", table_name)
             try:
                 # Create table directly from data instead of using initialize_collections
                 # This ensures schema matches exactly
@@ -373,6 +375,7 @@ class LanceDBStore:
             table = db.open_table(model_to_table[model])
         except Exception:
             # Nothing to prune if the table does not exist yet
+            logger.debug("Table '%s' not yet created; nothing to prune.", model_to_table[model], exc_info=True)
             return
 
         repo_expr = repr(repo)
@@ -387,6 +390,7 @@ class LanceDBStore:
             table.delete(filter_expr)
         except Exception:
             # If deletion fails (e.g., because no matching rows), ignore silently.
+            logger.debug("prune_file_rows delete failed for repo=%s path=%s; skipping.", repo, path, exc_info=True)
             return
 
     def delete_repo(self, repo: str, *, model: str) -> None:
@@ -407,6 +411,9 @@ class LanceDBStore:
             table = db.open_table(model_to_table[model])
         except Exception:
             # Nothing to delete if the table does not exist yet
+            logger.debug(
+                "Table '%s' not yet created; nothing to delete for repo=%s.", model_to_table[model], repo, exc_info=True
+            )
             return
 
         repo_expr = repr(repo)
@@ -416,6 +423,7 @@ class LanceDBStore:
             table.delete(filter_expr)
         except Exception:
             # If deletion fails (e.g., because no matching rows), ignore silently.
+            logger.debug("delete_repo delete failed for repo=%s; skipping.", repo, exc_info=True)
             return
 
     def count_repo_vectors(self, repo: str, *, model: str) -> int:
@@ -439,6 +447,9 @@ class LanceDBStore:
             table = db.open_table(model_to_table[model])
         except Exception:
             # Table doesn't exist yet
+            logger.debug(
+                "Table '%s' not yet created; vector count=0 for repo=%s.", model_to_table[model], repo, exc_info=True
+            )
             return 0
 
         repo_expr = repr(repo)
@@ -450,6 +461,7 @@ class LanceDBStore:
             return len(result)
         except Exception:
             # If query fails, assume 0
+            logger.warning("count_repo_vectors query failed for repo=%s.", repo, exc_info=True)
             return 0
 
     def query(
@@ -502,6 +514,7 @@ class LanceDBStore:
             table = db.open_table(table_name)
         except Exception:
             # Table doesn't exist yet
+            logger.debug("Table '%s' not yet created; returning empty results.", table_name, exc_info=True)
             return []
 
         # Avoid triggering ANN index build paths when the table has no vectors.
@@ -510,7 +523,7 @@ class LanceDBStore:
                 return []
         except Exception:
             # If row counting fails, continue with normal query flow.
-            pass
+            logger.debug("count_rows() unavailable for '%s'; proceeding with query.", table_name, exc_info=True)
 
         self._ensure_vector_index(table_name, metric=ann_params.metric)
 
@@ -543,6 +556,7 @@ class LanceDBStore:
             return results
         except Exception:
             # Handle empty table or other search errors
+            logger.warning("Vector search failed on table '%s'.", table_name, exc_info=True)
             return []
 
     def get_chunk_by_id(self, chunk_id: str, model: str = "small") -> dict[str, Any] | None:
@@ -570,6 +584,7 @@ class LanceDBStore:
             table = db.open_table(table_name)
         except Exception:
             # Table doesn't exist yet
+            logger.debug("Table '%s' not yet created; chunk_id=%s not found.", table_name, chunk_id, exc_info=True)
             return None
 
         # Query for the specific ID
@@ -577,6 +592,7 @@ class LanceDBStore:
             results = table.search().where(f"id = '{chunk_id}'").limit(1).to_list()
             return results[0] if results else None
         except Exception:
+            logger.warning("get_chunk_by_id query failed for chunk_id=%s.", chunk_id, exc_info=True)
             return None
 
     def get_vectors_by_hashes(self, repo: str, hashes: Iterable[str], *, model: str) -> dict[str, list[float]]:
@@ -603,13 +619,8 @@ class LanceDBStore:
         db = self.connect()
         try:
             table = db.open_table(model_to_table[model])
-        except Exception as e:
-            logger = logging.getLogger(__name__)
-            logger.warning(
-                "Failed to open table '%s'",
-                model_to_table[model],
-                exc_info=e,
-            )
+        except Exception:
+            logger.warning("Failed to open table '%s'.", model_to_table[model], exc_info=True)
             return {}
 
         repo_expr = repr(repo)
@@ -626,7 +637,6 @@ class LanceDBStore:
             results = table.search().where(filter_expr).select(["text_hash", "vector"]).to_list()
 
             return {r["text_hash"]: r["vector"] for r in results}
-        except Exception as e:
-            logger = logging.getLogger(__name__)
-            logger.warning("Failed to get vectors by hashes", exc_info=e)
+        except Exception:
+            logger.warning("Failed to get vectors by hashes for repo=%s.", repo, exc_info=True)
             return {}

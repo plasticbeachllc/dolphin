@@ -32,6 +32,7 @@ class CrossEncoderReranker:
         self.batch_size = batch_size
         self.enabled = False
         self.model = None
+        self.load_error: str | None = None  # Set when model loading fails
 
         if model_name == "test-model":
             self.model = self._create_mock_model()
@@ -40,6 +41,7 @@ class CrossEncoderReranker:
             return
 
         if not _SENTENCE_TRANSFORMERS_AVAILABLE:
+            self.load_error = "dependencies missing — install with: uv pip install pb-dolphin[reranking]"
             _log.error(
                 "⚠️  Cross-encoder reranking is enabled in config but dependencies are missing!\n"
                 "   Required: torch and sentence-transformers (~2GB install)\n"
@@ -62,7 +64,8 @@ class CrossEncoderReranker:
             self.enabled = True
             _log.info(f"Cross-encoder loaded successfully on {self.model.device}")
         except Exception as e:
-            _log.error(f"Failed to load cross-encoder model: {e}. Reranking disabled.")
+            self.load_error = str(e)
+            _log.error("Failed to load cross-encoder model: %s. Reranking disabled.", e, exc_info=True)
 
     def _create_mock_model(self):
         """Creates a mock model object for testing."""

@@ -321,6 +321,7 @@ class RepoWatcher:
             commit_sha = branch_state.commit_sha
             branch = branch_state.branch
         except Exception:
+            logger.debug("Could not determine git branch state; using placeholders.", exc_info=True)
             commit_sha = "unknown"
             branch = "unknown"
 

@@ -456,6 +456,8 @@ class IngestionPipeline:
         """Process a list of modified or added files."""
         stats = {
             "files_done": 0,
+            "files_skipped_ignored": 0,
+            "files_error": 0,
             "chunks_indexed": 0,
             "chunks_skipped": 0,
             "vectors_written": 0,
@@ -472,6 +474,7 @@ class IngestionPipeline:
         for path in files:
             try:
                 if ignore_spec.match_file(path):
+                    stats["files_skipped_ignored"] += 1
                     print(f"  {path}: skipped (ignored pattern)")
                     if not dry_run:
                         file_id = self.metadata.get_file_id(repo_id, path)
@@ -508,6 +511,7 @@ class IngestionPipeline:
                 try:
                     text = file_path.read_text(encoding="utf-8", errors="ignore")
                 except Exception as e:
+                    stats["files_error"] += 1
                     error_logger.log_file_error(path, e)
                     print(f"Error reading {path}: {e}")
                     continue
@@ -687,6 +691,7 @@ class IngestionPipeline:
                 print(self._format_index_summary(path, len(chunks), len(new_hashes), skipped_occurrences))
 
             except Exception as e:
+                stats["files_error"] += 1
                 error_logger.log_file_error(path, e)
                 print(f"Error processing {path}: {e}")
                 continue
@@ -860,6 +865,7 @@ class IngestionPipeline:
 
             # Initialize counters
             files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
+            files_skipped_ignored = files_error = 0
             graph_nodes_created = graph_edges_created = 0
 
             # Process modified/added files
@@ -877,6 +883,8 @@ class IngestionPipeline:
                 error_logger=error_logger,
             )
             files_done += stats["files_done"]
+            files_skipped_ignored += stats["files_skipped_ignored"]
+            files_error += stats["files_error"]
             chunks_indexed += stats["chunks_indexed"]
             chunks_skipped += stats["chunks_skipped"]
             vectors_written += stats["vectors_written"]
@@ -957,6 +965,10 @@ class IngestionPipeline:
             # Print summary
             print(f"\nIndexing complete for {repo_name}:")
             print(f"  Files processed: {files_done}")
+            if files_skipped_ignored:
+                print(f"  Files skipped (ignored): {files_skipped_ignored}")
+            if files_error:
+                print(f"  Files with errors: {files_error}")
             print(f"  Chunks indexed: {chunks_indexed}")
             print(f"  Chunks skipped (dedup): {chunks_skipped}")
             print(f"  Chunks pruned (deleted): {chunks_pruned}")
@@ -973,7 +985,7 @@ class IngestionPipeline:
                     if lp.exists() and lp.stat().st_size > 0:
                         print(f"  Errors logged to: {lp}")
             except Exception:
-                pass
+                logger.debug("Could not check error logger state.", exc_info=True)
 
             return {
                 "repo": repo_name,
@@ -982,6 +994,8 @@ class IngestionPipeline:
                 "commit": commit_sha,
                 "branch": branch,
                 "files_indexed": files_done,
+                "files_skipped_ignored": files_skipped_ignored,
+                "files_error": files_error,
                 "chunks_indexed": chunks_indexed,
                 "chunks_skipped": chunks_skipped,
                 "vectors_written": vectors_written,
@@ -1068,20 +1082,23 @@ class IngestionPipeline:
         ignore_patterns.update(extra_security)
 
         # Determine changed files
+        files_skipped_ignored = 0
         if full_reindex or last_success is None:
             print(f"Full reindex mode: scanning all files for {repo_name}")
             with DynamicWorkerPool(max_workers=max_workers) as pool:
                 candidates = scan_repo_parallel(root, ignore_patterns, pool=pool)
             changed_files = [c.rel_path for c in candidates]
             deleted_files = []
+            # Ignored files are excluded by scan_repo_parallel; count not available here
         else:
             print(f"Incremental mode: processing files changed since {last_success[:8]}")
-            changed_files = git_changed_files_modified_added(root, last_success, commit_sha)
+            raw_changed = git_changed_files_modified_added(root, last_success, commit_sha)
             deleted_files = git_changed_files_deleted(root, last_success, commit_sha)
 
-            # Filter ignored files from changed list
+            # Filter ignored files from changed list and count them
             ignore_spec = PathSpec.from_lines("gitignore", ignore_patterns)
-            changed_files = [f for f in changed_files if not ignore_spec.match_file(f)]
+            changed_files = [f for f in raw_changed if not ignore_spec.match_file(f)]
+            files_skipped_ignored = len(raw_changed) - len(changed_files)
 
         return (
             repo_id,
@@ -1094,6 +1111,7 @@ class IngestionPipeline:
             ignore_patterns,
             changed_files,
             deleted_files,
+            files_skipped_ignored,
         )
 
     async def index_parallel(
@@ -1129,12 +1147,14 @@ class IngestionPipeline:
             ignore_patterns,
             changed_files,
             deleted_files,
+            files_skipped_ignored,
         ) = self._setup_parallel_session(repo_name, force, full_reindex, dry_run, max_workers)
 
         self._invalidate_cache_for_repo(repo_name, dry_run=dry_run)
 
         # Counters
         files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
+        files_error = 0
         graph_nodes_created = graph_edges_created = 0
 
         # Setup Async Embedder
@@ -1212,6 +1232,7 @@ class IngestionPipeline:
                                 )
                             )
                         except Exception as e:
+                            files_error += 1
                             error_logger.log_file_error(path, e)
                             continue
 
@@ -1223,6 +1244,7 @@ class IngestionPipeline:
 
                     for res in parse_results:
                         if not res.success:
+                            files_error += 1
                             error = Exception(res.error) if res.error else Exception("Unknown error")
                             error_logger.log_file_error(str(res.file_path), error)
                             continue
@@ -1482,6 +1504,29 @@ class IngestionPipeline:
             graph_manager = self.get_graph_manager(repo_id)
             graph_manager.get_graph(force_rebuild=True)
 
+        # Print summary (parallel pipeline does not print one during processing)
+        print(f"\nIndexing complete for {repo_name}:")
+        print(f"  Files processed: {files_done}")
+        if files_skipped_ignored:
+            print(f"  Files skipped (ignored): {files_skipped_ignored}")
+        if files_error:
+            print(f"  Files with errors: {files_error}")
+        print(f"  Chunks indexed: {chunks_indexed}")
+        print(f"  Chunks skipped (dedup): {chunks_skipped}")
+        print(f"  Chunks pruned (deleted): {chunks_pruned}")
+        print(f"  Vectors written: {vectors_written}")
+        if graph_nodes_created > 0 or graph_edges_created > 0:
+            print(f"  Graph nodes created: {graph_nodes_created}")
+            print(f"  Graph edges created: {graph_edges_created}")
+        print(f"  Session: {session_id}")
+        try:
+            if error_logger.had_errors():
+                lp = error_logger.get_log_path()
+                if lp.exists() and lp.stat().st_size > 0:
+                    print(f"  Errors logged to: {lp}")
+        except Exception:
+            pass
+
         return {
             "repo": repo_name,
             "repo_id": repo_id,
@@ -1489,6 +1534,8 @@ class IngestionPipeline:
             "commit": commit_sha,
             "branch": branch,
             "files_indexed": files_done,
+            "files_skipped_ignored": files_skipped_ignored,
+            "files_error": files_error,
             "chunks_indexed": chunks_indexed,
             "chunks_skipped": chunks_skipped,
             "vectors_written": vectors_written,
