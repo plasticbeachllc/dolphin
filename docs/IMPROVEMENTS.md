@@ -5,6 +5,7 @@ Each section includes priority, effort estimate, and actionable guidance for imp
 
 > **Notation**: `P0` = critical/do first, `P1` = high priority, `P2` = medium, `P3` = nice-to-have.
 > Effort: `S` = small (< 1 day), `M` = medium (1–3 days), `L` = large (3+ days).
+> Status badges: ✅ Done · 🔄 Partial · ⬜ Open
 
 ---
 
@@ -35,7 +36,9 @@ Each section includes priority, effort estimate, and actionable guidance for imp
 
 ### 1.1 Security
 
-#### P0/S — API key comparison is timing-vulnerable
+#### ✅ P0/S — API key comparison is timing-vulnerable
+
+> **Status**: Done (Sprint 1) — `kb/api/app.py` now uses `hmac.compare_digest()`.
 
 **File**: `kb/api/app.py:108`
 
@@ -55,7 +58,9 @@ Also missing:
 - **Rate limiting** on failed auth attempts (brute-force is trivial).
 - **Audit logging** of 401s (no record of who tried what).
 
-#### P1/S — Foreign key pragma silently swallowed
+#### ✅ P1/S — Foreign key pragma silently swallowed
+
+> **Status**: Done (Sprint 1) — now logs at `error` level with `exc_info=True` and re-raises.
 
 **File**: `kb/store/sqlite_meta.py:151–154`
 
@@ -69,13 +74,15 @@ except Exception:
 If this fails, the entire referential integrity layer is gone — orphaned chunks, dangling file references, etc.
 Fix: log at `error` level and raise; the database is not trustworthy without FK enforcement.
 
-#### P1/S — CORS allows credentials with wildcard methods
+#### ✅ P1/S — CORS allows credentials with wildcard methods
+
+> **Status**: Done (Sprint 1) — tightened to `["GET", "POST", "DELETE", "OPTIONS"]` and `["X-API-Key", "Content-Type", "Accept"]`.
 
 **File**: `kb/api/app.py:80–88`
 
 `allow_credentials=True` combined with `allow_methods=["*"]` and `allow_headers=["*"]` is overly permissive even for `localhost:3000`. Tighten to specific methods (`GET`, `POST`, `DELETE`) and specific headers (`X-API-Key`, `Content-Type`).
 
-#### P2/S — Path validation allows symlinks by default
+#### ⬜ P2/S — Path validation allows symlinks by default
 
 **File**: `kb/api/utils.py:52`
 
@@ -89,7 +96,11 @@ Symlinks can escape the repo root. Consider `allow_symlinks=False` as the defaul
 
 ### 1.2 Error Handling
 
-#### P1/M — 171 bare `except Exception` handlers across 36 files
+#### 🔄 P1/M — 171 bare `except Exception` handlers across 36 files
+
+> **Status**: Phase 1 done (Sprint 2) — all bare handlers in the top offending files now log with
+> `exc_info=True`. Phase 2 (narrow to specific exception types) and Phase 3 (defensive decorator)
+> remain open.
 
 The single largest code quality issue. Breakdown of the top offenders:
 
@@ -104,12 +115,11 @@ The single largest code quality issue. Breakdown of the top offenders:
 
 **Recommended approach** (incremental, not big-bang):
 
-1. **Triage into three buckets**: (a) genuinely defensive/acceptable, (b) needs logging, (c) needs specific exception types.
-2. **Phase 1**: Add `_log.warning(...)` with `exc_info=True` to every bare handler that currently does `pass`, `continue`, or `return None`. This is a mechanical change.
-3. **Phase 2**: Replace the most impactful catch-alls (LanceDB, SQLite, pipeline) with specific exception types (`lancedb.LanceDBError`, `sqlite3.OperationalError`, etc.).
-4. **Phase 3**: Introduce a `@defensive` decorator or context manager for the intentionally-broad handlers, making the intent explicit.
+1. ✅ **Phase 1**: Add `_log.warning(...)` with `exc_info=True` to every bare handler that currently does `pass`, `continue`, or `return None`. This is a mechanical change.
+2. ⬜ **Phase 2**: Replace the most impactful catch-alls (LanceDB, SQLite, pipeline) with specific exception types (`lancedb.LanceDBError`, `sqlite3.OperationalError`, etc.).
+3. ⬜ **Phase 3**: Introduce a `@defensive` decorator or context manager for the intentionally-broad handlers, making the intent explicit.
 
-#### P2/S — Deduplicator returns empty set on error, causing re-embedding
+#### ⬜ P2/S — Deduplicator returns empty set on error, causing re-embedding
 
 **File**: `kb/ingest/dedup.py:27–43`
 
@@ -151,7 +161,7 @@ Priority: **P2/L** — do this opportunistically when touching these files, not 
 
 ### 1.5 Concurrency & Thread Safety
 
-#### P1/S — Global mutable state without locks
+#### ⬜ P1/S — Global mutable state without locks
 
 **File**: `kb/api/app.py:114–150`
 
@@ -163,7 +173,7 @@ _pipeline = None
 
 These module-level globals are mutated by `set_stores()` / `set_pipeline()` and read by every request handler. FastAPI runs on an async event loop, but `asyncio.to_thread()` calls and background tasks introduce real concurrency. A `threading.Lock` (or using FastAPI's dependency injection with `Depends`) would be safer.
 
-#### P2/S — Rate limiter lists grow unbounded
+#### ⬜ P2/S — Rate limiter lists grow unbounded
 
 **File**: `kb/ingest/async_embedder.py:57–58`
 
@@ -178,7 +188,10 @@ These rolling-window lists are appended to on every request but pruning only hap
 
 ### 1.6 Correctness Bugs
 
-#### P1/S — Snippet truncation is a no-op
+#### ✅ P1/S — Snippet truncation is a no-op
+
+> **Status**: Done (Sprint 1) — truncation now implemented: match text has first priority on the
+> token budget, remaining budget is split evenly between context_before/context_after.
 
 **File**: `kb/api/app.py:236–242`
 
@@ -190,7 +203,7 @@ if estimated_tokens > max_tokens:
 
 The `truncated` flag is set but the content is never actually truncated. Downstream consumers (MCP clients, CLI) that trust this flag will receive unexpectedly large payloads. Either implement the truncation or remove the flag.
 
-#### P2/S — Token estimation is inaccurate
+#### ⬜ P2/S — Token estimation is inaccurate
 
 **Files**: `kb/api/app.py:234` and `kb/ingest/async_embedder.py:67`
 
@@ -207,7 +220,9 @@ Both undercount for code (punctuation, camelCase, symbols). Since tiktoken is al
 
 ### 2.1 Developer Onboarding
 
-#### P1/S — No `.env.example` file
+#### ✅ P1/S — No `.env.example` file
+
+> **Status**: Done (Sprint 2) — `.env.example` created at repo root with all documented env vars.
 
 New contributors must read source code to discover which environment variables exist. Create a `.env.example`:
 
@@ -234,11 +249,11 @@ OPENAI_API_KEY=sk-your-key-here
 # DOLPHIN_FORCE_BM25_NORMALIZER=
 ```
 
-#### P2/S — No production deployment guide
+#### ⬜ P2/S — No production deployment guide
 
 `README.md` covers local development. There's no guide for deploying Dolphin as a shared service (reverse proxy setup, process management, TLS, auth hardening, Redis configuration). A `docs/DEPLOYMENT.md` would prevent each team from reinventing this.
 
-#### P2/S — CHANGELOG version mismatch
+#### ⬜ P2/S — CHANGELOG version mismatch
 
 `pyproject.toml` says `0.2.2`, `FastAPI(version="0.2.1")` in `app.py:30`. These should stay in sync — ideally generated from a single source of truth.
 
@@ -246,7 +261,7 @@ OPENAI_API_KEY=sk-your-key-here
 
 ### 2.2 CLI Experience
 
-#### P2/S — Silent failures during `dolphin index`
+#### ⬜ P2/S — Silent failures during `dolphin index`
 
 When files are skipped (binary, ignored, permission error), the CLI provides no summary. Add a post-index summary:
 
@@ -254,7 +269,7 @@ When files are skipped (binary, ignored, permission error), the CLI provides no 
 Indexed 142 files (3,201 chunks). Skipped: 12 binary, 3 ignored, 1 error.
 ```
 
-#### P3/S — `dolphin search` truncates at 8 lines with no override
+#### ⬜ P3/S — `dolphin search` truncates at 8 lines with no override
 
 The `MAX_SNIPPET_LINES = 8` constant in `cli.py` is hardcoded. Add a `--max-lines` flag for power users who want more context.
 
@@ -262,13 +277,17 @@ The `MAX_SNIPPET_LINES = 8` constant in `cli.py` is hardcoded. Add a `--max-line
 
 ### 2.3 Error Messages & Observability
 
-#### P1/S — Silent reranker degradation
+#### ✅ P1/S — Silent reranker degradation
+
+> **Status**: Done (Sprint 2) — `cross_encoder_rerank.py` stores `load_error` when the model fails
+> to load; `dolphin status` shows reranking state; search responses include a `warnings` field when
+> reranking is configured but unavailable.
 
 **File**: `kb/retrieval/cross_encoder_rerank.py:52–65`
 
 If the cross-encoder model fails to load, reranking is silently disabled (`self.enabled = False`). The user ran `uv pip install "pb-dolphin[reranking]"` explicitly for this. Surface a warning in `dolphin status` and in search responses (e.g., a `warnings` field).
 
-#### P2/S — Cache invalidation failures are swallowed
+#### ⬜ P2/S — Cache invalidation failures are swallowed
 
 **File**: `kb/api/app.py:339–347`
 
@@ -278,13 +297,13 @@ Failed cache invalidation means stale results are served after reindex. At minim
 
 ### 2.4 Configuration
 
-#### P2/S — OpenAI API key validation is existence-only
+#### ⬜ P2/S — OpenAI API key validation is existence-only
 
 **File**: `kb/config.py` (config check) and `kb/embeddings/provider.py`
 
 The key is checked with `os.environ.get(...)` — an empty string passes. The provider creates both sync and async OpenAI clients but never validates the key until the first API call, which may happen minutes later during indexing. Add a lightweight validation at startup (format check + a test embed call with a short string).
 
-#### P3/S — Config deep-merge has no depth limit
+#### ⬜ P3/S — Config deep-merge has no depth limit
 
 **File**: `kb/config.py` (`_deep_merge`)
 
@@ -296,7 +315,11 @@ Recursive merge with no depth limit. Not a practical issue today, but a malforme
 
 ### 3.1 Memory
 
-#### P1/M — In-memory cache has no size bound
+#### ✅ P1/M — In-memory cache has no size bound
+
+> **Status**: Done (Sprint 2) — `QueryCache` now accepts `max_memory_entries` (default 10,000).
+> `_evict_memory_cache()` runs a two-phase eviction: first removes expired entries, then trims
+> soonest-to-expire entries until at 90 % of capacity.
 
 **File**: `kb/cache/cache.py:55–58`
 
@@ -310,14 +333,14 @@ When Redis is unavailable (the default for most local users), all cache entries 
 
 **Fix**: Use `functools.lru_cache` or a bounded LRU dict (e.g., `cachetools.TTLCache`). Add a `max_memory_entries` config knob with a sensible default (e.g., 10,000).
 
-#### P2/S — Both sync and async OpenAI clients instantiated
+#### ⬜ P2/S — Both sync and async OpenAI clients instantiated
 
 **File**: `kb/embeddings/provider.py`
 
 The `OpenAIEmbeddingProvider` creates both `self.client` and `self.async_client` at init time. If only one path is used (typical for CLI = sync, API = async), the other is wasted memory and connections.
 Lazy-initialize each on first use.
 
-#### P2/S — File lines cached per-request, not shared
+#### ⬜ P2/S — File lines cached per-request, not shared
 
 **File**: `kb/api/app.py:158`
 
@@ -327,19 +350,19 @@ Lazy-initialize each on first use.
 
 ### 3.2 Latency
 
-#### P2/M — Search fallback chain adds unnecessary overhead
+#### ⬜ P2/M — Search fallback chain adds unnecessary overhead
 
 **File**: `kb/api/app.py:420–475`
 
 The search dispatch logic tries `search_async`, then `search`, then `asyncio.to_thread(search)`, then checks `isawaitable()` on the result. This four-step dispatch runs on every request. Since the backend type is known at startup, resolve the dispatch once during initialization and store a single callable.
 
-#### P2/S — LanceDB connection not pooled
+#### ⬜ P2/S — LanceDB connection not pooled
 
 **File**: `kb/store/lancedb_store.py:35–50`
 
 A single cached connection is shared. For concurrent requests this serializes vector lookups. Investigate whether LanceDB supports connection pooling or if concurrent access on the same connection is safe. If not, implement a connection pool similar to `SQLiteConnectionPool`.
 
-#### P3/S — Token estimation heuristic in rate limiter
+#### ⬜ P3/S — Token estimation heuristic in rate limiter
 
 **File**: `kb/ingest/async_embedder.py:67`
 
@@ -353,13 +376,13 @@ Underestimates tokens for code (which has many symbols). This causes the rate li
 
 ### 3.3 Stability & Resource Management
 
-#### P1/S — Server startup crashes if backend init fails
+#### ⬜ P1/S — Server startup crashes if backend init fails
 
 **File**: `kb/api/server.py` (startup lifespan)
 
 `initialize_search_backend()` can raise on startup. There's no try/except wrapping the lifespan startup, so the entire server process dies. Wrap in a try/except, log the error, and start in a degraded mode (health check reports unhealthy, search returns 503).
 
-#### P2/S — Watcher thread pool executor never fully awaited
+#### ⬜ P2/S — Watcher thread pool executor never fully awaited
 
 **File**: `kb/ingest/watcher.py:48`
 
@@ -369,7 +392,7 @@ self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
 On shutdown, `_executor.shutdown(wait=True)` should be called. If the watcher is stopped abruptly, in-flight indexing tasks may be interrupted mid-write, leaving partial state in SQLite and LanceDB.
 
-#### P3/S — SQLite transaction boundaries worth auditing
+#### ⬜ P3/S — SQLite transaction boundaries worth auditing
 
 **File**: `kb/store/sqlite_meta.py` (throughout)
 
@@ -379,13 +402,19 @@ The code pattern is `with self._connect() as conn` (the connection pool's contex
 
 ## 4. Infrastructure & CI/CD
 
-#### P1/S — Docker images use `:latest` tags
+#### ✅ P1/S — Docker images use `:latest` tags
+
+> **Status**: Done (Sprint 1) — all five services pinned to specific versions in
+> `observability/docker-compose.yml`.
 
 **File**: `observability/docker-compose.yml`
 
 All five services (Prometheus, Jaeger, Loki, Promtail, Grafana) use `:latest`. Pin to specific versions for reproducible deployments.
 
-#### P1/S — Grafana default credentials hardcoded
+#### ✅ P1/S — Grafana default credentials hardcoded
+
+> **Status**: Done (Sprint 1) — credentials moved to `${VAR:?error}` env-var syntax; an
+> `observability/.env.example` documents the required vars.
 
 **File**: `observability/docker-compose.yml:85–86`
 
@@ -396,19 +425,22 @@ GF_SECURITY_ADMIN_PASSWORD: admin
 
 Move to environment variables or a `.env` file excluded from version control.
 
-#### P2/S — Loki auth disabled
+#### ⬜ P2/S — Loki auth disabled
 
 **File**: `observability/loki/loki-config.yml`
 
 `auth_enabled: false` means anyone with network access to port 3100 can read application logs. Enable auth for anything beyond local development.
 
-#### P2/S — Known CVE acknowledged but undocumented
+#### ✅ P2/S — Known CVE acknowledged but undocumented
+
+> **Status**: Done (Sprint 2) — `docs/SECURITY_EXCEPTIONS.md` created, documenting CVE-2026-0994
+> and GHSA-7gcm-g887-7qv7 with rationale, upstream status, accepted risk, and re-evaluation dates.
 
 **File**: `.github/workflows/security-scan.yml:28`
 
 `CVE-2026-0994` (protobuf DoS, confirmed in `.github/workflows/security-scan.yml:26`) and `GHSA-7gcm-g887-7qv7` are ignored in CI. The workflow already has an inline comment for the protobuf CVE; neither exception has a dedicated rationale document. Add a `docs/SECURITY_EXCEPTIONS.md` that records the advisory, the upstream status, the accepted risk, and a target date for re-evaluation.
 
-#### P3/S — No application Dockerfile
+#### ⬜ P3/S — No application Dockerfile
 
 There's no Dockerfile for the Dolphin application itself — only for the observability stack. For teams wanting to deploy Dolphin as a container, provide a multi-stage Dockerfile with:
 
@@ -425,36 +457,36 @@ There's no Dockerfile for the Dolphin application itself — only for the observ
 
 The improvements above are ordered by priority within each section. Here's a suggested attack plan:
 
-#### Sprint 1: Security & Correctness (1–2 days)
+#### ✅ Sprint 1: Security & Correctness — Complete
 
-1. `kb/api/app.py:108` — Replace string comparison with `hmac.compare_digest()`.
-2. `kb/store/sqlite_meta.py:151–154` — Log + raise on FK pragma failure.
-3. `kb/api/app.py:236–242` — Implement actual snippet truncation or remove the flag.
-4. `kb/api/app.py:80–88` — Tighten CORS to specific methods/headers.
-5. `observability/docker-compose.yml` — Pin image versions, externalize Grafana credentials.
+1. ✅ `kb/api/app.py:108` — Replace string comparison with `hmac.compare_digest()`.
+2. ✅ `kb/store/sqlite_meta.py:151–154` — Log + raise on FK pragma failure.
+3. ✅ `kb/api/app.py:236–242` — Implement actual snippet truncation.
+4. ✅ `kb/api/app.py:80–88` — Tighten CORS to specific methods/headers.
+5. ✅ `observability/docker-compose.yml` — Pin image versions, externalize Grafana credentials.
 
-#### Sprint 2: Observability & Error Handling (2–3 days)
+#### ✅ Sprint 2: Observability & Error Handling — Complete
 
-1. Audit all 171 bare `except Exception` handlers. For each: add `exc_info=True` logging if missing.
-2. `kb/retrieval/cross_encoder_rerank.py` — Surface reranker status in `dolphin status` and search response `warnings`.
-3. `kb/cache/cache.py` — Add bounded size + TTL eviction to in-memory cache.
-4. Create `.env.example`.
-5. Document CVE exceptions in CI.
+1. ✅ Audit bare `except Exception` handlers — Phase 1 done: all top-file handlers now log with `exc_info=True`; `print()` calls in `graph_helpers.py` and `lancedb_store.py` converted to `_log.warning()`.
+2. ✅ `kb/retrieval/cross_encoder_rerank.py` — `load_error` attribute added; reranker status surfaced in `dolphin status` and search response `warnings`.
+3. ✅ `kb/cache/cache.py` — Bounded size (`max_memory_entries=10_000`) with two-phase TTL eviction.
+4. ✅ Create `.env.example` at repo root.
+5. ✅ `docs/SECURITY_EXCEPTIONS.md` — CVE-2026-0994 and GHSA-7gcm-g887-7qv7 documented.
 
 #### Sprint 3: Performance & Stability (2–3 days)
 
-1. `kb/api/server.py` — Wrap startup in try/except for graceful degradation.
-2. `kb/api/app.py` — Resolve search dispatch once at startup, not per-request.
-3. `kb/embeddings/provider.py` — Lazy-init sync/async clients.
-4. `kb/ingest/async_embedder.py` — Replace `list` with `deque(maxlen=...)` for rate-limiter windows.
-5. `kb/store/sqlite_meta.py` — Wrap multi-statement operations in explicit transactions.
+1. ⬜ `kb/api/server.py` — Wrap startup in try/except for graceful degradation.
+2. ⬜ `kb/api/app.py` — Resolve search dispatch once at startup, not per-request.
+3. ⬜ `kb/embeddings/provider.py` — Lazy-init sync/async clients.
+4. ⬜ `kb/ingest/async_embedder.py` — Replace `list` with `deque(maxlen=...)` for rate-limiter windows.
+5. ⬜ `kb/store/sqlite_meta.py` — Wrap multi-statement operations in explicit transactions.
 
 #### Sprint 4: Architecture & UX (ongoing)
 
-1. Begin decomposing `sqlite_meta.py` (3,073 lines) as it's touched for new features.
-2. Standardize search return type to a `SearchResult` dataclass.
-3. Improve CLI post-index summaries with skip/error counts.
-4. Write `docs/DEPLOYMENT.md` for production use.
+1. ⬜ Begin decomposing `sqlite_meta.py` (3,073 lines) as it's touched for new features.
+2. ⬜ Standardize search return type to a `SearchResult` dataclass.
+3. ⬜ Improve CLI post-index summaries with skip/error counts.
+4. ⬜ Write `docs/DEPLOYMENT.md` for production use.
 
 ### Conventions for new code
 
@@ -472,19 +504,19 @@ When implementing fixes:
 | API routes           | `kb/api/app.py`             | 1,862 | Needs decomposition    |
 | Search orchestration | `kb/api/search_backend.py`  | 1,338 | Complex async dispatch |
 | SQLite metadata      | `kb/store/sqlite_meta.py`   | 3,073 | Largest module         |
-| Vector store         | `kb/store/lancedb_store.py` | 632   | Most bare exceptions   |
+| Vector store         | `kb/store/lancedb_store.py` | 632   | Bare exceptions logged |
 | Ingestion pipeline   | `kb/ingest/pipeline.py`     | 1,499 | Core indexing flow     |
 | Configuration        | `kb/config.py`              | 474   | Dataclass-based        |
-| Caching              | `kb/cache/cache.py`         | 446   | Unbounded in-memory    |
+| Caching              | `kb/cache/cache.py`         | 481   | Bounded in-memory      |
 | Embeddings           | `kb/embeddings/provider.py` | ~320  | OpenAI + stub          |
-| CLI                  | `kb/cli.py`                 | 818   | User-facing entry      |
+| CLI                  | `kb/ingest/cli.py`          | 986   | User-facing entry      |
 | File watcher         | `kb/ingest/watcher.py`      | ~400  | Async + threading      |
 
 ### Running checks
 
 ```bash
-# Lint
-just check
+# Lint + format
+python -m ruff check . && python -m ruff format --check .
 
 # Unit tests
 just test unit
