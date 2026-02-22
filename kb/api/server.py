@@ -264,9 +264,7 @@ async def lifespan_handler(app_instance: FastAPI):
         if pending:
             for task in pending:
                 task.cancel()
-            cancelled_done, cancelled_pending = await asyncio.wait(
-                pending, timeout=_WATCHER_CANCEL_GRACE_SECONDS
-            )
+            cancelled_done, cancelled_pending = await asyncio.wait(pending, timeout=_WATCHER_CANCEL_GRACE_SECONDS)
             done = done.union(cancelled_done)
             if cancelled_pending:
                 print_status(

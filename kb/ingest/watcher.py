@@ -59,9 +59,7 @@ class RepoWatcher:
 
     def _should_stop(self) -> bool:
         """Return True when shutdown has been requested."""
-        return self._stop_requested.is_set() or (
-            self._stop_event is not None and self._stop_event.is_set()
-        )
+        return self._stop_requested.is_set() or (self._stop_event is not None and self._stop_event.is_set())
 
     def _shutdown_executor(self) -> None:
         """Shutdown internal executor once to avoid lingering threads on process exit."""
