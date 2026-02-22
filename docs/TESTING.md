@@ -63,6 +63,7 @@ Configured hooks run:
 - Search and retrieval hot path:
   - `uv run pytest tests/unit/search/test_search_backend.py -v`
   - `uv run pytest tests/unit/search/test_search_backend.py -k search_async_uses_async_embedding_provider -v`
+  - `uv run pytest tests/unit/search/test_search_backend.py -k search_async_cache_miss_checks_cache_once -v`
   - `uv run pytest tests/unit/search/test_search_api.py -k search_prefers_async_backend_method -v`
   - `uv run pytest tests/unit/store/test_sqlite_meta.py -k bm25_hydration -v`
   - `uv run pytest tests/unit/store/test_lancedb_store.py -k index -v`

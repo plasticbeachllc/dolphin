@@ -267,6 +267,42 @@ class TestKnowledgeSearchBackend:
         assert results[0]["chunk_id"] == "chunk1"
         embedding_provider.embed_texts_async.assert_awaited_once()
 
+    @pytest.mark.asyncio
+    async def test_search_async_cache_miss_checks_cache_once(self, tmp_path: Path):
+        embedding_provider = MagicMock(spec=["embed_texts", "embed_texts_async"])
+        embedding_provider.embed_texts = MagicMock(side_effect=AssertionError("sync embed_texts should not be called"))
+        embedding_provider.embed_texts_async = AsyncMock(return_value=[[0.1] * 1536])
+
+        lance_store = MagicMock(spec=["query", "upsert_chunks"])
+        lance_store.query.return_value = [{"id": "chunk1", "_distance": 0.1, "repo": "repo", "path": "file.py"}]
+
+        sql_store = MagicMock()
+        sql_store.get_repo_by_name.return_value = {"id": 1}
+        sql_store.get_pending_changes.return_value = []
+        sql_store.bm25_search.return_value = []
+        sql_store.get_bm25_hydration_map.return_value = {}
+
+        cache = MagicMock()
+        cache.get_results.return_value = None
+
+        config = KBConfig.from_mapping(
+            {"storage": {"store_root": str(tmp_path)}, "embedding": {"default_embed_model": "small"}}
+        )
+        backend = KnowledgeSearchBackend(
+            embedding_provider,
+            lance_store,
+            sql_store,
+            cache=cache,
+            hybrid_search_enabled=True,
+            config=config,
+        )
+
+        results, _ = await backend.search_async(SearchRequest(query="async cache miss", repos=["repo"], top_k=5))
+
+        assert len(results) == 1
+        assert results[0]["chunk_id"] == "chunk1"
+        assert cache.get_results.call_count == 1
+
     def test_bm25_normalization_uses_min_max_when_stats_available(self, tmp_path: Path):
         stats_path = tmp_path / "bm25_stats.json"
         stats = BM25Statistics(

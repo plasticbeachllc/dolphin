@@ -200,34 +200,49 @@ class KnowledgeSearchBackend:
             self._bm25_normalizer = SigmoidNormalizer(RETRIEVAL_PARAMS.BM25_SCORE_NORMALIZATION_FACTOR)
             return float(self._bm25_normalizer.normalize(score))
 
-    def _get_cached_results_if_available(self, request: SearchRequest) -> list[dict[str, object]] | None:
-        """Return cached results for a request when cache usage is allowed."""
-        cache_allowed = True
-        if self.cache and request.repos:
-            for repo_name in request.repos:
-                repo_info = self.sql_store.get_repo_by_name(repo_name)
-                if not repo_info:
-                    continue
-                repo_id = int(repo_info["id"])
-                if self.sql_store.get_pending_changes(repo_id, limit=1):
-                    cache_allowed = False
-                    break
+    def _is_cache_allowed(self, request: SearchRequest) -> bool:
+        """Return whether request-level cache access is permitted."""
+        if not self.cache:
+            return False
 
-        if not self.cache or not cache_allowed:
-            return None
+        if not request.repos:
+            return True
 
-        cache_params = {
+        for repo_name in request.repos:
+            repo_info = self.sql_store.get_repo_by_name(repo_name)
+            if not repo_info:
+                continue
+            repo_id = int(repo_info["id"])
+            if self.sql_store.get_pending_changes(repo_id, limit=1):
+                return False
+        return True
+
+    def _build_cache_params(self, request: SearchRequest) -> dict[str, object]:
+        """Build cache key parameters from request fields."""
+        return {
             "top_k": request.top_k,
             "score_cutoff": request.score_cutoff,
             "embed_model": self.config.default_embed_model,
             "repos": request.repos,
             "path_prefix": request.path_prefix,
         }
+
+    def _get_cached_results_if_available(self, request: SearchRequest) -> list[dict[str, object]] | None:
+        """Return cached results for a request when cache usage is allowed."""
+        if not self._is_cache_allowed(request):
+            return None
+
+        cache_params = self._build_cache_params(request)
         return self.cache.get_results(request.query, **cache_params)
 
     async def search_async(self, request: SearchRequest) -> tuple[Sequence[dict[str, object]], str | None]:
         """Execute search without blocking the event loop."""
-        cached_results = await asyncio.to_thread(self._get_cached_results_if_available, request)
+        cache_allowed = await asyncio.to_thread(self._is_cache_allowed, request)
+        cache_params = self._build_cache_params(request) if cache_allowed else None
+
+        cached_results = None
+        if cache_params is not None:
+            cached_results = await asyncio.to_thread(self.cache.get_results, request.query, **cache_params)
         if cached_results is not None:
             return cached_results, None
 
@@ -239,6 +254,8 @@ class KnowledgeSearchBackend:
             self.search,
             request,
             _query_embedding_override=query_embedding[0],
+            _skip_cache=True,
+            _cache_state_override=(cache_allowed, cache_params),
         )
 
     def search(
@@ -246,6 +263,8 @@ class KnowledgeSearchBackend:
         request: SearchRequest,
         *,
         _query_embedding_override: list[float] | None = None,
+        _skip_cache: bool = False,
+        _cache_state_override: tuple[bool, dict[str, object] | None] | None = None,
     ) -> tuple[Sequence[dict[str, object]], str | None]:
         # Generate correlation ID for this search request
         correlation_id = f"search_{uuid.uuid4().hex[:8]}"
@@ -268,28 +287,15 @@ class KnowledgeSearchBackend:
             },
         )
 
-        cache_allowed = True
-        if self.cache and request.repos:
-            for repo_name in request.repos:
-                repo_info = self.sql_store.get_repo_by_name(repo_name)
-                if not repo_info:
-                    continue
-                repo_id = int(repo_info["id"])
-                if self.sql_store.get_pending_changes(repo_id, limit=1):
-                    cache_allowed = False
-                    break
+        if _cache_state_override is None:
+            cache_allowed = self._is_cache_allowed(request)
+            cache_params = self._build_cache_params(request) if cache_allowed else None
+        else:
+            cache_allowed, cache_params = _cache_state_override
 
-        # Check cache first if available
-        if self.cache and cache_allowed:
-            # Create cache key from request parameters
-            cache_params = {
-                "top_k": request.top_k,
-                "score_cutoff": request.score_cutoff,
-                "embed_model": self.config.default_embed_model,
-                "repos": request.repos,
-                "path_prefix": request.path_prefix,
-            }
-            cached_results = self.cache.get_results(request.query, **cache_params)
+        # Check cache first if available unless caller already checked cache.
+        if not _skip_cache:
+            cached_results = self._get_cached_results_if_available(request)
             if cached_results is not None:
                 request_logger.info(
                     "Search completed (cache hit)",
@@ -641,7 +647,7 @@ class KnowledgeSearchBackend:
                 request_logger.warning("Graph enrichment failed", error=e)
 
         # Cache results if cache is available
-        if self.cache and cache_allowed:
+        if self.cache and cache_allowed and cache_params is not None:
             self.cache.set_results(request.query, list(final_results), **cache_params)
 
         # Log search completion with summary at INFO level
