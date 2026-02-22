@@ -88,6 +88,8 @@ AI Client (MCP) / CLI / REST consumer
 - ✅ Python KB backend: active
 - ✅ MCP bridge: active
 - ✅ Shared TS utilities: active
+- ✅ Watcher shutdown path: startup-cancel cleanup and bounded server-side cancellation grace windows are active
+- ✅ Chunking config model scope: embedding model selection is global (repo-level model overrides ignored)
 
 ## Testing Surface
 

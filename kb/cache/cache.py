@@ -357,9 +357,10 @@ def create_cache(
 
     if redis_url and enabled:
         try:
-            import redis
-
-            redis_client = redis.from_url(redis_url)
+            # Optional dependency: resolve at runtime so environments without
+            # redis still type-check and gracefully fall back to memory cache.
+            redis_module = __import__("redis")
+            redis_client = redis_module.from_url(redis_url)
             # Test connection
             redis_client.ping()
             _log.info("Connected to Redis cache at %s", redis_url)
