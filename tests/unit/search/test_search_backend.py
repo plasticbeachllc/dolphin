@@ -6,6 +6,7 @@ import pytest
 
 from kb.api.app import SearchRequest
 from kb.api.search_backend import KnowledgeSearchBackend, create_search_backend
+from kb.cache import QueryCache
 from kb.config import KBConfig
 from kb.retrieval.bm25_normalizer import SigmoidNormalizer
 from kb.retrieval.bm25_stats import BM25Statistics
@@ -380,6 +381,68 @@ class TestKnowledgeSearchBackend:
         # Should detect hash mismatch and ignore cursor
         results_mismatch, _ = basic_backend.search(request_mismatch)
         assert len(results_mismatch) == 1
+
+    def test_search_cache_key_distinguishes_request_filters(self, mock_providers, tmp_path: Path):
+        """Different semantic filters must map to different cache entries."""
+        embedding_provider, lance_store, sql_store = mock_providers
+        config = KBConfig.from_mapping(
+            {"storage": {"store_root": str(tmp_path)}, "embedding": {"default_embed_model": "small"}}
+        )
+        backend = KnowledgeSearchBackend(
+            embedding_provider,
+            lance_store,
+            sql_store,
+            cache=QueryCache(enabled=True),
+            hybrid_search_enabled=False,
+            config=config,
+        )
+
+        embedding_provider.embed_texts.return_value = [[0.1] * 1536]
+        lance_store.query.return_value = [{"id": "chunk1", "_distance": 0.1, "repo": "repo", "path": "file.py"}]
+
+        request_plain = SearchRequest(query="cache key", top_k=5)
+        request_filtered = SearchRequest(query="cache key", top_k=5, exclude_patterns=["*.md"])
+
+        backend.search(request_plain)
+        backend.search(request_filtered)
+        backend.search(request_filtered)
+
+        # First two requests should execute search; third should hit cache for filtered variant.
+        assert embedding_provider.embed_texts.call_count == 2
+        assert lance_store.query.call_count == 2
+
+    def test_search_cache_hit_preserves_next_cursor(self, mock_providers, tmp_path: Path):
+        """Cache hits must return the same next_cursor as the original search response."""
+        embedding_provider, lance_store, sql_store = mock_providers
+        config = KBConfig.from_mapping(
+            {"storage": {"store_root": str(tmp_path)}, "embedding": {"default_embed_model": "small"}}
+        )
+        backend = KnowledgeSearchBackend(
+            embedding_provider,
+            lance_store,
+            sql_store,
+            cache=QueryCache(enabled=True),
+            hybrid_search_enabled=False,
+            config=config,
+        )
+
+        embedding_provider.embed_texts.return_value = [[0.1] * 1536]
+        lance_store.query.return_value = [
+            {"id": f"chunk_{i}", "_distance": 0.1 * (i + 1), "repo": "repo", "path": f"file_{i}.py"} for i in range(8)
+        ]
+
+        request = SearchRequest(query="cursor cache", top_k=3)
+        first_results, first_cursor = backend.search(request)
+
+        assert len(first_results) == 3
+        assert first_cursor is not None
+
+        second_results, second_cursor = backend.search(request)
+        assert second_results == first_results
+        assert second_cursor == first_cursor
+        # Only the first call should execute embedding/vector search.
+        assert embedding_provider.embed_texts.call_count == 1
+        assert lance_store.query.call_count == 1
 
 
 @pytest.fixture
