@@ -65,6 +65,9 @@ AI Client (MCP) / CLI / REST consumer
 
 ### Retrieval performance notes (2026-02)
 
+- `/v1/search` dispatches synchronous backends via `asyncio.to_thread`, and prefers a backend `search_async` method when available to keep the FastAPI event loop non-blocking under load.
+- `KnowledgeSearchBackend` now exposes `search_async`, which uses async embedding calls and preserves the existing synchronous `search` entrypoint for CLI and tests.
+- Async and sync search paths now share cache-state evaluation to avoid duplicate cache lookups on async cache misses.
 - Vector and BM25 branches execute concurrently inside `KnowledgeSearchBackend.search` to reduce end-to-end search latency.
 - BM25 hydration now uses bulk metadata lookups keyed by FTS content IDs (`SQLiteMetadataStore.get_bm25_hydration_map`) instead of per-hit lookups.
 - LanceDB vector indexes are managed explicitly and lazily per table in `LanceDBStore` (create once, reuse across queries).

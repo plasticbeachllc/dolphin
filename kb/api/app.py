@@ -5,7 +5,7 @@ import datetime
 import logging
 import re
 from collections.abc import Awaitable, Iterable, Sequence
-from inspect import isawaitable
+from inspect import isawaitable, iscoroutinefunction
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Protocol, cast
@@ -443,14 +443,20 @@ async def search(request: SearchRequest) -> dict[str, Any]:
             set_config_method(temp_config_data)
 
     started = perf_counter()
-    raw_result = backend.search(request)
     hits: Iterable[dict[str, object]]
     next_cursor: str | None = None
 
-    if isawaitable(raw_result):
-        result = await raw_result
+    search_async = getattr(backend, "search_async", None)
+    if callable(search_async) and iscoroutinefunction(search_async):
+        result = await search_async(request)
     else:
-        result = raw_result
+        search_method = backend.search
+        if iscoroutinefunction(search_method):
+            result = await search_method(request)
+        else:
+            result = await asyncio.to_thread(search_method, request)
+            if isawaitable(result):
+                result = await result
 
     # Result is always (hits, next_cursor) per Protocol
     hits, next_cursor = result
