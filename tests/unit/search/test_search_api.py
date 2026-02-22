@@ -50,6 +50,30 @@ class TestSearchAPI:
             assert response_data["hits"] == [{"chunk_id": "1"}]
             mock_backend.search.assert_called_once()
 
+    def test_search_prefers_async_backend_method(self, client_with_backend):
+        class AsyncBackend:
+            def __init__(self):
+                self.sync_called = False
+                self.async_called = False
+
+            def search(self, _request):
+                self.sync_called = True
+                return ([{"chunk_id": "sync"}], None)
+
+            async def search_async(self, _request):
+                self.async_called = True
+                return ([{"chunk_id": "async"}], None)
+
+        with patch("kb.api.app.get_search_backend") as mock_get_backend:
+            backend = AsyncBackend()
+            mock_get_backend.return_value = backend
+
+            response = client_with_backend.post("/v1/search", json={"query": "test"})
+            assert response.status_code == 200
+            assert response.json()["hits"] == [{"chunk_id": "async"}]
+            assert backend.async_called is True
+            assert backend.sync_called is False
+
     def test_search_invalid_request(self, client_with_backend):
         response = client_with_backend.post("/v1/search", json={"top_k": 5})
         assert response.status_code == 422

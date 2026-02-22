@@ -103,9 +103,7 @@ class EmbeddingProvider:
             Base implementation calls synchronous embed_texts() in a non-blocking way.
             Subclasses can override for true async implementations.
         """
-        # For stub provider, synchronous operation is fast enough
-        # Call synchronously to maintain backward compatibility
-        return self.embed_texts(model, texts)
+        return await asyncio.to_thread(self.embed_texts, model, texts)
 
 
 class OpenAIEmbeddingProvider(EmbeddingProvider):

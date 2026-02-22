@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -199,7 +200,53 @@ class KnowledgeSearchBackend:
             self._bm25_normalizer = SigmoidNormalizer(RETRIEVAL_PARAMS.BM25_SCORE_NORMALIZATION_FACTOR)
             return float(self._bm25_normalizer.normalize(score))
 
-    def search(self, request: SearchRequest) -> tuple[Sequence[dict[str, object]], str | None]:
+    def _get_cached_results_if_available(self, request: SearchRequest) -> list[dict[str, object]] | None:
+        """Return cached results for a request when cache usage is allowed."""
+        cache_allowed = True
+        if self.cache and request.repos:
+            for repo_name in request.repos:
+                repo_info = self.sql_store.get_repo_by_name(repo_name)
+                if not repo_info:
+                    continue
+                repo_id = int(repo_info["id"])
+                if self.sql_store.get_pending_changes(repo_id, limit=1):
+                    cache_allowed = False
+                    break
+
+        if not self.cache or not cache_allowed:
+            return None
+
+        cache_params = {
+            "top_k": request.top_k,
+            "score_cutoff": request.score_cutoff,
+            "embed_model": self.config.default_embed_model,
+            "repos": request.repos,
+            "path_prefix": request.path_prefix,
+        }
+        return self.cache.get_results(request.query, **cache_params)
+
+    async def search_async(self, request: SearchRequest) -> tuple[Sequence[dict[str, object]], str | None]:
+        """Execute search without blocking the event loop."""
+        cached_results = await asyncio.to_thread(self._get_cached_results_if_available, request)
+        if cached_results is not None:
+            return cached_results, None
+
+        query_embedding = await self.embedding_provider.embed_texts_async(
+            self.config.default_embed_model,
+            [request.query],
+        )
+        return await asyncio.to_thread(
+            self.search,
+            request,
+            _query_embedding_override=query_embedding[0],
+        )
+
+    def search(
+        self,
+        request: SearchRequest,
+        *,
+        _query_embedding_override: list[float] | None = None,
+    ) -> tuple[Sequence[dict[str, object]], str | None]:
         # Generate correlation ID for this search request
         correlation_id = f"search_{uuid.uuid4().hex[:8]}"
         start_time = time.time()
@@ -253,7 +300,10 @@ class KnowledgeSearchBackend:
                 )
                 return cached_results, None
 
-        query_embedding = self.embedding_provider.embed_texts(self.config.default_embed_model, [request.query])[0]
+        if _query_embedding_override is not None:
+            query_embedding = _query_embedding_override
+        else:
+            query_embedding = self.embedding_provider.embed_texts(self.config.default_embed_model, [request.query])[0]
         # Fetch more candidates for reranking when enabled; otherwise use the default multiplier.
         try:
             rerank_multiplier = int(self.config.retrieval.reranking.candidate_multiplier)
