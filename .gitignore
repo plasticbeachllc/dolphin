@@ -21,6 +21,7 @@ kilocode-config/
 
 # artifacts
 artifacts/
+dist/
 
 # cache artifacts
 .mypy_cache
