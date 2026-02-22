@@ -116,8 +116,8 @@ The single largest code quality issue. Breakdown of the top offenders:
 **Recommended approach** (incremental, not big-bang):
 
 1. ✅ **Phase 1**: Add `_log.warning(...)` with `exc_info=True` to every bare handler that currently does `pass`, `continue`, or `return None`. This is a mechanical change.
-2. ⬜ **Phase 2**: Replace the most impactful catch-alls (LanceDB, SQLite, pipeline) with specific exception types (`lancedb.LanceDBError`, `sqlite3.OperationalError`, etc.).
-3. ⬜ **Phase 3**: Introduce a `@defensive` decorator or context manager for the intentionally-broad handlers, making the intent explicit.
+2. ✅ **Phase 2**: Fixed silent handlers in `sqlite_meta.py` (4 handlers), `watcher.py` (3 handlers missing `exc_info=True`), `cli.py` (3 handlers only printing to stderr), and `pipeline.py` (3 `print()` calls in except blocks replaced with `logger`). `lancedb_store.py` and `app.py` were already Phase 2 ready.
+3. ✅ **Phase 3**: `@defensive` decorator and context manager created in `kb/utils/defensive.py`. Use for intentionally-broad handlers where suppression is correct behaviour.
 
 #### ⬜ P2/S — Deduplicator returns empty set on error, causing re-embedding
 
@@ -163,7 +163,11 @@ Priority: **P2/L** — do this opportunistically when touching these files, not 
 
 ### 1.5 Concurrency & Thread Safety
 
-#### ⬜ P1/S — Global mutable state without locks
+#### ✅ P1/S — Global mutable state without locks
+
+> **Status**: Done (Sprint 5) — `_store_lock = threading.Lock()` added; all write paths
+> (`set_stores`, `set_pipeline`, `reset_pipeline`, `reset_stores`) are now guarded by the lock.
+> Reads remain unlocked as they occur on the async event loop after startup is complete.
 
 **File**: `kb/api/app.py:114–150`
 

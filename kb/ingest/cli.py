@@ -168,6 +168,7 @@ def add_repo(
                 pipeline.index(name, dry_run=False, force=False)
                 typer.echo(f"✅ Indexing complete for {name}")
             except Exception as e:
+                _log.error("Indexing failed during add-repo prompt for %s", name, exc_info=True)
                 typer.echo(f"❌ Indexing failed: {e}", err=True)
 
 
@@ -605,6 +606,7 @@ def reset_repo(
                 typer.echo(f"⚠️  Cleanup warnings: {len(result['lancedb_warnings'])}", err=True)
 
         except Exception as e:
+            _log.warning("Enhanced cleanup failed for %s, continuing anyway", name, exc_info=True)
             typer.echo(f"Warning: Enhanced cleanup failed, continuing anyway: {e}", err=True)
 
     # Re-register repo
@@ -989,6 +991,7 @@ def reset_all(
 
         except Exception as e:
             error_msg = f"Failed to remove {repo['name']}: {e}"
+            _log.error("Failed to remove repo %s during reset", repo["name"], exc_info=True)
             total_stats["errors"].append(error_msg)  # type: ignore[attr-defined]
             typer.echo(f"  ✗ {error_msg}", err=True)
 

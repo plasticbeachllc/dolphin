@@ -84,7 +84,7 @@ class RepoWatcher:
                 if aborted:
                     print(f"⚠️  Aborted {aborted} stale session(s) for {self.repo_name}")
             except Exception as e:
-                logger.warning(f"Failed to abort stale sessions for {self.repo_name}: {e}")
+                logger.warning(f"Failed to abort stale sessions for {self.repo_name}: {e}", exc_info=True)
 
             if self._should_stop():
                 return
@@ -98,7 +98,7 @@ class RepoWatcher:
                 )
                 print(f"Startup sync complete for {self.repo_name}")
             except Exception as e:
-                logger.error(f"Startup sync failed for {self.repo_name}: {e}")
+                logger.error(f"Startup sync failed for {self.repo_name}: {e}", exc_info=True)
 
             if self._should_stop():
                 return
@@ -182,7 +182,7 @@ class RepoWatcher:
                 self.current_branch_state = new_state
 
         except Exception as e:
-            logger.error(f"Error checking branch state: {e}")
+            logger.error(f"Error checking branch state: {e}", exc_info=True)
 
     async def _seed_working_tree_changes(self) -> None:
         """Capture working tree changes before the watch loop starts."""

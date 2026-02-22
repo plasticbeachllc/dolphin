@@ -2252,6 +2252,7 @@ class SQLiteMetadataStore:
             stats["orphaned"] = cur.rowcount
 
         except Exception as e:
+            logger.error("Failed to clean up FTS entries for repo %s", repo_name, exc_info=True)
             errors.append(str(e))
 
         return stats
@@ -2510,6 +2511,7 @@ class SQLiteMetadataStore:
                 stats[f"{model}_deleted"] = pre_count - post_count
 
             except Exception as e:
+                logger.error("LanceDB %s model cleanup failed for repo %s", model, name, exc_info=True)
                 errors.append(f"{model} model cleanup failed: {e}")
 
         return stats
@@ -2573,6 +2575,7 @@ class SQLiteMetadataStore:
             # with vector counts
 
         except Exception as e:
+            logger.error("LanceDB consistency check failed for repo %s", repo_name, exc_info=True)
             stats["consistent"] = False
             issues.append(f"LanceDB consistency check failed: {e}")
 
@@ -2866,6 +2869,7 @@ class SQLiteMetadataStore:
                 conn.commit()
 
             except Exception as e:
+                logger.error("Database integrity repair failed", exc_info=True)
                 conn.rollback()
                 repair_report["success"] = False
                 errors.append(f"Repair failed: {e}")

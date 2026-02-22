@@ -250,8 +250,8 @@ class IngestionPipeline:
         for model in ["small", "large"]:
             try:
                 self.lancedb.delete_repo(repo_name, model=model)
-            except Exception as e:
-                print(f"  Warning: Could not delete {model} vectors: {e}")
+            except Exception:
+                logger.warning("Could not delete %s vectors for repo %s", model, repo_name, exc_info=True)
 
         # Delete code graph data
         if self.graph_store:
@@ -259,8 +259,8 @@ class IngestionPipeline:
             try:
                 nodes_deleted = cleanup_graph_for_repo(self.graph_store, repo_id)
                 print(f"  Deleted {nodes_deleted} graph nodes and associated edges")
-            except Exception as e:
-                print(f"  Warning: Could not delete graph data: {e}")
+            except Exception:
+                logger.warning("Could not delete graph data for repo_id=%s", repo_id, exc_info=True)
 
         # Delete from metadata database
         print("  Clearing metadata...")
@@ -343,9 +343,9 @@ class IngestionPipeline:
 
                 conn.commit()
                 print("  Metadata cleared successfully")
-            except Exception as e:
+            except Exception:
                 conn.rollback()
-                print(f"  Error clearing metadata: {e}")
+                logger.error("Error clearing metadata for repo_id=%s", repo_id, exc_info=True)
                 raise
 
     def scan(self, repo_name: str, *, dry_run: bool = False, force: bool = False) -> dict:

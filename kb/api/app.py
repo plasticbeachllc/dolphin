@@ -5,6 +5,7 @@ import datetime
 import hmac
 import logging
 import re
+import threading
 from collections.abc import Awaitable, Iterable, Sequence
 from inspect import isawaitable, iscoroutinefunction
 from pathlib import Path
@@ -115,23 +116,28 @@ async def validate_api_key(request: Request, call_next):
     return await call_next(request)
 
 
-# Will be set by server startup
+# Will be set by server startup.
+# Lock guards all writes; reads are unlocked because they only occur on the
+# async event loop after startup has completed and stores are stable.
 _sql_store = None
 _lance_store = None
 _pipeline = None
+_store_lock = threading.Lock()
 
 
 def set_stores(sql_store, lance_store):
     """Set the SQL and Lance stores for API endpoints."""
     global _sql_store, _lance_store
-    _sql_store = sql_store
-    _lance_store = lance_store
+    with _store_lock:
+        _sql_store = sql_store
+        _lance_store = lance_store
 
 
 def set_pipeline(pipeline):
     """Set the ingestion pipeline for API endpoints."""
     global _pipeline
-    _pipeline = pipeline
+    with _store_lock:
+        _pipeline = pipeline
 
 
 def get_pipeline():
@@ -142,15 +148,17 @@ def get_pipeline():
 def reset_pipeline():
     """Reset the ingestion pipeline to None (for testing)."""
     global _pipeline
-    _pipeline = None
+    with _store_lock:
+        _pipeline = None
 
 
 def reset_stores():
     """Reset stores to None (for testing)."""
     global _sql_store, _lance_store, _pipeline
-    _sql_store = None
-    _lance_store = None
-    _pipeline = None
+    with _store_lock:
+        _sql_store = None
+        _lance_store = None
+        _pipeline = None
 
 
 def _enrich_hits_with_snippets(
