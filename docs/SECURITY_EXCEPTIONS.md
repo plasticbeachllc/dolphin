@@ -10,12 +10,12 @@ re-evaluation date.
 
 ### CVE-2026-0994 — Protobuf denial-of-service
 
-| Field | Value |
-|-------|-------|
-| **Advisory** | CVE-2026-0994 |
-| **Package** | `protobuf` |
-| **Severity** | Medium (DoS) |
-| **Ignored since** | 2026-02 |
+| Field              | Value                                      |
+| ------------------ | ------------------------------------------ |
+| **Advisory**       | CVE-2026-0994                              |
+| **Package**        | `protobuf`                                 |
+| **Severity**       | Medium (DoS)                               |
+| **Ignored since**  | 2026-02                                    |
 | **Re-evaluate by** | 2026-05 (or when upstream publishes a fix) |
 
 **Description**: A denial-of-service vulnerability in the protobuf library
@@ -23,7 +23,7 @@ affecting protobuf parsing under certain untrusted-input conditions.
 
 **Why we accept this risk**: Dolphin uses protobuf exclusively as a transitive
 dependency of the OpenTelemetry OTLP exporter (`opentelemetry-exporter-otlp`).
-Protobuf-encoded data in Dolphin's context is telemetry sent *to* a trusted
+Protobuf-encoded data in Dolphin's context is telemetry sent _to_ a trusted
 collector (Jaeger/Grafana), never parsed from untrusted external sources.
 The DoS vector is therefore not reachable in normal deployment.
 
@@ -37,13 +37,13 @@ that resolves this CVE.
 
 ### GHSA-7gcm-g887-7qv7
 
-| Field | Value |
-|-------|-------|
-| **Advisory** | GHSA-7gcm-g887-7qv7 |
-| **Package** | TBD — see investigation note |
-| **Severity** | Unknown |
-| **Ignored since** | 2026-02 |
-| **Re-evaluate by** | 2026-04 |
+| Field              | Value                        |
+| ------------------ | ---------------------------- |
+| **Advisory**       | GHSA-7gcm-g887-7qv7          |
+| **Package**        | TBD — see investigation note |
+| **Severity**       | Unknown                      |
+| **Ignored since**  | 2026-02                      |
+| **Re-evaluate by** | 2026-04                      |
 
 **Description**: Advisory details were not publicly available when this
 exception was added.
