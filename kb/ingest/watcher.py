@@ -2,6 +2,7 @@ import asyncio
 import concurrent.futures
 import datetime
 import logging
+import threading
 import time
 from pathlib import Path
 
@@ -46,13 +47,21 @@ class RepoWatcher:
 
         self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         self._stop_event: asyncio.Event | None = None
+        self._stop_requested = threading.Event()
         self._executor_closed = False
         self._last_missing_cleanup = 0.0
 
     def request_stop(self) -> None:
         """Request watcher loop shutdown."""
+        self._stop_requested.set()
         if self._stop_event is not None:
             self._stop_event.set()
+
+    def _should_stop(self) -> bool:
+        """Return True when shutdown has been requested."""
+        return self._stop_requested.is_set() or (
+            self._stop_event is not None and self._stop_event.is_set()
+        )
 
     def _shutdown_executor(self) -> None:
         """Shutdown internal executor once to avoid lingering threads on process exit."""
@@ -64,39 +73,53 @@ class RepoWatcher:
     async def watch(self):
         """Start watching the repository for changes."""
         self._stop_event = asyncio.Event()
+        self._stop_requested.clear()
         assert self._stop_event is not None
         print(f"Starting watcher for {self.repo_name} at {self.root}")
 
         try:
-            aborted = self.metadata.abort_stale_sessions(
-                repo_id=self.repo_id,
-                reason="Aborted on startup: previous watcher session did not complete cleanly",
-            )
-            if aborted:
-                print(f"⚠️  Aborted {aborted} stale session(s) for {self.repo_name}")
-        except Exception as e:
-            logger.warning(f"Failed to abort stale sessions for {self.repo_name}: {e}")
+            try:
+                aborted = self.metadata.abort_stale_sessions(
+                    repo_id=self.repo_id,
+                    reason="Aborted on startup: previous watcher session did not complete cleanly",
+                )
+                if aborted:
+                    print(f"⚠️  Aborted {aborted} stale session(s) for {self.repo_name}")
+            except Exception as e:
+                logger.warning(f"Failed to abort stale sessions for {self.repo_name}: {e}")
 
-        # Perform startup sync to ensure index is up to date with HEAD
-        # We use force=True to allow dirty working tree (since we are watching for edits)
-        print(f"Performing startup sync for {self.repo_name}...")
-        try:
-            await asyncio.get_event_loop().run_in_executor(
-                self._executor, lambda: self.pipeline.index(self.repo_name, dry_run=False, force=True)
-            )
-            print(f"Startup sync complete for {self.repo_name}")
-        except Exception as e:
-            logger.error(f"Startup sync failed for {self.repo_name}: {e}")
+            if self._should_stop():
+                return
 
-        # Seed pending changes for untracked or modified files created during startup sync.
-        await self._seed_working_tree_changes()
+            # Perform startup sync to ensure index is up to date with HEAD.
+            # We use force=True to allow dirty working tree (since we are watching for edits).
+            print(f"Performing startup sync for {self.repo_name}...")
+            try:
+                await asyncio.get_event_loop().run_in_executor(
+                    self._executor, lambda: self.pipeline.index(self.repo_name, dry_run=False, force=True)
+                )
+                print(f"Startup sync complete for {self.repo_name}")
+            except Exception as e:
+                logger.error(f"Startup sync failed for {self.repo_name}: {e}")
 
-        # Process any pending changes from previous run first
-        await self._process_pending_changes()
+            if self._should_stop():
+                return
 
-        try:
+            # Seed pending changes for untracked or modified files created during startup sync.
+            await self._seed_working_tree_changes()
+            if self._should_stop():
+                return
+
+            # Process any pending changes from previous run first.
+            await self._process_pending_changes()
+            if self._should_stop():
+                return
+
             # Main watch loop
             async for changes in awatch(self.root, stop_event=self._stop_event, debounce=1000, step=500):
+                if self._should_stop():
+                    break
+
                 # Check for branch switch
                 await self._check_branch_switch()
 
@@ -257,6 +280,9 @@ class RepoWatcher:
 
     def _process_pending_sync(self):
         """Synchronous processing logic (runs in thread pool)."""
+        if self._should_stop():
+            return
+
         # Fetch pending changes
         changes = self.metadata.get_pending_changes(self.repo_id, limit=500)
         if not changes:

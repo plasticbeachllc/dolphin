@@ -13,10 +13,6 @@ def test_load_dolphin_repo_config():
 
     assert config.repo_path == dolphin_path.resolve()
     assert config.default_window_size > 0, "Default window size must be positive"
-    assert config.embedding_model in [
-        "text-embedding-3-small",
-        "text-embedding-3-large",
-    ], f"Invalid embedding model: {config.embedding_model}"
     assert config.tokenizer_encoding == "cl100k_base", "Expected cl100k_base encoding"
 
 
@@ -51,7 +47,6 @@ def test_missing_config_uses_defaults():
 
         assert default_config.repo_path == tmp_path.resolve()
         assert default_config.default_window_size == 350, "Expected default window size 350"
-        assert default_config.embedding_model == "text-embedding-3-small"
 
 
 def test_custom_config_file():
@@ -70,9 +65,6 @@ default_window_size = 512
 rust = 600
 python = 700
 
-[embeddings]
-model = "text-embedding-3-large"
-
 [tokenizer]
 encoding = "cl100k_base"
 """
@@ -82,4 +74,24 @@ encoding = "cl100k_base"
         assert custom_config.default_window_size == 512
         assert custom_config.get_window_size_for_language("rust") == 600
         assert custom_config.get_window_size_for_language("python") == 700
-        assert custom_config.embedding_model == "text-embedding-3-large"
+
+
+def test_deprecated_embedding_model_override_is_ignored(caplog):
+    """Per-repo [embeddings].model should be ignored in favor of global model config."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        config_dir = tmp_path / ".dolphin"
+        config_dir.mkdir()
+
+        config_file = config_dir / "chunking_config.toml"
+        config_file.write_text(
+            """
+default_window_size = 512
+
+[embeddings]
+model = "text-embedding-3-large"
+"""
+        )
+
+        _ = load_repo_chunking_config(tmp_path)
+        assert any("Ignoring deprecated [embeddings].model" in message for message in caplog.messages)

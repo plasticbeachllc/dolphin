@@ -518,6 +518,7 @@ class IngestionPipeline:
                     language=language,
                     text=text,
                     repo_config=repo_config,
+                    model=embed_model,
                 )
 
                 # Compute text_hash for each chunk

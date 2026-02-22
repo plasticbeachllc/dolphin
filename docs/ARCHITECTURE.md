@@ -4,7 +4,7 @@ Technical architecture and implementation status for Dolphin.
 
 **Version**: 0.2.2  
 **Status**: Beta (KB + MCP release components)  
-**Last Updated**: 2026-02-20
+**Last Updated**: 2026-02-22
 
 ## Overview
 
@@ -82,6 +82,8 @@ AI Client (MCP) / CLI / REST consumer
 - ✅ Python KB backend: active
 - ✅ MCP bridge: active
 - ✅ Shared TS utilities: active
+- ✅ Watcher shutdown path: startup-cancel cleanup and bounded server-side cancellation grace windows are active
+- ✅ Chunking config model scope: embedding model selection is global (repo-level model overrides ignored)
 
 ## Testing Surface
 

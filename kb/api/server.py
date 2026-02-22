@@ -30,6 +30,25 @@ logging.basicConfig(
 )
 
 
+def _load_timeout_from_env(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        logging.getLogger(__name__).warning("Invalid %s=%r; using default %.1fs", name, raw, default)
+        return default
+    if value <= 0:
+        logging.getLogger(__name__).warning("Non-positive %s=%r; using default %.1fs", name, raw, default)
+        return default
+    return value
+
+
+_WATCHER_SHUTDOWN_GRACE_SECONDS = _load_timeout_from_env("DOLPHIN_WATCH_SHUTDOWN_TIMEOUT", 15.0)
+_WATCHER_CANCEL_GRACE_SECONDS = _load_timeout_from_env("DOLPHIN_WATCH_CANCEL_TIMEOUT", 5.0)
+
+
 def initialize_search_backend() -> None:
     """Initialize and configure the search backend and ingestion pipeline based on config."""
     config: KBConfig = load_config()
@@ -240,13 +259,22 @@ async def lifespan_handler(app_instance: FastAPI):
                     stderr=True,
                 )
 
-        done, pending = await asyncio.wait(watch_tasks, timeout=5.0)
+        done, pending = await asyncio.wait(watch_tasks, timeout=_WATCHER_SHUTDOWN_GRACE_SECONDS)
 
         if pending:
             for task in pending:
                 task.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
-            print_status("Watchers did not stop gracefully before timeout.", level="warn", stderr=True)
+            cancelled_done, cancelled_pending = await asyncio.wait(
+                pending, timeout=_WATCHER_CANCEL_GRACE_SECONDS
+            )
+            done = done.union(cancelled_done)
+            if cancelled_pending:
+                print_status(
+                    "Watchers did not stop gracefully before timeout.",
+                    level="warn",
+                    context={"pending": len(cancelled_pending)},
+                    stderr=True,
+                )
 
         for task in done:
             try:

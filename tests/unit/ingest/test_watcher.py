@@ -206,3 +206,33 @@ class TestRepoWatcher:
         # Verify metadata updates
         mock_pipeline.metadata.mark_changes_processed.assert_called_once_with([1, 2])
         mock_pipeline.metadata.set_session_status.assert_called_once_with(999, "succeeded")
+
+    @patch("kb.ingest.watcher.get_current_branch_state")
+    @patch("kb.ignores.build_ignore_pathspec")
+    async def test_watch_startup_cancellation_closes_executor(
+        self,
+        mock_build_ignore,
+        mock_get_branch,
+        mock_pipeline,
+        config,
+    ):
+        """Cancelling during startup sync must still close the watcher executor."""
+        from pathspec import PathSpec
+
+        mock_build_ignore.return_value = PathSpec.from_lines("gitignore", [])
+        mock_get_branch.return_value = BranchState(branch="main", commit_sha="123")
+
+        watcher = RepoWatcher("repo", config, mock_pipeline)
+        watcher._seed_working_tree_changes = AsyncMock()
+        watcher._process_pending_changes = AsyncMock()
+
+        with patch.object(asyncio.get_event_loop(), "run_in_executor", new_callable=AsyncMock) as mock_run:
+            mock_run.side_effect = asyncio.CancelledError()
+
+            with pytest.raises(asyncio.CancelledError):
+                await watcher.watch()
+
+        assert watcher._executor_closed
+        assert watcher._stop_requested.is_set()
+        watcher._seed_working_tree_changes.assert_not_called()
+        watcher._process_pending_changes.assert_not_called()

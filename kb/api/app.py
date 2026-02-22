@@ -1126,6 +1126,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                 language=language,
                 text=text,
                 repo_config=repo_config,
+                model=embed_model,
             )
 
             import logging

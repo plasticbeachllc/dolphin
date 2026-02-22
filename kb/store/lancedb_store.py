@@ -425,6 +425,14 @@ class LanceDBStore:
             # Table doesn't exist yet
             return []
 
+        # Avoid triggering ANN index build paths when the table has no vectors.
+        try:
+            if table.count_rows() == 0:
+                return []
+        except Exception:
+            # If row counting fails, continue with normal query flow.
+            pass
+
         # Build search query with ANN parameters - explicitly specify vector column name
         search_query = table.search(list(query_vector), vector_column_name="vector").limit(top_k)
 

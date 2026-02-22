@@ -1,8 +1,8 @@
 """Repository-specific chunking configuration system.
 
 This module provides per-repository chunking configuration via TOML files,
-allowing customization of token window sizes, per-language overrides, and
-embedding model settings for semantic retrieval.
+allowing customization of token window sizes and per-language overrides for
+semantic retrieval.
 """
 
 from __future__ import annotations
@@ -20,11 +20,11 @@ except ImportError:
 __all__ = ["RepoChunkingConfig", "load_repo_chunking_config"]
 
 _log = logging.getLogger(__name__)
+_warned_model_overrides: set[Path] = set()
 
 # Default configuration values aligned with semantic retrieval best practices
 DEFAULT_WINDOW_SIZE = 350
 DEFAULT_OVERLAP_PCT = 0.10
-DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 DEFAULT_TOKENIZER_ENCODING = "cl100k_base"
 
 # Per-language window size defaults (in tokens)
@@ -56,7 +56,6 @@ class RepoChunkingConfig:
         repo_path: Absolute path to the repository root
         default_window_size: Default token window size for all files
         per_language: Language-specific token window size overrides
-        embedding_model: OpenAI embedding model name
         tokenizer_encoding: Tokenizer encoding name (e.g., "cl100k_base")
         overlap_pct: Percentage of overlap between consecutive chunks (0.0-1.0)
     """
@@ -64,7 +63,6 @@ class RepoChunkingConfig:
     repo_path: Path
     default_window_size: int = DEFAULT_WINDOW_SIZE
     per_language: dict[str, int] = field(default_factory=lambda: DEFAULT_PER_LANGUAGE.copy())
-    embedding_model: str = DEFAULT_EMBEDDING_MODEL
     tokenizer_encoding: str = DEFAULT_TOKENIZER_ENCODING
     overlap_pct: float = DEFAULT_OVERLAP_PCT
 
@@ -120,7 +118,6 @@ def load_repo_chunking_config(repo_path: Path) -> RepoChunkingConfig:
             repo_path=repo_path,
             default_window_size=DEFAULT_WINDOW_SIZE,
             per_language=DEFAULT_PER_LANGUAGE.copy(),
-            embedding_model=DEFAULT_EMBEDDING_MODEL,
             tokenizer_encoding=DEFAULT_TOKENIZER_ENCODING,
             overlap_pct=DEFAULT_OVERLAP_PCT,
         )
@@ -149,11 +146,19 @@ def load_repo_chunking_config(repo_path: Path) -> RepoChunkingConfig:
                 continue
             per_language[str(lang)] = size
 
-    # Embedding configuration
+    # Deprecated per-repo embedding model override.
+    # Model selection is controlled globally now.
     embeddings_section = data.get("embeddings", {})
-    embedding_model = embeddings_section.get("model", DEFAULT_EMBEDDING_MODEL)
-    if not isinstance(embedding_model, str):
-        embedding_model = DEFAULT_EMBEDDING_MODEL
+    if (
+        isinstance(embeddings_section, Mapping)
+        and "model" in embeddings_section
+        and config_file not in _warned_model_overrides
+    ):
+        _log.warning(
+            "Ignoring deprecated [embeddings].model in %s; embedding model is configured globally.",
+            config_file,
+        )
+        _warned_model_overrides.add(config_file)
 
     # Tokenizer configuration
     tokenizer_section = data.get("tokenizer", {})
@@ -168,17 +173,15 @@ def load_repo_chunking_config(repo_path: Path) -> RepoChunkingConfig:
         overlap_pct = DEFAULT_OVERLAP_PCT
 
     _log.info(
-        "Loaded chunking config from %s (default_window_size=%d, model=%s)",
+        "Loaded chunking config from %s (default_window_size=%d)",
         config_file,
         default_window,
-        embedding_model,
     )
 
     return RepoChunkingConfig(
         repo_path=repo_path,
         default_window_size=default_window,
         per_language=per_language,
-        embedding_model=embedding_model,
         tokenizer_encoding=tokenizer_encoding,
         overlap_pct=overlap_pct,
     )
