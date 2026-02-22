@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Iterable, Sequence
 from inspect import isawaitable, iscoroutinefunction
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Protocol, cast
+from typing import Any, NamedTuple, Protocol, cast
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -320,22 +320,30 @@ class SearchRequest(BaseModel):
     cursor: str | None = None
 
 
+class SearchResultSet(NamedTuple):
+    """Canonical return type for all search backend calls.
+
+    Using NamedTuple preserves tuple unpacking (``hits, cursor = result``)
+    while adding named-field access and eliminating the previous
+    tuple/dict/list polymorphism at call sites.
+    """
+
+    hits: Sequence[dict[str, object]]
+    next_cursor: str | None
+
+
 class SearchBackend(Protocol):
     """Protocol describing the dependency used to execute searches."""
 
-    def search(
-        self, request: SearchRequest
-    ) -> tuple[Sequence[dict[str, object]], str | None] | Awaitable[tuple[Sequence[dict[str, object]], str | None]]: ...
+    def search(self, request: SearchRequest) -> SearchResultSet | Awaitable[SearchResultSet]: ...
 
 
 class _EmptySearchBackend:
     """Default backend that returns zero hits until retrieval is implemented."""
 
-    def search(
-        self, request: SearchRequest
-    ) -> tuple[Sequence[dict[str, object]], str | None] | Awaitable[tuple[Sequence[dict[str, object]], str | None]]:
+    def search(self, request: SearchRequest) -> SearchResultSet:
         _ = request
-        return [], None
+        return SearchResultSet([], None)
 
 
 _DEFAULT_BACKEND = _EmptySearchBackend()

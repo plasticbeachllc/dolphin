@@ -219,11 +219,24 @@ def index(
         traceback.print_exc()
         raise
 
-    typer.echo(f"Index complete for {name}: session={result.get('session_id')}")
-    typer.echo(f"  files_indexed: {result.get('files_indexed')}")
-    typer.echo(f"  chunks_indexed: {result.get('chunks_indexed')}")
-    typer.echo(f"  chunks_skipped: {result.get('chunks_skipped')}")
-    typer.echo(f"  vectors_written: {result.get('vectors_written')}")
+    files_indexed = result.get("files_indexed", 0)
+    chunks_indexed = result.get("chunks_indexed", 0)
+    files_skipped_ignored = result.get("files_skipped_ignored", 0)
+    files_error = result.get("files_error", 0)
+    chunks_pruned = result.get("chunks_pruned", 0)
+
+    summary = f"Indexed {files_indexed} file{'s' if files_indexed != 1 else ''} ({chunks_indexed:,} chunks)."
+    skips: list[str] = []
+    if files_skipped_ignored:
+        skips.append(f"{files_skipped_ignored} ignored")
+    if files_error:
+        skips.append(f"{files_error} error{'s' if files_error != 1 else ''}")
+    if skips:
+        summary += f" Skipped: {', '.join(skips)}."
+    typer.echo(summary)
+
+    if chunks_pruned:
+        typer.echo(f"  Pruned {chunks_pruned:,} stale chunk{'s' if chunks_pruned != 1 else ''}.")
 
     # Notify server to reload
     _notify_server_reload(config)

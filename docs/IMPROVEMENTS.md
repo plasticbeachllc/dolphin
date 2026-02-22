@@ -157,6 +157,8 @@ Priority: **P2/L** — do this opportunistically when touching these files, not 
 
 **Recommendation** (P2/M): Define a `SearchResult` dataclass as the canonical return type, and have all backends conform. Eliminate the tuple/dict polymorphism.
 
+> **Status**: Done (Sprint 4) — `SearchResultSet(NamedTuple)` with `hits` and `next_cursor` fields defined in `app.py`; `SearchBackend` Protocol updated; `_EmptySearchBackend` and `KnowledgeSearchBackend` both return `SearchResultSet`. Supports tuple unpacking for backward compatibility.
+
 ---
 
 ### 1.5 Concurrency & Thread Safety
@@ -251,7 +253,9 @@ OPENAI_API_KEY=sk-your-key-here
 # DOLPHIN_FORCE_BM25_NORMALIZER=
 ```
 
-#### ⬜ P2/S — No production deployment guide
+#### ✅ P2/S — No production deployment guide
+
+> **Status**: Done (Sprint 4) — `docs/DEPLOYMENT.md` created covering reverse proxy (nginx/Caddy), process management (systemd/launchd), TLS, auth hardening, Redis configuration, and observability stack setup.
 
 `README.md` covers local development. There's no guide for deploying Dolphin as a shared service (reverse proxy setup, process management, TLS, auth hardening, Redis configuration). A `docs/DEPLOYMENT.md` would prevent each team from reinventing this.
 
@@ -263,7 +267,9 @@ OPENAI_API_KEY=sk-your-key-here
 
 ### 2.2 CLI Experience
 
-#### ⬜ P2/S — Silent failures during `dolphin index`
+#### ✅ P2/S — Silent failures during `dolphin index`
+
+> **Status**: Done (Sprint 4) — pipeline now tracks `files_skipped_ignored` and `files_error` counters; both sequential and parallel modes print a summary; `cli.py` formats a friendly one-liner: `"Indexed N files (X chunks). Skipped: Y ignored, Z errors."`.
 
 When files are skipped (binary, ignored, permission error), the CLI provides no summary. Add a post-index summary:
 
@@ -491,12 +497,12 @@ The improvements above are ordered by priority within each section. Here's a sug
 4. ✅ `kb/ingest/async_embedder.py` — `request_times` and `token_usage` are now `deque(maxlen=initial_rpm)`; `_enforce_limits` uses `popleft()` instead of list-comprehension reassignment, preserving the deque and its bound.
 5. ✅ `kb/store/sqlite_meta.py` — `rebuild_fts5_table` wraps DROP + CREATE in a single `BEGIN IMMEDIATE` / `COMMIT` transaction (using `isolation_level=None` to bypass Python's DDL auto-commit); `sync_locations_for_content_row`, `prune_invalidated_content_for_file`, and `ensure_content_rows_for_file` open with explicit `BEGIN IMMEDIATE` for deterministic isolation.
 
-#### Sprint 4: Architecture & UX (ongoing)
+#### ✅ Sprint 4: Architecture & UX — Complete
 
 1. ⬜ Begin decomposing `sqlite_meta.py` (3,073 lines) as it's touched for new features.
-2. ⬜ Standardize search return type to a `SearchResult` dataclass.
-3. ⬜ Improve CLI post-index summaries with skip/error counts.
-4. ⬜ Write `docs/DEPLOYMENT.md` for production use.
+2. ✅ Standardize search return type to a `SearchResult` dataclass.
+3. ✅ Improve CLI post-index summaries with skip/error counts.
+4. ✅ Write `docs/DEPLOYMENT.md` for production use.
 
 ### Conventions for new code
 
