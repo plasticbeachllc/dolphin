@@ -1,0 +1,494 @@
+# Dolphin: Improvement Opportunities
+
+A comprehensive audit of code quality, UX, and performance across the Dolphin codebase.
+Each section includes priority, effort estimate, and actionable guidance for implementers.
+
+> **Notation**: `P0` = critical/do first, `P1` = high priority, `P2` = medium, `P3` = nice-to-have.
+> Effort: `S` = small (< 1 day), `M` = medium (1–3 days), `L` = large (3+ days).
+
+---
+
+## Table of Contents
+
+1. [Code Quality](#1-code-quality)
+   - [1.1 Security](#11-security)
+   - [1.2 Error Handling](#12-error-handling)
+   - [1.3 Module Size & Cohesion](#13-module-size--cohesion)
+   - [1.4 Type Safety](#14-type-safety)
+   - [1.5 Concurrency & Thread Safety](#15-concurrency--thread-safety)
+   - [1.6 Correctness Bugs](#16-correctness-bugs)
+2. [UX & Documentation](#2-ux--documentation)
+   - [2.1 Developer Onboarding](#21-developer-onboarding)
+   - [2.2 CLI Experience](#22-cli-experience)
+   - [2.3 Error Messages & Observability](#23-error-messages--observability)
+   - [2.4 Configuration](#24-configuration)
+3. [Performance](#3-performance)
+   - [3.1 Memory](#31-memory)
+   - [3.2 Latency](#32-latency)
+   - [3.3 Stability & Resource Management](#33-stability--resource-management)
+4. [Infrastructure & CI/CD](#4-infrastructure--cicd)
+5. [Quickstart for Implementers](#5-quickstart-for-implementers)
+
+---
+
+## 1. Code Quality
+
+### 1.1 Security
+
+#### P0/S — API key comparison is timing-vulnerable
+
+**File**: `kb/api/app.py:108`
+
+```python
+if not api_key or api_key != expected_key:
+```
+
+Direct string comparison leaks timing information. Replace with:
+
+```python
+import hmac
+if not api_key or not hmac.compare_digest(api_key, expected_key or ""):
+```
+
+Also missing:
+- **Rate limiting** on failed auth attempts (brute-force is trivial).
+- **Audit logging** of 401s (no record of who tried what).
+
+#### P1/S — Foreign key pragma silently swallowed
+
+**File**: `kb/store/sqlite_meta.py:151–154`
+
+```python
+try:
+    dbapi_connection.execute("PRAGMA foreign_keys=ON")
+except Exception:
+    pass  # FK enforcement silently disabled
+```
+
+If this fails, the entire referential integrity layer is gone — orphaned chunks, dangling file references, etc.
+Fix: log at `error` level and raise; the database is not trustworthy without FK enforcement.
+
+#### P1/S — CORS allows credentials with wildcard methods
+
+**File**: `kb/api/app.py:80–88`
+
+`allow_credentials=True` combined with `allow_methods=["*"]` and `allow_headers=["*"]` is overly permissive even for `localhost:3000`. Tighten to specific methods (`GET`, `POST`, `DELETE`) and specific headers (`X-API-Key`, `Content-Type`).
+
+#### P2/S — Path validation allows symlinks by default
+
+**File**: `kb/api/utils.py:39`
+
+```python
+validator = PathValidator(base_dir=repo_root, allow_symlinks=True)
+```
+
+Symlinks can escape the repo root. Consider `allow_symlinks=False` as the default, with an opt-in flag for repos that need it.
+
+---
+
+### 1.2 Error Handling
+
+#### P1/M — 171 bare `except Exception` handlers across 36 files
+
+The single largest code quality issue. Breakdown of the top offenders:
+
+| File | Count | Impact |
+|------|-------|--------|
+| `kb/store/lancedb_store.py` | 26 | Vector ops silently fail |
+| `kb/api/app.py` | 24 | Request-level failures hidden |
+| `kb/ingest/pipeline.py` | 12 | Indexing errors swallowed |
+| `kb/store/sqlite_meta.py` | 11 | DB integrity issues masked |
+| `kb/ingest/watcher.py` | 9 | File-watch failures undetected |
+| `kb/ingest/cli.py` | 9 | CLI errors lost |
+
+**Recommended approach** (incremental, not big-bang):
+
+1. **Triage into three buckets**: (a) genuinely defensive/acceptable, (b) needs logging, (c) needs specific exception types.
+2. **Phase 1**: Add `_log.warning(...)` with `exc_info=True` to every bare handler that currently does `pass`, `continue`, or `return None`. This is a mechanical change.
+3. **Phase 2**: Replace the most impactful catch-alls (LanceDB, SQLite, pipeline) with specific exception types (`lancedb.LanceDBError`, `sqlite3.OperationalError`, etc.).
+4. **Phase 3**: Introduce a `@defensive` decorator or context manager for the intentionally-broad handlers, making the intent explicit.
+
+#### P2/S — Deduplicator returns empty set on error, causing re-embedding
+
+**File**: `kb/ingest/dedup.py:27–43`
+
+When the SQLite hash lookup fails, the fallback is `set()` — meaning every chunk is treated as new, re-embedded, and re-stored. This is wasteful and can cause duplicate vectors. Better to propagate the error and let the pipeline retry or skip the file.
+
+---
+
+### 1.3 Module Size & Cohesion
+
+Several modules have grown past the point of easy comprehension:
+
+| File | Lines | Concern |
+|------|-------|---------|
+| `kb/store/sqlite_meta.py` | 3,073 | Metadata, FTS, sessions, snapshots, migrations — everything |
+| `kb/api/app.py` | 1,862 | Routes, enrichment, indexing logic, task processing |
+| `kb/ingest/pipeline.py` | 1,499 | Scanning, chunking, embedding, graph extraction |
+| `kb/api/search_backend.py` | 1,338 | Search orchestration, caching, BM25, vector search |
+| `kb/ingest/cli.py` | 986 | CLI commands with business logic interleaved |
+
+**Suggested decompositions**:
+
+- **`sqlite_meta.py`** → split into `sqlite_meta.py` (CRUD), `fts_index.py` (FTS5 ops), `session_manager.py` (indexing sessions), `snapshot_store.py` (file snapshots).
+- **`app.py`** → extract `_process_index_task` and snippet enrichment into `kb/api/indexing.py` and `kb/api/snippets.py`. Keep routes thin.
+- **`pipeline.py`** → the graph extraction helpers are already partly in `graph_helpers.py`; move the remaining orchestration into smaller stage functions.
+
+Priority: **P2/L** — do this opportunistically when touching these files, not as a standalone refactor.
+
+---
+
+### 1.4 Type Safety
+
+- **158 uses of `Any`** across 25 files. The worst offenders: `cache.py` (17), `structured_logger.py` (16), `rankers.py` (14), `sqlite_meta.py` (21).
+- **17 `# type: ignore` comments**, most without justification. The `provider.py:255,316` ignores hide a real mismatch between declared return types and actual returns.
+- Search backend uses a `Protocol` class but the return-type contract is loose — `search()` may return `list[dict]`, `dict` with a `"hits"` key, or a `tuple`. Callers (app.py:559–570) must handle all three.
+
+**Recommendation** (P2/M): Define a `SearchResult` dataclass as the canonical return type, and have all backends conform. Eliminate the tuple/dict polymorphism.
+
+---
+
+### 1.5 Concurrency & Thread Safety
+
+#### P1/S — Global mutable state without locks
+
+**File**: `kb/api/app.py:114–150`
+
+```python
+_sql_store = None
+_lance_store = None
+_pipeline = None
+```
+
+These module-level globals are mutated by `set_stores()` / `set_pipeline()` and read by every request handler. FastAPI runs on an async event loop, but `asyncio.to_thread()` calls and background tasks introduce real concurrency. A `threading.Lock` (or using FastAPI's dependency injection with `Depends`) would be safer.
+
+#### P2/S — Rate limiter lists grow unbounded
+
+**File**: `kb/ingest/async_embedder.py:57–58`
+
+```python
+self.request_times: list[float] = []
+self.token_usage: list[tuple[float, float]] = []
+```
+
+These rolling-window lists are appended to on every request but pruning only happens inside `_enforce_limits()`. If the pruning window is large or the load is bursty, these can grow significantly. Use `collections.deque(maxlen=...)` instead.
+
+---
+
+### 1.6 Correctness Bugs
+
+#### P1/S — Snippet truncation is a no-op
+
+**File**: `kb/api/app.py:236–242`
+
+```python
+if estimated_tokens > max_tokens:
+    truncated = True
+    pass  # Returns full content despite truncation flag!
+```
+
+The `truncated` flag is set but the content is never actually truncated. Downstream consumers (MCP clients, CLI) that trust this flag will receive unexpectedly large payloads. Either implement the truncation or remove the flag.
+
+#### P2/S — Token estimation is inaccurate
+
+**Files**: `kb/api/app.py:234` and `kb/ingest/async_embedder.py:67`
+
+Two different estimation heuristics:
+- `total_chars / 4.0` (app.py — character-based)
+- `len(t.split()) * 1.3` (async_embedder.py — word-based)
+
+Both undercount for code (punctuation, camelCase, symbols). Since tiktoken is already a dependency (mocked in tests), use it for accurate counts where precision matters (rate limiting, snippet truncation).
+
+---
+
+## 2. UX & Documentation
+
+### 2.1 Developer Onboarding
+
+#### P1/S — No `.env.example` file
+
+New contributors must read source code to discover which environment variables exist. Create a `.env.example`:
+
+```bash
+# Required for embedding operations
+OPENAI_API_KEY=sk-your-key-here
+
+# Optional: override auto-generated API key
+# DOLPHIN_API_KEY=
+
+# Optional: override config location
+# DOLPHIN_CONFIG_PATH=
+
+# Logging
+# DOLPHIN_LOG_LEVEL=INFO
+# DOLPHIN_LOG_TRACEBACK=0
+
+# Watcher timeouts
+# DOLPHIN_WATCH_SHUTDOWN_TIMEOUT=15
+# DOLPHIN_WATCH_CANCEL_TIMEOUT=5
+
+# BM25 tuning
+# DOLPHIN_BM25_STATS_PATH=
+# DOLPHIN_FORCE_BM25_NORMALIZER=
+```
+
+#### P2/S — No production deployment guide
+
+`README.md` covers local development. There's no guide for deploying Dolphin as a shared service (reverse proxy setup, process management, TLS, auth hardening, Redis configuration). A `docs/DEPLOYMENT.md` would prevent each team from reinventing this.
+
+#### P2/S — CHANGELOG version mismatch
+
+`pyproject.toml` says `0.2.2`, `FastAPI(version="0.2.1")` in `app.py:30`. These should stay in sync — ideally generated from a single source of truth.
+
+---
+
+### 2.2 CLI Experience
+
+#### P2/S — Silent failures during `dolphin index`
+
+When files are skipped (binary, ignored, permission error), the CLI provides no summary. Add a post-index summary:
+
+```
+Indexed 142 files (3,201 chunks). Skipped: 12 binary, 3 ignored, 1 error.
+```
+
+#### P3/S — `dolphin search` truncates at 8 lines with no override
+
+The `MAX_SNIPPET_LINES = 8` constant in `cli.py` is hardcoded. Add a `--max-lines` flag for power users who want more context.
+
+---
+
+### 2.3 Error Messages & Observability
+
+#### P1/S — Silent reranker degradation
+
+**File**: `kb/retrieval/cross_encoder_rerank.py:52–65`
+
+If the cross-encoder model fails to load, reranking is silently disabled (`self.enabled = False`). The user ran `uv pip install "pb-dolphin[reranking]"` explicitly for this. Surface a warning in `dolphin status` and in search responses (e.g., a `warnings` field).
+
+#### P2/S — Cache invalidation failures are swallowed
+
+**File**: `kb/api/app.py:339–347`
+
+Failed cache invalidation means stale results are served after reindex. At minimum, log at `error` level (not `warning`) and include it in the `/v1/health?check=deep` response.
+
+---
+
+### 2.4 Configuration
+
+#### P2/S — OpenAI API key validation is existence-only
+
+**File**: `kb/config.py` (config check) and `kb/embeddings/provider.py`
+
+The key is checked with `os.environ.get(...)` — an empty string passes. The provider creates both sync and async OpenAI clients but never validates the key until the first API call, which may happen minutes later during indexing. Add a lightweight validation at startup (format check + a test embed call with a short string).
+
+#### P3/S — Config deep-merge has no depth limit
+
+**File**: `kb/config.py` (`_deep_merge`)
+
+Recursive merge with no depth limit. Not a practical issue today, but a malformed config could cause a stack overflow. Cap at a reasonable depth (e.g., 10).
+
+---
+
+## 3. Performance
+
+### 3.1 Memory
+
+#### P1/M — In-memory cache has no size bound
+
+**File**: `kb/cache/cache.py:55–58`
+
+```python
+self._memory_cache: dict[str, tuple[Any, float]] = {}
+self._repo_index: dict[str, set[str]] = {}
+self._key_repos: dict[str, set[str]] = {}
+```
+
+When Redis is unavailable (the default for most local users), all cache entries live in unbounded dicts. A long-running `dolphin serve` with many queries will leak memory indefinitely. The `_repo_index` and `_key_repos` dicts never expire entries — TTL is only checked on read for values.
+
+**Fix**: Use `functools.lru_cache` or a bounded LRU dict (e.g., `cachetools.TTLCache`). Add a `max_memory_entries` config knob with a sensible default (e.g., 10,000).
+
+#### P2/S — Both sync and async OpenAI clients instantiated
+
+**File**: `kb/embeddings/provider.py`
+
+The `OpenAIEmbeddingProvider` creates both `self.client` and `self.async_client` at init time. If only one path is used (typical for CLI = sync, API = async), the other is wasted memory and connections.
+Lazy-initialize each on first use.
+
+#### P2/S — File lines cached per-request, not shared
+
+**File**: `kb/api/app.py:158`
+
+`file_lines_cache` is a local dict scoped to each call of `_enrich_hits_with_snippets`. If the same file appears in multiple search requests within a short window, it's re-read each time. Consider a short-lived module-level LRU cache (TTL ~30s) for hot files.
+
+---
+
+### 3.2 Latency
+
+#### P2/M — Search fallback chain adds unnecessary overhead
+
+**File**: `kb/api/app.py:420–475`
+
+The search dispatch logic tries `search_async`, then `search`, then `asyncio.to_thread(search)`, then checks `isawaitable()` on the result. This four-step dispatch runs on every request. Since the backend type is known at startup, resolve the dispatch once during initialization and store a single callable.
+
+#### P2/S — LanceDB connection not pooled
+
+**File**: `kb/store/lancedb_store.py:35–50`
+
+A single cached connection is shared. For concurrent requests this serializes vector lookups. Investigate whether LanceDB supports connection pooling or if concurrent access on the same connection is safe. If not, implement a connection pool similar to `SQLiteConnectionPool`.
+
+#### P3/S — Token estimation heuristic in rate limiter
+
+**File**: `kb/ingest/async_embedder.py:67`
+
+```python
+est_tokens = sum(len(t.split()) * 1.3 for t in texts)
+```
+
+Underestimates tokens for code (which has many symbols). This causes the rate limiter to under-count usage, leading to unexpected 429s from OpenAI followed by backoffs. Use tiktoken for accurate counts in the rate-limiting path (it's already a dependency).
+
+---
+
+### 3.3 Stability & Resource Management
+
+#### P1/S — Server startup crashes if backend init fails
+
+**File**: `kb/api/server.py` (startup lifespan)
+
+`initialize_search_backend()` can raise on startup. There's no try/except wrapping the lifespan startup, so the entire server process dies. Wrap in a try/except, log the error, and start in a degraded mode (health check reports unhealthy, search returns 503).
+
+#### P2/S — Watcher thread pool executor never fully awaited
+
+**File**: `kb/ingest/watcher.py:48`
+
+```python
+self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+```
+
+On shutdown, `_executor.shutdown(wait=True)` should be called. If the watcher is stopped abruptly, in-flight indexing tasks may be interrupted mid-write, leaving partial state in SQLite and LanceDB.
+
+#### P2/S — SQLite transactions not explicitly bounded
+
+**File**: `kb/store/sqlite_meta.py` (throughout)
+
+Many operations use `with conn:` (auto-commit mode) but run multiple `execute()` calls that should be atomic. If the process crashes between writes, partial updates are committed. Wrap multi-statement operations in explicit `BEGIN`/`COMMIT` blocks.
+
+---
+
+## 4. Infrastructure & CI/CD
+
+#### P1/S — Docker images use `:latest` tags
+
+**File**: `observability/docker-compose.yml`
+
+All five services (Prometheus, Jaeger, Loki, Promtail, Grafana) use `:latest`. Pin to specific versions for reproducible deployments.
+
+#### P1/S — Grafana default credentials hardcoded
+
+**File**: `observability/docker-compose.yml:85–86`
+
+```yaml
+GF_SECURITY_ADMIN_USER: admin
+GF_SECURITY_ADMIN_PASSWORD: admin
+```
+
+Move to environment variables or a `.env` file excluded from version control.
+
+#### P2/S — Loki auth disabled
+
+**File**: `observability/loki/loki-config.yml`
+
+`auth_enabled: false` means anyone with network access to port 3100 can read application logs. Enable auth for anything beyond local development.
+
+#### P2/S — Known CVE acknowledged but undocumented
+
+**File**: `.github/workflows/security-scan.yml:28`
+
+`CVE-2026-0994` (protobuf DoS) and `GHSA-7gcm-g887-7qv7` are ignored in CI with no documented rationale. Add comments in the workflow file explaining why each is acceptable, and create a `docs/SECURITY_EXCEPTIONS.md` tracking these.
+
+#### P3/S — No application Dockerfile
+
+There's no Dockerfile for the Dolphin application itself — only for the observability stack. For teams wanting to deploy Dolphin as a container, provide a multi-stage Dockerfile with:
+1. A build stage (uv + bun)
+2. A slim runtime stage
+3. Health check instruction
+4. Non-root user
+
+---
+
+## 5. Quickstart for Implementers
+
+### Where to start
+
+The improvements above are ordered by priority within each section. Here's a suggested attack plan:
+
+#### Sprint 1: Security & Correctness (1–2 days)
+
+1. `kb/api/app.py:108` — Replace string comparison with `hmac.compare_digest()`.
+2. `kb/store/sqlite_meta.py:151–154` — Log + raise on FK pragma failure.
+3. `kb/api/app.py:236–242` — Implement actual snippet truncation or remove the flag.
+4. `kb/api/app.py:80–88` — Tighten CORS to specific methods/headers.
+5. `observability/docker-compose.yml` — Pin image versions, externalize Grafana credentials.
+
+#### Sprint 2: Observability & Error Handling (2–3 days)
+
+1. Audit all 171 bare `except Exception` handlers. For each: add `exc_info=True` logging if missing.
+2. `kb/retrieval/cross_encoder_rerank.py` — Surface reranker status in `dolphin status` and search response `warnings`.
+3. `kb/cache/cache.py` — Add bounded size + TTL eviction to in-memory cache.
+4. Create `.env.example`.
+5. Document CVE exceptions in CI.
+
+#### Sprint 3: Performance & Stability (2–3 days)
+
+1. `kb/api/server.py` — Wrap startup in try/except for graceful degradation.
+2. `kb/api/app.py` — Resolve search dispatch once at startup, not per-request.
+3. `kb/embeddings/provider.py` — Lazy-init sync/async clients.
+4. `kb/ingest/async_embedder.py` — Replace `list` with `deque(maxlen=...)` for rate-limiter windows.
+5. `kb/store/sqlite_meta.py` — Wrap multi-statement operations in explicit transactions.
+
+#### Sprint 4: Architecture & UX (ongoing)
+
+1. Begin decomposing `sqlite_meta.py` (3,073 lines) as it's touched for new features.
+2. Standardize search return type to a `SearchResult` dataclass.
+3. Improve CLI post-index summaries with skip/error counts.
+4. Write `docs/DEPLOYMENT.md` for production use.
+
+### Conventions for new code
+
+When implementing fixes:
+
+- **Error handling**: Catch the most specific exception possible. If you must catch `Exception`, add a comment explaining why and always log with `exc_info=True`.
+- **Type safety**: Avoid `Any` — use `TypedDict`, dataclasses, or Pydantic models. If a `# type: ignore` is needed, suffix it with a reason: `# type: ignore[arg-type] — lancedb returns untyped`.
+- **Testing**: Every bug fix should have a regression test. The project uses `pytest` with markers (`unit`, `integration`, `e2e`). Minimum coverage is 75%.
+- **Config changes**: Add new settings to `kb/config_template.toml` and the relevant `@dataclass` in `kb/config.py`. Never hardcode values that a user might want to tune.
+
+### Key file map
+
+| Area | Primary File | Lines | Notes |
+|------|-------------|-------|-------|
+| API routes | `kb/api/app.py` | 1,862 | Needs decomposition |
+| Search orchestration | `kb/api/search_backend.py` | 1,338 | Complex async dispatch |
+| SQLite metadata | `kb/store/sqlite_meta.py` | 3,073 | Largest module |
+| Vector store | `kb/store/lancedb_store.py` | 632 | Most bare exceptions |
+| Ingestion pipeline | `kb/ingest/pipeline.py` | 1,499 | Core indexing flow |
+| Configuration | `kb/config.py` | 474 | Dataclass-based |
+| Caching | `kb/cache/cache.py` | 446 | Unbounded in-memory |
+| Embeddings | `kb/embeddings/provider.py` | ~320 | OpenAI + stub |
+| CLI | `kb/cli.py` | 818 | User-facing entry |
+| File watcher | `kb/ingest/watcher.py` | ~400 | Async + threading |
+
+### Running checks
+
+```bash
+# Lint
+just check
+
+# Unit tests
+just test unit
+
+# Full suite (requires OPENAI_API_KEY + Redis)
+just test-full
+
+# Coverage (75% minimum)
+just test-cov
+```
