@@ -22,14 +22,14 @@ For local development setup, see the project README.
 
 ## 1. Prerequisites
 
-| Dependency | Minimum Version | Notes |
-|---|---|---|
-| Python | 3.12 | 3.13 also supported |
-| uv | any | Recommended package manager |
-| Bun | 1.x | Required for the MCP bridge |
-| OpenAI API key | — | Required for embedding; set in environment |
-| Redis | 7.x | Optional; improves cache hit rates across restarts |
-| nginx / caddy | any | Recommended for TLS termination and auth proxy |
+| Dependency     | Minimum Version | Notes                                              |
+| -------------- | --------------- | -------------------------------------------------- |
+| Python         | 3.12            | 3.13 also supported                                |
+| uv             | any             | Recommended package manager                        |
+| Bun            | 1.x             | Required for the MCP bridge                        |
+| OpenAI API key | —               | Required for embedding; set in environment         |
+| Redis          | 7.x             | Optional; improves cache hit rates across restarts |
+| nginx / caddy  | any             | Recommended for TLS termination and auth proxy     |
 
 ---
 
@@ -437,12 +437,12 @@ cp .env.example .env          # fill in GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PAS
 docker compose up -d
 ```
 
-| Service | Default port | Purpose |
-|---|---|---|
-| Prometheus | 9090 | Metrics scraping |
-| Grafana | 3001 | Dashboards |
-| Loki | 3100 | Log aggregation |
-| Jaeger | 16686 | Distributed tracing |
+| Service    | Default port | Purpose             |
+| ---------- | ------------ | ------------------- |
+| Prometheus | 9090         | Metrics scraping    |
+| Grafana    | 3001         | Dashboards          |
+| Loki       | 3100         | Log aggregation     |
+| Jaeger     | 16686        | Distributed tracing |
 
 ### 8.2 Prometheus scrape config
 
