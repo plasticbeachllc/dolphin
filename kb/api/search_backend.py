@@ -10,6 +10,7 @@ import random
 import time
 import uuid
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +77,8 @@ class KnowledgeSearchBackend:
         self._bm25_stats_path = self._resolve_bm25_stats_path()
         self._bm25_normalizer: ScoreNormalizer | None = None
         self._bm25_normalizer_metadata: dict[str, Any] = {}
+        # Execute independent retrieval branches concurrently to reduce p95 latency.
+        self._search_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="kb-search")
         self._configure_bm25_statistics_collection()
 
     def _resolve_bm25_stats_path(self) -> Path:
@@ -264,15 +267,36 @@ class KnowledgeSearchBackend:
         # Get ANN parameters from config or use defaults
         ann_params = self._get_ann_params(request)
 
+        vector_future = self._search_executor.submit(
+            self.lance_store.query,
+            query_embedding,
+            model=self.config.default_embed_model,
+            top_k=num_candidates,
+            ann_params=ann_params,
+        )
+
+        bm25_future = None
+        repo_filter = request.repos[0] if request.repos else None
+        if self.hybrid_search_enabled and hasattr(self.sql_store, "bm25_search"):
+            request_logger.debug(
+                "BM25 search started",
+                {
+                    "repo": repo_filter,
+                    "path_prefix": request.path_prefix,
+                },
+            )
+            bm25_future = self._search_executor.submit(
+                self.sql_store.bm25_search,
+                request.query,
+                repo=repo_filter,
+                path_prefix=request.path_prefix,
+                top_k=num_candidates,
+            )
+
         # Vector search with error handling
         vector_formatted = []
         try:
-            vector_results = self.lance_store.query(
-                query_embedding,
-                model=self.config.default_embed_model,
-                top_k=num_candidates,
-                ann_params=ann_params,
-            )
+            vector_results = vector_future.result()
             vector_formatted = self._format_vector_results(vector_results)
             request_logger.debug("Vector search completed", {"results_count": len(vector_formatted)})
         except Exception as e:
@@ -281,22 +305,9 @@ class KnowledgeSearchBackend:
 
         # BM25 search with error handling
         bm25_hydrated = []
-        if self.hybrid_search_enabled and hasattr(self.sql_store, "bm25_search"):
+        if bm25_future is not None:
             try:
-                repo_filter = request.repos[0] if request.repos else None
-                request_logger.debug(
-                    "BM25 search started",
-                    {
-                        "repo": repo_filter,
-                        "path_prefix": request.path_prefix,
-                    },
-                )
-                bm25_results = self.sql_store.bm25_search(
-                    request.query,
-                    repo=repo_filter,
-                    path_prefix=request.path_prefix,
-                    top_k=num_candidates,
-                )
+                bm25_results = bm25_future.result()
                 request_logger.debug(
                     "BM25 search completed",
                     {
@@ -715,9 +726,16 @@ class KnowledgeSearchBackend:
         if not bm25_results:
             return []
 
+        content_ids = [str(result["chunk_id"]) for result in bm25_results if result.get("chunk_id")]
+        hydration_map: dict[str, dict[str, Any]] = {}
+        try:
+            hydration_map = sql_store.get_bm25_hydration_map(content_ids, embed_model)
+        except Exception as exc:
+            self.logger.warning("Failed bulk BM25 hydration lookup", error=exc)
+
         hydrated = []
         for result in bm25_results:
-            chunk_id = result["chunk_id"]
+            chunk_id = str(result["chunk_id"])
             text_hash = result.get("text_hash")
             repo_name = result["repo"]
             path = result["path"]
@@ -725,26 +743,23 @@ class KnowledgeSearchBackend:
             # Normalize BM25 score to [0, 1] range for fusion
             normalized_score = self._normalize_bm25_score(result["score"])
 
+            hydrated_identity = hydration_map.get(chunk_id)
             locations = []
             file_id = None
             repo_id = None
-
-            # Look up locations using text_hash and repo/path
-            if text_hash:
-                repo_info = sql_store.get_repo_by_name(repo_name)
-                if repo_info:
-                    repo_id = repo_info["id"]
-                    file_id = sql_store.get_file_id(repo_id, path)
-                    if file_id:
-                        locations = sql_store.get_chunk_locations_by_identity(repo_id, file_id, text_hash, embed_model)
+            actual_model = embed_model
+            if hydrated_identity:
+                repo_id = hydrated_identity.get("repo_id")
+                file_id = hydrated_identity.get("file_id")
+                text_hash = hydrated_identity.get("text_hash") or text_hash
+                actual_model = hydrated_identity.get("embed_model", embed_model)
+                locations = hydrated_identity.get("locations", [])
 
             # If we found locations, create a result for each one
             if locations and repo_id is not None and file_id is not None:
                 for loc in locations:
                     start_line = loc.get("start_line")
                     end_line = loc.get("end_line")
-                    # Use the actual model from the location, or fallback to requested if missing (should be there now)
-                    actual_model = loc.get("embed_model", embed_model)
 
                     # Generate LanceDB-compatible row ID
                     # Format: {repo_id}:{file_id}:{embed_model}:{text_hash}:{start_line}:{end_line}
