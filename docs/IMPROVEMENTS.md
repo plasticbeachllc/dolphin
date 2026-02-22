@@ -173,7 +173,9 @@ _pipeline = None
 
 These module-level globals are mutated by `set_stores()` / `set_pipeline()` and read by every request handler. FastAPI runs on an async event loop, but `asyncio.to_thread()` calls and background tasks introduce real concurrency. A `threading.Lock` (or using FastAPI's dependency injection with `Depends`) would be safer.
 
-#### ⬜ P2/S — Rate limiter lists grow unbounded
+#### ✅ P2/S — Rate limiter lists grow unbounded
+
+> **Status**: Done (Sprint 3) — both tracking collections are now `deque(maxlen=initial_rpm)`; `_enforce_limits` uses `popleft()` for O(k) pruning instead of O(n) list-comprehension reassignment.
 
 **File**: `kb/ingest/async_embedder.py:57–58`
 
@@ -333,7 +335,9 @@ When Redis is unavailable (the default for most local users), all cache entries 
 
 **Fix**: Use `functools.lru_cache` or a bounded LRU dict (e.g., `cachetools.TTLCache`). Add a `max_memory_entries` config knob with a sensible default (e.g., 10,000).
 
-#### ⬜ P2/S — Both sync and async OpenAI clients instantiated
+#### ✅ P2/S — Both sync and async OpenAI clients instantiated
+
+> **Status**: Done (Sprint 3) — clients are now created on first use via `_get_client()` / `_get_async_client()`; only the path actually exercised (sync CLI or async API server) ever allocates a client.
 
 **File**: `kb/embeddings/provider.py`
 
@@ -350,7 +354,9 @@ Lazy-initialize each on first use.
 
 ### 3.2 Latency
 
-#### ⬜ P2/M — Search fallback chain adds unnecessary overhead
+#### ✅ P2/M — Search fallback chain adds unnecessary overhead
+
+> **Status**: Done (Sprint 3) — `_make_search_fn()` resolves the callable once when `set_search_backend()` is called; `search()` now makes a single `await search_fn(request)` call.
 
 **File**: `kb/api/app.py:420–475`
 
@@ -376,7 +382,9 @@ Underestimates tokens for code (which has many symbols). This causes the rate li
 
 ### 3.3 Stability & Resource Management
 
-#### ⬜ P1/S — Server startup crashes if backend init fails
+#### ✅ P1/S — Server startup crashes if backend init fails
+
+> **Status**: Done (Sprint 3) — lifespan now catches all `Exception` types, logs at `error` level with `exc_info=True`, prints a clear failure message, and re-raises so the server process exits cleanly instead of crashing with a raw traceback.
 
 **File**: `kb/api/server.py` (startup lifespan)
 
@@ -392,7 +400,9 @@ self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
 On shutdown, `_executor.shutdown(wait=True)` should be called. If the watcher is stopped abruptly, in-flight indexing tasks may be interrupted mid-write, leaving partial state in SQLite and LanceDB.
 
-#### ⬜ P3/S — SQLite transaction boundaries worth auditing
+#### ✅ P3/S — SQLite transaction boundaries worth auditing
+
+> **Status**: Done (Sprint 3) — `rebuild_fts5_table` now uses a single `BEGIN IMMEDIATE`/`COMMIT` to make DROP + CREATE atomic (requires `isolation_level=None` to suppress Python's DDL auto-commit); `sync_locations_for_content_row`, `prune_invalidated_content_for_file`, and `ensure_content_rows_for_file` open with explicit `BEGIN IMMEDIATE` for deterministic isolation across all Python sqlite3 versions.
 
 **File**: `kb/store/sqlite_meta.py` (throughout)
 
@@ -473,13 +483,13 @@ The improvements above are ordered by priority within each section. Here's a sug
 4. ✅ Create `.env.example` at repo root.
 5. ✅ `docs/SECURITY_EXCEPTIONS.md` — CVE-2026-0994 and GHSA-7gcm-g887-7qv7 documented.
 
-#### Sprint 3: Performance & Stability (2–3 days)
+#### ✅ Sprint 3: Performance & Stability — Complete
 
-1. ⬜ `kb/api/server.py` — Wrap startup in try/except for graceful degradation.
-2. ⬜ `kb/api/app.py` — Resolve search dispatch once at startup, not per-request.
-3. ⬜ `kb/embeddings/provider.py` — Lazy-init sync/async clients.
-4. ⬜ `kb/ingest/async_embedder.py` — Replace `list` with `deque(maxlen=...)` for rate-limiter windows.
-5. ⬜ `kb/store/sqlite_meta.py` — Wrap multi-statement operations in explicit transactions.
+1. ✅ `kb/api/server.py` — Startup now catches all `Exception` types after `FileNotFoundError`; logs at `error` level with full traceback and re-raises so the server exits cleanly with a clear message instead of crashing mid-traceback or silently starting broken.
+2. ✅ `kb/api/app.py` — `_make_search_fn()` resolves the dispatch strategy once when `set_search_backend()` is called; `search()` uses the cached callable instead of a four-step per-request probe.
+3. ✅ `kb/embeddings/provider.py` — `OpenAIEmbeddingProvider` defers client creation to first use via `_get_client()` / `_get_async_client()`; only the path actually taken (sync CLI or async API) ever allocates a client.
+4. ✅ `kb/ingest/async_embedder.py` — `request_times` and `token_usage` are now `deque(maxlen=initial_rpm)`; `_enforce_limits` uses `popleft()` instead of list-comprehension reassignment, preserving the deque and its bound.
+5. ✅ `kb/store/sqlite_meta.py` — `rebuild_fts5_table` wraps DROP + CREATE in a single `BEGIN IMMEDIATE` / `COMMIT` transaction (using `isolation_level=None` to bypass Python's DDL auto-commit); `sync_locations_for_content_row`, `prune_invalidated_content_for_file`, and `ensure_content_rows_for_file` open with explicit `BEGIN IMMEDIATE` for deterministic isolation.
 
 #### Sprint 4: Architecture & UX (ongoing)
 

@@ -340,12 +340,42 @@ class _EmptySearchBackend:
 
 _DEFAULT_BACKEND = _EmptySearchBackend()
 _search_backend: SearchBackend = _DEFAULT_BACKEND
+# Cache of (backend_instance, search_fn) resolved by set_search_backend().
+# The instance check in search() ensures a runtime-replaced backend (e.g. in tests)
+# always gets a freshly-resolved callable.
+_resolved_search_cache: tuple[SearchBackend, Any] | None = None
+
+
+def _make_search_fn(backend: SearchBackend):
+    """Return an async callable that dispatches a SearchRequest to *backend*.
+
+    The dispatch strategy is resolved once here rather than being re-evaluated on
+    every request.
+    """
+    search_async = getattr(backend, "search_async", None)
+    if callable(search_async) and iscoroutinefunction(search_async):
+        return search_async
+
+    search_method = backend.search
+    if iscoroutinefunction(search_method):
+        return search_method
+
+    # Synchronous backend: wrap in asyncio.to_thread and handle the edge case
+    # where the sync method itself returns an awaitable.
+    async def _sync_wrapper(request):
+        result = await asyncio.to_thread(search_method, request)
+        if isawaitable(result):
+            result = await result
+        return result
+
+    return _sync_wrapper
 
 
 def set_search_backend(backend: SearchBackend | None) -> None:
     """Override the search backend used by the API."""
-    global _search_backend
+    global _search_backend, _resolved_search_cache
     _search_backend = backend or _DEFAULT_BACKEND
+    _resolved_search_cache = (_search_backend, _make_search_fn(_search_backend))
 
 
 def get_search_backend() -> SearchBackend:
@@ -469,17 +499,9 @@ async def search(request: SearchRequest) -> dict[str, Any]:
     hits: Iterable[dict[str, object]]
     next_cursor: str | None = None
 
-    search_async = getattr(backend, "search_async", None)
-    if callable(search_async) and iscoroutinefunction(search_async):
-        result = await search_async(request)
-    else:
-        search_method = backend.search
-        if iscoroutinefunction(search_method):
-            result = await search_method(request)
-        else:
-            result = await asyncio.to_thread(search_method, request)
-            if isawaitable(result):
-                result = await result
+    cache = _resolved_search_cache
+    search_fn = cache[1] if cache is not None and cache[0] is backend else _make_search_fn(backend)
+    result = await search_fn(request)
 
     # Result is always (hits, next_cursor) per Protocol
     hits, next_cursor = result

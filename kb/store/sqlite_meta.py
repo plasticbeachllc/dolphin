@@ -1107,6 +1107,7 @@ class SQLiteMetadataStore:
 
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
+                conn.execute("BEGIN IMMEDIATE")
                 # Load existing
                 cur.execute(
                     """
@@ -1217,6 +1218,7 @@ class SQLiteMetadataStore:
         """Delete content (and locations) not present in current_hashes. Returns count deleted."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
+                conn.execute("BEGIN IMMEDIATE")
                 # First, get the file path for FTS5 cleanup
                 cur.execute("SELECT path FROM files WHERE id = ?", (int(file_id),))
                 file_row = cur.fetchone()
@@ -1307,6 +1309,7 @@ class SQLiteMetadataStore:
             return mapping
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
+                conn.execute("BEGIN IMMEDIATE")
                 # Pre-check: Verify the file exists in the files table
                 # This provides a clearer error message than an FK constraint failure
                 cur.execute("SELECT id, path FROM files WHERE id = ?", (int(file_id),))
@@ -1642,13 +1645,25 @@ class SQLiteMetadataStore:
         re-index all chunks using bulk_index_chunks_for_fts().
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            # Drop existing FTS5 table if it exists
-            cur.execute("DROP TABLE IF EXISTS chunks_fts")
-            conn.commit()
-
-            # Recreate with new schema
-            self._create_fts5_table_safe(cur)
-            conn.commit()
+            # Python's default sqlite3 isolation mode auto-commits before DDL
+            # statements, making DROP and CREATE run as separate autocommit ops.
+            # Switch to isolation_level=None (autocommit) so we can issue an
+            # explicit BEGIN and wrap both DDL ops in a single atomic transaction.
+            saved_isolation = conn.isolation_level
+            conn.isolation_level = None
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                cur.execute("DROP TABLE IF EXISTS chunks_fts")
+                self._create_fts5_table_safe(cur)
+                conn.execute("COMMIT")
+            except Exception:
+                try:
+                    conn.execute("ROLLBACK")
+                except Exception:
+                    pass
+                raise
+            finally:
+                conn.isolation_level = saved_isolation
 
     def get_chunk_by_id(self, chunk_id: str) -> dict[str, Any] | None:
         """Get full chunk metadata by content_id.

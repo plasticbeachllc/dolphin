@@ -189,6 +189,15 @@ async def lifespan_handler(app_instance: FastAPI):
                 stderr=True,
             )
             print_hint("Run `dolphin init` before starting the server.", stderr=True)
+        except Exception as exc:
+            logging.getLogger(__name__).error("Search backend initialization failed.", exc_info=True)
+            print_status(
+                "Backend initialization failed; server cannot start.",
+                level="error",
+                context={"error": str(exc)},
+                stderr=True,
+            )
+            raise
 
     # Start watchers if configured
     watchers = []

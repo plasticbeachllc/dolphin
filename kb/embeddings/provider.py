@@ -152,12 +152,26 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             )
 
         self.batch_size = batch_size
-        self.client = self._openai_module(api_key=self.api_key)
-        self.async_client = self._async_openai_module(api_key=self.api_key)
+        # Clients are lazily created on first use; only the path actually taken
+        # (sync CLI vs. async API server) will ever allocate a client object.
+        self._client = None
+        self._async_client = None
 
         # Validate API key immediately with a minimal test request (unless disabled for testing)
         if validate_key:
             self._validate_api_key()
+
+    def _get_client(self):
+        """Return the sync OpenAI client, creating it on first access."""
+        if self._client is None:
+            self._client = self._openai_module(api_key=self.api_key)
+        return self._client
+
+    def _get_async_client(self):
+        """Return the async OpenAI client, creating it on first access."""
+        if self._async_client is None:
+            self._async_client = self._async_openai_module(api_key=self.api_key)
+        return self._async_client
 
     def _validate_api_key(self) -> None:
         """Validate API key by making a minimal test request.
@@ -167,7 +181,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         """
         try:
             # Make a minimal test request with a tiny payload
-            self.client.embeddings.create(input=["test"], model="text-embedding-3-small")
+            self._get_client().embeddings.create(input=["test"], model="text-embedding-3-small")
             # If we get here, the API key is valid
         except Exception as e:
             error_msg = str(e)
@@ -190,8 +204,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
     async def close(self) -> None:
         """Close async client and release resources."""
-        if hasattr(self, "async_client"):
-            await self.async_client.close()
+        if self._async_client is not None:
+            await self._async_client.close()
 
     @with_retry(max_attempts=3, delays=(1.0, 2.0, 4.0))
     def embed_texts(self, model: str, texts: list[str]) -> list[list[float]]:
@@ -240,7 +254,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 batch_indices = uncached_indices[batch_start : batch_start + self.batch_size]
 
                 # Call OpenAI API
-                response = self.client.embeddings.create(input=batch, model=openai_model)
+                response = self._get_client().embeddings.create(input=batch, model=openai_model)
 
                 # Extract embeddings and cache them
                 for j, item in enumerate(response.data):
@@ -301,7 +315,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 batch_indices = uncached_indices[batch_start : batch_start + self.batch_size]
 
                 # Call OpenAI API asynchronously
-                response = await self.async_client.embeddings.create(input=batch, model=openai_model)
+                response = await self._get_async_client().embeddings.create(input=batch, model=openai_model)
 
                 # Extract embeddings and cache them
                 for j, item in enumerate(response.data):
