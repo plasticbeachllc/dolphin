@@ -1,3 +1,4 @@
+import threading
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -22,6 +23,7 @@ def mock_providers():
             "get_chunk_by_id",
             "get_chunk_by_content_identity",
             "get_chunk_locations_by_identity",
+            "get_bm25_hydration_map",
             "get_repo_by_name",
             "get_file_id",
             "index_chunk_for_fts",
@@ -62,19 +64,23 @@ class TestKnowledgeSearchBackend:
                 "text_hash": "hash2",
             }
         ]
-        # Mock the hydration methods for the BM25 result
-        sql_store.get_repo_by_name.return_value = {"id": 1}
-        sql_store.get_file_id.return_value = 2
-        sql_store.get_chunk_locations_by_identity.return_value = [
-            {
-                "content_id": "chunk2",
-                "start_line": 1,
-                "end_line": 10,
-                "symbol_kind": None,
-                "symbol_name": None,
-                "symbol_path": None,
+        sql_store.get_bm25_hydration_map.return_value = {
+            "chunk2": {
+                "repo_id": 1,
+                "file_id": 2,
+                "text_hash": "hash2",
+                "embed_model": "small",
+                "locations": [
+                    {
+                        "start_line": 1,
+                        "end_line": 10,
+                        "symbol_kind": None,
+                        "symbol_name": None,
+                        "symbol_path": None,
+                    }
+                ],
             }
-        ]
+        }
 
         request = SearchRequest(query="test", top_k=10)
         results, _ = basic_backend.search(request)
@@ -106,19 +112,23 @@ class TestKnowledgeSearchBackend:
                 "text_hash": "hash2",
             }
         ]
-        # Mock the hydration methods for the BM25 result
-        sql_store.get_repo_by_name.return_value = {"id": 1}
-        sql_store.get_file_id.return_value = 2
-        sql_store.get_chunk_locations_by_identity.return_value = [
-            {
-                "content_id": "chunk2",
-                "start_line": 1,
-                "end_line": 10,
-                "symbol_kind": None,
-                "symbol_name": None,
-                "symbol_path": None,
+        sql_store.get_bm25_hydration_map.return_value = {
+            "chunk2": {
+                "repo_id": 1,
+                "file_id": 2,
+                "text_hash": "hash2",
+                "embed_model": "small",
+                "locations": [
+                    {
+                        "start_line": 1,
+                        "end_line": 10,
+                        "symbol_kind": None,
+                        "symbol_name": None,
+                        "symbol_path": None,
+                    }
+                ],
             }
-        ]
+        }
 
         # Use low cutoff (0.0) to accept RRF scores (~0.016)
         request = SearchRequest(query="test", score_cutoff=0.0)
@@ -140,21 +150,24 @@ class TestKnowledgeSearchBackend:
             basic_backend.sql_store,
         )
 
-        # Mock the new lookup methods
-        sql_store.get_repo_by_name = MagicMock(return_value={"id": 1})
-        sql_store.get_file_id = MagicMock(return_value=2)
-
         deterministic_id = "32char_deterministic_hash_id"
-        sql_store.get_chunk_locations_by_identity.return_value = [
-            {
-                "content_id": "uuid-123",
-                "start_line": 10,
-                "end_line": 20,
-                "symbol_kind": None,
-                "symbol_name": "func",
-                "symbol_path": "module.func",
+        sql_store.get_bm25_hydration_map.return_value = {
+            deterministic_id: {
+                "repo_id": 1,
+                "file_id": 2,
+                "text_hash": "abcdef",
+                "embed_model": "small",
+                "locations": [
+                    {
+                        "start_line": 10,
+                        "end_line": 20,
+                        "symbol_kind": None,
+                        "symbol_name": "func",
+                        "symbol_path": "module.func",
+                    }
+                ],
             }
-        ]
+        }
         sql_store.get_chunk_by_id.return_value = None
 
         hydrated = basic_backend._hydrate_bm25_results(
@@ -171,15 +184,47 @@ class TestKnowledgeSearchBackend:
             embed_model="small",
         )
 
-        # Verify the new lookup flow was used
-        sql_store.get_repo_by_name.assert_called_once_with("repo")
-        sql_store.get_file_id.assert_called_once_with(1, "repo/file.py")
-        sql_store.get_chunk_locations_by_identity.assert_called_once_with(1, 2, "abcdef", "small")
+        # Verify bulk hydration path was used
+        sql_store.get_bm25_hydration_map.assert_called_once_with([deterministic_id], "small")
         sql_store.get_chunk_by_id.assert_not_called()
         assert hydrated[0]["start_line"] == 10
         # Check generated ID format: {repo_id}:{file_id}:{embed_model}:{text_hash}:{start_line}:{end_line}
         expected_id = "1:2:small:abcdef:10:20"
         assert hydrated[0]["chunk_id"] == expected_id
+
+    def test_search_executes_vector_and_bm25_in_parallel(self, mock_providers, tmp_path: Path):
+        embedding_provider, lance_store, sql_store = mock_providers
+        config = KBConfig.from_mapping(
+            {"storage": {"store_root": str(tmp_path)}, "embedding": {"default_embed_model": "small"}}
+        )
+        backend = KnowledgeSearchBackend(
+            embedding_provider,
+            lance_store,
+            sql_store,
+            hybrid_search_enabled=True,
+            config=config,
+        )
+
+        embedding_provider.embed_texts.return_value = [[0.1] * 1536]
+
+        bm25_started = threading.Event()
+
+        def vector_query(*args, **kwargs):
+            assert bm25_started.wait(timeout=0.5), "BM25 search did not start concurrently"
+            return [{"id": "chunk1", "_distance": 0.1, "repo": "repo", "path": "file.py"}]
+
+        def bm25_search(*args, **kwargs):
+            bm25_started.set()
+            return []
+
+        lance_store.query.side_effect = vector_query
+        sql_store.bm25_search.side_effect = bm25_search
+        sql_store.get_bm25_hydration_map.return_value = {}
+
+        results, _ = backend.search(SearchRequest(query="parallel check", top_k=5))
+
+        assert len(results) == 1
+        assert results[0]["chunk_id"] == "chunk1"
 
     def test_bm25_normalization_uses_min_max_when_stats_available(self, tmp_path: Path):
         stats_path = tmp_path / "bm25_stats.json"

@@ -225,6 +225,81 @@ def test_get_chunk_locations_fallback(meta_store, tmp_path):
     assert locations[0]["start_line"] == 1
 
 
+def test_get_bm25_hydration_map_prefers_requested_model(meta_store, tmp_path):
+    """Bulk hydration should prefer requested model when multiple models exist."""
+    repo_path = tmp_path / "hydration-repo"
+    repo_path.mkdir()
+    meta_store.record_repo("hydration-repo", repo_path)
+    repo = meta_store.get_repo_by_name("hydration-repo")
+    assert repo is not None
+    repo_id = int(repo["id"])
+
+    file_id = meta_store.upsert_file(
+        repo_id=repo_id,
+        path="src/service.py",
+        ext=".py",
+        language="python",
+        is_binary=False,
+        size_bytes=256,
+    )
+
+    with meta_store._connect() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO chunk_content (
+                repo_id, file_id, text_hash, embed_model, id, first_indexed_at, last_indexed_at
+            ) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            """,
+            (repo_id, file_id, "hash-hydrate", "small", "cid-small"),
+        )
+        cur.execute(
+            """
+            INSERT INTO chunk_content (
+                repo_id, file_id, text_hash, embed_model, id, first_indexed_at, last_indexed_at
+            ) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            """,
+            (repo_id, file_id, "hash-hydrate", "large", "cid-large"),
+        )
+        cur.execute(
+            """
+            INSERT INTO chunk_locations (
+                content_id, start_line, end_line, symbol_name, symbol_path, symbol_kind, id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("cid-small", 11, 22, "small_func", "svc.small_func", "function", "loc-small"),
+        )
+        cur.execute(
+            """
+            INSERT INTO chunk_locations (
+                content_id, start_line, end_line, symbol_name, symbol_path, symbol_kind, id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("cid-large", 33, 44, "large_func", "svc.large_func", "function", "loc-large"),
+        )
+        cur.execute(
+            """
+            INSERT INTO chunks_fts (
+                content_id, repo, path, text_hash, content, symbol_name, symbol_path
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("fts-hydration", "hydration-repo", "src/service.py", "hash-hydrate", "function body", None, None),
+        )
+        conn.commit()
+
+    hydration = meta_store.get_bm25_hydration_map(["fts-hydration"], embed_model="small")
+
+    assert "fts-hydration" in hydration
+    entry = hydration["fts-hydration"]
+    assert entry["repo_id"] == repo_id
+    assert entry["file_id"] == file_id
+    assert entry["text_hash"] == "hash-hydrate"
+    assert entry["embed_model"] == "small"
+    assert len(entry["locations"]) == 1
+    assert entry["locations"][0]["start_line"] == 11
+    assert entry["locations"][0]["end_line"] == 22
+
+
 def test_initialize_creates_schema_version_table(tmp_path):
     """Initialization should create schema_version tracking metadata."""
     db_path = tmp_path / "test.db"

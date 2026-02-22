@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class LanceDBStore:
@@ -25,6 +28,9 @@ class LanceDBStore:
 
         # Cache for database connection to avoid connection isolation issues
         self._db = None
+        self._indexed_tables: set[str] = set()
+        self._index_failures: set[str] = set()
+        self._index_lock = threading.Lock()
 
     def connect(self) -> Any:
         """Get or create a cached LanceDB connection."""
@@ -107,6 +113,72 @@ class LanceDBStore:
                     names.add(name)
         return names
 
+    def _mark_index_stale(self, table_name: str) -> None:
+        with self._index_lock:
+            self._indexed_tables.discard(table_name)
+            self._index_failures.discard(table_name)
+
+    def _ensure_vector_index(self, table_name: str, metric: str = "cosine") -> None:
+        """Create a vector index lazily and exactly once per table."""
+        with self._index_lock:
+            if table_name in self._indexed_tables or table_name in self._index_failures:
+                return
+
+        db = self.connect()
+        try:
+            table = db.open_table(table_name)
+        except Exception:
+            return
+
+        try:
+            if table.count_rows() == 0:
+                return
+        except Exception:
+            # If row count is unavailable, continue best-effort.
+            pass
+
+        # If index metadata exists, skip create call.
+        try:
+            if hasattr(table, "list_indices"):
+                existing = table.list_indices()
+                if existing:
+                    with self._index_lock:
+                        self._indexed_tables.add(table_name)
+                    return
+        except Exception:
+            pass
+
+        create_attempts = (
+            lambda: table.create_index(vector_column_name="vector", metric=metric, replace=False),
+            lambda: table.create_index(vector_column_name="vector", metric=metric),
+            lambda: table.create_index("vector", metric=metric),
+            lambda: table.create_index("vector"),
+        )
+
+        last_error: Exception | None = None
+        for attempt in create_attempts:
+            try:
+                attempt()
+                with self._index_lock:
+                    self._indexed_tables.add(table_name)
+                return
+            except TypeError as exc:
+                last_error = exc
+                continue
+            except Exception as exc:
+                message = str(exc).lower()
+                if "already exists" in message and "index" in message:
+                    with self._index_lock:
+                        self._indexed_tables.add(table_name)
+                    return
+                last_error = exc
+                break
+
+        with self._index_lock:
+            self._index_failures.add(table_name)
+        if last_error is not None:
+            logger.warning("Failed to create LanceDB vector index for table '%s': %s", table_name, last_error)
+
     def initialize_collections(self) -> None:
         """Create (or open) the global collections per the authoritative schema.
 
@@ -159,6 +231,7 @@ class LanceDBStore:
                 table = db.create_table(name, data=[dummy_row])
                 # Immediately delete the placeholder row
                 table.delete("id = '__init_placeholder__'")
+                self._mark_index_stale(name)
             except Exception as e:
                 # If table creation fails, check if it now exists (race condition)
                 try:
@@ -253,6 +326,7 @@ class LanceDBStore:
                     # Empty table from initialization - drop and recreate with real data
                     db.drop_table(table_name)
                     db.create_table(table_name, data=pa_table, mode="create")
+                    self._mark_index_stale(table_name)
                 else:
                     # Has data - try to append
                     table.add(pa_table, mode="append")
@@ -261,6 +335,7 @@ class LanceDBStore:
                 try:
                     db.drop_table(table_name)
                     db.create_table(table_name, data=pa_table, mode="create")
+                    self._mark_index_stale(table_name)
                 except Exception:
                     raise append_error
         except Exception as e:
@@ -270,9 +345,13 @@ class LanceDBStore:
                 # Create table directly from data instead of using initialize_collections
                 # This ensures schema matches exactly
                 db.create_table(table_name, data=pa_table, mode="create")
+                self._mark_index_stale(table_name)
             except Exception as retry_error:
                 # If still failing, raise a more descriptive error
                 raise RuntimeError(f"Failed to create table {table_name}: {retry_error}") from e
+
+        # Keep index lifecycle explicit: create lazily after data write, then reuse.
+        self._ensure_vector_index(table_name)
 
     def prune_file_rows(
         self,
@@ -432,6 +511,8 @@ class LanceDBStore:
         except Exception:
             # If row counting fails, continue with normal query flow.
             pass
+
+        self._ensure_vector_index(table_name, metric=ann_params.metric)
 
         # Build search query with ANN parameters - explicitly specify vector column name
         search_query = table.search(list(query_vector), vector_column_name="vector").limit(top_k)
