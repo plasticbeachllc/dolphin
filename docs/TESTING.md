@@ -62,6 +62,7 @@ Configured hooks run:
   - `uv run pytest tests/unit/test_logging/test_structured_logger.py -v`
 - Search and retrieval hot path:
   - `uv run pytest tests/unit/search/test_search_backend.py -v`
+  - `uv run pytest tests/unit/search/test_search_backend.py -k cache -v`
   - `uv run pytest tests/unit/store/test_sqlite_meta.py -k bm25_hydration -v`
   - `uv run pytest tests/unit/store/test_lancedb_store.py -k index -v`
 
@@ -84,7 +85,7 @@ Configured hooks run:
 
 ### Cache validation quick hits
 
-- Unit cache tests: `uv run pytest tests/unit/test_cache.py -v`
+- Unit cache tests: `uv run pytest tests/unit/cache/test_cache.py -v`
 - Integration cache flows: `tests/integration/cache/`
 
 ## Observability stack

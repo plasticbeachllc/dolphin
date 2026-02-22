@@ -81,6 +81,40 @@ class KnowledgeSearchBackend:
         self._search_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="kb-search")
         self._configure_bm25_statistics_collection()
 
+    @staticmethod
+    def _normalize_string_list(values: Sequence[str] | None) -> list[str]:
+        """Canonicalize list-like request fields for stable cache keys."""
+        if not values:
+            return []
+        # Order should not affect cache identity for set-like filters.
+        return sorted({str(value) for value in values if str(value)})
+
+    def _build_search_cache_params(self, request: SearchRequest) -> dict[str, Any]:
+        """Build a complete, canonical cache fingerprint for search results."""
+        return {
+            "cache_schema": 2,
+            "embed_model": self.config.default_embed_model,
+            "hybrid_search_enabled": bool(self.hybrid_search_enabled),
+            "reranking_enabled": bool(self.reranker is not None),
+            "config_ann_strategy": self.config.retrieval.ann.strategy,
+            "config_ann_metric": self.config.retrieval.ann.metric,
+            "config_mmr_enabled": bool(self.config.retrieval.mmr_enabled),
+            "config_mmr_lambda": self.config.retrieval.mmr_lambda,
+            "top_k": int(request.top_k),
+            "score_cutoff": request.score_cutoff,
+            "repos": self._normalize_string_list(request.repos),
+            "path_prefix": self._normalize_string_list(request.path_prefix),
+            "exclude_paths": self._normalize_string_list(request.exclude_paths),
+            "exclude_patterns": self._normalize_string_list(request.exclude_patterns),
+            "mmr_enabled": request.mmr_enabled,
+            "mmr_lambda": request.mmr_lambda,
+            "ann_strategy": request.ann_strategy,
+            "ann_nprobes": request.ann_nprobes,
+            "ann_refine_factor": request.ann_refine_factor,
+            "include_graph_context": bool(getattr(request, "include_graph_context", False)),
+            "cursor": request.cursor,
+        }
+
     def _resolve_bm25_stats_path(self) -> Path:
         env_override = os.environ.get("DOLPHIN_BM25_STATS_PATH")
         if env_override:
@@ -222,6 +256,7 @@ class KnowledgeSearchBackend:
         )
 
         cache_allowed = True
+        cache_params: dict[str, Any] | None = None
         if self.cache and request.repos:
             for repo_name in request.repos:
                 repo_info = self.sql_store.get_repo_by_name(repo_name)
@@ -234,16 +269,10 @@ class KnowledgeSearchBackend:
 
         # Check cache first if available
         if self.cache and cache_allowed:
-            # Create cache key from request parameters
-            cache_params = {
-                "top_k": request.top_k,
-                "score_cutoff": request.score_cutoff,
-                "embed_model": self.config.default_embed_model,
-                "repos": request.repos,
-                "path_prefix": request.path_prefix,
-            }
-            cached_results = self.cache.get_results(request.query, **cache_params)
-            if cached_results is not None:
+            cache_params = self._build_search_cache_params(request)
+            cached_payload = self.cache.get_search_results(request.query, **cache_params)
+            if cached_payload is not None:
+                cached_results, cached_next_cursor = cached_payload
                 request_logger.info(
                     "Search completed (cache hit)",
                     {
@@ -251,7 +280,7 @@ class KnowledgeSearchBackend:
                         "cache_hit": True,
                     },
                 )
-                return cached_results, None
+                return cached_results, cached_next_cursor
 
         query_embedding = self.embedding_provider.embed_texts(self.config.default_embed_model, [request.query])[0]
         # Fetch more candidates for reranking when enabled; otherwise use the default multiplier.
@@ -591,8 +620,13 @@ class KnowledgeSearchBackend:
                 request_logger.warning("Graph enrichment failed", error=e)
 
         # Cache results if cache is available
-        if self.cache and cache_allowed:
-            self.cache.set_results(request.query, list(final_results), **cache_params)
+        if self.cache and cache_allowed and cache_params is not None:
+            self.cache.set_search_results(
+                request.query,
+                list(final_results),
+                next_cursor=next_cursor,
+                **cache_params,
+            )
 
         # Log search completion with summary at INFO level
         duration_ms = (time.time() - start_time) * 1000
