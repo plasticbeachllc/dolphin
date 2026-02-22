@@ -1,7 +1,7 @@
 # Testing Guide
 
 **Version**: 2.2.0
-**Last Updated**: 2026-02-20
+**Last Updated**: 2026-02-22
 
 This repository's canonical test reference covers the Python backend, MCP bridge, shared TypeScript package, and observability checks.
 
@@ -60,6 +60,10 @@ Configured hooks run:
 - CLI query UX + logging signal:
   - `uv run pytest tests/unit/cli/test_cli_query.py -v`
   - `uv run pytest tests/unit/test_logging/test_structured_logger.py -v`
+- Search and retrieval hot path:
+  - `uv run pytest tests/unit/search/test_search_backend.py -v`
+  - `uv run pytest tests/unit/store/test_sqlite_meta.py -k bm25_hydration -v`
+  - `uv run pytest tests/unit/store/test_lancedb_store.py -k index -v`
 
 ### MCP bridge
 

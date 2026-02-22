@@ -1755,6 +1755,131 @@ class SQLiteMetadataStore:
 
             return []
 
+    def get_bm25_hydration_map(self, content_ids: list[str], embed_model: str) -> dict[str, dict[str, Any]]:
+        """Bulk-hydrate BM25 hits keyed by deterministic FTS content_id.
+
+        Args:
+            content_ids: FTS content_ids returned by bm25_search
+            embed_model: Preferred embedding model for location selection
+
+        Returns:
+            Mapping of content_id -> hydration payload:
+                {
+                    "repo_id": int,
+                    "file_id": int,
+                    "text_hash": str,
+                    "embed_model": str,
+                    "locations": list[dict[str, Any]],
+                }
+        """
+        if not content_ids:
+            return {}
+
+        # Preserve caller order while removing duplicates.
+        ordered_ids: list[str] = []
+        seen: set[str] = set()
+        for content_id in content_ids:
+            if content_id in seen:
+                continue
+            seen.add(content_id)
+            ordered_ids.append(content_id)
+
+        placeholders = ",".join(["?"] * len(ordered_ids))
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute(
+                f"""
+                SELECT
+                    fts.content_id,
+                    r.id AS repo_id,
+                    f.id AS file_id,
+                    fts.text_hash,
+                    cc.embed_model,
+                    cl.start_line,
+                    cl.end_line,
+                    cl.symbol_kind,
+                    cl.symbol_name,
+                    cl.symbol_path
+                FROM chunks_fts fts
+                JOIN repos r
+                  ON r.name = fts.repo
+                JOIN files f
+                  ON f.repo_id = r.id AND f.path = fts.path
+                JOIN chunk_content cc
+                  ON cc.repo_id = r.id AND cc.file_id = f.id AND cc.text_hash = fts.text_hash
+                LEFT JOIN chunk_locations cl
+                  ON cl.content_id = cc.id
+                WHERE fts.content_id IN ({placeholders})
+                ORDER BY fts.content_id, cc.embed_model, cl.start_line ASC, cl.end_line ASC
+                """,
+                tuple(ordered_ids),
+            )
+            rows = cur.fetchall() or []
+
+        grouped: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            content_id = str(row[0])
+            repo_id = int(row[1])
+            file_id = int(row[2])
+            text_hash = str(row[3])
+            model = str(row[4])
+            start_line = int(row[5]) if row[5] is not None else None
+            end_line = int(row[6]) if row[6] is not None else None
+            symbol_kind = row[7]
+            symbol_name = row[8]
+            symbol_path = row[9]
+
+            grouped_entry = grouped.setdefault(
+                content_id,
+                {
+                    "repo_id": repo_id,
+                    "file_id": file_id,
+                    "text_hash": text_hash,
+                    "models": {},
+                },
+            )
+
+            model_locations = grouped_entry["models"].setdefault(model, [])
+            if start_line is None or end_line is None:
+                continue
+            model_locations.append(
+                {
+                    "start_line": start_line,
+                    "end_line": end_line,
+                    "symbol_kind": symbol_kind,
+                    "symbol_name": symbol_name,
+                    "symbol_path": symbol_path,
+                }
+            )
+
+        hydrated: dict[str, dict[str, Any]] = {}
+        for content_id, entry in grouped.items():
+            models: dict[str, list[dict[str, Any]]] = entry["models"]
+            chosen_model: str | None = None
+
+            preferred_locations = models.get(embed_model) or []
+            if preferred_locations:
+                chosen_model = embed_model
+            else:
+                available_models = sorted(model_name for model_name, locations in models.items() if locations)
+                if available_models:
+                    chosen_model = available_models[0]
+                elif models:
+                    # Keep deterministic behavior if we only have model identity but no locations.
+                    chosen_model = sorted(models.keys())[0]
+
+            if chosen_model is None:
+                continue
+
+            hydrated[content_id] = {
+                "repo_id": entry["repo_id"],
+                "file_id": entry["file_id"],
+                "text_hash": entry["text_hash"],
+                "embed_model": chosen_model,
+                "locations": models.get(chosen_model, []),
+            }
+
+        return hydrated
+
     def get_chunk_by_content_identity(
         self,
         repo_id: int,

@@ -4,7 +4,7 @@ Technical architecture and implementation status for Dolphin.
 
 **Version**: 0.2.2  
 **Status**: Beta (KB + MCP release components)  
-**Last Updated**: 2026-02-20
+**Last Updated**: 2026-02-22
 
 ## Overview
 
@@ -62,6 +62,12 @@ AI Client (MCP) / CLI / REST consumer
 ### Retrieval path
 
 `Query -> embed -> vector + BM25 -> fusion/rerank -> snippets -> API/MCP response`
+
+### Retrieval performance notes (2026-02)
+
+- Vector and BM25 branches execute concurrently inside `KnowledgeSearchBackend.search` to reduce end-to-end search latency.
+- BM25 hydration now uses bulk metadata lookups keyed by FTS content IDs (`SQLiteMetadataStore.get_bm25_hydration_map`) instead of per-hit lookups.
+- LanceDB vector indexes are managed explicitly and lazily per table in `LanceDBStore` (create once, reuse across queries).
 
 ## Metadata Schema Contract
 
