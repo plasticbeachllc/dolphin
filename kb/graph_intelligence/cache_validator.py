@@ -186,6 +186,15 @@ class GraphCacheValidator:
 
             if cache_state:
                 cache_state.edge_changes_since_rebuild += count
-                session.commit()
             else:
-                logger.warning(f"Cannot increment edge changes: no cache state for repo {self.repo_id}")
+                # Create initial state if it doesn't exist yet (e.g. first index of a fresh repo)
+                cache_state = GraphCacheState(
+                    repo_id=self.repo_id,
+                    edge_changes_since_rebuild=count,
+                    commit_sha="",
+                    last_rebuild_at=datetime.now().isoformat(),
+                    node_count=0,
+                    edge_count=0,
+                )
+                session.add(cache_state)
+            session.commit()

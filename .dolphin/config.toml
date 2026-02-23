@@ -55,6 +55,12 @@ ignore = [
     "*.log",
     "*.log.*",
 
+    # Test directories
+    "tests/**",
+
+    # Documentation
+    "CHANGELOG.md",
+
     # Zero-value for semantic code search
     "**/.gitignore",
     "**/.gitattributes",
