@@ -673,7 +673,7 @@ class SQLiteMetadataStore:
                     # Log warning but don't fail initialization for existing databases
                     print(f"Warning: Found {count} orphaned records in {check_name}")
 
-    def record_repo(self, name: str, path: Path | str, *, default_embed_model: str = "small") -> None:
+    def record_repo(self, name: str, path: Path | str, *, default_embed_model: str = "large") -> None:
         """Insert or update a repo registration.
 
         Uses raw sqlite3 for simplicity; models are already materialized.
@@ -704,7 +704,7 @@ class SQLiteMetadataStore:
             )
             conn.commit()
 
-    def register_repo(self, name: str, path: str | Path, *, default_embed_model: str = "small") -> None:
+    def register_repo(self, name: str, path: str | Path, *, default_embed_model: str = "large") -> None:
         """Alias for record_repo for backward compatibility.
 
         Args:
