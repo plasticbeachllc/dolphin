@@ -275,7 +275,7 @@ class TestRepoRegistrationPathNormalization:
     def test_normalize_path_rejects_non_string(self):
         """normalize_repo_registration_path(123) raises HTTPException(400)."""
         with pytest.raises(HTTPException) as exc_info:
-            normalize_repo_registration_path(123)
+            normalize_repo_registration_path(123)  # type: ignore[arg-type]
         assert exc_info.value.status_code == 400
 
     def test_normalize_path_rejects_whitespace_only(self):

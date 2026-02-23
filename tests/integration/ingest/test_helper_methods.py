@@ -18,7 +18,7 @@ def pipeline(tmp_path: Path) -> Generator[IngestionPipeline, None, None]:
     store_root = tmp_path / "store"
     store_root.mkdir()
 
-    config = KBConfig(store_root=store_root, embedding_provider="openai")
+    config = KBConfig(store_root=store_root, embedding_provider="openai", default_embed_model="small")
     metadata = SQLiteMetadataStore(store_root / "metadata.db")
     metadata.initialize()
     lancedb = LanceDBStore(store_root / "lancedb")
@@ -80,6 +80,7 @@ def test_setup_parallel_session_helper_exists(pipeline, repo):
         ignore_patterns,
         changed_files,
         deleted_files,
+        files_skipped_ignored,
     ) = result
 
     assert repo_id > 0

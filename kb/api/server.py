@@ -140,6 +140,22 @@ def initialize_search_backend() -> None:
     set_pipeline(pipeline)
     print_status("Ingestion pipeline ready.", level="success", stderr=True)
 
+    # Warn about embedding model mismatches between config and registered repos.
+    # The watcher startup sync will auto-trigger full reindex for mismatched repos,
+    # but the user should see an explicit heads-up.
+    config_model = config.default_embed_model
+    repos = backend.sql_store.list_all_repos()
+    for repo in repos:
+        repo_model = repo.get("default_embed_model", "large")
+        if repo_model != config_model:
+            print_status(
+                f"Embedding model mismatch for '{repo['name']}': "
+                f"indexed with '{repo_model}', config says '{config_model}'. "
+                f"A full re-index will run automatically on startup sync.",
+                level="warn",
+                stderr=True,
+            )
+
 
 def reload_search_backend() -> None:
     """Reload the search backend and stores to pick up index changes."""

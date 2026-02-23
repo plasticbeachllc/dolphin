@@ -664,6 +664,18 @@ def serve(
             metadata.initialize()
             repos = metadata.list_all_repos()
             repo_list = [repo["name"] for repo in repos]
+
+            # Warn about embedding model mismatches
+            config_model = config.default_embed_model
+            for repo in repos:
+                repo_model = repo.get("default_embed_model", "large")
+                if repo_model != config_model:
+                    print_status(
+                        f"Embedding model changed for '{repo['name']}': "
+                        f"indexed with '{repo_model}', config now '{config_model}'. "
+                        f"Will re-index automatically on startup.",
+                        level="warn",
+                    )
         except Exception as e:
             print_status(
                 "Failed to list repositories for automatic watcher startup.",
