@@ -291,6 +291,11 @@ class TestCLIIndex:
             check=True,
             capture_output=True,
         )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "config", "commit.gpgsign", "false"],
+            check=True,
+            capture_output=True,
+        )
         subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
         subprocess.run(
             ["git", "-C", str(repo_path), "commit", "-m", "initial"],

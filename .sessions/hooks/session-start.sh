@@ -20,6 +20,12 @@ for p in "$HOME/.local/bin" "$HOME/.bun/bin"; do
   fi
 done
 
+# Install just if missing
+if ! command -v just >/dev/null 2>&1; then
+  curl -fsSL https://github.com/casey/just/releases/download/1.40.0/just-1.40.0-x86_64-unknown-linux-musl.tar.gz \
+    | tar -xz -C /usr/local/bin just
+fi
+
 # Python deps
 if command -v uv >/dev/null 2>&1 && [ -f pyproject.toml ]; then
   uv sync --group dev --group test

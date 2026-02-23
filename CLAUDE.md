@@ -50,19 +50,19 @@ just check-python                         # ruff + ty
 
 ### Python backend (`kb/`)
 
-| Directory | Purpose |
-|-----------|---------|
-| `kb/api/` | FastAPI app, routes, search backend, middleware |
-| `kb/ingest/` | Indexing pipeline, scanner, parallel parser, CLI |
-| `kb/chunkers/` | Language-aware AST chunkers (Python, TS, SQL, Svelte, Markdown) |
-| `kb/store/` | SQLite metadata (`sqlite_meta.py` — largest file), LanceDB vectors, graph storage |
-| `kb/search/` | Parallel search execution, adaptive ANN tuning |
-| `kb/retrieval/` | Ranking, cross-encoder reranking, BM25 normalization, graph context |
-| `kb/embeddings/` | OpenAI embedding provider, adaptive batching |
-| `kb/cache/` | Query result caching with fingerprinting, AST cache |
-| `kb/graph_intelligence/` | Knowledge graph: import/type extractors |
-| `kb/config.py` | Config loading from `~/.dolphin/config.toml` |
-| `kb/cli.py` | Unified CLI entry point (`dolphin` command) |
+| Directory                | Purpose                                                                           |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `kb/api/`                | FastAPI app, routes, search backend, middleware                                   |
+| `kb/ingest/`             | Indexing pipeline, scanner, parallel parser, CLI                                  |
+| `kb/chunkers/`           | Language-aware AST chunkers (Python, TS, SQL, Svelte, Markdown)                   |
+| `kb/store/`              | SQLite metadata (`sqlite_meta.py` — largest file), LanceDB vectors, graph storage |
+| `kb/search/`             | Parallel search execution, adaptive ANN tuning                                    |
+| `kb/retrieval/`          | Ranking, cross-encoder reranking, BM25 normalization, graph context               |
+| `kb/embeddings/`         | OpenAI embedding provider, adaptive batching                                      |
+| `kb/cache/`              | Query result caching with fingerprinting, AST cache                               |
+| `kb/graph_intelligence/` | Knowledge graph: import/type extractors                                           |
+| `kb/config.py`           | Config loading from `~/.dolphin/config.toml`                                      |
+| `kb/cli.py`              | Unified CLI entry point (`dolphin` command)                                       |
 
 ### TypeScript (`mcp-bridge/`, `shared/`)
 

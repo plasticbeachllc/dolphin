@@ -52,9 +52,19 @@ class TestInitCommand:
         assert result.exit_code == 0
         assert "LanceDB root initialized" in result.stdout
 
-    def test_init_is_idempotent(self, tmp_path):
+    def test_init_is_idempotent(self, tmp_path, monkeypatch):
         """Test that running init twice is safe."""
         config_path = tmp_path / "config.toml"
+        store_root = tmp_path / "store"
+
+        # Patch the config template to use an isolated store root so parallel
+        # xdist workers don't race on the default ~/.dolphin/knowledge_store path.
+        original_template = _read_config_template()
+        isolated_template = original_template.replace(
+            'store_root = "~/.dolphin/knowledge_store"',
+            f'store_root = "{store_root}"',
+        )
+        monkeypatch.setattr("kb.ingest.cli._read_config_template", lambda: isolated_template)
 
         # First run
         result1 = runner.invoke(app, ["init", "--config-path", str(config_path)])
