@@ -1018,12 +1018,13 @@ class IngestionPipeline:
         full_reindex: bool,
         dry_run: bool,
         max_workers: int | None,
-    ) -> tuple[int, Path, str, str, str, int, ErrorLogger, set[str], list[str], list[str]]:
+    ) -> tuple[int, Path, str, str, str, int, ErrorLogger, set[str], list[str], list[str], int]:
         """Setup parallel indexing session and discover changed files.
 
         Returns:
             Tuple of (repo_id, root, embed_model, commit_sha, branch, session_id,
-                     error_logger, ignore_patterns, changed_files, deleted_files)
+                     error_logger, ignore_patterns, changed_files, deleted_files,
+                     files_skipped_ignored)
         """
         # Resolve repo and Git state
         repo = self.metadata.get_repo_by_name(repo_name)
