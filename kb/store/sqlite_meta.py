@@ -174,14 +174,7 @@ def enrich_fts_content(
     if not extra_tokens:
         return content
 
-    # Deduplicate while preserving order
-    seen: set[str] = set()
-    unique: list[str] = []
-    for t in extra_tokens:
-        if t not in seen:
-            seen.add(t)
-            unique.append(t)
-
+    unique = list(dict.fromkeys(extra_tokens))
     return content + _FTS_ENRICHMENT_SENTINEL + " ".join(unique)
 
 
