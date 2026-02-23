@@ -509,12 +509,15 @@ def setup_tiktoken(request):
         pytest.exit("Tiktoken encoding data required for integration tests", returncode=1)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def mock_tiktoken():
     """Mock tiktoken.get_encoding to avoid network calls during unit tests.
 
     Note: This fixture is NOT autouse. It must be explicitly requested by tests
     or applied via pytest marks. Integration tests should use real tiktoken.
+
+    Function-scoped so the patch does not leak into integration tests
+    when both run on the same xdist worker.
     """
     mock_encoding = MockTiktokenEncoding()
 
