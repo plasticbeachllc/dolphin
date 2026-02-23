@@ -239,6 +239,16 @@ def index(
     if chunks_pruned:
         typer.echo(f"  Pruned {chunks_pruned:,} stale chunk{'s' if chunks_pruned != 1 else ''}.")
 
+    # Prune chunks for files matching ignore patterns (e.g., after ignore config changes)
+    if not dry_run:
+        try:
+            prune_result = _prune_ignored_files(name, pipeline.metadata, pipeline.lancedb, config, dry_run=False)
+            pruned_count = prune_result.get("chunks_pruned", 0)
+            if pruned_count:
+                typer.echo(f"  Pruned {pruned_count:,} chunk{'s' if pruned_count != 1 else ''} for ignored files.")
+        except Exception as e:
+            typer.echo(f"Warning: Failed to prune ignored files: {e}", err=True)
+
     # Notify server to reload
     _notify_server_reload(config)
 
@@ -328,30 +338,21 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
     console.print()
 
 
-@app.command("prune-ignored")
-def prune_ignored(
-    name: str = typer.Argument(..., help="Repository name to clean up."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be removed without persisting."),
-) -> None:
-    """Remove chunks for files that match the ignore patterns.
+def _prune_ignored_files(
+    name: str,
+    metadata: SQLiteMetadataStore,
+    lancedb: LanceDBStore,
+    config: KBConfig,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Prune chunks for files matching ignore patterns.
 
-    Use this after updating ignore patterns to clean up previously-indexed
-    files that should no longer be included.
+    Returns dict with 'chunks_pruned' and 'files_pruned' counts.
     """
-    config = load_config()
-    repo = config.resolved_store_root()
-
-    metadata = SQLiteMetadataStore(repo / "metadata.db")
-    metadata.initialize()
-
-    lancedb = LanceDBStore(repo / "lancedb")
-    lancedb.initialize_collections()
-
     # Resolve repo and get its root path
     repo_record = metadata.get_repo_by_name(name)
     if not repo_record:
-        typer.echo(f"Error: Repository '{name}' not registered.")
-        raise typer.Exit(code=1)
+        return {"chunks_pruned": 0, "files_pruned": 0}
 
     repo_id = int(repo_record["id"])
     repo_root = Path(str(repo_record["root_path"]))
@@ -369,17 +370,6 @@ def prune_ignored(
     }
     ignore_patterns = build_ignore_set(config.ignore, config.ignore_exceptions)
     repo_level_patterns, repo_level_exceptions = load_repo_ignores(repo_root)
-    if dry_run:
-        typer.echo(
-            f"Debug: repo_level ignores loaded: {len(repo_level_patterns)} patterns",
-            err=True,
-        )
-        # Check if bun.lock patterns are in repo_level
-        bun_in_repo = [p for p in repo_level_patterns if "bun" in p.lower()]
-        if bun_in_repo:
-            typer.echo(f"Debug: bun patterns in repo_level: {bun_in_repo}", err=True)
-        else:
-            typer.echo("Debug: NO bun patterns in repo_level", err=True)
     if repo_level_patterns:
         ignore_patterns.update(repo_level_patterns)
     # Apply repo-level exceptions
@@ -393,14 +383,6 @@ def prune_ignored(
 
     ignore_spec = PathSpec.from_lines("gitignore", ignore_patterns)
 
-    # Debug: show which patterns we're using
-    if dry_run:
-        typer.echo(f"Debug: Using {len(ignore_patterns)} ignore patterns", err=True)
-        bun_patterns = [p for p in ignore_patterns if "bun" in p.lower()]
-        if bun_patterns:
-            typer.echo(f"Debug: bun-related patterns: {bun_patterns}", err=True)
-        else:
-            typer.echo("Debug: NO bun patterns found!", err=True)
     # Get all files for this repo
     files = metadata.get_all_files_for_repo(repo_id)
 
@@ -412,8 +394,6 @@ def prune_ignored(
 
         # Check if file matches ignore patterns
         matches = ignore_spec.match_file(file_path)
-        if dry_run and "bun.lock" in file_path:
-            typer.echo(f"Debug: {file_path} matches={matches}", err=True)
 
         if matches:
             pruned_files.append(file_path)
@@ -438,17 +418,39 @@ def prune_ignored(
                 file_chunks = metadata.get_chunks_for_file(repo_id, file_path)
                 total_chunks_pruned += len(file_chunks) if file_chunks else 0
 
+    return {"chunks_pruned": total_chunks_pruned, "files_pruned": len(pruned_files)}
+
+
+@app.command("prune-ignored")
+def prune_ignored(
+    name: str = typer.Argument(..., help="Repository name to clean up."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be removed without persisting."),
+) -> None:
+    """Remove chunks for files that match the ignore patterns.
+
+    Use this after updating ignore patterns to clean up previously-indexed
+    files that should no longer be included.
+    """
+    config = load_config()
+    repo = config.resolved_store_root()
+
+    metadata = SQLiteMetadataStore(repo / "metadata.db")
+    metadata.initialize()
+
+    lancedb = LanceDBStore(repo / "lancedb")
+    lancedb.initialize_collections()
+
+    result = _prune_ignored_files(name, metadata, lancedb, config, dry_run=dry_run)
+    total_chunks_pruned = result["chunks_pruned"]
+    files_pruned = result["files_pruned"]
+
     if dry_run:
         typer.echo("[DRY RUN] Would prune:")
-        typer.echo(f"  Files: {len(pruned_files)}")
+        typer.echo(f"  Files: {files_pruned}")
         typer.echo(f"  Chunks: {total_chunks_pruned}")
-        for f in pruned_files[:10]:
-            typer.echo(f"    - {f}")
-        if len(pruned_files) > 10:
-            typer.echo(f"    ... and {len(pruned_files) - 10} more")
     else:
         typer.echo(f"✅ Pruned ignored content from '{name}':")
-        typer.echo(f"  Files: {len(pruned_files)}")
+        typer.echo(f"  Files: {files_pruned}")
         typer.echo(f"  Chunks: {total_chunks_pruned}")
 
 
