@@ -169,6 +169,52 @@ class TestOpenAIEmbeddingProvider:
             assert mock_client.embeddings.create.call_count == 3
 
 
+class TestOpenAIKeyValidation:
+    """Tests for API key format validation and _validate_api_key."""
+
+    def test_init_rejects_key_without_sk_prefix(self):
+        """Key without 'sk-' prefix raises ValueError matching 'malformed'."""
+        with patch("openai.OpenAI"):
+            with pytest.raises(ValueError, match="malformed"):
+                OpenAIEmbeddingProvider(api_key="toolongbutnosk-prefix1234", validate_key=False)
+
+    def test_init_rejects_key_too_short(self):
+        """Key < 20 chars raises ValueError."""
+        with patch("openai.OpenAI"):
+            with pytest.raises(ValueError, match="malformed"):
+                OpenAIEmbeddingProvider(api_key="sk-short", validate_key=False)
+
+    def test_validate_api_key_success(self):
+        """With patched OpenAI that succeeds, validate_key=True init completes."""
+        with patch("openai.OpenAI") as mock_openai_class:
+            mock_client = Mock()
+            mock_client.embeddings.create.return_value = Mock(data=[Mock(embedding=[0.1] * 1536)])
+            mock_openai_class.return_value = mock_client
+
+            provider = OpenAIEmbeddingProvider(api_key="sk-test-key-1234567890", validate_key=True)
+            assert provider.api_key == "sk-test-key-1234567890"
+
+    def test_validate_api_key_auth_failure(self):
+        """Mock raises 401; init raises RuntimeError containing 'VALIDATION FAILED'."""
+        with patch("openai.OpenAI") as mock_openai_class:
+            mock_client = Mock()
+            mock_client.embeddings.create.side_effect = Exception("Error code: 401 - invalid api key")
+            mock_openai_class.return_value = mock_client
+
+            with pytest.raises(RuntimeError, match="VALIDATION FAILED"):
+                OpenAIEmbeddingProvider(api_key="sk-test-key-1234567890", validate_key=True)
+
+    def test_validate_api_key_other_error_reraises(self):
+        """Mock raises ConnectionError; original exception propagates (not wrapped)."""
+        with patch("openai.OpenAI") as mock_openai_class:
+            mock_client = Mock()
+            mock_client.embeddings.create.side_effect = ConnectionError("network down")
+            mock_openai_class.return_value = mock_client
+
+            with pytest.raises(ConnectionError, match="network down"):
+                OpenAIEmbeddingProvider(api_key="sk-test-key-1234567890", validate_key=True)
+
+
 class TestProviderFactory:
     """Tests for provider factory and global management."""
 

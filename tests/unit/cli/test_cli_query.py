@@ -145,3 +145,116 @@ def test_search_language_filter_alias(monkeypatch) -> None:
     assert "Language filter: python" in result.stdout
     assert "src/main.py" in result.stdout
     assert "src/view.ts" not in result.stdout
+
+
+def _make_multiline_hit(num_lines: int) -> dict:
+    """Helper to build a hit with a multi-line content field."""
+    content = "\n".join(f"line{i}" for i in range(1, num_lines + 1))
+    return {
+        "chunk_id": "c1",
+        "repo": "demo",
+        "path": "src/main.py",
+        "start_line": 1,
+        "end_line": num_lines,
+        "score": 0.80,
+        "content": content,
+    }
+
+
+def test_search_max_lines_truncates_snippet(monkeypatch) -> None:
+    """Fake hit with 20-line content; --max-lines 3 output shows 3 lines and '17 more lines'."""
+
+    def fake_search_remote(**_kwargs):
+        return ([_make_multiline_hit(20)], {"top_k": 8}, None)
+
+    monkeypatch.setattr(cli, "_search_remote", fake_search_remote)
+    result = runner.invoke(cli.app, ["search", "query", "--verbose", "--max-lines", "3"])
+
+    assert result.exit_code == 0
+    assert "line1" in result.stdout
+    assert "line3" in result.stdout
+    assert "line4" not in result.stdout
+    assert "17 more lines" in result.stdout
+
+
+def test_search_max_lines_default_is_8(monkeypatch) -> None:
+    """Fake hit with 15-line content; default invocation shows 8 lines and '7 more lines'."""
+
+    def fake_search_remote(**_kwargs):
+        return ([_make_multiline_hit(15)], {"top_k": 8}, None)
+
+    monkeypatch.setattr(cli, "_search_remote", fake_search_remote)
+    result = runner.invoke(cli.app, ["search", "query", "--verbose"])
+
+    assert result.exit_code == 0
+    assert "line8" in result.stdout
+    assert "line9" not in result.stdout
+    assert "7 more lines" in result.stdout
+
+
+def test_search_max_lines_no_truncation_when_content_fits(monkeypatch) -> None:
+    """Content with 4 lines; --max-lines 8 shows all 4 lines, no 'more lines' suffix."""
+
+    def fake_search_remote(**_kwargs):
+        return ([_make_multiline_hit(4)], {"top_k": 8}, None)
+
+    monkeypatch.setattr(cli, "_search_remote", fake_search_remote)
+    result = runner.invoke(cli.app, ["search", "query", "--verbose", "--max-lines", "8"])
+
+    assert result.exit_code == 0
+    assert "line4" in result.stdout
+    assert "more lines" not in result.stdout
+
+
+def test_search_max_lines_clipped_to_1(monkeypatch) -> None:
+    """--max-lines 0 is guarded to max(1, ...) — at least 1 line shown."""
+
+    def fake_search_remote(**_kwargs):
+        return ([_make_multiline_hit(5)], {"top_k": 8}, None)
+
+    monkeypatch.setattr(cli, "_search_remote", fake_search_remote)
+    result = runner.invoke(cli.app, ["search", "query", "--verbose", "--max-lines", "0"])
+
+    assert result.exit_code == 0
+    assert "line1" in result.stdout
+    assert "4 more lines" in result.stdout
+
+
+def test_display_results_no_hits(monkeypatch) -> None:
+    """_display_results with empty list prints 'No results found.'."""
+
+    def fake_search_remote(**_kwargs):
+        return ([], {"top_k": 8}, None)
+
+    monkeypatch.setattr(cli, "_search_remote", fake_search_remote)
+    result = runner.invoke(cli.app, ["search", "nothing here"])
+
+    assert result.exit_code == 0
+    assert "No results found." in result.stdout
+
+
+def test_display_results_verbose_shows_chunk_id(monkeypatch) -> None:
+    """Hit with chunk_id; verbose=True output contains chunk_id=..."""
+
+    def fake_search_remote(**_kwargs):
+        return (
+            [
+                {
+                    "chunk_id": "abc-123-def",
+                    "repo": "demo",
+                    "path": "src/main.py",
+                    "start_line": 1,
+                    "end_line": 3,
+                    "score": 0.80,
+                    "content": "line1\nline2",
+                }
+            ],
+            {"top_k": 8, "model": "small", "latency_ms": 5},
+            None,
+        )
+
+    monkeypatch.setattr(cli, "_search_remote", fake_search_remote)
+    result = runner.invoke(cli.app, ["search", "query", "--verbose"])
+
+    assert result.exit_code == 0
+    assert "chunk_id=abc-123-def" in result.stdout
