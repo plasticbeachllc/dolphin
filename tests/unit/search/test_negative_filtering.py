@@ -2,11 +2,8 @@
 
 from typing import cast
 
-import pytest
-
 from kb.api.app import SearchRequest
 from kb.api.search_backend import KnowledgeSearchBackend
-from kb.constants.retrieval_config import RETRIEVAL_PARAMS
 from kb.embeddings.provider import EmbeddingProvider
 from kb.store.lancedb_store import LanceDBStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
@@ -78,28 +75,7 @@ class TestNegativeFiltering:
 
             filtered = [r for r in filtered if not matches_excluded_pattern(str(r.get("path", "")))]
 
-        adjusted: list[dict[str, object]] = []
-        for item in filtered:
-            path_obj = item.get("path", "")
-            path = str(path_obj) if path_obj else ""
-            score_obj = item.get("score", 0.0)
-            score = float(score_obj) if isinstance(score_obj, (int, float)) else 0.0
-            is_config = (
-                path.endswith(".toml")
-                or path.endswith(".json")
-                or path.endswith(".yaml")
-                or path.endswith(".yml")
-                or "config.toml" in path.lower()
-                or "package.json" in path.lower()
-                or "tsconfig.json" in path.lower()
-            )
-
-            if is_config:
-                adjusted.append({**item, "score": score * RETRIEVAL_PARAMS.CONFIG_FILE_SCORE_PENALTY})
-            else:
-                adjusted.append(item)
-
-        return adjusted
+        return filtered
 
     def test_exclude_paths_single_path(self):
         """Test excluding a single path prefix."""
@@ -191,31 +167,6 @@ class TestNegativeFiltering:
         legacy = self._legacy_filter_then_score(results, request)
 
         assert combined == legacy
-
-    def test_config_files_are_penalized_but_retained(self):
-        """Config files should remain in results but with reduced scores."""
-
-        results = [
-            {"chunk_id": "1", "repo": "test", "path": "src/main.py", "score": 1.0},
-            {"chunk_id": "2", "repo": "test", "path": "config/settings.toml", "score": 1.0},
-        ]
-
-        backend = KnowledgeSearchBackend(
-            embedding_provider=cast(EmbeddingProvider, None),
-            lance_store=cast(LanceDBStore, None),
-            sql_store=cast(SQLiteMetadataStore, None),
-        )
-
-        filtered = backend._filter_and_score_results(results, SearchRequest(query="test"))
-
-        assert len(filtered) == 2
-
-        config_result = next(r for r in filtered if r["path"] == "config/settings.toml")
-        assert pytest.approx(config_result["score"]) == 1.0 * RETRIEVAL_PARAMS.CONFIG_FILE_SCORE_PENALTY
-
-        # Non-config results remain unaffected
-        code_result = next(r for r in filtered if r["path"] == "src/main.py")
-        assert code_result["score"] == 1.0
 
     def test_exclude_patterns_glob_matching(self):
         """Test excluding files by glob patterns."""

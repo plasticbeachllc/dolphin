@@ -35,16 +35,6 @@ class RetrievalConstants:
     A/B test: EXP-2024-11-01
     """
 
-    # Score Adjustments
-    CONFIG_FILE_SCORE_PENALTY: float = 0.5
-    """Reduce config file scores by 50%.
-
-    Rationale: Config files (JSON/TOML/YAML) frequently dominate results
-    due to high chunk count but low semantic value. 50% penalty balances
-    this while still allowing config files when highly relevant.
-    A/B test: EXP-2024-10-15
-    """
-
     # BM25 Normalization
     BM25_SCORE_NORMALIZATION_FACTOR: float = 10.0
     """Sigmoid normalization parameter for BM25 scores.

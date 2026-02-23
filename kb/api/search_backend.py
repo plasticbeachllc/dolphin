@@ -420,7 +420,7 @@ class KnowledgeSearchBackend:
                 # Log error but continue with empty BM25 results
                 request_logger.warning("BM25 search failed", error=e)
 
-        # Apply request filters and file-type scoring in a single pass for better perf
+        # Apply request filters (repo, path prefix/exclude) before fusion
         vector_filtered = self._filter_and_score_results(vector_formatted, request)
         bm25_filtered = self._filter_and_score_results(bm25_hydrated, request)
 
@@ -756,26 +756,6 @@ class KnowledgeSearchBackend:
                     return True
             return False
 
-        def is_config_file(path: str) -> bool:
-            lowered = path.lower()
-            return (
-                lowered.endswith(".toml")
-                or lowered.endswith(".json")
-                or lowered.endswith(".yaml")
-                or lowered.endswith(".yml")
-                or "config.toml" in lowered
-                or "package.json" in lowered
-                or "tsconfig.json" in lowered
-            )
-
-        def apply_penalty(result: dict[str, object]) -> dict[str, object]:
-            score_obj = result.get("score", 0.0)
-            score = float(score_obj) if isinstance(score_obj, (int, float)) else 0.0
-            return {
-                **result,
-                "score": score * RETRIEVAL_PARAMS.CONFIG_FILE_SCORE_PENALTY,
-            }
-
         repo_filter = set(request.repos) if request.repos else None
         include_prefixes: tuple[str, ...] = (
             tuple(normalize_path(prefix) for prefix in request.path_prefix) if request.path_prefix else tuple()
@@ -805,10 +785,7 @@ class KnowledgeSearchBackend:
             if exclude_patterns and matches_pattern(normalized_path, basename, exclude_patterns):
                 continue
 
-            if is_config_file(raw_path):
-                filtered.append(apply_penalty(result))
-            else:
-                filtered.append(result)
+            filtered.append(result)
 
         return filtered
 
