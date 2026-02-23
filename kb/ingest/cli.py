@@ -1,5 +1,6 @@
 # from __future__ import annotations
 import asyncio
+import logging
 import os
 import sys
 from pathlib import Path
@@ -16,6 +17,8 @@ from ..embeddings.provider import create_provider, set_default_provider
 from ..ignores import build_ignore_set, load_repo_ignores
 from ..store import LanceDBStore, SQLiteMetadataStore
 from .pipeline import IngestionPipeline
+
+_log = logging.getLogger(__name__)
 
 app = typer.Typer(help="Unified knowledge store ingestion CLI.")
 
@@ -165,6 +168,7 @@ def add_repo(
                 pipeline.index(name, dry_run=False, force=False)
                 typer.echo(f"✅ Indexing complete for {name}")
             except Exception as e:
+                _log.error("Indexing failed during add-repo prompt for %s", name, exc_info=True)
                 typer.echo(f"❌ Indexing failed: {e}", err=True)
 
 
@@ -197,6 +201,27 @@ def index(
         raise typer.Exit(code=2)
 
     pipeline = _build_pipeline(config)
+
+    # Crash recovery: abort any sessions left running from a prior CLI invocation
+    # (the server does this on startup, but CLI callers need it too)
+    aborted = metadata.abort_stale_sessions(
+        repo_id=int(repo_record["id"]),
+        reason="Aborted on CLI startup: previous indexing session did not complete cleanly",
+    )
+    if aborted:
+        typer.echo(f"Recovered {aborted} stale session(s) from a previous run.")
+
+    # Install SIGINT handler so Ctrl-C stops cleanly between files
+    import signal
+
+    _original_sigint = signal.getsignal(signal.SIGINT)
+
+    def _sigint_handler(signum, frame):
+        typer.echo("\nInterrupt received — stopping after current file…")
+        pipeline.request_cancel()
+
+    signal.signal(signal.SIGINT, _sigint_handler)
+
     try:
         if parallel:
             # Run async parallel indexing
@@ -210,17 +235,48 @@ def index(
             result = pipeline.index(name, dry_run=dry_run, force=force, full_reindex=full)
 
     except Exception as e:
+        from .pipeline import _CancelledError
+
+        if isinstance(e, (KeyboardInterrupt, _CancelledError)):
+            typer.echo("Indexing interrupted. Progress up to the last completed file has been saved.")
+            typer.echo("Run the same command again to continue from where you left off.")
+            raise typer.Exit(code=130)
         typer.echo(f"Indexing failed: {e}")
         import traceback
 
         traceback.print_exc()
         raise
+    finally:
+        signal.signal(signal.SIGINT, _original_sigint)
 
-    typer.echo(f"Index complete for {name}: session={result.get('session_id')}")
-    typer.echo(f"  files_indexed: {result.get('files_indexed')}")
-    typer.echo(f"  chunks_indexed: {result.get('chunks_indexed')}")
-    typer.echo(f"  chunks_skipped: {result.get('chunks_skipped')}")
-    typer.echo(f"  vectors_written: {result.get('vectors_written')}")
+    files_indexed = result.get("files_indexed", 0)
+    chunks_indexed = result.get("chunks_indexed", 0)
+    files_skipped_ignored = result.get("files_skipped_ignored", 0)
+    files_error = result.get("files_error", 0)
+    chunks_pruned = result.get("chunks_pruned", 0)
+
+    summary = f"Indexed {files_indexed} file{'s' if files_indexed != 1 else ''} ({chunks_indexed:,} chunks)."
+    skips: list[str] = []
+    if files_skipped_ignored:
+        skips.append(f"{files_skipped_ignored} ignored")
+    if files_error:
+        skips.append(f"{files_error} error{'s' if files_error != 1 else ''}")
+    if skips:
+        summary += f" Skipped: {', '.join(skips)}."
+    typer.echo(summary)
+
+    if chunks_pruned:
+        typer.echo(f"  Pruned {chunks_pruned:,} stale chunk{'s' if chunks_pruned != 1 else ''}.")
+
+    # Prune chunks for files matching ignore patterns (e.g., after ignore config changes)
+    if not dry_run:
+        try:
+            prune_result = _prune_ignored_files(name, pipeline.metadata, pipeline.lancedb, config, dry_run=False)
+            pruned_count = prune_result.get("chunks_pruned", 0)
+            if pruned_count:
+                typer.echo(f"  Pruned {pruned_count:,} chunk{'s' if pruned_count != 1 else ''} for ignored files.")
+        except Exception as e:
+            typer.echo(f"Warning: Failed to prune ignored files: {e}", err=True)
 
     # Notify server to reload
     _notify_server_reload(config)
@@ -237,6 +293,7 @@ def _notify_server_reload(config: KBConfig) -> None:
         api_key = load_kb_api_key()
     except Exception:
         # API key might not exist yet if only indexing
+        _log.debug("Could not load API key; skipping server notification.", exc_info=True)
         return
 
     try:
@@ -291,7 +348,123 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
     else:
         console.print("\n[yellow]No repositories registered.[/yellow]")
 
+    # Reranking status
+    console.print("\n[bold]🔍 Reranking[/bold]")
+    reranking_cfg = config.retrieval.reranking
+    if not reranking_cfg.enabled:
+        console.print("  [dim]Disabled (set reranking.enabled = true in config to enable)[/dim]")
+    else:
+        try:
+            from sentence_transformers import CrossEncoder as _CE  # type: ignore[import-untyped]  # noqa: F401
+
+            console.print(f"  [green]Enabled[/green] — model: {reranking_cfg.model}")
+        except ImportError:
+            console.print(
+                "  [red]Enabled in config but dependencies are missing.[/red]\n"
+                "  Install with: [bold]uv pip install pb-dolphin\\[reranking][/bold]"
+            )
+
     console.print()
+
+
+def _prune_ignored_files(
+    name: str,
+    metadata: SQLiteMetadataStore,
+    lancedb: LanceDBStore,
+    config: KBConfig,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Prune chunks for files matching ignore patterns.
+
+    Returns dict with 'chunks_pruned' and 'files_pruned' counts.
+    """
+    # Resolve repo and get its root path
+    repo_record = metadata.get_repo_by_name(name)
+    if not repo_record:
+        return {"chunks_pruned": 0, "files_pruned": 0}
+
+    repo_id = int(repo_record["id"])
+    repo_root = Path(str(repo_record["root_path"]))
+
+    # Build ignore spec
+    extra_security = {
+        "**/id_rsa",
+        "**/*.pem",
+        "**/.aws/**",
+        "**/gcloud/**",
+        "**/secrets/**",
+        "**/*keys.json",
+        "**/*service_account.json",
+        "**/*auth.json",
+    }
+    ignore_patterns = build_ignore_set(config.ignore, config.ignore_exceptions)
+    repo_level_patterns, repo_level_exceptions = load_repo_ignores(repo_root)
+    if repo_level_patterns:
+        ignore_patterns.update(repo_level_patterns)
+    # Apply repo-level exceptions
+    if repo_level_exceptions:
+        ignore_patterns = build_ignore_set(ignore_patterns, repo_level_exceptions)
+    ignore_patterns.update(extra_security)
+
+    # Manually add bun.lock patterns to test
+    ignore_patterns.add("bun.lock")
+    ignore_patterns.add("**/bun.lock")
+
+    ignore_spec = PathSpec.from_lines("gitignore", ignore_patterns)
+
+    # Get all files for this repo
+    files = metadata.get_all_files_for_repo(repo_id)
+
+    total_chunks_pruned = 0
+    pruned_files = []
+    for file_record in files:
+        file_path = cast(str, file_record["path"])
+        file_id = cast(int, file_record["id"])
+
+        # Check if file matches ignore patterns
+        matches = ignore_spec.match_file(file_path)
+
+        if matches:
+            pruned_files.append(file_path)
+
+            # Prune all content for this file across all embedding models
+            if not dry_run:
+                # Get all embed models used for this file and prune each
+                for embed_model in ["small", "large"]:
+                    pruned_count = metadata.prune_invalidated_content_for_file(
+                        repo_id, file_id, embed_model=embed_model, current_hashes=set()
+                    )
+                    total_chunks_pruned += pruned_count
+                    lancedb.prune_file_rows(name, file_path, model=embed_model)
+
+                # Also delete any orphaned FTS5 entries for this file
+                with metadata._connect() as conn:
+                    cur = conn.cursor()
+                    cur.execute("DELETE FROM chunks_fts WHERE path = ?", (file_path,))
+                    conn.commit()
+
+                # Delete the file record itself so it doesn't show up again on subsequent runs
+                metadata.delete_file(repo_id, file_id)
+            else:
+                # In dry-run, just count what would be pruned
+                file_chunks = metadata.get_chunks_for_file(repo_id, file_path)
+                total_chunks_pruned += len(file_chunks) if file_chunks else 0
+
+    # Rebuild FTS5 index after bulk deletes to prevent corruption
+    if not dry_run and pruned_files:
+        try:
+            with metadata._connect() as conn:
+                cur = conn.cursor()
+                cur.execute("PRAGMA integrity_check")
+                result = cur.fetchone()
+                if result and result[0] != "ok":
+                    _log.warning(f"FTS5 index integrity issue detected, rebuilding: {result[0]}")
+                cur.execute("INSERT INTO chunks_fts(chunks_fts, rank) VALUES('rebuild', -1)")
+                conn.commit()
+        except Exception as e:
+            _log.warning(f"Failed to rebuild FTS5 index: {e}")
+
+    return {"chunks_pruned": total_chunks_pruned, "files_pruned": len(pruned_files)}
 
 
 @app.command("prune-ignored")
@@ -313,108 +486,17 @@ def prune_ignored(
     lancedb = LanceDBStore(repo / "lancedb")
     lancedb.initialize_collections()
 
-    # Resolve repo and get its root path
-    repo_record = metadata.get_repo_by_name(name)
-    if not repo_record:
-        typer.echo(f"Error: Repository '{name}' not registered.")
-        raise typer.Exit(code=1)
-
-    repo_id = int(repo_record["id"])
-    repo_root = Path(str(repo_record["root_path"]))
-
-    # Build ignore spec
-    extra_security = {
-        "**/id_rsa",
-        "**/*.pem",
-        "**/.aws/**",
-        "**/gcloud/**",
-        "**/secrets/**",
-        "**/*keys.json",
-        "**/*service_account.json",
-        "**/*auth.json",
-    }
-    ignore_patterns = build_ignore_set(config.ignore, config.ignore_exceptions)
-    repo_level_patterns, repo_level_exceptions = load_repo_ignores(repo_root)
-    if dry_run:
-        typer.echo(
-            f"Debug: repo_level ignores loaded: {len(repo_level_patterns)} patterns",
-            err=True,
-        )
-        # Check if bun.lock patterns are in repo_level
-        bun_in_repo = [p for p in repo_level_patterns if "bun" in p.lower()]
-        if bun_in_repo:
-            typer.echo(f"Debug: bun patterns in repo_level: {bun_in_repo}", err=True)
-        else:
-            typer.echo("Debug: NO bun patterns in repo_level", err=True)
-    if repo_level_patterns:
-        ignore_patterns.update(repo_level_patterns)
-    # Apply repo-level exceptions
-    if repo_level_exceptions:
-        ignore_patterns = build_ignore_set(ignore_patterns, repo_level_exceptions)
-    ignore_patterns.update(extra_security)
-
-    # Manually add bun.lock patterns to test
-    ignore_patterns.add("bun.lock")
-    ignore_patterns.add("**/bun.lock")
-
-    ignore_spec = PathSpec.from_lines("gitignore", ignore_patterns)
-
-    # Debug: show which patterns we're using
-    if dry_run:
-        typer.echo(f"Debug: Using {len(ignore_patterns)} ignore patterns", err=True)
-        bun_patterns = [p for p in ignore_patterns if "bun" in p.lower()]
-        if bun_patterns:
-            typer.echo(f"Debug: bun-related patterns: {bun_patterns}", err=True)
-        else:
-            typer.echo("Debug: NO bun patterns found!", err=True)
-    # Get all files for this repo
-    files = metadata.get_all_files_for_repo(repo_id)
-
-    total_chunks_pruned = 0
-    pruned_files = []
-    for file_record in files:
-        file_path = cast(str, file_record["path"])
-        file_id = cast(int, file_record["id"])
-
-        # Check if file matches ignore patterns
-        matches = ignore_spec.match_file(file_path)
-        if dry_run and "bun.lock" in file_path:
-            typer.echo(f"Debug: {file_path} matches={matches}", err=True)
-
-        if matches:
-            pruned_files.append(file_path)
-
-            # Prune all content for this file across all embedding models
-            if not dry_run:
-                # Get all embed models used for this file and prune each
-                for embed_model in ["small", "large"]:
-                    pruned_count = metadata.prune_invalidated_content_for_file(
-                        repo_id, file_id, embed_model=embed_model, current_hashes=set()
-                    )
-                    total_chunks_pruned += pruned_count
-                    lancedb.prune_file_rows(name, file_path, model=embed_model)
-
-                # Also delete any orphaned FTS5 entries for this file
-                with metadata._connect() as conn:
-                    cur = conn.cursor()
-                    cur.execute("DELETE FROM chunks_fts WHERE path = ?", (file_path,))
-                    conn.commit()
-            else:
-                # In dry-run, just count what would be pruned
-                file_chunks = metadata.get_chunks_for_file(repo_id, file_path)
-                total_chunks_pruned += len(file_chunks) if file_chunks else 0
+    result = _prune_ignored_files(name, metadata, lancedb, config, dry_run=dry_run)
+    total_chunks_pruned = result["chunks_pruned"]
+    files_pruned = result["files_pruned"]
 
     if dry_run:
         typer.echo("[DRY RUN] Would prune:")
-        typer.echo(f"  Files: {len(pruned_files)}")
+        typer.echo(f"  Files: {files_pruned}")
         typer.echo(f"  Chunks: {total_chunks_pruned}")
-        for f in pruned_files[:10]:
-            typer.echo(f"    - {f}")
-        if len(pruned_files) > 10:
-            typer.echo(f"    ... and {len(pruned_files) - 10} more")
     else:
         typer.echo(f"✅ Pruned ignored content from '{name}':")
-        typer.echo(f"  Files: {len(pruned_files)}")
+        typer.echo(f"  Files: {files_pruned}")
         typer.echo(f"  Chunks: {total_chunks_pruned}")
 
 
@@ -572,6 +654,7 @@ def reset_repo(
                 typer.echo(f"⚠️  Cleanup warnings: {len(result['lancedb_warnings'])}", err=True)
 
         except Exception as e:
+            _log.warning("Enhanced cleanup failed for %s, continuing anyway", name, exc_info=True)
             typer.echo(f"Warning: Enhanced cleanup failed, continuing anyway: {e}", err=True)
 
     # Re-register repo
@@ -956,6 +1039,7 @@ def reset_all(
 
         except Exception as e:
             error_msg = f"Failed to remove {repo['name']}: {e}"
+            _log.error("Failed to remove repo %s during reset", repo["name"], exc_info=True)
             total_stats["errors"].append(error_msg)  # type: ignore[attr-defined]
             typer.echo(f"  ✗ {error_msg}", err=True)
 

@@ -309,6 +309,19 @@ class TestCacheInvalidationOnReindex:
 
         assert cache.get_results("query", repos=[repo_name]) is None
 
+    def test_reindex_invalidation_also_clears_global_queries(self, temp_dir: Path):
+        cache = QueryCache()
+        pipeline, repo_name = _setup_pipeline(temp_dir, cache)
+
+        cache.set_results("scoped", [{"id": "1"}], repos=[repo_name])
+        cache.set_results("global", [{"id": "2"}])
+        assert cache.get_results("global") is not None
+
+        pipeline.index(repo_name, dry_run=False, force=True, full_reindex=True)
+
+        assert cache.get_results("scoped", repos=[repo_name]) is None
+        assert cache.get_results("global") is None
+
 
 class TestCacheInvalidationAPI:
     """API-level cache invalidation coverage."""

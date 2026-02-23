@@ -5,7 +5,8 @@ import datetime
 import logging
 import sqlite3
 import subprocess
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,10 @@ from .parallel_scanner import scan_repo_parallel
 logger = logging.getLogger(__name__)
 
 
+class _CancelledError(Exception):
+    """Raised when an indexing operation is cancelled via Ctrl-C / request_cancel()."""
+
+
 @dataclass
 class IngestionPipeline:
     """Coordinates scanning, chunking, and persistence."""
@@ -58,6 +63,7 @@ class IngestionPipeline:
     graph_store: GraphStore | None = None
     graph_managers: dict[int, GraphManager] | None = None  # repo_id -> GraphManager
     cache: QueryCache | None = None
+    _cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
 
     def __post_init__(self):
         """Initialize graph store if not provided."""
@@ -67,6 +73,15 @@ class IngestionPipeline:
             self.graph_managers = {}
         self._bm25_stats_path: Path | None = self._resolve_bm25_stats_path()
         self._configure_bm25_statistics()
+
+    def request_cancel(self) -> None:
+        """Signal the pipeline to stop after the current file completes."""
+        self._cancel_event.set()
+
+    def _check_cancelled(self) -> None:
+        """Raise ``_CancelledError`` if cancellation was requested."""
+        if self._cancel_event.is_set():
+            raise _CancelledError("Indexing cancelled")
 
     def get_graph_manager(self, repo_id: int) -> GraphManager:
         """Get or create GraphManager for a repository.
@@ -250,8 +265,8 @@ class IngestionPipeline:
         for model in ["small", "large"]:
             try:
                 self.lancedb.delete_repo(repo_name, model=model)
-            except Exception as e:
-                print(f"  Warning: Could not delete {model} vectors: {e}")
+            except Exception:
+                logger.warning("Could not delete %s vectors for repo %s", model, repo_name, exc_info=True)
 
         # Delete code graph data
         if self.graph_store:
@@ -259,8 +274,8 @@ class IngestionPipeline:
             try:
                 nodes_deleted = cleanup_graph_for_repo(self.graph_store, repo_id)
                 print(f"  Deleted {nodes_deleted} graph nodes and associated edges")
-            except Exception as e:
-                print(f"  Warning: Could not delete graph data: {e}")
+            except Exception:
+                logger.warning("Could not delete graph data for repo_id=%s", repo_id, exc_info=True)
 
         # Delete from metadata database
         print("  Clearing metadata...")
@@ -343,9 +358,9 @@ class IngestionPipeline:
 
                 conn.commit()
                 print("  Metadata cleared successfully")
-            except Exception as e:
+            except Exception:
                 conn.rollback()
-                print(f"  Error clearing metadata: {e}")
+                logger.error("Error clearing metadata for repo_id=%s", repo_id, exc_info=True)
                 raise
 
     def scan(self, repo_name: str, *, dry_run: bool = False, force: bool = False) -> dict:
@@ -456,6 +471,8 @@ class IngestionPipeline:
         """Process a list of modified or added files."""
         stats = {
             "files_done": 0,
+            "files_skipped_ignored": 0,
+            "files_error": 0,
             "chunks_indexed": 0,
             "chunks_skipped": 0,
             "vectors_written": 0,
@@ -470,8 +487,12 @@ class IngestionPipeline:
         repo_config = load_repo_chunking_config(root)
 
         for path in files:
+            # Cooperative cancellation: stop cleanly between files
+            self._check_cancelled()
+
             try:
                 if ignore_spec.match_file(path):
+                    stats["files_skipped_ignored"] += 1
                     print(f"  {path}: skipped (ignored pattern)")
                     if not dry_run:
                         file_id = self.metadata.get_file_id(repo_id, path)
@@ -508,6 +529,7 @@ class IngestionPipeline:
                 try:
                     text = file_path.read_text(encoding="utf-8", errors="ignore")
                 except Exception as e:
+                    stats["files_error"] += 1
                     error_logger.log_file_error(path, e)
                     print(f"Error reading {path}: {e}")
                     continue
@@ -518,6 +540,7 @@ class IngestionPipeline:
                     language=language,
                     text=text,
                     repo_config=repo_config,
+                    model=embed_model,
                 )
 
                 # Compute text_hash for each chunk
@@ -686,6 +709,7 @@ class IngestionPipeline:
                 print(self._format_index_summary(path, len(chunks), len(new_hashes), skipped_occurrences))
 
             except Exception as e:
+                stats["files_error"] += 1
                 error_logger.log_file_error(path, e)
                 print(f"Error processing {path}: {e}")
                 continue
@@ -835,6 +859,17 @@ class IngestionPipeline:
         # Get last successful commit
         last_success = self.metadata.get_last_successful_commit(repo_id)
 
+        # Quick consistency repair: clean up orphaned metadata from prior crashes
+        # (lightweight — only touches SQLite, skipped on fresh/full reindex)
+        if last_success is not None and not full_reindex:
+            try:
+                repair = self.metadata.repair_repository_consistency(repo_id, repo_name)
+                if repair["repairs_performed"]:
+                    for msg in repair["repairs_performed"]:
+                        print(f"  [auto-repair] {msg}")
+            except Exception as exc:
+                logger.warning("Auto-repair failed for %s, continuing anyway", repo_name, exc_info=exc)
+
         # Start session
         session_id = self.metadata.begin_session(repo_id, commit_sha, branch, embed_model)
 
@@ -859,6 +894,7 @@ class IngestionPipeline:
 
             # Initialize counters
             files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
+            files_skipped_ignored = files_error = 0
             graph_nodes_created = graph_edges_created = 0
 
             # Process modified/added files
@@ -876,6 +912,8 @@ class IngestionPipeline:
                 error_logger=error_logger,
             )
             files_done += stats["files_done"]
+            files_skipped_ignored += stats["files_skipped_ignored"]
+            files_error += stats["files_error"]
             chunks_indexed += stats["chunks_indexed"]
             chunks_skipped += stats["chunks_skipped"]
             vectors_written += stats["vectors_written"]
@@ -956,6 +994,10 @@ class IngestionPipeline:
             # Print summary
             print(f"\nIndexing complete for {repo_name}:")
             print(f"  Files processed: {files_done}")
+            if files_skipped_ignored:
+                print(f"  Files skipped (ignored): {files_skipped_ignored}")
+            if files_error:
+                print(f"  Files with errors: {files_error}")
             print(f"  Chunks indexed: {chunks_indexed}")
             print(f"  Chunks skipped (dedup): {chunks_skipped}")
             print(f"  Chunks pruned (deleted): {chunks_pruned}")
@@ -972,7 +1014,7 @@ class IngestionPipeline:
                     if lp.exists() and lp.stat().st_size > 0:
                         print(f"  Errors logged to: {lp}")
             except Exception:
-                pass
+                logger.debug("Could not check error logger state.", exc_info=True)
 
             return {
                 "repo": repo_name,
@@ -981,6 +1023,8 @@ class IngestionPipeline:
                 "commit": commit_sha,
                 "branch": branch,
                 "files_indexed": files_done,
+                "files_skipped_ignored": files_skipped_ignored,
+                "files_error": files_error,
                 "chunks_indexed": chunks_indexed,
                 "chunks_skipped": chunks_skipped,
                 "vectors_written": vectors_written,
@@ -989,7 +1033,7 @@ class IngestionPipeline:
                 "graph_edges_created": graph_edges_created,
                 "dry_run": dry_run,
             }
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, _CancelledError):
             self.metadata.set_session_status(session_id, "aborted", notes="interrupted")
             raise
         except Exception as exc:
@@ -1003,12 +1047,13 @@ class IngestionPipeline:
         full_reindex: bool,
         dry_run: bool,
         max_workers: int | None,
-    ) -> tuple[int, Path, str, str, str, int, ErrorLogger, set[str], list[str], list[str]]:
+    ) -> tuple[int, Path, str, str, str, int, ErrorLogger, set[str], list[str], list[str], int]:
         """Setup parallel indexing session and discover changed files.
 
         Returns:
             Tuple of (repo_id, root, embed_model, commit_sha, branch, session_id,
-                     error_logger, ignore_patterns, changed_files, deleted_files)
+                     error_logger, ignore_patterns, changed_files, deleted_files,
+                     files_skipped_ignored)
         """
         # Resolve repo and Git state
         repo = self.metadata.get_repo_by_name(repo_name)
@@ -1017,9 +1062,28 @@ class IngestionPipeline:
 
         repo_id = int(repo["id"])
         root = Path(repo["root_path"])
-        embed_model = str(repo.get("default_embed_model", self.config.default_embed_model))
 
         from ..embeddings.provider import SUPPORTED_MODELS
+
+        # Detect model mismatch between global config and repo metadata
+        target_model = self.config.default_embed_model.strip().lower()
+        last_model = str(repo.get("default_embed_model", "large")).strip().lower()
+
+        last_success = self.metadata.get_last_successful_commit(repo_id)
+        is_fresh_index = last_success is None
+
+        if target_model != last_model:
+            print(f"⚠️  Global model '{target_model}' differs from repo model '{last_model}'.")
+
+            if not is_fresh_index:
+                print(f"   Triggering full re-index and migration for {repo_name}...")
+                full_reindex = True
+            else:
+                print(f"   Updating repo configuration for {repo_name}...")
+
+            self.metadata.record_repo(repo_name, root, default_embed_model=target_model)
+
+        embed_model = target_model
 
         if embed_model not in SUPPORTED_MODELS:
             raise ValueError(f"Unsupported embed model configured for repo {repo_name}: {embed_model}")
@@ -1038,8 +1102,15 @@ class IngestionPipeline:
             print(f"Full reindex requested: dropping existing index for {repo_name}...")
             self._drop_repo_index(repo_id, repo_name)
 
-        # Get last successful commit
-        last_success = self.metadata.get_last_successful_commit(repo_id)
+        # Quick consistency repair: clean up orphaned metadata from prior crashes
+        if last_success is not None and not full_reindex:
+            try:
+                repair = self.metadata.repair_repository_consistency(repo_id, repo_name)
+                if repair["repairs_performed"]:
+                    for msg in repair["repairs_performed"]:
+                        print(f"  [auto-repair] {msg}")
+            except Exception as exc:
+                logger.warning("Auto-repair failed for %s, continuing anyway", repo_name, exc_info=exc)
 
         # Start session
         session_id = self.metadata.begin_session(repo_id, commit_sha, branch, embed_model)
@@ -1067,20 +1138,23 @@ class IngestionPipeline:
         ignore_patterns.update(extra_security)
 
         # Determine changed files
+        files_skipped_ignored = 0
         if full_reindex or last_success is None:
             print(f"Full reindex mode: scanning all files for {repo_name}")
             with DynamicWorkerPool(max_workers=max_workers) as pool:
                 candidates = scan_repo_parallel(root, ignore_patterns, pool=pool)
             changed_files = [c.rel_path for c in candidates]
             deleted_files = []
+            # Ignored files are excluded by scan_repo_parallel; count not available here
         else:
             print(f"Incremental mode: processing files changed since {last_success[:8]}")
-            changed_files = git_changed_files_modified_added(root, last_success, commit_sha)
+            raw_changed = git_changed_files_modified_added(root, last_success, commit_sha)
             deleted_files = git_changed_files_deleted(root, last_success, commit_sha)
 
-            # Filter ignored files from changed list
+            # Filter ignored files from changed list and count them
             ignore_spec = PathSpec.from_lines("gitignore", ignore_patterns)
-            changed_files = [f for f in changed_files if not ignore_spec.match_file(f)]
+            changed_files = [f for f in raw_changed if not ignore_spec.match_file(f)]
+            files_skipped_ignored = len(raw_changed) - len(changed_files)
 
         return (
             repo_id,
@@ -1093,6 +1167,7 @@ class IngestionPipeline:
             ignore_patterns,
             changed_files,
             deleted_files,
+            files_skipped_ignored,
         )
 
     async def index_parallel(
@@ -1128,12 +1203,14 @@ class IngestionPipeline:
             ignore_patterns,
             changed_files,
             deleted_files,
+            files_skipped_ignored,
         ) = self._setup_parallel_session(repo_name, force, full_reindex, dry_run, max_workers)
 
         self._invalidate_cache_for_repo(repo_name, dry_run=dry_run)
 
         # Counters
         files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
+        files_error = 0
         graph_nodes_created = graph_edges_created = 0
 
         # Setup Async Embedder
@@ -1163,6 +1240,9 @@ class IngestionPipeline:
             with pool as executor:
                 # Process in batches to manage memory and flow
                 for i in range(0, len(changed_files), batch_size):
+                    # Cooperative cancellation: stop cleanly between batches
+                    self._check_cancelled()
+
                     batch_paths = changed_files[i : i + batch_size]
 
                     parse_jobs = []
@@ -1211,6 +1291,7 @@ class IngestionPipeline:
                                 )
                             )
                         except Exception as e:
+                            files_error += 1
                             error_logger.log_file_error(path, e)
                             continue
 
@@ -1222,6 +1303,7 @@ class IngestionPipeline:
 
                     for res in parse_results:
                         if not res.success:
+                            files_error += 1
                             error = Exception(res.error) if res.error else Exception("Unknown error")
                             error_logger.log_file_error(str(res.file_path), error)
                             continue
@@ -1274,9 +1356,14 @@ class IngestionPipeline:
                         if not file_id:
                             continue
 
-                        changed_chunks, unchanged_chunks = dedup.filter_unchanged_chunks(
-                            chunks, repo_id, file_id, embed_model
-                        )
+                        try:
+                            changed_chunks, unchanged_chunks = dedup.filter_unchanged_chunks(
+                                chunks, repo_id, file_id, embed_model
+                            )
+                        except Exception as dedup_err:
+                            files_error += 1
+                            error_logger.log_file_error(path, dedup_err)
+                            continue
                         skipped_occurrences = len(unchanged_chunks)
                         chunks_skipped += skipped_occurrences
 
@@ -1452,7 +1539,7 @@ class IngestionPipeline:
             files_done += del_stats["files_done"]
             chunks_pruned += del_stats["chunks_pruned"]
 
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, _CancelledError):
             self.metadata.set_session_status(session_id, "aborted", notes="interrupted")
             raise
         except Exception as exc:
@@ -1481,6 +1568,29 @@ class IngestionPipeline:
             graph_manager = self.get_graph_manager(repo_id)
             graph_manager.get_graph(force_rebuild=True)
 
+        # Print summary (parallel pipeline does not print one during processing)
+        print(f"\nIndexing complete for {repo_name}:")
+        print(f"  Files processed: {files_done}")
+        if files_skipped_ignored:
+            print(f"  Files skipped (ignored): {files_skipped_ignored}")
+        if files_error:
+            print(f"  Files with errors: {files_error}")
+        print(f"  Chunks indexed: {chunks_indexed}")
+        print(f"  Chunks skipped (dedup): {chunks_skipped}")
+        print(f"  Chunks pruned (deleted): {chunks_pruned}")
+        print(f"  Vectors written: {vectors_written}")
+        if graph_nodes_created > 0 or graph_edges_created > 0:
+            print(f"  Graph nodes created: {graph_nodes_created}")
+            print(f"  Graph edges created: {graph_edges_created}")
+        print(f"  Session: {session_id}")
+        try:
+            if error_logger.had_errors():
+                lp = error_logger.get_log_path()
+                if lp.exists() and lp.stat().st_size > 0:
+                    print(f"  Errors logged to: {lp}")
+        except Exception:
+            pass
+
         return {
             "repo": repo_name,
             "repo_id": repo_id,
@@ -1488,6 +1598,8 @@ class IngestionPipeline:
             "commit": commit_sha,
             "branch": branch,
             "files_indexed": files_done,
+            "files_skipped_ignored": files_skipped_ignored,
+            "files_error": files_error,
             "chunks_indexed": chunks_indexed,
             "chunks_skipped": chunks_skipped,
             "vectors_written": vectors_written,

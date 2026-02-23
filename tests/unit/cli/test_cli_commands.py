@@ -6,8 +6,6 @@ covering add-repo, status, list-repos, list-files, search, validate, repair.
 
 from __future__ import annotations
 
-import subprocess
-
 from typer.testing import CliRunner
 
 from kb.ingest.cli import app
@@ -18,40 +16,27 @@ runner = CliRunner()
 class TestCLIAddRepo:
     """Test add-repo command execution."""
 
-    def test_add_repo_success(self, tmp_path):
+    def test_add_repo_success(self, git_repo, isolated_kb_env):
         """Test successfully adding a repository."""
-        # Create a real git repo
-        repo_path = tmp_path / "test_repo"
-        repo_path.mkdir()
-        (repo_path / "test.py").write_text("x = 1")
-        subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
+        runner.invoke(app, ["init", "--config-path", str(isolated_kb_env.config_path)])
 
-        config_path = tmp_path / "config.toml"
-        runner.invoke(app, ["init", "--config-path", str(config_path)])
-
-        result = runner.invoke(app, ["add-repo", "myrepo", str(repo_path)])
+        result = runner.invoke(app, ["add-repo", "myrepo", str(git_repo)])
 
         assert result.exit_code == 0
         assert "registered" in result.stdout.lower() or "added" in result.stdout.lower()
 
-    def test_add_repo_with_custom_embed_model(self, tmp_path):
+    def test_add_repo_with_custom_embed_model(self, git_repo, isolated_kb_env):
         """Test adding a repository with custom embed model."""
-        repo_path = tmp_path / "test_repo"
-        repo_path.mkdir()
-        subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
-
-        config_path = tmp_path / "config.toml"
-        runner.invoke(app, ["init", "--config-path", str(config_path)])
+        runner.invoke(app, ["init", "--config-path", str(isolated_kb_env.config_path)])
 
         # No longer pass --default-embed-model, uses global config
-        result = runner.invoke(app, ["add-repo", "myrepo", str(repo_path)])
+        result = runner.invoke(app, ["add-repo", "myrepo", str(git_repo)])
 
         assert result.exit_code == 0
 
-    def test_add_repo_non_directory_fails(self, tmp_path):
+    def test_add_repo_non_directory_fails(self, tmp_path, isolated_kb_env):
         """Test that add-repo fails for a file path."""
-        config_path = tmp_path / "config.toml"
-        runner.invoke(app, ["init", "--config-path", str(config_path)])
+        runner.invoke(app, ["init", "--config-path", str(isolated_kb_env.config_path)])
 
         file_path = tmp_path / "somefile.txt"
         file_path.write_text("content")
@@ -64,25 +49,19 @@ class TestCLIAddRepo:
 class TestCLIStatus:
     """Test status command execution."""
 
-    def test_status_no_repos(self, tmp_path):
+    def test_status_no_repos(self, isolated_kb_env):
         """Test status with no registered repos."""
-        config_path = tmp_path / "config.toml"
-        runner.invoke(app, ["init", "--config-path", str(config_path)])
+        runner.invoke(app, ["init", "--config-path", str(isolated_kb_env.config_path)])
 
         result = runner.invoke(app, ["status"])
 
         assert result.exit_code == 0
         # Should show some status, even if no repos
 
-    def test_status_with_specific_repo(self, tmp_path):
+    def test_status_with_specific_repo(self, git_repo, isolated_kb_env):
         """Test status for a specific repository."""
-        repo_path = tmp_path / "test_repo"
-        repo_path.mkdir()
-        subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
-
-        config_path = tmp_path / "config.toml"
-        runner.invoke(app, ["init", "--config-path", str(config_path)])
-        runner.invoke(app, ["add-repo", "myrepo", str(repo_path)])
+        runner.invoke(app, ["init", "--config-path", str(isolated_kb_env.config_path)])
+        runner.invoke(app, ["add-repo", "myrepo", str(git_repo)])
 
         result = runner.invoke(app, ["status", "myrepo"])
 
@@ -92,25 +71,19 @@ class TestCLIStatus:
 class TestCLIListRepos:
     """Test list-repos command execution."""
 
-    def test_list_repos_empty(self, tmp_path):
+    def test_list_repos_empty(self, isolated_kb_env):
         """Test list-repos with no repositories."""
-        config_path = tmp_path / "config.toml"
-        runner.invoke(app, ["init", "--config-path", str(config_path)])
+        runner.invoke(app, ["init", "--config-path", str(isolated_kb_env.config_path)])
 
         result = runner.invoke(app, ["list-repos"])
 
         assert result.exit_code == 0
         # May show empty list or message
 
-    def test_list_repos_with_data(self, tmp_path):
+    def test_list_repos_with_data(self, git_repo, isolated_kb_env):
         """Test list-repos shows registered repositories."""
-        repo_path = tmp_path / "test_repo"
-        repo_path.mkdir()
-        subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
-
-        config_path = tmp_path / "config.toml"
-        runner.invoke(app, ["init", "--config-path", str(config_path)])
-        runner.invoke(app, ["add-repo", "myrepo", str(repo_path)])
+        runner.invoke(app, ["init", "--config-path", str(isolated_kb_env.config_path)])
+        runner.invoke(app, ["add-repo", "myrepo", str(git_repo)])
 
         result = runner.invoke(app, ["list-repos"])
 
@@ -126,10 +99,9 @@ class TestCLIListFiles:
         result = runner.invoke(app, ["list-files"])
         assert result.exit_code != 0
 
-    def test_list_files_nonexistent_repo(self, tmp_path):
+    def test_list_files_nonexistent_repo(self, isolated_kb_env):
         """Test list-files for non-existent repository."""
-        config_path = tmp_path / "config.toml"
-        runner.invoke(app, ["init", "--config-path", str(config_path)])
+        runner.invoke(app, ["init", "--config-path", str(isolated_kb_env.config_path)])
 
         result = runner.invoke(app, ["list-files", "nonexistent"])
 
@@ -144,10 +116,9 @@ class TestCLIValidateRepo:
         result = runner.invoke(app, ["validate-repo"])
         assert result.exit_code != 0
 
-    def test_validate_repo_nonexistent_fails(self, tmp_path):
+    def test_validate_repo_nonexistent_fails(self, isolated_kb_env):
         """Test validate-repo fails for non-existent repository."""
-        config_path = tmp_path / "config.toml"
-        runner.invoke(app, ["init", "--config-path", str(config_path)])
+        runner.invoke(app, ["init", "--config-path", str(isolated_kb_env.config_path)])
 
         result = runner.invoke(app, ["validate-repo", "nonexistent"])
 
@@ -185,24 +156,18 @@ class TestCLIRmRepo:
         result = runner.invoke(app, ["rm-repo"])
         assert result.exit_code != 0
 
-    def test_rm_repo_nonexistent_fails(self, tmp_path):
+    def test_rm_repo_nonexistent_fails(self, isolated_kb_env):
         """Test rm-repo fails for non-existent repository."""
-        config_path = tmp_path / "config.toml"
-        runner.invoke(app, ["init", "--config-path", str(config_path)])
+        runner.invoke(app, ["init", "--config-path", str(isolated_kb_env.config_path)])
 
         result = runner.invoke(app, ["rm-repo", "nonexistent", "--force"])
 
         assert result.exit_code != 0
 
-    def test_rm_repo_success(self, tmp_path):
+    def test_rm_repo_success(self, git_repo, isolated_kb_env):
         """Test rm-repo successfully removes a repository."""
-        repo_path = tmp_path / "test_repo"
-        repo_path.mkdir()
-        subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
-
-        config_path = tmp_path / "config.toml"
-        runner.invoke(app, ["init", "--config-path", str(config_path)])
-        runner.invoke(app, ["add-repo", "myrepo", str(repo_path)])
+        runner.invoke(app, ["init", "--config-path", str(isolated_kb_env.config_path)])
+        runner.invoke(app, ["add-repo", "myrepo", str(git_repo)])
 
         result = runner.invoke(app, ["rm-repo", "myrepo", "--force"])
 
@@ -227,10 +192,9 @@ class TestCLISearch:
         result = runner.invoke(app, ["search"])
         assert result.exit_code != 0
 
-    def test_search_empty_results(self, tmp_path):
+    def test_search_empty_results(self, isolated_kb_env):
         """Test search returns empty results for unindexed query."""
-        config_path = tmp_path / "config.toml"
-        runner.invoke(app, ["init", "--config-path", str(config_path)])
+        runner.invoke(app, ["init", "--config-path", str(isolated_kb_env.config_path)])
 
         runner.invoke(app, ["search", "nonexistent query"])
 
@@ -241,10 +205,9 @@ class TestCLISearch:
 class TestCLIResetAll:
     """Test reset-all command execution."""
 
-    def test_reset_all_requires_confirmation(self, tmp_path):
+    def test_reset_all_requires_confirmation(self, isolated_kb_env):
         """Test reset-all prompts for confirmation without --force."""
-        config_path = tmp_path / "config.toml"
-        runner.invoke(app, ["init", "--config-path", str(config_path)])
+        runner.invoke(app, ["init", "--config-path", str(isolated_kb_env.config_path)])
 
         # Without --force, should prompt for confirmation
         # Providing 'n' to decline
@@ -253,10 +216,9 @@ class TestCLIResetAll:
         # Should exit without deleting
         assert "abort" in result.stdout.lower() or result.exit_code == 0
 
-    def test_reset_all_with_force(self, tmp_path):
+    def test_reset_all_with_force(self, isolated_kb_env):
         """Test reset-all with --force skips confirmation."""
-        config_path = tmp_path / "config.toml"
-        runner.invoke(app, ["init", "--config-path", str(config_path)])
+        runner.invoke(app, ["init", "--config-path", str(isolated_kb_env.config_path)])
 
         result = runner.invoke(app, ["reset-all", "--force"])
 
@@ -266,40 +228,19 @@ class TestCLIResetAll:
 class TestCLIIndex:
     """Test index command execution."""
 
-    def test_index_nonexistent_repo(self, tmp_path):
+    def test_index_nonexistent_repo(self, isolated_kb_env):
         """Test index fails for non-existent repository."""
-        config_path = tmp_path / "config.toml"
-        runner.invoke(app, ["init", "--config-path", str(config_path)])
+        runner.invoke(app, ["init", "--config-path", str(isolated_kb_env.config_path)])
 
         result = runner.invoke(app, ["index", "nonexistent"])
 
         assert result.exit_code != 0
 
-    def test_index_dry_run(self, tmp_path):
+    def test_index_dry_run(self, make_git_repo, isolated_kb_env):
         """Test index with --dry-run flag."""
-        repo_path = tmp_path / "test_repo"
-        repo_path.mkdir()
-        (repo_path / "test.py").write_text("x = 1")
-        subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
-        subprocess.run(
-            ["git", "-C", str(repo_path), "config", "user.email", "test@test.com"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo_path), "config", "user.name", "Test"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
-        subprocess.run(
-            ["git", "-C", str(repo_path), "commit", "-m", "initial"],
-            check=True,
-            capture_output=True,
-        )
+        repo_path = make_git_repo(files={"test.py": "x = 1"})
 
-        config_path = tmp_path / "config.toml"
-        runner.invoke(app, ["init", "--config-path", str(config_path)])
+        runner.invoke(app, ["init", "--config-path", str(isolated_kb_env.config_path)])
         runner.invoke(app, ["add-repo", "myrepo", str(repo_path)])
 
         result = runner.invoke(app, ["index", "myrepo", "--dry-run", "--force"])

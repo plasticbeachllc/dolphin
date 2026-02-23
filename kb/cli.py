@@ -123,9 +123,11 @@ def index(
     dry_run: bool = typer.Option(False, "--dry-run", help="Run without persisting."),
     force: bool = typer.Option(False, "--force", help="Bypass clean working tree check."),
     full: bool = typer.Option(False, "--full", help="Process all files instead of incremental diff."),
+    parallel: bool = typer.Option(True, "--parallel/--no-parallel", help="Use parallel indexing (default: True)."),
+    workers: int | None = typer.Option(None, "--workers", "-w", help="Number of worker processes (default: auto)."),
 ) -> None:
     """Run the full indexing pipeline for the specified repository."""
-    kb_index(name=name, dry_run=dry_run, force=force, full=full)
+    kb_index(name=name, dry_run=dry_run, force=force, full=full, parallel=parallel, workers=workers)
 
 
 @app.command()
@@ -175,6 +177,11 @@ def search(
     show_content: bool = typer.Option(False, "--show-content", "-c", help="Display snippets in terminal output."),
     verbose: bool = typer.Option(False, "--verbose", help="Show detailed hit metadata and snippets."),
     json_output: bool = typer.Option(False, "--json", help="Emit stable JSON output for scripting."),
+    max_lines: int = typer.Option(
+        MAX_SNIPPET_LINES_DISPLAY,
+        "--max-lines",
+        help="Maximum snippet lines to display per hit (default: 8).",
+    ),
 ) -> None:
     """Search indexed code semantically.
 
@@ -255,6 +262,7 @@ def search(
         verbose=verbose,
         meta=meta,
         languages=normalized_langs,
+        max_lines=max(1, max_lines),
     )
 
 
@@ -532,6 +540,7 @@ def _display_results(
     verbose: bool,
     meta: dict[str, object],
     languages: list[str],
+    max_lines: int = MAX_SNIPPET_LINES_DISPLAY,
 ) -> None:
     """Display compact search results by default, verbose details on demand."""
     if not hits:
@@ -593,10 +602,10 @@ def _display_results(
             if isinstance(snippet_text, str) and snippet_text.strip():
                 lines = snippet_text.splitlines()
                 typer.echo("   ---")
-                for line in lines[:MAX_SNIPPET_LINES_DISPLAY]:
+                for line in lines[:max_lines]:
                     typer.echo(f"   {line}")
-                if len(lines) > MAX_SNIPPET_LINES_DISPLAY:
-                    typer.echo(f"   ... ({len(lines) - MAX_SNIPPET_LINES_DISPLAY} more lines)")
+                if len(lines) > max_lines:
+                    typer.echo(f"   ... ({len(lines) - max_lines} more lines)")
                 typer.echo("   ---")
 
     if not verbose:
@@ -657,6 +666,18 @@ def serve(
             metadata.initialize()
             repos = metadata.list_all_repos()
             repo_list = [repo["name"] for repo in repos]
+
+            # Warn about embedding model mismatches
+            config_model = config.default_embed_model
+            for repo in repos:
+                repo_model = repo.get("default_embed_model", "large")
+                if repo_model != config_model:
+                    print_status(
+                        f"Embedding model changed for '{repo['name']}': "
+                        f"indexed with '{repo_model}', config now '{config_model}'. "
+                        f"Will re-index automatically on startup.",
+                        level="warn",
+                    )
         except Exception as e:
             print_status(
                 "Failed to list repositories for automatic watcher startup.",

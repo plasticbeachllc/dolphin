@@ -2,8 +2,10 @@
 
 import os
 import shutil
+import subprocess
 import tempfile
 from collections.abc import Generator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
@@ -11,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 if TYPE_CHECKING:
+    from kb.store.sqlite_meta import SQLiteMetadataStore
     from tests.kb_utils import InMemoryKBBackend
 
 _TEST_CONFIG_ENV = "DOLPHIN_CONFIG_PATH"
@@ -162,6 +165,99 @@ def git_repo(temp_dir: Path, _git_template_dir: Path) -> Generator[Path, None, N
     shutil.copytree(_git_template_dir, repo_path, dirs_exist_ok=True)
     yield repo_path
     # Cleanup is handled by temp_dir context manager
+
+
+@pytest.fixture
+def make_git_repo(_git_template_dir: Path, tmp_path: Path):
+    """Factory fixture for creating git repos with custom file content.
+
+    Usage:
+        repo = make_git_repo({"main.py": "def foo(): pass"})
+        empty = make_git_repo()  # empty repo with initial commit
+
+    Built on _git_template_dir for speed (no subprocess git init).
+    """
+    _counter = 0
+
+    def _factory(files: dict[str, str] | None = None, name: str = "repo") -> Path:
+        nonlocal _counter
+        repo_path = tmp_path / f"{name}_{_counter}"
+        _counter += 1
+        shutil.copytree(_git_template_dir, repo_path, dirs_exist_ok=True)
+
+        if files:
+            for relpath, content in files.items():
+                fpath = repo_path / relpath
+                fpath.parent.mkdir(parents=True, exist_ok=True)
+                fpath.write_text(content)
+            subprocess.run(
+                ["git", "-C", str(repo_path), "add", "."],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(repo_path), "commit", "-m", "Add test files"],
+                check=True,
+                capture_output=True,
+            )
+
+        return repo_path
+
+    return _factory
+
+
+@dataclass
+class KBTestEnv:
+    """Fully isolated knowledge store environment for one test.
+
+    CLI commands that call load_config() will resolve to this isolated
+    store via DOLPHIN_CONFIG_PATH, preventing cross-test pollution.
+    """
+
+    config_path: Path
+    store_root: Path
+    metadata: "SQLiteMetadataStore"
+
+
+@pytest.fixture
+def isolated_kb_env(tmp_path: Path, monkeypatch) -> KBTestEnv:
+    """Per-test isolated config + database.
+
+    Creates a config.toml with isolated store_root, sets DOLPHIN_CONFIG_PATH
+    via monkeypatch, and initializes a fresh SQLite metadata store.
+    """
+    from kb.store.sqlite_meta import SQLiteMetadataStore
+
+    store_root = tmp_path / "kb_store"
+    store_root.mkdir()
+
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        f'[storage]\nstore_root = "{store_root}"\n\n[embedding]\nprovider = "stub"\ndefault_embed_model = "small"\n',
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("DOLPHIN_CONFIG_PATH", str(config_path))
+
+    metadata = SQLiteMetadataStore(store_root / "metadata.db")
+    metadata.initialize()
+
+    return KBTestEnv(config_path=config_path, store_root=store_root, metadata=metadata)
+
+
+@pytest.fixture
+def cli_repo(git_repo: Path, isolated_kb_env: KBTestEnv):
+    """Git repo registered in an isolated KB environment.
+
+    Combines git_repo + isolated_kb_env. The repo is registered directly
+    via metadata store (fast, no CLI roundtrip).
+    """
+    isolated_kb_env.metadata.record_repo(
+        name="test-repo",
+        path=git_repo,
+        default_embed_model="small",
+    )
+    return {"repo_path": git_repo, "repo_name": "test-repo", "env": isolated_kb_env}
 
 
 class MockTiktokenEncoding:
@@ -413,12 +509,15 @@ def setup_tiktoken(request):
         pytest.exit("Tiktoken encoding data required for integration tests", returncode=1)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def mock_tiktoken():
     """Mock tiktoken.get_encoding to avoid network calls during unit tests.
 
     Note: This fixture is NOT autouse. It must be explicitly requested by tests
     or applied via pytest marks. Integration tests should use real tiktoken.
+
+    Function-scoped so the patch does not leak into integration tests
+    when both run on the same xdist worker.
     """
     mock_encoding = MockTiktokenEncoding()
 

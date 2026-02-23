@@ -1,10 +1,12 @@
+import threading
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from kb.api.app import SearchRequest
 from kb.api.search_backend import KnowledgeSearchBackend, create_search_backend
+from kb.cache import QueryCache
 from kb.config import KBConfig
 from kb.retrieval.bm25_normalizer import SigmoidNormalizer
 from kb.retrieval.bm25_stats import BM25Statistics
@@ -22,6 +24,7 @@ def mock_providers():
             "get_chunk_by_id",
             "get_chunk_by_content_identity",
             "get_chunk_locations_by_identity",
+            "get_bm25_hydration_map",
             "get_repo_by_name",
             "get_file_id",
             "index_chunk_for_fts",
@@ -62,19 +65,23 @@ class TestKnowledgeSearchBackend:
                 "text_hash": "hash2",
             }
         ]
-        # Mock the hydration methods for the BM25 result
-        sql_store.get_repo_by_name.return_value = {"id": 1}
-        sql_store.get_file_id.return_value = 2
-        sql_store.get_chunk_locations_by_identity.return_value = [
-            {
-                "content_id": "chunk2",
-                "start_line": 1,
-                "end_line": 10,
-                "symbol_kind": None,
-                "symbol_name": None,
-                "symbol_path": None,
+        sql_store.get_bm25_hydration_map.return_value = {
+            "chunk2": {
+                "repo_id": 1,
+                "file_id": 2,
+                "text_hash": "hash2",
+                "embed_model": "small",
+                "locations": [
+                    {
+                        "start_line": 1,
+                        "end_line": 10,
+                        "symbol_kind": None,
+                        "symbol_name": None,
+                        "symbol_path": None,
+                    }
+                ],
             }
-        ]
+        }
 
         request = SearchRequest(query="test", top_k=10)
         results, _ = basic_backend.search(request)
@@ -106,19 +113,23 @@ class TestKnowledgeSearchBackend:
                 "text_hash": "hash2",
             }
         ]
-        # Mock the hydration methods for the BM25 result
-        sql_store.get_repo_by_name.return_value = {"id": 1}
-        sql_store.get_file_id.return_value = 2
-        sql_store.get_chunk_locations_by_identity.return_value = [
-            {
-                "content_id": "chunk2",
-                "start_line": 1,
-                "end_line": 10,
-                "symbol_kind": None,
-                "symbol_name": None,
-                "symbol_path": None,
+        sql_store.get_bm25_hydration_map.return_value = {
+            "chunk2": {
+                "repo_id": 1,
+                "file_id": 2,
+                "text_hash": "hash2",
+                "embed_model": "small",
+                "locations": [
+                    {
+                        "start_line": 1,
+                        "end_line": 10,
+                        "symbol_kind": None,
+                        "symbol_name": None,
+                        "symbol_path": None,
+                    }
+                ],
             }
-        ]
+        }
 
         # Use low cutoff (0.0) to accept RRF scores (~0.016)
         request = SearchRequest(query="test", score_cutoff=0.0)
@@ -140,21 +151,24 @@ class TestKnowledgeSearchBackend:
             basic_backend.sql_store,
         )
 
-        # Mock the new lookup methods
-        sql_store.get_repo_by_name = MagicMock(return_value={"id": 1})
-        sql_store.get_file_id = MagicMock(return_value=2)
-
         deterministic_id = "32char_deterministic_hash_id"
-        sql_store.get_chunk_locations_by_identity.return_value = [
-            {
-                "content_id": "uuid-123",
-                "start_line": 10,
-                "end_line": 20,
-                "symbol_kind": None,
-                "symbol_name": "func",
-                "symbol_path": "module.func",
+        sql_store.get_bm25_hydration_map.return_value = {
+            deterministic_id: {
+                "repo_id": 1,
+                "file_id": 2,
+                "text_hash": "abcdef",
+                "embed_model": "small",
+                "locations": [
+                    {
+                        "start_line": 10,
+                        "end_line": 20,
+                        "symbol_kind": None,
+                        "symbol_name": "func",
+                        "symbol_path": "module.func",
+                    }
+                ],
             }
-        ]
+        }
         sql_store.get_chunk_by_id.return_value = None
 
         hydrated = basic_backend._hydrate_bm25_results(
@@ -171,15 +185,124 @@ class TestKnowledgeSearchBackend:
             embed_model="small",
         )
 
-        # Verify the new lookup flow was used
-        sql_store.get_repo_by_name.assert_called_once_with("repo")
-        sql_store.get_file_id.assert_called_once_with(1, "repo/file.py")
-        sql_store.get_chunk_locations_by_identity.assert_called_once_with(1, 2, "abcdef", "small")
+        # Verify bulk hydration path was used
+        sql_store.get_bm25_hydration_map.assert_called_once_with([deterministic_id], "small")
         sql_store.get_chunk_by_id.assert_not_called()
         assert hydrated[0]["start_line"] == 10
         # Check generated ID format: {repo_id}:{file_id}:{embed_model}:{text_hash}:{start_line}:{end_line}
         expected_id = "1:2:small:abcdef:10:20"
         assert hydrated[0]["chunk_id"] == expected_id
+
+    def test_search_executes_vector_and_bm25_in_parallel(self, mock_providers, tmp_path: Path):
+        embedding_provider, lance_store, sql_store = mock_providers
+        config = KBConfig.from_mapping(
+            {"storage": {"store_root": str(tmp_path)}, "embedding": {"default_embed_model": "small"}}
+        )
+        backend = KnowledgeSearchBackend(
+            embedding_provider,
+            lance_store,
+            sql_store,
+            hybrid_search_enabled=True,
+            config=config,
+        )
+
+        embedding_provider.embed_texts.return_value = [[0.1] * 1536]
+
+        bm25_started = threading.Event()
+
+        def vector_query(*args, **kwargs):
+            assert bm25_started.wait(timeout=0.5), "BM25 search did not start concurrently"
+            return [{"id": "chunk1", "_distance": 0.1, "repo": "repo", "path": "file.py"}]
+
+        def bm25_search(*args, **kwargs):
+            bm25_started.set()
+            return []
+
+        lance_store.query.side_effect = vector_query
+        sql_store.bm25_search.side_effect = bm25_search
+        sql_store.get_bm25_hydration_map.return_value = {}
+
+        results, _ = backend.search(SearchRequest(query="parallel check", top_k=5))
+
+        assert len(results) == 1
+        assert results[0]["chunk_id"] == "chunk1"
+
+    @pytest.mark.asyncio
+    async def test_search_async_uses_async_embedding_provider(self, tmp_path: Path):
+        embedding_provider = MagicMock(spec=["embed_texts", "embed_texts_async"])
+        embedding_provider.embed_texts = MagicMock(side_effect=AssertionError("sync embed_texts should not be called"))
+        embedding_provider.embed_texts_async = AsyncMock(return_value=[[0.1] * 1536])
+
+        lance_store = MagicMock(spec=["query", "upsert_chunks"])
+        sql_store = MagicMock(
+            spec=[
+                "bm25_search",
+                "get_chunk_contents",
+                "get_chunk_by_id",
+                "get_chunk_by_content_identity",
+                "get_chunk_locations_by_identity",
+                "get_bm25_hydration_map",
+                "get_repo_by_name",
+                "get_file_id",
+                "index_chunk_for_fts",
+                "configure_bm25_statistics",
+            ]
+        )
+        config = KBConfig.from_mapping(
+            {"storage": {"store_root": str(tmp_path)}, "embedding": {"default_embed_model": "small"}}
+        )
+        backend = KnowledgeSearchBackend(
+            embedding_provider,
+            lance_store,
+            sql_store,
+            hybrid_search_enabled=True,
+            config=config,
+        )
+
+        lance_store.query.return_value = [{"id": "chunk1", "_distance": 0.1, "repo": "repo", "path": "file.py"}]
+        sql_store.bm25_search.return_value = []
+
+        results, _ = await backend.search_async(SearchRequest(query="async embedding", top_k=5))
+
+        assert len(results) == 1
+        assert results[0]["chunk_id"] == "chunk1"
+        embedding_provider.embed_texts_async.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_search_async_cache_miss_checks_cache_once(self, tmp_path: Path):
+        embedding_provider = MagicMock(spec=["embed_texts", "embed_texts_async"])
+        embedding_provider.embed_texts = MagicMock(side_effect=AssertionError("sync embed_texts should not be called"))
+        embedding_provider.embed_texts_async = AsyncMock(return_value=[[0.1] * 1536])
+
+        lance_store = MagicMock(spec=["query", "upsert_chunks"])
+        lance_store.query.return_value = [{"id": "chunk1", "_distance": 0.1, "repo": "repo", "path": "file.py"}]
+
+        sql_store = MagicMock()
+        sql_store.get_repo_by_name.return_value = {"id": 1}
+        sql_store.get_pending_changes.return_value = []
+        sql_store.bm25_search.return_value = []
+        sql_store.get_bm25_hydration_map.return_value = {}
+
+        cache = MagicMock()
+        cache.get_search_results.return_value = None
+
+        config = KBConfig.from_mapping(
+            {"storage": {"store_root": str(tmp_path)}, "embedding": {"default_embed_model": "small"}}
+        )
+        backend = KnowledgeSearchBackend(
+            embedding_provider,
+            lance_store,
+            sql_store,
+            cache=cache,
+            hybrid_search_enabled=True,
+            config=config,
+        )
+
+        results, _ = await backend.search_async(SearchRequest(query="async cache miss", repos=["repo"], top_k=5))
+
+        assert len(results) == 1
+        assert results[0]["chunk_id"] == "chunk1"
+        assert cache.get_search_results.call_count == 1
 
     def test_bm25_normalization_uses_min_max_when_stats_available(self, tmp_path: Path):
         stats_path = tmp_path / "bm25_stats.json"
@@ -335,6 +458,68 @@ class TestKnowledgeSearchBackend:
         # Should detect hash mismatch and ignore cursor
         results_mismatch, _ = basic_backend.search(request_mismatch)
         assert len(results_mismatch) == 1
+
+    def test_search_cache_key_distinguishes_request_filters(self, mock_providers, tmp_path: Path):
+        """Different semantic filters must map to different cache entries."""
+        embedding_provider, lance_store, sql_store = mock_providers
+        config = KBConfig.from_mapping(
+            {"storage": {"store_root": str(tmp_path)}, "embedding": {"default_embed_model": "small"}}
+        )
+        backend = KnowledgeSearchBackend(
+            embedding_provider,
+            lance_store,
+            sql_store,
+            cache=QueryCache(enabled=True),
+            hybrid_search_enabled=False,
+            config=config,
+        )
+
+        embedding_provider.embed_texts.return_value = [[0.1] * 1536]
+        lance_store.query.return_value = [{"id": "chunk1", "_distance": 0.1, "repo": "repo", "path": "file.py"}]
+
+        request_plain = SearchRequest(query="cache key", top_k=5)
+        request_filtered = SearchRequest(query="cache key", top_k=5, exclude_patterns=["*.md"])
+
+        backend.search(request_plain)
+        backend.search(request_filtered)
+        backend.search(request_filtered)
+
+        # First two requests should execute search; third should hit cache for filtered variant.
+        assert embedding_provider.embed_texts.call_count == 2
+        assert lance_store.query.call_count == 2
+
+    def test_search_cache_hit_preserves_next_cursor(self, mock_providers, tmp_path: Path):
+        """Cache hits must return the same next_cursor as the original search response."""
+        embedding_provider, lance_store, sql_store = mock_providers
+        config = KBConfig.from_mapping(
+            {"storage": {"store_root": str(tmp_path)}, "embedding": {"default_embed_model": "small"}}
+        )
+        backend = KnowledgeSearchBackend(
+            embedding_provider,
+            lance_store,
+            sql_store,
+            cache=QueryCache(enabled=True),
+            hybrid_search_enabled=False,
+            config=config,
+        )
+
+        embedding_provider.embed_texts.return_value = [[0.1] * 1536]
+        lance_store.query.return_value = [
+            {"id": f"chunk_{i}", "_distance": 0.1 * (i + 1), "repo": "repo", "path": f"file_{i}.py"} for i in range(8)
+        ]
+
+        request = SearchRequest(query="cursor cache", top_k=3)
+        first_results, first_cursor = backend.search(request)
+
+        assert len(first_results) == 3
+        assert first_cursor is not None
+
+        second_results, second_cursor = backend.search(request)
+        assert second_results == first_results
+        assert second_cursor == first_cursor
+        # Only the first call should execute embedding/vector search.
+        assert embedding_provider.embed_texts.call_count == 1
+        assert lance_store.query.call_count == 1
 
 
 @pytest.fixture

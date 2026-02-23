@@ -46,21 +46,19 @@ class TestOpenAIEmbeddingProvider:
 
     def test_init_with_api_key(self):
         """Test initialization with explicit API key."""
-        with patch("openai.OpenAI") as mock_openai_class:
-            provider = OpenAIEmbeddingProvider(api_key="test-key-123")
+        with patch("openai.OpenAI"):
+            provider = OpenAIEmbeddingProvider(api_key="sk-test-key-1234567890", validate_key=False)
 
-            assert provider.api_key == "test-key-123"
+            assert provider.api_key == "sk-test-key-1234567890"
             assert provider.batch_size == 100
-            mock_openai_class.assert_called_once_with(api_key="test-key-123")
 
     def test_init_with_env_var(self):
         """Test initialization reading API key from environment."""
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "env-key-456"}):
-            with patch("openai.OpenAI") as mock_openai_class:
-                provider = OpenAIEmbeddingProvider()
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-env-key-456789012345"}):
+            with patch("openai.OpenAI"):
+                provider = OpenAIEmbeddingProvider(validate_key=False)
 
-                assert provider.api_key == "env-key-456"
-                mock_openai_class.assert_called_once_with(api_key="env-key-456")
+                assert provider.api_key == "sk-env-key-456789012345"
 
     def test_init_without_api_key_raises(self):
         """Test that missing API key raises ValueError."""
@@ -82,7 +80,7 @@ class TestOpenAIEmbeddingProvider:
             mock_client.embeddings.create.return_value = mock_response
             mock_openai_class.return_value = mock_client
 
-            provider = OpenAIEmbeddingProvider(api_key="test-key", validate_key=False)
+            provider = OpenAIEmbeddingProvider(api_key="sk-test-key-1234567890", validate_key=False)
             result = provider.embed_texts("small", ["text1", "text2"])
 
             assert len(result) == 2
@@ -115,7 +113,7 @@ class TestOpenAIEmbeddingProvider:
             ]
             mock_openai_class.return_value = mock_client
 
-            provider = OpenAIEmbeddingProvider(api_key="test-key", batch_size=100, validate_key=False)
+            provider = OpenAIEmbeddingProvider(api_key="sk-test-key-1234567890", batch_size=100, validate_key=False)
             result = provider.embed_texts("small", texts)
 
             assert len(result) == 250
@@ -131,7 +129,7 @@ class TestOpenAIEmbeddingProvider:
             mock_client.embeddings.create.return_value = mock_response
             mock_openai_class.return_value = mock_client
 
-            provider = OpenAIEmbeddingProvider(api_key="test-key", validate_key=False)
+            provider = OpenAIEmbeddingProvider(api_key="sk-test-key-1234567890", validate_key=False)
             result = provider.embed_texts("large", ["test"])
 
             assert len(result[0]) == 3072
@@ -143,7 +141,7 @@ class TestOpenAIEmbeddingProvider:
             mock_client = Mock()
             mock_openai_class.return_value = mock_client
 
-            provider = OpenAIEmbeddingProvider(api_key="test-key", validate_key=False)
+            provider = OpenAIEmbeddingProvider(api_key="sk-test-key-1234567890", validate_key=False)
             result = provider.embed_texts("small", [])
 
             assert result == []
@@ -164,11 +162,57 @@ class TestOpenAIEmbeddingProvider:
             ]
             mock_openai_class.return_value = mock_client
 
-            provider = OpenAIEmbeddingProvider(api_key="test-key", validate_key=False)
+            provider = OpenAIEmbeddingProvider(api_key="sk-test-key-1234567890", validate_key=False)
             result = provider.embed_texts("small", ["test"])
 
             assert len(result) == 1
             assert mock_client.embeddings.create.call_count == 3
+
+
+class TestOpenAIKeyValidation:
+    """Tests for API key format validation and _validate_api_key."""
+
+    def test_init_rejects_key_without_sk_prefix(self):
+        """Key without 'sk-' prefix raises ValueError matching 'malformed'."""
+        with patch("openai.OpenAI"):
+            with pytest.raises(ValueError, match="malformed"):
+                OpenAIEmbeddingProvider(api_key="toolongbutnosk-prefix1234", validate_key=False)
+
+    def test_init_rejects_key_too_short(self):
+        """Key < 20 chars raises ValueError."""
+        with patch("openai.OpenAI"):
+            with pytest.raises(ValueError, match="malformed"):
+                OpenAIEmbeddingProvider(api_key="sk-short", validate_key=False)
+
+    def test_validate_api_key_success(self):
+        """With patched OpenAI that succeeds, validate_key=True init completes."""
+        with patch("openai.OpenAI") as mock_openai_class:
+            mock_client = Mock()
+            mock_client.embeddings.create.return_value = Mock(data=[Mock(embedding=[0.1] * 1536)])
+            mock_openai_class.return_value = mock_client
+
+            provider = OpenAIEmbeddingProvider(api_key="sk-test-key-1234567890", validate_key=True)
+            assert provider.api_key == "sk-test-key-1234567890"
+
+    def test_validate_api_key_auth_failure(self):
+        """Mock raises 401; init raises RuntimeError containing 'VALIDATION FAILED'."""
+        with patch("openai.OpenAI") as mock_openai_class:
+            mock_client = Mock()
+            mock_client.embeddings.create.side_effect = Exception("Error code: 401 - invalid api key")
+            mock_openai_class.return_value = mock_client
+
+            with pytest.raises(RuntimeError, match="VALIDATION FAILED"):
+                OpenAIEmbeddingProvider(api_key="sk-test-key-1234567890", validate_key=True)
+
+    def test_validate_api_key_other_error_reraises(self):
+        """Mock raises ConnectionError; original exception propagates (not wrapped)."""
+        with patch("openai.OpenAI") as mock_openai_class:
+            mock_client = Mock()
+            mock_client.embeddings.create.side_effect = ConnectionError("network down")
+            mock_openai_class.return_value = mock_client
+
+            with pytest.raises(ConnectionError, match="network down"):
+                OpenAIEmbeddingProvider(api_key="sk-test-key-1234567890", validate_key=True)
 
 
 class TestProviderFactory:
@@ -183,7 +227,7 @@ class TestProviderFactory:
     def test_create_openai_provider(self):
         """Test creating OpenAI provider."""
         with patch("openai.OpenAI"):
-            provider = create_provider("openai", api_key="test-key")
+            provider = create_provider("openai", api_key="sk-test-key-1234567890", validate_key=False)
             assert isinstance(provider, OpenAIEmbeddingProvider)
 
     def test_create_invalid_provider(self):
@@ -195,14 +239,14 @@ class TestProviderFactory:
         """Test setting global default provider."""
         # Create a custom provider
         with patch("openai.OpenAI"):
-            custom_provider = OpenAIEmbeddingProvider(api_key="test-key")
+            custom_provider = OpenAIEmbeddingProvider(api_key="sk-test-key-1234567890")
             set_default_provider(custom_provider)
 
             try:
                 # Test that convenience function uses new default
                 mock_response = Mock()
                 mock_response.data = [Mock(embedding=[0.9] * 1536)]
-                custom_provider.client.embeddings.create.return_value = mock_response  # type: ignore[assignment]
+                custom_provider._client.embeddings.create.return_value = mock_response  # type: ignore[assignment]
 
                 result = embed_texts("small", ["test"])
                 assert result[0] == [0.9] * 1536

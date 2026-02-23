@@ -52,9 +52,19 @@ class TestInitCommand:
         assert result.exit_code == 0
         assert "LanceDB root initialized" in result.stdout
 
-    def test_init_is_idempotent(self, tmp_path):
+    def test_init_is_idempotent(self, tmp_path, monkeypatch):
         """Test that running init twice is safe."""
         config_path = tmp_path / "config.toml"
+        store_root = tmp_path / "store"
+
+        # Patch the config template to use an isolated store root so parallel
+        # xdist workers don't race on the default ~/.dolphin/knowledge_store path.
+        original_template = _read_config_template()
+        isolated_template = original_template.replace(
+            'store_root = "~/.dolphin/knowledge_store"',
+            f'store_root = "{store_root}"',
+        )
+        monkeypatch.setattr("kb.ingest.cli._read_config_template", lambda: isolated_template)
 
         # First run
         result1 = runner.invoke(app, ["init", "--config-path", str(config_path)])
@@ -378,17 +388,17 @@ class TestBuildPipeline:
             openai_api_key_env="TEST_API_KEY",
         )
 
-        monkeypatch.setenv("TEST_API_KEY", "test-key-12345")
+        monkeypatch.setenv("TEST_API_KEY", "sk-test-key-1234567890")
 
         # Mock create_provider to avoid real API validation
         with patch("kb.ingest.cli.create_provider") as mock_create:
-            mock_provider = OpenAIEmbeddingProvider(api_key="test-key-12345", validate_key=False)
+            mock_provider = OpenAIEmbeddingProvider(api_key="sk-test-key-1234567890", validate_key=False)
             mock_create.return_value = mock_provider
 
             pipeline = _build_pipeline(config)
 
             assert pipeline is not None
-            mock_create.assert_called_once_with("openai", api_key="test-key-12345", batch_size=100)
+            mock_create.assert_called_once_with("openai", api_key="sk-test-key-1234567890", batch_size=100)
 
 
 class TestConfigTemplate:

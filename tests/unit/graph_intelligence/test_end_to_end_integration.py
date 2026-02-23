@@ -4,11 +4,8 @@ Tests the full integration flow without requiring real tiktoken/embeddings.
 Uses mocked components for embedding while testing real graph intelligence.
 """
 
-import shutil
 import subprocess
-import tempfile
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 from sqlmodel import Session, select
@@ -19,40 +16,7 @@ from kb.store.graph_store import GraphStore
 from kb.store.sql_models import CodeEdge, CodeNode, GraphMetrics
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
-
-@pytest.fixture
-def temp_git_repo():
-    """Create a temporary git repository with Python code."""
-    tmpdir = tempfile.mkdtemp()
-    repo_path = Path(tmpdir) / "test_repo"
-    repo_path.mkdir()
-
-    # Initialize git repo with test-friendly config
-    subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@example.com"],
-        cwd=repo_path,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test User"],
-        cwd=repo_path,
-        check=True,
-        capture_output=True,
-    )
-    # Disable GPG signing for this repo
-    subprocess.run(
-        ["git", "config", "commit.gpgsign", "false"],
-        cwd=repo_path,
-        check=True,
-        capture_output=True,
-    )
-
-    # Create Python files
-    main_py = repo_path / "main.py"
-    main_py.write_text(
-        """
+_MAIN_PY = """\
 def main():
     result = process()
     display(result)
@@ -69,21 +33,12 @@ def transform(data):
 def display(result):
     print(result)
 """
-    )
 
-    # Commit
-    subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "Initial commit"],
-        cwd=repo_path,
-        check=True,
-        capture_output=True,
-    )
 
-    yield repo_path
-
-    # Cleanup
-    shutil.rmtree(tmpdir)
+@pytest.fixture
+def temp_git_repo(make_git_repo):
+    """Create a temporary git repository with Python code."""
+    return make_git_repo(files={"main.py": _MAIN_PY})
 
 
 @pytest.fixture

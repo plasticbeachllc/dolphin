@@ -87,8 +87,14 @@ class TestChunkDeduplication:
         assert unchanged == [chunk_new]
         assert chunk_without_hash in changed
 
-    def test_hash_computation_failure_fallback(self, temp_db_path):
-        """Test error handling in hash computation with conservative fallback."""
+    def test_hash_computation_failure_propagates(self, temp_db_path):
+        """Test that store errors propagate instead of silently treating all chunks as changed.
+
+        Previously the deduplicator swallowed errors and returned an empty hash set,
+        which caused every chunk to look changed and could produce duplicate vectors.
+        Now errors propagate so the caller (pipeline) can skip the file entirely and
+        increment its error counter.
+        """
         store = SQLiteMetadataStore(temp_db_path)
         store.initialize()
 
@@ -115,13 +121,14 @@ class TestChunkDeduplication:
         chunk_new = _make_chunk("print('hi')\n", 1)
         chunk_new.text_hash = hash_text(chunk_new.text)
 
-        # Simulate store failure and ensure fallback treats everything as changed
+        # Simulate store failure; exception must propagate so callers skip the file
         with patch.object(store, "get_existing_content_hashes_for_file") as mock_method:
             mock_method.side_effect = RuntimeError("boom")
 
-            changed, unchanged = dedup.filter_unchanged_chunks([chunk_new], repo_id, file_id, embed_model)
+            import pytest as _pytest
 
-            assert len(changed) == 1 and len(unchanged) == 0
+            with _pytest.raises(RuntimeError, match="boom"):
+                dedup.filter_unchanged_chunks([chunk_new], repo_id, file_id, embed_model)
 
     def test_moved_chunk_handling(self, temp_db_path):
         """Test that moved chunks are properly handled (treated as changed)."""
@@ -210,3 +217,70 @@ class TestChunkDeduplication:
         changed, unchanged = dedup.filter_unchanged_chunks([chunk], repo_id, file_id, "large")
         assert len(unchanged) == 0
         assert len(changed) == 1
+
+    def test_chunk_without_text_hash_treated_as_changed(self, temp_db_path):
+        """Chunk with text_hash = None always lands in changed, never unchanged."""
+        store = SQLiteMetadataStore(temp_db_path)
+        store.initialize()
+
+        repo_root = Path("/mock/repo")
+        store.record_repo("sample", repo_root)
+        repo = store.get_repo_by_name("sample")
+        assert repo is not None
+        repo_id = int(repo["id"])
+        file_id = store.upsert_file(
+            repo_id,
+            path="src/main.py",
+            ext=".py",
+            language="python",
+            is_binary=False,
+            size_bytes=42,
+        )
+
+        dedup = ChunkDeduplicator(store)
+
+        # Create chunk with no text_hash set
+        chunk = Chunk(text="print('no hash')\n", start_line=1, end_line=1, token_count=5)
+        assert getattr(chunk, "text_hash", None) is None
+
+        changed, unchanged = dedup.filter_unchanged_chunks([chunk], repo_id, file_id, "small")
+
+        # The chunk had no hash, so it was computed and the chunk is treated as changed
+        assert len(changed) == 1
+        assert len(unchanged) == 0
+        # Hash should now be set
+        assert chunk.text_hash is not None
+
+    def test_mixed_hashed_and_unhashed_chunks(self, temp_db_path):
+        """2 chunks: one with stored hash (unchanged), one without hash (changed)."""
+        store = SQLiteMetadataStore(temp_db_path)
+        store.initialize()
+
+        repo_root = Path("/mock/repo")
+        store.record_repo("sample", repo_root)
+        repo = store.get_repo_by_name("sample")
+        assert repo is not None
+        repo_id = int(repo["id"])
+        file_id = store.upsert_file(
+            repo_id,
+            path="src/main.py",
+            ext=".py",
+            language="python",
+            is_binary=False,
+            size_bytes=42,
+        )
+
+        dedup = ChunkDeduplicator(store)
+
+        # Chunk with a pre-computed hash, persisted in the store
+        chunk_hashed = Chunk(text="print('hashed')\n", start_line=1, end_line=1, token_count=5)
+        chunk_hashed.text_hash = hash_text(chunk_hashed.text)
+        store.upsert_chunk_content_row(repo_id, file_id, chunk_hashed.text_hash, "small")
+
+        # Chunk without a hash (will be computed, treated as changed since not in store)
+        chunk_unhashed = Chunk(text="print('new content')\n", start_line=2, end_line=2, token_count=5)
+
+        changed, unchanged = dedup.filter_unchanged_chunks([chunk_hashed, chunk_unhashed], repo_id, file_id, "small")
+
+        assert chunk_hashed in unchanged
+        assert chunk_unhashed in changed

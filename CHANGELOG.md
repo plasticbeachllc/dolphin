@@ -11,6 +11,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.3] - 2026-02-23
+
+### Added
+
+- **Defensive Utilities** (`kb/utils/defensive.py`): `@defensive` decorator and context manager for fault-tolerant code paths with configurable fallbacks and structured error logging.
+- **Token Estimation** (`kb/utils/tokens.py`): Lightweight token-counting utilities for cost estimation without requiring full tokenizer loads.
+- **Async Search**: `search_async` pathway in the search backend runs vector + BM25 queries via `asyncio.to_thread`, unblocking API workers during search execution.
+- **API Key Authentication**: All `/v1/*` endpoints now require an API key validated with `hmac.compare_digest`; `/health` remains unauthenticated.
+- **Crash Recovery**: Server startup now aborts stale indexing sessions left by previous processes that exited uncleanly.
+- **Embedding Model Mismatch Detection**: Startup warns when a repo's indexed embedding model differs from the configured default and triggers automatic full reindex via watcher sync.
+- **FTS Content Enrichment**: BM25 full-text index now includes path segments and symbol tokens, improving identifier search recall.
+
+### Changed
+
+- **BM25 OR Queries**: BM25 search now uses OR-mode queries for multi-term searches, improving recall for broad queries.
+- **Watcher Shutdown**: Graceful watcher shutdown now uses configurable timeouts (`DOLPHIN_WATCH_SHUTDOWN_TIMEOUT`, `DOLPHIN_WATCH_CANCEL_TIMEOUT`) with explicit stop-request and cancel phases.
+- **Search Result Caching**: Cache layer enhanced with query fingerprinting, result-set caching, and eviction support for search results.
+- **LanceDB Auto-Indexing**: LanceDB store now automatically creates IVF-PQ indexes when table row counts exceed thresholds, with collection lifecycle management improvements.
+- **SQLite Metadata Store**: Expanded with stale session abort, embedding model tracking per repo, and additional query helpers.
+
+### Fixed
+
+- **Pipeline Embedding Model Switching**: Ingestion pipeline detects embedding model changes and triggers full reindex instead of incremental, preventing mixed-model indexes.
+- **Pydantic Deprecation**: Replaced deprecated class-based `Config` inner class on `SearchRequest` with `model_config = ConfigDict(...)` to silence `PydanticDeprecatedSince20` warnings and maintain forward compatibility with Pydantic V3.
+- **Server Watcher Shutdown Hang**: Watcher shutdown now explicitly requests stop before cancelling tasks, preventing post-shutdown Ctrl-C hangs and noisy thread-exit traces.
+- **Pipeline Return Type**: Fixed `search_async` return type annotation and cache tuple unpacking.
+- **Config Reset Bug**: Fixed config file handling during `reset-repo` operations.
+- **Startup Sync Edge Cases**: Fixed startup sync behavior when embedding models change between runs.
+- **CodeQL and Audit Issues**: Addressed security scan findings and documented CVE ignores in the security-scan workflow.
+
+---
+
 ## [0.2.2] - 2026-02-20
 
 ### Added

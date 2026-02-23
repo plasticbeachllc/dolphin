@@ -5,7 +5,14 @@ from typing import Any, cast
 
 import pytest
 
-from kb.api.app import SearchRequest, reset_search_backend, reset_stores, set_search_backend, set_stores
+from kb.api.app import (
+    SearchRequest,
+    SearchResultSet,
+    reset_search_backend,
+    reset_stores,
+    set_search_backend,
+    set_stores,
+)
 from kb.store import LanceDBStore, SQLiteMetadataStore
 from tests.utils.mock_services import MockEmbeddingService
 
@@ -16,15 +23,15 @@ class MockSearchBackend:
     def __init__(self, metadata_store: SQLiteMetadataStore, lancedb_store: LanceDBStore):
         self.metadata_store = metadata_store
         self.lancedb_store = lancedb_store
-        self.search_calls = []
+        self.search_calls: list[SearchRequest] = []
 
-    def search(self, request: SearchRequest) -> tuple[list[dict[str, Any]], str | None]:
+    def search(self, request: SearchRequest) -> SearchResultSet:
         """Mock search implementation that returns predictable results."""
         self.search_calls.append(request)
 
         # Return mock search results based on query
         if "widget" in request.query.lower():
-            return (
+            return SearchResultSet(
                 [
                     {
                         "path": "src/widgets.py",
@@ -40,7 +47,7 @@ class MockSearchBackend:
                 None,
             )
         elif "overview" in request.query.lower():
-            return (
+            return SearchResultSet(
                 [
                     {
                         "path": "docs/overview.md",
@@ -55,7 +62,7 @@ class MockSearchBackend:
                 None,
             )
         else:
-            return [], None
+            return SearchResultSet([], None)
 
 
 class TestSearchIntegration:

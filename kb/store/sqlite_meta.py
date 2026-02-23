@@ -110,6 +110,81 @@ def generate_fts_content_id(repo_id: int, file_id: int, text_hash: str) -> str:
 
 logger = logging.getLogger(__name__)
 
+# Sentinel used to separate search-enrichment tokens from actual content in FTS5.
+_FTS_ENRICHMENT_SENTINEL = "\n__FTS_META__\n"
+
+# Regex for splitting CamelCase / PascalCase identifiers into sub-tokens.
+_CAMEL_SPLIT_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+
+
+def _split_camel_case(name: str) -> list[str]:
+    """Split a CamelCase identifier into lowercase sub-tokens.
+
+    >>> _split_camel_case("IngestionPipeline")
+    ['ingestion', 'pipeline']
+    >>> _split_camel_case("HTMLParser")
+    ['html', 'parser']
+    >>> _split_camel_case("simple")
+    ['simple']
+    """
+    parts = _CAMEL_SPLIT_RE.split(name)
+    return [p.lower() for p in parts if p]
+
+
+def _path_tokens(path: str) -> list[str]:
+    """Extract searchable tokens from a file path.
+
+    Splits on '/' and '.', strips common noise like file extensions everyone knows,
+    and lowercases everything.
+
+    >>> _path_tokens("kb/ingest/pipeline.py")
+    ['kb', 'ingest', 'pipeline']
+    """
+    # Strip the file extension first, then split on path separators.
+    # This avoids confusing directory names (e.g. "c/") with extensions (e.g. ".c").
+    stem = re.sub(r"\.[^/\\]+$", "", path)
+    parts = re.split(r"[/\\]", stem)
+    return [p.lower() for p in parts if p]
+
+
+def enrich_fts_content(
+    content: str,
+    path: str,
+    symbol_name: str | None = None,
+    symbol_path: str | None = None,
+) -> str:
+    """Build FTS5 content enriched with path tokens and CamelCase-split symbols.
+
+    The enrichment tokens are appended after a sentinel line so they can be
+    stripped when retrieving content for display (see ``strip_fts_enrichment``).
+    """
+    extra_tokens: list[str] = []
+
+    # Add path components as searchable tokens
+    extra_tokens.extend(_path_tokens(path))
+
+    # Split CamelCase symbol names into sub-tokens
+    if symbol_name:
+        extra_tokens.extend(_split_camel_case(symbol_name))
+    if symbol_path:
+        for segment in re.split(r"[./]", symbol_path):
+            if segment:
+                extra_tokens.extend(_split_camel_case(segment))
+
+    if not extra_tokens:
+        return content
+
+    unique = list(dict.fromkeys(extra_tokens))
+    return content + _FTS_ENRICHMENT_SENTINEL + " ".join(unique)
+
+
+def strip_fts_enrichment(content: str) -> str:
+    """Remove enrichment tokens appended by ``enrich_fts_content``."""
+    idx = content.find(_FTS_ENRICHMENT_SENTINEL)
+    if idx == -1:
+        return content
+    return content[:idx]
+
 
 class SQLiteMetadataStore:
     """SQLite-backed metadata store using SQLModel for schema materialization."""
@@ -150,8 +225,13 @@ class SQLiteMetadataStore:
         def _set_sqlite_pragma(dbapi_connection, connection_record):
             try:
                 dbapi_connection.execute("PRAGMA foreign_keys=ON")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.error(
+                    "Failed to enable SQLite foreign key enforcement; referential integrity cannot be guaranteed: %s",
+                    exc,
+                    exc_info=True,
+                )
+                raise
 
         return engine
 
@@ -586,7 +666,7 @@ class SQLiteMetadataStore:
                     # Log warning but don't fail initialization for existing databases
                     print(f"Warning: Found {count} orphaned records in {check_name}")
 
-    def record_repo(self, name: str, path: Path | str, *, default_embed_model: str = "small") -> None:
+    def record_repo(self, name: str, path: Path | str, *, default_embed_model: str = "large") -> None:
         """Insert or update a repo registration.
 
         Uses raw sqlite3 for simplicity; models are already materialized.
@@ -617,7 +697,7 @@ class SQLiteMetadataStore:
             )
             conn.commit()
 
-    def register_repo(self, name: str, path: str | Path, *, default_embed_model: str = "small") -> None:
+    def register_repo(self, name: str, path: str | Path, *, default_embed_model: str = "large") -> None:
         """Alias for record_repo for backward compatibility.
 
         Args:
@@ -1102,6 +1182,7 @@ class SQLiteMetadataStore:
 
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
+                conn.execute("BEGIN IMMEDIATE")
                 # Load existing
                 cur.execute(
                     """
@@ -1212,6 +1293,7 @@ class SQLiteMetadataStore:
         """Delete content (and locations) not present in current_hashes. Returns count deleted."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
+                conn.execute("BEGIN IMMEDIATE")
                 # First, get the file path for FTS5 cleanup
                 cur.execute("SELECT path FROM files WHERE id = ?", (int(file_id),))
                 file_row = cur.fetchone()
@@ -1302,6 +1384,7 @@ class SQLiteMetadataStore:
             return mapping
         with self._connect() as conn, closing(conn.cursor()) as cur:
             try:
+                conn.execute("BEGIN IMMEDIATE")
                 # Pre-check: Verify the file exists in the files table
                 # This provides a clearer error message than an FK constraint failure
                 cur.execute("SELECT id, path FROM files WHERE id = ?", (int(file_id),))
@@ -1425,6 +1508,31 @@ class SQLiteMetadataStore:
             rows = cur.fetchall() or []
             return [{"id": str(r[0])} for r in rows]
 
+    @staticmethod
+    def _prepare_fts5_query(query: str) -> str:
+        """Convert a plain-text query to an FTS5 OR query for broader matching.
+
+        FTS5 uses implicit AND by default, which is too restrictive for search:
+        "ingestion indexer" requires BOTH terms in a chunk.  Converting to OR
+        ensures partial matches surface while BM25 naturally ranks multi-term
+        matches higher.
+
+        Queries that already contain explicit FTS5 operators or quoted phrases
+        are passed through unchanged.
+        """
+        tokens = query.split()
+        if len(tokens) <= 1:
+            return query
+
+        # Preserve queries with explicit FTS5 operators or quoted phrases
+        fts5_operators = {"AND", "OR", "NOT", "NEAR"}
+        if any(t.upper() in fts5_operators for t in tokens):
+            return query
+        if '"' in query:
+            return query
+
+        return " OR ".join(tokens)
+
     def bm25_search(
         self,
         query: str,
@@ -1459,11 +1567,13 @@ class SQLiteMetadataStore:
         if any(char in query for char in [";", "\\", "\x00"]):
             return []
 
+        fts_query = self._prepare_fts5_query(query)
+
         try:
             with self._connect() as conn, closing(conn.cursor()) as cur:
                 # Build FTS5 query with filters
                 conditions = ["chunks_fts MATCH ?"]
-                params = [query]
+                params = [fts_query]
 
                 if repo:
                     conditions.append("repo = ?")
@@ -1547,6 +1657,8 @@ class SQLiteMetadataStore:
             symbol_path: Optional fully qualified symbol path
         """
 
+        enriched = enrich_fts_content(content, path, symbol_name, symbol_path)
+
         with self._connect() as conn, closing(conn.cursor()) as cur:
             # Upsert: replace if exists, insert if new
             cur.execute(
@@ -1555,7 +1667,7 @@ class SQLiteMetadataStore:
                 (content_id, repo, path, text_hash, content, symbol_name, symbol_path)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-                (content_id, repo, path, text_hash, content, symbol_name, symbol_path),
+                (content_id, repo, path, text_hash, enriched, symbol_name, symbol_path),
             )
             conn.commit()
 
@@ -1606,7 +1718,7 @@ class SQLiteMetadataStore:
                 else:
                     raise
 
-            # Proceed with bulk insert
+            # Proceed with bulk insert (enrich content with path/symbol tokens)
             cur.executemany(
                 """
                 INSERT OR REPLACE INTO chunks_fts
@@ -1619,7 +1731,12 @@ class SQLiteMetadataStore:
                         c["repo"],
                         c["path"],
                         c["text_hash"],
-                        c["content"],
+                        enrich_fts_content(
+                            c["content"],
+                            c["path"],
+                            c.get("symbol_name"),
+                            c.get("symbol_path"),
+                        ),
                         c.get("symbol_name"),
                         c.get("symbol_path"),
                     )
@@ -1637,13 +1754,25 @@ class SQLiteMetadataStore:
         re-index all chunks using bulk_index_chunks_for_fts().
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            # Drop existing FTS5 table if it exists
-            cur.execute("DROP TABLE IF EXISTS chunks_fts")
-            conn.commit()
-
-            # Recreate with new schema
-            self._create_fts5_table_safe(cur)
-            conn.commit()
+            # Python's default sqlite3 isolation mode auto-commits before DDL
+            # statements, making DROP and CREATE run as separate autocommit ops.
+            # Switch to isolation_level=None (autocommit) so we can issue an
+            # explicit BEGIN and wrap both DDL ops in a single atomic transaction.
+            saved_isolation = conn.isolation_level
+            conn.isolation_level = None
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                cur.execute("DROP TABLE IF EXISTS chunks_fts")
+                self._create_fts5_table_safe(cur)
+                conn.execute("COMMIT")
+            except Exception:
+                try:
+                    conn.execute("ROLLBACK")
+                except Exception:
+                    pass
+                raise
+            finally:
+                conn.isolation_level = saved_isolation
 
     def get_chunk_by_id(self, chunk_id: str) -> dict[str, Any] | None:
         """Get full chunk metadata by content_id.
@@ -1755,6 +1884,131 @@ class SQLiteMetadataStore:
 
             return []
 
+    def get_bm25_hydration_map(self, content_ids: list[str], embed_model: str) -> dict[str, dict[str, Any]]:
+        """Bulk-hydrate BM25 hits keyed by deterministic FTS content_id.
+
+        Args:
+            content_ids: FTS content_ids returned by bm25_search
+            embed_model: Preferred embedding model for location selection
+
+        Returns:
+            Mapping of content_id -> hydration payload:
+                {
+                    "repo_id": int,
+                    "file_id": int,
+                    "text_hash": str,
+                    "embed_model": str,
+                    "locations": list[dict[str, Any]],
+                }
+        """
+        if not content_ids:
+            return {}
+
+        # Preserve caller order while removing duplicates.
+        ordered_ids: list[str] = []
+        seen: set[str] = set()
+        for content_id in content_ids:
+            if content_id in seen:
+                continue
+            seen.add(content_id)
+            ordered_ids.append(content_id)
+
+        placeholders = ",".join(["?"] * len(ordered_ids))
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute(
+                f"""
+                SELECT
+                    fts.content_id,
+                    r.id AS repo_id,
+                    f.id AS file_id,
+                    fts.text_hash,
+                    cc.embed_model,
+                    cl.start_line,
+                    cl.end_line,
+                    cl.symbol_kind,
+                    cl.symbol_name,
+                    cl.symbol_path
+                FROM chunks_fts fts
+                JOIN repos r
+                  ON r.name = fts.repo
+                JOIN files f
+                  ON f.repo_id = r.id AND f.path = fts.path
+                JOIN chunk_content cc
+                  ON cc.repo_id = r.id AND cc.file_id = f.id AND cc.text_hash = fts.text_hash
+                LEFT JOIN chunk_locations cl
+                  ON cl.content_id = cc.id
+                WHERE fts.content_id IN ({placeholders})
+                ORDER BY fts.content_id, cc.embed_model, cl.start_line ASC, cl.end_line ASC
+                """,
+                tuple(ordered_ids),
+            )
+            rows = cur.fetchall() or []
+
+        grouped: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            content_id = str(row[0])
+            repo_id = int(row[1])
+            file_id = int(row[2])
+            text_hash = str(row[3])
+            model = str(row[4])
+            start_line = int(row[5]) if row[5] is not None else None
+            end_line = int(row[6]) if row[6] is not None else None
+            symbol_kind = row[7]
+            symbol_name = row[8]
+            symbol_path = row[9]
+
+            grouped_entry = grouped.setdefault(
+                content_id,
+                {
+                    "repo_id": repo_id,
+                    "file_id": file_id,
+                    "text_hash": text_hash,
+                    "models": {},
+                },
+            )
+
+            model_locations = grouped_entry["models"].setdefault(model, [])
+            if start_line is None or end_line is None:
+                continue
+            model_locations.append(
+                {
+                    "start_line": start_line,
+                    "end_line": end_line,
+                    "symbol_kind": symbol_kind,
+                    "symbol_name": symbol_name,
+                    "symbol_path": symbol_path,
+                }
+            )
+
+        hydrated: dict[str, dict[str, Any]] = {}
+        for content_id, entry in grouped.items():
+            models: dict[str, list[dict[str, Any]]] = entry["models"]
+            chosen_model: str | None = None
+
+            preferred_locations = models.get(embed_model) or []
+            if preferred_locations:
+                chosen_model = embed_model
+            else:
+                available_models = sorted(model_name for model_name, locations in models.items() if locations)
+                if available_models:
+                    chosen_model = available_models[0]
+                elif models:
+                    # Keep deterministic behavior if we only have model identity but no locations.
+                    chosen_model = sorted(models.keys())[0]
+
+            if chosen_model is None:
+                continue
+
+            hydrated[content_id] = {
+                "repo_id": entry["repo_id"],
+                "file_id": entry["file_id"],
+                "text_hash": entry["text_hash"],
+                "embed_model": chosen_model,
+                "locations": models.get(chosen_model, []),
+            }
+
+        return hydrated
+
     def get_chunk_by_content_identity(
         self,
         repo_id: int,
@@ -1861,7 +2115,7 @@ class SQLiteMetadataStore:
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(fts_query, chunk_ids)
             rows = cur.fetchall()
-            result = {str(row[0]): str(row[1]) for row in rows}
+            result = {str(row[0]): strip_fts_enrichment(str(row[1])) for row in rows}
 
             # If all chunks found in FTS, return immediately
             if len(result) == len(chunk_ids):
@@ -1901,7 +2155,7 @@ class SQLiteMetadataStore:
                             result[str(chunk_id)] = "\n".join(chunk_lines)
                     except Exception:
                         # If we can't read the file, skip this chunk
-                        pass
+                        logger.debug("Could not read file for chunk_id=%s; skipping.", chunk_id, exc_info=True)
 
             return result
 
@@ -2107,6 +2361,7 @@ class SQLiteMetadataStore:
             stats["orphaned"] = cur.rowcount
 
         except Exception as e:
+            logger.error("Failed to clean up FTS entries for repo %s", repo_name, exc_info=True)
             errors.append(str(e))
 
         return stats
@@ -2365,6 +2620,7 @@ class SQLiteMetadataStore:
                 stats[f"{model}_deleted"] = pre_count - post_count
 
             except Exception as e:
+                logger.error("LanceDB %s model cleanup failed for repo %s", model, name, exc_info=True)
                 errors.append(f"{model} model cleanup failed: {e}")
 
         return stats
@@ -2428,6 +2684,7 @@ class SQLiteMetadataStore:
             # with vector counts
 
         except Exception as e:
+            logger.error("LanceDB consistency check failed for repo %s", repo_name, exc_info=True)
             stats["consistent"] = False
             issues.append(f"LanceDB consistency check failed: {e}")
 
@@ -2721,6 +2978,7 @@ class SQLiteMetadataStore:
                 conn.commit()
 
             except Exception as e:
+                logger.error("Database integrity repair failed", exc_info=True)
                 conn.rollback()
                 repair_report["success"] = False
                 errors.append(f"Repair failed: {e}")

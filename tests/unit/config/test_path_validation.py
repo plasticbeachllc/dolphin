@@ -1,11 +1,12 @@
 """Unit tests for path validation security."""
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException
 
-from kb.api.utils import normalize_repo_registration_path, validate_path_within_repo
+from kb.api.utils import GitRepository, normalize_repo_registration_path, validate_path_within_repo
 
 
 class TestPathValidationSecurity:
@@ -162,8 +163,13 @@ class TestPathValidationSecurity:
         assert isinstance(exc_info.value, HTTPException)
         assert exc_info.value.status_code == 403
 
-    def test_accept_symlink_within_repo(self, tmp_path):
-        """Test that symlinks pointing within repo are accepted."""
+    def test_reject_symlink_within_repo(self, tmp_path):
+        """Test that symlinks within repo are rejected (allow_symlinks=False by default).
+
+        Even symlinks whose target is within the repo are rejected: the default
+        allow_symlinks=False policy eliminates a whole class of symlink-race and
+        TOCTOU attacks regardless of where the target currently lives.
+        """
         repo_root = tmp_path / "repo"
         repo_root.mkdir()
 
@@ -173,9 +179,12 @@ class TestPathValidationSecurity:
         symlink = repo_root / "link.txt"
         symlink.symlink_to(target_file)
 
-        # Should accept because resolved path is within repo
-        result = validate_path_within_repo(symlink, repo_root)
-        assert result == target_file.resolve()
+        # Should reject because allow_symlinks=False is the secure default
+        with pytest.raises(HTTPException) as exc_info:
+            validate_path_within_repo(symlink, repo_root)
+
+        assert isinstance(exc_info.value, HTTPException)
+        assert exc_info.value.status_code == 403
 
     def test_reject_absolute_path_outside_repo(self, tmp_path):
         """Test that absolute paths outside repo are rejected."""
@@ -262,3 +271,59 @@ class TestRepoRegistrationPathNormalization:
         monkeypatch.setenv("HOME", str(tmp_path))
         normalized = normalize_repo_registration_path("~/repo")
         assert normalized == (tmp_path / "repo").absolute()
+
+    def test_normalize_path_rejects_non_string(self):
+        """normalize_repo_registration_path(123) raises HTTPException(400)."""
+        with pytest.raises(HTTPException) as exc_info:
+            normalize_repo_registration_path(123)  # type: ignore[arg-type]
+        assert exc_info.value.status_code == 400
+
+    def test_normalize_path_rejects_whitespace_only(self):
+        """normalize_repo_registration_path('   ') raises HTTPException(400)."""
+        with pytest.raises(HTTPException) as exc_info:
+            normalize_repo_registration_path("   ")
+        assert exc_info.value.status_code == 400
+
+
+class TestValidatePathGenericException:
+    """Test generic exception handling in validate_path_within_repo."""
+
+    def test_validate_path_generic_exception_returns_400(self, tmp_path):
+        """Patch PathValidator.validate to raise a plain Exception; returns HTTPException(400)."""
+        repo_root = tmp_path / "repo"
+        repo_root.mkdir()
+        test_file = repo_root / "test.py"
+        test_file.write_text("# test")
+
+        with patch("kb.api.utils.PathValidator") as mock_validator_class:
+            mock_validator_class.return_value.validate.side_effect = Exception("generic error")
+
+            with pytest.raises(HTTPException) as exc_info:
+                validate_path_within_repo(test_file, repo_root)
+            assert exc_info.value.status_code == 400
+            assert "Invalid file path" in exc_info.value.detail
+
+
+class TestGitRepository:
+    """Test GitRepository error paths."""
+
+    def test_git_repository_run_command_failure(self, tmp_path):
+        """Patch subprocess.check_output to raise CalledProcessError; _run_command raises RuntimeError."""
+        import subprocess
+
+        git_repo = GitRepository(tmp_path)
+
+        with patch("subprocess.check_output") as mock_check:
+            mock_check.side_effect = subprocess.CalledProcessError(
+                1, ["git", "rev-parse", "HEAD"], output=b"fatal: not a git repo"
+            )
+
+            with pytest.raises(RuntimeError, match="Git command failed"):
+                git_repo._run_command("rev-parse", "HEAD")
+
+    def test_git_repository_get_commit_and_branch_non_git(self, tmp_path):
+        """GitRepository on a non-git dir; get_commit_and_branch returns ('unknown', 'unknown')."""
+        git_repo = GitRepository(tmp_path)
+        commit, branch = git_repo.get_commit_and_branch()
+        assert commit == "unknown"
+        assert branch == "unknown"

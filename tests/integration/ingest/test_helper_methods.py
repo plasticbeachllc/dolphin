@@ -18,7 +18,7 @@ def pipeline(tmp_path: Path) -> Generator[IngestionPipeline, None, None]:
     store_root = tmp_path / "store"
     store_root.mkdir()
 
-    config = KBConfig(store_root=store_root, embedding_provider="openai")
+    config = KBConfig(store_root=store_root, embedding_provider="openai", default_embed_model="small")
     metadata = SQLiteMetadataStore(store_root / "metadata.db")
     metadata.initialize()
     lancedb = LanceDBStore(store_root / "lancedb")
@@ -39,23 +39,9 @@ def pipeline(tmp_path: Path) -> Generator[IngestionPipeline, None, None]:
 
 
 @pytest.fixture
-def repo(tmp_path: Path) -> Path:
-    """Create a git repo."""
-    import subprocess
-
-    repo_path = tmp_path / "test_repo"
-    repo_path.mkdir()
-
-    subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True)
-    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo_path, check=True)
-
-    (repo_path / "file.py").write_text("def f(): pass\n")
-
-    subprocess.run(["git", "add", "."], cwd=repo_path, check=True)
-    subprocess.run(["git", "commit", "-m", "Init"], cwd=repo_path, check=True, capture_output=True)
-
-    return repo_path
+def repo(make_git_repo) -> Path:
+    """Create a git repo with a Python file."""
+    return make_git_repo(files={"file.py": "def f(): pass\n"})
 
 
 def test_setup_parallel_session_helper_exists(pipeline, repo):
@@ -80,6 +66,7 @@ def test_setup_parallel_session_helper_exists(pipeline, repo):
         ignore_patterns,
         changed_files,
         deleted_files,
+        files_skipped_ignored,
     ) = result
 
     assert repo_id > 0

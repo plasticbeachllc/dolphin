@@ -174,6 +174,17 @@ class TestCacheInvalidation:
 
         assert cache.get_results("q1", repos=["repo1", "repo2"]) is None
 
+    def test_invalidate_repo_removes_global_query_entries(self):
+        """Verify repo invalidation also clears unscoped global search cache entries."""
+        cache = QueryCache()
+        cache.set_results("repo scoped", [{"id": "1"}], repos=["repo1"])
+        cache.set_results("global query", [{"id": "global"}])
+
+        cache.invalidate_repo("repo1")
+
+        assert cache.get_results("repo scoped", repos=["repo1"]) is None
+        assert cache.get_results("global query") is None
+
     def test_clear_all(self):
         """Verify complete cache clear."""
         cache = QueryCache()
@@ -184,6 +195,34 @@ class TestCacheInvalidation:
 
         assert cache.get_embedding("q", "small") is None
         assert cache.get_results("q") is None
+
+
+class TestSearchPayloadCaching:
+    """Test cache behavior for pagination-aware search payloads."""
+
+    def test_search_results_include_next_cursor(self):
+        cache = QueryCache()
+        hits = [{"chunk_id": "chunk1", "score": 0.9}]
+        cache.set_search_results("query", hits, next_cursor="cursor-1", repos=["repo1"], top_k=1)
+
+        cached = cache.get_search_results("query", repos=["repo1"], top_k=1)
+        assert cached is not None
+        cached_hits, cached_cursor = cached
+        assert cached_hits == hits
+        assert cached_cursor == "cursor-1"
+        # Legacy getter should still return just hits.
+        assert cache.get_results("query", repos=["repo1"], top_k=1) == hits
+
+    def test_search_results_backward_compat_for_legacy_entries(self):
+        cache = QueryCache()
+        hits = [{"chunk_id": "legacy"}]
+        cache.set_results("legacy-query", hits, repos=["repo1"], top_k=1)
+
+        cached = cache.get_search_results("legacy-query", repos=["repo1"], top_k=1)
+        assert cached is not None
+        cached_hits, cached_cursor = cached
+        assert cached_hits == hits
+        assert cached_cursor is None
 
 
 class TestCacheEnableDisable:

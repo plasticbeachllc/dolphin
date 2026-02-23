@@ -55,6 +55,25 @@ ignore = [
     "*.log",
     "*.log.*",
 
+    # Test directories
+    "tests/**",
+
+    # Documentation
+    "CHANGELOG.md",
+
+    # Zero-value for semantic code search
+    "**/.gitignore",
+    "**/.gitattributes",
+    "**/.gitmodules",
+    "**/.dockerignore",
+    "**/.editorconfig",
+    "**/.eslintignore",
+    "**/.prettierignore",
+    "**/.prettierrc",
+    "**/.eslintrc",
+    "**/.npmignore",
+    "**/.hgignore",
+
     # Lock files
     "package-lock.json",
     "yarn.lock",

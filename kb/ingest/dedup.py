@@ -17,8 +17,11 @@ class ChunkDeduplicator:
     Uses text-hash-only deduplication (ignores locations) to decide which
     chunks require embedding. This is robust to chunks moving within a file.
 
-    On any error fetching existing hashes or computing a hash, we log a
-    warning and treat the affected chunks as changed (safe fallback).
+    On any error computing a chunk hash, we log a warning and treat the
+    affected chunk as changed (safe fallback for that individual chunk).
+    On any error *fetching* existing hashes, we propagate the exception so
+    the caller (the ingestion pipeline) can decide whether to skip the file
+    or abort, rather than silently re-embedding every chunk.
     """
 
     def __init__(self, store: SQLiteMetadataStore):
@@ -27,20 +30,12 @@ class ChunkDeduplicator:
     def get_existing_hashes_set(self, repo_id: int, file_id: int, embed_model: str) -> set[str]:
         """Return the set of existing text hashes for a file+model.
 
-        On failure to query the store, returns an empty set (conservative).
+        Raises:
+            Exception: Propagates any store error so the caller can skip the
+                file and increment its error counter rather than re-embedding
+                every chunk (which can cause duplicate vectors).
         """
-        try:
-            existing = self.store.get_existing_content_hashes_for_file(repo_id, file_id, embed_model)
-            return existing
-        except Exception as e:
-            _log.warning(
-                "Failed to fetch existing hashes for repo_id=%s file_id=%s model=%s; treating all as changed: %s",
-                repo_id,
-                file_id,
-                embed_model,
-                e,
-            )
-            return set()
+        return self.store.get_existing_content_hashes_for_file(repo_id, file_id, embed_model)
 
     def filter_unchanged_chunks(
         self, chunks: list[Chunk], repo_id: int, file_id: int, embed_model: str

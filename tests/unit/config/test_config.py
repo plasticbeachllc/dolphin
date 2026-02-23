@@ -1,5 +1,7 @@
 """Tests for knowledge base configuration."""
 
+import pytest
+
 from kb.config import KBConfig, RetrievalConfig, load_config
 
 
@@ -218,6 +220,98 @@ class TestKBConfig:
         # Exceptions should be excluded
         assert ".env.example" not in result
         assert "config.log" not in result
+
+
+class TestDeepMerge:
+    """Test cases for _deep_merge depth-limit paths."""
+
+    def test_deep_merge_depth_limit_raises_value_error(self, tmp_path, monkeypatch):
+        """Build dicts nested 11 levels deep in BOTH configs; merge raises ValueError."""
+        # _deep_merge only recurses when both base and override have dicts for the
+        # same key, so both configs must share the same nested structure.
+        toml_lines = ['[storage]\nstore_root = "/tmp/test"\n']
+        for i in range(11):
+            key = ".".join(["level"] * (i + 1))
+            toml_lines.append(f"[{key}]")
+        base_toml = "\n".join(toml_lines) + '\nbase_leaf = "base"\n'
+        repo_toml = "\n".join(toml_lines[1:]) + '\nrepo_leaf = "repo"\n'
+
+        base_config = tmp_path / "global.toml"
+        base_config.write_text(base_toml)
+
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        repo_cfg_dir = repo_dir / ".dolphin"
+        repo_cfg_dir.mkdir()
+        (repo_cfg_dir / "config.toml").write_text(repo_toml)
+
+        monkeypatch.setenv("DOLPHIN_CONFIG_PATH", str(base_config))
+
+        with pytest.raises(ValueError, match="maximum depth"):
+            load_config(repo_path=repo_dir)
+
+    def test_deep_merge_exactly_at_limit_does_not_raise(self, tmp_path, monkeypatch):
+        """Nesting of exactly 9 levels (depth 0..9) merges successfully at the limit boundary."""
+        # The check is `_depth >= 10`, so depth 9 is the max that succeeds.
+        # 9 levels of dict nesting means 9 recursive calls (depth 1..9).
+        toml_lines = ['[storage]\nstore_root = "/tmp/test"\n']
+        for i in range(9):
+            key = ".".join(["level"] * (i + 1))
+            toml_lines.append(f"[{key}]")
+        base_toml = "\n".join(toml_lines) + '\nbase_leaf = "base"\n'
+        repo_toml = "\n".join(toml_lines[1:]) + '\nrepo_leaf = "repo"\n'
+
+        base_config = tmp_path / "global.toml"
+        base_config.write_text(base_toml)
+
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        repo_cfg_dir = repo_dir / ".dolphin"
+        repo_cfg_dir.mkdir()
+        (repo_cfg_dir / "config.toml").write_text(repo_toml)
+
+        monkeypatch.setenv("DOLPHIN_CONFIG_PATH", str(base_config))
+
+        # Should not raise
+        config = load_config(repo_path=repo_dir)
+        assert config is not None
+
+    def test_deep_merge_depth_resets_across_sibling_keys(self, tmp_path, monkeypatch):
+        """Siblings at the same depth do not accumulate depth; only recursive nesting counts."""
+        base_config = tmp_path / "global.toml"
+        base_config.write_text(
+            """
+[storage]
+store_root = "/tmp/test"
+
+[retrieval]
+top_k = 5
+
+[api]
+max_top_k = 30
+"""
+        )
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        repo_cfg_dir = repo_dir / ".dolphin"
+        repo_cfg_dir.mkdir()
+
+        # Multiple sibling keys, each with shallow nesting
+        (repo_cfg_dir / "config.toml").write_text(
+            """
+[retrieval]
+top_k = 12
+
+[api]
+max_top_k = 50
+"""
+        )
+
+        monkeypatch.setenv("DOLPHIN_CONFIG_PATH", str(base_config))
+
+        config = load_config(repo_path=repo_dir)
+        assert config.retrieval.top_k == 12
+        assert config.api.max_top_k == 50
 
 
 class TestLoadConfig:

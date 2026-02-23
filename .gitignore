@@ -9,6 +9,10 @@
 !.claude/hooks/
 !.claude/settings.json
 
+# Session hooks
+.sessions/*
+!.sessions/hooks/
+
 # private dirs
 docs/private/
 docs/ignore/
@@ -21,6 +25,7 @@ kilocode-config/
 
 # artifacts
 artifacts/
+dist/
 
 # cache artifacts
 .mypy_cache

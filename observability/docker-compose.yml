@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # Prometheus - Metrics storage and querying
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.52.0
     container_name: dolphin-prometheus
     ports:
       - "9090:9090"
@@ -23,7 +23,7 @@ services:
 
   # Jaeger - Distributed tracing
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/all-in-one:1.57.0
     container_name: dolphin-jaeger
     ports:
       - "5775:5775/udp"
@@ -43,7 +43,7 @@ services:
 
   # Loki - Log aggregation
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:3.0.0
     container_name: dolphin-loki
     ports:
       - "3100:3100"
@@ -57,7 +57,7 @@ services:
 
   # Promtail - Log shipper for Loki
   promtail:
-    image: grafana/promtail:latest
+    image: grafana/promtail:3.0.0
     container_name: dolphin-promtail
     volumes:
       - ./loki/promtail-config.yml:/etc/promtail/config.yml
@@ -73,7 +73,7 @@ services:
 
   # Grafana - Visualization and dashboards
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.0.0
     container_name: dolphin-grafana
     ports:
       - "3000:3000"
@@ -82,8 +82,8 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/dashboards:/var/lib/grafana/dashboards
     environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:?GRAFANA_ADMIN_USER must be set}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_INSTALL_PLUGINS=
     restart: unless-stopped
