@@ -23,6 +23,7 @@ def mock_pipeline(tmp_path: Path) -> Generator[IngestionPipeline, None, None]:
         store_root=store_root,
         embedding_provider="openai",  # Will need mock
         openai_api_key_env="OPENAI_API_KEY",
+        default_embed_model="small",
     )
 
     # Initialize stores
