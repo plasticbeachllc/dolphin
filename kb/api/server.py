@@ -161,8 +161,8 @@ def reload_search_backend() -> None:
     """Reload the search backend and stores to pick up index changes."""
     print_status("Reloading search backend.", level="step", stderr=True)
     try:
-        # Reset existing backend first to force fresh connections
-        reset_search_backend()
+        # Initialize first; only reset the old backend on success so that a
+        # failed re-initialization never leaves the server with an empty backend.
         initialize_search_backend()
         print_status("Search backend reloaded.", level="success", stderr=True)
     except Exception as e:
