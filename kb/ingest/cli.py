@@ -201,6 +201,27 @@ def index(
         raise typer.Exit(code=2)
 
     pipeline = _build_pipeline(config)
+
+    # Crash recovery: abort any sessions left running from a prior CLI invocation
+    # (the server does this on startup, but CLI callers need it too)
+    aborted = metadata.abort_stale_sessions(
+        repo_id=int(repo_record["id"]),
+        reason="Aborted on CLI startup: previous indexing session did not complete cleanly",
+    )
+    if aborted:
+        typer.echo(f"Recovered {aborted} stale session(s) from a previous run.")
+
+    # Install SIGINT handler so Ctrl-C stops cleanly between files
+    import signal
+
+    _original_sigint = signal.getsignal(signal.SIGINT)
+
+    def _sigint_handler(signum, frame):
+        typer.echo("\nInterrupt received — stopping after current file…")
+        pipeline.request_cancel()
+
+    signal.signal(signal.SIGINT, _sigint_handler)
+
     try:
         if parallel:
             # Run async parallel indexing
@@ -214,11 +235,19 @@ def index(
             result = pipeline.index(name, dry_run=dry_run, force=force, full_reindex=full)
 
     except Exception as e:
+        from .pipeline import _CancelledError
+
+        if isinstance(e, (KeyboardInterrupt, _CancelledError)):
+            typer.echo("Indexing interrupted. Progress up to the last completed file has been saved.")
+            typer.echo("Run the same command again to continue from where you left off.")
+            raise typer.Exit(code=130)
         typer.echo(f"Indexing failed: {e}")
         import traceback
 
         traceback.print_exc()
         raise
+    finally:
+        signal.signal(signal.SIGINT, _original_sigint)
 
     files_indexed = result.get("files_indexed", 0)
     chunks_indexed = result.get("chunks_indexed", 0)
