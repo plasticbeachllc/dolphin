@@ -3,7 +3,7 @@
 [![PyPi Version](https://img.shields.io/pypi/v/pb-dolphin.svg)](https://pypi.org/project/pb-dolphin/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Blazing-fast, all-in-one semantic search for context efficiency in large codebases.
+Multi-repo all-in-one semantic search for context efficiency in large codebases.
 
 Dolphin helps humans and AI agents find the right code quickly with semantic search, rich context retrieval, and different interface options (CLI, REST API, and MCP).
 
