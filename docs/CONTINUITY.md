@@ -23,12 +23,14 @@ Session stays `status='aborted'` (terminal state, so `begin_session()` won't blo
 **A. Add cancellation infrastructure to `IngestionPipeline`**
 
 In `__post_init__` (line 62), initialize:
+
 ```python
 self._cancel_requested = threading.Event()
 self._original_sigint = None
 ```
 
 Add two methods:
+
 - `_install_sigint_handler()` — saves current handler, installs one that sets `_cancel_requested` on first Ctrl-C and raises `KeyboardInterrupt` on second
 - `_restore_sigint_handler()` — restores original handler
 
@@ -81,18 +83,19 @@ def get_files_with_commit_sha(self, repo_id: int, commit_sha: str) -> set[str]:
 ### 4. Tests
 
 Add to existing test files:
+
 - `tests/unit/store/test_sqlite_meta.py` — test `get_files_with_commit_sha`
 - `tests/unit/ingest/test_pipeline_core.py` — test cancel flag stops processing, test per-file checkpoint, test resume filtering
 
 ## Edge Cases
 
-| Scenario | Behavior |
-|----------|----------|
-| HEAD moves between runs | New commit SHA doesn't match old stamps → all files reprocessed (correct) |
-| `--full` reindex | `_drop_repo_index` deletes file rows → stamps gone → full reprocess |
-| Second Ctrl-C | Handler raises `KeyboardInterrupt` immediately → forced abort |
-| Watcher compatibility | Watcher's `abort_stale_sessions()` is fine — interrupted sessions are already "aborted" |
-| Content dedup safety | `ensure_content_rows_for_file()` uses ON CONFLICT → re-indexing stamped files is harmless |
+| Scenario                | Behavior                                                                                  |
+| ----------------------- | ----------------------------------------------------------------------------------------- |
+| HEAD moves between runs | New commit SHA doesn't match old stamps → all files reprocessed (correct)                 |
+| `--full` reindex        | `_drop_repo_index` deletes file rows → stamps gone → full reprocess                       |
+| Second Ctrl-C           | Handler raises `KeyboardInterrupt` immediately → forced abort                             |
+| Watcher compatibility   | Watcher's `abort_stale_sessions()` is fine — interrupted sessions are already "aborted"   |
+| Content dedup safety    | `ensure_content_rows_for_file()` uses ON CONFLICT → re-indexing stamped files is harmless |
 
 ## Verification
 
