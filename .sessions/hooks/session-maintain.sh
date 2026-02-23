@@ -12,7 +12,7 @@ fi
 # JS deps
 if command -v bun >/dev/null 2>&1; then
   for dir in mcp-bridge shared; do
-    [ -f "$dir/package.json" ] && (cd "$dir" && bun install --no-save)
+    [ -f "$dir/package.json" ] && (cd "$dir" && bun install --frozen-lockfile)
   done
 fi
 
