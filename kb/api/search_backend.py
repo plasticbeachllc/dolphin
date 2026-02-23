@@ -276,10 +276,11 @@ class KnowledgeSearchBackend:
         cache_params = self._build_search_cache_params(request) if cache_allowed else None
 
         cached_payload = None
-        if cache_params is not None:
+        if cache_params is not None and self.cache is not None:
             cached_payload = await asyncio.to_thread(self.cache.get_search_results, request.query, **cache_params)
         if cached_payload is not None:
-            return cached_payload
+            hits, cursor = cached_payload
+            return SearchResultSet(hits, cursor)
 
         query_embedding = await self.embedding_provider.embed_texts_async(
             self.config.default_embed_model,

@@ -157,7 +157,7 @@ class TestDefensiveDecorator:
     def test_invalid_first_argument_raises_type_error(self):
         """defensive(42) raises TypeError."""
         with pytest.raises(TypeError, match="callable"):
-            defensive(42)
+            defensive(42)  # type: ignore[arg-type]
 
 
 class TestDefensiveContextManager:
