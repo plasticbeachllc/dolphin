@@ -110,7 +110,6 @@ def generate_fts_content_id(repo_id: int, file_id: int, text_hash: str) -> str:
 
 logger = logging.getLogger(__name__)
 
-
 # Sentinel used to separate search-enrichment tokens from actual content in FTS5.
 _FTS_ENRICHMENT_SENTINEL = "\n__FTS_META__\n"
 
@@ -119,17 +118,33 @@ _CAMEL_SPLIT_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
 
 def _split_camel_case(name: str) -> list[str]:
-    """Split a CamelCase identifier into lowercase sub-tokens."""
+    """Split a CamelCase identifier into lowercase sub-tokens.
+
+    >>> _split_camel_case("IngestionPipeline")
+    ['ingestion', 'pipeline']
+    >>> _split_camel_case("HTMLParser")
+    ['html', 'parser']
+    >>> _split_camel_case("simple")
+    ['simple']
+    """
     parts = _CAMEL_SPLIT_RE.split(name)
     return [p.lower() for p in parts if p]
 
 
 def _path_tokens(path: str) -> list[str]:
-    """Extract searchable tokens from a file path."""
-    parts = re.split(r"[/\\.]", path)
-    return [
-        p.lower() for p in parts if p and p not in {"py", "js", "ts", "go", "rs", "rb", "java", "c", "h", "cpp", "hpp"}
-    ]
+    """Extract searchable tokens from a file path.
+
+    Splits on '/' and '.', strips common noise like file extensions everyone knows,
+    and lowercases everything.
+
+    >>> _path_tokens("kb/ingest/pipeline.py")
+    ['kb', 'ingest', 'pipeline']
+    """
+    # Strip the file extension first, then split on path separators.
+    # This avoids confusing directory names (e.g. "c/") with extensions (e.g. ".c").
+    stem = re.sub(r"\.[^/\\]+$", "", path)
+    parts = re.split(r"[/\\]", stem)
+    return [p.lower() for p in parts if p]
 
 
 def enrich_fts_content(
@@ -144,15 +159,21 @@ def enrich_fts_content(
     stripped when retrieving content for display (see ``strip_fts_enrichment``).
     """
     extra_tokens: list[str] = []
+
+    # Add path components as searchable tokens
     extra_tokens.extend(_path_tokens(path))
+
+    # Split CamelCase symbol names into sub-tokens
     if symbol_name:
         extra_tokens.extend(_split_camel_case(symbol_name))
     if symbol_path:
         for segment in re.split(r"[./]", symbol_path):
             if segment:
                 extra_tokens.extend(_split_camel_case(segment))
+
     if not extra_tokens:
         return content
+
     unique = list(dict.fromkeys(extra_tokens))
     return content + _FTS_ENRICHMENT_SENTINEL + " ".join(unique)
 
@@ -645,7 +666,7 @@ class SQLiteMetadataStore:
                     # Log warning but don't fail initialization for existing databases
                     print(f"Warning: Found {count} orphaned records in {check_name}")
 
-    def record_repo(self, name: str, path: Path | str, *, default_embed_model: str = "small") -> None:
+    def record_repo(self, name: str, path: Path | str, *, default_embed_model: str = "large") -> None:
         """Insert or update a repo registration.
 
         Uses raw sqlite3 for simplicity; models are already materialized.
@@ -676,7 +697,7 @@ class SQLiteMetadataStore:
             )
             conn.commit()
 
-    def register_repo(self, name: str, path: str | Path, *, default_embed_model: str = "small") -> None:
+    def register_repo(self, name: str, path: str | Path, *, default_embed_model: str = "large") -> None:
         """Alias for record_repo for backward compatibility.
 
         Args:
@@ -1502,11 +1523,14 @@ class SQLiteMetadataStore:
         tokens = query.split()
         if len(tokens) <= 1:
             return query
+
+        # Preserve queries with explicit FTS5 operators or quoted phrases
         fts5_operators = {"AND", "OR", "NOT", "NEAR"}
         if any(t.upper() in fts5_operators for t in tokens):
             return query
         if '"' in query:
             return query
+
         return " OR ".join(tokens)
 
     def bm25_search(
@@ -1694,7 +1718,7 @@ class SQLiteMetadataStore:
                 else:
                     raise
 
-            # Proceed with bulk insert
+            # Proceed with bulk insert (enrich content with path/symbol tokens)
             cur.executemany(
                 """
                 INSERT OR REPLACE INTO chunks_fts

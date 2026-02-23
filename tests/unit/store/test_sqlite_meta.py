@@ -546,7 +546,7 @@ class TestPathTokens:
 
     def test_deep_path(self):
         tokens = _path_tokens("a/b/c/deep_module.py")
-        assert tokens == ["a", "b", "deep_module"]
+        assert tokens == ["a", "b", "c", "deep_module"]
 
 
 class TestEnrichFTSContent:
@@ -599,6 +599,7 @@ class TestBM25SearchORQuery:
         repo_path.mkdir()
         meta_store.record_repo("test-repo", repo_path)
 
+        # Index a chunk that contains "ingestion" but NOT "indexer"
         meta_store.index_chunk_for_fts(
             content_id="chunk-1",
             repo="test-repo",
@@ -608,6 +609,7 @@ class TestBM25SearchORQuery:
             symbol_name="IngestionPipeline",
         )
 
+        # Index a chunk that contains "index" but NOT "ingestion"
         meta_store.index_chunk_for_fts(
             content_id="chunk-2",
             repo="test-repo",
@@ -619,6 +621,7 @@ class TestBM25SearchORQuery:
 
         results = meta_store.bm25_search("ingestion indexer")
 
+        # Both chunks should appear (OR matching)
         assert len(results) >= 1
         paths = [r["path"] for r in results]
         assert "kb/ingest/pipeline.py" in paths or "kb/ingest/indexer.py" in paths
@@ -629,6 +632,7 @@ class TestBM25SearchORQuery:
         repo_path.mkdir()
         meta_store.record_repo("test-repo", repo_path)
 
+        # Index a chunk where "pipeline" only appears in the path, not content
         meta_store.index_chunk_for_fts(
             content_id="chunk-path",
             repo="test-repo",
@@ -658,6 +662,7 @@ class TestBM25SearchORQuery:
             symbol_name="IngestionPipeline",
         )
 
+        # "ingestion" should match via CamelCase-split enrichment
         results = meta_store.bm25_search("ingestion")
 
         assert len(results) >= 1

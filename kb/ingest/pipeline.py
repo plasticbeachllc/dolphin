@@ -1033,9 +1033,28 @@ class IngestionPipeline:
 
         repo_id = int(repo["id"])
         root = Path(repo["root_path"])
-        embed_model = str(repo.get("default_embed_model", self.config.default_embed_model))
 
         from ..embeddings.provider import SUPPORTED_MODELS
+
+        # Detect model mismatch between global config and repo metadata
+        target_model = self.config.default_embed_model.strip().lower()
+        last_model = str(repo.get("default_embed_model", "large")).strip().lower()
+
+        last_success = self.metadata.get_last_successful_commit(repo_id)
+        is_fresh_index = last_success is None
+
+        if target_model != last_model:
+            print(f"⚠️  Global model '{target_model}' differs from repo model '{last_model}'.")
+
+            if not is_fresh_index:
+                print(f"   Triggering full re-index and migration for {repo_name}...")
+                full_reindex = True
+            else:
+                print(f"   Updating repo configuration for {repo_name}...")
+
+            self.metadata.record_repo(repo_name, root, default_embed_model=target_model)
+
+        embed_model = target_model
 
         if embed_model not in SUPPORTED_MODELS:
             raise ValueError(f"Unsupported embed model configured for repo {repo_name}: {embed_model}")
@@ -1053,9 +1072,6 @@ class IngestionPipeline:
         if full_reindex and not dry_run:
             print(f"Full reindex requested: dropping existing index for {repo_name}...")
             self._drop_repo_index(repo_id, repo_name)
-
-        # Get last successful commit
-        last_success = self.metadata.get_last_successful_commit(repo_id)
 
         # Start session
         session_id = self.metadata.begin_session(repo_id, commit_sha, branch, embed_model)
