@@ -5,7 +5,8 @@ import datetime
 import logging
 import sqlite3
 import subprocess
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,10 @@ from .parallel_scanner import scan_repo_parallel
 logger = logging.getLogger(__name__)
 
 
+class _CancelledError(Exception):
+    """Raised when an indexing operation is cancelled via Ctrl-C / request_cancel()."""
+
+
 @dataclass
 class IngestionPipeline:
     """Coordinates scanning, chunking, and persistence."""
@@ -58,6 +63,7 @@ class IngestionPipeline:
     graph_store: GraphStore | None = None
     graph_managers: dict[int, GraphManager] | None = None  # repo_id -> GraphManager
     cache: QueryCache | None = None
+    _cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
 
     def __post_init__(self):
         """Initialize graph store if not provided."""
@@ -67,6 +73,15 @@ class IngestionPipeline:
             self.graph_managers = {}
         self._bm25_stats_path: Path | None = self._resolve_bm25_stats_path()
         self._configure_bm25_statistics()
+
+    def request_cancel(self) -> None:
+        """Signal the pipeline to stop after the current file completes."""
+        self._cancel_event.set()
+
+    def _check_cancelled(self) -> None:
+        """Raise ``_CancelledError`` if cancellation was requested."""
+        if self._cancel_event.is_set():
+            raise _CancelledError("Indexing cancelled")
 
     def get_graph_manager(self, repo_id: int) -> GraphManager:
         """Get or create GraphManager for a repository.
@@ -472,6 +487,9 @@ class IngestionPipeline:
         repo_config = load_repo_chunking_config(root)
 
         for path in files:
+            # Cooperative cancellation: stop cleanly between files
+            self._check_cancelled()
+
             try:
                 if ignore_spec.match_file(path):
                     stats["files_skipped_ignored"] += 1
@@ -841,6 +859,17 @@ class IngestionPipeline:
         # Get last successful commit
         last_success = self.metadata.get_last_successful_commit(repo_id)
 
+        # Quick consistency repair: clean up orphaned metadata from prior crashes
+        # (lightweight — only touches SQLite, skipped on fresh/full reindex)
+        if last_success is not None and not full_reindex:
+            try:
+                repair = self.metadata.repair_repository_consistency(repo_id, repo_name)
+                if repair["repairs_performed"]:
+                    for msg in repair["repairs_performed"]:
+                        print(f"  [auto-repair] {msg}")
+            except Exception as exc:
+                logger.warning("Auto-repair failed for %s, continuing anyway", repo_name, exc_info=exc)
+
         # Start session
         session_id = self.metadata.begin_session(repo_id, commit_sha, branch, embed_model)
 
@@ -1004,7 +1033,7 @@ class IngestionPipeline:
                 "graph_edges_created": graph_edges_created,
                 "dry_run": dry_run,
             }
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, _CancelledError):
             self.metadata.set_session_status(session_id, "aborted", notes="interrupted")
             raise
         except Exception as exc:
@@ -1072,6 +1101,16 @@ class IngestionPipeline:
         if full_reindex and not dry_run:
             print(f"Full reindex requested: dropping existing index for {repo_name}...")
             self._drop_repo_index(repo_id, repo_name)
+
+        # Quick consistency repair: clean up orphaned metadata from prior crashes
+        if last_success is not None and not full_reindex:
+            try:
+                repair = self.metadata.repair_repository_consistency(repo_id, repo_name)
+                if repair["repairs_performed"]:
+                    for msg in repair["repairs_performed"]:
+                        print(f"  [auto-repair] {msg}")
+            except Exception as exc:
+                logger.warning("Auto-repair failed for %s, continuing anyway", repo_name, exc_info=exc)
 
         # Start session
         session_id = self.metadata.begin_session(repo_id, commit_sha, branch, embed_model)
@@ -1201,6 +1240,9 @@ class IngestionPipeline:
             with pool as executor:
                 # Process in batches to manage memory and flow
                 for i in range(0, len(changed_files), batch_size):
+                    # Cooperative cancellation: stop cleanly between batches
+                    self._check_cancelled()
+
                     batch_paths = changed_files[i : i + batch_size]
 
                     parse_jobs = []
@@ -1497,7 +1539,7 @@ class IngestionPipeline:
             files_done += del_stats["files_done"]
             chunks_pruned += del_stats["chunks_pruned"]
 
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, _CancelledError):
             self.metadata.set_session_status(session_id, "aborted", notes="interrupted")
             raise
         except Exception as exc:
