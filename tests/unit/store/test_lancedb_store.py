@@ -152,13 +152,6 @@ def test_connect_called_once_under_concurrent_threads():
 
     mock_db = MagicMock()
 
-    original_connect = store.connect
-
-    def patched_connect():
-        nonlocal call_count
-        # Use the real connect logic but track calls
-        return original_connect()
-
     with pytest.importorskip("unittest.mock").patch("lancedb.connect") as mock_lancedb_connect:
         mock_lancedb_connect.return_value = mock_db
 

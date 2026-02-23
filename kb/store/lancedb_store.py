@@ -464,9 +464,7 @@ class LanceDBStore:
         filter_expr = f"repo = {repo_expr}"
 
         try:
-            # Query matching rows and count them
-            result = table.search().where(filter_expr).limit(1000000).to_list()
-            return len(result)
+            return table.count_rows(filter=filter_expr)
         except Exception:
             # If query fails, assume 0
             logger.warning("count_repo_vectors query failed for repo=%s.", repo, exc_info=True)
