@@ -80,6 +80,7 @@ def test_setup_parallel_session_helper_exists(pipeline, repo):
         ignore_patterns,
         changed_files,
         deleted_files,
+        files_skipped_ignored,
     ) = result
 
     assert repo_id > 0

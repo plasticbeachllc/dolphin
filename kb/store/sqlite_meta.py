@@ -128,7 +128,7 @@ def _path_tokens(path: str) -> list[str]:
     """Extract searchable tokens from a file path."""
     parts = re.split(r"[/\\.]", path)
     return [
-        p.lower() for p in parts if p and p not in ("py", "js", "ts", "go", "rs", "rb", "java", "c", "h", "cpp", "hpp")
+        p.lower() for p in parts if p and p not in {"py", "js", "ts", "go", "rs", "rb", "java", "c", "h", "cpp", "hpp"}
     ]
 
 
@@ -153,12 +153,7 @@ def enrich_fts_content(
                 extra_tokens.extend(_split_camel_case(segment))
     if not extra_tokens:
         return content
-    seen: set[str] = set()
-    unique: list[str] = []
-    for t in extra_tokens:
-        if t not in seen:
-            seen.add(t)
-            unique.append(t)
+    unique = list(dict.fromkeys(extra_tokens))
     return content + _FTS_ENRICHMENT_SENTINEL + " ".join(unique)
 
 
