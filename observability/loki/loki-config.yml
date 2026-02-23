@@ -1,3 +1,7 @@
+# auth_enabled: false is intentional for local development only.
+# For production deployments exposed beyond localhost, set this to true and
+# configure matching credentials in Promtail (clients.basic_auth) and the
+# Grafana Loki datasource. See docs/DEPLOYMENT.md for details.
 auth_enabled: false
 
 server:

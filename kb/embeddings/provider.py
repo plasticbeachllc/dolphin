@@ -150,6 +150,13 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             raise ValueError(
                 "OpenAI API key is required. Provide via api_key parameter or set OPENAI_API_KEY environment variable."
             )
+        # Format check: valid OpenAI keys start with "sk-" and are at least 20 chars.
+        # This catches typos and copy-paste errors before the first API call.
+        if not self.api_key.startswith("sk-") or len(self.api_key) < 20:
+            raise ValueError(
+                "OPENAI_API_KEY appears malformed (expected 'sk-...' with ≥20 characters). "
+                "Get a valid key from https://platform.openai.com/account/api-keys"
+            )
 
         self.batch_size = batch_size
         # Clients are lazily created on first use; only the path actually taken

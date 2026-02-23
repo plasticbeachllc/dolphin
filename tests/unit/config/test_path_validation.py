@@ -162,8 +162,13 @@ class TestPathValidationSecurity:
         assert isinstance(exc_info.value, HTTPException)
         assert exc_info.value.status_code == 403
 
-    def test_accept_symlink_within_repo(self, tmp_path):
-        """Test that symlinks pointing within repo are accepted."""
+    def test_reject_symlink_within_repo(self, tmp_path):
+        """Test that symlinks within repo are rejected (allow_symlinks=False by default).
+
+        Even symlinks whose target is within the repo are rejected: the default
+        allow_symlinks=False policy eliminates a whole class of symlink-race and
+        TOCTOU attacks regardless of where the target currently lives.
+        """
         repo_root = tmp_path / "repo"
         repo_root.mkdir()
 
@@ -173,9 +178,12 @@ class TestPathValidationSecurity:
         symlink = repo_root / "link.txt"
         symlink.symlink_to(target_file)
 
-        # Should accept because resolved path is within repo
-        result = validate_path_within_repo(symlink, repo_root)
-        assert result == target_file.resolve()
+        # Should reject because allow_symlinks=False is the secure default
+        with pytest.raises(HTTPException) as exc_info:
+            validate_path_within_repo(symlink, repo_root)
+
+        assert isinstance(exc_info.value, HTTPException)
+        assert exc_info.value.status_code == 403
 
     def test_reject_absolute_path_outside_repo(self, tmp_path):
         """Test that absolute paths outside repo are rejected."""

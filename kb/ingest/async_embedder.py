@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..embeddings.provider import embed_texts_with_retry
+from ..utils.tokens import estimate_tokens_batch
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +67,8 @@ class RateLimitedEmbedder:
         if not texts:
             return []
 
-        # Estimate token count (rough heuristic: 1 word ~ 1.3 tokens)
-        est_tokens = sum(len(t.split()) * 1.3 for t in texts)
+        # Estimate token count via tiktoken (falls back to chars/4 if unavailable).
+        est_tokens = estimate_tokens_batch(texts)
 
         async with self.semaphore:
             # Check backoff

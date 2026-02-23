@@ -175,6 +175,11 @@ def search(
     show_content: bool = typer.Option(False, "--show-content", "-c", help="Display snippets in terminal output."),
     verbose: bool = typer.Option(False, "--verbose", help="Show detailed hit metadata and snippets."),
     json_output: bool = typer.Option(False, "--json", help="Emit stable JSON output for scripting."),
+    max_lines: int = typer.Option(
+        MAX_SNIPPET_LINES_DISPLAY,
+        "--max-lines",
+        help="Maximum snippet lines to display per hit (default: 8).",
+    ),
 ) -> None:
     """Search indexed code semantically.
 
@@ -255,6 +260,7 @@ def search(
         verbose=verbose,
         meta=meta,
         languages=normalized_langs,
+        max_lines=max(1, max_lines),
     )
 
 
@@ -532,6 +538,7 @@ def _display_results(
     verbose: bool,
     meta: dict[str, object],
     languages: list[str],
+    max_lines: int = MAX_SNIPPET_LINES_DISPLAY,
 ) -> None:
     """Display compact search results by default, verbose details on demand."""
     if not hits:
@@ -593,10 +600,10 @@ def _display_results(
             if isinstance(snippet_text, str) and snippet_text.strip():
                 lines = snippet_text.splitlines()
                 typer.echo("   ---")
-                for line in lines[:MAX_SNIPPET_LINES_DISPLAY]:
+                for line in lines[:max_lines]:
                     typer.echo(f"   {line}")
-                if len(lines) > MAX_SNIPPET_LINES_DISPLAY:
-                    typer.echo(f"   ... ({len(lines) - MAX_SNIPPET_LINES_DISPLAY} more lines)")
+                if len(lines) > max_lines:
+                    typer.echo(f"   ... ({len(lines) - max_lines} more lines)")
                 typer.echo("   ---")
 
     if not verbose:

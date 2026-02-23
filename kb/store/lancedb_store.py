@@ -26,27 +26,35 @@ class LanceDBStore:
             # Convert file paths to Path objects
             self.root = Path(root) if isinstance(root, str) else root
 
-        # Cache for database connection to avoid connection isolation issues
+        # Cache for database connection to avoid connection isolation issues.
+        # Lance format supports concurrent readers on a single connection, so
+        # a single cached db object is safe for read-heavy workloads.  The
+        # _connect_lock only guards the one-time lazy-initialisation of _db.
         self._db = None
         self._indexed_tables: set[str] = set()
         self._index_failures: set[str] = set()
         self._index_lock = threading.Lock()
+        self._connect_lock = threading.Lock()
 
     def connect(self) -> Any:
-        """Get or create a cached LanceDB connection."""
-        # Only create directory for file-based storage, not memory://
-        if isinstance(self.root, Path):
-            self.root.mkdir(parents=True, exist_ok=True)
-
-        # Return cached connection if available
+        """Get or create a cached LanceDB connection (thread-safe initialisation)."""
         if self._db is not None:
             return self._db
 
-        # Create new connection and cache it
-        import lancedb
+        with self._connect_lock:
+            # Re-check after acquiring the lock (double-checked locking).
+            if self._db is not None:
+                return self._db
 
-        db_uri = self.root if isinstance(self.root, str) else self.root.as_posix()
-        self._db = lancedb.connect(db_uri)
+            # Only create directory for file-based storage, not memory://
+            if isinstance(self.root, Path):
+                self.root.mkdir(parents=True, exist_ok=True)
+
+            import lancedb
+
+            db_uri = self.root if isinstance(self.root, str) else self.root.as_posix()
+            self._db = lancedb.connect(db_uri)
+
         return self._db
 
     def _get_schema_for_model(self, model: str) -> Any:

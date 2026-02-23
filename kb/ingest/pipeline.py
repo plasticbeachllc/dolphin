@@ -1297,9 +1297,14 @@ class IngestionPipeline:
                         if not file_id:
                             continue
 
-                        changed_chunks, unchanged_chunks = dedup.filter_unchanged_chunks(
-                            chunks, repo_id, file_id, embed_model
-                        )
+                        try:
+                            changed_chunks, unchanged_chunks = dedup.filter_unchanged_chunks(
+                                chunks, repo_id, file_id, embed_model
+                            )
+                        except Exception as dedup_err:
+                            files_error += 1
+                            error_logger.log_file_error(path, dedup_err)
+                            continue
                         skipped_occurrences = len(unchanged_chunks)
                         chunks_skipped += skipped_occurrences
 

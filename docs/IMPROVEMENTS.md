@@ -82,7 +82,11 @@ Fix: log at `error` level and raise; the database is not trustworthy without FK 
 
 `allow_credentials=True` combined with `allow_methods=["*"]` and `allow_headers=["*"]` is overly permissive even for `localhost:3000`. Tighten to specific methods (`GET`, `POST`, `DELETE`) and specific headers (`X-API-Key`, `Content-Type`).
 
-#### ⬜ P2/S — Path validation allows symlinks by default
+#### ✅ P2/S — Path validation allows symlinks by default
+
+> **Status**: Done (Sprint 5) — `allow_symlinks=False` is now the default in `validate_path_within_repo`.
+> All symlinks are rejected regardless of target location, eliminating symlink-race and TOCTOU attack
+> vectors. Tests updated to reflect the new secure default.
 
 **File**: `kb/api/utils.py:52`
 
@@ -119,7 +123,11 @@ The single largest code quality issue. Breakdown of the top offenders:
 2. ✅ **Phase 2**: Fixed silent handlers in `sqlite_meta.py` (4 handlers), `watcher.py` (3 handlers missing `exc_info=True`), `cli.py` (3 handlers only printing to stderr), and `pipeline.py` (3 `print()` calls in except blocks replaced with `logger`). `lancedb_store.py` and `app.py` were already Phase 2 ready.
 3. ✅ **Phase 3**: `@defensive` decorator and context manager created in `kb/utils/defensive.py`. Use for intentionally-broad handlers where suppression is correct behaviour.
 
-#### ⬜ P2/S — Deduplicator returns empty set on error, causing re-embedding
+#### ✅ P2/S — Deduplicator returns empty set on error, causing re-embedding
+
+> **Status**: Done (Sprint 5) — `get_existing_hashes_set` now propagates exceptions instead of
+> returning `set()`. The parallel indexing path in `pipeline.py` catches the error, increments
+> `files_error`, and continues. Tests updated to verify propagation.
 
 **File**: `kb/ingest/dedup.py:27–43`
 
@@ -211,7 +219,12 @@ if estimated_tokens > max_tokens:
 
 The `truncated` flag is set but the content is never actually truncated. Downstream consumers (MCP clients, CLI) that trust this flag will receive unexpectedly large payloads. Either implement the truncation or remove the flag.
 
-#### ⬜ P2/S — Token estimation is inaccurate
+#### ✅ P2/S — Token estimation is inaccurate
+
+> **Status**: Done (Sprint 5) — `kb/utils/tokens.py` created with `estimate_tokens()` /
+> `estimate_tokens_batch()` backed by tiktoken's `cl100k_base` encoder (graceful fallback to
+> `len(text) // 4` if tiktoken is absent). Both `app.py` and `async_embedder.py` now use the
+> shared utility; the inconsistent character and word heuristics are gone.
 
 **Files**: `kb/api/app.py:234` and `kb/ingest/async_embedder.py:67`
 
@@ -263,7 +276,11 @@ OPENAI_API_KEY=sk-your-key-here
 
 `README.md` covers local development. There's no guide for deploying Dolphin as a shared service (reverse proxy setup, process management, TLS, auth hardening, Redis configuration). A `docs/DEPLOYMENT.md` would prevent each team from reinventing this.
 
-#### ⬜ P2/S — CHANGELOG version mismatch
+#### ✅ P2/S — CHANGELOG version mismatch
+
+> **Status**: Done (Sprint 5) — `app.py` now reads the version dynamically via
+> `importlib.metadata.version("pb-dolphin")` at startup; `FastAPI(version=_APP_VERSION)` is always
+> in sync with `pyproject.toml`. Falls back to `"0.0.0"` if the package is not installed.
 
 `pyproject.toml` says `0.2.2`, `FastAPI(version="0.2.1")` in `app.py:30`. These should stay in sync — ideally generated from a single source of truth.
 
@@ -281,7 +298,11 @@ When files are skipped (binary, ignored, permission error), the CLI provides no 
 Indexed 142 files (3,201 chunks). Skipped: 12 binary, 3 ignored, 1 error.
 ```
 
-#### ⬜ P3/S — `dolphin search` truncates at 8 lines with no override
+#### ✅ P3/S — `dolphin search` truncates at 8 lines with no override
+
+> **Status**: Done (Sprint 5) — `--max-lines` option added to `dolphin search`; default is the
+> existing `MAX_SNIPPET_LINES_DISPLAY = 8`. `_display_results` accepts the value as a parameter
+> so it can be overridden per invocation without touching the module constant.
 
 The `MAX_SNIPPET_LINES = 8` constant in `cli.py` is hardcoded. Add a `--max-lines` flag for power users who want more context.
 
@@ -299,7 +320,11 @@ The `MAX_SNIPPET_LINES = 8` constant in `cli.py` is hardcoded. Add a `--max-line
 
 If the cross-encoder model fails to load, reranking is silently disabled (`self.enabled = False`). The user ran `uv pip install "pb-dolphin[reranking]"` explicitly for this. Surface a warning in `dolphin status` and in search responses (e.g., a `warnings` field).
 
-#### ⬜ P2/S — Cache invalidation failures are swallowed
+#### ✅ P2/S — Cache invalidation failures are swallowed
+
+> **Status**: Done (Sprint 5) — `_invalidate_search_cache` now logs at `error` level and flips
+> `_cache_invalidation_healthy = False`. The deep health check (`/v1/health?check=deep`) includes a
+> `cache_invalidation` entry and returns `"degraded"` status when the flag is False.
 
 **File**: `kb/api/app.py:339–347`
 
@@ -309,13 +334,21 @@ Failed cache invalidation means stale results are served after reindex. At minim
 
 ### 2.4 Configuration
 
-#### ⬜ P2/S — OpenAI API key validation is existence-only
+#### ✅ P2/S — OpenAI API key validation is existence-only
+
+> **Status**: Done (Sprint 5) — `OpenAIEmbeddingProvider.__init__` now performs a format check
+> immediately after reading the key (`sk-` prefix required, ≥ 20 characters), raising a clear
+> `ValueError` before any API call is made. An actual validation call (`embeddings.create` with a
+> minimal test payload) runs at startup unless `validate_key=False` (testing only).
 
 **File**: `kb/config.py` (config check) and `kb/embeddings/provider.py`
 
 The key is checked with `os.environ.get(...)` — an empty string passes. The provider creates both sync and async OpenAI clients but never validates the key until the first API call, which may happen minutes later during indexing. Add a lightweight validation at startup (format check + a test embed call with a short string).
 
-#### ⬜ P3/S — Config deep-merge has no depth limit
+#### ✅ P3/S — Config deep-merge has no depth limit
+
+> **Status**: Done (Sprint 5) — `_deep_merge` now accepts `_depth: int = 0`; raises `ValueError`
+> if depth reaches `_DEEP_MERGE_MAX_DEPTH = 10`, with a clear message pointing to the config files.
 
 **File**: `kb/config.py` (`_deep_merge`)
 
@@ -354,7 +387,11 @@ When Redis is unavailable (the default for most local users), all cache entries 
 The `OpenAIEmbeddingProvider` creates both `self.client` and `self.async_client` at init time. If only one path is used (typical for CLI = sync, API = async), the other is wasted memory and connections.
 Lazy-initialize each on first use.
 
-#### ⬜ P2/S — File lines cached per-request, not shared
+#### ✅ P2/S — File lines cached per-request, not shared
+
+> **Status**: Done (Sprint 5) — `_FILE_LINES_CACHE` is now a module-level dict keyed on
+> `(path_str, mtime)` with a FIFO cap of 256 entries. `_read_file_lines()` reads from the cache on
+> hit and falls back to disk on miss; stale files are detected automatically via mtime.
 
 **File**: `kb/api/app.py:158`
 
@@ -372,13 +409,21 @@ Lazy-initialize each on first use.
 
 The search dispatch logic tries `search_async`, then `search`, then `asyncio.to_thread(search)`, then checks `isawaitable()` on the result. This four-step dispatch runs on every request. Since the backend type is known at startup, resolve the dispatch once during initialization and store a single callable.
 
-#### ⬜ P2/S — LanceDB connection not pooled
+#### ✅ P2/S — LanceDB connection not pooled
+
+> **Status**: Done (Sprint 5) — researched LanceDB concurrency: the Lance format supports safe
+> concurrent reads on a single connection. `connect()` now uses double-checked locking
+> (`_connect_lock = threading.Lock()`) to guarantee the connection is initialised exactly once
+> even under concurrent async-to-thread calls. A full connection pool is not needed.
 
 **File**: `kb/store/lancedb_store.py:35–50`
 
 A single cached connection is shared. For concurrent requests this serializes vector lookups. Investigate whether LanceDB supports connection pooling or if concurrent access on the same connection is safe. If not, implement a connection pool similar to `SQLiteConnectionPool`.
 
-#### ⬜ P3/S — Token estimation heuristic in rate limiter
+#### ✅ P3/S — Token estimation heuristic in rate limiter
+
+> **Status**: Done (Sprint 5) — resolved as part of the token estimation fix above.
+> `async_embedder.py` now calls `estimate_tokens_batch(texts)` from `kb/utils/tokens.py`.
 
 **File**: `kb/ingest/async_embedder.py:67`
 
@@ -400,7 +445,10 @@ Underestimates tokens for code (which has many symbols). This causes the rate li
 
 `initialize_search_backend()` can raise on startup. There's no try/except wrapping the lifespan startup, so the entire server process dies. Wrap in a try/except, log the error, and start in a degraded mode (health check reports unhealthy, search returns 503).
 
-#### ⬜ P2/S — Watcher thread pool executor never fully awaited
+#### ✅ P2/S — Watcher thread pool executor never fully awaited
+
+> **Status**: Done (prior sprint) — `_executor.shutdown(wait=True)` is called during watcher
+> shutdown; in-flight indexing tasks complete before the process exits.
 
 **File**: `kb/ingest/watcher.py:48`
 
@@ -445,7 +493,12 @@ GF_SECURITY_ADMIN_PASSWORD: admin
 
 Move to environment variables or a `.env` file excluded from version control.
 
-#### ⬜ P2/S — Loki auth disabled
+#### 🔄 P2/S — Loki auth disabled
+
+> **Status**: Documented (Sprint 5) — `auth_enabled: false` is now clearly commented as intentional
+> for local development only. The config file includes instructions for enabling auth (set to `true`
+> and add matching credentials in Promtail and the Grafana Loki datasource). See
+> `docs/DEPLOYMENT.md` for production hardening details.
 
 **File**: `observability/loki/loki-config.yml`
 
@@ -460,7 +513,11 @@ Move to environment variables or a `.env` file excluded from version control.
 
 `CVE-2026-0994` (protobuf DoS, confirmed in `.github/workflows/security-scan.yml:26`) and `GHSA-7gcm-g887-7qv7` are ignored in CI. The workflow already has an inline comment for the protobuf CVE; neither exception has a dedicated rationale document. Add a `docs/SECURITY_EXCEPTIONS.md` that records the advisory, the upstream status, the accepted risk, and a target date for re-evaluation.
 
-#### ⬜ P3/S — No application Dockerfile
+#### ✅ P3/S — No application Dockerfile
+
+> **Status**: Done (Sprint 5) — `Dockerfile` and `.dockerignore` created at repo root.
+> Two-stage build (uv builder → slim runtime); non-root `dolphin` user; `HEALTHCHECK` on
+> `/v1/health`; data volume at `/data/store`.
 
 There's no Dockerfile for the Dolphin application itself — only for the observability stack. For teams wanting to deploy Dolphin as a container, provide a multi-stage Dockerfile with:
 
@@ -507,6 +564,21 @@ The improvements above are ordered by priority within each section. Here's a sug
 2. ✅ Standardize search return type to a `SearchResult` dataclass.
 3. ✅ Improve CLI post-index summaries with skip/error counts.
 4. ✅ Write `docs/DEPLOYMENT.md` for production use.
+
+#### ✅ Sprint 5: Security, Correctness & Performance — Complete
+
+1. ✅ `threading.Lock` on all global-state writers in `app.py`.
+2. ✅ Structured logging (Phase 2 & 3) — `@defensive` decorator; `exc_info=True` across `watcher.py`, `cli.py`, `pipeline.py`, `sqlite_meta.py`.
+3. ✅ `kb/api/utils.py` — `allow_symlinks=False` as secure default in `validate_path_within_repo`.
+4. ✅ `kb/ingest/dedup.py` — dedup errors propagate; pipeline increments `files_error` instead of re-embedding all chunks.
+5. ✅ `kb/utils/tokens.py` — tiktoken-backed `estimate_tokens()` / `estimate_tokens_batch()`; replaces both character and word heuristics in `app.py` and `async_embedder.py`.
+6. ✅ `kb/api/app.py` — version read from `importlib.metadata`; `_cache_invalidation_healthy` flag surfaced in deep health check; module-level file-lines cache (FIFO, 256 entries).
+7. ✅ `kb/embeddings/provider.py` — `sk-` format check + length validation at startup.
+8. ✅ `kb/store/lancedb_store.py` — double-checked locking for thread-safe lazy `connect()`.
+9. 🔄 `observability/loki/loki-config.yml` — `auth_enabled: false` documented as intentional for local dev; see `docs/DEPLOYMENT.md` for production hardening.
+10. ✅ `kb/cli.py` — `--max-lines` flag added to `dolphin search`; passes through to `_display_results`.
+11. ✅ `kb/config.py` — `_deep_merge` capped at depth 10; raises `ValueError` on malformed deep configs.
+12. ✅ `Dockerfile` + `.dockerignore` — two-stage build with non-root user and `/v1/health` healthcheck.
 
 ### Conventions for new code
 

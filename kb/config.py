@@ -410,12 +410,19 @@ def load_config(path: Path | None = None, repo_path: Path | None = None) -> KBCo
         ValueError: when the loaded file is not a TOML mapping.
     """
 
-    def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    _DEEP_MERGE_MAX_DEPTH = 10
+
+    def _deep_merge(base: dict[str, Any], override: dict[str, Any], _depth: int = 0) -> dict[str, Any]:
+        if _depth >= _DEEP_MERGE_MAX_DEPTH:
+            raise ValueError(
+                f"Config nesting exceeds maximum depth ({_DEEP_MERGE_MAX_DEPTH}). "
+                "Check your configuration files for excessively nested tables."
+            )
         merged = dict(base)
         for key, value in override.items():
             base_value = merged.get(key)
             if isinstance(base_value, Mapping) and isinstance(value, Mapping):
-                merged[key] = _deep_merge(dict(base_value), dict(value))
+                merged[key] = _deep_merge(dict(base_value), dict(value), _depth + 1)
             else:
                 merged[key] = value
         return merged

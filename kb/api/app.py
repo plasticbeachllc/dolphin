@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from ..api_key import load_kb_api_key
 from ..config import KBConfig, load_config
 from ..store.sqlite_meta import SQLiteMetadataStore, generate_fts_content_id
+from ..utils.tokens import estimate_tokens
 from .task_queue import TaskStatus, get_task_queue
 from .utils import GitRepository, normalize_repo_registration_path, validate_path_within_repo
 
@@ -31,7 +32,14 @@ EMBEDDING_BATCH_SIZE = 128
 ESTIMATED_TOKENS_PER_CHUNK = 200
 CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_:-]+$")
 
-app = FastAPI(title="Unified Knowledge Store", version="0.2.1")
+try:
+    from importlib.metadata import version as _pkg_version
+
+    _APP_VERSION = _pkg_version("pb-dolphin")
+except Exception:
+    _APP_VERSION = "0.0.0"
+
+app = FastAPI(title="Unified Knowledge Store", version=_APP_VERSION)
 
 
 @app.exception_handler(RequestValidationError)
@@ -124,6 +132,16 @@ _lance_store = None
 _pipeline = None
 _store_lock = threading.Lock()
 
+# Flips to False on the first cache-invalidation failure so the deep health
+# check can surface it without re-running a live invalidation.
+_cache_invalidation_healthy: bool = True
+
+# Module-level bounded file-lines cache shared across search requests.
+# Keyed by (absolute_path_str, mtime) so file edits produce automatic misses.
+# CPython dict ops are GIL-protected so no additional lock is needed here.
+_FILE_LINES_CACHE: dict[tuple[str, float], list[str]] = {}
+_FILE_LINES_CACHE_MAX = 256
+
 
 def set_stores(sql_store, lance_store):
     """Set the SQL and Lance stores for API endpoints."""
@@ -161,13 +179,37 @@ def reset_stores():
         _pipeline = None
 
 
+def _read_file_lines(full_path: Path) -> list[str] | None:
+    """Read file lines using the module-level bounded cache keyed on (path, mtime).
+
+    Returns None on any read error.  Cache entries are evicted FIFO when the
+    cache exceeds ``_FILE_LINES_CACHE_MAX`` entries.
+    """
+    try:
+        mtime = full_path.stat().st_mtime
+    except OSError:
+        return None
+    key = (str(full_path), mtime)
+    cached = _FILE_LINES_CACHE.get(key)
+    if cached is not None:
+        return cached
+    try:
+        with open(full_path, encoding="utf-8") as fh:
+            lines = fh.readlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    if len(_FILE_LINES_CACHE) >= _FILE_LINES_CACHE_MAX:
+        _FILE_LINES_CACHE.pop(next(iter(_FILE_LINES_CACHE)))
+    _FILE_LINES_CACHE[key] = lines
+    return lines
+
+
 def _enrich_hits_with_snippets(
     hits: list[dict[str, object]],
     request: SearchRequest,
     sql_store: SQLiteMetadataStore,
 ) -> list[dict[str, object]]:
     repo_root_cache: dict[str, Path] = {}
-    file_lines_cache: dict[tuple[str, str], list[str]] = {}
 
     for hit in hits:
         existing_snippet = hit.get("snippet")
@@ -201,15 +243,9 @@ def _enrich_hits_with_snippets(
         if not full_path.exists() or not full_path.is_file():
             continue
 
-        cache_key = (repo_name, path_str)
-        if cache_key not in file_lines_cache:
-            try:
-                with open(full_path, encoding="utf-8") as fh:
-                    file_lines_cache[cache_key] = fh.readlines()
-            except UnicodeDecodeError:
-                continue
-
-        lines = file_lines_cache.get(cache_key, [])
+        lines = _read_file_lines(full_path)
+        if lines is None:
+            continue
         if not lines:
             continue
 
@@ -240,10 +276,10 @@ def _enrich_hits_with_snippets(
         before_content = "".join(lines[before_start_idx:before_end_idx])
         after_content = "".join(lines[after_start_idx:after_end_idx])
 
-        # Token estimation (crude approx: 4 chars / token)
-        total_chars = len(text_content) + len(before_content) + len(after_content)
+        # Token estimation via tiktoken (falls back to chars/4 if unavailable).
+        combined_text = text_content + before_content + after_content
         max_tokens = request.max_snippet_tokens
-        estimated_tokens = total_chars / 4.0
+        estimated_tokens = estimate_tokens(combined_text)
 
         truncated = False
         if estimated_tokens > max_tokens:
@@ -405,14 +441,20 @@ def reset_search_backend() -> None:
 
 
 def _invalidate_search_cache(repo_name: str) -> None:
+    global _cache_invalidation_healthy
     backend = get_search_backend()
     cache = getattr(backend, "cache", None)
     if not cache:
         return
     try:
         cache.invalidate_repo(repo_name)
-    except Exception as exc:  # pragma: no cover - defensive
-        logging.warning("Failed to invalidate cache for repo %s", repo_name, exc_info=exc)
+    except Exception:  # pragma: no cover - defensive
+        _cache_invalidation_healthy = False
+        _log.error(
+            "Failed to invalidate cache for repo %s — stale results may be served until the next restart",
+            repo_name,
+            exc_info=True,
+        )
 
 
 def _get_system_stats() -> dict[str, Any]:
@@ -474,10 +516,14 @@ async def health(check: str = Query(default="shallow")) -> dict[str, object]:
     else:
         checks["embeddings"] = "not_configured"
 
+    # Cache invalidation health
+    checks["cache_invalidation"] = "ok" if _cache_invalidation_healthy else "degraded"
+
     # System stats
     checks["system"] = _get_system_stats()
 
-    return {"status": "ok", "checks": checks}
+    overall = "ok" if _cache_invalidation_healthy else "degraded"
+    return {"status": overall, "checks": checks}
 
 
 @app.get("/v1/health")
