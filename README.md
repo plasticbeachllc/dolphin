@@ -9,7 +9,7 @@ Dolphin helps humans and AI agents find the right code quickly with semantic sea
 
 ## Why Dolphin
 
-- **Modern search framework**: hybrid vector + keyword retrieval with reranking keeps search relevant as codebases scale.
+- **Modern search framework**: hybrid vector + keyword retrieval with optional reranking keeps search relevant as codebases scale.
 - **All-in-one context management**: indexing, chunking, metadata, snippets, and graph context in one framework.
 - **Practical developer UX**: use from terminal, set up with MCP, or integrate however you like.
 
