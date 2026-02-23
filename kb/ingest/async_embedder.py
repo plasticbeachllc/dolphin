@@ -7,6 +7,7 @@ adaptive rate limiting to handle API constraints.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import time
 from collections import deque
@@ -90,8 +91,11 @@ class RateLimitedEmbedder:
                 # For safety, run in executor.
                 loop = asyncio.get_running_loop()
 
-                # Note: `embed_texts_with_retry` is our robust entry point
-                vectors = await loop.run_in_executor(None, embed_texts_with_retry, self.model, texts)
+                # Explicitly copy context so the embedding provider ContextVar
+                # propagates to the executor thread (Python <3.14 does not do
+                # this automatically in run_in_executor).
+                ctx = contextvars.copy_context()
+                vectors = await loop.run_in_executor(None, ctx.run, embed_texts_with_retry, self.model, texts)
 
                 # Record usage
                 self._record_usage(est_tokens)
