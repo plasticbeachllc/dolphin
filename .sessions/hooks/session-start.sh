@@ -13,6 +13,10 @@ for p in "$HOME/.local/bin" "$HOME/.bun/bin"; do
   if [ -d "$p" ]; then
     export PATH="$p:$PATH"
     append_env "export PATH=\"$p:\$PATH\""
+    if [[ "$p" == *"/.bun/bin" ]]; then
+      export BUN_INSTALL="$HOME/.bun"
+      append_env 'export BUN_INSTALL="$HOME/.bun"'
+    fi
   fi
 done
 
