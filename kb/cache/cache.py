@@ -6,6 +6,7 @@ to improve performance and reduce API costs.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import logging
@@ -15,6 +16,8 @@ from typing import Any
 _log = logging.getLogger(__name__)
 
 _REPO_INDEX_PREFIX = "repo_index"
+_GLOBAL_RESULTS_SCOPE = "__global__"
+_RESULTS_CACHE_VERSION = "v2"
 
 
 class QueryCache:
@@ -35,6 +38,7 @@ class QueryCache:
         embedding_ttl: int = 3600,
         result_ttl: int = 900,
         enabled: bool = True,
+        max_memory_entries: int = 10_000,
     ):
         """Initialize query cache.
 
@@ -43,13 +47,18 @@ class QueryCache:
             embedding_ttl: Time-to-live for embeddings in seconds (default: 1 hour)
             result_ttl: Time-to-live for results in seconds (default: 15 minutes)
             enabled: Whether caching is enabled (default: True)
+            max_memory_entries: Maximum number of entries in the in-memory fallback cache.
+                When the limit is reached, expired entries are evicted first; if still over
+                capacity, the soonest-to-expire entries are removed. (default: 10,000)
         """
         self.redis = redis_client
         self.embedding_ttl = embedding_ttl
         self.result_ttl = result_ttl
         self.enabled = enabled
+        self._max_memory_entries = max_memory_entries
 
-        # Fallback in-memory cache if Redis not available
+        # Fallback in-memory cache if Redis not available.
+        # Values are (payload, expires_at) tuples; bounded by _max_memory_entries.
         self._memory_cache: dict[str, tuple[Any, float]] = {}
         self._repo_index: dict[str, set[str]] = {}
         self._key_repos: dict[str, set[str]] = {}
@@ -76,6 +85,14 @@ class QueryCache:
 
     def _repo_index_key(self, repo: str) -> str:
         return f"{_REPO_INDEX_PREFIX}:{repo}"
+
+    def _global_index_key(self) -> str:
+        return self._repo_index_key(_GLOBAL_RESULTS_SCOPE)
+
+    def _result_cache_key(self, query: str, params: dict[str, Any]) -> str:
+        # Include a cache version marker so key-shape upgrades do not risk stale collisions.
+        param_str = json.dumps(params, sort_keys=True, separators=(",", ":"))
+        return f"results:{_RESULTS_CACHE_VERSION}:{self._hash_key(query, param_str)}"
 
     def _extract_repos(self, params: dict[str, Any]) -> list[str]:
         repos: list[str] = []
@@ -105,7 +122,7 @@ class QueryCache:
             self._memory_cache.pop(cache_key, None)
             self._remove_key_from_repo_index(cache_key)
             return None
-        return value
+        return copy.deepcopy(value)
 
     def _remove_key_from_repo_index(self, cache_key: str) -> None:
         repos = self._key_repos.pop(cache_key, set())
@@ -116,19 +133,92 @@ class QueryCache:
                 if not repo_keys:
                     self._repo_index.pop(repo, None)
 
+    def _evict_memory_cache(self) -> None:
+        """Evict expired entries; if still over capacity, remove the soonest-to-expire entries."""
+        now = time.time()
+        # Phase 1: remove all entries whose TTL has passed.
+        expired = [k for k, (_, exp) in self._memory_cache.items() if exp <= now]
+        for key in expired:
+            self._memory_cache.pop(key, None)
+            self._remove_key_from_repo_index(key)
+
+        # Phase 2: if still at capacity, evict by soonest expiry until under 90% full.
+        if len(self._memory_cache) >= self._max_memory_entries:
+            target = max(0, int(self._max_memory_entries * 0.9))
+            overflow = len(self._memory_cache) - target
+            by_expiry = sorted(self._memory_cache.keys(), key=lambda k: self._memory_cache[k][1])
+            for key in by_expiry[:overflow]:
+                self._memory_cache.pop(key, None)
+                self._remove_key_from_repo_index(key)
+            _log.debug(
+                "In-memory cache eviction: removed %d entries (capacity=%d)",
+                overflow,
+                self._max_memory_entries,
+            )
+
     def _index_result_key(self, cache_key: str, params: dict[str, Any]) -> None:
-        repos = self._extract_repos(params)
-        if not repos:
-            return
+        scopes = self._extract_repos(params)
+        if not scopes:
+            scopes = [_GLOBAL_RESULTS_SCOPE]
         if self.redis:
-            for repo in repos:
-                index_key = self._repo_index_key(repo)
+            for scope in scopes:
+                index_key = self._repo_index_key(scope)
                 self.redis.sadd(index_key, cache_key)
                 self.redis.expire(index_key, self.result_ttl)
         else:
-            for repo in repos:
-                self._repo_index.setdefault(repo, set()).add(cache_key)
-            self._key_repos.setdefault(cache_key, set()).update(repos)
+            for scope in scopes:
+                self._repo_index.setdefault(scope, set()).add(cache_key)
+            self._key_repos.setdefault(cache_key, set()).update(scopes)
+
+    @staticmethod
+    def _decode_redis_key(key: Any) -> str:
+        if isinstance(key, (bytes, bytearray)):
+            return key.decode()
+        return str(key)
+
+    def _get_cached_results_payload(self, query: str, params: dict[str, Any]) -> Any | None:
+        if not self.enabled:
+            return None
+
+        cache_key = self._result_cache_key(query, params)
+
+        try:
+            if self.redis:
+                cached = self.redis.get(cache_key)
+                if cached:
+                    self.stats["result_hits"] += 1
+                    return json.loads(cached)
+            else:
+                value = self._get_memory_value(cache_key)
+                if value is not None:
+                    self.stats["result_hits"] += 1
+                    return value
+
+            self.stats["result_misses"] += 1
+            return None
+
+        except Exception as e:
+            _log.warning("Cache read error for results: %s", e)
+            return None
+
+    def _set_cached_results_payload(self, query: str, payload: Any, params: dict[str, Any]) -> None:
+        if not self.enabled:
+            return
+
+        cache_key = self._result_cache_key(query, params)
+
+        try:
+            if self.redis:
+                self.redis.setex(cache_key, self.result_ttl, json.dumps(payload))
+                self._index_result_key(cache_key, params)
+            else:
+                if len(self._memory_cache) >= self._max_memory_entries:
+                    self._evict_memory_cache()
+                self._memory_cache[cache_key] = (copy.deepcopy(payload), time.time() + self.result_ttl)
+                self._index_result_key(cache_key, params)
+
+        except Exception as e:
+            _log.warning("Cache write error for results: %s", e)
 
     def get_embedding(self, query: str, model: str) -> list[float] | None:
         """Get cached embedding for a query.
@@ -183,8 +273,10 @@ class QueryCache:
                 self.redis.setex(cache_key, self.embedding_ttl, json.dumps(embedding))
             else:
                 # In-memory fallback
+                if len(self._memory_cache) >= self._max_memory_entries:
+                    self._evict_memory_cache()
                 self._memory_cache[cache_key] = (
-                    embedding,
+                    copy.deepcopy(embedding),
                     time.time() + self.embedding_ttl,
                 )
 
@@ -201,32 +293,16 @@ class QueryCache:
         Returns:
             Cached search results or None if not cached
         """
-        if not self.enabled:
+        payload = self._get_cached_results_payload(query, params)
+        if payload is None:
             return None
-
-        # Create stable hash from query + sorted params
-        param_str = json.dumps(params, sort_keys=True, separators=(",", ":"))
-        cache_key = f"results:{self._hash_key(query, param_str)}"
-
-        try:
-            if self.redis:
-                cached = self.redis.get(cache_key)
-                if cached:
-                    self.stats["result_hits"] += 1
-                    return json.loads(cached)
-            else:
-                # In-memory fallback
-                value = self._get_memory_value(cache_key)
-                if value is not None:
-                    self.stats["result_hits"] += 1
-                    return value
-
-            self.stats["result_misses"] += 1
-            return None
-
-        except Exception as e:
-            _log.warning("Cache read error for results: %s", e)
-            return None
+        if isinstance(payload, list):
+            return payload
+        if isinstance(payload, dict):
+            hits = payload.get("hits")
+            if isinstance(hits, list):
+                return hits
+        return None
 
     def set_results(self, query: str, results: list[dict[str, Any]], **params: Any) -> None:
         """Cache search results.
@@ -236,23 +312,35 @@ class QueryCache:
             results: Search results to cache
             **params: Search parameters used
         """
-        if not self.enabled:
-            return
+        self._set_cached_results_payload(query, results, params)
 
-        param_str = json.dumps(params, sort_keys=True, separators=(",", ":"))
-        cache_key = f"results:{self._hash_key(query, param_str)}"
+    def get_search_results(self, query: str, **params: Any) -> tuple[list[dict[str, Any]], str | None] | None:
+        """Get cached search response payload including pagination cursor."""
+        payload = self._get_cached_results_payload(query, params)
+        if payload is None:
+            return None
+        if isinstance(payload, list):
+            # Backward compatibility for pre-v2 payload shape.
+            return payload, None
+        if isinstance(payload, dict):
+            hits = payload.get("hits")
+            if isinstance(hits, list):
+                raw_cursor = payload.get("next_cursor")
+                next_cursor = raw_cursor if isinstance(raw_cursor, str) else None
+                return hits, next_cursor
+        return None
 
-        try:
-            if self.redis:
-                self.redis.setex(cache_key, self.result_ttl, json.dumps(results))
-                self._index_result_key(cache_key, params)
-            else:
-                # In-memory fallback
-                self._memory_cache[cache_key] = (results, time.time() + self.result_ttl)
-                self._index_result_key(cache_key, params)
-
-        except Exception as e:
-            _log.warning("Cache write error for results: %s", e)
+    def set_search_results(
+        self,
+        query: str,
+        results: list[dict[str, Any]],
+        *,
+        next_cursor: str | None,
+        **params: Any,
+    ) -> None:
+        """Cache search results plus next-cursor metadata for pagination correctness."""
+        payload: dict[str, Any] = {"hits": results, "next_cursor": next_cursor}
+        self._set_cached_results_payload(query, payload, params)
 
     def invalidate_repo(self, repo: str) -> None:
         """Invalidate all cached results for a repository.
@@ -268,23 +356,29 @@ class QueryCache:
         try:
             if self.redis:
                 index_key = self._repo_index_key(repo)
-                keys = self.redis.smembers(index_key)
-                if keys:
-                    cache_keys = [key.decode() if isinstance(key, (bytes, bytearray)) else key for key in keys]
+                global_key = self._global_index_key()
+                repo_keys = {self._decode_redis_key(key) for key in self.redis.smembers(index_key)}
+                global_keys = {self._decode_redis_key(key) for key in self.redis.smembers(global_key)}
+                cache_keys = sorted(repo_keys.union(global_keys))
+                if cache_keys:
                     pipeline = self.redis.pipeline()
                     pipeline.delete(*cache_keys)
                     pipeline.delete(index_key)
+                    pipeline.delete(global_key)
                     pipeline.execute()
                 else:
                     self.redis.delete(index_key)
-                _log.info("Invalidated cache for repo: %s", repo)
+                    self.redis.delete(global_key)
+                _log.info("Invalidated cache for repo: %s (removed_keys=%d)", repo, len(cache_keys))
             else:
-                keys = list(self._repo_index.get(repo, set()))
+                keys = set(self._repo_index.get(repo, set()))
+                keys.update(self._repo_index.get(_GLOBAL_RESULTS_SCOPE, set()))
                 for key in keys:
                     self._memory_cache.pop(key, None)
                     self._remove_key_from_repo_index(key)
                 self._repo_index.pop(repo, None)
-                _log.info("Invalidated cache for repo: %s", repo)
+                self._repo_index.pop(_GLOBAL_RESULTS_SCOPE, None)
+                _log.info("Invalidated cache for repo: %s (removed_keys=%d)", repo, len(keys))
 
         except Exception as e:
             _log.warning("Cache invalidation error for repo %s: %s", repo, e)
@@ -340,6 +434,7 @@ def create_cache(
     embedding_ttl: int = 3600,
     result_ttl: int = 900,
     enabled: bool = True,
+    max_memory_entries: int = 10_000,
 ) -> QueryCache:
     """Factory function to create a query cache.
 
@@ -357,9 +452,10 @@ def create_cache(
 
     if redis_url and enabled:
         try:
-            import redis
-
-            redis_client = redis.from_url(redis_url)
+            # Optional dependency: resolve at runtime so environments without
+            # redis still type-check and gracefully fall back to memory cache.
+            redis_module = __import__("redis")
+            redis_client = redis_module.from_url(redis_url)
             # Test connection
             redis_client.ping()
             _log.info("Connected to Redis cache at %s", redis_url)
@@ -380,4 +476,5 @@ def create_cache(
         embedding_ttl=embedding_ttl,
         result_ttl=result_ttl,
         enabled=enabled,
+        max_memory_entries=max_memory_entries,
     )

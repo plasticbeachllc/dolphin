@@ -228,6 +228,7 @@ def chunk_file(
     language: str,
     text: str,
     repo_config: RepoChunkingConfig,
+    model: str | None = None,
     token_target: int | None = None,
     overlap_pct: float | None = None,
 ) -> list:  # Returns list of Chunk objects
@@ -237,7 +238,7 @@ def chunk_file(
     It automatically:
     - Selects the appropriate chunker based on language
     - Applies per-language token window sizes from repo config
-    - Uses the configured embedding model for tokenization
+    - Uses the runtime embedding model bucket ("small"/"large") for tokenization
     - Attaches symbol_path metadata using rel_path
 
     Args:
@@ -246,6 +247,7 @@ def chunk_file(
         language: Language identifier (from detect_language_from_extension)
         text: File content to chunk
         repo_config: Repository chunking configuration
+        model: Runtime embedding model (for tokenizer bucket selection)
         token_target: Override token window size (uses config if None)
         overlap_pct: Override overlap percentage (uses config if None)
 
@@ -269,14 +271,16 @@ def chunk_file(
     if overlap_pct is None:
         overlap_pct = repo_config.overlap_pct
 
-    # Map embedding model to tokenizer model name
-    # "text-embedding-3-small" -> "small", "text-embedding-3-large" -> "large"
-    model = "small"  # Default
-    if repo_config.embedding_model:
-        if "large" in repo_config.embedding_model.lower():
-            model = "large"
-        elif "small" in repo_config.embedding_model.lower():
-            model = "small"
+    # Map runtime embedding model to tokenizer bucket.
+    # Accept canonical values ("small"/"large") and provider names.
+    model_name = (model or "small").strip().lower()
+    if "large" in model_name:
+        tokenizer_model = "large"
+    elif "small" in model_name:
+        tokenizer_model = "small"
+    else:
+        _log.warning("Unknown chunking model %r; defaulting tokenizer bucket to 'small'", model)
+        tokenizer_model = "small"
 
     # Get the appropriate chunker
     chunker = get_chunker(language)
@@ -285,7 +289,7 @@ def chunk_file(
         "Chunking %s (lang=%s, model=%s, target=%d, overlap=%.2f)",
         rel_path,
         language,
-        model,
+        tokenizer_model,
         token_target,
         overlap_pct,
     )
@@ -294,7 +298,7 @@ def chunk_file(
     try:
         chunks = chunker(
             text,
-            model=model,
+            model=tokenizer_model,
             token_target=token_target,
             overlap_pct=overlap_pct,
         )
@@ -302,7 +306,7 @@ def chunk_file(
         _log.error("Chunker failed for %s: %s. Using fallback.", rel_path, e)
         chunks = chunk_text(
             text,
-            model=model,
+            model=tokenizer_model,
             token_target=token_target,
             overlap_pct=overlap_pct,
         )

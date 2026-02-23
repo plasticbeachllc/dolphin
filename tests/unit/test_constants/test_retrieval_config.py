@@ -14,12 +14,6 @@ class TestRetrievalConstants:
         assert isinstance(RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER, int)
         assert RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER > 0
 
-    def test_config_file_score_penalty(self):
-        """Test CONFIG_FILE_SCORE_PENALTY constant."""
-        assert RETRIEVAL_PARAMS.CONFIG_FILE_SCORE_PENALTY == 0.5
-        assert isinstance(RETRIEVAL_PARAMS.CONFIG_FILE_SCORE_PENALTY, float)
-        assert 0.0 <= RETRIEVAL_PARAMS.CONFIG_FILE_SCORE_PENALTY <= 1.0
-
     def test_bm25_score_normalization_factor(self):
         """Test BM25_SCORE_NORMALIZATION_FACTOR constant."""
         assert RETRIEVAL_PARAMS.BM25_SCORE_NORMALIZATION_FACTOR == 10.0
@@ -68,7 +62,6 @@ class TestRetrievalConstants:
     def test_all_constants_have_values(self):
         """Test that all constant fields have non-None values."""
         assert RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER is not None
-        assert RETRIEVAL_PARAMS.CONFIG_FILE_SCORE_PENALTY is not None
         assert RETRIEVAL_PARAMS.BM25_SCORE_NORMALIZATION_FACTOR is not None
         assert RETRIEVAL_PARAMS.RRF_K is not None
         assert RETRIEVAL_PARAMS.MMR_LAMBDA_DEFAULT is not None
@@ -80,9 +73,6 @@ class TestRetrievalConstants:
         """Test that constants are within reasonable ranges."""
         # Multipliers should be >= 1
         assert RETRIEVAL_PARAMS.CANDIDATE_MULTIPLIER >= 1
-
-        # Penalties should be 0-1
-        assert 0.0 <= RETRIEVAL_PARAMS.CONFIG_FILE_SCORE_PENALTY <= 1.0
 
         # Lambda should be 0-1
         assert 0.0 <= RETRIEVAL_PARAMS.MMR_LAMBDA_DEFAULT <= 1.0
@@ -113,7 +103,6 @@ class TestRetrievalConstants:
         """Test creating a new RetrievalConstants instance with custom values."""
         custom = RetrievalConstants(
             CANDIDATE_MULTIPLIER=8,
-            CONFIG_FILE_SCORE_PENALTY=0.3,
             BM25_SCORE_NORMALIZATION_FACTOR=15.0,
             RRF_K=50,
             MMR_LAMBDA_DEFAULT=0.8,
@@ -123,7 +112,6 @@ class TestRetrievalConstants:
         )
 
         assert custom.CANDIDATE_MULTIPLIER == 8
-        assert custom.CONFIG_FILE_SCORE_PENALTY == 0.3
         assert custom.BM25_SCORE_NORMALIZATION_FACTOR == 15.0
         assert custom.RRF_K == 50
         assert custom.MMR_LAMBDA_DEFAULT == 0.8

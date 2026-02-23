@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from kb.api.app import SearchRequest, reset_search_backend, set_search_backend
+from kb.api.app import SearchRequest, SearchResultSet, reset_search_backend, set_search_backend
 from kb.hashing import hash_text
 
 FIXTURE_REPO_ROOT = Path(__file__).resolve().parent / "fixtures" / "kb_sample_repo"
@@ -59,7 +59,7 @@ class InMemoryKBBackend:
                 text_hash=hash_text(text),
             )
 
-    def search(self, request: SearchRequest) -> tuple[Sequence[dict[str, object]], str | None]:
+    def search(self, request: SearchRequest) -> SearchResultSet:
         """Perform a naive substring search across the loaded chunks."""
         scope = {s.lower() for s in request.repos or []}
         query = request.query.lower()
@@ -92,7 +92,7 @@ class InMemoryKBBackend:
                     },
                 }
             )
-        return matches[: request.top_k], None
+        return SearchResultSet(matches[: request.top_k], None)
 
 
 def _build_snippet(

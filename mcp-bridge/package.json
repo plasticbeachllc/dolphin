@@ -22,18 +22,18 @@
     "@opentelemetry/api": "^1.9.0",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@iarna/toml": "^2.2.5",
-    "zod": "~3.24.0",
-    "zod-to-json-schema": "~3.24.0"
+    "zod": "~4.3.6",
+    "zod-to-json-schema": "~3.25.1"
   },
   "devDependencies": {
-    "@types/node": "^24.10.9",
-    "eslint": "^9.39.2",
+    "@types/node": "^25.3.0",
+    "eslint": "^10.0.1",
     "eslint-config-standard-with-typescript": "^43.0.1",
     "eslint-plugin-import": "^2.32.0",
-    "eslint-plugin-n": "^17.23.2",
+    "eslint-plugin-n": "^17.24.0",
     "eslint-plugin-promise": "^7.2.1",
-    "@typescript-eslint/eslint-plugin": "^8.53.1",
-    "@typescript-eslint/parser": "^8.53.1",
+    "@typescript-eslint/eslint-plugin": "^8.56.0",
+    "@typescript-eslint/parser": "^8.56.0",
     "typescript": "^5.9.3"
   },
   "keywords": [

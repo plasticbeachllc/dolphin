@@ -30,6 +30,25 @@ logging.basicConfig(
 )
 
 
+def _load_timeout_from_env(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        logging.getLogger(__name__).warning("Invalid %s=%r; using default %.1fs", name, raw, default)
+        return default
+    if value <= 0:
+        logging.getLogger(__name__).warning("Non-positive %s=%r; using default %.1fs", name, raw, default)
+        return default
+    return value
+
+
+_WATCHER_SHUTDOWN_GRACE_SECONDS = _load_timeout_from_env("DOLPHIN_WATCH_SHUTDOWN_TIMEOUT", 15.0)
+_WATCHER_CANCEL_GRACE_SECONDS = _load_timeout_from_env("DOLPHIN_WATCH_CANCEL_TIMEOUT", 5.0)
+
+
 def initialize_search_backend() -> None:
     """Initialize and configure the search backend and ingestion pipeline based on config."""
     config: KBConfig = load_config()
@@ -121,6 +140,22 @@ def initialize_search_backend() -> None:
     set_pipeline(pipeline)
     print_status("Ingestion pipeline ready.", level="success", stderr=True)
 
+    # Warn about embedding model mismatches between config and registered repos.
+    # The watcher startup sync will auto-trigger full reindex for mismatched repos,
+    # but the user should see an explicit heads-up.
+    config_model = config.default_embed_model
+    repos = backend.sql_store.list_all_repos()
+    for repo in repos:
+        repo_model = repo.get("default_embed_model", "large")
+        if repo_model != config_model:
+            print_status(
+                f"Embedding model mismatch for '{repo['name']}': "
+                f"indexed with '{repo_model}', config says '{config_model}'. "
+                f"A full re-index will run automatically on startup sync.",
+                level="warn",
+                stderr=True,
+            )
+
 
 def reload_search_backend() -> None:
     """Reload the search backend and stores to pick up index changes."""
@@ -170,6 +205,15 @@ async def lifespan_handler(app_instance: FastAPI):
                 stderr=True,
             )
             print_hint("Run `dolphin init` before starting the server.", stderr=True)
+        except Exception as exc:
+            logging.getLogger(__name__).error("Search backend initialization failed.", exc_info=True)
+            print_status(
+                "Backend initialization failed; server cannot start.",
+                level="error",
+                context={"error": str(exc)},
+                stderr=True,
+            )
+            raise
 
     # Start watchers if configured
     watchers = []
@@ -240,13 +284,20 @@ async def lifespan_handler(app_instance: FastAPI):
                     stderr=True,
                 )
 
-        done, pending = await asyncio.wait(watch_tasks, timeout=5.0)
+        done, pending = await asyncio.wait(watch_tasks, timeout=_WATCHER_SHUTDOWN_GRACE_SECONDS)
 
         if pending:
             for task in pending:
                 task.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
-            print_status("Watchers did not stop gracefully before timeout.", level="warn", stderr=True)
+            cancelled_done, cancelled_pending = await asyncio.wait(pending, timeout=_WATCHER_CANCEL_GRACE_SECONDS)
+            done = done.union(cancelled_done)
+            if cancelled_pending:
+                print_status(
+                    "Watchers did not stop gracefully before timeout.",
+                    level="warn",
+                    context={"pending": len(cancelled_pending)},
+                    stderr=True,
+                )
 
         for task in done:
             try:

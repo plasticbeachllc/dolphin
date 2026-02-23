@@ -797,3 +797,46 @@ async def test_index_parallel_sets_session_failed_on_error(tmp_path, monkeypatch
     assert row is not None
     assert row[0] == "failed"
     assert "parse fail" in (row[1] or "")
+
+
+@pytest.mark.asyncio
+async def test_parallel_indexing_increments_error_on_dedup_failure(tmp_path, monkeypatch):
+    """Mock ChunkDeduplicator.filter_unchanged_chunks to raise; parallel run completes; files_error is 1."""
+    store_path = tmp_path / "store"
+    store_path.mkdir()
+
+    config = KBConfig(store_root=store_path, embedding_provider="stub")
+    metadata = SQLiteMetadataStore(store_path / "test.db")
+    metadata.initialize()
+    lancedb = LanceDBStore(store_path / "lancedb")
+    pipeline = IngestionPipeline(config=config, lancedb=lancedb, metadata=metadata)
+
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    subprocess.run(["git", "-C", str(repo_path), "init"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo_path), "config", "user.email", "test@test.com"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_path), "config", "user.name", "Test"],
+        check=True,
+        capture_output=True,
+    )
+    (repo_path / "hello.py").write_text('def hello():\n    return "Hello, World!"\n')
+    subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "initial"], check=True, capture_output=True)
+
+    metadata.register_repo("test-repo", str(repo_path), default_embed_model="small")
+
+    from kb.ingest.dedup import ChunkDeduplicator
+
+    def _raise_dedup(self, *args, **kwargs):
+        raise RuntimeError("dedup kaboom")
+
+    monkeypatch.setattr(ChunkDeduplicator, "filter_unchanged_chunks", _raise_dedup)
+
+    result = await pipeline.index_parallel("test-repo", force=True)
+
+    assert result["files_error"] >= 1

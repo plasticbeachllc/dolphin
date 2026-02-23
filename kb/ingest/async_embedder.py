@@ -7,12 +7,15 @@ adaptive rate limiting to handle API constraints.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import time
+from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
 from ..embeddings.provider import embed_texts_with_retry
+from ..utils.tokens import estimate_tokens_batch
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +57,10 @@ class RateLimitedEmbedder:
         # State
         self.semaphore = asyncio.Semaphore(max_concurrent)
         self.last_request_time = 0.0
-        self.request_times: list[float] = []  # Rolling window for RPM
-        self.token_usage: list[tuple[float, float]] = []  # Rolling window for TPM
+        # Bounded deques prevent unbounded growth; maxlen caps at the RPM limit so
+        # the oldest entries are evicted automatically if pruning ever falls behind.
+        self.request_times: deque[float] = deque(maxlen=initial_rpm)  # Rolling window for RPM
+        self.token_usage: deque[tuple[float, float]] = deque(maxlen=initial_rpm)  # Rolling window for TPM
         self.backoff_until = 0.0
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
@@ -63,8 +68,8 @@ class RateLimitedEmbedder:
         if not texts:
             return []
 
-        # Estimate token count (rough heuristic: 1 word ~ 1.3 tokens)
-        est_tokens = sum(len(t.split()) * 1.3 for t in texts)
+        # Estimate token count via tiktoken (falls back to chars/4 if unavailable).
+        est_tokens = estimate_tokens_batch(texts)
 
         async with self.semaphore:
             # Check backoff
@@ -86,8 +91,11 @@ class RateLimitedEmbedder:
                 # For safety, run in executor.
                 loop = asyncio.get_running_loop()
 
-                # Note: `embed_texts_with_retry` is our robust entry point
-                vectors = await loop.run_in_executor(None, embed_texts_with_retry, self.model, texts)
+                # Explicitly copy context so the embedding provider ContextVar
+                # propagates to the executor thread (Python <3.14 does not do
+                # this automatically in run_in_executor).
+                ctx = contextvars.copy_context()
+                vectors = await loop.run_in_executor(None, ctx.run, embed_texts_with_retry, self.model, texts)
 
                 # Record usage
                 self._record_usage(est_tokens)
@@ -108,9 +116,12 @@ class RateLimitedEmbedder:
         while True:
             now = time.time()
 
-            # Prune old history (1 minute window)
-            self.request_times = [t for t in self.request_times if now - t < 60]
-            self.token_usage = [(t, k) for t, k in self.token_usage if now - t < 60]
+            # Evict entries older than the 1-minute rolling window from the left
+            # (deques are ordered oldest-first since entries are appended on the right).
+            while self.request_times and now - self.request_times[0] >= 60:
+                self.request_times.popleft()
+            while self.token_usage and now - self.token_usage[0][0] >= 60:
+                self.token_usage.popleft()
 
             current_rpm = len(self.request_times)
             current_tpm = sum(k for _, k in self.token_usage)

@@ -116,7 +116,6 @@ class TestChunkFileInterface:
             repo_path=Path("/mock/repo"),
             default_window_size=400,
             per_language={"python": 512, "markdown": 256},
-            embedding_model="text-embedding-3-small",
             overlap_pct=0.10,
         )
 
@@ -153,7 +152,6 @@ class Calculator:
             repo_path=Path("/mock/repo"),
             default_window_size=400,
             per_language={"python": 512, "markdown": 256},
-            embedding_model="text-embedding-3-small",
             overlap_pct=0.10,
         )
 
@@ -189,7 +187,6 @@ Content for section 2.
             repo_path=Path("/mock/repo"),
             default_window_size=400,
             per_language={"python": 512},
-            embedding_model="text-embedding-3-small",
             overlap_pct=0.10,
         )
 
@@ -289,7 +286,6 @@ class DataProcessor:
             repo_path=Path("."),
             default_window_size=400,
             per_language={"python": 600, "markdown": 300},  # Custom sizes
-            embedding_model="text-embedding-3-large",
             overlap_pct=0.15,
         )
 
@@ -300,6 +296,7 @@ class DataProcessor:
             language="python",
             text=source,
             repo_config=config,
+            model="text-embedding-3-large",
         )
 
         # Should use the custom Python window size from config

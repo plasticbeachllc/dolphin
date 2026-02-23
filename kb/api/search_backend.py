@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -10,6 +11,7 @@ import random
 import time
 import uuid
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +29,7 @@ from ..retrieval.rankers import maximal_marginal_relevance, reciprocal_rank_fusi
 from ..store.graph_store import GraphStore
 from ..store.lancedb_store import LanceDBStore
 from ..store.sqlite_meta import SQLiteMetadataStore
-from .app import SearchRequest
+from .app import SearchRequest, SearchResultSet
 
 
 class KnowledgeSearchBackend:
@@ -76,7 +78,43 @@ class KnowledgeSearchBackend:
         self._bm25_stats_path = self._resolve_bm25_stats_path()
         self._bm25_normalizer: ScoreNormalizer | None = None
         self._bm25_normalizer_metadata: dict[str, Any] = {}
+        # Execute independent retrieval branches concurrently to reduce p95 latency.
+        self._search_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="kb-search")
         self._configure_bm25_statistics_collection()
+
+    @staticmethod
+    def _normalize_string_list(values: Sequence[str] | None) -> list[str]:
+        """Canonicalize list-like request fields for stable cache keys."""
+        if not values:
+            return []
+        # Order should not affect cache identity for set-like filters.
+        return sorted({str(value) for value in values if str(value)})
+
+    def _build_search_cache_params(self, request: SearchRequest) -> dict[str, Any]:
+        """Build a complete, canonical cache fingerprint for search results."""
+        return {
+            "cache_schema": 2,
+            "embed_model": self.config.default_embed_model,
+            "hybrid_search_enabled": bool(self.hybrid_search_enabled),
+            "reranking_enabled": bool(self.reranker is not None),
+            "config_ann_strategy": self.config.retrieval.ann.strategy,
+            "config_ann_metric": self.config.retrieval.ann.metric,
+            "config_mmr_enabled": bool(self.config.retrieval.mmr_enabled),
+            "config_mmr_lambda": self.config.retrieval.mmr_lambda,
+            "top_k": int(request.top_k),
+            "score_cutoff": request.score_cutoff,
+            "repos": self._normalize_string_list(request.repos),
+            "path_prefix": self._normalize_string_list(request.path_prefix),
+            "exclude_paths": self._normalize_string_list(request.exclude_paths),
+            "exclude_patterns": self._normalize_string_list(request.exclude_patterns),
+            "mmr_enabled": request.mmr_enabled,
+            "mmr_lambda": request.mmr_lambda,
+            "ann_strategy": request.ann_strategy,
+            "ann_nprobes": request.ann_nprobes,
+            "ann_refine_factor": request.ann_refine_factor,
+            "include_graph_context": bool(getattr(request, "include_graph_context", False)),
+            "cursor": request.cursor,
+        }
 
     def _resolve_bm25_stats_path(self) -> Path:
         env_override = os.environ.get("DOLPHIN_BM25_STATS_PATH")
@@ -196,7 +234,74 @@ class KnowledgeSearchBackend:
             self._bm25_normalizer = SigmoidNormalizer(RETRIEVAL_PARAMS.BM25_SCORE_NORMALIZATION_FACTOR)
             return float(self._bm25_normalizer.normalize(score))
 
-    def search(self, request: SearchRequest) -> tuple[Sequence[dict[str, object]], str | None]:
+    def _is_cache_allowed(self, request: SearchRequest) -> bool:
+        """Return whether request-level cache access is permitted."""
+        if not self.cache:
+            return False
+
+        if not request.repos:
+            return True
+
+        for repo_name in request.repos:
+            repo_info = self.sql_store.get_repo_by_name(repo_name)
+            if not repo_info:
+                continue
+            repo_id = int(repo_info["id"])
+            if self.sql_store.get_pending_changes(repo_id, limit=1):
+                return False
+        return True
+
+    def _get_cached_results_if_available(
+        self,
+        request: SearchRequest,
+        *,
+        cache_allowed: bool | None = None,
+        cache_params: dict[str, Any] | None = None,
+    ) -> tuple[list[dict[str, object]], str | None] | None:
+        """Return cached results + cursor for a request when cache usage is allowed."""
+        if cache_allowed is None:
+            cache_allowed = self._is_cache_allowed(request)
+
+        if not cache_allowed or not self.cache:
+            return None
+
+        if cache_params is None:
+            cache_params = self._build_search_cache_params(request)
+
+        return self.cache.get_search_results(request.query, **cache_params)
+
+    async def search_async(self, request: SearchRequest) -> SearchResultSet:
+        """Execute search without blocking the event loop."""
+        cache_allowed = await asyncio.to_thread(self._is_cache_allowed, request)
+        cache_params = self._build_search_cache_params(request) if cache_allowed else None
+
+        cached_payload = None
+        if cache_params is not None and self.cache is not None:
+            cached_payload = await asyncio.to_thread(self.cache.get_search_results, request.query, **cache_params)
+        if cached_payload is not None:
+            hits, cursor = cached_payload
+            return SearchResultSet(hits, cursor)
+
+        query_embedding = await self.embedding_provider.embed_texts_async(
+            self.config.default_embed_model,
+            [request.query],
+        )
+        return await asyncio.to_thread(
+            self.search,
+            request,
+            _query_embedding_override=query_embedding[0],
+            _skip_cache=True,
+            _cache_state_override=(cache_allowed, cache_params),
+        )
+
+    def search(
+        self,
+        request: SearchRequest,
+        *,
+        _query_embedding_override: list[float] | None = None,
+        _skip_cache: bool = False,
+        _cache_state_override: tuple[bool, dict[str, Any] | None] | None = None,
+    ) -> SearchResultSet:
         # Generate correlation ID for this search request
         correlation_id = f"search_{uuid.uuid4().hex[:8]}"
         start_time = time.time()
@@ -218,29 +323,21 @@ class KnowledgeSearchBackend:
             },
         )
 
-        cache_allowed = True
-        if self.cache and request.repos:
-            for repo_name in request.repos:
-                repo_info = self.sql_store.get_repo_by_name(repo_name)
-                if not repo_info:
-                    continue
-                repo_id = int(repo_info["id"])
-                if self.sql_store.get_pending_changes(repo_id, limit=1):
-                    cache_allowed = False
-                    break
+        if _cache_state_override is None:
+            cache_allowed = self._is_cache_allowed(request)
+            cache_params = self._build_search_cache_params(request) if cache_allowed else None
+        else:
+            cache_allowed, cache_params = _cache_state_override
 
-        # Check cache first if available
-        if self.cache and cache_allowed:
-            # Create cache key from request parameters
-            cache_params = {
-                "top_k": request.top_k,
-                "score_cutoff": request.score_cutoff,
-                "embed_model": self.config.default_embed_model,
-                "repos": request.repos,
-                "path_prefix": request.path_prefix,
-            }
-            cached_results = self.cache.get_results(request.query, **cache_params)
-            if cached_results is not None:
+        # Check cache first if available unless caller already checked cache.
+        if not _skip_cache:
+            cached_payload = self._get_cached_results_if_available(
+                request,
+                cache_allowed=cache_allowed,
+                cache_params=cache_params,
+            )
+            if cached_payload is not None:
+                cached_results, cached_next_cursor = cached_payload
                 request_logger.info(
                     "Search completed (cache hit)",
                     {
@@ -248,9 +345,12 @@ class KnowledgeSearchBackend:
                         "cache_hit": True,
                     },
                 )
-                return cached_results, None
+                return SearchResultSet(cached_results, cached_next_cursor)
 
-        query_embedding = self.embedding_provider.embed_texts(self.config.default_embed_model, [request.query])[0]
+        if _query_embedding_override is not None:
+            query_embedding = _query_embedding_override
+        else:
+            query_embedding = self.embedding_provider.embed_texts(self.config.default_embed_model, [request.query])[0]
         # Fetch more candidates for reranking when enabled; otherwise use the default multiplier.
         try:
             rerank_multiplier = int(self.config.retrieval.reranking.candidate_multiplier)
@@ -264,15 +364,36 @@ class KnowledgeSearchBackend:
         # Get ANN parameters from config or use defaults
         ann_params = self._get_ann_params(request)
 
+        vector_future = self._search_executor.submit(
+            self.lance_store.query,
+            query_embedding,
+            model=self.config.default_embed_model,
+            top_k=num_candidates,
+            ann_params=ann_params,
+        )
+
+        bm25_future = None
+        repo_filter = request.repos[0] if request.repos else None
+        if self.hybrid_search_enabled and hasattr(self.sql_store, "bm25_search"):
+            request_logger.debug(
+                "BM25 search started",
+                {
+                    "repo": repo_filter,
+                    "path_prefix": request.path_prefix,
+                },
+            )
+            bm25_future = self._search_executor.submit(
+                self.sql_store.bm25_search,
+                request.query,
+                repo=repo_filter,
+                path_prefix=request.path_prefix,
+                top_k=num_candidates,
+            )
+
         # Vector search with error handling
         vector_formatted = []
         try:
-            vector_results = self.lance_store.query(
-                query_embedding,
-                model=self.config.default_embed_model,
-                top_k=num_candidates,
-                ann_params=ann_params,
-            )
+            vector_results = vector_future.result()
             vector_formatted = self._format_vector_results(vector_results)
             request_logger.debug("Vector search completed", {"results_count": len(vector_formatted)})
         except Exception as e:
@@ -281,22 +402,9 @@ class KnowledgeSearchBackend:
 
         # BM25 search with error handling
         bm25_hydrated = []
-        if self.hybrid_search_enabled and hasattr(self.sql_store, "bm25_search"):
+        if bm25_future is not None:
             try:
-                repo_filter = request.repos[0] if request.repos else None
-                request_logger.debug(
-                    "BM25 search started",
-                    {
-                        "repo": repo_filter,
-                        "path_prefix": request.path_prefix,
-                    },
-                )
-                bm25_results = self.sql_store.bm25_search(
-                    request.query,
-                    repo=repo_filter,
-                    path_prefix=request.path_prefix,
-                    top_k=num_candidates,
-                )
+                bm25_results = bm25_future.result()
                 request_logger.debug(
                     "BM25 search completed",
                     {
@@ -313,7 +421,7 @@ class KnowledgeSearchBackend:
                 # Log error but continue with empty BM25 results
                 request_logger.warning("BM25 search failed", error=e)
 
-        # Apply request filters and file-type scoring in a single pass for better perf
+        # Apply request filters (repo, path prefix/exclude) before fusion
         vector_filtered = self._filter_and_score_results(vector_formatted, request)
         bm25_filtered = self._filter_and_score_results(bm25_hydrated, request)
 
@@ -580,8 +688,13 @@ class KnowledgeSearchBackend:
                 request_logger.warning("Graph enrichment failed", error=e)
 
         # Cache results if cache is available
-        if self.cache and cache_allowed:
-            self.cache.set_results(request.query, list(final_results), **cache_params)
+        if self.cache and cache_allowed and cache_params is not None:
+            self.cache.set_search_results(
+                request.query,
+                list(final_results),
+                next_cursor=next_cursor,
+                **cache_params,
+            )
 
         # Log search completion with summary at INFO level
         duration_ms = (time.time() - start_time) * 1000
@@ -594,7 +707,7 @@ class KnowledgeSearchBackend:
             },
         )
 
-        return final_results, next_cursor
+        return SearchResultSet(final_results, next_cursor)
 
     def _format_vector_results(self, vector_results: list[dict]) -> list[dict[str, object]]:
         formatted = []
@@ -644,26 +757,6 @@ class KnowledgeSearchBackend:
                     return True
             return False
 
-        def is_config_file(path: str) -> bool:
-            lowered = path.lower()
-            return (
-                lowered.endswith(".toml")
-                or lowered.endswith(".json")
-                or lowered.endswith(".yaml")
-                or lowered.endswith(".yml")
-                or "config.toml" in lowered
-                or "package.json" in lowered
-                or "tsconfig.json" in lowered
-            )
-
-        def apply_penalty(result: dict[str, object]) -> dict[str, object]:
-            score_obj = result.get("score", 0.0)
-            score = float(score_obj) if isinstance(score_obj, (int, float)) else 0.0
-            return {
-                **result,
-                "score": score * RETRIEVAL_PARAMS.CONFIG_FILE_SCORE_PENALTY,
-            }
-
         repo_filter = set(request.repos) if request.repos else None
         include_prefixes: tuple[str, ...] = (
             tuple(normalize_path(prefix) for prefix in request.path_prefix) if request.path_prefix else tuple()
@@ -693,10 +786,7 @@ class KnowledgeSearchBackend:
             if exclude_patterns and matches_pattern(normalized_path, basename, exclude_patterns):
                 continue
 
-            if is_config_file(raw_path):
-                filtered.append(apply_penalty(result))
-            else:
-                filtered.append(result)
+            filtered.append(result)
 
         return filtered
 
@@ -715,9 +805,16 @@ class KnowledgeSearchBackend:
         if not bm25_results:
             return []
 
+        content_ids = [str(result["chunk_id"]) for result in bm25_results if result.get("chunk_id")]
+        hydration_map: dict[str, dict[str, Any]] = {}
+        try:
+            hydration_map = sql_store.get_bm25_hydration_map(content_ids, embed_model)
+        except Exception as exc:
+            self.logger.warning("Failed bulk BM25 hydration lookup", error=exc)
+
         hydrated = []
         for result in bm25_results:
-            chunk_id = result["chunk_id"]
+            chunk_id = str(result["chunk_id"])
             text_hash = result.get("text_hash")
             repo_name = result["repo"]
             path = result["path"]
@@ -725,26 +822,23 @@ class KnowledgeSearchBackend:
             # Normalize BM25 score to [0, 1] range for fusion
             normalized_score = self._normalize_bm25_score(result["score"])
 
+            hydrated_identity = hydration_map.get(chunk_id)
             locations = []
             file_id = None
             repo_id = None
-
-            # Look up locations using text_hash and repo/path
-            if text_hash:
-                repo_info = sql_store.get_repo_by_name(repo_name)
-                if repo_info:
-                    repo_id = repo_info["id"]
-                    file_id = sql_store.get_file_id(repo_id, path)
-                    if file_id:
-                        locations = sql_store.get_chunk_locations_by_identity(repo_id, file_id, text_hash, embed_model)
+            actual_model = embed_model
+            if hydrated_identity:
+                repo_id = hydrated_identity.get("repo_id")
+                file_id = hydrated_identity.get("file_id")
+                text_hash = hydrated_identity.get("text_hash") or text_hash
+                actual_model = hydrated_identity.get("embed_model", embed_model)
+                locations = hydrated_identity.get("locations", [])
 
             # If we found locations, create a result for each one
             if locations and repo_id is not None and file_id is not None:
                 for loc in locations:
                     start_line = loc.get("start_line")
                     end_line = loc.get("end_line")
-                    # Use the actual model from the location, or fallback to requested if missing (should be there now)
-                    actual_model = loc.get("embed_model", embed_model)
 
                     # Generate LanceDB-compatible row ID
                     # Format: {repo_id}:{file_id}:{embed_model}:{text_hash}:{start_line}:{end_line}

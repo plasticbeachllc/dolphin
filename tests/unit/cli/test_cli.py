@@ -388,17 +388,17 @@ class TestBuildPipeline:
             openai_api_key_env="TEST_API_KEY",
         )
 
-        monkeypatch.setenv("TEST_API_KEY", "test-key-12345")
+        monkeypatch.setenv("TEST_API_KEY", "sk-test-key-1234567890")
 
         # Mock create_provider to avoid real API validation
         with patch("kb.ingest.cli.create_provider") as mock_create:
-            mock_provider = OpenAIEmbeddingProvider(api_key="test-key-12345", validate_key=False)
+            mock_provider = OpenAIEmbeddingProvider(api_key="sk-test-key-1234567890", validate_key=False)
             mock_create.return_value = mock_provider
 
             pipeline = _build_pipeline(config)
 
             assert pipeline is not None
-            mock_create.assert_called_once_with("openai", api_key="test-key-12345", batch_size=100)
+            mock_create.assert_called_once_with("openai", api_key="sk-test-key-1234567890", batch_size=100)
 
 
 class TestConfigTemplate:

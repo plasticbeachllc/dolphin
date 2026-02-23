@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import hmac
 import logging
 import re
+import threading
 from collections.abc import Awaitable, Iterable, Sequence
-from inspect import isawaitable
+from inspect import isawaitable, iscoroutinefunction
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Protocol, cast
+from typing import Any, NamedTuple, Protocol, cast
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -19,15 +21,25 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..api_key import load_kb_api_key
 from ..config import KBConfig, load_config
 from ..store.sqlite_meta import SQLiteMetadataStore, generate_fts_content_id
+from ..utils.tokens import estimate_tokens
 from .task_queue import TaskStatus, get_task_queue
 from .utils import GitRepository, normalize_repo_registration_path, validate_path_within_repo
+
+_log = logging.getLogger(__name__)
 
 # Constants
 EMBEDDING_BATCH_SIZE = 128
 ESTIMATED_TOKENS_PER_CHUNK = 200
 CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_:-]+$")
 
-app = FastAPI(title="Unified Knowledge Store", version="0.2.1")
+try:
+    from importlib.metadata import version as _pkg_version
+
+    _APP_VERSION = _pkg_version("pb-dolphin")
+except Exception:
+    _APP_VERSION = "0.0.0"
+
+app = FastAPI(title="Unified Knowledge Store", version=_APP_VERSION)
 
 
 @app.exception_handler(RequestValidationError)
@@ -68,6 +80,7 @@ def _load_default_config() -> KBConfig:
     try:
         return load_config()
     except Exception:
+        _log.warning("Failed to load config; using defaults.", exc_info=True)
         return KBConfig()
 
 
@@ -83,8 +96,8 @@ app.add_middleware(
         "http://localhost:3000",  # Development only
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["X-API-Key", "Content-Type", "Accept"],
 )
 
 
@@ -105,29 +118,44 @@ async def validate_api_key(request: Request, call_next):
         api_key = request.headers.get("X-API-Key")
         expected_key = load_kb_api_key()
 
-        if not api_key or api_key != expected_key:
+        if not api_key or not hmac.compare_digest(api_key, expected_key or ""):
             return JSONResponse({"error": "Unauthorized", "detail": "Valid API key required"}, status_code=401)
 
     return await call_next(request)
 
 
-# Will be set by server startup
+# Will be set by server startup.
+# Lock guards all writes; reads are unlocked because they only occur on the
+# async event loop after startup has completed and stores are stable.
 _sql_store = None
 _lance_store = None
 _pipeline = None
+_store_lock = threading.Lock()
+
+# Flips to False on the first cache-invalidation failure so the deep health
+# check can surface it without re-running a live invalidation.
+_cache_invalidation_healthy: bool = True
+
+# Module-level bounded file-lines cache shared across search requests.
+# Keyed by (absolute_path_str, mtime) so file edits produce automatic misses.
+# CPython dict ops are GIL-protected so no additional lock is needed here.
+_FILE_LINES_CACHE: dict[tuple[str, float], list[str]] = {}
+_FILE_LINES_CACHE_MAX = 256
 
 
 def set_stores(sql_store, lance_store):
     """Set the SQL and Lance stores for API endpoints."""
     global _sql_store, _lance_store
-    _sql_store = sql_store
-    _lance_store = lance_store
+    with _store_lock:
+        _sql_store = sql_store
+        _lance_store = lance_store
 
 
 def set_pipeline(pipeline):
     """Set the ingestion pipeline for API endpoints."""
     global _pipeline
-    _pipeline = pipeline
+    with _store_lock:
+        _pipeline = pipeline
 
 
 def get_pipeline():
@@ -138,15 +166,42 @@ def get_pipeline():
 def reset_pipeline():
     """Reset the ingestion pipeline to None (for testing)."""
     global _pipeline
-    _pipeline = None
+    with _store_lock:
+        _pipeline = None
 
 
 def reset_stores():
     """Reset stores to None (for testing)."""
     global _sql_store, _lance_store, _pipeline
-    _sql_store = None
-    _lance_store = None
-    _pipeline = None
+    with _store_lock:
+        _sql_store = None
+        _lance_store = None
+        _pipeline = None
+
+
+def _read_file_lines(full_path: Path) -> list[str] | None:
+    """Read file lines using the module-level bounded cache keyed on (path, mtime).
+
+    Returns None on any read error.  Cache entries are evicted FIFO when the
+    cache exceeds ``_FILE_LINES_CACHE_MAX`` entries.
+    """
+    try:
+        mtime = full_path.stat().st_mtime
+    except OSError:
+        return None
+    key = (str(full_path), mtime)
+    cached = _FILE_LINES_CACHE.get(key)
+    if cached is not None:
+        return cached
+    try:
+        with open(full_path, encoding="utf-8") as fh:
+            lines = fh.readlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    if len(_FILE_LINES_CACHE) >= _FILE_LINES_CACHE_MAX:
+        _FILE_LINES_CACHE.pop(next(iter(_FILE_LINES_CACHE)))
+    _FILE_LINES_CACHE[key] = lines
+    return lines
 
 
 def _enrich_hits_with_snippets(
@@ -155,7 +210,6 @@ def _enrich_hits_with_snippets(
     sql_store: SQLiteMetadataStore,
 ) -> list[dict[str, object]]:
     repo_root_cache: dict[str, Path] = {}
-    file_lines_cache: dict[tuple[str, str], list[str]] = {}
 
     for hit in hits:
         existing_snippet = hit.get("snippet")
@@ -189,15 +243,9 @@ def _enrich_hits_with_snippets(
         if not full_path.exists() or not full_path.is_file():
             continue
 
-        cache_key = (repo_name, path_str)
-        if cache_key not in file_lines_cache:
-            try:
-                with open(full_path, encoding="utf-8") as fh:
-                    file_lines_cache[cache_key] = fh.readlines()
-            except UnicodeDecodeError:
-                continue
-
-        lines = file_lines_cache.get(cache_key, [])
+        lines = _read_file_lines(full_path)
+        if lines is None:
+            continue
         if not lines:
             continue
 
@@ -228,18 +276,36 @@ def _enrich_hits_with_snippets(
         before_content = "".join(lines[before_start_idx:before_end_idx])
         after_content = "".join(lines[after_start_idx:after_end_idx])
 
-        # Token estimation (crude approx: 4 chars / token)
-        total_chars = len(text_content) + len(before_content) + len(after_content)
+        # Token estimation via tiktoken (falls back to chars/4 if unavailable).
+        combined_text = text_content + before_content + after_content
         max_tokens = request.max_snippet_tokens
-        estimated_tokens = total_chars / 4.0
+        estimated_tokens = estimate_tokens(combined_text)
 
         truncated = False
         if estimated_tokens > max_tokens:
             truncated = True
-            # Simple truncation strategy: keep match, trim context, then trim match if needed
-            # For now, we will flag it as truncated but return full content to avoid breaking logic
-            # In a real implementation, we would slice the strings.
-            pass
+            max_chars = int(max_tokens * 4)
+            match_chars = len(text_content)
+
+            if match_chars >= max_chars:
+                # Match alone exceeds budget: truncate match, drop all context.
+                text_content = text_content[:max_chars]
+                before_content = ""
+                after_content = ""
+            else:
+                # Match fits; distribute remaining budget to context (context_before
+                # gets half, context_after gets the other half, then swap leftover).
+                remaining = max_chars - match_chars
+                before_budget = remaining // 2
+                after_budget = remaining - before_budget
+
+                # context_after: keep lines closest to the match (trim from the end).
+                if len(after_content) > after_budget:
+                    after_content = after_content[:after_budget]
+
+                # context_before: keep lines closest to the match (trim from the start).
+                if len(before_content) > before_budget:
+                    before_content = before_content[len(before_content) - before_budget :]
 
         snippet_obj = {
             "start_line": before_start_idx + 1 if before_content else start_int,
@@ -297,32 +363,70 @@ class SearchRequest(BaseModel):
     cursor: str | None = None
 
 
+class SearchResultSet(NamedTuple):
+    """Canonical return type for all search backend calls.
+
+    Using NamedTuple preserves tuple unpacking (``hits, cursor = result``)
+    while adding named-field access and eliminating the previous
+    tuple/dict/list polymorphism at call sites.
+    """
+
+    hits: Sequence[dict[str, object]]
+    next_cursor: str | None
+
+
 class SearchBackend(Protocol):
     """Protocol describing the dependency used to execute searches."""
 
-    def search(
-        self, request: SearchRequest
-    ) -> tuple[Sequence[dict[str, object]], str | None] | Awaitable[tuple[Sequence[dict[str, object]], str | None]]: ...
+    def search(self, request: SearchRequest) -> SearchResultSet | Awaitable[SearchResultSet]: ...
 
 
 class _EmptySearchBackend:
     """Default backend that returns zero hits until retrieval is implemented."""
 
-    def search(
-        self, request: SearchRequest
-    ) -> tuple[Sequence[dict[str, object]], str | None] | Awaitable[tuple[Sequence[dict[str, object]], str | None]]:
+    def search(self, request: SearchRequest) -> SearchResultSet:
         _ = request
-        return [], None
+        return SearchResultSet([], None)
 
 
 _DEFAULT_BACKEND = _EmptySearchBackend()
 _search_backend: SearchBackend = _DEFAULT_BACKEND
+# Cache of (backend_instance, search_fn) resolved by set_search_backend().
+# The instance check in search() ensures a runtime-replaced backend (e.g. in tests)
+# always gets a freshly-resolved callable.
+_resolved_search_cache: tuple[SearchBackend, Any] | None = None
+
+
+def _make_search_fn(backend: SearchBackend):
+    """Return an async callable that dispatches a SearchRequest to *backend*.
+
+    The dispatch strategy is resolved once here rather than being re-evaluated on
+    every request.
+    """
+    search_async = getattr(backend, "search_async", None)
+    if callable(search_async) and iscoroutinefunction(search_async):
+        return search_async
+
+    search_method = backend.search
+    if iscoroutinefunction(search_method):
+        return search_method
+
+    # Synchronous backend: wrap in asyncio.to_thread and handle the edge case
+    # where the sync method itself returns an awaitable.
+    async def _sync_wrapper(request):
+        result = await asyncio.to_thread(search_method, request)
+        if isawaitable(result):
+            result = await result
+        return result
+
+    return _sync_wrapper
 
 
 def set_search_backend(backend: SearchBackend | None) -> None:
     """Override the search backend used by the API."""
-    global _search_backend
+    global _search_backend, _resolved_search_cache
     _search_backend = backend or _DEFAULT_BACKEND
+    _resolved_search_cache = (_search_backend, _make_search_fn(_search_backend))
 
 
 def get_search_backend() -> SearchBackend:
@@ -336,14 +440,20 @@ def reset_search_backend() -> None:
 
 
 def _invalidate_search_cache(repo_name: str) -> None:
+    global _cache_invalidation_healthy
     backend = get_search_backend()
     cache = getattr(backend, "cache", None)
     if not cache:
         return
     try:
         cache.invalidate_repo(repo_name)
-    except Exception as exc:  # pragma: no cover - defensive
-        logging.warning("Failed to invalidate cache for repo %s", repo_name, exc_info=exc)
+    except Exception:  # pragma: no cover - defensive
+        _cache_invalidation_healthy = False
+        _log.error(
+            "Failed to invalidate cache for repo %s — stale results may be served until the next restart",
+            repo_name,
+            exc_info=True,
+        )
 
 
 def _get_system_stats() -> dict[str, Any]:
@@ -393,6 +503,7 @@ async def health(check: str = Query(default="shallow")) -> dict[str, object]:
             _lance_store.connect()
             checks["lancedb"] = "ok"
         except Exception:
+            _log.warning("LanceDB health check failed.", exc_info=True)
             checks["lancedb"] = "error"
     else:
         checks["lancedb"] = "not_configured"
@@ -404,10 +515,14 @@ async def health(check: str = Query(default="shallow")) -> dict[str, object]:
     else:
         checks["embeddings"] = "not_configured"
 
+    # Cache invalidation health
+    checks["cache_invalidation"] = "ok" if _cache_invalidation_healthy else "degraded"
+
     # System stats
     checks["system"] = _get_system_stats()
 
-    return {"status": "ok", "checks": checks}
+    overall = "ok" if _cache_invalidation_healthy else "degraded"
+    return {"status": overall, "checks": checks}
 
 
 @app.get("/v1/health")
@@ -442,14 +557,12 @@ async def search(request: SearchRequest) -> dict[str, Any]:
             set_config_method(temp_config_data)
 
     started = perf_counter()
-    raw_result = backend.search(request)
     hits: Iterable[dict[str, object]]
     next_cursor: str | None = None
 
-    if isawaitable(raw_result):
-        result = await raw_result
-    else:
-        result = raw_result
+    cache = _resolved_search_cache
+    search_fn = cache[1] if cache is not None and cache[0] is backend else _make_search_fn(backend)
+    result = await search_fn(request)
 
     # Result is always (hits, next_cursor) per Protocol
     hits, next_cursor = result
@@ -561,10 +674,21 @@ async def search(request: SearchRequest) -> dict[str, Any]:
     if next_cursor:
         meta["next_cursor"] = next_cursor
 
-    return {
-        "hits": hits_list,
-        "meta": meta,
-    }
+    # Collect warnings for conditions the caller should know about.
+    warnings: list[str] = []
+    _backend = get_search_backend()
+    _reranker = getattr(_backend, "reranker", None)
+    if _reranker is not None and not _reranker.enabled:
+        _config = getattr(_backend, "config", None)
+        _rerank_cfg = getattr(_config, "reranking", None)
+        if _rerank_cfg and getattr(_rerank_cfg, "enabled", False):
+            reason = getattr(_reranker, "load_error", None) or "unknown reason"
+            warnings.append(f"Reranking is configured but unavailable: {reason}")
+
+    response: dict[str, Any] = {"hits": hits_list, "meta": meta}
+    if warnings:
+        response["warnings"] = warnings
+    return response
 
 
 @app.post("/v1/search")
@@ -1125,6 +1249,7 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
                 language=language,
                 text=text,
                 repo_config=repo_config,
+                model=embed_model,
             )
 
             import logging

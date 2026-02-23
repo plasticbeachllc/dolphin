@@ -193,8 +193,10 @@ class TestStoreGraphData:
         assert stats["nodes_created"] == 1
         assert stats["edges_created"] == 0
 
-    def test_store_handles_node_creation_error(self, capsys):
+    def test_store_handles_node_creation_error(self, caplog):
         """Test that node creation errors are handled gracefully."""
+        import logging
+
         mock_store = Mock()
         mock_store.upsert_node.side_effect = Exception("Database error")
 
@@ -208,21 +210,21 @@ class TestStoreGraphData:
             )
         ]
 
-        stats = store_graph_data(
-            mock_store,
-            nodes,
-            [],
-            repo_id=1,
-            file_id=100,
-            language="python",
-            commit_sha="abc123",
-            branch="main",
-        )
+        with caplog.at_level(logging.WARNING, logger="kb.ingest.graph_helpers"):
+            stats = store_graph_data(
+                mock_store,
+                nodes,
+                [],
+                repo_id=1,
+                file_id=100,
+                language="python",
+                commit_sha="abc123",
+                branch="main",
+            )
 
         # Should log warning but not crash
-        captured = capsys.readouterr()
-        assert "Warning: Failed to store node" in captured.out
-        assert "module.func" in captured.out
+        assert any("Failed to store node" in r.message for r in caplog.records)
+        assert any("module.func" in r.message for r in caplog.records)
 
         # No nodes should be created
         assert stats["nodes_created"] == 0
@@ -303,8 +305,10 @@ class TestStoreGraphData:
         assert mock_store.upsert_edge.call_count == 0
         assert stats["edges_created"] == 0
 
-    def test_store_handles_edge_creation_error(self, capsys):
+    def test_store_handles_edge_creation_error(self, caplog):
         """Test that edge creation errors are handled gracefully."""
+        import logging
+
         mock_store = Mock()
         mock_store.upsert_node.side_effect = ["node1-id", "node2-id"]
         mock_store.upsert_edge.side_effect = Exception("Edge constraint violation")
@@ -335,23 +339,23 @@ class TestStoreGraphData:
             )
         ]
 
-        stats = store_graph_data(
-            mock_store,
-            nodes,
-            edges,
-            repo_id=1,
-            file_id=100,
-            language="python",
-            commit_sha="abc123",
-            branch="main",
-        )
+        with caplog.at_level(logging.WARNING, logger="kb.ingest.graph_helpers"):
+            stats = store_graph_data(
+                mock_store,
+                nodes,
+                edges,
+                repo_id=1,
+                file_id=100,
+                language="python",
+                commit_sha="abc123",
+                branch="main",
+            )
 
         # Nodes should be created
         assert stats["nodes_created"] == 2
 
         # Edge should fail but not crash
-        captured = capsys.readouterr()
-        assert "Warning: Failed to store edge" in captured.out
+        assert any("Failed to store edge" in r.message for r in caplog.records)
         assert stats["edges_created"] == 0
 
     def test_store_multiple_edges_between_same_nodes(self):
@@ -432,17 +436,18 @@ class TestCleanupGraphForFile:
         # cleanup_graph_for_file returns tuple (nodes_deleted, edges_deleted)
         assert deleted_count == (0, 0)
 
-    def test_cleanup_handles_errors_gracefully(self, capsys):
+    def test_cleanup_handles_errors_gracefully(self, caplog):
         """Test that cleanup errors are handled gracefully."""
+        import logging
+
         mock_store = Mock()
         mock_store.delete_nodes_for_file.side_effect = Exception("Database error")
 
-        deleted_count = cleanup_graph_for_file(mock_store, file_id=100)
+        with caplog.at_level(logging.WARNING, logger="kb.ingest.graph_helpers"):
+            deleted_count = cleanup_graph_for_file(mock_store, file_id=100)
 
         # Should log warning but not crash
-        captured = capsys.readouterr()
-        assert "Warning: Failed to clean up graph data" in captured.out
-        assert "file 100" in captured.out
+        assert any("Failed to clean up graph data for file" in r.message for r in caplog.records)
 
         # Should return (0, 0) on error
         assert deleted_count == (0, 0)
@@ -470,17 +475,18 @@ class TestCleanupGraphForRepo:
 
         assert deleted_count == 0
 
-    def test_cleanup_handles_errors_gracefully(self, capsys):
+    def test_cleanup_handles_errors_gracefully(self, caplog):
         """Test that cleanup errors are handled gracefully."""
+        import logging
+
         mock_store = Mock()
         mock_store.delete_nodes_for_repo.side_effect = Exception("Constraint violation")
 
-        deleted_count = cleanup_graph_for_repo(mock_store, repo_id=1)
+        with caplog.at_level(logging.WARNING, logger="kb.ingest.graph_helpers"):
+            deleted_count = cleanup_graph_for_repo(mock_store, repo_id=1)
 
         # Should log warning but not crash
-        captured = capsys.readouterr()
-        assert "Warning: Failed to clean up graph data" in captured.out
-        assert "repo 1" in captured.out
+        assert any("Failed to clean up graph data for repo" in r.message for r in caplog.records)
 
         # Should return 0 on error
         assert deleted_count == 0
