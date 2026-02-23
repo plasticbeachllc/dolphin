@@ -19,15 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Token Estimation** (`kb/utils/tokens.py`): Lightweight token-counting utilities for cost estimation without requiring full tokenizer loads.
 - **Async Search**: `search_async` pathway in the search backend runs vector + BM25 queries via `asyncio.to_thread`, unblocking API workers during search execution.
 - **API Key Authentication**: All `/v1/*` endpoints now require an API key validated with `hmac.compare_digest`; `/health` remains unauthenticated.
-- **Dynamic App Version**: API version is now read from package metadata at startup instead of being hardcoded.
-- **Prometheus Metrics**: Added `prometheus_middleware` and `/metrics` endpoint for request latency and throughput monitoring.
 - **Crash Recovery**: Server startup now aborts stale indexing sessions left by previous processes that exited uncleanly.
 - **Embedding Model Mismatch Detection**: Startup warns when a repo's indexed embedding model differs from the configured default and triggers automatic full reindex via watcher sync.
 - **FTS Content Enrichment**: BM25 full-text index now includes path segments and symbol tokens, improving identifier search recall.
-- **53+ New Unit Tests**: Coverage audit identified and filled gaps across cache, config, CLI, search backend, sqlite_meta, lancedb_store, defensive utils, and token utilities.
-- **DRY Test Fixtures**: New composable `make_git_repo`, `isolated_kb_env`, `cli_repo`, and `KBTestEnv` fixtures in root `conftest.py` replace 6+ inline patterns for git repo creation and 4+ patterns for config/store setup.
-- **CLAUDE.md**: Project-level instructions for Claude Code, replacing the previous `AGENTS.md`.
-- **Improvement Plan Documentation** (`docs/IMPROVEMENTS.md`): Sprint-structured improvement roadmap covering async search, caching, defensive coding, token estimation, and test coverage.
 
 ### Changed
 
@@ -35,19 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Watcher Shutdown**: Graceful watcher shutdown now uses configurable timeouts (`DOLPHIN_WATCH_SHUTDOWN_TIMEOUT`, `DOLPHIN_WATCH_CANCEL_TIMEOUT`) with explicit stop-request and cancel phases.
 - **Search Result Caching**: Cache layer enhanced with query fingerprinting, result-set caching, and eviction support for search results.
 - **LanceDB Auto-Indexing**: LanceDB store now automatically creates IVF-PQ indexes when table row counts exceed thresholds, with collection lifecycle management improvements.
-- **SQLite Metadata Store**: Expanded with stale session abort, embedding model tracking per repo, and additional query helpers (+292 lines).
-- **Pipeline Embedding Model Switching**: Ingestion pipeline detects embedding model changes and triggers full reindex instead of incremental, preventing mixed-model indexes.
-- **Session Hooks**: `.codex/` hooks renamed to `.sessions/hooks/` with simplified session-start and session-maintain scripts.
-- **Scripts Cleanup**: Removed 15+ obsolete scripts (diagnostics, migrations, benchmarks, `.bak` files) from `scripts/`.
-- **PUBLISH.md**: Moved from project root to `docs/PUBLISH.md`.
-- **Test Fixture Scoping**: `mock_tiktoken` changed from session-scoped to function-scoped to prevent patch leakage across xdist workers.
+- **SQLite Metadata Store**: Expanded with stale session abort, embedding model tracking per repo, and additional query helpers.
 
 ### Fixed
 
+- **Pipeline Embedding Model Switching**: Ingestion pipeline detects embedding model changes and triggers full reindex instead of incremental, preventing mixed-model indexes.
 - **Pydantic Deprecation**: Replaced deprecated class-based `Config` inner class on `SearchRequest` with `model_config = ConfigDict(...)` to silence `PydanticDeprecatedSince20` warnings and maintain forward compatibility with Pydantic V3.
-- **Flaky `test_index_dry_run`**: Shared per-worker test database retained stale commit hashes from previous test runs, causing `git merge-base` failures. Fixed with per-test isolated `DOLPHIN_CONFIG_PATH` via `monkeypatch`.
-- **Flaky `test_real_tiktoken`**: Session-scoped `mock_tiktoken` fixture leaked into integration tests on the same xdist worker, masking real tiktoken behavior. Fixed by narrowing scope to function-level.
-- **Missing `commit.gpgsign=false`**: `test_helper_methods.py` repo fixture created git repos without disabling GPG signing, causing failures in CI environments. Now uses `make_git_repo` which inherits the correct template config.
 - **Server Watcher Shutdown Hang**: Watcher shutdown now explicitly requests stop before cancelling tasks, preventing post-shutdown Ctrl-C hangs and noisy thread-exit traces.
 - **Pipeline Return Type**: Fixed `search_async` return type annotation and cache tuple unpacking.
 - **Config Reset Bug**: Fixed config file handling during `reset-repo` operations.
