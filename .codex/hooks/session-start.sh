@@ -24,6 +24,11 @@ if [ -d "$HOME/.bun/bin" ]; then
   append_env 'export PATH="$BUN_INSTALL/bin:$PATH"'
 fi
 
+if ! command -v just >/dev/null 2>&1; then
+  curl -fsSL https://github.com/casey/just/releases/download/1.40.0/just-1.40.0-x86_64-unknown-linux-musl.tar.gz \
+    | tar -xz -C /usr/local/bin just
+fi
+
 if command -v uv >/dev/null 2>&1; then
   if [ -f "pyproject.toml" ]; then
     uv sync --group dev --group test
