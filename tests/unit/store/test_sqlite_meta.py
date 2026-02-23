@@ -8,7 +8,13 @@ import pytest
 
 from kb.migrations import LATEST_SCHEMA_VERSION
 from kb.store.connection_pool import close_connection_pool, get_connection_pool
-from kb.store.sqlite_meta import SQLiteMetadataStore
+from kb.store.sqlite_meta import (
+    SQLiteMetadataStore,
+    _path_tokens,
+    _split_camel_case,
+    enrich_fts_content,
+    strip_fts_enrichment,
+)
 
 
 @pytest.fixture
@@ -476,3 +482,182 @@ class TestErrorPathLogging:
             with patch.object(store2, "_validate_database_integrity", side_effect=RuntimeError("integrity boom")):
                 with pytest.raises(RuntimeError, match="integrity boom"):
                     store2.initialize()
+
+
+# ---------------------------------------------------------------------------
+# Tests for BM25 query preprocessing (OR conversion) and FTS content enrichment
+# ---------------------------------------------------------------------------
+
+
+class TestPrepareFTS5Query:
+    """Tests for SQLiteMetadataStore._prepare_fts5_query."""
+
+    def test_single_word_unchanged(self):
+        assert SQLiteMetadataStore._prepare_fts5_query("pipeline") == "pipeline"
+
+    def test_multi_word_converted_to_or(self):
+        assert SQLiteMetadataStore._prepare_fts5_query("ingestion indexer") == "ingestion OR indexer"
+
+    def test_three_words_converted_to_or(self):
+        result = SQLiteMetadataStore._prepare_fts5_query("ingestion indexer pipeline")
+        assert result == "ingestion OR indexer OR pipeline"
+
+    def test_explicit_and_preserved(self):
+        assert SQLiteMetadataStore._prepare_fts5_query("auth AND login") == "auth AND login"
+
+    def test_explicit_or_preserved(self):
+        assert SQLiteMetadataStore._prepare_fts5_query("auth OR login") == "auth OR login"
+
+    def test_explicit_not_preserved(self):
+        assert SQLiteMetadataStore._prepare_fts5_query("auth NOT test") == "auth NOT test"
+
+    def test_quoted_phrase_preserved(self):
+        assert SQLiteMetadataStore._prepare_fts5_query('"user controller"') == '"user controller"'
+
+    def test_empty_string(self):
+        assert SQLiteMetadataStore._prepare_fts5_query("") == ""
+
+
+class TestSplitCamelCase:
+    def test_pascal_case(self):
+        assert _split_camel_case("IngestionPipeline") == ["ingestion", "pipeline"]
+
+    def test_acronym(self):
+        assert _split_camel_case("HTMLParser") == ["html", "parser"]
+
+    def test_simple_lower(self):
+        assert _split_camel_case("simple") == ["simple"]
+
+    def test_multi_part(self):
+        assert _split_camel_case("MyBigClassName") == ["my", "big", "class", "name"]
+
+    def test_empty(self):
+        assert _split_camel_case("") == []
+
+
+class TestPathTokens:
+    def test_basic_path(self):
+        assert _path_tokens("kb/ingest/pipeline.py") == ["kb", "ingest", "pipeline"]
+
+    def test_strips_common_extensions(self):
+        tokens = _path_tokens("src/utils/helper.js")
+        assert "js" not in tokens
+        assert "helper" in tokens
+
+    def test_deep_path(self):
+        tokens = _path_tokens("a/b/c/deep_module.py")
+        assert tokens == ["a", "b", "deep_module"]
+
+
+class TestEnrichFTSContent:
+    def test_adds_path_tokens(self):
+        enriched = enrich_fts_content("some code here", "kb/ingest/pipeline.py")
+        assert "ingest" in enriched
+        assert "pipeline" in enriched
+        assert "some code here" in enriched
+
+    def test_splits_camel_case_symbol(self):
+        enriched = enrich_fts_content(
+            "class body",
+            "src/foo.py",
+            symbol_name="IngestionPipeline",
+        )
+        assert "ingestion" in enriched
+        assert "pipeline" in enriched
+
+    def test_no_enrichment_for_empty_path_and_symbol(self):
+        enriched = enrich_fts_content("content", "")
+        assert enriched == "content"
+
+    def test_strip_roundtrip(self):
+        original = "def foo():\n    pass"
+        enriched = enrich_fts_content(original, "kb/ingest/pipeline.py", symbol_name="IngestionPipeline")
+        stripped = strip_fts_enrichment(enriched)
+        assert stripped == original
+
+    def test_strip_on_plain_content(self):
+        assert strip_fts_enrichment("no sentinel here") == "no sentinel here"
+
+    def test_deduplicates_tokens(self):
+        enriched = enrich_fts_content(
+            "code",
+            "ingest/ingest.py",
+            symbol_name="IngestManager",
+        )
+        sentinel = "\n__FTS_META__\n"
+        meta = enriched.split(sentinel)[1]
+        tokens = meta.split()
+        assert tokens.count("ingest") == 1
+
+
+class TestBM25SearchORQuery:
+    """Integration test: BM25 search with OR queries finds partial matches."""
+
+    def test_or_query_finds_partial_match(self, meta_store, tmp_path):
+        """A multi-word query should find chunks matching ANY term."""
+        repo_path = tmp_path / "test-repo"
+        repo_path.mkdir()
+        meta_store.record_repo("test-repo", repo_path)
+
+        meta_store.index_chunk_for_fts(
+            content_id="chunk-1",
+            repo="test-repo",
+            path="kb/ingest/pipeline.py",
+            text_hash="hash1",
+            content="class IngestionPipeline: handles ingestion of code",
+            symbol_name="IngestionPipeline",
+        )
+
+        meta_store.index_chunk_for_fts(
+            content_id="chunk-2",
+            repo="test-repo",
+            path="kb/ingest/indexer.py",
+            text_hash="hash2",
+            content="def index_documents(): indexes all documents",
+            symbol_name="index_documents",
+        )
+
+        results = meta_store.bm25_search("ingestion indexer")
+
+        assert len(results) >= 1
+        paths = [r["path"] for r in results]
+        assert "kb/ingest/pipeline.py" in paths or "kb/ingest/indexer.py" in paths
+
+    def test_enriched_path_tokens_are_searchable(self, meta_store, tmp_path):
+        """Path tokens added by enrichment should be findable via BM25."""
+        repo_path = tmp_path / "test-repo"
+        repo_path.mkdir()
+        meta_store.record_repo("test-repo", repo_path)
+
+        meta_store.index_chunk_for_fts(
+            content_id="chunk-path",
+            repo="test-repo",
+            path="kb/ingest/pipeline.py",
+            text_hash="hash-path",
+            content="class SomeClass: does stuff with code repositories",
+            symbol_name="SomeClass",
+        )
+
+        results = meta_store.bm25_search("pipeline")
+
+        assert len(results) >= 1
+        assert results[0]["path"] == "kb/ingest/pipeline.py"
+
+    def test_camel_case_symbol_searchable(self, meta_store, tmp_path):
+        """CamelCase symbols should be findable by their sub-tokens."""
+        repo_path = tmp_path / "test-repo"
+        repo_path.mkdir()
+        meta_store.record_repo("test-repo", repo_path)
+
+        meta_store.index_chunk_for_fts(
+            content_id="chunk-camel",
+            repo="test-repo",
+            path="src/manager.py",
+            text_hash="hash-camel",
+            content="class body with no mention of the class name words",
+            symbol_name="IngestionPipeline",
+        )
+
+        results = meta_store.bm25_search("ingestion")
+
+        assert len(results) >= 1
