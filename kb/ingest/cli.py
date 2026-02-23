@@ -418,6 +418,20 @@ def _prune_ignored_files(
                 file_chunks = metadata.get_chunks_for_file(repo_id, file_path)
                 total_chunks_pruned += len(file_chunks) if file_chunks else 0
 
+    # Rebuild FTS5 index after bulk deletes to prevent corruption
+    if not dry_run and pruned_files:
+        try:
+            with metadata._connect() as conn:
+                cur = conn.cursor()
+                cur.execute("PRAGMA integrity_check")
+                result = cur.fetchone()
+                if result and result[0] != "ok":
+                    _log.warning(f"FTS5 index integrity issue detected, rebuilding: {result[0]}")
+                cur.execute("INSERT INTO chunks_fts(chunks_fts, rank) VALUES('rebuild', -1)")
+                conn.commit()
+        except Exception as e:
+            _log.warning(f"Failed to rebuild FTS5 index: {e}")
+
     return {"chunks_pruned": total_chunks_pruned, "files_pruned": len(pruned_files)}
 
 
