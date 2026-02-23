@@ -123,9 +123,11 @@ def index(
     dry_run: bool = typer.Option(False, "--dry-run", help="Run without persisting."),
     force: bool = typer.Option(False, "--force", help="Bypass clean working tree check."),
     full: bool = typer.Option(False, "--full", help="Process all files instead of incremental diff."),
+    parallel: bool = typer.Option(True, "--parallel/--no-parallel", help="Use parallel indexing (default: True)."),
+    workers: int | None = typer.Option(None, "--workers", "-w", help="Number of worker processes (default: auto)."),
 ) -> None:
     """Run the full indexing pipeline for the specified repository."""
-    kb_index(name=name, dry_run=dry_run, force=force, full=full)
+    kb_index(name=name, dry_run=dry_run, force=force, full=full, parallel=parallel, workers=workers)
 
 
 @app.command()
