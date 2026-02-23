@@ -119,6 +119,11 @@ class TestPipelineScan:
             check=True,
             capture_output=True,
         )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "config", "commit.gpgsign", "false"],
+            check=True,
+            capture_output=True,
+        )
 
         # Add a file and commit
         (repo_path / "test.py").write_text('print("hello")')
@@ -197,6 +202,11 @@ class TestPipelineIndex:
         )
         subprocess.run(
             ["git", "-C", str(repo_path), "config", "user.name", "Test"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "config", "commit.gpgsign", "false"],
             check=True,
             capture_output=True,
         )
@@ -707,6 +717,11 @@ class TestPipelineReconcileBranchSwitch:
             check=True,
             capture_output=True,
         )
+        subprocess.run(
+            ["git", "-C", str(repo_path), "config", "commit.gpgsign", "false"],
+            check=True,
+            capture_output=True,
+        )
         (repo_path / "test.py").write_text("x = 1")
         subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
         subprocess.run(
@@ -749,6 +764,11 @@ async def test_index_parallel_sets_session_failed_on_error(tmp_path, monkeypatch
     )
     subprocess.run(
         ["git", "-C", str(repo_path), "config", "user.name", "Test"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_path), "config", "commit.gpgsign", "false"],
         check=True,
         capture_output=True,
     )

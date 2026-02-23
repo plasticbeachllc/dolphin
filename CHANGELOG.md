@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.3] - 2026-02-23
+
+### Fixed
+
+- **Test Isolation**: Fixed parallel test worker race condition in `test_init_is_idempotent` where multiple xdist workers shared the default `~/.dolphin/knowledge_store` path, causing sporadic `table repos already exists` SQLite errors. Each test now uses an isolated store root via monkeypatched config template.
+- **Test Git Signing**: Fixed `git commit` failures in `TestPipelineScan`, `TestPipelineIndex`, `TestPipelineReconcileBranchSwitch`, `TestCLIIndex`, and `test_index_parallel_sets_session_failed_on_error` fixtures caused by global `commit.gpgsign = true`. Added `commit.gpgsign = false` per-repo config to all inline git repo setups.
+- **Pydantic Deprecation**: Replaced deprecated class-based `Config` inner class on `SearchRequest` with `model_config = ConfigDict(...)` to silence `PydanticDeprecatedSince20` warnings and maintain forward compatibility with Pydantic V3.
+
+### Changed
+
+- **package.json**: Merged duplicate `overrides` keys into a single block. The first `overrides` block (`hono`, `qs`) was silently dropped by JSON parsers; all overrides are now in one canonical block.
+
+---
+
 ## [0.2.2] - 2026-02-20
 
 ### Added

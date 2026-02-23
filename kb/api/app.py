@@ -14,7 +14,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..api_key import load_kb_api_key
 from ..config import KBConfig, load_config
@@ -259,8 +259,7 @@ def _enrich_hits_with_snippets(
 
 
 class SearchRequest(BaseModel):
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
     query: str
     repos: list[str] | None = None
