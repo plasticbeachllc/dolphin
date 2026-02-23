@@ -1,5 +1,6 @@
 import asyncio
 import concurrent.futures
+import contextvars
 import datetime
 import logging
 import threading
@@ -93,9 +94,12 @@ class RepoWatcher:
             # We use force=True to allow dirty working tree (since we are watching for edits).
             print(f"Performing startup sync for {self.repo_name}...")
             try:
-                await asyncio.get_event_loop().run_in_executor(
-                    self._executor, lambda: self.pipeline.index(self.repo_name, dry_run=False, force=True)
-                )
+                # Explicitly copy context so the embedding provider ContextVar
+                # propagates to the executor thread (Python <3.14 does not do
+                # this automatically in run_in_executor).
+                ctx = contextvars.copy_context()
+                _do_index = lambda: self.pipeline.index(self.repo_name, dry_run=False, force=True)  # noqa: E731
+                await asyncio.get_event_loop().run_in_executor(self._executor, ctx.run, _do_index)
                 print(f"Startup sync complete for {self.repo_name}")
             except Exception as e:
                 logger.error(f"Startup sync failed for {self.repo_name}: {e}", exc_info=True)
@@ -274,7 +278,8 @@ class RepoWatcher:
 
     async def _process_pending_changes(self):
         """Process all pending changes in the database."""
-        await asyncio.get_event_loop().run_in_executor(self._executor, self._process_pending_sync)
+        ctx = contextvars.copy_context()
+        await asyncio.get_event_loop().run_in_executor(self._executor, ctx.run, self._process_pending_sync)
 
     def _process_pending_sync(self):
         """Synchronous processing logic (runs in thread pool)."""
