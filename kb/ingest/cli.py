@@ -413,6 +413,9 @@ def _prune_ignored_files(
                     cur = conn.cursor()
                     cur.execute("DELETE FROM chunks_fts WHERE path = ?", (file_path,))
                     conn.commit()
+
+                # Delete the file record itself so it doesn't show up again on subsequent runs
+                metadata.delete_file(repo_id, file_id)
             else:
                 # In dry-run, just count what would be pruned
                 file_chunks = metadata.get_chunks_for_file(repo_id, file_path)
