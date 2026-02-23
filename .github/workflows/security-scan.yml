@@ -23,8 +23,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
       - name: Run pip-audit
-        # protobuf has an upstream-reported DoS issue (CVE-2026-0994) with no published fix yet.
-        # We keep OTLP support (which depends on protobuf) and temporarily ignore this advisory.
+        # CVE-2026-0994 / GHSA-7gcm-g887-7qv7: Protobuf JSON recursion DoS vulnerability
+        # - Affects: protobuf up to 6.33.4
+        # - Impact: JSON parsing can be exploited to cause denial-of-service through uncontrolled recursion
+        # - Reason for ignoring: We require OTLP support which depends on protobuf. No fix available yet from upstream.
+        #   We accept this risk for the critical observability functionality provided by OTLP.
         run: uv run pip-audit --local --skip-editable --progress-spinner=off --ignore-vuln CVE-2026-0994 --ignore-vuln GHSA-7gcm-g887-7qv7
 
 
@@ -56,4 +59,20 @@ jobs:
       - name: Audit JS dependencies (${{ matrix.project }})
         if: steps.install.outputs.found == 'true'
         working-directory: ${{ matrix.project }}
-        run: bun audit
+        # GHSA-3ppc-4f35-3m26 (CVE-2026-26996): minimatch ReDoS via repeated wildcards
+        # - Severity: HIGH
+        # - Affects: minimatch <10.2.1
+        # - Impact: Regular expression denial-of-service when processing malicious glob patterns
+        # - Reason for ignoring: minimatch <10.2.1 is required by transitive dependencies (@typescript-eslint/parser,
+        #   @typescript-eslint/eslint-plugin, eslint-plugin-import) that haven't yet upgraded their constraints.
+        #   These tools only process project configuration files, not user-controlled input, reducing the attack surface.
+        #   We monitor for upstream patches and will update immediately when available.
+        #
+        # GHSA-2g4f-4pwh-qvx6 (CVE-2025-69873): ajv ReDoS when using $data option
+        # - Severity: MODERATE
+        # - Affects: ajv <6.14.0
+        # - Impact: Regular expression denial-of-service when using the $data option in JSON schemas
+        # - Reason for ignoring: ajv <6.14.0 is required by @modelcontextprotocol/sdk and eslint dependencies.
+        #   The $data option is not used in our project's JSON schema validation, limiting exposure.
+        #   We monitor for upstream patches and will update immediately when available.
+        run: bun audit --ignore=GHSA-3ppc-4f35-3m26 --ignore=GHSA-2g4f-4pwh-qvx6
