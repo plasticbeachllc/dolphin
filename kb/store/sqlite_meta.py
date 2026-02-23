@@ -140,10 +140,11 @@ def _path_tokens(path: str) -> list[str]:
     >>> _path_tokens("kb/ingest/pipeline.py")
     ['kb', 'ingest', 'pipeline']
     """
-    parts = re.split(r"[/\\.]", path)
-    # Drop empty strings and very short extension-like fragments
-    _exts = {"py", "js", "ts", "go", "rs", "rb", "java", "c", "h", "cpp", "hpp"}
-    return [p.lower() for p in parts if p and p not in _exts]
+    # Strip the file extension first, then split on path separators.
+    # This avoids confusing directory names (e.g. "c/") with extensions (e.g. ".c").
+    stem = re.sub(r"\.[^/\\]+$", "", path)
+    parts = re.split(r"[/\\]", stem)
+    return [p.lower() for p in parts if p]
 
 
 def enrich_fts_content(
