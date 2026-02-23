@@ -86,12 +86,31 @@ just check-python                         # ruff + ty
 - **Structured logging**: use `StructuredLogger` from `kb.observability`
 - **Path security**: all user-controlled paths must go through `kb.security.path_validator`
 
+## Documentation
+
+- Do not add new docs files unless explicitly requested.
+- Update existing docs when behavior changes (especially `docs/ARCHITECTURE.md`, `docs/TESTING.md`).
+
+## Test expectations
+
+- New features: add tests. Bug fixes: add regression tests. Refactors: existing tests must stay green.
+- Prefer targeted suites relevant to changed code.
+
 ## Before finalizing changes
 
 ```bash
 uv run pytest tests/unit/ -v
 uv run ruff check
 uv run ty check
+bun run guard:quick
 ```
 
 For changes touching MCP bridge or shared: `cd mcp-bridge && bun test && cd ../shared && bun test`
+
+## Operational commands
+
+```bash
+uv run dolphin kb status                          # show indexed repos
+uv run dolphin kb index <repo-name> --full --force # full reindex
+cd mcp-bridge && bun run src/index.ts              # run MCP bridge directly
+```
