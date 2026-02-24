@@ -17,6 +17,7 @@ def git_init_and_commit(path: Path):
     subprocess.check_call(["git", "init"], cwd=path)
     subprocess.check_call(["git", "config", "user.name", "Test User"], cwd=path)
     subprocess.check_call(["git", "config", "user.email", "test@example.com"], cwd=path)
+    subprocess.check_call(["git", "config", "commit.gpgsign", "false"], cwd=path)
     (path / "README.md").write_text("initial commit")
     subprocess.check_call(["git", "add", "README.md"], cwd=path)
     subprocess.check_call(["git", "commit", "-m", "Initial commit"], cwd=path)
