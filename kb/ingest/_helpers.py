@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import signal
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
+
+
+def worker_ignore_sigint() -> None:
+    """Ignore SIGINT in worker processes so only the main process handles Ctrl-C."""
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
 def build_desired_map(chunks: Sequence[Any]) -> dict[str, list[dict]]:

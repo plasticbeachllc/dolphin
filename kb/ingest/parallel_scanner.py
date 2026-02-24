@@ -15,6 +15,7 @@ from pathlib import Path
 
 from pathspec import PathSpec
 
+from ._helpers import worker_ignore_sigint
 from .lang import classify_language
 from .scanner import FileCandidate, ScannerError, _is_binary
 
@@ -159,7 +160,7 @@ def scan_repo_parallel(
             for batch_candidates in pool.map(process_batch, batches):
                 all_candidates.extend(batch_candidates)
         else:
-            with mp.Pool(processes=num_workers) as mp_pool:
+            with mp.Pool(processes=num_workers, initializer=worker_ignore_sigint) as mp_pool:
                 # Process batches and collect results
                 for batch_candidates in mp_pool.imap_unordered(process_batch, batches):
                     all_candidates.extend(batch_candidates)

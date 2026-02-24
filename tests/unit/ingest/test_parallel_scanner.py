@@ -1,10 +1,46 @@
 """Unit tests for parallel file scanner."""
 
+import signal
 from unittest.mock import patch
 
 import pytest
 
+from kb.ingest._helpers import worker_ignore_sigint
 from kb.ingest.parallel_scanner import _process_file_batch, scan_repo_parallel
+
+
+class TestWorkerIgnoreSigint:
+    """Tests for the shared worker SIGINT initializer."""
+
+    def test_sets_sigint_to_sig_ign(self):
+        """worker_ignore_sigint must set SIGINT to SIG_IGN in the calling process."""
+        original = signal.getsignal(signal.SIGINT)
+        try:
+            worker_ignore_sigint()
+            assert signal.getsignal(signal.SIGINT) is signal.SIG_IGN
+        finally:
+            signal.signal(signal.SIGINT, original)
+
+    def test_pool_created_with_initializer(self):
+        """mp.Pool in scan_repo_parallel must use worker_ignore_sigint as initializer."""
+        with (
+            patch("kb.ingest.scanner._list_tracked") as mock_list,
+            patch("kb.ingest.scanner._submodule_roots", return_value=[]),
+            patch("multiprocessing.Pool") as mock_pool,
+        ):
+            mock_pool.return_value.__enter__.return_value.imap_unordered.return_value = []
+            mock_list.return_value = [f"file{i}.py" for i in range(250)]
+
+            import tempfile
+            from pathlib import Path
+
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / ".git").mkdir()
+                scan_repo_parallel(root, [], num_workers=2)
+
+            call_kwargs = mock_pool.call_args[1]
+            assert call_kwargs.get("initializer") is worker_ignore_sigint
 
 
 class TestProcessFileBatch:
