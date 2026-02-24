@@ -15,7 +15,7 @@
         "name": "Plastic Beach, LLC",
         "email": "info@plasticbeach.email"
       },
-      "source": "./claude-plugin",
+      "source": ".",
       "category": "development",
       "homepage": "https://github.com/plasticbeachllc/dolphin"
     }
