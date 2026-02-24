@@ -922,7 +922,7 @@ def main() -> None:
         app()
     except ConfigNotFoundError as e:
         print_status(str(e), level="error", stderr=True)
-        raise typer.Exit(1) from None
+        sys.exit(1)
 
 
 if __name__ == "__main__":
