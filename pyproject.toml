@@ -93,7 +93,6 @@ dev = [
 
 [project.scripts]
 dolphin = "kb.cli:main"
-kb = "kb.ingest.cli:app"
 kb-api = "kb.api.server:main"
 
 [tool.hatch.build.targets.wheel]
