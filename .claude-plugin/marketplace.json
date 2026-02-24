@@ -1,10 +1,11 @@
 {
-  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "dolphin",
-  "description": "Dolphin semantic code search plugin for Claude Code",
   "owner": {
     "name": "Plastic Beach, LLC",
     "email": "info@plasticbeach.email"
+  },
+  "metadata": {
+    "description": "Dolphin semantic code search plugin for Claude Code"
   },
   "plugins": [
     {
@@ -15,7 +16,7 @@
         "name": "Plastic Beach, LLC",
         "email": "info@plasticbeach.email"
       },
-      "source": ".",
+      "source": "./",
       "category": "development",
       "homepage": "https://github.com/plasticbeachllc/dolphin"
     }
