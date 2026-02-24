@@ -26,19 +26,19 @@ uv run dolphin search "your query" --json [options]
 
 **Key options:**
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--repo NAME` / `-r NAME` | Filter to specific repo(s) (repeatable) | all repos |
-| `--path PREFIX` / `-p PREFIX` | Filter by path prefix (repeatable) | none |
-| `--exclude-pattern GLOB` / `-x GLOB` | Exclude glob pattern (repeatable) | none |
-| `--lang LANG` | Language filter: py, ts, js, md, sql, svelte (repeatable) | all |
-| `--top-k N` / `-k N` | Number of results | 8 |
-| `--max-snippets N` | Include content for top N hits | 0 |
-| `--context-before N` | Context lines before match | 0 |
-| `--context-after N` | Context lines after match | 0 |
-| `--graph-context` | Include knowledge graph context | off |
-| `--local` / `-l` | Search without API server (slower startup) | remote |
-| `--json` | Machine-readable JSON output | off |
+| Flag                                 | Description                                               | Default   |
+| ------------------------------------ | --------------------------------------------------------- | --------- |
+| `--repo NAME` / `-r NAME`            | Filter to specific repo(s) (repeatable)                   | all repos |
+| `--path PREFIX` / `-p PREFIX`        | Filter by path prefix (repeatable)                        | none      |
+| `--exclude-pattern GLOB` / `-x GLOB` | Exclude glob pattern (repeatable)                         | none      |
+| `--lang LANG`                        | Language filter: py, ts, js, md, sql, svelte (repeatable) | all       |
+| `--top-k N` / `-k N`                 | Number of results                                         | 8         |
+| `--max-snippets N`                   | Include content for top N hits                            | 0         |
+| `--context-before N`                 | Context lines before match                                | 0         |
+| `--context-after N`                  | Context lines after match                                 | 0         |
+| `--graph-context`                    | Include knowledge graph context                           | off       |
+| `--local` / `-l`                     | Search without API server (slower startup)                | remote    |
+| `--json`                             | Machine-readable JSON output                              | off       |
 
 **Always use `--json` when calling from this skill** so results are structured.
 
@@ -116,5 +116,6 @@ Use chunk IDs from search results to fetch full chunk content.
 ## Troubleshooting
 
 If remote search fails with a connection error, either:
+
 1. Start the server: `uv run dolphin serve`
 2. Or use local mode: add `--local` flag (slower but needs no server)
