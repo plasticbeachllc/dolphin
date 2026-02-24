@@ -1,6 +1,6 @@
 ---
 name: dolphin-search
-description: Semantic code search across indexed repositories using Dolphin knowledge base. Use when searching for code implementations, finding functions or classes across repos, looking up how something works in the codebase, or querying the knowledge base. Also use when the user mentions "dolphin search", "search the KB", "find in indexed repos", or asks to look something up across multiple repositories.
+description: Search across any repositories indexed with Dolphin. Use when searching for code implementations, finding functions or classes across repos, or looking up how something works in the codebase. Also use when the user mentions "search" or asks to look up or find something.
 allowed-tools: Bash(uv run dolphin *)
 ---
 
