@@ -1,7 +1,7 @@
 {
   "name": "dolphin",
   "version": "0.1.0",
-  "description": "Semantic code search across indexed repositories using Dolphin. Provides hybrid vector + keyword retrieval for large codebases via CLI.",
+  "description": "Modern search across indexed repositories using Dolphin. Provides hybrid vector + keyword retrieval for large codebases via CLI.",
   "author": {
     "name": "Plastic Beach, LLC",
     "email": "info@plasticbeach.email"
