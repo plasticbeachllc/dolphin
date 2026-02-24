@@ -48,6 +48,7 @@ def repo_with_files(tmp_path: Path) -> Path:
     subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True)
     subprocess.run(["git", "config", "user.name", "Test"], cwd=repo_path, check=True)
+    subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=repo_path, check=True)
 
     for i in range(10):
         (repo_path / f"file{i}.py").write_text(f"def f{i}(): pass\n")

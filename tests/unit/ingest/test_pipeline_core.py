@@ -873,6 +873,11 @@ async def test_parallel_indexing_increments_error_on_dedup_failure(tmp_path, mon
         check=True,
         capture_output=True,
     )
+    subprocess.run(
+        ["git", "-C", str(repo_path), "config", "commit.gpgsign", "false"],
+        check=True,
+        capture_output=True,
+    )
     (repo_path / "hello.py").write_text('def hello():\n    return "Hello, World!"\n')
     subprocess.run(["git", "-C", str(repo_path), "add", "."], check=True, capture_output=True)
     subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "initial"], check=True, capture_output=True)
