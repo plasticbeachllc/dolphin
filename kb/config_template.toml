@@ -59,6 +59,8 @@ ignore = [
     "*.db",
     "*.sqlite",
     "*.sqlite3",
+    ".gitignore",
+    ".claude/worktrees/",
 ]
 
 # Exceptions to ignore patterns - files matching these will NOT be ignored
