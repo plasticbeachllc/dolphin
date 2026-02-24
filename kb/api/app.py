@@ -702,36 +702,20 @@ async def list_repos() -> dict[str, list[dict[str, object]]]:
     if _sql_store is None:
         raise HTTPException(status_code=503, detail="SQL store not initialized")
 
-    # Query all repos from SQL store
     try:
-        from contextlib import closing
-
+        all_repos = _sql_store.list_all_repos()
         repos = []
-        with _sql_store._connect() as conn, closing(conn.cursor()) as cur:
-            # Get all repos
-            cur.execute("SELECT id, name, root_path, default_embed_model FROM repos")
-            repo_rows = cur.fetchall()
-
-            for repo_row in repo_rows:
-                repo_id, name, root_path, default_model = repo_row
-
-                # Count files for this repo
-                cur.execute("SELECT COUNT(*) FROM files WHERE repo_id = ?", (repo_id,))
-                file_count = cur.fetchone()[0]
-
-                # Count chunks for this repo
-                cur.execute("SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,))
-                chunk_count = cur.fetchone()[0]
-
-                repos.append(
-                    {
-                        "name": name,
-                        "path": root_path,
-                        "default_embed_model": default_model,
-                        "files": file_count,
-                        "chunks": chunk_count,
-                    }
-                )
+        for repo in all_repos:
+            counts = _sql_store.get_repo_counts(repo["id"])
+            repos.append(
+                {
+                    "name": repo["name"],
+                    "path": repo["root_path"],
+                    "default_embed_model": repo["default_embed_model"],
+                    "files": counts["files"],
+                    "chunks": counts["chunks"],
+                }
+            )
 
         return {"repos": repos}
 

@@ -613,11 +613,111 @@ def _display_results(
 
 
 @app.command()
-def list_repos() -> None:
+def repos(
+    json_output: bool = typer.Option(False, "--json", help="Emit JSON output for scripting."),
+) -> None:
     """List all registered repositories."""
-    from kb.ingest.cli import list_repos as kb_list_repos
+    config = load_config()
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata.initialize()
 
-    kb_list_repos()
+    all_repos = metadata.list_all_repos()
+    if not all_repos:
+        if json_output:
+            typer.echo(json.dumps({"repos": []}))
+        else:
+            typer.echo("No repositories registered.")
+        return
+
+    if json_output:
+        repo_list = []
+        for repo in all_repos:
+            counts = metadata.get_repo_counts(repo["id"])
+            repo_list.append(
+                {
+                    "name": repo["name"],
+                    "root_path": repo["root_path"],
+                    "default_embed_model": repo["default_embed_model"],
+                    "files": counts["files"],
+                    "chunks": counts["chunks"],
+                }
+            )
+        typer.echo(json.dumps({"repos": repo_list}, indent=2))
+    else:
+        typer.echo(f"\nRegistered Repositories ({len(all_repos)}):\n")
+        for repo in all_repos:
+            typer.echo(f"  - {repo['name']}")
+            typer.echo(f"    Path: {repo['root_path']}")
+            typer.echo(f"    Model: {repo['default_embed_model']}")
+            typer.echo(f"    ID: {repo['id']}")
+            typer.echo()
+
+
+@app.command()
+def chunk(
+    chunk_id: str = typer.Argument(..., help="The chunk ID to fetch."),
+    json_output: bool = typer.Option(False, "--json", help="Emit JSON output for scripting."),
+) -> None:
+    """Fetch a chunk by its ID and display its content."""
+    config = load_config()
+    store_root = config.resolved_store_root()
+    metadata = SQLiteMetadataStore(store_root / "metadata.db")
+    metadata.initialize()
+
+    chunk_meta = metadata.get_chunk_by_id(chunk_id)
+    if not chunk_meta:
+        if json_output:
+            typer.echo(json.dumps({"error": f"Chunk not found: {chunk_id}"}))
+        else:
+            typer.echo(f"Error: Chunk not found: {chunk_id}", err=True)
+        raise typer.Exit(1)
+
+    content_map = metadata.get_chunk_contents([chunk_id])
+    content = content_map.get(chunk_id, "")
+
+    # Resolve repo name from the file path
+    repo_name: str | None = None
+    all_repos = metadata.list_all_repos()
+    file_path = chunk_meta.get("path", "")
+    for repo in all_repos:
+        root = repo["root_path"]
+        if file_path.startswith(root) or file_path.startswith("/"):
+            # Check if this file belongs to this repo by querying
+            file_id = metadata.get_file_id(repo["id"], file_path)
+            if file_id is not None:
+                repo_name = repo["name"]
+                break
+
+    if json_output:
+        payload = {
+            "chunk_id": chunk_meta["chunk_id"],
+            "repo": repo_name,
+            "path": chunk_meta.get("path"),
+            "start_line": chunk_meta.get("start_line"),
+            "end_line": chunk_meta.get("end_line"),
+            "language": chunk_meta.get("language"),
+            "symbol_kind": chunk_meta.get("symbol_kind"),
+            "symbol_name": chunk_meta.get("symbol_name"),
+            "symbol_path": chunk_meta.get("symbol_path"),
+            "content": content,
+        }
+        typer.echo(json.dumps(payload, indent=2))
+    else:
+        start = chunk_meta.get("start_line", "?")
+        end = chunk_meta.get("end_line", "?")
+        lang = chunk_meta.get("language") or ""
+        location = f"{repo_name or '?'}/{file_path}:{start}-{end}"
+        typer.echo(f"Chunk: {chunk_id}")
+        typer.echo(f"Location: {location}")
+        if chunk_meta.get("symbol_name"):
+            typer.echo(f"Symbol: {chunk_meta.get('symbol_kind', '')}:{chunk_meta['symbol_name']}")
+        typer.echo()
+        if content:
+            typer.echo(f"```{lang}")
+            typer.echo(content)
+            typer.echo("```")
+        else:
+            typer.echo("(no content available)")
 
 
 @app.command()

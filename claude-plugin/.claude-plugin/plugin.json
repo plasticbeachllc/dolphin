@@ -1,0 +1,12 @@
+{
+  "name": "dolphin",
+  "version": "0.1.0",
+  "description": "Semantic code search across indexed repositories using Dolphin. Provides hybrid vector + keyword retrieval for large codebases via CLI.",
+  "author": {
+    "name": "Plastic Beach",
+    "email": "support@plasticbeach.co"
+  },
+  "repository": "https://github.com/plasticbeachllc/dolphin",
+  "license": "MIT",
+  "keywords": ["code-search", "semantic-search", "knowledge-base", "embeddings"]
+}

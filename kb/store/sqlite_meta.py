@@ -789,6 +789,19 @@ class SQLiteMetadataStore:
                 for row in rows
             ]
 
+    def get_repo_counts(self, repo_id: int) -> dict[str, int]:
+        """Get file and chunk counts for a repository.
+
+        Returns:
+            Dict with 'files' and 'chunks' integer counts.
+        """
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute("SELECT COUNT(*) FROM files WHERE repo_id = ?", (repo_id,))
+            file_count = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,))
+            chunk_count = cur.fetchone()[0]
+            return {"files": file_count, "chunks": chunk_count}
+
     def get_repo_by_name(self, name: str) -> RepoRecord | None:
         """Return repo record by name or None if not found."""
         with self._connect() as conn, closing(conn.cursor()) as cur:

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "dolphin",
+  "description": "Dolphin semantic code search plugin for Claude Code",
+  "owner": {
+    "name": "Plastic Beach",
+    "email": "support@plasticbeach.co"
+  },
+  "plugins": [
+    {
+      "name": "dolphin",
+      "description": "Semantic code search across indexed repositories using hybrid vector + keyword retrieval",
+      "version": "0.1.0",
+      "author": {
+        "name": "Plastic Beach",
+        "email": "support@plasticbeach.co"
+      },
+      "source": "./claude-plugin",
+      "category": "development",
+      "homepage": "https://github.com/plasticbeachllc/dolphin"
+    }
+  ]
+}
