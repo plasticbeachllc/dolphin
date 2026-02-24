@@ -388,8 +388,12 @@ class RepoWatcher:
             print(f"Batch processed successfully (session {session_id})")
 
         except Exception as e:
-            logger.error(f"Error processing batch: {e}", exc_info=True)
-            self.metadata.set_session_status(session_id, "failed")
+            if self.pipeline.is_cancel_requested():
+                logger.info("Batch processing interrupted by shutdown request for %s", self.repo_name)
+                self.metadata.set_session_status(session_id, "aborted", notes="interrupted by shutdown")
+            else:
+                logger.error(f"Error processing batch: {e}", exc_info=True)
+                self.metadata.set_session_status(session_id, "failed")
 
     def _find_missing_files_in_db(self) -> list[str]:
         """Return file paths that exist in metadata but not on disk."""
