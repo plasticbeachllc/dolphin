@@ -12,7 +12,7 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 
-from ..config import DEFAULT_CONFIG_PATH, KBConfig, load_config
+from ..config import DEFAULT_CONFIG_PATH, ConfigNotFoundError, KBConfig, load_config
 from ..embeddings.provider import create_provider, set_default_provider
 from ..ignores import build_ignore_set, load_repo_ignores
 from ..store import LanceDBStore, SQLiteMetadataStore
@@ -1063,7 +1063,12 @@ def reset_all(
 
 
 def main() -> None:
-    app()
+    try:
+        app()
+    except ConfigNotFoundError as e:
+        console = Console(stderr=True)
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1) from None
 
 
 if __name__ == "__main__":

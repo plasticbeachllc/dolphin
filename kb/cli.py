@@ -19,7 +19,7 @@ import uvicorn
 # Import kb CLI functions for top-level commands
 # Import subcommand apps
 from kb.api_key import get_or_create_kb_api_key
-from kb.config import load_config
+from kb.config import ConfigNotFoundError, load_config
 from kb.ingest.cli import (
     add_repo as kb_add_repo,
     app as kb_app,
@@ -769,6 +769,8 @@ def serve(
                         f"Will re-index automatically on startup.",
                         level="warn",
                     )
+        except ConfigNotFoundError:
+            raise
         except Exception as e:
             print_status(
                 "Failed to list repositories for automatic watcher startup.",
@@ -923,7 +925,11 @@ def config(
 
 def main() -> None:
     """Entry point for the dolphin CLI."""
-    app()
+    try:
+        app()
+    except ConfigNotFoundError as e:
+        print_status(str(e), level="error")
+        raise typer.Exit(1) from None
 
 
 if __name__ == "__main__":

@@ -16,6 +16,11 @@ from .ignores import DEFAULT_IGNORE_PATTERNS
 
 _log = logging.getLogger(__name__)
 
+
+class ConfigNotFoundError(FileNotFoundError):
+    """Raised when no Dolphin configuration file can be located."""
+
+
 CONFIG_ROOT = Path.home() / ".dolphin" / "knowledge_store"
 DEFAULT_CONFIG_PATH = CONFIG_ROOT / "config.toml"
 USER_CONFIG_PATH = Path.home() / ".dolphin" / "config.toml"
@@ -469,7 +474,7 @@ def load_config(path: Path | None = None, repo_path: Path | None = None) -> KBCo
                 base_config = tomllib.load(f) or {}
 
     if not base_config and not repo_config:
-        raise FileNotFoundError("No configuration found. Create one with 'dolphin init' or provide --config path.")
+        raise ConfigNotFoundError("No configuration found. Run 'dolphin init' to create one, or provide --config path.")
 
     if base_config and not isinstance(base_config, Mapping):
         raise ValueError("Config must contain a mapping at the top level")
