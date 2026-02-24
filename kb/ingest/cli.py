@@ -1029,8 +1029,9 @@ def main() -> None:
     try:
         app()
     except ConfigNotFoundError as e:
-        console = Console(stderr=True)
-        console.print(f"[bold red]Error:[/bold red] {e}")
+        from ..terminal import print_status
+
+        print_status(str(e), level="error", stderr=True)
         raise typer.Exit(1) from None
 
 

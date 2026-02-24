@@ -921,7 +921,7 @@ def main() -> None:
     try:
         app()
     except ConfigNotFoundError as e:
-        print_status(str(e), level="error")
+        print_status(str(e), level="error", stderr=True)
         raise typer.Exit(1) from None
 
 
