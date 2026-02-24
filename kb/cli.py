@@ -675,18 +675,9 @@ def chunk(
     content_map = metadata.get_chunk_contents([chunk_id])
     content = content_map.get(chunk_id, "")
 
-    # Resolve repo name from the file path
-    repo_name: str | None = None
-    all_repos = metadata.list_all_repos()
+    # Resolve repo name and file path
+    repo_name = metadata.get_repo_name_for_chunk(chunk_id)
     file_path = chunk_meta.get("path", "")
-    for repo in all_repos:
-        root = repo["root_path"]
-        if file_path.startswith(root) or file_path.startswith("/"):
-            # Check if this file belongs to this repo by querying
-            file_id = metadata.get_file_id(repo["id"], file_path)
-            if file_id is not None:
-                repo_name = repo["name"]
-                break
 
     if json_output:
         payload = {
