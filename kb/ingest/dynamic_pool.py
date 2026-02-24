@@ -10,6 +10,7 @@ import logging
 import math
 import multiprocessing as mp
 import os
+import signal
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from typing import ClassVar
@@ -18,9 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 def _worker_init() -> None:
-    """Ignore SIGINT in worker processes; the main process owns shutdown."""
-    import signal
-
+    """Ignore SIGINT in worker processes so only the main process handles Ctrl-C."""
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
@@ -125,7 +124,11 @@ class DynamicWorkerPool:
             f"using={self._optimal_workers} workers"
         )
 
+<<<<<<< HEAD
         # Create executor; workers ignore SIGINT so the main process handles Ctrl-C cleanly
+=======
+        # Create executor — workers ignore SIGINT so only the main process handles Ctrl-C
+>>>>>>> 10fd51f (fix: suppress SIGINT in worker processes to prevent traceback spam on Ctrl-C)
         self._executor = ProcessPoolExecutor(max_workers=self._optimal_workers, initializer=_worker_init)
 
     def _calculate_optimal_workers(self) -> int:
