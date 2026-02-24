@@ -630,9 +630,10 @@ def repos(
         return
 
     if json_output:
+        all_counts = metadata.get_all_repo_counts()
         repo_list = []
         for repo in all_repos:
-            counts = metadata.get_repo_counts(repo["id"])
+            counts = all_counts.get(repo["id"], {"files": 0, "chunks": 0})
             repo_list.append(
                 {
                     "name": repo["name"],
@@ -675,8 +676,7 @@ def chunk(
     content_map = metadata.get_chunk_contents([chunk_id])
     content = content_map.get(chunk_id, "")
 
-    # Resolve repo name and file path
-    repo_name = metadata.get_repo_name_for_chunk(chunk_id)
+    repo_name = chunk_meta.get("repo_name")
     file_path = chunk_meta.get("path", "")
 
     if json_output:

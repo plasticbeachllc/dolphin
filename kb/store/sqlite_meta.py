@@ -802,6 +802,21 @@ class SQLiteMetadataStore:
             chunk_count = cur.fetchone()[0]
             return {"files": file_count, "chunks": chunk_count}
 
+    def get_all_repo_counts(self) -> dict[int, dict[str, int]]:
+        """Get file and chunk counts for all repositories in bulk.
+
+        Returns:
+            Dict mapping repo_id to {'files': int, 'chunks': int}.
+        """
+        with self._connect() as conn, closing(conn.cursor()) as cur:
+            cur.execute("SELECT repo_id, COUNT(*) FROM files GROUP BY repo_id")
+            file_counts = {int(row[0]): int(row[1]) for row in cur.fetchall()}
+            cur.execute("SELECT repo_id, COUNT(*) FROM chunk_content GROUP BY repo_id")
+            chunk_counts = {int(row[0]): int(row[1]) for row in cur.fetchall()}
+
+            all_repo_ids = set(file_counts) | set(chunk_counts)
+            return {rid: {"files": file_counts.get(rid, 0), "chunks": chunk_counts.get(rid, 0)} for rid in all_repo_ids}
+
     def get_repo_by_name(self, name: str) -> RepoRecord | None:
         """Return repo record by name or None if not found."""
         with self._connect() as conn, closing(conn.cursor()) as cur:
@@ -1791,7 +1806,8 @@ class SQLiteMetadataStore:
         """Get full chunk metadata by content_id.
 
         Returns:
-            Dict with chunk metadata or None if not found
+            Dict with chunk metadata or None if not found.
+            Includes 'repo_name' resolved via the repos table.
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
@@ -1808,9 +1824,11 @@ class SQLiteMetadataStore:
                     cl.end_line,
                     cl.symbol_kind,
                     cl.symbol_name,
-                    cl.symbol_path
+                    cl.symbol_path,
+                    r.name
                 FROM chunk_content cc
                 JOIN files f ON cc.file_id = f.id
+                JOIN repos r ON f.repo_id = r.id
                 LEFT JOIN chunk_locations cl ON cc.id = cl.content_id
                 WHERE cc.id = ?
             """,
@@ -1834,6 +1852,7 @@ class SQLiteMetadataStore:
                 "symbol_kind": row[9],
                 "symbol_name": row[10],
                 "symbol_path": row[11],
+                "repo_name": str(row[12]),
             }
 
     def get_chunk_locations_by_identity(

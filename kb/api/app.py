@@ -704,9 +704,10 @@ async def list_repos() -> dict[str, list[dict[str, object]]]:
 
     try:
         all_repos = _sql_store.list_all_repos()
+        all_counts = _sql_store.get_all_repo_counts()
         repos = []
         for repo in all_repos:
-            counts = _sql_store.get_repo_counts(repo["id"])
+            counts = all_counts.get(repo["id"], {"files": 0, "chunks": 0})
             repos.append(
                 {
                     "name": repo["name"],
