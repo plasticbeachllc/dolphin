@@ -78,6 +78,10 @@ class IngestionPipeline:
         """Signal the pipeline to stop after the current file completes."""
         self._cancel_event.set()
 
+    def is_cancel_requested(self) -> bool:
+        """Return True if cancellation has been requested."""
+        return self._cancel_event.is_set()
+
     def _check_cancelled(self) -> None:
         """Raise ``_CancelledError`` if cancellation was requested."""
         if self._cancel_event.is_set():
@@ -733,6 +737,8 @@ class IngestionPipeline:
         }
 
         for path in files:
+            # Cooperative cancellation: stop cleanly between files
+            self._check_cancelled()
             file_id: int | None = None
             try:
                 file_id = self.metadata.get_file_id(repo_id, path)

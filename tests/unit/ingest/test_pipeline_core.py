@@ -592,6 +592,55 @@ class TestPipelineProcessDeletions:
         assert pruned_models == []
         assert metadata.get_file_id(repo_id, "deleted.py") == file_id
 
+    def test_process_deletions_stops_on_cancel(self, pipeline_setup, monkeypatch):
+        """process_deletions should stop between files when cancel is requested."""
+        pipeline, repo_path, metadata, repo_id, file_id = pipeline_setup
+        from kb.ingest.error_logging import ErrorLogger
+
+        # Register a second file so there are two to delete
+        metadata.upsert_file(
+            repo_id=repo_id,
+            path="other.py",
+            ext=".py",
+            language="python",
+            is_binary=False,
+            size_bytes=50,
+        )
+
+        # Track which files the cleanup helper is called on
+        cleaned_files: list[str] = []
+        orig_cleanup = pipeline._cleanup_deleted_file_dependencies
+
+        def tracking_cleanup(repo_id_arg, repo_name_arg, file_id_arg, path_arg):
+            cleaned_files.append(path_arg)
+            return orig_cleanup(repo_id_arg, repo_name_arg, file_id_arg, path_arg)
+
+        monkeypatch.setattr(pipeline, "_cleanup_deleted_file_dependencies", tracking_cleanup)
+
+        pipeline.request_cancel()
+        error_logger = ErrorLogger(repo_path, "session1")
+
+        with pytest.raises(Exception, match="cancelled"):
+            pipeline.process_deletions(
+                repo_id=repo_id,
+                repo_name="test-repo",
+                files=["deleted.py", "other.py"],
+                embed_model="small",
+                dry_run=False,
+                error_logger=error_logger,
+            )
+
+        # Cancel fires before the first file is touched, so nothing should be cleaned
+        assert cleaned_files == []
+
+    def test_is_cancel_requested_reflects_state(self, pipeline_setup):
+        """is_cancel_requested returns False initially and True after request_cancel."""
+        pipeline, *_ = pipeline_setup
+
+        assert not pipeline.is_cancel_requested()
+        pipeline.request_cancel()
+        assert pipeline.is_cancel_requested()
+
 
 class TestPipelineDropRepoIndex:
     """Test IngestionPipeline _drop_repo_index operation."""
