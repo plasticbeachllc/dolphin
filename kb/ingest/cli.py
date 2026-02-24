@@ -2,7 +2,6 @@
 import asyncio
 import logging
 import os
-import sys
 from pathlib import Path
 from typing import cast
 
@@ -71,45 +70,7 @@ def init(
         config_content = _read_config_template()
         created = True
 
-    # Prompt for default embedding model if we are creating new or purely interactive
-    # (Simple approach: we just append/replace the setting in the TOML string?
-    #  Or we just guide the user. For a robust CLI, let's just write the file first.)
-
-    # If creating fresh, let's ask for preference
-    if created and sys.stdin is not None and sys.stdin.isatty():
-        model_choice = (
-            typer.prompt(
-                "Select default embedding model",
-                default="large",
-                show_choices=True,
-                type=str,
-            )
-            .strip()
-            .lower()
-        )
-
-        if model_choice not in ("small", "large"):
-            model_choice = "large"
-            console.print("[yellow]Invalid choice, defaulting to 'large'.[/yellow]")
-
-        # Patch the template string before writing
-        # We assume the template has `default_embed_model = "large"` or similar
-        # A simple replace works for the template
-        if 'default_embed_model = "large"' in config_content:
-            config_content = config_content.replace(
-                'default_embed_model = "large"',
-                f'default_embed_model = "{model_choice}"',
-            )
-        elif 'default_embed_model = "small"' in config_content:
-            config_content = config_content.replace(
-                'default_embed_model = "small"',
-                f'default_embed_model = "{model_choice}"',
-            )
-
-        target.write_text(config_content, encoding="utf-8")
-        console.print(f"Created knowledge store config at [bold green]{target}[/bold green]")
-    elif created:
-        # Non-interactive, write default
+    if created:
         target.write_text(config_content, encoding="utf-8")
         console.print(f"Created knowledge store config at [bold green]{target}[/bold green]")
 

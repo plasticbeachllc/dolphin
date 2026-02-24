@@ -30,7 +30,7 @@ per_session_spend_cap_usd = 10.0
 provider = "openai"
 
 # Default embedding model: "small" (1536-dim) or "large" (3072-dim)
-default_embed_model = "large"
+default_embed_model = "small"
 
 # Number of texts to embed per API call
 batch_size = 100
