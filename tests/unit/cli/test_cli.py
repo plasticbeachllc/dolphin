@@ -271,12 +271,19 @@ class TestIndexCommand:
 class TestStatusCommand:
     """Test kb status command."""
 
+    def _set_store_root(self, config_path, store_root):
+        store_root.mkdir(parents=True, exist_ok=True)
+        config_text = config_path.read_text()
+        config_text = config_text.replace('store_root = "~/.dolphin/knowledge_store"', f'store_root = "{store_root}"')
+        config_path.write_text(config_text)
+
     def test_status_works_without_arguments(self, tmp_path):
         """Test that status command works without arguments."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
+        self._set_store_root(config_path, tmp_path / "store")
 
-        result = runner.invoke(app, ["status"])
+        result = runner.invoke(app, ["status"], env={"DOLPHIN_CONFIG_PATH": str(config_path)})
 
         assert result.exit_code == 0
         assert "summary" in result.stdout.lower() or "Knowledge" in result.stdout
@@ -285,8 +292,9 @@ class TestStatusCommand:
         """Test that status accepts optional repo name."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
+        self._set_store_root(config_path, tmp_path / "store")
 
-        result = runner.invoke(app, ["status", "test-repo"])
+        result = runner.invoke(app, ["status", "test-repo"], env={"DOLPHIN_CONFIG_PATH": str(config_path)})
 
         assert result.exit_code == 0
 
@@ -337,9 +345,18 @@ class TestListFilesCommand:
     def test_list_files_with_unregistered_repo(self, tmp_path):
         """Test list-files with unregistered repository."""
         config_path = tmp_path / "config.toml"
+        store_root = tmp_path / "store"
+        store_root.mkdir(parents=True, exist_ok=True)
         runner.invoke(app, ["init", "--config-path", str(config_path)])
+        config_text = config_path.read_text()
+        config_text = config_text.replace('store_root = "~/.dolphin/knowledge_store"', f'store_root = "{store_root}"')
+        config_path.write_text(config_text)
 
-        result = runner.invoke(app, ["list-files", "nonexistent-repo"])
+        result = runner.invoke(
+            app,
+            ["list-files", "nonexistent-repo"],
+            env={"DOLPHIN_CONFIG_PATH": str(config_path)},
+        )
 
         assert result.exit_code == 1
         # Error is printed to stderr, not stdout
