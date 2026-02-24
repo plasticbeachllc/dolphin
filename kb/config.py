@@ -22,8 +22,8 @@ class ConfigNotFoundError(FileNotFoundError):
 
 
 CONFIG_ROOT = Path.home() / ".dolphin" / "knowledge_store"
-DEFAULT_CONFIG_PATH = CONFIG_ROOT / "config.toml"
 USER_CONFIG_PATH = Path.home() / ".dolphin" / "config.toml"
+DEFAULT_CONFIG_PATH = USER_CONFIG_PATH
 
 # Path to the bundled config template
 _TEMPLATE_PATH = Path(__file__).parent / "config_template.toml"
@@ -139,7 +139,7 @@ class KBConfig:
 
     store_root: Path = field(default_factory=lambda: _to_path(CONFIG_ROOT))
     endpoint: str = "127.0.0.1:7777"
-    default_embed_model: str = "large"
+    default_embed_model: str = "small"
     concurrency: int = 3
     per_session_spend_cap_usd: float = 10.0
     ignore: list[str] = field(default_factory=lambda: list(DEFAULT_IGNORE_PATTERNS))
@@ -468,9 +468,14 @@ def load_config(path: Path | None = None, repo_path: Path | None = None) -> KBCo
     else:
         # 4) User config fallback
         user_config = USER_CONFIG_PATH
+        legacy_config = CONFIG_ROOT / "config.toml"  # Old default location prior to fix
         if user_config.exists():
             _log.debug("Loading user config: %s", user_config)
             with user_config.open("rb") as f:
+                base_config = tomllib.load(f) or {}
+        elif legacy_config.exists():
+            _log.debug("Loading legacy config from old default location: %s", legacy_config)
+            with legacy_config.open("rb") as f:
                 base_config = tomllib.load(f) or {}
 
     if not base_config and not repo_config:

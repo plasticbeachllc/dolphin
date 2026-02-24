@@ -16,13 +16,10 @@ from typing import Annotated
 import typer
 import uvicorn
 
-# Import kb CLI functions for top-level commands
-# Import subcommand apps
 from kb.api_key import get_or_create_kb_api_key
 from kb.config import ConfigNotFoundError, load_config
 from kb.ingest.cli import (
     add_repo as kb_add_repo,
-    app as kb_app,
     index as kb_index,
     init as kb_init,
     list_files as kb_list_files,
@@ -66,10 +63,6 @@ def dolphin_callback(
     version: bool = typer.Option(False, "--version", "-v", help="Show version and exit"),
 ):
     version_callback(version)
-
-
-# Add subcommand apps
-app.add_typer(kb_app, name="kb", help="Knowledge base management commands")
 
 
 _log = StructuredLogger("kb.cli", {"component": "dolphin_cli"})

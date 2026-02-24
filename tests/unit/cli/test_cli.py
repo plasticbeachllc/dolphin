@@ -1,14 +1,30 @@
 """Comprehensive unit tests for CLI commands."""
 
+import tomllib
 from pathlib import Path
 
 import pytest
+import tomli_w
 from typer.testing import CliRunner
 
 from kb.config import KBConfig
 from kb.ingest.cli import _build_pipeline, _read_config_template, app
 
 runner = CliRunner()
+
+
+def _set_config_store_root(config_path: Path, store_root: Path) -> None:
+    """Point a config file's storage.store_root at an isolated directory.
+
+    Parses and rewrites the TOML file properly so the helper is resilient
+    to whitespace or comment changes in the config template.
+    """
+    store_root.mkdir(parents=True, exist_ok=True)
+    with config_path.open("rb") as f:
+        config_data = tomllib.load(f)
+    config_data.setdefault("storage", {})["store_root"] = str(store_root)
+    with config_path.open("wb") as f:
+        tomli_w.dump(config_data, f)
 
 
 class TestInitCommand:
@@ -95,18 +111,11 @@ class TestInitCommand:
 class TestAddRepoCommand:
     """Test kb add-repo command."""
 
-    def _set_store_root(self, config_path: Path, store_root: Path) -> None:
-        store_root.mkdir(parents=True, exist_ok=True)
-        config_text = config_path.read_text()
-        config_text = config_text.replace('store_root = "~/.dolphin/knowledge_store"', f'store_root = "{store_root}"')
-        config_path.write_text(config_text)
-
     def test_add_repo_registers_repository(self, tmp_path, git_repo):
         """Test that add-repo successfully registers a repo."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
-        self._set_store_root(config_path, tmp_path / "store")
-        self._set_store_root(config_path, tmp_path / "store")
+        _set_config_store_root(config_path, tmp_path / "store")
 
         result = runner.invoke(
             app,
@@ -132,7 +141,7 @@ class TestAddRepoCommand:
         """Test that add-repo fails for non-existent directory."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
-        self._set_store_root(config_path, tmp_path / "store")
+        _set_config_store_root(config_path, tmp_path / "store")
 
         nonexistent = tmp_path / "nonexistent"
         result = runner.invoke(app, ["add-repo", "test", str(nonexistent)])
@@ -144,7 +153,7 @@ class TestAddRepoCommand:
         """Test that add-repo fails when path is a file."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
-        self._set_store_root(config_path, tmp_path / "store")
+        _set_config_store_root(config_path, tmp_path / "store")
 
         file_path = tmp_path / "file.txt"
         file_path.write_text("content")
@@ -157,7 +166,7 @@ class TestAddRepoCommand:
         """Test add-repo uses global config for embedding model."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
-        self._set_store_root(config_path, tmp_path / "store")
+        _set_config_store_root(config_path, tmp_path / "store")
 
         # No longer pass --default-embed-model, it uses global config
         result = runner.invoke(
@@ -173,7 +182,7 @@ class TestAddRepoCommand:
         """Test add-repo uses global config for embedding model."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
-        self._set_store_root(config_path, tmp_path / "store")
+        _set_config_store_root(config_path, tmp_path / "store")
 
         # No longer pass --default-embed-model, it uses global config
         result = runner.invoke(
@@ -189,7 +198,7 @@ class TestAddRepoCommand:
         """Test that embedding model is now set globally, not per-repo."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
-        self._set_store_root(config_path, tmp_path / "store")
+        _set_config_store_root(config_path, tmp_path / "store")
 
         # Flag no longer exists - testing it should fail
         result = runner.invoke(
@@ -211,7 +220,7 @@ class TestAddRepoCommand:
         """Test that add-repo expands ~ in path."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
-        self._set_store_root(config_path, tmp_path / "store")
+        _set_config_store_root(config_path, tmp_path / "store")
 
         # Point Path.home() and environment home variables to the tmp directory
         monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
@@ -275,8 +284,9 @@ class TestStatusCommand:
         """Test that status command works without arguments."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
+        _set_config_store_root(config_path, tmp_path / "store")
 
-        result = runner.invoke(app, ["status"])
+        result = runner.invoke(app, ["status"], env={"DOLPHIN_CONFIG_PATH": str(config_path)})
 
         assert result.exit_code == 0
         assert "summary" in result.stdout.lower() or "Knowledge" in result.stdout
@@ -285,8 +295,9 @@ class TestStatusCommand:
         """Test that status accepts optional repo name."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
+        _set_config_store_root(config_path, tmp_path / "store")
 
-        result = runner.invoke(app, ["status", "test-repo"])
+        result = runner.invoke(app, ["status", "test-repo"], env={"DOLPHIN_CONFIG_PATH": str(config_path)})
 
         assert result.exit_code == 0
 
@@ -338,8 +349,13 @@ class TestListFilesCommand:
         """Test list-files with unregistered repository."""
         config_path = tmp_path / "config.toml"
         runner.invoke(app, ["init", "--config-path", str(config_path)])
+        _set_config_store_root(config_path, tmp_path / "store")
 
-        result = runner.invoke(app, ["list-files", "nonexistent-repo"])
+        result = runner.invoke(
+            app,
+            ["list-files", "nonexistent-repo"],
+            env={"DOLPHIN_CONFIG_PATH": str(config_path)},
+        )
 
         assert result.exit_code == 1
         # Error is printed to stderr, not stdout
