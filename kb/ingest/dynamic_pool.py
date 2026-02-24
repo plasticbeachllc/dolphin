@@ -16,6 +16,14 @@ from typing import ClassVar
 
 logger = logging.getLogger(__name__)
 
+
+def _worker_init() -> None:
+    """Ignore SIGINT in worker processes; the main process owns shutdown."""
+    import signal
+
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+
 # Try to import psutil for advanced resource monitoring
 try:
     import psutil
@@ -117,8 +125,8 @@ class DynamicWorkerPool:
             f"using={self._optimal_workers} workers"
         )
 
-        # Create executor
-        self._executor = ProcessPoolExecutor(max_workers=self._optimal_workers)
+        # Create executor; workers ignore SIGINT so the main process handles Ctrl-C cleanly
+        self._executor = ProcessPoolExecutor(max_workers=self._optimal_workers, initializer=_worker_init)
 
     def _calculate_optimal_workers(self) -> int:
         """Calculate optimal number of workers based on current system state."""
