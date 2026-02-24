@@ -217,7 +217,7 @@ def index(
     _original_sigint = signal.getsignal(signal.SIGINT)
 
     def _sigint_handler(signum, frame):
-        typer.echo("\nInterrupt received — stopping after current file…")
+        typer.echo("\nInterrupt received — stopping after current files…")
         pipeline.request_cancel()
 
     signal.signal(signal.SIGINT, _sigint_handler)
