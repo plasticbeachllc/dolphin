@@ -82,7 +82,7 @@ bun run --hot src/index.ts
 
 ```bash
 # Index a repository (from repo root)
-uv run dolphin kb index <repo-name>
+uv run dolphin index <repo-name>
 ```
 
 ## Debugging Workflows
