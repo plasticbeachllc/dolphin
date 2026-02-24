@@ -345,12 +345,8 @@ class TestListFilesCommand:
     def test_list_files_with_unregistered_repo(self, tmp_path):
         """Test list-files with unregistered repository."""
         config_path = tmp_path / "config.toml"
-        store_root = tmp_path / "store"
-        store_root.mkdir(parents=True, exist_ok=True)
         runner.invoke(app, ["init", "--config-path", str(config_path)])
-        config_text = config_path.read_text()
-        config_text = config_text.replace('store_root = "~/.dolphin/knowledge_store"', f'store_root = "{store_root}"')
-        config_path.write_text(config_text)
+        self._set_store_root(config_path, tmp_path / "store")
 
         result = runner.invoke(
             app,
