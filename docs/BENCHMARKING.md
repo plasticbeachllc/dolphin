@@ -108,16 +108,16 @@ export TEST_REPO_LARGE="$HOME/test-repos/large"    # ~50,000 files
 
 ```bash
 # Small repository
-uv run dolphin kb add-repo test-small "$TEST_REPO_SMALL"
-time uv run dolphin kb index test-small --full --force
+uv run dolphin add-repo test-small "$TEST_REPO_SMALL"
+time uv run dolphin index test-small --full --force
 
 # Medium repository
-uv run dolphin kb add-repo test-medium "$TEST_REPO_MEDIUM"
-time uv run dolphin kb index test-medium --full --force
+uv run dolphin add-repo test-medium "$TEST_REPO_MEDIUM"
+time uv run dolphin index test-medium --full --force
 
 # Large repository (incremental recommended)
-uv run dolphin kb add-repo test-large "$TEST_REPO_LARGE"
-time uv run dolphin kb index test-large
+uv run dolphin add-repo test-large "$TEST_REPO_LARGE"
+time uv run dolphin index test-large
 ```
 
 **Expected Results**:
@@ -246,10 +246,10 @@ If performance doesn't meet targets:
 
 ```bash
 # Faster, cheaper (recommended)
-uv run dolphin kb add-repo my-repo /path --default-embed-model small
+uv run dolphin add-repo my-repo /path --default-embed-model small
 
 # More accurate, slower
-uv run dolphin kb add-repo my-repo /path --default-embed-model large
+uv run dolphin add-repo my-repo /path --default-embed-model large
 ```
 
 **Trade-offs**:
@@ -292,10 +292,10 @@ curl -X POST http://127.0.0.1:7777/v1/search \
 
 ```bash
 # Fast: Only index changed files
-uv run dolphin kb index my-repo
+uv run dolphin index my-repo
 
 # Slow: Full reindex (only when needed)
-uv run dolphin kb index my-repo --full --force
+uv run dolphin index my-repo --full --force
 ```
 
 ### 5. Caching Strategy

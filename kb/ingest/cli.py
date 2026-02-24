@@ -88,7 +88,9 @@ def init(
     console.print(f"LanceDB root initialized at [bold cyan]{lancedb.root}[/bold cyan]")
 
     if created:
-        console.print("Initialization complete. You can now run [bold]kb add-repo[/bold] and [bold]kb index[/bold].")
+        console.print(
+            "Initialization complete. You can now run [bold]dolphin add-repo[/bold] and [bold]dolphin index[/bold]."
+        )
     else:
         console.print("[green]Initialization verified. Nothing else to do.[/green]")
 
@@ -115,7 +117,7 @@ def add_repo(
 
     typer.echo(f"Repository registered: name='{name}', path='{repo_path}'")
 
-    # Note: We rely on 'kb index' to handle any model mismatch if this was an update
+    # Note: We rely on 'dolphin index' to handle any model mismatch if this was an update
     # to an existing repo that had a different model.
 
     # Only prompt for indexing in interactive mode (skip in tests or if --no-index)
@@ -677,9 +679,9 @@ def search(
     """Search indexed code semantically (local backend).
 
     Examples:
-        dolphin kb search "authentication logic" --repo myapp
-        dolphin kb search "database migration" --path src/db --top-k 5
-        dolphin kb search "error handling" --show-content
+        dolphin search "authentication logic" --repo myapp
+        dolphin search "database migration" --path src/db --top-k 5
+        dolphin search "error handling" --show-content
     """
     from ..api.app import SearchRequest
     from ..api.search_backend import create_search_backend
@@ -1020,7 +1022,7 @@ def reset_all(
             typer.echo(f"  - {error}", err=True)
 
     typer.echo(f"\nConfiguration preserved at: {config.resolved_store_root()}")
-    typer.echo("You can now run 'dolphin kb add-repo' to register new repositories.")
+    typer.echo("You can now run 'dolphin add-repo' to register new repositories.")
 
 
 def main() -> None:
