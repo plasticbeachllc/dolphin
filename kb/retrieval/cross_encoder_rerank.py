@@ -11,7 +11,7 @@ _log = logging.getLogger(__name__)
 
 # Try to import sentence_transformers at module level for easier mocking
 try:
-    from sentence_transformers import CrossEncoder as _CrossEncoder
+    from sentence_transformers import CrossEncoder as _CrossEncoder  # ty: ignore[unresolved-import]
 
     _SENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
