@@ -3,8 +3,8 @@
   "name": "dolphin",
   "description": "Dolphin semantic code search plugin for Claude Code",
   "owner": {
-    "name": "Plastic Beach",
-    "email": "support@plasticbeach.co"
+    "name": "Plastic Beach, LLC",
+    "email": "info@plasticbeach.email"
   },
   "plugins": [
     {
@@ -12,8 +12,8 @@
       "description": "Semantic code search across indexed repositories using hybrid vector + keyword retrieval",
       "version": "0.1.0",
       "author": {
-        "name": "Plastic Beach",
-        "email": "support@plasticbeach.co"
+        "name": "Plastic Beach, LLC",
+        "email": "info@plasticbeach.email"
       },
       "source": "./claude-plugin",
       "category": "development",
