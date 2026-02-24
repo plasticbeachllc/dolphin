@@ -124,11 +124,7 @@ class DynamicWorkerPool:
             f"using={self._optimal_workers} workers"
         )
 
-<<<<<<< HEAD
-        # Create executor; workers ignore SIGINT so the main process handles Ctrl-C cleanly
-=======
         # Create executor — workers ignore SIGINT so only the main process handles Ctrl-C
->>>>>>> 10fd51f (fix: suppress SIGINT in worker processes to prevent traceback spam on Ctrl-C)
         self._executor = ProcessPoolExecutor(max_workers=self._optimal_workers, initializer=_worker_init)
 
     def _calculate_optimal_workers(self) -> int:
