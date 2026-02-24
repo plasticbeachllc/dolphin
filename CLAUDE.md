@@ -80,7 +80,7 @@ just check-python                         # ruff + ty
 
 - **Line length**: 120 (ruff)
 - **Imports**: sorted by ruff/isort; `kb` is first-party
-- **Entry points**: `dolphin` (main CLI), `kb` (ingest CLI), `kb-api` (API server)
+- **Entry points**: `dolphin` (main CLI), `kb-api` (API server)
 - **Config**: loaded from `~/.dolphin/config.toml` or `./.dolphin/config.toml`
 - **API key**: auto-generated at `~/.dolphin/kb_api_key`; override with `DOLPHIN_API_KEY` env var
 - **Structured logging**: use `StructuredLogger` from `kb.observability`
@@ -110,7 +110,7 @@ For changes touching MCP bridge or shared: `cd mcp-bridge && bun test && cd ../s
 ## Operational commands
 
 ```bash
-uv run dolphin kb status                          # show indexed repos
-uv run dolphin kb index <repo-name> --full --force # full reindex
-cd mcp-bridge && bun run src/index.ts              # run MCP bridge directly
+uv run dolphin status                          # show indexed repos
+uv run dolphin index <repo-name> --full --force # full reindex
+cd mcp-bridge && bun run src/index.ts          # run MCP bridge directly
 ```
