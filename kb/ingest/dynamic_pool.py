@@ -10,18 +10,13 @@ import logging
 import math
 import multiprocessing as mp
 import os
-import signal
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from typing import ClassVar
 
+from kb.ingest._helpers import worker_ignore_sigint
+
 logger = logging.getLogger(__name__)
-
-
-def _worker_init() -> None:
-    """Ignore SIGINT in worker processes so only the main process handles Ctrl-C."""
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-
 
 # Try to import psutil for advanced resource monitoring
 try:
@@ -125,7 +120,7 @@ class DynamicWorkerPool:
         )
 
         # Create executor — workers ignore SIGINT so only the main process handles Ctrl-C
-        self._executor = ProcessPoolExecutor(max_workers=self._optimal_workers, initializer=_worker_init)
+        self._executor = ProcessPoolExecutor(max_workers=self._optimal_workers, initializer=worker_ignore_sigint)
 
     def _calculate_optimal_workers(self) -> int:
         """Calculate optimal number of workers based on current system state."""

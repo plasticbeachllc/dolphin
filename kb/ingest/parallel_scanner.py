@@ -8,7 +8,6 @@ sequential scanning.
 from __future__ import annotations
 
 import multiprocessing as mp
-import signal
 from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
@@ -16,13 +15,9 @@ from pathlib import Path
 
 from pathspec import PathSpec
 
+from ._helpers import worker_ignore_sigint
 from .lang import classify_language
 from .scanner import FileCandidate, ScannerError, _is_binary
-
-
-def _worker_init() -> None:
-    """Ignore SIGINT in worker processes so only the main process handles Ctrl-C."""
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
 def _process_file_batch(
@@ -165,7 +160,7 @@ def scan_repo_parallel(
             for batch_candidates in pool.map(process_batch, batches):
                 all_candidates.extend(batch_candidates)
         else:
-            with mp.Pool(processes=num_workers, initializer=_worker_init) as mp_pool:
+            with mp.Pool(processes=num_workers, initializer=worker_ignore_sigint) as mp_pool:
                 # Process batches and collect results
                 for batch_candidates in mp_pool.imap_unordered(process_batch, batches):
                     all_candidates.extend(batch_candidates)
