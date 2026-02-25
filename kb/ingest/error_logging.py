@@ -77,7 +77,8 @@ class ErrorLogger:
         if not self._initialized:
             self._setup_logging()
         self._had_errors = True
-        assert self.logger is not None
+        if self.logger is None:
+            raise RuntimeError("logger not initialized")
         self.logger.error(message, exc_info=exc_info)
 
     def log_file_error(self, file_path: str, error: Exception) -> None:

@@ -98,6 +98,7 @@ class SQLiteConnectionPool:
         conn.execute("PRAGMA temp_store=MEMORY")
         conn.execute("PRAGMA mmap_size=30000000000")  # 30GB
         conn.execute("PRAGMA page_size=4096")
+        conn.execute("PRAGMA cache_size=-65536")  # 256 MB
 
         # Set row factory for dict-like access
         conn.row_factory = sqlite3.Row

@@ -38,8 +38,6 @@ describe("rest/client", () => {
 
       let capturedRequest: Request | undefined;
       const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-        console.log("DEBUG: Mock fetch called");
-        console.log("DEBUG: Mock Returning:", JSON.stringify(mockResponse));
         capturedRequest = new Request(input, init);
         return new Response(JSON.stringify(mockResponse), {
           status: 200,

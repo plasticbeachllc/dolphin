@@ -241,7 +241,7 @@ class ParallelHybridSearch:
         # Run in thread pool to avoid blocking
         if self.vector_search_fn is None:
             return []
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         results = await loop.run_in_executor(
             None,
             lambda: (self.vector_search_fn(query_embedding, top_k, **kwargs) if self.vector_search_fn else []),
@@ -285,7 +285,7 @@ class ParallelHybridSearch:
         bm25_fn = self.bm25_search_fn
 
         # Run in thread pool
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         results = await loop.run_in_executor(
             None,
             lambda: bm25_fn(query, top_k, **kwargs),
