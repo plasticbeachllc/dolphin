@@ -21,8 +21,8 @@ from ..app import (
     RepoStatsResponse,
     _invalidate_search_cache,
     _process_full_reindex_task,
-    _process_index_task,
     list_repos,
+    process_index_task,
 )
 from ..task_queue import get_task_queue
 from ..utils import normalize_repo_registration_path
@@ -288,7 +288,7 @@ async def reindex_repo(repo_name: str, request: ReindexRequest, background_tasks
             task = task_queue.create_task(repo_name, changed_files)
 
             # Queue background processing
-            background_tasks.add_task(_process_index_task, task.task_id, repo_name, changed_files)
+            background_tasks.add_task(process_index_task, task.task_id, repo_name, changed_files)
 
             return IndexResponse(
                 task_id=task.task_id,

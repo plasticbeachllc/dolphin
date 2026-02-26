@@ -841,22 +841,24 @@ class SQLiteMetadataStore:
         """Return repo records for the given names. Missing names are omitted."""
         if not names:
             return {}
-        # Safety: placeholders count is derived from len(names), not from user input;
-        # actual values are passed as query parameters, so no SQL injection risk.
-        placeholders = ",".join("?" * len(names))
+        # Chunk into batches of 500 to stay within SQLite's SQLITE_LIMIT_VARIABLE_NUMBER (default 999).
+        result: dict[str, RepoRecord] = {}
+        batch_size = 500
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute(
-                f"SELECT id, name, root_path, default_embed_model FROM repos WHERE name IN ({placeholders})",
-                names,
-            )
-            return {
-                str(row[1]): {
-                    "id": int(row[0]),
-                    "root_path": str(row[2]),
-                    "default_embed_model": str(row[3]),
-                }
-                for row in cur.fetchall()
-            }
+            for i in range(0, len(names), batch_size):
+                batch = names[i : i + batch_size]
+                placeholders = ",".join("?" * len(batch))
+                cur.execute(
+                    f"SELECT id, name, root_path, default_embed_model FROM repos WHERE name IN ({placeholders})",
+                    batch,
+                )
+                for row in cur.fetchall():
+                    result[str(row[1])] = {
+                        "id": int(row[0]),
+                        "root_path": str(row[2]),
+                        "default_embed_model": str(row[3]),
+                    }
+        return result
 
     def begin_session(self, repo_id: int, commit_sha: str, branch: str, embed_model: str) -> int:
         """Create a new ingestion session and return its id."""

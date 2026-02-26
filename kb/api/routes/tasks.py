@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
-from ..app import IndexRequest, IndexResponse, IndexStatusResponse, _process_index_task, get_lance_store, get_sql_store
+from ..app import IndexRequest, IndexResponse, IndexStatusResponse, get_lance_store, get_sql_store, process_index_task
 from ..task_queue import get_task_queue
 
 router = APIRouter()
@@ -38,7 +38,7 @@ async def index_files(request: IndexRequest, background_tasks: BackgroundTasks) 
     task = task_queue.create_task(request.repo, request.files)
 
     # Queue background processing
-    background_tasks.add_task(_process_index_task, task.task_id, request.repo, request.files)
+    background_tasks.add_task(process_index_task, task.task_id, request.repo, request.files)
 
     return IndexResponse(
         task_id=task.task_id,

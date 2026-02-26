@@ -928,7 +928,7 @@ class DriftDetectionResponse(BaseModel):
     total: int
 
 
-async def _process_index_task(task_id: str, repo_name: str, files: list[str]) -> None:
+async def process_index_task(task_id: str, repo_name: str, files: list[str]) -> None:
     """Background task to process file indexing."""
     import asyncio
 
@@ -1326,7 +1326,7 @@ async def _process_full_reindex_task(
 
         logger.info(f"[Full Reindex Task] About to process {len(files)} files for {repo_name}")
         # Now process all files using standard indexing
-        await _process_index_task(task_id, repo_name, files)
+        await process_index_task(task_id, repo_name, files)
         logger.info("[Full Reindex Task] Completed processing")
 
     except Exception as e:
