@@ -73,8 +73,6 @@ class RepoWatcher:
         """Start watching the repository for changes."""
         self._stop_event = asyncio.Event()
         self._stop_requested.clear()
-        if self._stop_event is None:
-            raise RuntimeError("stop_event not set")
         logger.info("Starting watcher for %s at %s", self.repo_name, self.root)
 
         try:

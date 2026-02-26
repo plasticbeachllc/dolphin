@@ -142,6 +142,16 @@ _FILE_LINES_CACHE: OrderedDict[tuple[str, float], list[str]] = OrderedDict()
 _FILE_LINES_CACHE_MAX = 256
 
 
+def get_sql_store():
+    """Return the current SQL metadata store (or None if not yet initialised)."""
+    return _sql_store
+
+
+def get_lance_store():
+    """Return the current LanceDB vector store (or None if not yet initialised)."""
+    return _lance_store
+
+
 def set_stores(sql_store, lance_store):
     """Set the SQL and Lance stores for API endpoints."""
     global _sql_store, _lance_store
