@@ -101,7 +101,7 @@ class RepoWatcher:
                 await asyncio.get_running_loop().run_in_executor(self._executor, ctx.run, _do_index)
                 logger.info("Startup sync complete for %s", self.repo_name)
             except Exception as e:
-                logger.error(f"Startup sync failed for {self.repo_name}: {e}", exc_info=True)
+                logger.error("Startup sync failed for %s: %s", self.repo_name, e, exc_info=True)
 
             if self._should_stop():
                 return

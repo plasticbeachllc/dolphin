@@ -450,6 +450,8 @@ class TestResetStats:
         stats.vectors_deleted += 20
         assert stats.repos_removed == 1
         assert stats.files_deleted == 10
+        assert stats.content_deleted == 5
+        assert stats.vectors_deleted == 20
 
     def test_error_collection(self):
         stats = ResetStats()

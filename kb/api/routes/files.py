@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from ..app import fetch_chunk, fetch_file_slice
 
@@ -23,4 +23,6 @@ async def fetch_file_slice_v1(
     end: int = Query(..., description="End line (1-indexed, inclusive)"),
 ) -> dict[str, object]:
     """Fetch a slice of a file by line range (v1)."""
+    if start < 1 or end < start:
+        raise HTTPException(status_code=422, detail="Invalid line range")
     return await fetch_file_slice(repo=repo, path=path, start=start, end=end)
