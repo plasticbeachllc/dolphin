@@ -28,10 +28,6 @@ describe("security and connectivity", () => {
 
     // If the request succeeds, it means it's using the localhost mock server
     // In a real scenario, we would test that non-loopback URLs are rejected
-    if (res.isError) {
-      console.error("search handler error:", JSON.stringify(res.content, null, 2));
-      console.error("search handler _meta:", JSON.stringify(res._meta, null, 2));
-    }
     expect(res.isError).toBe(false);
 
     // The mock server is running on localhost:7777, so this validates
