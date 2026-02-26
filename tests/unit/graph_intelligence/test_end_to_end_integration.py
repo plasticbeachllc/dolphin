@@ -416,8 +416,8 @@ class TestPerformance:
         )
         creation_time = time.time() - start
 
-        # Should be very fast (< 50ms, relaxed from 10ms for CI runner variance)
-        assert creation_time < 0.05
+        # Should be very fast (< 10ms)
+        assert creation_time < 0.01
 
         # Graph not loaded yet
         assert graph_manager._graph is None

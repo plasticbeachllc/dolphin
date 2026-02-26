@@ -12,8 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from kb.api.app import app, reset_pipeline, reset_stores, set_pipeline, set_stores
-from kb.config import KBConfig
-from kb.ingest.pipeline import IngestionPipeline
+from kb.pipeline import KBPipeline
 from kb.store.lancedb_vector import LanceDBVectorStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
 
@@ -155,7 +154,7 @@ class TestAsyncIndexingFlow:
         set_stores(sql_store, lance_store)
 
         # Set up pipeline
-        pipeline = IngestionPipeline(config=KBConfig(), lancedb=lance_store, metadata=sql_store)
+        pipeline = KBPipeline(sql_store, lance_store)
         set_pipeline(pipeline)
 
         # Create workspace and register
@@ -236,7 +235,7 @@ def goodbye():
         set_stores(sql_store, lance_store)
 
         # Set up pipeline
-        pipeline = IngestionPipeline(config=KBConfig(), lancedb=lance_store, metadata=sql_store)
+        pipeline = KBPipeline(sql_store, lance_store)
         set_pipeline(pipeline)
 
         # Create workspace and register
@@ -301,7 +300,7 @@ def goodbye():
         set_stores(sql_store, lance_store)
 
         # Set up pipeline
-        pipeline = IngestionPipeline(config=KBConfig(), lancedb=lance_store, metadata=sql_store)
+        pipeline = KBPipeline(sql_store, lance_store)
         set_pipeline(pipeline)
 
         # Create workspace
@@ -378,7 +377,7 @@ def function_{i}():
         set_stores(sql_store, lance_store)
 
         # Set up pipeline
-        pipeline = IngestionPipeline(config=KBConfig(), lancedb=lance_store, metadata=sql_store)
+        pipeline = KBPipeline(sql_store, lance_store)
         set_pipeline(pipeline)
 
         # Create workspace
@@ -464,7 +463,7 @@ class TestTaskStatusTracking:
         set_stores(sql_store, lance_store)
 
         # Set up pipeline
-        pipeline = IngestionPipeline(config=KBConfig(), lancedb=lance_store, metadata=sql_store)
+        pipeline = KBPipeline(sql_store, lance_store)
         set_pipeline(pipeline)
 
         # Create workspace
@@ -518,7 +517,7 @@ class TestTaskStatusTracking:
         set_stores(sql_store, lance_store)
 
         # Set up pipeline
-        pipeline = IngestionPipeline(config=KBConfig(), lancedb=lance_store, metadata=sql_store)
+        pipeline = KBPipeline(sql_store, lance_store)
         set_pipeline(pipeline)
 
         # Create two workspaces
@@ -582,7 +581,7 @@ class TestErrorHandling:
         set_stores(sql_store, lance_store)
 
         # Set up pipeline
-        pipeline = IngestionPipeline(config=KBConfig(), lancedb=lance_store, metadata=sql_store)
+        pipeline = KBPipeline(sql_store, lance_store)
         set_pipeline(pipeline)
 
         # Create workspace
@@ -657,7 +656,7 @@ class TestEndToEndWorkflow:
         set_stores(sql_store, lance_store)
 
         # Set up pipeline
-        pipeline = IngestionPipeline(config=KBConfig(), lancedb=lance_store, metadata=sql_store)
+        pipeline = KBPipeline(sql_store, lance_store)
         set_pipeline(pipeline)
 
         # Create workspace

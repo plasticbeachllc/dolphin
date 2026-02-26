@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from kb.security.path_validator import PathValidationError, PathValidator
+from .path_validator import PathValidationError, PathValidator
 
 
 @pytest.fixture

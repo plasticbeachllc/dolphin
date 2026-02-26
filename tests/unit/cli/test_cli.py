@@ -8,7 +8,7 @@ import tomli_w
 from typer.testing import CliRunner
 
 from kb.config import KBConfig
-from kb.ingest.cli import ResetStats, _build_pipeline, _read_config_template, app
+from kb.ingest.cli import _build_pipeline, _read_config_template, app
 
 runner = CliRunner()
 
@@ -431,34 +431,3 @@ class TestConfigTemplate:
         assert "[api]" in template
         assert "[graph]" in template
         assert "[mcp]" in template
-
-
-class TestResetStats:
-    """Test the ResetStats dataclass for repo reset accumulation."""
-
-    def test_defaults(self):
-        stats = ResetStats()
-        assert stats.repos_removed == 0
-        assert stats.files_deleted == 0
-        assert stats.errors == []
-
-    def test_accumulation(self):
-        stats = ResetStats()
-        stats.repos_removed += 1
-        stats.files_deleted += 10
-        stats.content_deleted += 5
-        stats.vectors_deleted += 20
-        assert stats.repos_removed == 1
-        assert stats.files_deleted == 10
-
-    def test_error_collection(self):
-        stats = ResetStats()
-        stats.errors.append("Failed to remove repo-a")
-        stats.errors.extend(["warn1", "warn2"])
-        assert len(stats.errors) == 3
-
-    def test_independent_instances(self):
-        a = ResetStats()
-        b = ResetStats()
-        a.errors.append("only-a")
-        assert b.errors == []
