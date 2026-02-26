@@ -23,11 +23,17 @@ def normalize_repo_registration_path(path_str: str) -> Path:
         raise HTTPException(status_code=400, detail="Path contains null byte")
 
     raw = path_str.strip()
-    candidate = Path(raw).expanduser()
 
-    # Reject obvious traversal segments up front.
-    if any(part == ".." for part in candidate.parts):
+    # Reject traversal segments before any path expansion.
+    if ".." in Path(raw).parts:
         raise HTTPException(status_code=400, detail="Path traversal segments are not allowed")
+
+    # Expand ~ to home directory using a string-level replacement so that
+    # the filesystem operation (Path.home()) is independent of user input.
+    if raw.startswith("~"):
+        raw = str(Path.home()) + raw[1:]
+
+    candidate = Path(raw)
 
     # Normalize to an absolute path string without touching the filesystem.
     normalized = candidate.absolute() if candidate.is_absolute() else (Path.cwd() / candidate).absolute()
