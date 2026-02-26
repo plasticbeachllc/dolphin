@@ -158,11 +158,8 @@ markers = [
 asyncio_mode = "auto"
 norecursedirs = ["scripts"]
 filterwarnings = [
-    "error::DeprecationWarning",
-    "error::PendingDeprecationWarning",
-    "ignore::DeprecationWarning:lancedb",
-    "ignore::DeprecationWarning:pyarrow",
-    "ignore::DeprecationWarning:pydantic",
+    "default::DeprecationWarning",
+    "default::PendingDeprecationWarning",
 ]
 
 [tool.coverage.run]

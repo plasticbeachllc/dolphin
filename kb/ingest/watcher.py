@@ -84,7 +84,7 @@ class RepoWatcher:
                 if aborted:
                     logger.warning("Aborted %d stale session(s) for %s", aborted, self.repo_name)
             except Exception as e:
-                logger.warning(f"Failed to abort stale sessions for {self.repo_name}: {e}", exc_info=True)
+                logger.warning("Failed to abort stale sessions for %s: %s", self.repo_name, e, exc_info=True)
 
             if self._should_stop():
                 return

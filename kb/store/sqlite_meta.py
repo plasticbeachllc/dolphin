@@ -841,6 +841,8 @@ class SQLiteMetadataStore:
         """Return repo records for the given names. Missing names are omitted."""
         if not names:
             return {}
+        # Safety: placeholders count is derived from len(names), not from user input;
+        # actual values are passed as query parameters, so no SQL injection risk.
         placeholders = ",".join("?" * len(names))
         with self._connect() as conn, closing(conn.cursor()) as cur:
             cur.execute(
