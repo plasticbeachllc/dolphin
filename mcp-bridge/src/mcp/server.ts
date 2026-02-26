@@ -4,20 +4,46 @@ import { tools } from "./tools/index.js";
 import { initLogger, logInfo, logWarn } from "../util/logger.js";
 import { CONFIG, getConfigSummary, validateConfig } from "../util/config.js";
 
-export async function createServer(): Promise<void> {
-  // Initialize file logger (no stdout pollution)
-  await initLogger();
+/** Dependency overrides for testing. All fields optional; defaults to real modules. */
+export interface CreateServerDeps {
+  config?: { SERVER_NAME: string; SERVER_VERSION: string; MCP_PROTOCOL_VERSION: string };
+  getConfigSummary?: () => unknown;
+  validateConfig?: () => string[];
+  initLogger?: () => Promise<void>;
+  logInfo?: (...args: unknown[]) => unknown;
+  logWarn?: (...args: unknown[]) => unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  McpServerClass?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  TransportClass?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  toolList?: any[];
+}
 
-  const SERVER_NAME = CONFIG.SERVER_NAME;
-  const SERVER_VERSION = CONFIG.SERVER_VERSION;
-  const MCP_PROTOCOL_VERSION = CONFIG.MCP_PROTOCOL_VERSION;
-  const configWarnings = validateConfig();
-  await logInfo("config", "MCP config loaded", { config: getConfigSummary() });
+export async function createServer(deps: CreateServerDeps = {}): Promise<void> {
+  const cfg = deps.config ?? CONFIG;
+  const cfgSummary = deps.getConfigSummary ?? getConfigSummary;
+  const cfgValidate = deps.validateConfig ?? validateConfig;
+  const _initLogger = deps.initLogger ?? initLogger;
+  const _logInfo = deps.logInfo ?? logInfo;
+  const _logWarn = deps.logWarn ?? logWarn;
+  const Server = deps.McpServerClass ?? McpServer;
+  const Transport = deps.TransportClass ?? StdioServerTransport;
+  const _tools = deps.toolList ?? tools;
+
+  // Initialize file logger (no stdout pollution)
+  await _initLogger();
+
+  const SERVER_NAME = cfg.SERVER_NAME;
+  const SERVER_VERSION = cfg.SERVER_VERSION;
+  const MCP_PROTOCOL_VERSION = cfg.MCP_PROTOCOL_VERSION;
+  const configWarnings = cfgValidate();
+  await _logInfo("config", "MCP config loaded", { config: cfgSummary() });
   if (configWarnings.length > 0) {
-    await logWarn("config", "MCP config warnings", { warnings: configWarnings });
+    await _logWarn("config", "MCP config warnings", { warnings: configWarnings });
   }
 
-  const server = new McpServer(
+  const server = new Server(
     {
       name: SERVER_NAME,
       version: SERVER_VERSION,
@@ -31,7 +57,7 @@ export async function createServer(): Promise<void> {
   );
 
   // Register tools
-  for (const tool of tools) {
+  for (const tool of _tools) {
     // MCP SDK types can be extremely deep here; keep runtime behavior while avoiding TS instantiation blowups.
     const registerTool = server.registerTool.bind(server) as unknown as (
       name: string,
@@ -53,8 +79,8 @@ export async function createServer(): Promise<void> {
   }
 
   // Start transport
-  const transport = new StdioServerTransport();
+  const transport = new Transport();
   await server.connect(transport);
 
-  logInfo("server_start", "MCP server started", { protocolVersion: MCP_PROTOCOL_VERSION });
+  _logInfo("server_start", "MCP server started", { protocolVersion: MCP_PROTOCOL_VERSION });
 }
