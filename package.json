@@ -28,7 +28,5 @@
     "hono": "^4.12.2",
     "qs": "^6.15.0"
   },
-  "dependencies": {
-    "hono": "^4.12.2"
-  }
+  "dependencies": {}
 }

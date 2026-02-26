@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from ..app import IndexRequest, IndexResponse, IndexStatusResponse, get_lance_store, get_sql_store, process_index_task
-from ..task_queue import get_task_queue
+from ..task_queue import TaskStatus, get_task_queue
 
 router = APIRouter()
 
@@ -37,8 +38,13 @@ async def index_files(request: IndexRequest, background_tasks: BackgroundTasks) 
     task_queue = get_task_queue()
     task = task_queue.create_task(request.repo, request.files)
 
-    # Queue background processing
-    background_tasks.add_task(process_index_task, task.task_id, request.repo, request.files)
+    # Queue background processing — transition to FAILED if enqueue itself errors
+    try:
+        background_tasks.add_task(process_index_task, task.task_id, request.repo, request.files)
+    except Exception:
+        _log.error("Failed to enqueue index task %s", task.task_id, exc_info=True)
+        await task_queue.update_task(task.task_id, status=TaskStatus.FAILED, error="Failed to enqueue task")
+        raise HTTPException(status_code=500, detail="Failed to enqueue indexing task")
 
     return IndexResponse(
         task_id=task.task_id,
@@ -104,8 +110,8 @@ async def admin_reload_backend() -> dict[str, str]:
 
         reload_search_backend()
         return {"status": "ok", "message": "Search backend reloaded"}
-    except Exception:
-        logging.error("Failed to reload backend", exc_info=True)
+    except (ImportError, RuntimeError, OSError) as exc:
+        logging.error("Failed to reload backend: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Reload failed")
 
 
@@ -127,6 +133,6 @@ async def rebuild_fts5() -> dict[str, str]:
             "status": "success",
             "message": "FTS5 table rebuilt successfully. Please trigger a re-index to populate it.",
         }
-    except Exception:
-        logging.error("Failed to rebuild FTS5 table", exc_info=True)
+    except (RuntimeError, OSError, sqlite3.Error) as exc:
+        logging.error("Failed to rebuild FTS5 table: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to rebuild FTS5 table")
