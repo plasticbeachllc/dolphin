@@ -182,7 +182,12 @@ _bun-test PROJECT TYPE:
 	if [ "{{PROJECT}}" = "mcp-bridge" ] && [ -n "$dir" ]; then
 		dir="src/tests/${dir#tests/}"
 	fi
-	cd "{{PROJECT}}" && bun test $dir --bail
+	# Integration tests use --serial to prevent mock.module() leaks between files
+	if [ "{{TYPE}}" = "integration" ]; then
+		cd "{{PROJECT}}" && bun test --serial $dir --bail
+	else
+		cd "{{PROJECT}}" && bun test $dir --bail
+	fi
 
 # ==============================================================================
 # Testing - Per-Project Commands (aliases to internal helpers)
