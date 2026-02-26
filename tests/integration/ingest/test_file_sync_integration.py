@@ -24,7 +24,6 @@ from kb.api.app import app, reset_pipeline, reset_stores, set_pipeline, set_stor
 from kb.config import KBConfig
 from kb.ingest.error_logging import ErrorLogger
 from kb.ingest.pipeline import IngestionPipeline
-from kb.pipeline import KBPipeline
 from kb.store import LanceDBStore
 from kb.store.lancedb_vector import LanceDBVectorStore
 from kb.store.sqlite_meta import SQLiteMetadataStore
@@ -57,7 +56,7 @@ class TestSnapshotTracking:
         set_stores(sql_store, lance_store)
 
         # Set up pipeline
-        pipeline = KBPipeline(sql_store, lance_store)
+        pipeline = IngestionPipeline(config=KBConfig(), lancedb=lance_store, metadata=sql_store)
         set_pipeline(pipeline)
 
         # Create workspace and register
@@ -138,7 +137,7 @@ class TestSnapshotTracking:
         set_stores(sql_store, lance_store)
 
         # Set up pipeline
-        pipeline = KBPipeline(sql_store, lance_store)
+        pipeline = IngestionPipeline(config=KBConfig(), lancedb=lance_store, metadata=sql_store)
         set_pipeline(pipeline)
 
         # Create workspace
@@ -222,7 +221,7 @@ class TestSnapshotTracking:
         set_stores(sql_store, lance_store)
 
         # Set up pipeline
-        pipeline = KBPipeline(sql_store, lance_store)
+        pipeline = IngestionPipeline(config=KBConfig(), lancedb=lance_store, metadata=sql_store)
         set_pipeline(pipeline)
 
         # Create workspace
@@ -287,7 +286,7 @@ class TestPostIndexValidation:
         set_stores(sql_store, lance_store)
 
         # Set up pipeline
-        pipeline = KBPipeline(sql_store, lance_store)
+        pipeline = IngestionPipeline(config=KBConfig(), lancedb=lance_store, metadata=sql_store)
         set_pipeline(pipeline)
 
         # Create workspace
@@ -352,7 +351,7 @@ class TestDriftDetection:
         set_stores(sql_store, lance_store)
 
         # Set up pipeline
-        pipeline = KBPipeline(sql_store, lance_store)
+        pipeline = IngestionPipeline(config=KBConfig(), lancedb=lance_store, metadata=sql_store)
         set_pipeline(pipeline)
 
         # Create workspace
@@ -417,7 +416,7 @@ class TestDriftDetection:
         set_stores(sql_store, lance_store)
 
         # Set up pipeline
-        pipeline = KBPipeline(sql_store, lance_store)
+        pipeline = IngestionPipeline(config=KBConfig(), lancedb=lance_store, metadata=sql_store)
         set_pipeline(pipeline)
 
         # Create workspace
@@ -474,7 +473,7 @@ class TestDriftDetection:
         set_stores(sql_store, lance_store)
 
         # Set up pipeline
-        pipeline = KBPipeline(sql_store, lance_store)
+        pipeline = IngestionPipeline(config=KBConfig(), lancedb=lance_store, metadata=sql_store)
         set_pipeline(pipeline)
 
         # Create workspace
@@ -532,7 +531,7 @@ class TestAutomaticChangeProcessing:
         set_stores(sql_store, lance_store)
 
         # Set up pipeline
-        pipeline = KBPipeline(sql_store, lance_store)
+        pipeline = IngestionPipeline(config=KBConfig(), lancedb=lance_store, metadata=sql_store)
         set_pipeline(pipeline)
 
         # Create workspace
@@ -671,7 +670,7 @@ class TestPendingChangesWorkflow:
         set_stores(sql_store, lance_store)
 
         # Set up pipeline
-        pipeline = KBPipeline(sql_store, lance_store)
+        pipeline = IngestionPipeline(config=KBConfig(), lancedb=lance_store, metadata=sql_store)
         set_pipeline(pipeline)
 
         # Create workspace

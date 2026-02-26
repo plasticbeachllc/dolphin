@@ -109,7 +109,6 @@ export async function fetchSnippetsInParallel(
           }
 
           try {
-            // DEBUG: Log exact parameters being sent to /file endpoint
             await logDebug("snippet_fetch_debug", "Attempting to fetch snippet", {
               repo: request.repo.trim(),
               repo_raw: request.repo,
@@ -143,7 +142,6 @@ export async function fetchSnippetsInParallel(
               chunkEndLine: request.endLine,
             };
 
-            // DEBUG: Log successful fetch
             await logDebug("snippet_fetch_debug", "Successfully fetched snippet", {
               repo: request.repo.trim(),
               path: request.path,
@@ -161,7 +159,6 @@ export async function fetchSnippetsInParallel(
         } catch (error) {
           lastError = error as Error;
 
-          // DEBUG: Log fetch errors
           const err = error instanceof Error ? error : new Error(String(error));
           await logDebug("snippet_fetch_debug", "Failed to fetch snippet", {
             repo: request.repo.trim(),

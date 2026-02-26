@@ -63,6 +63,29 @@ def test_list_all_repos(meta_store, tmp_path):
     assert all("id" in r and "root_path" in r for r in repos)
 
 
+def test_get_repos_by_names(meta_store, tmp_path):
+    """Test batch repo lookup by names."""
+    for i in range(3):
+        repo_path = tmp_path / f"repo{i}"
+        repo_path.mkdir()
+        meta_store.record_repo(f"repo{i}", repo_path)
+
+    # Look up existing repos
+    found = meta_store.get_repos_by_names(["repo0", "repo2"])
+    assert len(found) == 2
+    assert "repo0" in found
+    assert "repo2" in found
+    assert "id" in found["repo0"]
+
+    # Missing names are omitted
+    found = meta_store.get_repos_by_names(["repo0", "nonexistent"])
+    assert len(found) == 1
+    assert "repo0" in found
+
+    # Empty list returns empty dict
+    assert meta_store.get_repos_by_names([]) == {}
+
+
 def test_upsert_file(meta_store, tmp_path):
     """Test upserting a file."""
     repo_path = tmp_path / "test-repo"
