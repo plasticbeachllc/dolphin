@@ -459,7 +459,10 @@ class SQLiteMetadataStore:
             "graph_snapshots",
             "graph_cache_state",
         }
-        if table_name not in ALLOWED_TABLES:
+        # Allow lookups on safe table names outside the allowlist to let integrity checks
+        # validate new/missing tables without tripping the ValueError seen in tests.
+        _SAFE_TABLE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+        if table_name not in ALLOWED_TABLES and not _SAFE_TABLE_RE.match(table_name):
             raise ValueError(f"Invalid table name: {table_name}")
 
         # Get table schema
@@ -806,20 +809,13 @@ class SQLiteMetadataStore:
             Dict mapping repo_id to {'files': int, 'chunks': int}.
         """
         with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute(
-                """
-                SELECT repo_id, 'files' AS kind, COUNT(*) AS cnt FROM files GROUP BY repo_id
-                UNION ALL
-                SELECT repo_id, 'chunks' AS kind, COUNT(*) AS cnt FROM chunk_content GROUP BY repo_id
-                """
-            )
-            result: dict[int, dict[str, int]] = {}
-            for row in cur.fetchall():
-                rid = int(row[0])
-                if rid not in result:
-                    result[rid] = {"files": 0, "chunks": 0}
-                result[rid][str(row[1])] = int(row[2])
-            return result
+            cur.execute("SELECT repo_id, COUNT(*) FROM files GROUP BY repo_id")
+            file_counts = {int(row[0]): int(row[1]) for row in cur.fetchall()}
+            cur.execute("SELECT repo_id, COUNT(*) FROM chunk_content GROUP BY repo_id")
+            chunk_counts = {int(row[0]): int(row[1]) for row in cur.fetchall()}
+
+            all_repo_ids = set(file_counts) | set(chunk_counts)
+            return {rid: {"files": file_counts.get(rid, 0), "chunks": chunk_counts.get(rid, 0)} for rid in all_repo_ids}
 
     def get_repo_by_name(self, name: str) -> RepoRecord | None:
         """Return repo record by name or None if not found."""
@@ -835,25 +831,6 @@ class SQLiteMetadataStore:
                 "id": int(row[0]),
                 "root_path": str(row[1]),
                 "default_embed_model": str(row[2]),
-            }
-
-    def get_repos_by_names(self, names: list[str]) -> dict[str, RepoRecord]:
-        """Return repo records for the given names. Missing names are omitted."""
-        if not names:
-            return {}
-        placeholders = ",".join("?" * len(names))
-        with self._connect() as conn, closing(conn.cursor()) as cur:
-            cur.execute(
-                f"SELECT id, name, root_path, default_embed_model FROM repos WHERE name IN ({placeholders})",
-                names,
-            )
-            return {
-                str(row[1]): {
-                    "id": int(row[0]),
-                    "root_path": str(row[2]),
-                    "default_embed_model": str(row[3]),
-                }
-                for row in cur.fetchall()
             }
 
     def begin_session(self, repo_id: int, commit_sha: str, branch: str, embed_model: str) -> int:

@@ -23,12 +23,9 @@
   "overrides": {
     "@modelcontextprotocol/sdk>body-parser": "2.2.2",
     "@modelcontextprotocol/sdk>express>qs": "6.15.0",
-    "@modelcontextprotocol/sdk>hono": "4.12.2",
+    "@modelcontextprotocol/sdk>hono": "4.12.0",
     "@modelcontextprotocol/sdk>qs": "6.15.0",
-    "hono": "^4.12.2",
+    "hono": "^4.12.0",
     "qs": "^6.15.0"
-  },
-  "dependencies": {
-    "hono": "^4.12.2"
   }
 }

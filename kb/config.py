@@ -125,7 +125,6 @@ class ApiConfig:
     include_graph_context: bool = True
     context_lines_before: int = 0
     context_lines_after: int = 0
-    cors_origins: list[str] = field(default_factory=lambda: ["http://localhost:3000"])
 
 
 @dataclass

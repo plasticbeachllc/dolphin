@@ -2,7 +2,6 @@
 import asyncio
 import logging
 import os
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
@@ -19,20 +18,6 @@ from ..store import LanceDBStore, SQLiteMetadataStore
 from .pipeline import IngestionPipeline
 
 _log = logging.getLogger(__name__)
-
-
-@dataclass
-class ResetStats:
-    """Accumulator for repo-reset statistics."""
-
-    repos_removed: int = 0
-    files_deleted: int = 0
-    content_deleted: int = 0
-    locations_deleted: int = 0
-    sessions_deleted: int = 0
-    vectors_deleted: int = 0
-    errors: list[str] = field(default_factory=list)
-
 
 app = typer.Typer(help="Unified knowledge store ingestion CLI.")
 
@@ -985,19 +970,27 @@ def reset_all(
 
     # Remove all repos using enhanced cleanup
     typer.echo("\n🧹 Removing all repositories with comprehensive cleanup...")
-    total_stats = ResetStats()
+    total_stats = {
+        "repos_removed": 0,
+        "files_deleted": 0,
+        "content_deleted": 0,
+        "locations_deleted": 0,
+        "sessions_deleted": 0,
+        "vectors_deleted": 0,
+        "errors": [],
+    }
 
     for repo in repos:
         try:
             result = metadata.rm_repo_with_lancedb(lancedb, repo["name"], force=True)
             stats = result["cleanup_stats"]
 
-            total_stats.repos_removed += 1
-            total_stats.files_deleted += stats["files_deleted"]
-            total_stats.content_deleted += stats["content_deleted"]
-            total_stats.locations_deleted += stats["locations_deleted"]
-            total_stats.sessions_deleted += stats["sessions_deleted"]
-            total_stats.vectors_deleted += (
+            total_stats["repos_removed"] += 1  # type: ignore[operator]
+            total_stats["files_deleted"] += stats["files_deleted"]
+            total_stats["content_deleted"] += stats["content_deleted"]
+            total_stats["locations_deleted"] += stats["locations_deleted"]
+            total_stats["sessions_deleted"] += stats["sessions_deleted"]
+            total_stats["vectors_deleted"] += (
                 stats["lancedb_vectors"]["small_deleted"] + stats["lancedb_vectors"]["large_deleted"]
             )
 
@@ -1005,27 +998,27 @@ def reset_all(
 
             # Capture any warnings
             if "lancedb_warnings" in result:
-                total_stats.errors.extend(result["lancedb_warnings"])
+                total_stats["errors"].extend(result["lancedb_warnings"])  # type: ignore[attr-defined]
 
         except Exception as e:
             error_msg = f"Failed to remove {repo['name']}: {e}"
             _log.error("Failed to remove repo %s during reset", repo["name"], exc_info=True)
-            total_stats.errors.append(error_msg)
+            total_stats["errors"].append(error_msg)  # type: ignore[attr-defined]
             typer.echo(f"  ✗ {error_msg}", err=True)
 
     # Display final summary
     typer.echo("\n✅ Reset complete!")
     typer.echo("\nCleanup Statistics:")
-    typer.echo(f"  Repositories removed: {total_stats.repos_removed}")
-    typer.echo(f"  Files deleted: {total_stats.files_deleted}")
-    typer.echo(f"  Chunks deleted: {total_stats.content_deleted}")
-    typer.echo(f"  Locations deleted: {total_stats.locations_deleted}")
-    typer.echo(f"  Sessions deleted: {total_stats.sessions_deleted}")
-    typer.echo(f"  Vectors deleted: {total_stats.vectors_deleted}")
+    typer.echo(f"  Repositories removed: {total_stats['repos_removed']}")
+    typer.echo(f"  Files deleted: {total_stats['files_deleted']}")
+    typer.echo(f"  Chunks deleted: {total_stats['content_deleted']}")
+    typer.echo(f"  Locations deleted: {total_stats['locations_deleted']}")
+    typer.echo(f"  Sessions deleted: {total_stats['sessions_deleted']}")
+    typer.echo(f"  Vectors deleted: {total_stats['vectors_deleted']}")
 
-    if total_stats.errors:
-        typer.echo(f"\n⚠️  Warnings ({len(total_stats.errors)}):")
-        for error in total_stats.errors:
+    if total_stats["errors"]:
+        typer.echo(f"\n⚠️  Warnings ({len(total_stats['errors'])}):")  # type: ignore[arg-type]
+        for error in total_stats["errors"]:  # type: ignore[union-attr]
             typer.echo(f"  - {error}", err=True)
 
     typer.echo(f"\nConfiguration preserved at: {config.resolved_store_root()}")

@@ -1,6 +1,5 @@
 name: Python Lint
 on: [pull_request]
-# Write permissions needed to auto-commit ruff fixes back to the PR branch
 permissions:
   contents: write
   pull-requests: write
