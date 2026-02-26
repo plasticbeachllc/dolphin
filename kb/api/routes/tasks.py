@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
-import kb.api.app as _app_mod
-
-from ..app import IndexRequest, IndexResponse, IndexStatusResponse, _process_index_task
+from ..app import IndexRequest, IndexResponse, IndexStatusResponse, _process_index_task, get_lance_store, get_sql_store
 from ..task_queue import get_task_queue
 
 router = APIRouter()
@@ -23,8 +22,8 @@ async def index_files(request: IndexRequest, background_tasks: BackgroundTasks) 
     This endpoint creates an indexing task and processes it in the background.
     Use GET /v1/index/status/{task_id} to check progress.
     """
-    sql_store = _app_mod._sql_store
-    lance_store = _app_mod._lance_store
+    sql_store = get_sql_store()
+    lance_store = get_lance_store()
 
     if sql_store is None or lance_store is None:
         raise HTTPException(status_code=503, detail="Stores not initialized")
@@ -71,7 +70,7 @@ async def get_index_status(task_id: str) -> IndexStatusResponse:
 
 
 @router.get("/v1/index/tasks")
-async def list_index_tasks(repo: str | None = None) -> dict:
+async def list_index_tasks(repo: str | None = None) -> dict[str, list[dict[str, Any]]]:
     """List all indexing tasks, optionally filtered by repository."""
     task_queue = get_task_queue()
     tasks = task_queue.get_all_tasks(repo)
@@ -105,9 +104,9 @@ async def admin_reload_backend() -> dict[str, str]:
 
         reload_search_backend()
         return {"status": "ok", "message": "Search backend reloaded"}
-    except Exception as e:
+    except Exception:
         logging.error("Failed to reload backend", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Reload failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Reload failed")
 
 
 @router.post("/v1/admin/rebuild-fts5")
@@ -118,7 +117,7 @@ async def rebuild_fts5() -> dict[str, str]:
     you should trigger a full re-index to populate the FTS5 table with
     the new deterministic content_ids.
     """
-    sql_store = _app_mod._sql_store
+    sql_store = get_sql_store()
     if sql_store is None:
         raise HTTPException(status_code=503, detail="SQL store not initialized")
 
@@ -128,5 +127,6 @@ async def rebuild_fts5() -> dict[str, str]:
             "status": "success",
             "message": "FTS5 table rebuilt successfully. Please trigger a re-index to populate it.",
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to rebuild FTS5 table: {str(e)}")
+    except Exception:
+        logging.error("Failed to rebuild FTS5 table", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to rebuild FTS5 table")

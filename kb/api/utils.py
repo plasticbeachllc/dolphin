@@ -28,10 +28,13 @@ def normalize_repo_registration_path(path_str: str) -> Path:
     if ".." in Path(raw).parts:
         raise HTTPException(status_code=400, detail="Path traversal segments are not allowed")
 
-    # Expand ~ to home directory using a string-level replacement so that
-    # the filesystem operation (Path.home()) is independent of user input.
+    # Expand ~/... to home directory. Reject ~otheruser forms since we only
+    # support the current user's home directory.
     if raw.startswith("~"):
-        raw = str(Path.home()) + raw[1:]
+        if raw == "~" or raw.startswith("~/"):
+            raw = str(Path.home()) + raw[1:]
+        else:
+            raise HTTPException(status_code=400, detail="~user path expansion is not supported; use an absolute path")
 
     candidate = Path(raw)
 
