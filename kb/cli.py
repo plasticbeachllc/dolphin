@@ -11,7 +11,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated
 
 import typer
 import uvicorn
@@ -533,7 +533,7 @@ def _extract_snippet_text(hit: dict[str, object], show_content: bool, verbose: b
     content = hit.get("content")
     snippet_text = None
     if isinstance(snippet_obj, dict) and "text" in snippet_obj:
-        snippet_text = cast(dict[str, Any], snippet_obj)["text"]
+        snippet_text = snippet_obj["text"]
     if not snippet_text and isinstance(content, str):
         snippet_text = content
     if isinstance(snippet_text, str) and snippet_text.strip():
@@ -653,7 +653,7 @@ def _display_results(
 
         # Panel title and subtitle
         style = _score_style(score)
-        title = f"[bold]{i}. {location}[/bold]"
+        title = f"[bold]{i}. {escape(location)}[/bold]"
         subtitle = f"[{style}]{score:.2f}[/{style}]"
 
         # Build panel body
@@ -663,16 +663,16 @@ def _display_results(
         info_parts: list[str] = []
         if isinstance(symbol_name, str) and symbol_name:
             kind_label = str(symbol_kind) if symbol_kind else "symbol"
-            info_parts.append(f"[cyan]{kind_label}:{symbol_name}[/cyan]")
-        info_parts.append(f"[dim]{language}[/dim]")
+            info_parts.append(f"[cyan]{escape(kind_label)}:{escape(symbol_name)}[/cyan]")
+        info_parts.append(f"[dim]{escape(language)}[/dim]")
 
         if verbose:
             chunk_id = hit.get("chunk_id")
             if chunk_id:
-                info_parts.append(f"[dim]chunk_id={chunk_id}[/dim]")
+                info_parts.append(f"[dim]chunk_id={escape(str(chunk_id))}[/dim]")
             resource_link = hit.get("resource_link")
             if resource_link:
-                info_parts.append(f"[dim]resource={resource_link}[/dim]")
+                info_parts.append(f"[dim]resource={escape(str(resource_link))}[/dim]")
 
         renderables.append(Text.from_markup("  ".join(info_parts)))
 
@@ -753,16 +753,15 @@ def _display_results_plain(
             if resource_link:
                 typer.echo(f"   resource={resource_link}")
 
-        if show_content or verbose:
-            snippet_text = _extract_snippet_text(hit, show_content=show_content, verbose=verbose)
-            if snippet_text:
-                lines = snippet_text.splitlines()
-                typer.echo("   ---")
-                for line in lines[:max_lines]:
-                    typer.echo(f"   {line}")
-                if len(lines) > max_lines:
-                    typer.echo(f"   ... ({len(lines) - max_lines} more lines)")
-                typer.echo("   ---")
+        snippet_text = _extract_snippet_text(hit, show_content=show_content, verbose=verbose)
+        if snippet_text:
+            lines = snippet_text.splitlines()
+            typer.echo("   ---")
+            for line in lines[:max_lines]:
+                typer.echo(f"   {line}")
+            if len(lines) > max_lines:
+                typer.echo(f"   ... ({len(lines) - max_lines} more lines)")
+            typer.echo("   ---")
 
     if not verbose:
         typer.echo("\nTip: pass --verbose for expanded metadata and snippets.")

@@ -533,6 +533,14 @@ class IngestionPipeline:
                 # Skip binary files and files that don't exist
                 file_path = root / path
                 if not file_path.exists() or file_path.is_dir():
+                    stats["files_skipped_ignored"] += 1
+                    if progress_callback is not None:
+                        done = stats["files_done"] + stats["files_skipped_ignored"] + stats["files_error"]
+                        progress_callback(
+                            _progress_event(
+                                "file_skipped", done=done, total=len(files), chunks=stats["chunks_indexed"], path=path
+                            )
+                        )
                     continue
 
                 # Resolve or upsert file_id
@@ -1263,7 +1271,9 @@ class IngestionPipeline:
         embedding_queue = EmbeddingQueue(embedder)
         embedding_queue.start()
 
-        # Total includes pre-filtered ignored files for consistent progress reporting
+        # Total includes pre-filtered ignored files for consistent progress reporting.
+        # Note: the sequential path (process_files) handles ignore checking inline and fires
+        # individual file_skipped callbacks, so it doesn't need this initial bulk callback.
         total_files = len(changed_files) + files_skipped_ignored
 
         # Fire initial callback for pre-filtered ignored files so progress starts correctly

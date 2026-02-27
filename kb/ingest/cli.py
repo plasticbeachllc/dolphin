@@ -255,17 +255,13 @@ def _create_progress_display() -> tuple[Any, Any]:
         TimeElapsedColumn(),
         transient=False,
     )
-    _task_id: TaskID | None = None
+    _task_id: TaskID = progress.add_task("indexing", total=0, chunks=0)
 
     def _rich_callback(data: dict[str, Any]) -> None:
-        nonlocal _task_id
         total = data.get("total_files", 0)
         done = data.get("files_done", 0)
         chunks = data.get("chunks_indexed", 0)
-
-        if _task_id is None:
-            _task_id = progress.add_task("indexing", total=total, chunks=0)
-        progress.update(_task_id, completed=done, chunks=chunks)
+        progress.update(_task_id, total=total, completed=done, chunks=chunks)
 
     return progress, _rich_callback
 
