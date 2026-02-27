@@ -90,7 +90,7 @@ def _get_app_version() -> str:
 
         return _pkg_version("pb-dolphin")
     except PackageNotFoundError:
-        return "0.0.0"
+        return "dev"
 
 
 kb_info.info({"version": _get_app_version(), "python_version": platform.python_version()})

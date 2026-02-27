@@ -951,8 +951,9 @@ class SQLiteMetadataStore:
             column_values["chunks_pruned"] = int(chunks_pruned)
         if not column_values:
             return
-        # Guard against injection into SQL string: only allow known column names.
-        # assert is stripped under -O, so use an explicit raise.
+        # Defensive guard: all current callers pass literal keyword arguments so
+        # there is no injection path today, but this protects against future
+        # refactors that might accept external input.
         for col in column_values:
             if col not in self._ALLOWED_SESSION_COLUMNS:
                 raise ValueError(f"Disallowed session column: {col!r}")
@@ -1115,10 +1116,16 @@ class SQLiteMetadataStore:
         cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
         existing_tables = {row[0] for row in cur.fetchall()}
 
+        # graph_metrics JOINs code_nodes, so both must exist.
+        required_tables: dict[str, set[str]] = {
+            "graph_metrics": {"graph_metrics", "code_nodes"},
+        }
+
         parts = []
         params: list[int] = []
         for table_name, sql in checks:
-            if table_name not in existing_tables:
+            needed = required_tables.get(table_name, {table_name})
+            if not needed.issubset(existing_tables):
                 continue
             parts.append(sql)
             params.append(int(file_id))

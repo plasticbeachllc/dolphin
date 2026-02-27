@@ -219,6 +219,8 @@ def _read_file_lines(full_path: Path) -> list[str] | None:
         if len(_FILE_LINES_CACHE) >= _FILE_LINES_CACHE_MAX:
             _FILE_LINES_CACHE.popitem(last=False)
         _FILE_LINES_CACHE[key] = lines
+    else:
+        _log.debug("Skipping cache for large file: %s (%d lines)", full_path, len(lines))
     return lines
 
 
@@ -467,6 +469,9 @@ def reset_search_backend() -> None:
     low-concurrency paths.  Do **not** change to ``wait=True`` without also
     guarding the submit window, since that would block the caller on in-flight
     searches.
+
+    ``_EmptySearchBackend.close()`` is a no-op, so the ``except Exception``
+    guard only fires for real backends whose executor shutdown fails.
     """
     old = _search_backend
     set_search_backend(None)

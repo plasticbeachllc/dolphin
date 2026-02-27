@@ -443,12 +443,12 @@ class TestVersionInfo:
         assert len(version) > 0
 
     def test_get_app_version_fallback_on_package_not_found(self):
-        """_get_app_version falls back to '0.0.0' when package is not installed."""
+        """_get_app_version falls back to 'dev' when package is not installed."""
         from importlib.metadata import PackageNotFoundError
 
         with patch("importlib.metadata.version", side_effect=PackageNotFoundError("pb-dolphin")):
             version = _get_app_version()
-            assert version == "0.0.0"
+            assert version == "dev"
 
     def test_version_info_metric_contains_python_version(self):
         """The kb_api_info metric includes the python_version label."""

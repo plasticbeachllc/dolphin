@@ -245,8 +245,8 @@ class SQLiteConnectionPool:
         except sqlite3.Error:
             # Connection is unhealthy — discard it instead of returning to pool.
             logger.warning("Connection rollback failed on release; discarding connection")
-            # Remove from overflow set *before* close() so that Python cannot
-            # reuse the id() while it's still tracked.
+            # Remove overflow tag *before* close() — once the object is freed,
+            # its id() may be reused by a new connection on another thread.
             if is_overflow:
                 self._discard_overflow(conn)
             try:
