@@ -689,8 +689,7 @@ def _display_results(
             syntax = Syntax(code, lexer, theme="monokai", line_numbers=False, word_wrap=True)
             renderables.append(syntax)
 
-        panel_body: Group | str = Group(*renderables) if renderables else "[dim](no content)[/dim]"
-        console.print(Panel(panel_body, title=title, subtitle=subtitle, expand=True, padding=(0, 1)))
+        console.print(Panel(Group(*renderables), title=title, subtitle=subtitle, expand=True, padding=(0, 1)))
 
     if not verbose:
         print_hint("pass --verbose for chunk IDs and metadata.")

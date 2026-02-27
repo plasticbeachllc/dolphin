@@ -3,7 +3,9 @@ import asyncio
 import contextlib
 import logging
 import os
+import signal
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
@@ -19,6 +21,7 @@ from ..config import DEFAULT_CONFIG_PATH, ConfigNotFoundError, KBConfig, load_co
 from ..embeddings.provider import create_provider, set_default_provider
 from ..ignores import build_ignore_set, load_repo_ignores
 from ..store import LanceDBStore, SQLiteMetadataStore
+from ..terminal import print_status
 from .pipeline import IngestionPipeline
 
 _log = logging.getLogger(__name__)
@@ -40,6 +43,8 @@ class ResetStats:
 app = typer.Typer(help="Unified knowledge store ingestion CLI.")
 
 _CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "config_template.toml"
+_METADATA_DB_NAME = "metadata.db"
+_LANCEDB_DIR_NAME = "lancedb"
 
 
 def _read_config_template() -> str:
@@ -60,14 +65,14 @@ def _print_readiness_checklist(console: Console, config: KBConfig, config_path: 
         console.print(f"    [red]missing[/red]   Config         {config_path}")
 
     # 2. SQLite
-    db_path = store_root / "metadata.db"
+    db_path = store_root / _METADATA_DB_NAME
     if db_path.exists():
         console.print(f"    [green]ok[/green]      SQLite         {db_path}")
     else:
         console.print(f"    [red]missing[/red]   SQLite         {db_path}")
 
     # 3. LanceDB
-    lance_path = store_root / "lancedb"
+    lance_path = store_root / _LANCEDB_DIR_NAME
     if lance_path.exists():
         console.print(f"    [green]ok[/green]      LanceDB        {lance_path}")
     else:
@@ -103,8 +108,8 @@ def _print_readiness_checklist(console: Console, config: KBConfig, config_path: 
 
 
 def _build_pipeline(config: KBConfig) -> IngestionPipeline:
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()  # Ensure schema (and migrations) are applied before use
 
     # Configure embedding provider for ingestion pipeline
@@ -153,11 +158,11 @@ def init(
     store_root = config.resolved_store_root()
     store_root.mkdir(parents=True, exist_ok=True)
 
-    metadata = SQLiteMetadataStore(store_root / "metadata.db")
+    metadata = SQLiteMetadataStore(store_root / _METADATA_DB_NAME)
     metadata.initialize()
     console.print(f"SQLite initialized at [bold cyan]{metadata.db_path}[/bold cyan]")
 
-    lancedb = LanceDBStore(store_root / "lancedb")
+    lancedb = LanceDBStore(store_root / _LANCEDB_DIR_NAME)
     lancedb.initialize_collections()
     console.print(f"LanceDB root initialized at [bold cyan]{lancedb.root}[/bold cyan]")
 
@@ -186,7 +191,7 @@ def add_repo(
     # Use the global default model from config
     model = config.default_embed_model
 
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
     metadata.record_repo(name=name, path=repo_path, default_embed_model=model)
 
@@ -196,8 +201,6 @@ def add_repo(
     # to an existing repo that had a different model.
 
     # Only prompt for indexing in interactive mode (skip in tests or if --no-index)
-    import sys
-
     if not no_index and sys.stdin is not None and sys.stdin.isatty():
         if typer.confirm(f"Do you want to index '{name}' now?", default=False):
             typer.echo(f"Starting index for {name}...")
@@ -216,16 +219,19 @@ def _create_progress_display() -> tuple[Any, Any]:
     Returns (None, line_callback) when stdout is not a TTY.
     Returns (Progress, rich_callback) when stdout is a TTY.
     """
-    if not (sys.stdout is not None and hasattr(sys.stdout, "isatty") and sys.stdout.isatty()):
+    from ..terminal import STDOUT_CONSOLE
+
+    if not STDOUT_CONSOLE.is_terminal:
         # Non-TTY: periodic line output
-        _last = {"n": 0}
+        _last_n = 0
 
         def _line_callback(data: dict[str, Any]) -> None:
+            nonlocal _last_n
             n = data.get("files_done", 0)
             total = data.get("total_files", 0)
-            if n - _last["n"] >= 50 or n == total:
+            if n - _last_n >= 50 or n == total:
                 typer.echo(f"  Progress: {n}/{total} files, {data.get('chunks_indexed', 0):,} chunks")
-                _last["n"] = n
+                _last_n = n
 
         return None, _line_callback
 
@@ -282,7 +288,7 @@ def index(
     config = load_config()
 
     # Require repo to be pre-registered via: uv run dolphin add-repo <name> <abs/repo/path>
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
     repo_record = metadata.get_repo_by_name(name)
     if not repo_record:
@@ -304,8 +310,6 @@ def index(
         typer.echo(f"Recovered {aborted} stale session(s) from a previous run.")
 
     # Install SIGINT handler so Ctrl-C stops cleanly between files
-    import signal
-
     _original_sigint = signal.getsignal(signal.SIGINT)
 
     def _sigint_handler(signum, frame):
@@ -313,10 +317,6 @@ def index(
         pipeline.request_cancel()
 
     signal.signal(signal.SIGINT, _sigint_handler)
-
-    import time
-
-    from ..terminal import print_status
 
     progress_display, progress_callback = _create_progress_display()
 
@@ -435,7 +435,7 @@ def _notify_server_reload(config: KBConfig) -> None:
 def status(name: str | None = typer.Argument(None, help="Optional repo name.")) -> None:
     """Report knowledge store status with detailed repository listing."""
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     # Ensure DB and schema exist before summarizing.
     metadata.initialize()
 
@@ -604,10 +604,10 @@ def prune_ignored(
     config = load_config()
     repo = config.resolved_store_root()
 
-    metadata = SQLiteMetadataStore(repo / "metadata.db")
+    metadata = SQLiteMetadataStore(repo / _METADATA_DB_NAME)
     metadata.initialize()
 
-    lancedb = LanceDBStore(repo / "lancedb")
+    lancedb = LanceDBStore(repo / _LANCEDB_DIR_NAME)
     lancedb.initialize_collections()
 
     result = _prune_ignored_files(name, metadata, lancedb, config, dry_run=dry_run)
@@ -645,10 +645,10 @@ def rm_repo(
     - Provides detailed statistics
     """
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
 
     # Get repo info
     repo = metadata.get_repo_by_name(name)
@@ -752,9 +752,9 @@ def reset_repo(
 
     # Load config and stores
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
 
     # If repo exists, wipe it (no confirmation, force=True for automatic cleanup)
     repo = metadata.get_repo_by_name(name)
@@ -805,7 +805,7 @@ def list_files(
     Output is one file path per line for easy grepping.
     """
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
     # Resolve repo
@@ -940,10 +940,10 @@ def validate_repo(
     - LanceDB vector consistency
     """
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
 
     # Get repo info
     repo = metadata.get_repo_by_name(name)
@@ -1006,10 +1006,10 @@ def repair_repo(
     - Remove orphaned files
     """
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
 
     # Get repo info
     repo = metadata.get_repo_by_name(name)
@@ -1067,7 +1067,7 @@ def repair_repo(
 def list_repos() -> None:
     """List all registered repositories."""
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
     repos = metadata.list_all_repos()
@@ -1099,10 +1099,10 @@ def reset_all(
     This is a nuclear option for complete cleanup.
     """
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
 
     # Get all repos for cleanup
     repos = metadata.list_all_repos()
@@ -1182,8 +1182,6 @@ def main() -> None:
     try:
         app()
     except ConfigNotFoundError as e:
-        from ..terminal import print_status
-
         print_status(str(e), level="error", stderr=True)
         raise typer.Exit(1) from None
 
