@@ -9,16 +9,14 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, cast
-
-if TYPE_CHECKING:
-    from rich.progress import Progress
+from typing import Any, Literal, cast
 
 import typer
 from pathspec import PathSpec
 from rich import box
 from rich.console import Console
 from rich.markup import escape
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
 from ..api_key import get_kb_key_path, get_or_create_kb_api_key, load_kb_api_key
@@ -73,7 +71,7 @@ def _checklist_row(status: _ChecklistStatus, label: str, detail: str = "") -> st
     """Format a single readiness-checklist row with consistent alignment."""
     styled = _STATUS_STYLES[status]
     # Pad so the visible status text occupies a fixed width, keeping labels aligned.
-    pad = _CHECKLIST_STATUS_WIDTH - len(status)
+    pad = max(0, _CHECKLIST_STATUS_WIDTH - len(status))
     col_width = max(_CHECKLIST_LABEL_WIDTH, len(label) + 1)
     return f"    {styled}{' ' * pad}{label:<{col_width}}{detail}"
 
@@ -188,6 +186,7 @@ def init(
         get_or_create_kb_api_key()
     except Exception:
         _log.warning("Could not pre-create KB API key; checklist will show 'pending'.", exc_info=True)
+        console.print("[dim]Warning: could not create KB API key (check permissions)[/dim]")
 
     _print_readiness_checklist(console, config, target)
 
@@ -230,13 +229,13 @@ def add_repo(
                 typer.echo(f"❌ Indexing failed: {e}", err=True)
 
 
-def _create_progress_display() -> tuple["Progress | None", Callable[[dict[str, Any]], None]]:
+def _create_progress_display() -> tuple[Progress | None, Callable[[dict[str, Any]], None]]:
     """Create a Rich progress bar and return (progress, callback).
 
     Returns (None, line_callback) when stdout is not a TTY.
     Returns (Progress, rich_callback) when stdout is a TTY.
     """
-    from ..terminal import is_tty
+    from ..terminal import _STDERR_CONSOLE, is_tty
 
     if not is_tty():
         # Non-TTY: periodic line output to stderr
@@ -248,24 +247,14 @@ def _create_progress_display() -> tuple["Progress | None", Callable[[dict[str, A
             n = data.get("files_done", 0)
             total = data.get("total_files", 0)
             if not _started:
-                typer.echo(f"  Indexing {total} files...", err=True)
+                _STDERR_CONSOLE.print(f"  Indexing {total} files...")
                 _started = True
             step = max(1, total // 10) if total > 0 else 1
             if n - _last_n >= step or (n == total and total > 0):
-                typer.echo(f"  Progress: {n}/{total} files, {data.get('chunks_indexed', 0):,} chunks", err=True)
+                _STDERR_CONSOLE.print(f"  Progress: {n}/{total} files, {data.get('chunks_indexed', 0):,} chunks")
                 _last_n = n
 
         return None, _line_callback
-
-    from rich.progress import (
-        BarColumn,
-        MofNCompleteColumn,
-        Progress,
-        SpinnerColumn,
-        TaskID,
-        TextColumn,
-        TimeElapsedColumn,
-    )
 
     progress = Progress(
         SpinnerColumn(),
@@ -275,7 +264,7 @@ def _create_progress_display() -> tuple["Progress | None", Callable[[dict[str, A
         TextColumn("files"),
         TextColumn("[dim]{task.fields[chunks]:,} chunks[/dim]"),
         TimeElapsedColumn(),
-        transient=False,
+        transient=True,
     )
     _task_id: TaskID = progress.add_task("indexing", total=None, chunks=0)
 

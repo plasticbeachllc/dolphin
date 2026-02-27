@@ -1256,7 +1256,7 @@ class IngestionPipeline:
 
         # Counters
         files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
-        files_error = 0
+        files_skipped_missing = files_error = 0
         graph_nodes_created = graph_edges_created = 0
 
         # Setup Async Embedder
@@ -1273,14 +1273,14 @@ class IngestionPipeline:
         # Callers must increment counters *before* calling _fire so done reflects the update.
         def _fire(event: str, path: str) -> None:
             if progress_callback is not None:
-                done = files_done + files_skipped_ignored + files_error
+                done = files_done + files_skipped_ignored + files_skipped_missing + files_error
                 progress_callback(
                     _progress_event(event, done=done, total=total_files, chunks=chunks_indexed, path=path)
                 )
 
         # Fire initial callback for pre-filtered ignored files so progress starts correctly
         if files_skipped_ignored > 0:
-            _fire("file_skipped", "")
+            _fire("file_skipped", "<pre-filtered>")
 
         try:
             # Phase 1: Parallel Parsing
@@ -1313,6 +1313,8 @@ class IngestionPipeline:
                     for path in batch_paths:
                         file_path = root / path
                         if not file_path.exists() or file_path.is_dir():
+                            files_skipped_missing += 1
+                            _fire("file_skipped", path)
                             continue
 
                         # Quick metadata update
@@ -1647,6 +1649,8 @@ class IngestionPipeline:
         ]
         if files_skipped_ignored:
             summary_lines.append(f"  Files skipped (ignored): {files_skipped_ignored}")
+        if files_skipped_missing:
+            summary_lines.append(f"  Files skipped (missing): {files_skipped_missing}")
         if files_error:
             summary_lines.append(f"  Files with errors: {files_error}")
         summary_lines.append(f"  Chunks indexed: {chunks_indexed}")
@@ -1674,6 +1678,7 @@ class IngestionPipeline:
             "branch": branch,
             "files_indexed": files_done,
             "files_skipped_ignored": files_skipped_ignored,
+            "files_skipped_missing": files_skipped_missing,
             "files_error": files_error,
             "chunks_indexed": chunks_indexed,
             "chunks_skipped": chunks_skipped,
