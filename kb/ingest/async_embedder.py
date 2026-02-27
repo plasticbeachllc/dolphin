@@ -163,6 +163,8 @@ class EmbeddingQueue:
     async def stop(self, timeout: float = 30.0):
         """Stop workers and wait for queue to drain.
 
+        After stop() returns the instance may be restarted via start().
+
         Args:
             timeout: Maximum seconds to wait for the queue to drain before
                      force-cancelling workers.
@@ -180,6 +182,8 @@ class EmbeddingQueue:
             if self.workers:
                 await asyncio.gather(*self.workers, return_exceptions=True)
             self.workers.clear()
+            # Reset so the instance can be restarted with start().
+            self._shutdown = False
 
     async def submit(self, texts: list[str], metadata: dict[str, Any]) -> list[list[float]]:
         """Submit texts for embedding and wait for result."""

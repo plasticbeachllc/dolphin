@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 import threading
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from queue import Empty, Full, Queue
@@ -58,7 +59,12 @@ class SQLiteConnectionPool:
         self._pool: Queue = Queue(maxsize=pool_size)
         self._overflow_count = 0
         self._overflow_lock = threading.Lock()
-        self._overflow_conns: set[int] = set()  # Track overflow connections by id()
+        # Map id(conn) → UUID tag for overflow connections.  The UUID is the
+        # canonical identifier stored in _overflow_tags; the id() mapping is
+        # only used for lookup and is maintained under _overflow_lock so stale
+        # id reuse is harmless (entries are always removed before close()).
+        self._overflow_tags: set[str] = set()
+        self._overflow_id_to_tag: dict[int, str] = {}
 
         # Statistics
         self._created_connections = 0
@@ -173,7 +179,9 @@ class SQLiteConnectionPool:
                 self._overflow_count += 1
                 self._overflow_connections += 1
                 conn = self._create_connection()
-                self._overflow_conns.add(id(conn))
+                tag = uuid.uuid4().hex
+                self._overflow_tags.add(tag)
+                self._overflow_id_to_tag[id(conn)] = tag
                 self._created_connections += 1
                 logger.info(f"Created overflow connection ({self._overflow_count}/{self.max_overflow})")
                 return conn
@@ -214,8 +222,9 @@ class SQLiteConnectionPool:
             except sqlite3.Error:
                 pass
             with self._overflow_lock:
-                if conn_id in self._overflow_conns:
-                    self._overflow_conns.discard(conn_id)
+                tag = self._overflow_id_to_tag.pop(conn_id, None)
+                if tag is not None:
+                    self._overflow_tags.discard(tag)
                     self._overflow_count = max(0, self._overflow_count - 1)
             return
 
@@ -225,14 +234,17 @@ class SQLiteConnectionPool:
             # If this was an overflow connection that fit back into the pool,
             # update accounting so future overflow slots aren't blocked.
             with self._overflow_lock:
-                if conn_id in self._overflow_conns:
-                    self._overflow_conns.discard(conn_id)
+                tag = self._overflow_id_to_tag.pop(conn_id, None)
+                if tag is not None:
+                    self._overflow_tags.discard(tag)
                     self._overflow_count = max(0, self._overflow_count - 1)
         except Full:
             # Pool is full — close this overflow connection.
             with self._overflow_lock:
-                self._overflow_conns.discard(conn_id)
-                self._overflow_count = max(0, self._overflow_count - 1)
+                tag = self._overflow_id_to_tag.pop(conn_id, None)
+                if tag is not None:
+                    self._overflow_tags.discard(tag)
+                    self._overflow_count = max(0, self._overflow_count - 1)
             conn.close()
 
     def close_all(self) -> None:

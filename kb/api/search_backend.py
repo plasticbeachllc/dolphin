@@ -83,11 +83,18 @@ class KnowledgeSearchBackend:
         self._configure_bm25_statistics_collection()
 
     def shutdown(self) -> None:
-        """Shut down the search executor, waiting for in-flight tasks to complete."""
+        """Shut down the search executor, waiting for in-flight tasks to complete.
+
+        Call this explicitly when the SearchBackend is no longer needed (e.g.
+        during application shutdown) to ensure all in-flight searches finish
+        cleanly.  If ``shutdown()`` is never called, ``__del__`` will perform
+        a best-effort non-blocking cleanup when the object is garbage-collected,
+        but in-flight work may be abandoned in that case.
+        """
         self._search_executor.shutdown(wait=True)
 
     def __del__(self) -> None:
-        """Release executor threads on garbage collection."""
+        """Best-effort cleanup if shutdown() was not called explicitly."""
         executor = getattr(self, "_search_executor", None)
         if executor is not None:
             try:

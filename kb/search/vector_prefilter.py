@@ -15,25 +15,24 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Pattern to validate filter string values.  Allows common filename/repo chars
-# (alphanumeric, hyphens, underscores, dots, slashes, spaces, colons, parens,
-# hash, plus, tilde, equals, at-signs, glob wildcards).
-# Rejects only SQL-dangerous characters: quotes, semicolons, and comment markers.
-# Uses \Z (not $) so a trailing newline cannot bypass the check.
-_SAFE_FILTER_VALUE = re.compile(r"^[a-zA-Z0-9_\-./\\ @:*?()#+~=,]+\Z")
+# Blocklist pattern: reject values containing SQL-dangerous characters.
+# Specifically: single/double quotes, semicolons, and SQL comment markers (--).
+# Everything else (unicode, brackets, parens, etc.) is allowed so that real-world
+# repo names and file paths work without error.
+_SQL_DANGEROUS = re.compile(r"""['";]|--""")
 
 
 def _sanitize_filter_value(value: str) -> str:
     """Sanitize a string value for use in a LanceDB filter expression.
 
-    Validates against the safe pattern and escapes single quotes.
-    Raises ValueError if the value contains suspicious characters.
+    Rejects values containing SQL-dangerous characters (quotes, semicolons,
+    comment markers).  All other characters are allowed to avoid breaking
+    searches on legitimate repo/file names.
     """
-    if not _SAFE_FILTER_VALUE.match(value):
-        logger.warning("Filter value rejected by validation pattern: %r", value)
+    if _SQL_DANGEROUS.search(value):
+        logger.warning("Filter value rejected — contains SQL-dangerous characters: %r", value)
         raise ValueError(f"Invalid filter value: {value!r}")
-    # Escape single quotes by doubling them (standard SQL escaping)
-    return value.replace("'", "''")
+    return value
 
 
 @dataclass

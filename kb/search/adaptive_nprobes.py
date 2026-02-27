@@ -401,14 +401,10 @@ class GlobalAdaptiveNProbes:
         Returns:
             Global AdaptiveNProbes instance
         """
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = AdaptiveNProbes(target_latency_ms=target_latency_ms)
-        instance = cls._instance
-        if instance is None:  # pragma: no cover — unreachable after double-checked lock
-            raise RuntimeError("AdaptiveNProbes failed to initialize")
-        return instance
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = AdaptiveNProbes(target_latency_ms=target_latency_ms)
+            return cls._instance
 
     @classmethod
     def reset_instance(cls) -> None:

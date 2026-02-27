@@ -242,15 +242,10 @@ def get_ast_cache(
     """
     global _ast_cache
 
-    if _ast_cache is None:
-        with _ast_cache_lock:
-            if _ast_cache is None:
-                _ast_cache = ASTCache(max_size=max_size, persist_path=persist_path)
-
-    cache = _ast_cache
-    if cache is None:  # pragma: no cover — unreachable after double-checked lock
-        raise RuntimeError("ASTCache failed to initialize")
-    return cache
+    with _ast_cache_lock:
+        if _ast_cache is None:
+            _ast_cache = ASTCache(max_size=max_size, persist_path=persist_path)
+        return _ast_cache
 
 
 def clear_ast_cache() -> None:

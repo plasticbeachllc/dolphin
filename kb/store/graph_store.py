@@ -47,8 +47,7 @@ class GraphStore:
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA wal_autocheckpoint = 1000")
-        # busy_timeout handles lock contention; no need for the connect() timeout
-        # parameter which duplicates this at the Python level.
+        # Wait up to 5 s on lock contention instead of failing immediately.
         conn.execute("PRAGMA busy_timeout = 5000")
         return conn
 

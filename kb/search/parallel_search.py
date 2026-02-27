@@ -249,11 +249,14 @@ class ParallelHybridSearch:
             logger.error("Parallel search timed out after 60s")
             vector_task.cancel()
             bm25_task.cancel()
+            # Await cancelled tasks to avoid "Task was destroyed" warnings.
+            await asyncio.gather(vector_task, bm25_task, return_exceptions=True)
             raise SearchTimeoutError("Parallel search timed out after 60s")
         except Exception as e:
             logger.error(f"Parallel search failed: {e}")
             vector_task.cancel()
             bm25_task.cancel()
+            await asyncio.gather(vector_task, bm25_task, return_exceptions=True)
             # Fall back to sequential
             return await self._search_sequential(query, query_embedding, top_k, **kwargs)
 
@@ -444,20 +447,20 @@ class ParallelHybridSearch:
         if loop is not None and loop.is_running():
             # Already inside an async context — cannot use run_until_complete.
             # Use a cached thread to run the coroutine safely.
-            coro = self.search_async(query, query_embedding, top_k, **kwargs)
+            # The coroutine must be created inside the target thread (not here)
+            # because coroutines are not safe to pass across threads.
+            _self = self
+            _query, _emb, _k, _kw = query, query_embedding, top_k, kwargs
 
             def _run() -> list[SearchResult]:
-                return asyncio.run(coro)
+                return asyncio.run(_self.search_async(_query, _emb, _k, **_kw))
 
-            if self._sync_executor is None:
-                with self._sync_executor_lock:
-                    if self._sync_executor is None:
-                        self._sync_executor = concurrent.futures.ThreadPoolExecutor(
-                            max_workers=1, thread_name_prefix="parallel-search-sync"
-                        )
-            executor = self._sync_executor
-            if executor is None:  # pragma: no cover — unreachable after double-checked lock
-                raise RuntimeError("Failed to initialize sync executor")
+            with self._sync_executor_lock:
+                if self._sync_executor is None:
+                    self._sync_executor = concurrent.futures.ThreadPoolExecutor(
+                        max_workers=1, thread_name_prefix="parallel-search-sync"
+                    )
+                executor = self._sync_executor
             return executor.submit(_run).result()
         else:
             return asyncio.run(self.search_async(query, query_embedding, top_k, **kwargs))
