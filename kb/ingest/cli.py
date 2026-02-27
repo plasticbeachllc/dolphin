@@ -102,7 +102,7 @@ def _print_readiness_checklist(console: Console, config: KBConfig, config_path: 
     if load_kb_api_key():
         console.print(_checklist_row("ok", "KB API Key", escape(str(key_path))))
     else:
-        console.print(_checklist_row("pending", "KB API Key", "(created on first [bold]dolphin serve[/bold])"))
+        console.print(_checklist_row("pending", "KB API Key", "(will retry on [bold]dolphin serve[/bold])"))
 
     # 5. OpenAI API Key (only when using OpenAI provider)
     missing_steps: list[str] = []
@@ -235,7 +235,7 @@ def _create_progress_display() -> tuple[Progress | None, Callable[[dict[str, Any
     Returns (None, line_callback) when stdout is not a TTY.
     Returns (Progress, rich_callback) when stdout is a TTY.
     """
-    from ..terminal import _STDERR_CONSOLE, is_tty
+    from ..terminal import STDERR_CONSOLE, is_tty
 
     if not is_tty():
         # Non-TTY: periodic line output to stderr
@@ -247,11 +247,13 @@ def _create_progress_display() -> tuple[Progress | None, Callable[[dict[str, Any
             n = data.get("files_done", 0)
             total = data.get("total_files", 0)
             if not _started:
-                _STDERR_CONSOLE.print(f"  Indexing {total} files...")
+                STDERR_CONSOLE.print(f"  Indexing {total} files...")
                 _started = True
             step = max(1, total // 10) if total > 0 else 1
             if n - _last_n >= step or (n == total and total > 0):
-                _STDERR_CONSOLE.print(f"  Progress: {n}/{total} files, {data.get('chunks_indexed', 0):,} chunks")
+                STDERR_CONSOLE.print(
+                    f"  Progress: {n}/{total} files processed, {data.get('chunks_indexed', 0):,} chunks"
+                )
                 _last_n = n
 
         return None, _line_callback
@@ -374,7 +376,7 @@ def index(
         signal.signal(signal.SIGINT, _original_sigint)
 
     elapsed = time.monotonic() - t0
-    elapsed_str = f"{int(elapsed // 60)}m{int(elapsed % 60):02d}s"
+    elapsed_str = f"{int(elapsed)}s" if elapsed < 60 else f"{int(elapsed // 60)}m{int(elapsed % 60):02d}s"
 
     files_indexed = result.get("files_indexed", 0)
     chunks_indexed = result.get("chunks_indexed", 0)

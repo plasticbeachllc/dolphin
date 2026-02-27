@@ -1269,8 +1269,7 @@ class IngestionPipeline:
         # individual file_skipped callbacks, so it doesn't need this initial bulk callback.
         total_files = len(changed_files) + files_skipped_ignored
 
-        # Closure reads outer-scope counters by value at call time (Python late binding).
-        # Callers must increment counters *before* calling _fire so done reflects the update.
+        # Closure reads mutable outer-scope counters at call time; increment before calling _fire.
         def _fire(event: str, path: str) -> None:
             if progress_callback is not None:
                 done = files_done + files_skipped_ignored + files_skipped_missing + files_error

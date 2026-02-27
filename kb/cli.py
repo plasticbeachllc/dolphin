@@ -11,7 +11,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 import typer
 import uvicorn
@@ -533,7 +533,7 @@ def _extract_snippet_text(hit: dict[str, object], show_content: bool, verbose: b
     content = hit.get("content")
     snippet_text = None
     if isinstance(snippet_obj, dict) and "text" in snippet_obj:
-        snippet_text = snippet_obj["text"]
+        snippet_text = cast(dict[str, Any], snippet_obj)["text"]
     if not snippet_text and isinstance(content, str):
         snippet_text = content
     if isinstance(snippet_text, str) and snippet_text.strip():
@@ -669,9 +669,11 @@ def _display_results(
                 code += f"\n... ({len(lines) - max_lines} more lines)"
 
             lexer = _rich_lexer_for_language(language)
+            from pygments.util import ClassNotFound
+
             try:
                 syntax = Syntax(code, lexer, theme="monokai", line_numbers=False, word_wrap=True)
-            except Exception:
+            except ClassNotFound:
                 syntax = Syntax(code, "text", theme="monokai", line_numbers=False, word_wrap=True)
             renderables.append(syntax)
 
