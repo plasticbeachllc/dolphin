@@ -590,7 +590,7 @@ def _display_results(
         )
         return
 
-    from rich.console import Group
+    from rich.console import Group, RenderableType
     from rich.markup import escape
     from rich.panel import Panel
     from rich.syntax import Syntax
@@ -640,7 +640,7 @@ def _display_results(
         subtitle = f"[{style}]{score:.2f}[/{style}]"
 
         # Build panel body
-        renderables: list[Text | Syntax] = []
+        renderables: list[RenderableType] = []
 
         # Symbol + language info line
         info_parts: list[str] = []
@@ -669,7 +669,10 @@ def _display_results(
                 code += f"\n... ({len(lines) - max_lines} more lines)"
 
             lexer = _rich_lexer_for_language(language)
-            syntax = Syntax(code, lexer, theme="monokai", line_numbers=False, word_wrap=True)
+            try:
+                syntax = Syntax(code, lexer, theme="monokai", line_numbers=False, word_wrap=True)
+            except Exception:
+                syntax = Syntax(code, "text", theme="monokai", line_numbers=False, word_wrap=True)
             renderables.append(syntax)
 
         console.print(Panel(Group(*renderables), title=title, subtitle=subtitle, expand=True, padding=(0, 1)))

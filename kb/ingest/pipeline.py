@@ -930,7 +930,7 @@ class IngestionPipeline:
 
             # Initialize counters
             files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
-            files_skipped_ignored = files_error = 0
+            files_skipped_ignored = files_skipped_missing = files_error = 0
             graph_nodes_created = graph_edges_created = 0
 
             # Process modified/added files
@@ -950,6 +950,7 @@ class IngestionPipeline:
             )
             files_done += stats["files_done"]
             files_skipped_ignored += stats["files_skipped_ignored"]
+            files_skipped_missing += stats["files_skipped_missing"]
             files_error += stats["files_error"]
             chunks_indexed += stats["chunks_indexed"]
             chunks_skipped += stats["chunks_skipped"]
@@ -1035,6 +1036,8 @@ class IngestionPipeline:
             ]
             if files_skipped_ignored:
                 summary_lines.append(f"  Files skipped (ignored): {files_skipped_ignored}")
+            if files_skipped_missing:
+                summary_lines.append(f"  Files skipped (missing): {files_skipped_missing}")
             if files_error:
                 summary_lines.append(f"  Files with errors: {files_error}")
             summary_lines.append(f"  Chunks indexed: {chunks_indexed}")
@@ -1065,6 +1068,7 @@ class IngestionPipeline:
                 "branch": branch,
                 "files_indexed": files_done,
                 "files_skipped_ignored": files_skipped_ignored,
+                "files_skipped_missing": files_skipped_missing,
                 "files_error": files_error,
                 "chunks_indexed": chunks_indexed,
                 "chunks_skipped": chunks_skipped,
@@ -1265,6 +1269,8 @@ class IngestionPipeline:
         # individual file_skipped callbacks, so it doesn't need this initial bulk callback.
         total_files = len(changed_files) + files_skipped_ignored
 
+        # Closure reads outer-scope counters by value at call time (Python late binding).
+        # Callers must increment counters *before* calling _fire so done reflects the update.
         def _fire(event: str, path: str) -> None:
             if progress_callback is not None:
                 done = files_done + files_skipped_ignored + files_error
