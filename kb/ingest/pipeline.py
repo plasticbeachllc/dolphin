@@ -486,6 +486,7 @@ class IngestionPipeline:
         stats = {
             "files_done": 0,
             "files_skipped_ignored": 0,
+            "files_skipped_missing": 0,
             "files_error": 0,
             "chunks_indexed": 0,
             "chunks_skipped": 0,
@@ -502,7 +503,12 @@ class IngestionPipeline:
 
         def _fire(event: str, path: str) -> None:
             if progress_callback is not None:
-                done = stats["files_done"] + stats["files_skipped_ignored"] + stats["files_error"]
+                done = (
+                    stats["files_done"]
+                    + stats["files_skipped_ignored"]
+                    + stats["files_skipped_missing"]
+                    + stats["files_error"]
+                )
                 progress_callback(
                     _progress_event(event, done=done, total=len(files), chunks=stats["chunks_indexed"], path=path)
                 )
@@ -531,11 +537,11 @@ class IngestionPipeline:
                     _fire("file_skipped", path)
                     continue
 
-                # Skip missing/directory files (counted as errors, not ignored)
+                # Skip missing/directory files (distinct from processing errors)
                 file_path = root / path
                 if not file_path.exists() or file_path.is_dir():
-                    stats["files_error"] += 1
-                    _fire("file_error", path)
+                    stats["files_skipped_missing"] += 1
+                    _fire("file_skipped", path)
                     continue
 
                 # Resolve or upsert file_id

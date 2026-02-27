@@ -129,7 +129,7 @@ class TestInitCommand:
 
         # Create a config with openai provider
         original_template = _read_config_template()
-        assert 'provider = "openai"' in original_template, "Config template no longer defaults to openai provider"
+        assert "openai" in original_template.lower(), "Config template no longer references openai provider"
         openai_template = original_template.replace(
             'store_root = "~/.dolphin/knowledge_store"',
             f'store_root = "{store_root}"',

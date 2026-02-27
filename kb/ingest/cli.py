@@ -65,11 +65,14 @@ _STATUS_STYLES: dict[_ChecklistStatus, str] = {
 }
 
 
+_CHECKLIST_STATUS_WIDTH = 10
+
+
 def _checklist_row(status: _ChecklistStatus, label: str, detail: str = "") -> str:
     """Format a single readiness-checklist row with consistent alignment."""
     styled = _STATUS_STYLES[status]
-    # Pad to 10 visible chars so labels line up regardless of status word length.
-    pad = 10 - len(status)
+    # Pad so the visible status text occupies a fixed width, keeping labels aligned.
+    pad = _CHECKLIST_STATUS_WIDTH - len(status)
     return f"    {styled}{' ' * pad}{label:<15}{detail}"
 
 
@@ -234,16 +237,20 @@ def _create_progress_display() -> tuple["Progress | None", Callable[[dict[str, A
     from ..terminal import is_tty
 
     if not is_tty():
-        # Non-TTY: periodic line output
+        # Non-TTY: periodic line output to stderr
         _last_n = 0
+        _started = False
 
         def _line_callback(data: dict[str, Any]) -> None:
-            nonlocal _last_n
+            nonlocal _last_n, _started
             n = data.get("files_done", 0)
             total = data.get("total_files", 0)
+            if not _started:
+                typer.echo(f"  Indexing {total} files...", err=True)
+                _started = True
             step = max(1, total // 10) if total else 50
-            if n - _last_n >= step or n == total:
-                typer.echo(f"  Progress: {n}/{total} files, {data.get('chunks_indexed', 0):,} chunks")
+            if n - _last_n >= step or (n == total and total > 0):
+                typer.echo(f"  Progress: {n}/{total} files, {data.get('chunks_indexed', 0):,} chunks", err=True)
                 _last_n = n
 
         return None, _line_callback
@@ -274,7 +281,8 @@ def _create_progress_display() -> tuple["Progress | None", Callable[[dict[str, A
         total = data.get("total_files", 0)
         done = data.get("files_done", 0)
         chunks = data.get("chunks_indexed", 0)
-        progress.update(_task_id, total=total, completed=done, chunks=chunks)
+        # Use total or None so Rich shows a spinner when total is unknown/zero
+        progress.update(_task_id, total=total or None, completed=done, chunks=chunks)
 
     return progress, _rich_callback
 
