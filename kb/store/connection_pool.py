@@ -98,7 +98,10 @@ class SQLiteConnectionPool:
         # Always enforce foreign key constraints for metadata integrity
         conn.execute("PRAGMA foreign_keys=ON")
 
-        # Busy timeout: wait up to 5s on lock contention instead of failing immediately
+        # Busy timeout: wait up to 5s on lock contention instead of failing
+        # immediately.  Note: this compounds with the pool's own acquisition
+        # ``timeout`` (default 30s).  In the worst case a caller may wait up
+        # to ``timeout + 5s`` total (pool wait + SQLite busy wait).
         conn.execute("PRAGMA busy_timeout=5000")
 
         # Optimization pragmas

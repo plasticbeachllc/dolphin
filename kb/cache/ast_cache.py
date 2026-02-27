@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import pickle
 import threading
+import warnings
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -166,6 +167,21 @@ class ASTCache:
         """
         with self._lock:
             return self._hit_rate_unlocked()
+
+    def hit_rate_pct(self) -> float:
+        """Calculate cache hit rate as a percentage (0–100).
+
+        .. deprecated:: 0.2.4
+            Provided for backward compatibility with callers that
+            previously relied on ``hit_rate()`` returning a percentage.
+            Prefer ``hit_rate()`` (returns 0.0–1.0) for new code.
+        """
+        warnings.warn(
+            "hit_rate_pct() is deprecated; use hit_rate() which returns 0.0–1.0",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.hit_rate() * 100.0
 
     def stats(self) -> dict[str, Any]:
         """Get cache statistics.

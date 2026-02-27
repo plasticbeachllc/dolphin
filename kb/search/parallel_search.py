@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -452,6 +453,12 @@ class ParallelHybridSearch:
             loop = None
 
         if loop is not None and loop.is_running():
+            warnings.warn(
+                "Calling search() from a running event loop is no longer supported. "
+                "Use 'await search_async(...)' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
             raise RuntimeError(
                 "search() cannot be called from a running event loop — use 'await search_async(...)' instead"
             )

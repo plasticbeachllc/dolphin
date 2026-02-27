@@ -291,7 +291,12 @@ class KnowledgeSearchBackend:
         return self.cache.get_search_results(request.query, **cache_params)
 
     async def search_async(self, request: SearchRequest) -> SearchResultSet:
-        """Execute search without blocking the event loop."""
+        """Execute search without blocking the event loop.
+
+        Raises:
+            SearchTimeoutError: Propagated from the underlying parallel
+                search if both vector and BM25 branches time out.
+        """
         cache_allowed = await asyncio.to_thread(self._is_cache_allowed, request)
         cache_params = self._build_search_cache_params(request) if cache_allowed else None
 
