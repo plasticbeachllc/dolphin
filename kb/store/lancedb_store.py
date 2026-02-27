@@ -147,6 +147,9 @@ class LanceDBStore:
             # see https://lancedb.github.io/lancedb/ann_indexes/ and the upstream
             # Lance error "Not enough rows to train PQ. Requires 256 rows".
             # Brute-force KNN is fast enough at this scale anyway.
+            # NOTE: this changed from `== 0` to `< 256` — tables with 1–255
+            # rows now skip index creation (previously they would attempt it
+            # and hit a noisy PQ training error).
             if row_count < 256:
                 if row_count > 0:
                     logger.debug(

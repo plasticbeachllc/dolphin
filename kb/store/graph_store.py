@@ -42,7 +42,7 @@ class GraphStore:
     def _connect(self) -> sqlite3.Connection:
         """Create a database connection with proper configuration."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("PRAGMA journal_mode = WAL")

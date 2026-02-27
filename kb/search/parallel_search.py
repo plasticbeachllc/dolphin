@@ -245,7 +245,8 @@ class ParallelHybridSearch:
                 bm25_results = []
 
         except TimeoutError:
-            # In Python >= 3.11, builtin TimeoutError is the base for asyncio.TimeoutError.
+            # Safe: pyproject.toml requires Python >= 3.12 where builtin
+            # TimeoutError is the base for asyncio.TimeoutError (PEP 3151).
             logger.error("Parallel search timed out after 60s")
             vector_task.cancel()
             bm25_task.cancel()
@@ -445,12 +446,16 @@ class ParallelHybridSearch:
             loop = None
 
         if loop is not None and loop.is_running():
-            # Already inside an async context — cannot use run_until_complete.
-            # Use a cached thread to run the coroutine safely.
+            # Last-resort shim: the caller is already on a running event loop
+            # so we cannot use run_until_complete.  This offloads the async
+            # search to a background thread, which **blocks the current event
+            # loop thread** until the result is ready.  Prefer calling
+            # search_async() directly whenever possible.
             # The coroutine must be created inside the target thread (not here)
             # because coroutines are not safe to pass across threads.
             _self = self
             _query, _emb, _k, _kw = query, query_embedding, top_k, kwargs
+            logger.warning("search() called from running event loop — blocking; prefer search_async()")
 
             def _run() -> list[SearchResult]:
                 return asyncio.run(_self.search_async(_query, _emb, _k, **_kw))

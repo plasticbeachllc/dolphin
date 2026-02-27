@@ -156,7 +156,12 @@ class EmbeddingQueue:
         self._shutdown = False
 
     def start(self, num_workers: int = 3):
-        """Start background workers."""
+        """Start background workers.
+
+        Resets the shutdown flag so that a previously-stopped instance can be
+        reused.  Must be called before submitting new work.
+        """
+        self._shutdown = False
         for _ in range(num_workers):
             self.workers.append(asyncio.create_task(self._worker_loop()))
 
@@ -182,8 +187,6 @@ class EmbeddingQueue:
             if self.workers:
                 await asyncio.gather(*self.workers, return_exceptions=True)
             self.workers.clear()
-            # Reset so the instance can be restarted with start().
-            self._shutdown = False
 
     async def submit(self, texts: list[str], metadata: dict[str, Any]) -> list[list[float]]:
         """Submit texts for embedding and wait for result."""

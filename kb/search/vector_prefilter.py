@@ -16,23 +16,27 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # Blocklist pattern: reject values containing SQL-dangerous characters.
-# Specifically: single/double quotes, semicolons, and SQL comment markers (--).
+# Specifically: double quotes, semicolons, and SQL comment markers (--).
+# Single quotes are allowed but escaped via SQL doubling ("O'Brien" → "O''Brien").
 # Everything else (unicode, brackets, parens, etc.) is allowed so that real-world
 # repo names and file paths work without error.
-_SQL_DANGEROUS = re.compile(r"""['";]|--""")
+_SQL_DANGEROUS = re.compile(r"""[";]|--""")
 
 
 def _sanitize_filter_value(value: str) -> str:
     """Sanitize a string value for use in a LanceDB filter expression.
 
-    Rejects values containing SQL-dangerous characters (quotes, semicolons,
-    comment markers).  All other characters are allowed to avoid breaking
-    searches on legitimate repo/file names.
+    Rejects values containing SQL-dangerous characters (double quotes,
+    semicolons, comment markers).  Single quotes are escaped by doubling
+    (standard SQL escaping) so names like ``O'Briens-lib`` work correctly.
+    All other characters are allowed to avoid breaking searches on
+    legitimate repo/file names.
     """
     if _SQL_DANGEROUS.search(value):
         logger.warning("Filter value rejected — contains SQL-dangerous characters: %r", value)
         raise ValueError(f"Invalid filter value: {value!r}")
-    return value
+    # Escape single quotes by doubling them (standard SQL escaping)
+    return value.replace("'", "''")
 
 
 @dataclass
