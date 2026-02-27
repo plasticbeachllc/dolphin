@@ -15,24 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **API Route Modularization**: Split monolithic `app.py` into dedicated route modules (`routes/repos.py`, `routes/tasks.py`, `routes/files.py`, `routes/health.py`, `routes/search.py`) for better maintainability.
-- **Thread Safety Protections**: Added thread-safe singleton patterns (`ASTCache`, `GlobalAdaptiveNProbes`), `threading.Lock` guards on `ParallelChunkCache`, and `PRAGMA busy_timeout` / WAL autocheckpoint to SQLite connections.
-- **Search Timeout Protections**: Wrapped `asyncio.gather()` with `asyncio.wait_for()` (60s default) in parallel search; added 30s futures timeouts in search backend and async embedder `stop()`.
 - **CLI Init Checklist**: `dolphin init` now prints a pass/fail readiness checklist (config, SQLite, LanceDB, API keys) with numbered next steps.
 - **Rich Search Panels**: `dolphin search` renders results as Rich panels with syntax-highlighted snippets, color-coded scores, and symbol metadata; non-TTY falls back to plain text.
 - **Indexing Progress Bar**: Rich progress display during `dolphin index` with file/chunk counts and elapsed time; non-TTY line-based fallback.
 - **Auto-Fallback to Local Search**: `dolphin search` silently falls back to local search when the API server is unavailable, removing the need for `--local`.
 - **Verbose Local Snippets**: `--verbose` / `--show-content` now enriches local search results with code snippets (previously API-only).
-- **SQL Injection Guard**: Column allowlist in `bump_session_counters`; `_sanitize_filter_value()` in vector prefilter escapes quotes and rejects injection patterns.
-- **New Unit Tests**: 191 new tests covering API routes, Prometheus metrics, async embedder, incremental indexing, migration registry, dynamic pool, and parallel scanner (total: 1347 unit, 157 integration).
 
 ### Changed
 
 - **Flat CLI Structure**: Removed `kb` subcommand layer; all commands promoted to top-level (`dolphin add-repo`, `dolphin index`, etc. instead of `dolphin kb add-repo`).
 - **Default Embedding Model**: Changed from `large` to `small` (`text-embedding-3-small`), reducing cost and latency for typical workloads.
 - **CLI Design Language**: Unified ocean color palette (`deep_sky_blue3`, `steel_blue1`, `sea_green2`) with nautical emoji and `one-dark` syntax theme; Rich gracefully degrades on 16-color terminals.
-- **Dead Code Removal**: Removed `OptimizedIngestionPipeline`, `KBPipeline` compat shim, stale comment blocks, and unused dev dependencies (`black`, `isort`, `mypy`).
-- **Print→Logging**: Converted ~50 `print()` calls in pipeline/watcher to structured `logger.info/warning/error`.
 - **Exception Specificity**: Replaced bare `raise Exception()` with `RuntimeError`/`ValueError`; narrowed `except Exception` to specific types in search backend.
 - **N+1 Query Fix**: Added batch `get_repos_by_names()` and consolidated dependency count queries into single `UNION ALL`.
 - **File-Lines Cache**: Upgraded from FIFO to LRU with `OrderedDict`, capped at 50K lines.
@@ -48,10 +41,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Config Missing Error**: Clean user-facing error when config file is absent instead of unhandled exception (#188).
 - **Config Path Resolution**: Fixed path resolution and added legacy config location fallback (#187).
 - **Connection Pool Poisoning**: Discard connections on rollback failure instead of returning them to pool.
-- **Event Loop Detection**: Fixed `ParallelSearch.search()` to handle already-running event loops via `ThreadPoolExecutor`.
-- **DynamicPool**: Fixed unused `available_capacity` variable in `_calculate_optimal_workers()`.
-- **Validate-Repo Tip**: Fixed stale `kb repair-repo` reference to `dolphin repair-repo`.
-- **Reverted Unstable Refactor**: Reverted #190 (comprehensive codebase refactor) and re-applied improvements incrementally through #192.
 
 ---
 
