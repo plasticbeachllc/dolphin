@@ -15,21 +15,20 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Blocklist pattern: reject values containing SQL-dangerous characters.
-# Specifically: double quotes, semicolons, backslashes, SQL comment markers
-# (-- and /*), and bare LIKE metacharacters (% and _).
-# Backslashes are rejected because some SQL engines interpret them as escape
-# characters, which could bypass quote protection.
-# LIKE wildcards (% and _) are blocked in *input values* — the code itself
-# converts user-supplied globs (* and ?) into LIKE patterns after sanitisation.
-# Single quotes are allowed but escaped via SQL doubling ("O'Brien" → "O''Brien").
-# Everything else (unicode, brackets, parens, etc.) is allowed so that real-world
-# repo names and file paths work without error.
-_SQL_DANGEROUS = re.compile(r"""[";\\%_]|--|/\*""")
+# Blocklist pattern for exact-match contexts (=, IN): reject values
+# containing SQL-dangerous characters but allow underscores and percent
+# signs, which are common in identifiers (e.g. ``my_project``).
+_SQL_DANGEROUS = re.compile(r"""[";\\]|--|/\*""")
+
+# Stricter pattern for values that will be interpolated into LIKE
+# clauses.  Bare ``%`` and ``_`` are LIKE wildcards and must not appear
+# in user-supplied *literal* text (the code converts globs ``*``/``?``
+# into ``%``/``_`` *after* sanitisation).
+_SQL_DANGEROUS_LIKE = re.compile(r"""[";\\%_]|--|/\*""")
 
 
 def _sanitize_filter_value(value: str) -> str | None:
-    """Sanitize a string value for use in a LanceDB filter expression.
+    """Sanitize a string value for use in exact-match SQL contexts (``=``, ``IN``).
 
     Returns ``None`` (instead of raising) when the value contains
     SQL-dangerous characters so that callers can skip the offending
@@ -42,6 +41,22 @@ def _sanitize_filter_value(value: str) -> str | None:
         logger.warning("Filter value skipped — contains SQL-dangerous characters: %r", value)
         return None
     # Escape single quotes by doubling them (standard SQL escaping)
+    return value.replace("'", "''")
+
+
+def _sanitize_like_value(value: str) -> str | None:
+    """Sanitize a string value for use in a SQL LIKE clause.
+
+    Like ``_sanitize_filter_value`` but additionally rejects bare LIKE
+    metacharacters (``%`` and ``_``) to prevent unintended wildcard
+    matching.  Callers convert user-supplied globs (``*`` / ``?``) into
+    LIKE wildcards *after* calling this function.
+
+    Returns ``None`` when the value is rejected.
+    """
+    if _SQL_DANGEROUS_LIKE.search(value):
+        logger.warning("LIKE filter value skipped — contains dangerous characters: %r", value)
+        return None
     return value.replace("'", "''")
 
 
@@ -178,7 +193,7 @@ class VectorPreFilter:
         # File path exclusions
         if criteria.exclude_paths:
             for exclude_path in criteria.exclude_paths:
-                sanitized = _sanitize_filter_value(exclude_path)
+                sanitized = _sanitize_like_value(exclude_path)
                 if sanitized is None:
                     continue
                 # Always use LIKE for path matching (more flexible)
@@ -194,7 +209,7 @@ class VectorPreFilter:
         if criteria.file_patterns:
             pattern_conditions = []
             for pattern in criteria.file_patterns:
-                sanitized = _sanitize_filter_value(pattern)
+                sanitized = _sanitize_like_value(pattern)
                 if sanitized is None:
                     continue
                 # Convert glob to SQL LIKE pattern
