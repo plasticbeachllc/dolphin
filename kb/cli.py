@@ -195,7 +195,7 @@ def search(
     if snippet_limit <= 0 and (show_content or verbose):
         snippet_limit = min(top_k, 3)
 
-    search_kwargs = dict(
+    _common_search_args = dict(
         query=query,
         repos=repos,
         path_prefix=path_prefix,
@@ -212,12 +212,12 @@ def search(
     result: tuple[list[dict[str, object]], dict[str, object], SQLiteMetadataStore | None] | None = None
 
     if not local:
-        result = _search_remote(**search_kwargs)
+        result = _search_remote(**_common_search_args)  # type: ignore[arg-type]  # dict unpacking is safe here
         if result is None:
             typer.echo("Server unavailable, falling back to local search.", err=True)
 
     if local or result is None:
-        hits, meta, sql_store = _search_local(**search_kwargs)
+        hits, meta, sql_store = _search_local(**_common_search_args)  # type: ignore[arg-type]  # dict unpacking is safe here
     else:
         hits, meta, sql_store = result
 
