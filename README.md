@@ -92,11 +92,11 @@ Additionally, a Claude skill is available for install from this repo.
 
 - AST-based chunking for Python, TypeScript, JavaScript, Markdown, SQL, and Svelte
 - Fallback text chunking for everything else
-- Respects `.gitignore` — indexes only what matters
+- Respects `.gitignore` and an optional repo-specific Dolphin config (`dolphin init --repo`)
 
 **Live sync**
 
-- File-watching built into `dolphin serve` — edits are re-indexed automatically
+- File-watching built into `dolphin serve` so edits are re-indexed automatically
 - Git-aware: handles branch switches gracefully
 
 **Multiple interfaces**
