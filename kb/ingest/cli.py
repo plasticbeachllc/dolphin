@@ -436,7 +436,7 @@ def _notify_server_reload(config: KBConfig) -> None:
         if response.status_code == 200:
             typer.echo(f"🧭 Server notified: {response.json().get('message')}")
         elif response.status_code != 404:  # Ignore 404 if old server running
-            typer.echo(f"🌊 Server reload failed: {response.status_code}", err=True)
+            typer.echo(f"⚠️  Server reload failed: {response.status_code}", err=True)
     except requests.RequestException:
         # Server probably not running, which is fine
         pass
@@ -718,7 +718,7 @@ def rm_repo(
 
         # Show warnings if any
         if "lancedb_warnings" in result:
-            typer.echo("\n🌊 Warnings:")
+            typer.echo("\n⚠️  Warnings:")
             for warning in result["lancedb_warnings"]:
                 typer.echo(f"    {warning}", err=True)
 
@@ -786,7 +786,7 @@ def reset_repo(
 
             # Show warnings if any
             if "lancedb_warnings" in result and result["lancedb_warnings"]:
-                typer.echo(f"🌊 Cleanup warnings: {len(result['lancedb_warnings'])}", err=True)
+                typer.echo(f"⚠️  Cleanup warnings: {len(result['lancedb_warnings'])}", err=True)
 
         except Exception as e:
             _log.warning("Enhanced cleanup failed for %s, continuing anyway", name, exc_info=True)
@@ -973,7 +973,7 @@ def validate_repo(
         if report["valid"]:
             typer.echo(f"\n⛵ Repository '{name}' is consistent.")
         else:
-            typer.echo(f"\n🌊 Repository '{name}' has consistency issues:", err=True)
+            typer.echo(f"\n🚩 Repository '{name}' has consistency issues:", err=True)
             for issue in report["issues"]:
                 typer.echo(f"  - {issue}", err=True)
 
@@ -1064,7 +1064,7 @@ def repair_repo(
             else:
                 typer.echo(f"\n⛵ No repairs needed for '{name}'.")
         else:
-            typer.echo("\n🌊 Repair completed with errors:", err=True)
+            typer.echo("\n🚩 Repair completed with errors:", err=True)
             for error in repair_report["errors"]:
                 typer.echo(f"  - {error}", err=True)
             raise typer.Exit(code=1)
@@ -1124,7 +1124,7 @@ def reset_all(
 
     # Show what will be deleted
     summary = metadata.summarize()
-    typer.echo("\n🌊 WARNING: This will delete EVERYTHING:")
+    typer.echo("\n⚠️  WARNING: This will delete EVERYTHING:")
     typer.echo(f"  • {len(repos)} repositories")
     typer.echo(f"  • {summary['files']} files")
     typer.echo(f"  • {summary['chunks']} chunks")
@@ -1181,7 +1181,7 @@ def reset_all(
     typer.echo(f"  Vectors deleted: {total_stats.vectors_deleted}")
 
     if total_stats.errors:
-        typer.echo(f"\n🌊 Warnings ({len(total_stats.errors)}):")
+        typer.echo(f"\n⚠️  Warnings ({len(total_stats.errors)}):")
         for error in total_stats.errors:
             typer.echo(f"  - {error}", err=True)
 
