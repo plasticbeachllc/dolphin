@@ -144,6 +144,7 @@ _cache_invalidation_healthy: bool = True
 # CPython dict ops are GIL-protected so no additional lock is needed here.
 _FILE_LINES_CACHE: OrderedDict[tuple[str, float], list[str] | None] = OrderedDict()
 _FILE_LINES_CACHE_MAX = 256
+_FILE_LINES_CACHE_MISS = object()  # Sentinel to distinguish cached None from cache miss
 # Don't cache files larger than this to prevent memory bloat.
 _FILE_LINES_MAX_LINES = 50_000
 
@@ -205,9 +206,8 @@ def _read_file_lines(full_path: Path) -> list[str] | None:
     except OSError:
         return None
     key = (str(full_path), mtime)
-    _sentinel = object()
-    cached = _FILE_LINES_CACHE.get(key, _sentinel)
-    if cached is not _sentinel:
+    cached = _FILE_LINES_CACHE.get(key, _FILE_LINES_CACHE_MISS)
+    if cached is not _FILE_LINES_CACHE_MISS:
         _FILE_LINES_CACHE.move_to_end(key)
         return cached  # type: ignore[return-value]
     # Read line-by-line so we can bail early for huge files without

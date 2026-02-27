@@ -311,10 +311,6 @@ class IngestionPipeline:
                     return cur.fetchone() is not None
 
                 try:
-                    # Get all file IDs for this repo
-                    cur.execute("SELECT id FROM files WHERE repo_id = ?", (repo_id,))
-                    file_ids = [row[0] for row in cur.fetchall()]
-
                     # Delete in correct order respecting foreign key constraints:
 
                     # 1. Delete code graph data (references code_nodes and files)
@@ -348,16 +344,11 @@ class IngestionPipeline:
                         cur.execute("DELETE FROM code_nodes WHERE repo_id = ?", (repo_id,))
 
                     # 2. Delete chunk locations (references chunk_content)
-                    for file_id in file_ids:
-                        cur.execute(
-                            """
-                            DELETE FROM chunk_locations
-                            WHERE content_id IN (
-                                SELECT id FROM chunk_content WHERE file_id = ?
-                            )
-                        """,
-                            (file_id,),
-                        )
+                    _del_locations = (
+                        "DELETE FROM chunk_locations"
+                        " WHERE content_id IN (SELECT id FROM chunk_content WHERE repo_id = ?)"
+                    )
+                    cur.execute(_del_locations, (repo_id,))
 
                     # 3. Delete chunk content (references files)
                     cur.execute("DELETE FROM chunk_content WHERE repo_id = ?", (repo_id,))
