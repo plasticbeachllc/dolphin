@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
-import sys
 from collections.abc import Sequence
 from contextlib import contextmanager
 
@@ -24,18 +24,18 @@ except ImportError:
 
 @contextmanager
 def _quiet_model_load():
-    """Suppress noisy stdout (safetensors LOAD REPORT) and httpx INFO logs during model loading."""
+    """Suppress noisy stdout (safetensors LOAD REPORT) and httpx INFO logs during model loading.
+
+    Note: redirect_stdout patches global state, so concurrent stdout writers would be
+    affected during this window. Acceptable here since model loading is one-time init.
+    """
     httpx_logger = logging.getLogger("httpx")
     prev_level = httpx_logger.level
     httpx_logger.setLevel(logging.WARNING)
-    devnull = open(os.devnull, "w")  # noqa: SIM115
-    old_stdout = sys.stdout
-    sys.stdout = devnull
     try:
-        yield
+        with open(os.devnull, "w") as devnull, contextlib.redirect_stdout(devnull):
+            yield
     finally:
-        sys.stdout = old_stdout
-        devnull.close()
         httpx_logger.setLevel(prev_level)
 
 
