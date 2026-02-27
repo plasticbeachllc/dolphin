@@ -443,8 +443,7 @@ class ParallelHybridSearch:
 
         if loop is not None and loop.is_running():
             raise RuntimeError(
-                "search() cannot be called from a running event loop — "
-                "use 'await search_async(...)' instead"
+                "search() cannot be called from a running event loop — use 'await search_async(...)' instead"
             )
         else:
             return asyncio.run(self.search_async(query, query_embedding, top_k, **kwargs))
