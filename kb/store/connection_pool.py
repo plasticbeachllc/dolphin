@@ -63,7 +63,6 @@ class SQLiteConnectionPool:
         # id() that is still in the set.
         self._overflow_conns: set[int] = set()
 
-
         # Statistics
         self._created_connections = 0
         self._reused_connections = 0
