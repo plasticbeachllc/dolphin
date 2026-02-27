@@ -15,7 +15,7 @@
 
 Dolphin indexes your repositories and lets you perform hybrid (semantic + keyword) search across them.
 
-## Get started in 60 seconds
+## Quickstart
 
 ```bash
 # Install
