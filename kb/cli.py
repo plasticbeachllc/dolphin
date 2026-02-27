@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import os
 import sys
 from pathlib import Path
@@ -64,11 +63,6 @@ def dolphin_callback(
     version: bool = typer.Option(False, "--version", "-v", help="Show version and exit"),
 ):
     version_callback(version)
-
-    # Suppress verbose structured logs in CLI mode unless the user explicitly
-    # requested a log level via DOLPHIN_LOG_LEVEL.
-    if not os.environ.get("DOLPHIN_LOG_LEVEL", "").strip():
-        logging.getLogger("kb").setLevel(logging.WARNING)
 
 
 _log = StructuredLogger("kb.cli", {"component": "dolphin_cli"})
@@ -206,6 +200,13 @@ def search(
         dolphin search "oauth callback" --lang py --verbose
         dolphin search "cache invalidation" --json
     """
+    # Suppress verbose structured logs in CLI search unless the user explicitly
+    # requested a log level via DOLPHIN_LOG_LEVEL.  Setting the env var before
+    # any StructuredLogger for the search backend is created ensures it picks up
+    # WARNING as its log level during __init__.
+    if not os.environ.get("DOLPHIN_LOG_LEVEL", "").strip():
+        os.environ["DOLPHIN_LOG_LEVEL"] = "WARNING"
+
     normalized_langs = [_normalize_lang_token(item) for item in (lang or []) if item and item.strip()]
 
     # If language filtering is requested, fetch a broader candidate set and trim post-filter.
