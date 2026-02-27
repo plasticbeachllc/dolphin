@@ -160,7 +160,12 @@ class EmbeddingQueue:
 
         Resets the shutdown flag so that a previously-stopped instance can be
         reused.  Must be called before submitting new work.
+
+        Raises:
+            RuntimeError: If workers are already running (call stop() first).
         """
+        if self.workers:
+            raise RuntimeError("Workers already running — call stop() before start()")
         self._shutdown = False
         for _ in range(num_workers):
             self.workers.append(asyncio.create_task(self._worker_loop()))

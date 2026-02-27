@@ -16,11 +16,13 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # Blocklist pattern: reject values containing SQL-dangerous characters.
-# Specifically: double quotes, semicolons, and SQL comment markers (--).
+# Specifically: double quotes, semicolons, backslashes, and SQL comment markers (--).
+# Backslashes are rejected because some SQL engines interpret them as escape
+# characters, which could bypass quote protection.
 # Single quotes are allowed but escaped via SQL doubling ("O'Brien" → "O''Brien").
 # Everything else (unicode, brackets, parens, etc.) is allowed so that real-world
 # repo names and file paths work without error.
-_SQL_DANGEROUS = re.compile(r"""[";]|--""")
+_SQL_DANGEROUS = re.compile(r"""[";\\]|--""")
 
 
 def _sanitize_filter_value(value: str) -> str:

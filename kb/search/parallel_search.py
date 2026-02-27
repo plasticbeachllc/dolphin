@@ -7,9 +7,7 @@ to reduce search latency by 40-50%.
 from __future__ import annotations
 
 import asyncio
-import concurrent.futures
 import logging
-import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -135,6 +133,7 @@ class ParallelHybridSearch:
         bm25_store: Any = None,
         embedding_provider: Any = None,
         vector_weight: float = 0.6,
+        search_timeout_s: float = 60.0,
     ):
         """Initialize parallel hybrid search.
 
@@ -146,6 +145,7 @@ class ParallelHybridSearch:
             bm25_store: Optional BM25 store (alternative to bm25_search_fn)
             embedding_provider: Optional embedding provider
             vector_weight: Weight for vector search results (default: 0.6)
+            search_timeout_s: Timeout in seconds for parallel search (default: 60)
         """
         # Create wrapper functions from stores if provided
         if vector_search_fn is None and vector_store is not None:
@@ -165,10 +165,7 @@ class ParallelHybridSearch:
         self.bm25_store = bm25_store
         self.embedding_provider = embedding_provider
         self.vector_weight = vector_weight
-
-        # Reusable executor for sync-to-async bridging (avoids per-call overhead)
-        self._sync_executor: concurrent.futures.ThreadPoolExecutor | None = None
-        self._sync_executor_lock = threading.Lock()
+        self.search_timeout_s = search_timeout_s
 
         # Statistics tracking
         self._total_searches = 0
@@ -176,14 +173,13 @@ class ParallelHybridSearch:
         self._total_bm25_time_ms = 0.0
         self._total_time_ms = 0.0
 
-    def __del__(self) -> None:
-        """Release the cached sync executor on garbage collection."""
-        executor = getattr(self, "_sync_executor", None)
-        if executor is not None:
-            try:
-                executor.shutdown(wait=False)
-            except Exception:
-                pass
+    def shutdown(self) -> None:
+        """Release resources held by this search instance.
+
+        Currently a no-op (no long-lived threads or connections are held),
+        but provided for consistent lifecycle management alongside other
+        backend components.
+        """
 
     async def search_async(
         self,
@@ -205,7 +201,7 @@ class ParallelHybridSearch:
 
         Raises:
             SearchTimeoutError: If both vector and BM25 searches fail to
-                complete within 60 seconds.
+                complete within ``search_timeout_s`` seconds.
         """
         # Generate embedding if not provided
         if query_embedding is None and self.embedding_provider is not None:
@@ -232,7 +228,7 @@ class ParallelHybridSearch:
                     bm25_task,
                     return_exceptions=True,
                 ),
-                timeout=60.0,
+                timeout=self.search_timeout_s,
             )
 
             # Handle exceptions
@@ -247,12 +243,12 @@ class ParallelHybridSearch:
         except TimeoutError:
             # Safe: pyproject.toml requires Python >= 3.12 where builtin
             # TimeoutError is the base for asyncio.TimeoutError (PEP 3151).
-            logger.error("Parallel search timed out after 60s")
+            logger.error("Parallel search timed out after %ss", self.search_timeout_s)
             vector_task.cancel()
             bm25_task.cancel()
             # Await cancelled tasks to avoid "Task was destroyed" warnings.
             await asyncio.gather(vector_task, bm25_task, return_exceptions=True)
-            raise SearchTimeoutError("Parallel search timed out after 60s")
+            raise SearchTimeoutError(f"Parallel search timed out after {self.search_timeout_s}s")
         except Exception as e:
             logger.error(f"Parallel search failed: {e}")
             vector_task.cancel()
@@ -446,27 +442,10 @@ class ParallelHybridSearch:
             loop = None
 
         if loop is not None and loop.is_running():
-            # Last-resort shim: the caller is already on a running event loop
-            # so we cannot use run_until_complete.  This offloads the async
-            # search to a background thread, which **blocks the current event
-            # loop thread** until the result is ready.  Prefer calling
-            # search_async() directly whenever possible.
-            # The coroutine must be created inside the target thread (not here)
-            # because coroutines are not safe to pass across threads.
-            _self = self
-            _query, _emb, _k, _kw = query, query_embedding, top_k, kwargs
-            logger.warning("search() called from running event loop — blocking; prefer search_async()")
-
-            def _run() -> list[SearchResult]:
-                return asyncio.run(_self.search_async(_query, _emb, _k, **_kw))
-
-            with self._sync_executor_lock:
-                if self._sync_executor is None:
-                    self._sync_executor = concurrent.futures.ThreadPoolExecutor(
-                        max_workers=1, thread_name_prefix="parallel-search-sync"
-                    )
-                executor = self._sync_executor
-            return executor.submit(_run).result()
+            raise RuntimeError(
+                "search() cannot be called from a running event loop — "
+                "use 'await search_async(...)' instead"
+            )
         else:
             return asyncio.run(self.search_async(query, query_embedding, top_k, **kwargs))
 

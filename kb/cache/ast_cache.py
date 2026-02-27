@@ -151,13 +151,13 @@ class ASTCache:
         total = self._hits + self._misses
         if total == 0:
             return 0.0
-        return (self._hits / total) * 100
+        return self._hits / total
 
     def hit_rate(self) -> float:
         """Calculate cache hit rate.
 
         Returns:
-            Hit rate as percentage (0-100)
+            Hit rate as a fraction (0.0–1.0)
         """
         with self._lock:
             return self._hit_rate_unlocked()
