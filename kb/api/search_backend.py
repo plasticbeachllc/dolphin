@@ -451,8 +451,8 @@ class KnowledgeSearchBackend:
                 )
                 request_logger.debug("BM25 results hydrated", {"hydrated_count": len(bm25_hydrated)})
             except TimeoutError:
-                # In Python >= 3.11, builtin TimeoutError is the base for
-                # concurrent.futures.TimeoutError, so this catch is sufficient.
+                # Python >= 3.12 (per pyproject.toml): builtin TimeoutError is the
+                # base for concurrent.futures.TimeoutError, so this catch is sufficient.
                 request_logger.warning("BM25 search timed out after 30s")
                 # Note: cancel() only prevents execution if the task hasn't started.
                 bm25_future.cancel()

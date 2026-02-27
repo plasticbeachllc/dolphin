@@ -15,20 +15,16 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Blocklist pattern for exact-match contexts (=, IN): reject values
-# containing SQL-dangerous characters but allow underscores and percent
-# signs, which are common in identifiers (e.g. ``my_project``).
+# Blocklist pattern: reject values containing SQL injection characters.
+# Blocks double quotes, semicolons, backslashes, and SQL comment markers
+# (-- and /*).  Underscores, percent signs, and other common path/identifier
+# characters are intentionally allowed — LIKE wildcards are escaped
+# separately by ``_escape_like_literals``.
 _SQL_DANGEROUS = re.compile(r"""[";\\]|--|/\*""")
-
-# Stricter pattern for values that will be interpolated into LIKE
-# clauses.  Bare ``%`` and ``_`` are LIKE wildcards and must not appear
-# in user-supplied *literal* text (the code converts globs ``*``/``?``
-# into ``%``/``_`` *after* sanitisation).
-_SQL_DANGEROUS_LIKE = re.compile(r"""[";\\%_]|--|/\*""")
 
 
 def _sanitize_filter_value(value: str) -> str | None:
-    """Sanitize a string value for use in exact-match SQL contexts (``=``, ``IN``).
+    """Sanitize a string value for use in SQL filter expressions.
 
     Returns ``None`` (instead of raising) when the value contains
     SQL-dangerous characters so that callers can skip the offending
@@ -40,24 +36,16 @@ def _sanitize_filter_value(value: str) -> str | None:
     if _SQL_DANGEROUS.search(value):
         logger.warning("Filter value skipped — contains SQL-dangerous characters: %r", value)
         return None
-    # Escape single quotes by doubling them (standard SQL escaping)
     return value.replace("'", "''")
 
 
-def _sanitize_like_value(value: str) -> str | None:
-    """Sanitize a string value for use in a SQL LIKE clause.
+def _escape_like_literals(value: str) -> str:
+    """Escape LIKE metacharacters (``%`` and ``_``) so they match literally.
 
-    Like ``_sanitize_filter_value`` but additionally rejects bare LIKE
-    metacharacters (``%`` and ``_``) to prevent unintended wildcard
-    matching.  Callers convert user-supplied globs (``*`` / ``?``) into
-    LIKE wildcards *after* calling this function.
-
-    Returns ``None`` when the value is rejected.
+    Call this on sanitized text *before* converting glob wildcards
+    (``*`` / ``?``) into LIKE wildcards (``%`` / ``_``).
     """
-    if _SQL_DANGEROUS_LIKE.search(value):
-        logger.warning("LIKE filter value skipped — contains dangerous characters: %r", value)
-        return None
-    return value.replace("'", "''")
+    return value.replace("%", "\\%").replace("_", "\\_")
 
 
 @dataclass
@@ -193,27 +181,28 @@ class VectorPreFilter:
         # File path exclusions
         if criteria.exclude_paths:
             for exclude_path in criteria.exclude_paths:
-                sanitized = _sanitize_like_value(exclude_path)
+                sanitized = _sanitize_filter_value(exclude_path)
                 if sanitized is None:
                     continue
-                # Always use LIKE for path matching (more flexible)
                 if "*" in exclude_path or "?" in exclude_path:
-                    # Convert glob to SQL LIKE pattern
-                    like_pattern = sanitized.replace("*", "%").replace("?", "_")
+                    # Escape literal LIKE chars, then convert globs to LIKE wildcards
+                    escaped = _escape_like_literals(sanitized)
+                    like_pattern = escaped.replace("*", "%").replace("?", "_")
                     conditions.append(f"path NOT LIKE '{like_pattern}'")
                 else:
-                    # Use LIKE with % for prefix matching
-                    conditions.append(f"path NOT LIKE '{sanitized}%'")
+                    escaped = _escape_like_literals(sanitized)
+                    conditions.append(f"path NOT LIKE '{escaped}%'")
 
         # File pattern inclusions
         if criteria.file_patterns:
             pattern_conditions = []
             for pattern in criteria.file_patterns:
-                sanitized = _sanitize_like_value(pattern)
+                sanitized = _sanitize_filter_value(pattern)
                 if sanitized is None:
                     continue
-                # Convert glob to SQL LIKE pattern
-                like_pattern = sanitized.replace("*", "%").replace("?", "_")
+                # Escape literal LIKE chars, then convert globs to LIKE wildcards
+                escaped = _escape_like_literals(sanitized)
+                like_pattern = escaped.replace("*", "%").replace("?", "_")
                 pattern_conditions.append(f"path LIKE '{like_pattern}'")
 
             # OR together all patterns

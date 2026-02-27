@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -448,22 +447,14 @@ class ParallelHybridSearch:
             SearchTimeoutError: If the underlying async search times out.
         """
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
         except RuntimeError:
-            loop = None
-
-        if loop is not None and loop.is_running():
-            warnings.warn(
-                "Calling search() from a running event loop is no longer supported. "
-                "Use 'await search_async(...)' instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            raise RuntimeError(
-                "search() cannot be called from a running event loop — use 'await search_async(...)' instead"
-            )
-        else:
+            # No running loop — safe to use asyncio.run().
             return asyncio.run(self.search_async(query, query_embedding, top_k, **kwargs))
+
+        raise RuntimeError(
+            "search() cannot be called from a running event loop — use 'await search_async(...)' instead"
+        )
 
     def get_stats(self) -> dict[str, Any]:
         """Get search statistics.

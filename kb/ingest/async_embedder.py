@@ -167,22 +167,29 @@ class EmbeddingQueue:
         if self.workers:
             raise RuntimeError("Workers already running — call stop() before start()")
         tasks: list[asyncio.Task] = []
-        for _ in range(num_workers):
-            tasks.append(asyncio.create_task(self._worker_loop()))
-        # Reset _shutdown only after all tasks are created successfully to
-        # avoid inconsistent state if create_task raises partway through.
+        try:
+            for _ in range(num_workers):
+                tasks.append(asyncio.create_task(self._worker_loop()))
+        except Exception:
+            # Cancel any tasks that were created before the failure.
+            for t in tasks:
+                t.cancel()
+            raise
         self._shutdown = False
         self.workers = tasks
 
     async def stop(self, timeout: float = 30.0):
         """Stop workers and wait for queue to drain.
 
+        Safe to call multiple times; subsequent calls are no-ops.
         After stop() returns the instance may be restarted via start().
 
         Args:
             timeout: Maximum seconds to wait for the queue to drain before
                      force-cancelling workers.
         """
+        if self._shutdown and not self.workers:
+            return
         self._shutdown = True
         try:
             await asyncio.wait_for(self.queue.join(), timeout=timeout)
