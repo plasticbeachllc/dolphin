@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -200,12 +201,12 @@ def search(
         dolphin search "oauth callback" --lang py --verbose
         dolphin search "cache invalidation" --json
     """
-    # Suppress verbose structured logs in CLI search unless the user explicitly
-    # requested a log level via DOLPHIN_LOG_LEVEL.  Setting the env var before
-    # any StructuredLogger for the search backend is created ensures it picks up
-    # WARNING as its log level during __init__.
+    # Suppress verbose structured logs (INFO and below) in CLI search unless
+    # the user explicitly opted into a log level via DOLPHIN_LOG_LEVEL.
+    # logging.disable() is order-independent — it overrides per-logger levels
+    # regardless of when StructuredLogger instances are created.
     if not os.environ.get("DOLPHIN_LOG_LEVEL", "").strip():
-        os.environ["DOLPHIN_LOG_LEVEL"] = "WARNING"
+        logging.disable(logging.INFO)
 
     normalized_langs = [_normalize_lang_token(item) for item in (lang or []) if item and item.strip()]
 
