@@ -188,12 +188,15 @@ class ParallelHybridSearch:
 
         bm25_task = asyncio.create_task(self._bm25_search_async(query, top_k, **kwargs))
 
-        # Wait for both to complete
+        # Wait for both to complete (with timeout to prevent indefinite hangs)
         try:
-            vector_results, bm25_results = await asyncio.gather(
-                vector_task,
-                bm25_task,
-                return_exceptions=True,
+            vector_results, bm25_results = await asyncio.wait_for(
+                asyncio.gather(
+                    vector_task,
+                    bm25_task,
+                    return_exceptions=True,
+                ),
+                timeout=60.0,
             )
 
             # Handle exceptions
@@ -205,8 +208,15 @@ class ParallelHybridSearch:
                 logger.warning(f"BM25 search failed: {bm25_results}")
                 bm25_results = []
 
+        except TimeoutError:
+            logger.error("Parallel search timed out after 60s")
+            vector_task.cancel()
+            bm25_task.cancel()
+            return []
         except Exception as e:
             logger.error(f"Parallel search failed: {e}")
+            vector_task.cancel()
+            bm25_task.cancel()
             # Fall back to sequential
             return await self._search_sequential(query, query_embedding, top_k, **kwargs)
 
@@ -386,16 +396,20 @@ class ParallelHybridSearch:
         Returns:
             List of SearchResult objects
         """
-        # Create event loop and run async search
-        import asyncio
-
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
         except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            loop = None
 
-        return loop.run_until_complete(self.search_async(query, query_embedding, top_k, **kwargs))
+        if loop is not None and loop.is_running():
+            # Already inside an async context — cannot use run_until_complete.
+            # Create a new thread to run the coroutine safely.
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, self.search_async(query, query_embedding, top_k, **kwargs)).result()
+        else:
+            return asyncio.run(self.search_async(query, query_embedding, top_k, **kwargs))
 
     def get_stats(self) -> dict[str, Any]:
         """Get search statistics.

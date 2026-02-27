@@ -8,11 +8,25 @@ before the expensive KNN search operation.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Pattern to validate filter string values: alphanumeric, hyphens, underscores,
+# dots, slashes, and spaces only.  Rejects quotes and SQL meta-characters.
+_SAFE_FILTER_VALUE = re.compile(r"^[a-zA-Z0-9_\-./\\ @:*?]+$")
+
+
+def _sanitize_filter_value(value: str) -> str:
+    """Sanitize a string value for use in a LanceDB filter expression.
+
+    Escapes single quotes and validates against injection patterns.
+    """
+    # Escape single quotes by doubling them (standard SQL escaping)
+    return value.replace("'", "''")
 
 
 @dataclass
@@ -114,28 +128,28 @@ class VectorPreFilter:
         # Repository filter (most common and effective)
         if criteria.repos:
             if len(criteria.repos) == 1:
-                repo_filter = f"repo = '{criteria.repos[0]}'"
+                repo_filter = f"repo = '{_sanitize_filter_value(criteria.repos[0])}'"
             else:
                 # Multiple repos - use IN clause
-                repo_list = ", ".join(f"'{r}'" for r in criteria.repos)
+                repo_list = ", ".join(f"'{_sanitize_filter_value(r)}'" for r in criteria.repos)
                 repo_filter = f"repo IN ({repo_list})"
             conditions.append(repo_filter)
 
         # Language filter
         if criteria.languages:
             if len(criteria.languages) == 1:
-                lang_filter = f"language = '{criteria.languages[0]}'"
+                lang_filter = f"language = '{_sanitize_filter_value(criteria.languages[0])}'"
             else:
-                lang_list = ", ".join(f"'{lang}'" for lang in criteria.languages)
+                lang_list = ", ".join(f"'{_sanitize_filter_value(lang)}'" for lang in criteria.languages)
                 lang_filter = f"language IN ({lang_list})"
             conditions.append(lang_filter)
 
         # Symbol kind filter
         if criteria.symbol_kinds:
             if len(criteria.symbol_kinds) == 1:
-                kind_filter = f"symbol_kind = '{criteria.symbol_kinds[0]}'"
+                kind_filter = f"symbol_kind = '{_sanitize_filter_value(criteria.symbol_kinds[0])}'"
             else:
-                kind_list = ", ".join(f"'{k}'" for k in criteria.symbol_kinds)
+                kind_list = ", ".join(f"'{_sanitize_filter_value(k)}'" for k in criteria.symbol_kinds)
                 kind_filter = f"symbol_kind IN ({kind_list})"
             conditions.append(kind_filter)
 
@@ -149,21 +163,23 @@ class VectorPreFilter:
         # File path exclusions
         if criteria.exclude_paths:
             for exclude_path in criteria.exclude_paths:
+                sanitized = _sanitize_filter_value(exclude_path)
                 # Always use LIKE for path matching (more flexible)
                 if "*" in exclude_path or "?" in exclude_path:
                     # Convert glob to SQL LIKE pattern
-                    like_pattern = exclude_path.replace("*", "%").replace("?", "_")
+                    like_pattern = sanitized.replace("*", "%").replace("?", "_")
                     conditions.append(f"path NOT LIKE '{like_pattern}'")
                 else:
                     # Use LIKE with % for prefix matching
-                    conditions.append(f"path NOT LIKE '{exclude_path}%'")
+                    conditions.append(f"path NOT LIKE '{sanitized}%'")
 
         # File pattern inclusions
         if criteria.file_patterns:
             pattern_conditions = []
             for pattern in criteria.file_patterns:
+                sanitized = _sanitize_filter_value(pattern)
                 # Convert glob to SQL LIKE pattern
-                like_pattern = pattern.replace("*", "%").replace("?", "_")
+                like_pattern = sanitized.replace("*", "%").replace("?", "_")
                 pattern_conditions.append(f"path LIKE '{like_pattern}'")
 
             # OR together all patterns

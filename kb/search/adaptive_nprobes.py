@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import math
+import threading
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -385,6 +386,7 @@ class GlobalAdaptiveNProbes:
     """Global singleton for adaptive nprobes tuning."""
 
     _instance: AdaptiveNProbes | None = None
+    _lock: threading.Lock = threading.Lock()
 
     @classmethod
     def get_instance(
@@ -400,13 +402,16 @@ class GlobalAdaptiveNProbes:
             Global AdaptiveNProbes instance
         """
         if cls._instance is None:
-            cls._instance = AdaptiveNProbes(target_latency_ms=target_latency_ms)
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = AdaptiveNProbes(target_latency_ms=target_latency_ms)
         return cls._instance
 
     @classmethod
     def reset_instance(cls) -> None:
         """Reset the global instance."""
-        cls._instance = None
+        with cls._lock:
+            cls._instance = None
 
 
 def get_adaptive_params(

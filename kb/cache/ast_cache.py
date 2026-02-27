@@ -6,13 +6,17 @@ files, resulting in 40%+ parse time reduction on incremental indexing.
 
 from __future__ import annotations
 
+import logging
 import pickle
+import threading
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from ..chunkers.types import Chunk
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -212,18 +216,22 @@ class ASTCache:
     def __del__(self):
         """Save cache to disk on destruction."""
         if self.persist_path:
-            self._save_to_disk()
+            try:
+                self._save_to_disk()
+            except Exception:
+                pass  # Suppress errors during GC
 
 
 # Global cache instance
 _ast_cache: ASTCache | None = None
+_ast_cache_lock = threading.Lock()
 
 
 def get_ast_cache(
     max_size: int = 1000,
     persist_path: Path | None = None,
 ) -> ASTCache:
-    """Get or create the global AST cache instance.
+    """Get or create the global AST cache instance (thread-safe).
 
     Args:
         max_size: Maximum cache size (default: 1000)
@@ -235,7 +243,9 @@ def get_ast_cache(
     global _ast_cache
 
     if _ast_cache is None:
-        _ast_cache = ASTCache(max_size=max_size, persist_path=persist_path)
+        with _ast_cache_lock:
+            if _ast_cache is None:
+                _ast_cache = ASTCache(max_size=max_size, persist_path=persist_path)
 
     return _ast_cache
 
@@ -243,5 +253,6 @@ def get_ast_cache(
 def clear_ast_cache() -> None:
     """Clear the global AST cache."""
     global _ast_cache
-    if _ast_cache is not None:
-        _ast_cache.clear()
+    with _ast_cache_lock:
+        if _ast_cache is not None:
+            _ast_cache.clear()

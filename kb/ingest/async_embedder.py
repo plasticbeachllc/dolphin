@@ -160,10 +160,18 @@ class EmbeddingQueue:
         for _ in range(num_workers):
             self.workers.append(asyncio.create_task(self._worker_loop()))
 
-    async def stop(self):
-        """Stop workers and wait for queue to drain."""
+    async def stop(self, timeout: float = 30.0):
+        """Stop workers and wait for queue to drain.
+
+        Args:
+            timeout: Maximum seconds to wait for the queue to drain before
+                     force-cancelling workers.
+        """
         self._shutdown = True
-        await self.queue.join()
+        try:
+            await asyncio.wait_for(self.queue.join(), timeout=timeout)
+        except TimeoutError:
+            logger.warning(f"Embedding queue did not drain within {timeout}s, cancelling workers")
         for w in self.workers:
             w.cancel()
         if self.workers:

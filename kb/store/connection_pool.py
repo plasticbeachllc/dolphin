@@ -89,9 +89,13 @@ class SQLiteConnectionPool:
         # Enable WAL mode for better concurrency
         if self.enable_wal:
             conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA wal_autocheckpoint=1000")
 
         # Always enforce foreign key constraints for metadata integrity
         conn.execute("PRAGMA foreign_keys=ON")
+
+        # Busy timeout: wait up to 5s on lock contention instead of failing immediately
+        conn.execute("PRAGMA busy_timeout=5000")
 
         # Optimization pragmas
         conn.execute("PRAGMA synchronous=NORMAL")
@@ -197,11 +201,18 @@ class SQLiteConnectionPool:
         Args:
             conn: Connection to release
         """
-        # Rollback any uncommitted transaction
+        # Rollback any uncommitted transaction and verify connection health
         try:
             conn.rollback()
         except sqlite3.Error:
-            pass
+            # Connection is unhealthy — discard it instead of returning to pool
+            try:
+                conn.close()
+            except sqlite3.Error:
+                pass
+            with self._overflow_lock:
+                self._overflow_count = max(0, self._overflow_count - 1)
+            return
 
         # Try to return to pool
         try:
