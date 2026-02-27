@@ -320,6 +320,7 @@ class KBConfig:
         server_data = data.get("server", {})
         api_data = data.get("api", {})
         graph_data = data.get("graph", {})
+        indexing_data = data.get("indexing", {})
 
         # Build retrieval config using helper methods
         retrieval_config = cls._build_retrieval_config(retrieval_data)
@@ -356,17 +357,18 @@ class KBConfig:
             if embedding_data.get("api_key_env"):
                 config_kwargs["openai_api_key_env"] = embedding_data.get("api_key_env")
 
-        # Handle top-level settings
-        if data.get("per_session_spend_cap_usd") is not None:
-            config_kwargs["per_session_spend_cap_usd"] = cls._coerce_optional(
-                data.get("per_session_spend_cap_usd"), float
-            )
-        if data.get("ignore"):
-            ignore_value = data.get("ignore")
-            if isinstance(ignore_value, list):
-                config_kwargs["ignore"] = ignore_value
-        if data.get("exceptions") or data.get("ignore_exceptions"):
-            config_kwargs["ignore_exceptions"] = data.get("exceptions", data.get("ignore_exceptions", []))
+        # Handle indexing settings: prefer [indexing] section, then top-level.
+        spend_cap = indexing_data.get("per_session_spend_cap_usd") or data.get("per_session_spend_cap_usd")
+        if spend_cap is not None:
+            config_kwargs["per_session_spend_cap_usd"] = cls._coerce_optional(spend_cap, float)
+
+        ignore_value = indexing_data.get("ignore") or data.get("ignore")
+        if isinstance(ignore_value, list):
+            config_kwargs["ignore"] = ignore_value
+
+        ignore_exc = indexing_data.get("ignore_exceptions") or data.get("ignore_exceptions") or data.get("exceptions")
+        if isinstance(ignore_exc, list):
+            config_kwargs["ignore_exceptions"] = ignore_exc
 
         # Always override retrieval config with our constructed one
         config_kwargs["retrieval"] = retrieval_config
@@ -488,4 +490,22 @@ def load_config(path: Path | None = None, repo_path: Path | None = None) -> KBCo
         raise ValueError("Repo config must contain a mapping at the top level")
 
     config_data = _deep_merge(base_config, repo_config) if base_config else repo_config
+
+    # Union ignore lists from both configs so repo-level adds to (not replaces) global ignores.
+    def _collect_ignores(cfg: dict[str, Any], key: str) -> list[str]:
+        """Collect ignore patterns from [indexing] section or top-level."""
+        indexing = cfg.get("indexing", {})
+        val = indexing.get(key) or cfg.get(key)
+        return list(val) if isinstance(val, list) else []
+
+    if base_config and repo_config:
+        for key in ("ignore", "ignore_exceptions"):
+            merged_list = list(dict.fromkeys(_collect_ignores(base_config, key) + _collect_ignores(repo_config, key)))
+            if merged_list:
+                # Place in [indexing] if either config used it, otherwise top-level
+                if config_data.get("indexing") is not None:
+                    config_data.setdefault("indexing", {})[key] = merged_list
+                else:
+                    config_data[key] = merged_list
+
     return KBConfig.from_mapping(config_data)
