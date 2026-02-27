@@ -576,9 +576,9 @@ def _display_results(
 
     Falls back to plain text when stdout is not a TTY (for piping/scripting).
     """
-    from kb.terminal import STDOUT_CONSOLE
+    from kb.terminal import STDOUT_CONSOLE, is_tty
 
-    if not STDOUT_CONSOLE.is_terminal:
+    if not is_tty():
         _display_results_plain(
             query=query,
             hits=hits,
@@ -640,7 +640,7 @@ def _display_results(
         subtitle = f"[{style}]{score:.2f}[/{style}]"
 
         # Build panel body
-        renderables: list[Text | Syntax | str] = []
+        renderables: list[Text | Syntax] = []
 
         # Symbol + language info line
         info_parts: list[str] = []

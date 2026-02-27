@@ -9,7 +9,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 if TYPE_CHECKING:
     from rich.progress import Progress
@@ -56,10 +56,18 @@ def _read_config_template() -> str:
     return _CONFIG_TEMPLATE_PATH.read_text(encoding="utf-8")
 
 
-def _checklist_row(status: str, label: str, detail: str = "") -> str:
+_ChecklistStatus = Literal["ok", "missing", "pending"]
+
+_STATUS_STYLES: dict[_ChecklistStatus, str] = {
+    "ok": "[green]ok[/green]",
+    "missing": "[red]missing[/red]",
+    "pending": "[dim]pending[/dim]",
+}
+
+
+def _checklist_row(status: _ChecklistStatus, label: str, detail: str = "") -> str:
     """Format a single readiness-checklist row with consistent alignment."""
-    status_styles = {"ok": "[green]ok[/green]", "missing": "[red]missing[/red]", "pending": "[dim]pending[/dim]"}
-    styled = status_styles.get(status, status)
+    styled = _STATUS_STYLES[status]
     # Pad to 10 visible chars so labels line up regardless of status word length.
     pad = 10 - len(status)
     return f"    {styled}{' ' * pad}{label:<15}{detail}"
@@ -223,9 +231,9 @@ def _create_progress_display() -> tuple["Progress | None", Callable[[dict[str, A
     Returns (None, line_callback) when stdout is not a TTY.
     Returns (Progress, rich_callback) when stdout is a TTY.
     """
-    from ..terminal import STDOUT_CONSOLE
+    from ..terminal import is_tty
 
-    if not STDOUT_CONSOLE.is_terminal:
+    if not is_tty():
         # Non-TTY: periodic line output
         _last_n = 0
 
@@ -233,7 +241,7 @@ def _create_progress_display() -> tuple["Progress | None", Callable[[dict[str, A
             nonlocal _last_n
             n = data.get("files_done", 0)
             total = data.get("total_files", 0)
-            step = max(10, total // 5) if total else 50
+            step = max(1, total // 10) if total else 50
             if n - _last_n >= step or n == total:
                 typer.echo(f"  Progress: {n}/{total} files, {data.get('chunks_indexed', 0):,} chunks")
                 _last_n = n

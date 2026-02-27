@@ -11,6 +11,12 @@ StatusLevel = Literal["step", "info", "success", "warn", "error"]
 STDOUT_CONSOLE = Console(stderr=False, highlight=False, soft_wrap=True)
 _STDERR_CONSOLE = Console(stderr=True, highlight=False, soft_wrap=True)
 
+
+def is_tty() -> bool:
+    """Return whether stdout is connected to an interactive terminal."""
+    return STDOUT_CONSOLE.is_terminal
+
+
 _LEVEL_META: dict[StatusLevel, tuple[str, str]] = {
     "step": ("bright_blue", "STEP"),
     "info": ("cyan", "INFO"),
