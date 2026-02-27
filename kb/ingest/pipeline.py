@@ -1274,7 +1274,7 @@ class IngestionPipeline:
 
         # Fire initial callback for pre-filtered ignored files so progress starts correctly
         if files_skipped_ignored > 0:
-            _fire("file_skipped", "(pre-filtered ignored files)")
+            _fire("file_skipped", "")
 
         try:
             # Phase 1: Parallel Parsing

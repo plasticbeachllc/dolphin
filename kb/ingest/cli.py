@@ -66,6 +66,7 @@ _STATUS_STYLES: dict[_ChecklistStatus, str] = {
 
 
 _CHECKLIST_STATUS_WIDTH = 10
+_CHECKLIST_LABEL_WIDTH = 15
 
 
 def _checklist_row(status: _ChecklistStatus, label: str, detail: str = "") -> str:
@@ -73,7 +74,8 @@ def _checklist_row(status: _ChecklistStatus, label: str, detail: str = "") -> st
     styled = _STATUS_STYLES[status]
     # Pad so the visible status text occupies a fixed width, keeping labels aligned.
     pad = _CHECKLIST_STATUS_WIDTH - len(status)
-    return f"    {styled}{' ' * pad}{label:<15}{detail}"
+    col_width = max(_CHECKLIST_LABEL_WIDTH, len(label) + 1)
+    return f"    {styled}{' ' * pad}{label:<{col_width}}{detail}"
 
 
 def _print_readiness_checklist(console: Console, config: KBConfig, config_path: Path) -> None:
@@ -248,7 +250,7 @@ def _create_progress_display() -> tuple["Progress | None", Callable[[dict[str, A
             if not _started:
                 typer.echo(f"  Indexing {total} files...", err=True)
                 _started = True
-            step = max(1, total // 10) if total else 50
+            step = max(1, total // 10) if total > 0 else 1
             if n - _last_n >= step or (n == total and total > 0):
                 typer.echo(f"  Progress: {n}/{total} files, {data.get('chunks_indexed', 0):,} chunks", err=True)
                 _last_n = n
