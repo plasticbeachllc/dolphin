@@ -201,13 +201,6 @@ def search(
         dolphin search "oauth callback" --lang py --verbose
         dolphin search "cache invalidation" --json
     """
-    # Suppress verbose structured logs (INFO and below) in CLI search unless
-    # the user explicitly opted into a log level via DOLPHIN_LOG_LEVEL.
-    # logging.disable() is order-independent — it overrides per-logger levels
-    # regardless of when StructuredLogger instances are created.
-    if not os.environ.get("DOLPHIN_LOG_LEVEL", "").strip():
-        logging.disable(logging.INFO)
-
     normalized_langs = [_normalize_lang_token(item) for item in (lang or []) if item and item.strip()]
 
     # If language filtering is requested, fetch a broader candidate set and trim post-filter.
@@ -308,6 +301,13 @@ def _search_local(
             embedding_provider_type=config.embedding_provider,
             hybrid_search_enabled=True,
         )
+
+        # Suppress verbose structured logs from the search backend in CLI mode
+        # unless the user explicitly opted into a log level via DOLPHIN_LOG_LEVEL.
+        # We set the level on the stdlib logger directly (backend.logger.logger)
+        # after creation, which overrides the default INFO that StructuredLogger sets.
+        if not os.environ.get("DOLPHIN_LOG_LEVEL", "").strip():
+            backend.logger.logger.setLevel(logging.WARNING)
 
         # Create search request
         request = SearchRequest(
