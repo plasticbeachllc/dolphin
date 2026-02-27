@@ -275,11 +275,13 @@ class IngestionPipeline:
         """
         # Delete from LanceDB (both models)
         logger.info("  Clearing vectors from LanceDB...")
+        deletion_errors: list[str] = []
         for model in ["small", "large"]:
             try:
                 self.lancedb.delete_repo(repo_name, model=model)
             except Exception:
                 logger.warning("Could not delete %s vectors for repo %s", model, repo_name, exc_info=True)
+                deletion_errors.append(f"LanceDB {model} vectors")
 
         # Delete code graph data
         if self.graph_store:
@@ -289,6 +291,15 @@ class IngestionPipeline:
                 logger.info(f"  Deleted {nodes_deleted} graph nodes and associated edges")
             except Exception:
                 logger.warning("Could not delete graph data for repo_id=%s", repo_id, exc_info=True)
+                deletion_errors.append("graph data")
+
+        if deletion_errors:
+            logger.warning(
+                "Partial deletion for repo %s — failed to delete: %s. "
+                "Index may be inconsistent; consider a full reindex.",
+                repo_name,
+                ", ".join(deletion_errors),
+            )
 
         # Delete from metadata database
         logger.info("  Clearing metadata...")

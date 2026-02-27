@@ -91,7 +91,7 @@ class GitRepository:
             RuntimeError: If the git command fails
         """
         try:
-            result = subprocess.check_output(["git", "-C", str(self.root), *args], stderr=subprocess.STDOUT)
+            result = subprocess.check_output(["git", "-C", str(self.root), *args], stderr=subprocess.STDOUT, timeout=30)
             return result.decode("utf-8").strip()
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Git command failed: {' '.join(args)}\n{e.output.decode('utf-8', errors='ignore')}")

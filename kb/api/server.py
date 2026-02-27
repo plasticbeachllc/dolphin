@@ -353,7 +353,8 @@ def main():
     """Entry point for kb-api command."""
     import uvicorn
 
-    uvicorn.run("kb.api.server:app_with_lifespan", host="0.0.0.0", port=8000, reload=True)
+    dev_mode = os.environ.get("DOLPHIN_DEV_MODE", "").lower() in ("1", "true", "yes")
+    uvicorn.run("kb.api.server:app_with_lifespan", host="0.0.0.0", port=8000, reload=dev_mode)
 
 
 if __name__ == "__main__":

@@ -29,6 +29,7 @@ from .utils import GitRepository, validate_path_within_repo
 _log = logging.getLogger(__name__)
 
 # Constants
+# Batch size for metadata hash lookups (distinct from config.embedding_batch_size for the embedding API).
 EMBEDDING_BATCH_SIZE = 128
 ESTIMATED_TOKENS_PER_CHUNK = 200
 CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_:-]+$")
@@ -80,8 +81,11 @@ async def request_validation_error_handler(request: Request, exc: RequestValidat
 def _load_default_config() -> KBConfig:
     try:
         return load_config()
+    except FileNotFoundError:
+        _log.info("No config file found; using defaults.")
+        return KBConfig()
     except Exception:
-        _log.warning("Failed to load config; using defaults.", exc_info=True)
+        _log.error("Failed to load config; using defaults. Fix config to avoid unexpected behavior.", exc_info=True)
         return KBConfig()
 
 
@@ -140,6 +144,8 @@ _cache_invalidation_healthy: bool = True
 # CPython dict ops are GIL-protected so no additional lock is needed here.
 _FILE_LINES_CACHE: OrderedDict[tuple[str, float], list[str]] = OrderedDict()
 _FILE_LINES_CACHE_MAX = 256
+# Don't cache files larger than this to prevent memory bloat.
+_FILE_LINES_MAX_LINES = 50_000
 
 
 def get_sql_store():
@@ -208,9 +214,11 @@ def _read_file_lines(full_path: Path) -> list[str] | None:
             lines = fh.readlines()
     except (OSError, UnicodeDecodeError):
         return None
-    if len(_FILE_LINES_CACHE) >= _FILE_LINES_CACHE_MAX:
-        _FILE_LINES_CACHE.popitem(last=False)
-    _FILE_LINES_CACHE[key] = lines
+    # Only cache files that won't blow up memory.
+    if len(lines) <= _FILE_LINES_MAX_LINES:
+        if len(_FILE_LINES_CACHE) >= _FILE_LINES_CACHE_MAX:
+            _FILE_LINES_CACHE.popitem(last=False)
+        _FILE_LINES_CACHE[key] = lines
     return lines
 
 
@@ -445,8 +453,15 @@ def get_search_backend() -> SearchBackend:
 
 
 def reset_search_backend() -> None:
-    """Restore the default empty backend."""
+    """Restore the default empty backend, closing the previous one if applicable."""
+    old = _search_backend
     set_search_backend(None)
+    close_fn = getattr(old, "close", None)
+    if close_fn is not None:
+        try:
+            close_fn()
+        except Exception:
+            _log.debug("Error closing previous search backend", exc_info=True)
 
 
 def _invalidate_search_cache(repo_name: str) -> None:

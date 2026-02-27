@@ -230,4 +230,4 @@ combine-as-imports = true
 split-on-trailing-comma = false
 
 [tool.ty.environment]
-python-version = "3.12"
+python-version = "3.13"

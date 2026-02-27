@@ -917,6 +917,16 @@ class SQLiteMetadataStore:
                 )
             conn.commit()
 
+    _ALLOWED_SESSION_COLUMNS = frozenset(
+        {
+            "files_indexed",
+            "chunks_indexed",
+            "vectors_written",
+            "chunks_skipped",
+            "chunks_pruned",
+        }
+    )
+
     def bump_session_counters(
         self,
         session_id: int,
@@ -928,25 +938,25 @@ class SQLiteMetadataStore:
         chunks_pruned: int | None = None,
     ) -> None:
         """Set session counters to the provided values (no-op if all None)."""
-        sets: list[str] = []
-        params: list[int] = []
+        column_values: dict[str, int] = {}
         if files_indexed is not None:
-            sets.append("files_indexed = ?")
-            params.append(int(files_indexed))
+            column_values["files_indexed"] = int(files_indexed)
         if chunks_indexed is not None:
-            sets.append("chunks_indexed = ?")
-            params.append(int(chunks_indexed))
+            column_values["chunks_indexed"] = int(chunks_indexed)
         if vectors_written is not None:
-            sets.append("vectors_written = ?")
-            params.append(int(vectors_written))
+            column_values["vectors_written"] = int(vectors_written)
         if chunks_skipped is not None:
-            sets.append("chunks_skipped = ?")
-            params.append(int(chunks_skipped))
+            column_values["chunks_skipped"] = int(chunks_skipped)
         if chunks_pruned is not None:
-            sets.append("chunks_pruned = ?")
-            params.append(int(chunks_pruned))
-        if not sets:
+            column_values["chunks_pruned"] = int(chunks_pruned)
+        if not column_values:
             return
+        # Guard against accidental injection: only allow known column names.
+        for col in column_values:
+            if col not in self._ALLOWED_SESSION_COLUMNS:
+                raise ValueError(f"Disallowed session column: {col}")
+        sets = [f"{col} = ?" for col in column_values]
+        params: list[int] = list(column_values.values())
         sql = f"UPDATE sessions SET {', '.join(sets)} WHERE id = ?"
         params.append(int(session_id))
         with self._connect() as conn, closing(conn.cursor()) as cur:
@@ -1083,30 +1093,45 @@ class SQLiteMetadataStore:
                 ) from exc
 
     def _collect_file_dependency_counts(self, cur, file_id: int) -> dict[str, int]:
-        """Collect remaining dependent rows for a file on FK deletion failure."""
-        checks: dict[str, str] = {
-            "chunk_content": "SELECT COUNT(*) FROM chunk_content WHERE file_id = ?",
-            "code_nodes": "SELECT COUNT(*) FROM code_nodes WHERE file_id = ?",
-            "node_aliases": "SELECT COUNT(*) FROM node_aliases WHERE file_id = ?",
-            "graph_metrics": (
-                "SELECT COUNT(*) FROM graph_metrics gm JOIN code_nodes cn ON gm.node_id = cn.id WHERE cn.file_id = ?"
-            ),
-            "file_snapshots": "SELECT COUNT(*) FROM file_snapshots WHERE file_id = ?",
-        }
+        """Collect remaining dependent rows for a file on FK deletion failure.
 
-        counts: dict[str, int] = {}
-        for table_name, sql in checks.items():
-            cur.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?",
-                (table_name,),
-            )
-            if cur.fetchone() is None:
+        Uses a single query with UNION ALL to avoid multiple round-trips.
+        """
+        # Build a single query checking all dependency tables at once.
+        checks = [
+            ("chunk_content", "SELECT 'chunk_content' AS tbl, COUNT(*) AS cnt FROM chunk_content WHERE file_id = ?"),
+            ("code_nodes", "SELECT 'code_nodes', COUNT(*) FROM code_nodes WHERE file_id = ?"),
+            ("node_aliases", "SELECT 'node_aliases', COUNT(*) FROM node_aliases WHERE file_id = ?"),
+            (
+                "graph_metrics",
+                "SELECT 'graph_metrics', COUNT(*) FROM graph_metrics gm "
+                "JOIN code_nodes cn ON gm.node_id = cn.id WHERE cn.file_id = ?",
+            ),
+            ("file_snapshots", "SELECT 'file_snapshots', COUNT(*) FROM file_snapshots WHERE file_id = ?"),
+        ]
+
+        # Filter to only tables that exist in the schema.
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        existing_tables = {row[0] for row in cur.fetchall()}
+
+        parts = []
+        params: list[int] = []
+        for table_name, sql in checks:
+            if table_name not in existing_tables:
                 continue
-            cur.execute(sql, (int(file_id),))
-            row = cur.fetchone()
-            count = int(row[0]) if row else 0
-            if count > 0:
-                counts[table_name] = count
+            parts.append(sql)
+            params.append(int(file_id))
+
+        if not parts:
+            return {}
+
+        combined_sql = " UNION ALL ".join(parts)
+        cur.execute(combined_sql, tuple(params))
+        counts: dict[str, int] = {}
+        for row in cur.fetchall():
+            tbl, cnt = str(row[0]), int(row[1])
+            if cnt > 0:
+                counts[tbl] = cnt
         return counts
 
     def set_file_latest_commit(self, repo_id: int, path: str, commit_sha: str) -> None:

@@ -80,6 +80,7 @@ class KnowledgeSearchBackend:
         self._bm25_normalizer_metadata: dict[str, Any] = {}
         # Execute independent retrieval branches concurrently to reduce p95 latency.
         self._search_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="kb-search")
+        self._search_timeout_seconds = 30
         self._configure_bm25_statistics_collection()
 
     def shutdown(self) -> None:
@@ -92,6 +93,9 @@ class KnowledgeSearchBackend:
         but in-flight work may be abandoned in that case.
         """
         self._search_executor.shutdown(wait=True)
+
+    # Protocol-compatible alias used by reset_search_backend().
+    close = shutdown
 
     def __del__(self) -> None:
         """Best-effort cleanup if shutdown() was not called explicitly."""
@@ -418,26 +422,22 @@ class KnowledgeSearchBackend:
         # Vector search with error handling (timeout prevents indefinite hangs)
         vector_formatted = []
         try:
-            vector_results = vector_future.result(timeout=30.0)
+            vector_results = vector_future.result(timeout=self._search_timeout_seconds)
             vector_formatted = self._format_vector_results(vector_results)
             request_logger.debug("Vector search completed", {"results_count": len(vector_formatted)})
         except TimeoutError:
-            # Python >= 3.12 (per pyproject.toml): builtin TimeoutError is the
-            # base for concurrent.futures.TimeoutError, so this catch is sufficient.
-            request_logger.warning("Vector search timed out after 30s")
-            # Note: cancel() only prevents execution if the task hasn't started;
-            # already-running threads cannot be interrupted.  The timeout above
-            # ensures we don't block the caller regardless.
+            request_logger.warning(
+                "Vector search timed out", {"timeout_seconds": self._search_timeout_seconds}
+            )
             vector_future.cancel()
         except Exception as e:
-            # Log error but continue with empty vector results
-            request_logger.warning("Vector search failed", error=e)
+            request_logger.warning("Vector search failed", {"error_type": type(e).__name__}, error=e)
 
         # BM25 search with error handling
         bm25_hydrated = []
         if bm25_future is not None:
             try:
-                bm25_results = bm25_future.result(timeout=30.0)
+                bm25_results = bm25_future.result(timeout=self._search_timeout_seconds)
                 request_logger.debug(
                     "BM25 search completed",
                     {
@@ -451,14 +451,12 @@ class KnowledgeSearchBackend:
                 )
                 request_logger.debug("BM25 results hydrated", {"hydrated_count": len(bm25_hydrated)})
             except TimeoutError:
-                # Python >= 3.12 (per pyproject.toml): builtin TimeoutError is the
-                # base for concurrent.futures.TimeoutError, so this catch is sufficient.
-                request_logger.warning("BM25 search timed out after 30s")
-                # Note: cancel() only prevents execution if the task hasn't started.
+                request_logger.warning(
+                    "BM25 search timed out", {"timeout_seconds": self._search_timeout_seconds}
+                )
                 bm25_future.cancel()
             except Exception as e:
-                # Log error but continue with empty BM25 results
-                request_logger.warning("BM25 search failed", error=e)
+                request_logger.warning("BM25 search failed", {"error_type": type(e).__name__}, error=e)
 
         # Apply request filters (repo, path prefix/exclude) before fusion
         vector_filtered = self._filter_and_score_results(vector_formatted, request)

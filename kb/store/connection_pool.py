@@ -32,6 +32,9 @@ class SQLiteConnectionPool:
     - Connection timeout handling
     """
 
+    # Default mmap_size: 256MB — conservative for most systems.
+    DEFAULT_MMAP_SIZE = 256 * 1024 * 1024
+
     def __init__(
         self,
         database: str | Path,
@@ -39,6 +42,7 @@ class SQLiteConnectionPool:
         max_overflow: int = 5,
         timeout: float = 30.0,
         enable_wal: bool = True,
+        mmap_size: int | None = None,
     ):
         """Initialize connection pool.
 
@@ -48,12 +52,14 @@ class SQLiteConnectionPool:
             max_overflow: Additional connections allowed beyond pool_size
             timeout: Connection acquisition timeout (seconds)
             enable_wal: Enable WAL mode for better concurrency
+            mmap_size: SQLite mmap_size pragma value in bytes (default: 256MB)
         """
         self.database = str(Path(database).expanduser())
         self.pool_size = pool_size
         self.max_overflow = max_overflow
         self.timeout = timeout
         self.enable_wal = enable_wal
+        self.mmap_size = mmap_size if mmap_size is not None else self.DEFAULT_MMAP_SIZE
 
         self._pool: Queue = Queue(maxsize=pool_size)
         self._overflow_count = 0
@@ -107,7 +113,7 @@ class SQLiteConnectionPool:
         # Optimization pragmas
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA temp_store=MEMORY")
-        conn.execute("PRAGMA mmap_size=30000000000")  # 30GB
+        conn.execute(f"PRAGMA mmap_size={self.mmap_size}")
         conn.execute("PRAGMA page_size=4096")
         conn.execute("PRAGMA cache_size=-8192")  # ~8 MB per connection
 
@@ -209,22 +215,36 @@ class SQLiteConnectionPool:
         Args:
             conn: Connection to release
         """
-        # Rollback any uncommitted transaction and verify connection health
+        # Rollback any uncommitted transaction and verify connection health.
         conn_id = id(conn)
+        is_overflow = conn_id in self._overflow_conns
         try:
             conn.rollback()
         except sqlite3.Error:
             # Connection is unhealthy — discard it instead of returning to pool.
+            logger.warning("Connection rollback failed on release; discarding connection")
             # Remove from overflow set *before* close() so that Python cannot
             # reuse the id() while it's still tracked.
-            with self._overflow_lock:
-                if conn_id in self._overflow_conns:
+            if is_overflow:
+                with self._overflow_lock:
                     self._overflow_conns.discard(conn_id)
                     self._overflow_count = max(0, self._overflow_count - 1)
             try:
                 conn.close()
             except sqlite3.Error:
                 pass
+            if not is_overflow:
+                # Replenish pool with a fresh connection to avoid permanent shrinkage.
+                fresh = None
+                try:
+                    fresh = self._create_connection()
+                    self._pool.put_nowait(fresh)
+                    self._created_connections += 1
+                except Full:
+                    if fresh is not None:
+                        fresh.close()
+                except sqlite3.Error:
+                    logger.warning("Failed to replenish pool after discarding poisoned connection")
             return
 
         # Try to return to pool
