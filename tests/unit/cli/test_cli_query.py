@@ -258,3 +258,47 @@ def test_display_results_verbose_shows_chunk_id(monkeypatch) -> None:
 
     assert result.exit_code == 0
     assert "chunk_id=abc-123-def" in result.stdout
+
+
+# --- Tests for rich display helpers ---
+
+
+def test_rich_lexer_for_language() -> None:
+    """Language to lexer mapping should handle known and unknown languages."""
+    assert cli._rich_lexer_for_language("python") == "python"
+    assert cli._rich_lexer_for_language("typescript") == "typescript"
+    assert cli._rich_lexer_for_language("Python") == "python"  # case insensitive
+    assert cli._rich_lexer_for_language("svelte") == "html"  # closest lexer
+    assert cli._rich_lexer_for_language("unknown_lang") == "unknown_lang"  # pass-through for Pygments
+    assert cli._rich_lexer_for_language("shell") == "bash"  # override
+
+
+def test_extract_snippet_text_from_snippet_obj() -> None:
+    """Should extract text from snippet dict."""
+    hit: dict[str, object] = {"snippet": {"text": "def foo(): pass"}}
+    assert cli._extract_snippet_text(hit, show_content=True, verbose=False) == "def foo(): pass"
+
+
+def test_extract_snippet_text_from_content() -> None:
+    """Should fall back to content field when snippet is absent."""
+    hit: dict[str, object] = {"content": "class Bar: pass"}
+    assert cli._extract_snippet_text(hit, show_content=True, verbose=False) == "class Bar: pass"
+
+
+def test_extract_snippet_text_not_shown_without_flags() -> None:
+    """Should return None when neither show_content nor verbose is set."""
+    hit: dict[str, object] = {"snippet": {"text": "def foo(): pass"}}
+    assert cli._extract_snippet_text(hit, show_content=False, verbose=False) is None
+
+
+def test_extract_snippet_text_empty_content() -> None:
+    """Should return None for empty/whitespace-only content."""
+    assert cli._extract_snippet_text({"content": ""}, show_content=True, verbose=False) is None
+    assert cli._extract_snippet_text({"content": "   "}, show_content=True, verbose=False) is None
+
+
+def test_score_style() -> None:
+    """Score style should return appropriate color for score ranges."""
+    assert "green" in cli._score_style(0.85)
+    assert "yellow" in cli._score_style(0.55)
+    assert "dim" in cli._score_style(0.2)

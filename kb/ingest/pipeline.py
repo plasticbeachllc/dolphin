@@ -6,6 +6,7 @@ import logging
 import sqlite3
 import subprocess
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,14 @@ from .parallel_parser import ParseJob, parse_files_parallel
 from .parallel_scanner import scan_repo_parallel
 
 logger = logging.getLogger(__name__)
+
+# Type alias for optional progress callback
+ProgressCallback = Callable[[dict[str, Any]], None] | None
+
+
+def _progress_event(event: str, *, done: int, total: int, chunks: int, path: str) -> dict[str, Any]:
+    """Build a progress callback event dict."""
+    return {"event": event, "files_done": done, "total_files": total, "chunks_indexed": chunks, "current_file": path}
 
 
 class _CancelledError(Exception):
@@ -471,11 +480,13 @@ class IngestionPipeline:
         branch: str,
         dry_run: bool,
         error_logger: ErrorLogger,
+        progress_callback: ProgressCallback = None,
     ) -> dict[str, int]:
         """Process a list of modified or added files."""
         stats = {
             "files_done": 0,
             "files_skipped_ignored": 0,
+            "files_skipped_missing": 0,
             "files_error": 0,
             "chunks_indexed": 0,
             "chunks_skipped": 0,
@@ -489,6 +500,18 @@ class IngestionPipeline:
         from ..chunkers.repo_config import load_repo_chunking_config
 
         repo_config = load_repo_chunking_config(root)
+
+        def _fire(event: str, path: str) -> None:
+            if progress_callback is not None:
+                done = (
+                    stats["files_done"]
+                    + stats["files_skipped_ignored"]
+                    + stats["files_skipped_missing"]
+                    + stats["files_error"]
+                )
+                progress_callback(
+                    _progress_event(event, done=done, total=len(files), chunks=stats["chunks_indexed"], path=path)
+                )
 
         for path in files:
             # Cooperative cancellation: stop cleanly between files
@@ -511,11 +534,14 @@ class IngestionPipeline:
                                 if pruned:
                                     stats["chunks_pruned"] += pruned
                                 self.lancedb.prune_file_rows(repo_name, path, model=model_name)
+                    _fire("file_skipped", path)
                     continue
 
-                # Skip binary files and files that don't exist
+                # Skip missing/directory files (distinct from processing errors)
                 file_path = root / path
                 if not file_path.exists() or file_path.is_dir():
+                    stats["files_skipped_missing"] += 1
+                    _fire("file_skipped", path)
                     continue
 
                 # Resolve or upsert file_id
@@ -712,10 +738,13 @@ class IngestionPipeline:
                 # Log per-file summary
                 logger.info(self._format_index_summary(path, len(chunks), len(new_hashes), skipped_occurrences))
 
+                _fire("file_complete", path)
+
             except Exception as e:
                 stats["files_error"] += 1
                 error_logger.log_file_error(path, e)
                 logger.error(f"Error processing {path}: {e}")
+                _fire("file_error", path)
                 continue
 
         return stats
@@ -781,6 +810,7 @@ class IngestionPipeline:
         dry_run: bool = False,
         force: bool = False,
         full_reindex: bool = False,
+        progress_callback: ProgressCallback = None,
     ) -> dict[str, Any]:
         """Perform full indexing pipeline for the named repository.
 
@@ -900,7 +930,7 @@ class IngestionPipeline:
 
             # Initialize counters
             files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
-            files_skipped_ignored = files_error = 0
+            files_skipped_ignored = files_skipped_missing = files_error = 0
             graph_nodes_created = graph_edges_created = 0
 
             # Process modified/added files
@@ -916,9 +946,11 @@ class IngestionPipeline:
                 branch=branch,
                 dry_run=dry_run,
                 error_logger=error_logger,
+                progress_callback=progress_callback,
             )
             files_done += stats["files_done"]
             files_skipped_ignored += stats["files_skipped_ignored"]
+            files_skipped_missing += stats["files_skipped_missing"]
             files_error += stats["files_error"]
             chunks_indexed += stats["chunks_indexed"]
             chunks_skipped += stats["chunks_skipped"]
@@ -1004,6 +1036,8 @@ class IngestionPipeline:
             ]
             if files_skipped_ignored:
                 summary_lines.append(f"  Files skipped (ignored): {files_skipped_ignored}")
+            if files_skipped_missing:
+                summary_lines.append(f"  Files skipped (missing): {files_skipped_missing}")
             if files_error:
                 summary_lines.append(f"  Files with errors: {files_error}")
             summary_lines.append(f"  Chunks indexed: {chunks_indexed}")
@@ -1034,6 +1068,7 @@ class IngestionPipeline:
                 "branch": branch,
                 "files_indexed": files_done,
                 "files_skipped_ignored": files_skipped_ignored,
+                "files_skipped_missing": files_skipped_missing,
                 "files_error": files_error,
                 "chunks_indexed": chunks_indexed,
                 "chunks_skipped": chunks_skipped,
@@ -1188,6 +1223,7 @@ class IngestionPipeline:
         force: bool = False,
         full_reindex: bool = False,
         max_workers: int | None = None,
+        progress_callback: ProgressCallback = None,
     ) -> dict[str, Any]:
         """Parallel indexing with dynamic worker scaling.
 
@@ -1220,13 +1256,30 @@ class IngestionPipeline:
 
         # Counters
         files_done = chunks_indexed = chunks_skipped = vectors_written = chunks_pruned = 0
-        files_error = 0
+        files_skipped_missing = files_error = 0
         graph_nodes_created = graph_edges_created = 0
 
         # Setup Async Embedder
         embedder = RateLimitedEmbedder(provider_model=embed_model)
         embedding_queue = EmbeddingQueue(embedder)
         embedding_queue.start()
+
+        # Total includes pre-filtered ignored files for consistent progress reporting.
+        # Note: the sequential path (process_files) handles ignore checking inline and fires
+        # individual file_skipped callbacks, so it doesn't need this initial bulk callback.
+        total_files = len(changed_files) + files_skipped_ignored
+
+        # Closure reads mutable outer-scope counters at call time; increment before calling _fire.
+        def _fire(event: str, path: str) -> None:
+            if progress_callback is not None:
+                done = files_done + files_skipped_ignored + files_skipped_missing + files_error
+                progress_callback(
+                    _progress_event(event, done=done, total=total_files, chunks=chunks_indexed, path=path)
+                )
+
+        # Fire initial callback for pre-filtered ignored files so progress starts correctly
+        if files_skipped_ignored > 0:
+            _fire("file_skipped", "<pre-filtered>")
 
         try:
             # Phase 1: Parallel Parsing
@@ -1259,6 +1312,8 @@ class IngestionPipeline:
                     for path in batch_paths:
                         file_path = root / path
                         if not file_path.exists() or file_path.is_dir():
+                            files_skipped_missing += 1
+                            _fire("file_skipped", path)
                             continue
 
                         # Quick metadata update
@@ -1303,6 +1358,7 @@ class IngestionPipeline:
                         except Exception as e:
                             files_error += 1
                             error_logger.log_file_error(path, e)
+                            _fire("file_error", path)
                             continue
 
                     # Execute Parallel Parsing
@@ -1316,6 +1372,7 @@ class IngestionPipeline:
                             files_error += 1
                             error = Exception(res.error) if res.error else Exception("Unknown error")
                             error_logger.log_file_error(str(res.file_path), error)
+                            _fire("file_error", str(res.file_path))
                             continue
 
                         chunks = res.chunks
@@ -1373,6 +1430,7 @@ class IngestionPipeline:
                         except Exception as dedup_err:
                             files_error += 1
                             error_logger.log_file_error(path, dedup_err)
+                            _fire("file_error", path)
                             continue
                         skipped_occurrences = len(unchanged_chunks)
                         chunks_skipped += skipped_occurrences
@@ -1422,7 +1480,9 @@ class IngestionPipeline:
                         # Process each result with its associated data
                         for task_data, vectors in zip(embedding_tasks, results):
                             if isinstance(vectors, Exception):
+                                files_error += 1
                                 error_logger.log_file_error(task_data["path"], vectors)
+                                _fire("file_error", task_data["path"])
                                 continue
 
                             # Extract task data
@@ -1538,6 +1598,7 @@ class IngestionPipeline:
                             logger.info(
                                 self._format_index_summary(path, len(chunks), len(new_hashes), skipped_occurrences)
                             )
+                            _fire("file_complete", path)
 
             # Process deleted files using shared sync/async-safe logic.
             del_stats = self.process_deletions(
@@ -1587,6 +1648,8 @@ class IngestionPipeline:
         ]
         if files_skipped_ignored:
             summary_lines.append(f"  Files skipped (ignored): {files_skipped_ignored}")
+        if files_skipped_missing:
+            summary_lines.append(f"  Files skipped (missing): {files_skipped_missing}")
         if files_error:
             summary_lines.append(f"  Files with errors: {files_error}")
         summary_lines.append(f"  Chunks indexed: {chunks_indexed}")
@@ -1614,6 +1677,7 @@ class IngestionPipeline:
             "branch": branch,
             "files_indexed": files_done,
             "files_skipped_ignored": files_skipped_ignored,
+            "files_skipped_missing": files_skipped_missing,
             "files_error": files_error,
             "chunks_indexed": chunks_indexed,
             "chunks_skipped": chunks_skipped,

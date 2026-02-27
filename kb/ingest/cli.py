@@ -1,21 +1,30 @@
 # from __future__ import annotations
 import asyncio
+import contextlib
 import logging
 import os
+import signal
+import sys
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
+from typing import Any, Literal, cast
 
 import typer
 from pathspec import PathSpec
 from rich import box
 from rich.console import Console
+from rich.markup import escape
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
+from ..api_key import get_kb_key_path, get_or_create_kb_api_key, load_kb_api_key
 from ..config import DEFAULT_CONFIG_PATH, ConfigNotFoundError, KBConfig, load_config
 from ..embeddings.provider import create_provider, set_default_provider
 from ..ignores import build_ignore_set, load_repo_ignores
 from ..store import LanceDBStore, SQLiteMetadataStore
+from ..terminal import print_status
 from .pipeline import IngestionPipeline
 
 _log = logging.getLogger(__name__)
@@ -37,15 +46,86 @@ class ResetStats:
 app = typer.Typer(help="Unified knowledge store ingestion CLI.")
 
 _CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "config_template.toml"
+_METADATA_DB_NAME = "metadata.db"
+_LANCEDB_DIR_NAME = "lancedb"
 
 
 def _read_config_template() -> str:
     return _CONFIG_TEMPLATE_PATH.read_text(encoding="utf-8")
 
 
+_ChecklistStatus = Literal["ok", "missing", "pending"]
+
+_STATUS_STYLES: dict[_ChecklistStatus, str] = {
+    "ok": "[green]ok[/green]",
+    "missing": "[red]missing[/red]",
+    "pending": "[dim]pending[/dim]",
+}
+
+
+_CHECKLIST_STATUS_WIDTH = 10
+_CHECKLIST_LABEL_WIDTH = 15
+
+
+def _checklist_row(status: _ChecklistStatus, label: str, detail: str = "") -> str:
+    """Format a single readiness-checklist row with consistent alignment."""
+    styled = _STATUS_STYLES[status]
+    # Pad so the visible status text occupies a fixed width, keeping labels aligned.
+    pad = max(0, _CHECKLIST_STATUS_WIDTH - len(status))
+    col_width = max(_CHECKLIST_LABEL_WIDTH, len(label) + 1)
+    return f"    {styled}{' ' * pad}{label:<{col_width}}{detail}"
+
+
+def _print_readiness_checklist(console: Console, config: KBConfig, config_path: Path) -> None:
+    """Print a pass/fail readiness checklist after init."""
+    store_root = config.resolved_store_root()
+
+    console.print()
+    console.print("  [bold]Readiness check:[/bold]")
+
+    # 1. Config file
+    status = "ok" if config_path.exists() else "missing"
+    console.print(_checklist_row(status, "Config", escape(str(config_path))))
+
+    # 2. SQLite
+    db_path = store_root / _METADATA_DB_NAME
+    status = "ok" if db_path.exists() else "missing"
+    console.print(_checklist_row(status, "SQLite", escape(str(db_path))))
+
+    # 3. LanceDB
+    lance_path = store_root / _LANCEDB_DIR_NAME
+    status = "ok" if lance_path.exists() else "missing"
+    console.print(_checklist_row(status, "LanceDB", escape(str(lance_path))))
+
+    # 4. KB API Key
+    key_path = get_kb_key_path()
+    if load_kb_api_key():
+        console.print(_checklist_row("ok", "KB API Key", escape(str(key_path))))
+    else:
+        console.print(_checklist_row("pending", "KB API Key", "(will retry on [bold]dolphin serve[/bold])"))
+
+    # 5. Embedding provider API key check
+    # TODO: extend for other providers (Cohere, Anthropic, etc.) when supported
+    missing_steps: list[str] = []
+    if config.embedding_provider == "openai":
+        env_var = config.openai_api_key_env
+        if os.environ.get(env_var):
+            console.print(_checklist_row("ok", env_var))
+        else:
+            console.print(_checklist_row("missing", env_var, f'(set with: [bold]export {env_var}="sk-..."[/bold])'))
+            missing_steps.append(f'export {env_var}="sk-..."')
+
+    # Next steps
+    console.print()
+    console.print("  [bold]Next steps:[/bold]")
+    all_steps = [*missing_steps, "[bold]dolphin add-repo[/bold] <name> <path>", "[bold]dolphin index[/bold] <name>"]
+    for i, cmd in enumerate(all_steps, 1):
+        console.print(f"    {i}. {cmd}")
+
+
 def _build_pipeline(config: KBConfig) -> IngestionPipeline:
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()  # Ensure schema (and migrations) are applied before use
 
     # Configure embedding provider for ingestion pipeline
@@ -94,20 +174,22 @@ def init(
     store_root = config.resolved_store_root()
     store_root.mkdir(parents=True, exist_ok=True)
 
-    metadata = SQLiteMetadataStore(store_root / "metadata.db")
+    metadata = SQLiteMetadataStore(store_root / _METADATA_DB_NAME)
     metadata.initialize()
     console.print(f"SQLite initialized at [bold cyan]{metadata.db_path}[/bold cyan]")
 
-    lancedb = LanceDBStore(store_root / "lancedb")
+    lancedb = LanceDBStore(store_root / _LANCEDB_DIR_NAME)
     lancedb.initialize_collections()
     console.print(f"LanceDB root initialized at [bold cyan]{lancedb.root}[/bold cyan]")
 
-    if created:
-        console.print(
-            "Initialization complete. You can now run [bold]dolphin add-repo[/bold] and [bold]dolphin index[/bold]."
-        )
-    else:
-        console.print("[green]Initialization verified. Nothing else to do.[/green]")
+    # Ensure KB API key exists so the checklist can report it
+    try:
+        get_or_create_kb_api_key()
+    except Exception:
+        _log.warning("Could not pre-create KB API key; checklist will show 'pending'.", exc_info=True)
+        console.print("[dim]Warning: could not create KB API key (check permissions)[/dim]")
+
+    _print_readiness_checklist(console, config, target)
 
 
 @app.command("add-repo")
@@ -126,7 +208,7 @@ def add_repo(
     # Use the global default model from config
     model = config.default_embed_model
 
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
     metadata.record_repo(name=name, path=repo_path, default_embed_model=model)
 
@@ -136,8 +218,6 @@ def add_repo(
     # to an existing repo that had a different model.
 
     # Only prompt for indexing in interactive mode (skip in tests or if --no-index)
-    import sys
-
     if not no_index and sys.stdin is not None and sys.stdin.isatty():
         if typer.confirm(f"Do you want to index '{name}' now?", default=False):
             typer.echo(f"Starting index for {name}...")
@@ -148,6 +228,57 @@ def add_repo(
             except Exception as e:
                 _log.error("Indexing failed during add-repo prompt for %s", name, exc_info=True)
                 typer.echo(f"❌ Indexing failed: {e}", err=True)
+
+
+def _create_progress_display() -> tuple[Progress | None, Callable[[dict[str, Any]], None]]:
+    """Create a Rich progress bar and return (progress, callback).
+
+    Returns (None, line_callback) when stdout is not a TTY.
+    Returns (Progress, rich_callback) when stdout is a TTY.
+    """
+    from ..terminal import STDERR_CONSOLE, is_tty
+
+    if not is_tty():
+        # Non-TTY: periodic line output to stderr
+        _last_n = 0
+        _started = False
+
+        def _line_callback(data: dict[str, Any]) -> None:
+            nonlocal _last_n, _started
+            n = data.get("files_done", 0)
+            total = data.get("total_files", 0)
+            if not _started and total > 0:
+                STDERR_CONSOLE.print(f"  Indexing {total} files...")
+                _started = True
+            step = max(1, total // 10) if total > 0 else 1
+            if n - _last_n >= step or (n == total and total > 0):
+                STDERR_CONSOLE.print(
+                    f"  Progress: {n}/{total} files processed, {data.get('chunks_indexed', 0):,} chunks"
+                )
+                _last_n = n
+
+        return None, _line_callback
+
+    progress = Progress(
+        SpinnerColumn(),
+        TextColumn("[bold bright_blue]Indexing"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TextColumn("files"),
+        TextColumn("[dim]{task.fields[chunks]:,} chunks[/dim]"),
+        TimeElapsedColumn(),
+        transient=True,
+    )
+    _task_id: TaskID = progress.add_task("indexing", total=None, chunks=0)
+
+    def _rich_callback(data: dict[str, Any]) -> None:
+        total = data.get("total_files", 0)
+        done = data.get("files_done", 0)
+        chunks = data.get("chunks_indexed", 0)
+        # Use total or None so Rich shows a spinner when total is unknown/zero
+        progress.update(_task_id, total=total or None, completed=done, chunks=chunks)
+
+    return progress, _rich_callback
 
 
 @app.command()
@@ -168,7 +299,7 @@ def index(
     config = load_config()
 
     # Require repo to be pre-registered via: uv run dolphin add-repo <name> <abs/repo/path>
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
     repo_record = metadata.get_repo_by_name(name)
     if not repo_record:
@@ -190,8 +321,6 @@ def index(
         typer.echo(f"Recovered {aborted} stale session(s) from a previous run.")
 
     # Install SIGINT handler so Ctrl-C stops cleanly between files
-    import signal
-
     _original_sigint = signal.getsignal(signal.SIGINT)
 
     def _sigint_handler(signum, frame):
@@ -200,17 +329,37 @@ def index(
 
     signal.signal(signal.SIGINT, _sigint_handler)
 
+    progress_display, progress_callback = _create_progress_display()
+
+    mode = "parallel" if parallel else "sequential"
+    ctx: dict[str, object] = {"mode": mode}
+    if parallel:
+        ctx["workers"] = workers or "auto"
+    print_status(f"Indexing {name}", level="step", context=ctx)
+
+    t0 = time.monotonic()
+    progress_ctx = progress_display if progress_display is not None else contextlib.nullcontext()
     try:
-        if parallel:
-            # Run async parallel indexing
-            typer.echo(f"Starting parallel indexing for {name} (workers={workers or 'auto'})...")
-            result = asyncio.run(
-                pipeline.index_parallel(name, dry_run=dry_run, force=force, full_reindex=full, max_workers=workers)
-            )
-        else:
-            # Legacy sequential indexing
-            typer.echo(f"Starting sequential indexing for {name}...")
-            result = pipeline.index(name, dry_run=dry_run, force=force, full_reindex=full)
+        with progress_ctx:
+            if parallel:
+                result = asyncio.run(
+                    pipeline.index_parallel(
+                        name,
+                        dry_run=dry_run,
+                        force=force,
+                        full_reindex=full,
+                        max_workers=workers,
+                        progress_callback=progress_callback,
+                    )
+                )
+            else:
+                result = pipeline.index(
+                    name,
+                    dry_run=dry_run,
+                    force=force,
+                    full_reindex=full,
+                    progress_callback=progress_callback,
+                )
 
     except Exception as e:
         from .pipeline import _CancelledError
@@ -227,24 +376,32 @@ def index(
     finally:
         signal.signal(signal.SIGINT, _original_sigint)
 
+    elapsed = time.monotonic() - t0
+    elapsed_str = f"{int(elapsed)}s" if elapsed < 60 else f"{int(elapsed // 60)}m{int(elapsed % 60):02d}s"
+
     files_indexed = result.get("files_indexed", 0)
     chunks_indexed = result.get("chunks_indexed", 0)
     files_skipped_ignored = result.get("files_skipped_ignored", 0)
     files_error = result.get("files_error", 0)
     chunks_pruned = result.get("chunks_pruned", 0)
 
-    summary = f"Indexed {files_indexed} file{'s' if files_indexed != 1 else ''} ({chunks_indexed:,} chunks)."
+    summary_ctx: dict[str, object] = {
+        "files": files_indexed,
+        "chunks": f"{chunks_indexed:,}",
+        "elapsed": elapsed_str,
+    }
+    print_status("Indexing complete", level="success", context=summary_ctx)
+
     skips: list[str] = []
     if files_skipped_ignored:
         skips.append(f"{files_skipped_ignored} ignored")
     if files_error:
         skips.append(f"{files_error} error{'s' if files_error != 1 else ''}")
     if skips:
-        summary += f" Skipped: {', '.join(skips)}."
-    typer.echo(summary)
+        typer.echo(f"     Skipped: {', '.join(skips)}.")
 
     if chunks_pruned:
-        typer.echo(f"  Pruned {chunks_pruned:,} stale chunk{'s' if chunks_pruned != 1 else ''}.")
+        typer.echo(f"     Pruned {chunks_pruned:,} stale chunk{'s' if chunks_pruned != 1 else ''}.")
 
     # Prune chunks for files matching ignore patterns (e.g., after ignore config changes)
     if not dry_run:
@@ -289,7 +446,7 @@ def _notify_server_reload(config: KBConfig) -> None:
 def status(name: str | None = typer.Argument(None, help="Optional repo name.")) -> None:
     """Report knowledge store status with detailed repository listing."""
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     # Ensure DB and schema exist before summarizing.
     metadata.initialize()
 
@@ -458,10 +615,10 @@ def prune_ignored(
     config = load_config()
     repo = config.resolved_store_root()
 
-    metadata = SQLiteMetadataStore(repo / "metadata.db")
+    metadata = SQLiteMetadataStore(repo / _METADATA_DB_NAME)
     metadata.initialize()
 
-    lancedb = LanceDBStore(repo / "lancedb")
+    lancedb = LanceDBStore(repo / _LANCEDB_DIR_NAME)
     lancedb.initialize_collections()
 
     result = _prune_ignored_files(name, metadata, lancedb, config, dry_run=dry_run)
@@ -499,10 +656,10 @@ def rm_repo(
     - Provides detailed statistics
     """
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
 
     # Get repo info
     repo = metadata.get_repo_by_name(name)
@@ -606,9 +763,9 @@ def reset_repo(
 
     # Load config and stores
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
 
     # If repo exists, wipe it (no confirmation, force=True for automatic cleanup)
     repo = metadata.get_repo_by_name(name)
@@ -659,7 +816,7 @@ def list_files(
     Output is one file path per line for easy grepping.
     """
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
     # Resolve repo
@@ -794,10 +951,10 @@ def validate_repo(
     - LanceDB vector consistency
     """
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
 
     # Get repo info
     repo = metadata.get_repo_by_name(name)
@@ -860,10 +1017,10 @@ def repair_repo(
     - Remove orphaned files
     """
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
 
     # Get repo info
     repo = metadata.get_repo_by_name(name)
@@ -921,7 +1078,7 @@ def repair_repo(
 def list_repos() -> None:
     """List all registered repositories."""
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
     repos = metadata.list_all_repos()
@@ -953,10 +1110,10 @@ def reset_all(
     This is a nuclear option for complete cleanup.
     """
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
 
     # Get all repos for cleanup
     repos = metadata.list_all_repos()
@@ -1036,8 +1193,6 @@ def main() -> None:
     try:
         app()
     except ConfigNotFoundError as e:
-        from ..terminal import print_status
-
         print_status(str(e), level="error", stderr=True)
         raise typer.Exit(1) from None
 

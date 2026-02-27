@@ -453,6 +453,97 @@ class TestPipelineProcessFiles:
         # Should not raise and files_done = 0
         assert stats["files_done"] == 0
 
+    def test_process_files_calls_progress_callback(self, pipeline_setup):
+        """Test process_files invokes the progress callback after each file."""
+        pipeline, repo_path, metadata, repo_id, session_id = pipeline_setup
+        from pathspec import PathSpec
+
+        from kb.ingest.error_logging import ErrorLogger
+
+        error_logger = ErrorLogger(repo_path, str(session_id))
+        ignore_spec = PathSpec.from_lines("gitignore", [])
+
+        events: list[dict] = []
+        pipeline.process_files(
+            repo_id=repo_id,
+            repo_name="test-repo",
+            root=repo_path,
+            files=["test.py", "utils.py"],
+            ignore_spec=ignore_spec,
+            embed_model="small",
+            session_id=session_id,
+            commit_sha="abc123",
+            branch="main",
+            dry_run=True,
+            error_logger=error_logger,
+            progress_callback=events.append,
+        )
+
+        assert len(events) >= 2
+        assert all("files_done" in e for e in events)
+        assert all("total_files" in e for e in events)
+        assert all("chunks_indexed" in e for e in events)
+        assert all("current_file" in e for e in events)
+        # files_done should increase
+        done_values = [e["files_done"] for e in events]
+        assert done_values == sorted(done_values)
+
+    def test_process_files_callback_none_is_safe(self, pipeline_setup):
+        """Test process_files works correctly with progress_callback=None."""
+        pipeline, repo_path, metadata, repo_id, session_id = pipeline_setup
+        from pathspec import PathSpec
+
+        from kb.ingest.error_logging import ErrorLogger
+
+        error_logger = ErrorLogger(repo_path, str(session_id))
+        ignore_spec = PathSpec.from_lines("gitignore", [])
+
+        # Should not raise
+        stats = pipeline.process_files(
+            repo_id=repo_id,
+            repo_name="test-repo",
+            root=repo_path,
+            files=["test.py"],
+            ignore_spec=ignore_spec,
+            embed_model="small",
+            session_id=session_id,
+            commit_sha="abc123",
+            branch="main",
+            dry_run=True,
+            error_logger=error_logger,
+            progress_callback=None,
+        )
+        assert stats["files_done"] >= 1
+
+    def test_process_files_callback_on_skipped(self, pipeline_setup):
+        """Test progress callback is called for skipped (ignored) files."""
+        pipeline, repo_path, metadata, repo_id, session_id = pipeline_setup
+        from pathspec import PathSpec
+
+        from kb.ingest.error_logging import ErrorLogger
+
+        error_logger = ErrorLogger(repo_path, str(session_id))
+        ignore_spec = PathSpec.from_lines("gitignore", ["*.py"])
+
+        events: list[dict] = []
+        pipeline.process_files(
+            repo_id=repo_id,
+            repo_name="test-repo",
+            root=repo_path,
+            files=["test.py"],
+            ignore_spec=ignore_spec,
+            embed_model="small",
+            session_id=session_id,
+            commit_sha="abc123",
+            branch="main",
+            dry_run=True,
+            error_logger=error_logger,
+            progress_callback=events.append,
+        )
+
+        assert len(events) >= 1
+        assert events[0]["event"] == "file_skipped"
+
 
 class TestPipelineProcessDeletions:
     """Test IngestionPipeline process_deletions operation."""
