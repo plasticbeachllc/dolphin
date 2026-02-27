@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Sequence
+from contextlib import contextmanager
 
 import numpy as np
 
@@ -17,6 +19,29 @@ try:
 except ImportError:
     _CrossEncoder: type | None = None
     _SENTENCE_TRANSFORMERS_AVAILABLE = False
+
+
+@contextmanager
+def _quiet_model_load():
+    """Suppress noisy stdout (safetensors LOAD REPORT) and httpx INFO logs during model loading.
+
+    Uses fd-level redirect (os.dup2) rather than sys.stdout patching so that output from
+    native extensions (e.g. safetensors Rust bindings writing to fd 1) is also captured.
+    Patches global state — acceptable here since model loading is one-time init.
+    """
+    httpx_logger = logging.getLogger("httpx")
+    prev_level = httpx_logger.level
+    httpx_logger.setLevel(logging.WARNING)
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    saved_fd = os.dup(1)
+    os.dup2(devnull_fd, 1)
+    os.close(devnull_fd)
+    try:
+        yield
+    finally:
+        os.dup2(saved_fd, 1)
+        os.close(saved_fd)
+        httpx_logger.setLevel(prev_level)
 
 
 class CrossEncoderReranker:
@@ -57,10 +82,11 @@ class CrossEncoderReranker:
             # Type narrowing: _CrossEncoder is available when _SENTENCE_TRANSFORMERS_AVAILABLE is True
             if _CrossEncoder is None:
                 raise RuntimeError("CrossEncoder is not available")
-            if device:
-                self.model = _CrossEncoder(model_name, device=device)
-            else:
-                self.model = _CrossEncoder(model_name)
+            with _quiet_model_load():
+                if device:
+                    self.model = _CrossEncoder(model_name, device=device)
+                else:
+                    self.model = _CrossEncoder(model_name)
             self.enabled = True
             _log.info(f"Cross-encoder loaded successfully on {self.model.device}")
         except Exception as e:
