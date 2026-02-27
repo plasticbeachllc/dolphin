@@ -57,8 +57,8 @@ def _read_config_template() -> str:
 _ChecklistStatus = Literal["ok", "missing", "pending"]
 
 _STATUS_STYLES: dict[_ChecklistStatus, str] = {
-    "ok": "[green]ok[/green]",
-    "missing": "[red]missing[/red]",
+    "ok": "[sea_green2]ok[/sea_green2]",
+    "missing": "[indian_red1]missing[/indian_red1]",
     "pending": "[dim]pending[/dim]",
 }
 
@@ -167,7 +167,7 @@ def init(
 
     if created:
         target.write_text(config_content, encoding="utf-8")
-        console.print(f"Created knowledge store config at [bold green]{target}[/bold green]")
+        console.print(f"Created knowledge store config at [bold sea_green2]{target}[/bold sea_green2]")
 
     # Load config and initialize storage backends.
     config = load_config(target)
@@ -176,11 +176,11 @@ def init(
 
     metadata = SQLiteMetadataStore(store_root / _METADATA_DB_NAME)
     metadata.initialize()
-    console.print(f"SQLite initialized at [bold cyan]{metadata.db_path}[/bold cyan]")
+    console.print(f"SQLite initialized at [bold steel_blue1]{metadata.db_path}[/bold steel_blue1]")
 
     lancedb = LanceDBStore(store_root / _LANCEDB_DIR_NAME)
     lancedb.initialize_collections()
-    console.print(f"LanceDB root initialized at [bold cyan]{lancedb.root}[/bold cyan]")
+    console.print(f"LanceDB root initialized at [bold steel_blue1]{lancedb.root}[/bold steel_blue1]")
 
     # Ensure KB API key exists so the checklist can report it
     try:
@@ -224,10 +224,10 @@ def add_repo(
             pipeline = _build_pipeline(config)
             try:
                 pipeline.index(name, dry_run=False, force=False)
-                typer.echo(f"✅ Indexing complete for {name}")
+                typer.echo(f"⛵ Indexing complete for {name}")
             except Exception as e:
                 _log.error("Indexing failed during add-repo prompt for %s", name, exc_info=True)
-                typer.echo(f"❌ Indexing failed: {e}", err=True)
+                typer.echo(f"🚩 Indexing failed: {e}", err=True)
 
 
 def _create_progress_display() -> tuple[Progress | None, Callable[[dict[str, Any]], None]]:
@@ -261,7 +261,7 @@ def _create_progress_display() -> tuple[Progress | None, Callable[[dict[str, Any
 
     progress = Progress(
         SpinnerColumn(),
-        TextColumn("[bold bright_blue]Indexing"),
+        TextColumn("[bold deep_sky_blue3]Indexing"),
         BarColumn(),
         MofNCompleteColumn(),
         TextColumn("files"),
@@ -434,7 +434,7 @@ def _notify_server_reload(config: KBConfig) -> None:
     try:
         response = requests.post(endpoint, headers={"X-API-Key": api_key}, timeout=2.0)
         if response.status_code == 200:
-            typer.echo(f"🔄 Server notified: {response.json().get('message')}")
+            typer.echo(f"🧭 Server notified: {response.json().get('message')}")
         elif response.status_code != 404:  # Ignore 404 if old server running
             typer.echo(f"⚠️  Server reload failed: {response.status_code}", err=True)
     except requests.RequestException:
@@ -456,9 +456,9 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
     console = Console()
 
     # Summary Table
-    console.print("\n[bold]📊 Knowledge Store Summary[/bold]")
+    console.print("\n[bold]🗺️  Knowledge Store Summary[/bold]")
     summary_table = Table(show_header=False, box=box.SIMPLE)
-    summary_table.add_column("Metric", style="cyan")
+    summary_table.add_column("Metric", style="steel_blue1")
     summary_table.add_column("Value", style="bold white")
     summary_table.add_row("Total Repositories", str(summary["repos"]))
     summary_table.add_row("Total Files", str(summary["files"]))
@@ -468,9 +468,9 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
     # List all registered repositories
     repos = metadata.list_all_repos()
     if repos:
-        console.print("\n[bold]📚 Registered Repositories[/bold]")
+        console.print("\n[bold]⚓ Registered Repositories[/bold]")
         repo_table = Table(box=box.ROUNDED)
-        repo_table.add_column("Name", style="green")
+        repo_table.add_column("Name", style="sea_green2")
         repo_table.add_column("Path", style="dim")
         repo_table.add_column("Embed Model")
         repo_table.add_column("Created", style="dim")
@@ -481,10 +481,10 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
             )
         console.print(repo_table)
     else:
-        console.print("\n[yellow]No repositories registered.[/yellow]")
+        console.print("\n[dark_goldenrod]No repositories registered.[/dark_goldenrod]")
 
     # Reranking status
-    console.print("\n[bold]🔍 Reranking[/bold]")
+    console.print("\n[bold]🔭 Reranking[/bold]")
     reranking_cfg = config.retrieval.reranking
     if not reranking_cfg.enabled:
         console.print("  [dim]Disabled (set reranking.enabled = true in config to enable)[/dim]")
@@ -492,10 +492,10 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
         try:
             from sentence_transformers import CrossEncoder as _CE  # noqa: F401  # ty: ignore[unresolved-import]
 
-            console.print(f"  [green]Enabled[/green] — model: {reranking_cfg.model}")
+            console.print(f"  [sea_green2]Enabled[/sea_green2] — model: {reranking_cfg.model}")
         except ImportError:
             console.print(
-                "  [red]Enabled in config but dependencies are missing.[/red]\n"
+                "  [indian_red1]Enabled in config but dependencies are missing.[/indian_red1]\n"
                 "  Install with: [bold]uv pip install pb-dolphin\\[reranking][/bold]"
             )
 
@@ -630,7 +630,7 @@ def prune_ignored(
         typer.echo(f"  Files: {files_pruned}")
         typer.echo(f"  Chunks: {total_chunks_pruned}")
     else:
-        typer.echo(f"✅ Pruned ignored content from '{name}':")
+        typer.echo(f"⛵ Pruned ignored content from '{name}':")
         typer.echo(f"  Files: {files_pruned}")
         typer.echo(f"  Chunks: {total_chunks_pruned}")
 
@@ -696,7 +696,7 @@ def rm_repo(
 
         # Display cleanup statistics
         stats = result["cleanup_stats"]
-        typer.echo(f"\n✓ Repository '{name}' removed successfully.")
+        typer.echo(f"\n⛵ Repository '{name}' removed successfully.")
         typer.echo("\nCleanup Statistics:")
         typer.echo(f"  Files deleted: {stats['files_deleted']}")
         typer.echo(f"  Chunk content deleted: {stats['content_deleted']}")
@@ -794,7 +794,7 @@ def reset_repo(
 
     # Re-register repo
     metadata.record_repo(name=name, path=repo_path, default_embed_model=model)
-    typer.echo(f"✓ Repository '{name}' re-registered: path='{repo_path}', default_embed_model='{model}'")
+    typer.echo(f"⛵ Repository '{name}' re-registered: path='{repo_path}', default_embed_model='{model}'")
 
 
 @app.command()
@@ -886,7 +886,7 @@ def search(
             typer.echo("No results found.")
             return
 
-        typer.echo(f"\n🔍 Found {len(hits)} result(s):\n")
+        typer.echo(f"\n🔭 Found {len(hits)} result(s):\n")
 
         for i, hit in enumerate(hits, 1):
             score = hit.get("score", 0.0)
@@ -971,9 +971,9 @@ def validate_repo(
 
         # Display results
         if report["valid"]:
-            typer.echo(f"\n✓ Repository '{name}' is consistent.")
+            typer.echo(f"\n  ✓ Repository '{name}' is consistent.")
         else:
-            typer.echo(f"\n⚠️  Repository '{name}' has consistency issues:", err=True)
+            typer.echo(f"\n🚩 Repository '{name}' has consistency issues:", err=True)
             for issue in report["issues"]:
                 typer.echo(f"  - {issue}", err=True)
 
@@ -995,7 +995,7 @@ def validate_repo(
             typer.echo(f"  {model}: {count}")
 
         if not report["valid"]:
-            typer.echo(f"\nTip: Run 'kb repair-repo {name}' to fix these issues.")
+            typer.echo(f"\nTip: Run 'dolphin repair-repo {name}' to fix these issues.")
             raise typer.Exit(code=1)
 
     except Exception as e:
@@ -1057,14 +1057,14 @@ def repair_repo(
 
         if repair_report["success"]:
             if repair_report["repairs_performed"]:
-                typer.echo(f"\n✓ Repository '{name}' repaired successfully.")
+                typer.echo(f"\n⛵ Repository '{name}' repaired successfully.")
                 typer.echo("\nRepairs performed:")
                 for repair in repair_report["repairs_performed"]:
                     typer.echo(f"  - {repair}")
             else:
-                typer.echo(f"\n✓ No repairs needed for '{name}'.")
+                typer.echo(f"\n  ✓ No repairs needed for '{name}'.")
         else:
-            typer.echo("\n⚠️  Repair completed with errors:", err=True)
+            typer.echo("\n🚩 Repair completed with errors:", err=True)
             for error in repair_report["errors"]:
                 typer.echo(f"  - {error}", err=True)
             raise typer.Exit(code=1)
@@ -1086,7 +1086,7 @@ def list_repos() -> None:
         typer.echo("No repositories registered.")
         return
 
-    typer.echo(f"\n📚 Registered Repositories ({len(repos)}):\n")
+    typer.echo(f"\n⚓ Registered Repositories ({len(repos)}):\n")
     for repo in repos:
         typer.echo(f"  • {repo['name']}")
         typer.echo(f"    Path: {repo['root_path']}")
@@ -1168,10 +1168,10 @@ def reset_all(
             error_msg = f"Failed to remove {repo['name']}: {e}"
             _log.error("Failed to remove repo %s during reset", repo["name"], exc_info=True)
             total_stats.errors.append(error_msg)
-            typer.echo(f"  ✗ {error_msg}", err=True)
+            typer.echo(f"  🚩 {error_msg}", err=True)
 
     # Display final summary
-    typer.echo("\n✅ Reset complete!")
+    typer.echo("\n⛵ Reset complete!")
     typer.echo("\nCleanup Statistics:")
     typer.echo(f"  Repositories removed: {total_stats.repos_removed}")
     typer.echo(f"  Files deleted: {total_stats.files_deleted}")

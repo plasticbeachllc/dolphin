@@ -11,7 +11,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, TypedDict
 
 import typer
 import uvicorn
@@ -148,6 +148,22 @@ def list_files(
     kb_list_files(name)
 
 
+class _SearchArgs(TypedDict):
+    """Shared keyword arguments for local and remote search functions."""
+
+    query: str
+    repos: list[str] | None
+    path_prefix: list[str] | None
+    exclude_paths: list[str] | None
+    exclude_patterns: list[str] | None
+    top_k: int
+    score_cutoff: float
+    max_snippets: int
+    context_before: int
+    context_after: int
+    include_graph_context: bool
+
+
 @app.command()
 def search(
     query: str = typer.Argument(..., help="Search query."),
@@ -195,29 +211,29 @@ def search(
     if snippet_limit <= 0 and (show_content or verbose):
         snippet_limit = min(top_k, 3)
 
-    search_kwargs = dict(
-        query=query,
-        repos=repos,
-        path_prefix=path_prefix,
-        exclude_paths=exclude_paths,
-        exclude_patterns=exclude_patterns,
-        top_k=request_top_k,
-        score_cutoff=score_cutoff,
-        max_snippets=snippet_limit,
-        context_before=context_before,
-        context_after=context_after,
-        include_graph_context=include_graph_context,
-    )
+    _common_search_args: _SearchArgs = {
+        "query": query,
+        "repos": repos,
+        "path_prefix": path_prefix,
+        "exclude_paths": exclude_paths,
+        "exclude_patterns": exclude_patterns,
+        "top_k": request_top_k,
+        "score_cutoff": score_cutoff,
+        "max_snippets": snippet_limit,
+        "context_before": context_before,
+        "context_after": context_after,
+        "include_graph_context": include_graph_context,
+    }
 
     result: tuple[list[dict[str, object]], dict[str, object], SQLiteMetadataStore | None] | None = None
 
     if not local:
-        result = _search_remote(**search_kwargs)
+        result = _search_remote(**_common_search_args)
         if result is None:
             typer.echo("Server unavailable, falling back to local search.", err=True)
 
     if local or result is None:
-        hits, meta, sql_store = _search_local(**search_kwargs)
+        hits, meta, sql_store = _search_local(**_common_search_args)
     else:
         hits, meta, sql_store = result
 
@@ -561,9 +577,9 @@ def _rich_lexer_for_language(language: str) -> str:
 def _score_style(score: float) -> str:
     """Return a rich style string based on score value."""
     if score >= 0.7:
-        return "bold green"
+        return "bold sea_green2"
     if score >= 0.4:
-        return "yellow"
+        return "dark_goldenrod"
     return "dim"
 
 
@@ -613,7 +629,7 @@ def _display_results(
     safe_query = escape(query)
     count = len(hits)
     plural = "s" if count != 1 else ""
-    console.print(f'\nFound [bold]{count}[/bold] result{plural} for [cyan]"{safe_query}"[/cyan]')
+    console.print(f'\nFound [bold]{count}[/bold] result{plural} for [steel_blue1]"{safe_query}"[/steel_blue1]')
     if languages:
         console.print(f"[dim]Language filter: {', '.join(languages)}[/dim]")
     if verbose and meta:
@@ -676,9 +692,9 @@ def _display_results(
 
             lexer = _rich_lexer_for_language(language)
             try:
-                syntax = Syntax(code, lexer, theme="monokai", line_numbers=False, word_wrap=True)
+                syntax = Syntax(code, lexer, theme="one-dark", line_numbers=False, word_wrap=True)
             except ClassNotFound:
-                syntax = Syntax(code, "text", theme="monokai", line_numbers=False, word_wrap=True)
+                syntax = Syntax(code, "text", theme="one-dark", line_numbers=False, word_wrap=True)
             renderables.append(syntax)
 
         console.print(Panel(Group(*renderables), title=title, subtitle=subtitle, expand=True, padding=(0, 1)))
