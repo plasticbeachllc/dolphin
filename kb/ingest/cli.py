@@ -104,7 +104,8 @@ def _print_readiness_checklist(console: Console, config: KBConfig, config_path: 
     else:
         console.print(_checklist_row("pending", "KB API Key", "(will retry on [bold]dolphin serve[/bold])"))
 
-    # 5. OpenAI API Key (only when using OpenAI provider)
+    # 5. Embedding provider API key check
+    # TODO: extend for other providers (Cohere, Anthropic, etc.) when supported
     missing_steps: list[str] = []
     if config.embedding_provider == "openai":
         env_var = config.openai_api_key_env
@@ -246,7 +247,7 @@ def _create_progress_display() -> tuple[Progress | None, Callable[[dict[str, Any
             nonlocal _last_n, _started
             n = data.get("files_done", 0)
             total = data.get("total_files", 0)
-            if not _started:
+            if not _started and total > 0:
                 STDERR_CONSOLE.print(f"  Indexing {total} files...")
                 _started = True
             step = max(1, total // 10) if total > 0 else 1

@@ -11,7 +11,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated
 
 import typer
 import uvicorn
@@ -533,7 +533,7 @@ def _extract_snippet_text(hit: dict[str, object], show_content: bool, verbose: b
     content = hit.get("content")
     snippet_text = None
     if isinstance(snippet_obj, dict) and "text" in snippet_obj:
-        snippet_text = cast(dict[str, Any], snippet_obj)["text"]
+        snippet_text = snippet_obj["text"]
     if not snippet_text and isinstance(content, str):
         snippet_text = content
     if isinstance(snippet_text, str) and snippet_text.strip():
@@ -590,6 +590,7 @@ def _display_results(
         )
         return
 
+    from pygments.util import ClassNotFound
     from rich.console import Group, RenderableType
     from rich.markup import escape
     from rich.panel import Panel
@@ -614,7 +615,7 @@ def _display_results(
         top_k = meta.get("top_k")
         model = meta.get("model")
         latency = meta.get("latency_ms")
-        console.print(f"[dim]Meta: top_k={top_k} model={model} latency_ms={latency}[/dim]")
+        console.print(f"[dim]Meta: top_k={top_k} model={escape(str(model))} latency_ms={latency}[/dim]")
     console.print()
 
     for i, hit in enumerate(hits, 1):
@@ -669,8 +670,6 @@ def _display_results(
                 code += f"\n... ({len(lines) - max_lines} more lines)"
 
             lexer = _rich_lexer_for_language(language)
-            from pygments.util import ClassNotFound
-
             try:
                 syntax = Syntax(code, lexer, theme="monokai", line_numbers=False, word_wrap=True)
             except ClassNotFound:
