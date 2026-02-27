@@ -445,7 +445,7 @@ class TestVersionInfo:
 
     def test_get_app_version_fallback_on_import_error(self):
         """_get_app_version falls back to '0.0.0' when importlib.metadata fails."""
-        with patch("importlib.metadata.version", side_effect=Exception("not installed")):
+        with patch("importlib.metadata.version", side_effect=ImportError("not installed")):
             version = _get_app_version()
             assert version == "0.0.0"
 

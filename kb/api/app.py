@@ -461,7 +461,7 @@ def reset_search_backend() -> None:
         try:
             close_fn()
         except Exception:
-            _log.debug("Error closing previous search backend", exc_info=True)
+            _log.warning("Error closing previous search backend", exc_info=True)
 
 
 def _invalidate_search_cache(repo_name: str) -> None:

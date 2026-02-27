@@ -21,7 +21,7 @@ export interface CreateServerDeps {
   logWarn?: (...args: unknown[]) => unknown;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- MCP SDK generics are too deep for TS to infer
   McpServerClass?: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- MCP SDK transport generics are too deep for TS to infer
   TransportClass?: any;
   toolList?: ToolEntry[];
 }

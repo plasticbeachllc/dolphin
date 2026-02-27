@@ -89,7 +89,7 @@ def _get_app_version() -> str:
         from importlib.metadata import version as _pkg_version
 
         return _pkg_version("pb-dolphin")
-    except Exception:
+    except ImportError:
         return "0.0.0"
 
 
