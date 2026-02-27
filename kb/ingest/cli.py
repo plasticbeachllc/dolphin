@@ -4,7 +4,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import typer
 from pathspec import PathSpec
@@ -12,6 +12,7 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 
+from ..api_key import get_kb_key_path, get_or_create_kb_api_key, load_kb_api_key
 from ..config import DEFAULT_CONFIG_PATH, ConfigNotFoundError, KBConfig, load_config
 from ..embeddings.provider import create_provider, set_default_provider
 from ..ignores import build_ignore_set, load_repo_ignores
@@ -41,6 +42,62 @@ _CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "config_templat
 
 def _read_config_template() -> str:
     return _CONFIG_TEMPLATE_PATH.read_text(encoding="utf-8")
+
+
+def _print_readiness_checklist(console: Console, config: KBConfig, config_path: Path) -> None:
+    """Print a pass/fail readiness checklist after init."""
+    store_root = config.resolved_store_root()
+
+    console.print()
+    console.print("  [bold]Readiness check:[/bold]")
+
+    # 1. Config file
+    if config_path.exists():
+        console.print(f"    [green]ok[/green]      Config         {config_path}")
+    else:
+        console.print(f"    [red]missing[/red]   Config         {config_path}")
+
+    # 2. SQLite
+    db_path = store_root / "metadata.db"
+    if db_path.exists():
+        console.print(f"    [green]ok[/green]      SQLite         {db_path}")
+    else:
+        console.print(f"    [red]missing[/red]   SQLite         {db_path}")
+
+    # 3. LanceDB
+    lance_path = store_root / "lancedb"
+    if lance_path.exists():
+        console.print(f"    [green]ok[/green]      LanceDB        {lance_path}")
+    else:
+        console.print(f"    [red]missing[/red]   LanceDB        {lance_path}")
+
+    # 4. KB API Key
+    key_path = get_kb_key_path()
+    if load_kb_api_key():
+        console.print(f"    [green]ok[/green]      KB API Key     {key_path}")
+    else:
+        console.print("    [dim]pending[/dim]   KB API Key     (created on first [bold]dolphin serve[/bold])")
+
+    # 5. OpenAI API Key (only when using OpenAI provider)
+    missing_steps: list[str] = []
+    if config.embedding_provider == "openai":
+        env_var = config.openai_api_key_env
+        if os.environ.get(env_var):
+            console.print(f"    [green]ok[/green]      {env_var}")
+        else:
+            console.print(f'    [red]missing[/red]   {env_var}  (set with: [bold]export {env_var}="sk-..."[/bold])')
+            missing_steps.append(f'export {env_var}="sk-..."')
+
+    # Next steps
+    console.print()
+    console.print("  [bold]Next steps:[/bold]")
+    step = 1
+    for cmd in missing_steps:
+        console.print(f"    {step}. {cmd}")
+        step += 1
+    console.print(f"    {step}. [bold]dolphin add-repo[/bold] <name> <path>")
+    step += 1
+    console.print(f"    {step}. [bold]dolphin index[/bold] <name>")
 
 
 def _build_pipeline(config: KBConfig) -> IngestionPipeline:
@@ -102,12 +159,13 @@ def init(
     lancedb.initialize_collections()
     console.print(f"LanceDB root initialized at [bold cyan]{lancedb.root}[/bold cyan]")
 
-    if created:
-        console.print(
-            "Initialization complete. You can now run [bold]dolphin add-repo[/bold] and [bold]dolphin index[/bold]."
-        )
-    else:
-        console.print("[green]Initialization verified. Nothing else to do.[/green]")
+    # Ensure KB API key exists so the checklist can report it
+    try:
+        get_or_create_kb_api_key()
+    except Exception:
+        pass  # Non-fatal; checklist will show "pending"
+
+    _print_readiness_checklist(console, config, target)
 
 
 @app.command("add-repo")
@@ -148,6 +206,66 @@ def add_repo(
             except Exception as e:
                 _log.error("Indexing failed during add-repo prompt for %s", name, exc_info=True)
                 typer.echo(f"❌ Indexing failed: {e}", err=True)
+
+
+def _create_progress_display() -> tuple[Any, Any]:
+    """Create a Rich progress bar and return (progress, callback).
+
+    Returns (None, line_callback) when stdout is not a TTY.
+    Returns (Progress, rich_callback) when stdout is a TTY.
+    """
+    import sys as _sys
+    from collections.abc import Callable
+    from typing import Any
+
+    _ProgressCallback = Callable[[dict[str, Any]], None]
+
+    if not (_sys.stdout is not None and hasattr(_sys.stdout, "isatty") and _sys.stdout.isatty()):
+        # Non-TTY: periodic line output
+        _last = {"n": 0}
+
+        def _line_callback(data: dict[str, Any]) -> None:
+            n = data.get("files_done", 0)
+            total = data.get("total_files", 0)
+            if n - _last["n"] >= 50 or n == total:
+                typer.echo(f"  Progress: {n}/{total} files, {data.get('chunks_indexed', 0):,} chunks")
+                _last["n"] = n
+
+        return None, _line_callback
+
+    from rich.progress import (
+        BarColumn,
+        MofNCompleteColumn,
+        Progress,
+        SpinnerColumn,
+        TaskID,
+        TextColumn,
+        TimeElapsedColumn,
+    )
+
+    progress = Progress(
+        SpinnerColumn(),
+        TextColumn("[bold bright_blue]Indexing"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TextColumn("files"),
+        TextColumn("[dim]{task.fields[chunks]:,} chunks[/dim]"),
+        TimeElapsedColumn(),
+        transient=False,
+    )
+    _task_id: list[TaskID | None] = [None]
+
+    def _rich_callback(data: dict[str, Any]) -> None:
+        total = data.get("total_files", 0)
+        done = data.get("files_done", 0)
+        chunks = data.get("chunks_indexed", 0)
+
+        if _task_id[0] is None:
+            _task_id[0] = progress.add_task("indexing", total=total, chunks=0)
+        tid = _task_id[0]
+        progress.update(tid, completed=done, chunks=chunks)
+
+    return progress, _rich_callback
 
 
 @app.command()
@@ -200,17 +318,62 @@ def index(
 
     signal.signal(signal.SIGINT, _sigint_handler)
 
+    import time
+
+    from ..terminal import print_status
+
+    progress_display, progress_callback = _create_progress_display()
+
+    mode = "parallel" if parallel else "sequential"
+    ctx: dict[str, object] = {"mode": mode}
+    if parallel:
+        ctx["workers"] = workers or "auto"
+    print_status(f"Indexing {name}", level="step", context=ctx)
+
+    t0 = time.monotonic()
     try:
         if parallel:
-            # Run async parallel indexing
-            typer.echo(f"Starting parallel indexing for {name} (workers={workers or 'auto'})...")
-            result = asyncio.run(
-                pipeline.index_parallel(name, dry_run=dry_run, force=force, full_reindex=full, max_workers=workers)
-            )
+            if progress_display is not None:
+                with progress_display:
+                    result = asyncio.run(
+                        pipeline.index_parallel(
+                            name,
+                            dry_run=dry_run,
+                            force=force,
+                            full_reindex=full,
+                            max_workers=workers,
+                            progress_callback=progress_callback,
+                        )
+                    )
+            else:
+                result = asyncio.run(
+                    pipeline.index_parallel(
+                        name,
+                        dry_run=dry_run,
+                        force=force,
+                        full_reindex=full,
+                        max_workers=workers,
+                        progress_callback=progress_callback,
+                    )
+                )
         else:
-            # Legacy sequential indexing
-            typer.echo(f"Starting sequential indexing for {name}...")
-            result = pipeline.index(name, dry_run=dry_run, force=force, full_reindex=full)
+            if progress_display is not None:
+                with progress_display:
+                    result = pipeline.index(
+                        name,
+                        dry_run=dry_run,
+                        force=force,
+                        full_reindex=full,
+                        progress_callback=progress_callback,
+                    )
+            else:
+                result = pipeline.index(
+                    name,
+                    dry_run=dry_run,
+                    force=force,
+                    full_reindex=full,
+                    progress_callback=progress_callback,
+                )
 
     except Exception as e:
         from .pipeline import _CancelledError
@@ -227,24 +390,32 @@ def index(
     finally:
         signal.signal(signal.SIGINT, _original_sigint)
 
+    elapsed = time.monotonic() - t0
+    elapsed_str = f"{int(elapsed // 60)}m{int(elapsed % 60):02d}s"
+
     files_indexed = result.get("files_indexed", 0)
     chunks_indexed = result.get("chunks_indexed", 0)
     files_skipped_ignored = result.get("files_skipped_ignored", 0)
     files_error = result.get("files_error", 0)
     chunks_pruned = result.get("chunks_pruned", 0)
 
-    summary = f"Indexed {files_indexed} file{'s' if files_indexed != 1 else ''} ({chunks_indexed:,} chunks)."
+    summary_ctx: dict[str, object] = {
+        "files": files_indexed,
+        "chunks": f"{chunks_indexed:,}",
+        "elapsed": elapsed_str,
+    }
+    print_status("Indexing complete", level="success", context=summary_ctx)
+
     skips: list[str] = []
     if files_skipped_ignored:
         skips.append(f"{files_skipped_ignored} ignored")
     if files_error:
         skips.append(f"{files_error} error{'s' if files_error != 1 else ''}")
     if skips:
-        summary += f" Skipped: {', '.join(skips)}."
-    typer.echo(summary)
+        typer.echo(f"     Skipped: {', '.join(skips)}.")
 
     if chunks_pruned:
-        typer.echo(f"  Pruned {chunks_pruned:,} stale chunk{'s' if chunks_pruned != 1 else ''}.")
+        typer.echo(f"     Pruned {chunks_pruned:,} stale chunk{'s' if chunks_pruned != 1 else ''}.")
 
     # Prune chunks for files matching ignore patterns (e.g., after ignore config changes)
     if not dry_run:

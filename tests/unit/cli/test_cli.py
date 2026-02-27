@@ -107,6 +107,63 @@ class TestInitCommand:
         assert len(template) > 0
         assert "store_root" in template or "[" in template  # TOML content
 
+    def test_init_shows_readiness_checklist(self, tmp_path):
+        """Test that init shows a readiness checklist with component status."""
+        config_path = tmp_path / "config.toml"
+
+        result = runner.invoke(app, ["init", "--config-path", str(config_path)])
+
+        assert result.exit_code == 0
+        assert "Readiness check:" in result.stdout
+        assert "Config" in result.stdout
+        assert "SQLite" in result.stdout
+        assert "LanceDB" in result.stdout
+        assert "Next steps:" in result.stdout
+        assert "dolphin add-repo" in result.stdout
+        assert "dolphin index" in result.stdout
+
+    def test_init_shows_missing_openai_key(self, tmp_path, monkeypatch):
+        """Test that init warns when OPENAI_API_KEY is not set and provider is openai."""
+        config_path = tmp_path / "config.toml"
+        store_root = tmp_path / "store"
+
+        # Create a config with openai provider
+        original_template = _read_config_template()
+        openai_template = original_template.replace(
+            'store_root = "~/.dolphin/knowledge_store"',
+            f'store_root = "{store_root}"',
+        ).replace('provider = "openai"', 'provider = "openai"')  # Already openai in template
+        monkeypatch.setattr("kb.ingest.cli._read_config_template", lambda: openai_template)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+        result = runner.invoke(app, ["init", "--config-path", str(config_path)])
+
+        assert result.exit_code == 0
+        assert "OPENAI_API_KEY" in result.stdout
+        assert "missing" in result.stdout
+
+    def test_init_shows_ok_openai_key(self, tmp_path, monkeypatch):
+        """Test that init shows ok status when OPENAI_API_KEY is set."""
+        config_path = tmp_path / "config.toml"
+        store_root = tmp_path / "store"
+
+        original_template = _read_config_template()
+        openai_template = original_template.replace(
+            'store_root = "~/.dolphin/knowledge_store"',
+            f'store_root = "{store_root}"',
+        )
+        monkeypatch.setattr("kb.ingest.cli._read_config_template", lambda: openai_template)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-for-init-check")
+
+        result = runner.invoke(app, ["init", "--config-path", str(config_path)])
+
+        assert result.exit_code == 0
+        assert "OPENAI_API_KEY" in result.stdout
+        # Should show "ok" not "missing"
+        lines = result.stdout.splitlines()
+        openai_lines = [line for line in lines if "OPENAI_API_KEY" in line]
+        assert any("ok" in line for line in openai_lines)
+
 
 class TestAddRepoCommand:
     """Test kb add-repo command."""

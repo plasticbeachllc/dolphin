@@ -11,7 +11,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 import typer
 import uvicorn
@@ -525,6 +525,60 @@ def _emit_search_json(
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
 
 
+def _extract_snippet_text(hit: dict[str, object], show_content: bool, verbose: bool) -> str | None:
+    """Extract displayable snippet text from a search hit."""
+    if not (show_content or verbose):
+        return None
+    snippet_obj = hit.get("snippet")
+    content = hit.get("content")
+    snippet_text = None
+    if isinstance(snippet_obj, dict) and "text" in snippet_obj:
+        snippet_text = cast(dict[str, Any], snippet_obj)["text"]
+    if not snippet_text and isinstance(content, str):
+        snippet_text = content
+    if isinstance(snippet_text, str) and snippet_text.strip():
+        return snippet_text
+    return None
+
+
+_LANGUAGE_TO_LEXER: dict[str, str] = {
+    "python": "python",
+    "typescript": "typescript",
+    "javascript": "javascript",
+    "markdown": "markdown",
+    "sql": "sql",
+    "svelte": "html",
+    "text": "text",
+    "toml": "toml",
+    "yaml": "yaml",
+    "json": "json",
+    "css": "css",
+    "html": "html",
+    "rust": "rust",
+    "go": "go",
+    "java": "java",
+    "c": "c",
+    "cpp": "cpp",
+    "shell": "bash",
+    "bash": "bash",
+    "ruby": "ruby",
+}
+
+
+def _rich_lexer_for_language(language: str) -> str:
+    """Map dolphin language names to Pygments lexer names."""
+    return _LANGUAGE_TO_LEXER.get(language.lower(), "text")
+
+
+def _score_style(score: float) -> str:
+    """Return a rich style string based on score value."""
+    if score >= 0.7:
+        return "bold green"
+    if score >= 0.4:
+        return "yellow"
+    return "dim"
+
+
 def _display_results(
     *,
     query: str,
@@ -535,7 +589,120 @@ def _display_results(
     languages: list[str],
     max_lines: int = MAX_SNIPPET_LINES_DISPLAY,
 ) -> None:
-    """Display compact search results by default, verbose details on demand."""
+    """Display search results using rich panels with syntax highlighting.
+
+    Falls back to plain text when stdout is not a TTY (for piping/scripting).
+    """
+    from kb.terminal import _STDOUT_CONSOLE
+
+    if not _STDOUT_CONSOLE.is_terminal:
+        _display_results_plain(
+            query=query,
+            hits=hits,
+            show_content=show_content,
+            verbose=verbose,
+            meta=meta,
+            languages=languages,
+            max_lines=max_lines,
+        )
+        return
+
+    from rich.console import Group
+    from rich.panel import Panel
+    from rich.syntax import Syntax
+    from rich.text import Text
+
+    console = _STDOUT_CONSOLE
+
+    if not hits:
+        console.print()
+        console.print("[dim]No results found.[/dim]")
+        print_hint("Try broadening your query, removing filters, or indexing more repositories.")
+        return
+
+    console.print(f'\nFound [bold]{len(hits)}[/bold] result{"s" if len(hits) != 1 else ""} for [cyan]"{query}"[/cyan]')
+    if languages:
+        console.print(f"[dim]Language filter: {', '.join(languages)}[/dim]")
+    if verbose and meta:
+        top_k = meta.get("top_k")
+        model = meta.get("model")
+        latency = meta.get("latency_ms")
+        console.print(f"[dim]Meta: top_k={top_k} model={model} latency_ms={latency}[/dim]")
+    console.print()
+
+    for i, hit in enumerate(hits, 1):
+        score_value = hit.get("score", 0.0)
+        score = float(score_value) if isinstance(score_value, (int, float)) else 0.0
+        repo = str(hit.get("repo", "unknown"))
+        path = str(hit.get("path") or hit.get("file_path") or "unknown")
+        start_line = hit.get("start_line")
+        end_line = hit.get("end_line")
+        language = _detect_hit_language(hit)
+        symbol_name = hit.get("symbol_name")
+        symbol_kind = hit.get("symbol_kind")
+
+        # Build location string
+        if isinstance(start_line, int) and isinstance(end_line, int):
+            location = f"{repo}/{path}:{start_line}-{end_line}"
+        else:
+            location = f"{repo}/{path}"
+
+        # Panel title and subtitle
+        style = _score_style(score)
+        title = f"[bold]{i}. {location}[/bold]"
+        subtitle = f"[{style}]{score:.2f}[/{style}]"
+
+        # Build panel body
+        renderables: list[Text | Syntax | str] = []
+
+        # Symbol + language info line
+        info_parts: list[str] = []
+        if isinstance(symbol_name, str) and symbol_name:
+            kind_label = str(symbol_kind) if symbol_kind else "symbol"
+            info_parts.append(f"[cyan]{kind_label}:{symbol_name}[/cyan]")
+        info_parts.append(f"[dim]{language}[/dim]")
+
+        if verbose:
+            chunk_id = hit.get("chunk_id")
+            if chunk_id:
+                info_parts.append(f"[dim]chunk_id={chunk_id}[/dim]")
+            resource_link = hit.get("resource_link")
+            if resource_link:
+                info_parts.append(f"[dim]resource={resource_link}[/dim]")
+
+        renderables.append(Text.from_markup("  ".join(info_parts)))
+
+        # Code snippet
+        snippet_text = _extract_snippet_text(hit, show_content, verbose)
+        if snippet_text:
+            lines = snippet_text.splitlines()
+            display_lines = lines[:max_lines]
+            code = "\n".join(display_lines)
+            if len(lines) > max_lines:
+                code += f"\n... ({len(lines) - max_lines} more lines)"
+
+            lexer = _rich_lexer_for_language(language)
+            syntax = Syntax(code, lexer, theme="monokai", line_numbers=False, word_wrap=True)
+            renderables.append(syntax)
+
+        panel_body: Group | str = Group(*renderables) if renderables else "[dim](no content)[/dim]"
+        console.print(Panel(panel_body, title=title, subtitle=subtitle, expand=True, padding=(0, 1)))
+
+    if not verbose:
+        print_hint("pass --verbose for chunk IDs and metadata.")
+
+
+def _display_results_plain(
+    *,
+    query: str,
+    hits: list[dict[str, object]],
+    show_content: bool,
+    verbose: bool,
+    meta: dict[str, object],
+    languages: list[str],
+    max_lines: int = MAX_SNIPPET_LINES_DISPLAY,
+) -> None:
+    """Plain-text fallback for non-TTY output (piping, scripts)."""
     if not hits:
         typer.echo("No results found.")
         return
@@ -584,15 +751,8 @@ def _display_results(
                 typer.echo(f"   resource={resource_link}")
 
         if show_content or verbose:
-            snippet_obj = hit.get("snippet")
-            content = hit.get("content")
-            snippet_text = None
-            if isinstance(snippet_obj, dict):
-                snippet_text = snippet_obj.get("text")
-            if not snippet_text and isinstance(content, str):
-                snippet_text = content
-
-            if isinstance(snippet_text, str) and snippet_text.strip():
+            snippet_text = _extract_snippet_text(hit, show_content=True, verbose=True)
+            if snippet_text:
                 lines = snippet_text.splitlines()
                 typer.echo("   ---")
                 for line in lines[:max_lines]:

@@ -6,6 +6,7 @@ import logging
 import sqlite3
 import subprocess
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,9 @@ from .parallel_parser import ParseJob, parse_files_parallel
 from .parallel_scanner import scan_repo_parallel
 
 logger = logging.getLogger(__name__)
+
+# Type alias for optional progress callback
+ProgressCallback = Callable[[dict[str, Any]], None] | None
 
 
 class _CancelledError(Exception):
@@ -471,6 +475,7 @@ class IngestionPipeline:
         branch: str,
         dry_run: bool,
         error_logger: ErrorLogger,
+        progress_callback: ProgressCallback = None,
     ) -> dict[str, int]:
         """Process a list of modified or added files."""
         stats = {
@@ -511,6 +516,16 @@ class IngestionPipeline:
                                 if pruned:
                                     stats["chunks_pruned"] += pruned
                                 self.lancedb.prune_file_rows(repo_name, path, model=model_name)
+                    if progress_callback is not None:
+                        progress_callback(
+                            {
+                                "event": "file_skipped",
+                                "files_done": stats["files_done"] + stats["files_skipped_ignored"],
+                                "total_files": len(files),
+                                "chunks_indexed": stats["chunks_indexed"],
+                                "current_file": path,
+                            }
+                        )
                     continue
 
                 # Skip binary files and files that don't exist
@@ -712,10 +727,31 @@ class IngestionPipeline:
                 # Log per-file summary
                 logger.info(self._format_index_summary(path, len(chunks), len(new_hashes), skipped_occurrences))
 
+                if progress_callback is not None:
+                    progress_callback(
+                        {
+                            "event": "file_complete",
+                            "files_done": stats["files_done"] + stats["files_skipped_ignored"],
+                            "total_files": len(files),
+                            "chunks_indexed": stats["chunks_indexed"],
+                            "current_file": path,
+                        }
+                    )
+
             except Exception as e:
                 stats["files_error"] += 1
                 error_logger.log_file_error(path, e)
                 logger.error(f"Error processing {path}: {e}")
+                if progress_callback is not None:
+                    progress_callback(
+                        {
+                            "event": "file_error",
+                            "files_done": stats["files_done"] + stats["files_skipped_ignored"] + stats["files_error"],
+                            "total_files": len(files),
+                            "chunks_indexed": stats["chunks_indexed"],
+                            "current_file": path,
+                        }
+                    )
                 continue
 
         return stats
@@ -781,6 +817,7 @@ class IngestionPipeline:
         dry_run: bool = False,
         force: bool = False,
         full_reindex: bool = False,
+        progress_callback: ProgressCallback = None,
     ) -> dict[str, Any]:
         """Perform full indexing pipeline for the named repository.
 
@@ -916,6 +953,7 @@ class IngestionPipeline:
                 branch=branch,
                 dry_run=dry_run,
                 error_logger=error_logger,
+                progress_callback=progress_callback,
             )
             files_done += stats["files_done"]
             files_skipped_ignored += stats["files_skipped_ignored"]
@@ -1188,6 +1226,7 @@ class IngestionPipeline:
         force: bool = False,
         full_reindex: bool = False,
         max_workers: int | None = None,
+        progress_callback: ProgressCallback = None,
     ) -> dict[str, Any]:
         """Parallel indexing with dynamic worker scaling.
 
@@ -1538,6 +1577,16 @@ class IngestionPipeline:
                             logger.info(
                                 self._format_index_summary(path, len(chunks), len(new_hashes), skipped_occurrences)
                             )
+                            if progress_callback is not None:
+                                progress_callback(
+                                    {
+                                        "event": "file_complete",
+                                        "files_done": files_done + files_skipped_ignored,
+                                        "total_files": len(changed_files),
+                                        "chunks_indexed": chunks_indexed,
+                                        "current_file": path,
+                                    }
+                                )
 
             # Process deleted files using shared sync/async-safe logic.
             del_stats = self.process_deletions(
