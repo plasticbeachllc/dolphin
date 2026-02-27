@@ -60,7 +60,7 @@ class SQLiteConnectionPool:
         self.timeout = timeout
         self.enable_wal = enable_wal
         self.mmap_size = mmap_size if mmap_size is not None else self.DEFAULT_MMAP_SIZE
-        if not isinstance(self.mmap_size, int) or self.mmap_size < 0:
+        if isinstance(self.mmap_size, bool) or not isinstance(self.mmap_size, int) or self.mmap_size < 0:
             raise ValueError(f"mmap_size must be a non-negative int, got {self.mmap_size!r}")
 
         self._pool: Queue = Queue(maxsize=pool_size)

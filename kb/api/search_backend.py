@@ -80,6 +80,7 @@ class KnowledgeSearchBackend:
         self._bm25_normalizer_metadata: dict[str, Any] = {}
         # Execute independent retrieval branches concurrently to reduce p95 latency.
         self._search_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="kb-search")
+        # Not configurable by design — 30s is generous for any reasonable search.
         self._search_timeout_seconds = 30
         self._configure_bm25_statistics_collection()
 
