@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center">Dolphin</h1>
+  <h1 align="center">🐬 Dolphin</h1>
   <p align="center">
     <strong>Hybrid search across all your repositories.</strong><br/>
   </p>
