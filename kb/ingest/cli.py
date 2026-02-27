@@ -971,7 +971,7 @@ def validate_repo(
 
         # Display results
         if report["valid"]:
-            typer.echo(f"\n⛵ Repository '{name}' is consistent.")
+            typer.echo(f"\n  ✓ Repository '{name}' is consistent.")
         else:
             typer.echo(f"\n🚩 Repository '{name}' has consistency issues:", err=True)
             for issue in report["issues"]:
@@ -1062,7 +1062,7 @@ def repair_repo(
                 for repair in repair_report["repairs_performed"]:
                     typer.echo(f"  - {repair}")
             else:
-                typer.echo(f"\n⛵ No repairs needed for '{name}'.")
+                typer.echo(f"\n  ✓ No repairs needed for '{name}'.")
         else:
             typer.echo("\n🚩 Repair completed with errors:", err=True)
             for error in repair_report["errors"]:
@@ -1158,7 +1158,7 @@ def reset_all(
                 stats["lancedb_vectors"]["small_deleted"] + stats["lancedb_vectors"]["large_deleted"]
             )
 
-            typer.echo(f"  ⛵ Removed {repo['name']}")
+            typer.echo(f"  ✓ Removed {repo['name']}")
 
             # Capture any warnings
             if "lancedb_warnings" in result:
