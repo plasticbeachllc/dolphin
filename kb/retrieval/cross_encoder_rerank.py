@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import os
 from collections.abc import Sequence
@@ -26,16 +25,22 @@ except ImportError:
 def _quiet_model_load():
     """Suppress noisy stdout (safetensors LOAD REPORT) and httpx INFO logs during model loading.
 
-    Note: redirect_stdout patches global state, so concurrent stdout writers would be
-    affected during this window. Acceptable here since model loading is one-time init.
+    Uses fd-level redirect (os.dup2) rather than sys.stdout patching so that output from
+    native extensions (e.g. safetensors Rust bindings writing to fd 1) is also captured.
+    Patches global state — acceptable here since model loading is one-time init.
     """
     httpx_logger = logging.getLogger("httpx")
     prev_level = httpx_logger.level
     httpx_logger.setLevel(logging.WARNING)
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    saved_fd = os.dup(1)
     try:
-        with open(os.devnull, "w") as devnull, contextlib.redirect_stdout(devnull):
-            yield
+        os.dup2(devnull_fd, 1)
+        yield
     finally:
+        os.dup2(saved_fd, 1)
+        os.close(saved_fd)
+        os.close(devnull_fd)
         httpx_logger.setLevel(prev_level)
 
 
