@@ -18,10 +18,10 @@ def is_tty() -> bool:
 
 
 _LEVEL_META: dict[StatusLevel, tuple[str, str]] = {
-    "step": ("bright_blue", "STEP"),
+    "step": ("cyan", "STEP"),
     "info": ("cyan", "INFO"),
-    "success": ("green", "OK"),
-    "warn": ("yellow", "WARN"),
+    "success": ("cyan", "OK"),
+    "warn": ("red", "WARN"),
     "error": ("red", "ERROR"),
 }
 

@@ -561,9 +561,9 @@ def _rich_lexer_for_language(language: str) -> str:
 def _score_style(score: float) -> str:
     """Return a rich style string based on score value."""
     if score >= 0.7:
-        return "bold green"
+        return "bold cyan"
     if score >= 0.4:
-        return "yellow"
+        return "cyan"
     return "dim"
 
 

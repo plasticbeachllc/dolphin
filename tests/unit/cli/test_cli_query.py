@@ -299,6 +299,6 @@ def test_extract_snippet_text_empty_content() -> None:
 
 def test_score_style() -> None:
     """Score style should return appropriate color for score ranges."""
-    assert "green" in cli._score_style(0.85)
-    assert "yellow" in cli._score_style(0.55)
+    assert "cyan" in cli._score_style(0.85)
+    assert "cyan" in cli._score_style(0.55)
     assert "dim" in cli._score_style(0.2)

@@ -24,22 +24,20 @@ import tempfile
 import time
 from pathlib import Path
 
-# Color codes for terminal output
-GREEN = "\033[92m"
+# Color codes for terminal output — turquoise for emphasis, red for errors/warnings
+CYAN = "\033[96m"
 RED = "\033[91m"
-YELLOW = "\033[93m"
-BLUE = "\033[94m"
 RESET = "\033[0m"
 
 
 def log_step(message: str):
     """Log a test step."""
-    print(f"{BLUE}➜{RESET} {message}")
+    print(f"{CYAN}➜{RESET} {message}")
 
 
 def log_success(message: str):
     """Log a success."""
-    print(f"{GREEN}✓{RESET} {message}")
+    print(f"{CYAN}✓{RESET} {message}")
 
 
 def log_error(message: str):
@@ -49,7 +47,7 @@ def log_error(message: str):
 
 def log_warning(message: str):
     """Log a warning."""
-    print(f"{YELLOW}⚠{RESET} {message}")
+    print(f"{RED}⚠{RESET} {message}")
 
 
 def check_prerequisites() -> bool:
@@ -301,9 +299,9 @@ def _run_search_and_api_test(store_root: Path, port: int) -> tuple[bool, bool]:
         # ============================================================
         # Test 1: Search Functionality
         # ============================================================
-        print(f"\n{BLUE}{'─' * 70}{RESET}")
+        print(f"\n{CYAN}{'─' * 70}{RESET}")
         log_step("Test 3: Search Functionality")
-        print(f"{BLUE}{'─' * 70}{RESET}")
+        print(f"{CYAN}{'─' * 70}{RESET}")
 
         test_queries = ["calculate sum", "Calculator class", "greeting function"]
 
@@ -352,9 +350,9 @@ def _run_search_and_api_test(store_root: Path, port: int) -> tuple[bool, bool]:
         # ============================================================
         # Test 2: API Endpoints
         # ============================================================
-        print(f"\n{BLUE}{'─' * 70}{RESET}")
+        print(f"\n{CYAN}{'─' * 70}{RESET}")
         log_step("Test 4: API Endpoints")
-        print(f"{BLUE}{'─' * 70}{RESET}")
+        print(f"{CYAN}{'─' * 70}{RESET}")
 
         api_passed = True
 
@@ -559,9 +557,9 @@ def cleanup_test_repo(temp_store_root: Path) -> None:
 
 def main():
     """Run all end-to-end tests."""
-    print(f"\n{BLUE}{'=' * 70}{RESET}")
-    print(f"{BLUE}Dolphin End-to-End Live Integration Test{RESET}")
-    print(f"{BLUE}{'=' * 70}{RESET}\n")
+    print(f"\n{CYAN}{'=' * 70}{RESET}")
+    print(f"{CYAN}Dolphin End-to-End Live Integration Test{RESET}")
+    print(f"{CYAN}{'=' * 70}{RESET}\n")
 
     # Check prerequisites
     if not check_prerequisites():
@@ -587,9 +585,9 @@ def main():
             # ============================================================
             # Test 1: Initialization
             # ============================================================
-            print(f"\n{BLUE}{'─' * 70}{RESET}")
+            print(f"\n{CYAN}{'─' * 70}{RESET}")
             log_step("Test 1: Dolphin Initialization")
-            print(f"{BLUE}{'─' * 70}{RESET}")
+            print(f"{CYAN}{'─' * 70}{RESET}")
             test_results["initialization"] = _run_initialization_test(store_root)
             if test_results["initialization"]:
                 log_success("Initialization test PASSED")
@@ -599,9 +597,9 @@ def main():
             # ============================================================
             # Test 2: Repository Indexing
             # ============================================================
-            print(f"\n{BLUE}{'─' * 70}{RESET}")
+            print(f"\n{CYAN}{'─' * 70}{RESET}")
             log_step("Test 2: Repository Indexing")
-            print(f"{BLUE}{'─' * 70}{RESET}")
+            print(f"{CYAN}{'─' * 70}{RESET}")
             test_results["indexing"] = _run_repository_indexing_test(repo_path, store_root)
             if test_results["indexing"]:
                 log_success("Indexing test PASSED")
@@ -611,9 +609,9 @@ def main():
             # ============================================================
             # Start API Server (for tests 3 & 4)
             # ============================================================
-            print(f"\n{BLUE}{'─' * 70}{RESET}")
+            print(f"\n{CYAN}{'─' * 70}{RESET}")
             log_step("Starting API Server for Search and API Tests")
-            print(f"{BLUE}{'─' * 70}{RESET}")
+            print(f"{CYAN}{'─' * 70}{RESET}")
 
             port = find_free_port()
             log_step(f"  Using port {port} for API server...")
@@ -699,9 +697,9 @@ def main():
             # ============================================================
             # Test 5: Reranking (Optional)
             # ============================================================
-            print(f"\n{BLUE}{'─' * 70}{RESET}")
+            print(f"\n{CYAN}{'─' * 70}{RESET}")
             log_step("Test 5: Reranking (Optional)")
-            print(f"{BLUE}{'─' * 70}{RESET}")
+            print(f"{CYAN}{'─' * 70}{RESET}")
             test_results["reranking"] = _run_reranking_test(store_root)
             if test_results["reranking"]:
                 log_success("Reranking test PASSED")
@@ -709,20 +707,20 @@ def main():
             # ============================================================
             # Cleanup
             # ============================================================
-            print(f"\n{BLUE}{'─' * 70}{RESET}")
+            print(f"\n{CYAN}{'─' * 70}{RESET}")
             log_step("Cleanup: Removing test data from database")
-            print(f"{BLUE}{'─' * 70}{RESET}")
+            print(f"{CYAN}{'─' * 70}{RESET}")
             cleanup_test_repo(store_root)
 
             # ============================================================
             # Summary
             # ============================================================
-            print(f"\n{BLUE}{'=' * 70}{RESET}")
-            print(f"{BLUE}Test Summary{RESET}")
-            print(f"{BLUE}{'=' * 70}{RESET}\n")
+            print(f"\n{CYAN}{'=' * 70}{RESET}")
+            print(f"{CYAN}Test Summary{RESET}")
+            print(f"{CYAN}{'=' * 70}{RESET}\n")
 
             for test_name, passed in test_results.items():
-                status = f"{GREEN}✓ PASSED{RESET}" if passed else f"{RED}✗ FAILED{RESET}"
+                status = f"{CYAN}✓ PASSED{RESET}" if passed else f"{RED}✗ FAILED{RESET}"
                 print(f"  {test_name.capitalize():20s} {status}")
 
             tests_passed = sum(test_results.values())
@@ -731,11 +729,11 @@ def main():
             print()
             if tests_passed == tests_total:
                 log_success(f"All {tests_total} tests passed! ✨")
-                print(f"\n{GREEN}Dolphin is ready for PyPI deployment.{RESET}\n")
+                print(f"\n{CYAN}Dolphin is ready for PyPI deployment.{RESET}\n")
                 return 0
             else:
                 log_warning(f"{tests_passed}/{tests_total} tests passed")
-                print(f"\n{YELLOW}Some tests failed. Review output above.{RESET}\n")
+                print(f"\n{RED}Some tests failed. Review output above.{RESET}\n")
                 return 1
 
         except KeyboardInterrupt:

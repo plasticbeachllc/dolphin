@@ -57,7 +57,7 @@ def _read_config_template() -> str:
 _ChecklistStatus = Literal["ok", "missing", "pending"]
 
 _STATUS_STYLES: dict[_ChecklistStatus, str] = {
-    "ok": "[green]ok[/green]",
+    "ok": "[cyan]ok[/cyan]",
     "missing": "[red]missing[/red]",
     "pending": "[dim]pending[/dim]",
 }
@@ -167,7 +167,7 @@ def init(
 
     if created:
         target.write_text(config_content, encoding="utf-8")
-        console.print(f"Created knowledge store config at [bold green]{target}[/bold green]")
+        console.print(f"Created knowledge store config at [bold cyan]{target}[/bold cyan]")
 
     # Load config and initialize storage backends.
     config = load_config(target)
@@ -261,7 +261,7 @@ def _create_progress_display() -> tuple[Progress | None, Callable[[dict[str, Any
 
     progress = Progress(
         SpinnerColumn(),
-        TextColumn("[bold bright_blue]Indexing"),
+        TextColumn("[bold cyan]Indexing"),
         BarColumn(),
         MofNCompleteColumn(),
         TextColumn("files"),
@@ -470,7 +470,7 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
     if repos:
         console.print("\n[bold]📚 Registered Repositories[/bold]")
         repo_table = Table(box=box.ROUNDED)
-        repo_table.add_column("Name", style="green")
+        repo_table.add_column("Name", style="cyan")
         repo_table.add_column("Path", style="dim")
         repo_table.add_column("Embed Model")
         repo_table.add_column("Created", style="dim")
@@ -481,7 +481,7 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
             )
         console.print(repo_table)
     else:
-        console.print("\n[yellow]No repositories registered.[/yellow]")
+        console.print("\n[red]No repositories registered.[/red]")
 
     # Reranking status
     console.print("\n[bold]🔍 Reranking[/bold]")
@@ -492,7 +492,7 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
         try:
             from sentence_transformers import CrossEncoder as _CE  # noqa: F401  # ty: ignore[unresolved-import]
 
-            console.print(f"  [green]Enabled[/green] — model: {reranking_cfg.model}")
+            console.print(f"  [cyan]Enabled[/cyan] — model: {reranking_cfg.model}")
         except ImportError:
             console.print(
                 "  [red]Enabled in config but dependencies are missing.[/red]\n"
@@ -903,7 +903,7 @@ def search(
             symbol_name = hit.get("symbol_name")
             symbol_kind = hit.get("symbol_kind")
             if symbol_name and symbol_kind:
-                typer.secho(f"   {symbol_kind}: {symbol_name}", fg="green")
+                typer.secho(f"   {symbol_kind}: {symbol_name}", fg="cyan")
 
             # Show content if requested
             if show_content:
@@ -926,7 +926,7 @@ def search(
                     if len(content.splitlines()) > 10:
                         typer.secho(
                             f"   ... ({len(content.splitlines()) - 10} more lines)",
-                            fg="yellow",
+                            dim=True,
                         )
                     typer.echo("   " + "─" * 70)
 
