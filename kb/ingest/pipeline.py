@@ -293,14 +293,6 @@ class IngestionPipeline:
                 logger.warning("Could not delete graph data for repo_id=%s", repo_id, exc_info=True)
                 deletion_errors.append("graph data")
 
-        if deletion_errors:
-            logger.warning(
-                "Partial deletion for repo %s — failed to delete: %s. "
-                "Index may be inconsistent; consider a full reindex.",
-                repo_name,
-                ", ".join(deletion_errors),
-            )
-
         # Delete from metadata database
         logger.info("  Clearing metadata...")
         with self.metadata._connect() as conn:
@@ -385,7 +377,16 @@ class IngestionPipeline:
             except Exception:
                 conn.rollback()
                 logger.error("Error clearing metadata for repo_id=%s", repo_id, exc_info=True)
+                deletion_errors.append("metadata DB")
                 raise
+
+        if deletion_errors:
+            logger.warning(
+                "Partial deletion for repo %s — failed to delete: %s. "
+                "Index may be inconsistent; consider a full reindex.",
+                repo_name,
+                ", ".join(deletion_errors),
+            )
 
     def scan(self, repo_name: str, *, dry_run: bool = False, force: bool = False) -> dict:
         """Perform scanning for the named repository and persist file catalog.

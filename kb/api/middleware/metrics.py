@@ -86,10 +86,10 @@ kb_info = Info("kb_api", "Knowledge Bank API information")
 
 def _get_app_version() -> str:
     try:
-        from importlib.metadata import version as _pkg_version
+        from importlib.metadata import PackageNotFoundError, version as _pkg_version
 
         return _pkg_version("pb-dolphin")
-    except ImportError:
+    except PackageNotFoundError:
         return "0.0.0"
 
 

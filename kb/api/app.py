@@ -453,7 +453,16 @@ def get_search_backend() -> SearchBackend:
 
 
 def reset_search_backend() -> None:
-    """Restore the default empty backend, closing the previous one if applicable."""
+    """Restore the default empty backend, closing the previous one if applicable.
+
+    Note: ``close(wait=False)`` returns immediately.  A concurrent ``search()``
+    call that captured the old backend reference but hasn't yet called
+    ``executor.submit()`` may raise ``RuntimeError``.  This is acceptable
+    because reset is only called during config reload or test teardown — both
+    low-concurrency paths.  Do **not** change to ``wait=True`` without also
+    guarding the submit window, since that would block the caller on in-flight
+    searches.
+    """
     old = _search_backend
     set_search_backend(None)
     close_fn = getattr(old, "close", None)

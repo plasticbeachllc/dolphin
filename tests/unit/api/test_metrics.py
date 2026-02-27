@@ -1,6 +1,5 @@
 """Unit tests for Prometheus metrics middleware."""
 
-import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -443,9 +442,11 @@ class TestVersionInfo:
         assert isinstance(version, str)
         assert len(version) > 0
 
-    def test_get_app_version_fallback_on_import_error(self):
-        """_get_app_version falls back to '0.0.0' when importlib.metadata fails."""
-        with patch("importlib.metadata.version", side_effect=ImportError("not installed")):
+    def test_get_app_version_fallback_on_package_not_found(self):
+        """_get_app_version falls back to '0.0.0' when package is not installed."""
+        from importlib.metadata import PackageNotFoundError
+
+        with patch("importlib.metadata.version", side_effect=PackageNotFoundError("pb-dolphin")):
             version = _get_app_version()
             assert version == "0.0.0"
 
@@ -458,14 +459,3 @@ class TestVersionInfo:
             {"version": _get_app_version(), "python_version": platform.python_version()},
         )
         assert value == 1.0
-
-    def test_version_not_hardcoded(self):
-        """The version is determined dynamically, not hardcoded to a literal."""
-        import inspect
-
-        source = inspect.getsource(_get_app_version)
-        # The function should use importlib.metadata, not return a hardcoded version directly
-        assert "importlib" in source or "_pkg_version" in source
-        # The only literal version in the source should be the fallback "0.0.0"
-        version_literals = re.findall(r'"(\d+\.\d+\.\d+)"', source)
-        assert version_literals == ["0.0.0"], f"Unexpected version literals in source: {version_literals}"

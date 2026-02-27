@@ -113,6 +113,8 @@ class SQLiteConnectionPool:
         # Optimization pragmas
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA temp_store=MEMORY")
+        # SQLite PRAGMAs don't support ? parameter binding; the value is
+        # validated as int in __init__ so f-string interpolation is safe here.
         conn.execute(f"PRAGMA mmap_size={self.mmap_size}")
         conn.execute("PRAGMA page_size=4096")
         conn.execute("PRAGMA cache_size=-8192")  # ~8 MB per connection
@@ -241,6 +243,7 @@ class SQLiteConnectionPool:
                     self._pool.put_nowait(fresh)
                     self._created_connections += 1
                 except Full:
+                    # Pool was filled between the check and put; close the spare.
                     if fresh is not None:
                         fresh.close()
                 except sqlite3.Error:
