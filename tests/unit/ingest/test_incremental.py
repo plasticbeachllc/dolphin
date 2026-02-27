@@ -163,11 +163,11 @@ class TestComputeChunkDiff:
 
         diff = compute_chunk_diff([chunk_a, chunk_b], set(), repo_name="repo", file_path="f.py")
 
-        # Both chunks are in new_chunks because neither hash existed, but
-        # internally only one unique hash was added.  The first encounters
-        # the hash as absent, the second finds it already in new_hashes
-        # but the hash is still not in existing_hashes so the chunk is
-        # added to chunks_to_embed as well.
+        # Both chunks land in new_chunks because their shared hash was not
+        # in existing_hashes.  compute_chunk_diff does not deduplicate
+        # within a single diff — that happens downstream in the embedder.
+        # This test documents the current behaviour: two distinct chunk
+        # objects with the same text are both marked as new.
         assert len(diff.new_chunks) == 2
         assert diff.stats["total_new"] == 2
 

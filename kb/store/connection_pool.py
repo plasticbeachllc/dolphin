@@ -68,8 +68,10 @@ class SQLiteConnectionPool:
         self._overflow_lock = threading.Lock()
         # Track which live connections are overflow (by id()) so release()
         # can definitively distinguish pool vs. overflow connections.
-        # Entries are always removed under _overflow_lock *before* conn.close(),
-        # so Python cannot reuse an id() that is still in the set.
+        # Individual set.add/discard are atomic under CPython's GIL; on
+        # non-GIL builds, guard accesses with _overflow_lock.
+        # Entries are always removed *before* conn.close(), so Python cannot
+        # reuse an id() that is still in the set.
         self._overflow_conns: set[int] = set()
 
         # Statistics

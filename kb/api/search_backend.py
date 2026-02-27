@@ -426,9 +426,7 @@ class KnowledgeSearchBackend:
             vector_formatted = self._format_vector_results(vector_results)
             request_logger.debug("Vector search completed", {"results_count": len(vector_formatted)})
         except TimeoutError:
-            request_logger.warning(
-                "Vector search timed out", {"timeout_seconds": self._search_timeout_seconds}
-            )
+            request_logger.warning("Vector search timed out", {"timeout_seconds": self._search_timeout_seconds})
             vector_future.cancel()
         except Exception as e:
             request_logger.warning("Vector search failed", {"error_type": type(e).__name__}, error=e)
@@ -451,9 +449,7 @@ class KnowledgeSearchBackend:
                 )
                 request_logger.debug("BM25 results hydrated", {"hydrated_count": len(bm25_hydrated)})
             except TimeoutError:
-                request_logger.warning(
-                    "BM25 search timed out", {"timeout_seconds": self._search_timeout_seconds}
-                )
+                request_logger.warning("BM25 search timed out", {"timeout_seconds": self._search_timeout_seconds})
                 bm25_future.cancel()
             except Exception as e:
                 request_logger.warning("BM25 search failed", {"error_type": type(e).__name__}, error=e)

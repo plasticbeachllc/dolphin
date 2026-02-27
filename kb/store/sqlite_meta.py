@@ -917,6 +917,7 @@ class SQLiteMetadataStore:
                 )
             conn.commit()
 
+    # Keep in sync with bump_session_counters() keyword parameters below.
     _ALLOWED_SESSION_COLUMNS = frozenset(
         {
             "files_indexed",
@@ -1101,7 +1102,7 @@ class SQLiteMetadataStore:
         """
         # Build a single query checking all dependency tables at once.
         checks = [
-            ("chunk_content", "SELECT 'chunk_content' AS tbl, COUNT(*) AS cnt FROM chunk_content WHERE file_id = ?"),
+            ("chunk_content", "SELECT 'chunk_content', COUNT(*) FROM chunk_content WHERE file_id = ?"),
             ("code_nodes", "SELECT 'code_nodes', COUNT(*) FROM code_nodes WHERE file_id = ?"),
             ("node_aliases", "SELECT 'node_aliases', COUNT(*) FROM node_aliases WHERE file_id = ?"),
             (

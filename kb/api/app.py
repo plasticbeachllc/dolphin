@@ -217,8 +217,10 @@ def _read_file_lines(full_path: Path) -> list[str] | None:
             for line in fh:
                 lines.append(line)
                 if len(lines) > _FILE_LINES_MAX_LINES:
-                    _log.debug("Skipping cache for large file: %s", full_path)
-                    return lines  # return uncached; caller still gets content
+                    # Return None so callers display "file too large" instead
+                    # of silently truncated content that looks complete.
+                    _log.debug("File too large to serve: %s (>%d lines)", full_path, _FILE_LINES_MAX_LINES)
+                    return None
     except (OSError, UnicodeDecodeError):
         return None
     # Cache files within the size limit.
