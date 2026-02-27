@@ -14,6 +14,7 @@ import typer
 from pathspec import PathSpec
 from rich import box
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from ..api_key import get_kb_key_path, get_or_create_kb_api_key, load_kb_api_key
@@ -60,28 +61,28 @@ def _print_readiness_checklist(console: Console, config: KBConfig, config_path: 
 
     # 1. Config file
     if config_path.exists():
-        console.print(f"    [green]ok[/green]      Config         {config_path}")
+        console.print(f"    [green]ok[/green]      Config         {escape(str(config_path))}")
     else:
-        console.print(f"    [red]missing[/red]   Config         {config_path}")
+        console.print(f"    [red]missing[/red]   Config         {escape(str(config_path))}")
 
     # 2. SQLite
     db_path = store_root / _METADATA_DB_NAME
     if db_path.exists():
-        console.print(f"    [green]ok[/green]      SQLite         {db_path}")
+        console.print(f"    [green]ok[/green]      SQLite         {escape(str(db_path))}")
     else:
-        console.print(f"    [red]missing[/red]   SQLite         {db_path}")
+        console.print(f"    [red]missing[/red]   SQLite         {escape(str(db_path))}")
 
     # 3. LanceDB
     lance_path = store_root / _LANCEDB_DIR_NAME
     if lance_path.exists():
-        console.print(f"    [green]ok[/green]      LanceDB        {lance_path}")
+        console.print(f"    [green]ok[/green]      LanceDB        {escape(str(lance_path))}")
     else:
-        console.print(f"    [red]missing[/red]   LanceDB        {lance_path}")
+        console.print(f"    [red]missing[/red]   LanceDB        {escape(str(lance_path))}")
 
     # 4. KB API Key
     key_path = get_kb_key_path()
     if load_kb_api_key():
-        console.print(f"    [green]ok[/green]      KB API Key     {key_path}")
+        console.print(f"    [green]ok[/green]      KB API Key     {escape(str(key_path))}")
     else:
         console.print("    [dim]pending[/dim]   KB API Key     (created on first [bold]dolphin serve[/bold])")
 
@@ -170,7 +171,7 @@ def init(
     try:
         get_or_create_kb_api_key()
     except Exception:
-        pass  # Non-fatal; checklist will show "pending"
+        _log.debug("Could not pre-create KB API key; checklist will show 'pending'.", exc_info=True)
 
     _print_readiness_checklist(console, config, target)
 
@@ -229,7 +230,8 @@ def _create_progress_display() -> tuple[Any, Any]:
             nonlocal _last_n
             n = data.get("files_done", 0)
             total = data.get("total_files", 0)
-            if n - _last_n >= 50 or n == total:
+            step = max(10, total // 5) if total else 50
+            if n - _last_n >= step or n == total:
                 typer.echo(f"  Progress: {n}/{total} files, {data.get('chunks_indexed', 0):,} chunks")
                 _last_n = n
 
@@ -255,7 +257,7 @@ def _create_progress_display() -> tuple[Any, Any]:
         TimeElapsedColumn(),
         transient=False,
     )
-    _task_id: TaskID = progress.add_task("indexing", total=0, chunks=0)
+    _task_id: TaskID = progress.add_task("indexing", total=None, chunks=0)
 
     def _rich_callback(data: dict[str, Any]) -> None:
         total = data.get("total_files", 0)

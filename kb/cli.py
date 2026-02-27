@@ -541,33 +541,16 @@ def _extract_snippet_text(hit: dict[str, object], show_content: bool, verbose: b
     return None
 
 
-_LANGUAGE_TO_LEXER: dict[str, str] = {
-    "python": "python",
-    "typescript": "typescript",
-    "javascript": "javascript",
-    "markdown": "markdown",
-    "sql": "sql",
+_LANGUAGE_TO_LEXER_OVERRIDES: dict[str, str] = {
     "svelte": "html",
-    "text": "text",
-    "toml": "toml",
-    "yaml": "yaml",
-    "json": "json",
-    "css": "css",
-    "html": "html",
-    "rust": "rust",
-    "go": "go",
-    "java": "java",
-    "c": "c",
-    "cpp": "cpp",
     "shell": "bash",
-    "bash": "bash",
-    "ruby": "ruby",
 }
 
 
 def _rich_lexer_for_language(language: str) -> str:
     """Map dolphin language names to Pygments lexer names."""
-    return _LANGUAGE_TO_LEXER.get(language.lower(), "text")
+    lang = language.lower()
+    return _LANGUAGE_TO_LEXER_OVERRIDES.get(lang, lang)
 
 
 def _score_style(score: float) -> str:
@@ -764,7 +747,7 @@ def _display_results_plain(
             typer.echo("   ---")
 
     if not verbose:
-        typer.echo("\nTip: pass --verbose for expanded metadata and snippets.")
+        typer.echo("\nTip: pass --verbose for chunk IDs and metadata.")
 
 
 @app.command()

@@ -269,7 +269,8 @@ def test_rich_lexer_for_language() -> None:
     assert cli._rich_lexer_for_language("typescript") == "typescript"
     assert cli._rich_lexer_for_language("Python") == "python"  # case insensitive
     assert cli._rich_lexer_for_language("svelte") == "html"  # closest lexer
-    assert cli._rich_lexer_for_language("unknown_lang") == "text"  # fallback
+    assert cli._rich_lexer_for_language("unknown_lang") == "unknown_lang"  # pass-through for Pygments
+    assert cli._rich_lexer_for_language("shell") == "bash"  # override
 
 
 def test_extract_snippet_text_from_snippet_obj() -> None:

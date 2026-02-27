@@ -533,12 +533,12 @@ class IngestionPipeline:
                 # Skip binary files and files that don't exist
                 file_path = root / path
                 if not file_path.exists() or file_path.is_dir():
-                    stats["files_skipped_ignored"] += 1
+                    stats["files_error"] += 1
                     if progress_callback is not None:
                         done = stats["files_done"] + stats["files_skipped_ignored"] + stats["files_error"]
                         progress_callback(
                             _progress_event(
-                                "file_skipped", done=done, total=len(files), chunks=stats["chunks_indexed"], path=path
+                                "file_error", done=done, total=len(files), chunks=stats["chunks_indexed"], path=path
                             )
                         )
                     continue
