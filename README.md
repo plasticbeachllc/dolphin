@@ -60,7 +60,7 @@ Additionally, a Claude skill is available for install from this repo.
 ## How it works
 
 ```
-  You / AI assistant
+  You / Agent
         |
         v
   ┌───────────────────────────────────────┐
