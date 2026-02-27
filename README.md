@@ -2,7 +2,6 @@
   <h1 align="center">Dolphin</h1>
   <p align="center">
     <strong>Hybrid search across all your repositories.</strong><br/>
-    Find the right code from your terminal, your editor, or your AI assistant.
   </p>
   <p align="center">
     <a href="https://pypi.org/project/pb-dolphin/"><img src="https://img.shields.io/pypi/v/pb-dolphin.svg" alt="PyPI"></a>
