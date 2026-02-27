@@ -23,8 +23,12 @@ _SAFE_FILTER_VALUE = re.compile(r"^[a-zA-Z0-9_\-./\\ @:*?]+$")
 def _sanitize_filter_value(value: str) -> str:
     """Sanitize a string value for use in a LanceDB filter expression.
 
-    Escapes single quotes and validates against injection patterns.
+    Validates against the safe pattern and escapes single quotes.
+    Raises ValueError if the value contains suspicious characters.
     """
+    if not _SAFE_FILTER_VALUE.match(value):
+        logger.warning("Filter value rejected by validation pattern: %r", value)
+        raise ValueError(f"Invalid filter value: {value!r}")
     # Escape single quotes by doubling them (standard SQL escaping)
     return value.replace("'", "''")
 

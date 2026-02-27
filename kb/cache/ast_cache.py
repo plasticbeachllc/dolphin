@@ -247,7 +247,9 @@ def get_ast_cache(
             if _ast_cache is None:
                 _ast_cache = ASTCache(max_size=max_size, persist_path=persist_path)
 
-    return _ast_cache
+    cache = _ast_cache
+    assert cache is not None  # guaranteed by double-checked lock above
+    return cache
 
 
 def clear_ast_cache() -> None:

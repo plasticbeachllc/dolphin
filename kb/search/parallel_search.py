@@ -7,12 +7,17 @@ to reduce search latency by 40-50%.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+class SearchTimeoutError(Exception):
+    """Raised when a parallel search exceeds its timeout."""
 
 
 @dataclass
@@ -147,6 +152,9 @@ class ParallelHybridSearch:
         self.embedding_provider = embedding_provider
         self.vector_weight = vector_weight
 
+        # Reusable executor for sync-to-async bridging (avoids per-call overhead)
+        self._sync_executor: concurrent.futures.ThreadPoolExecutor | None = None
+
         # Statistics tracking
         self._total_searches = 0
         self._total_vector_time_ms = 0.0
@@ -209,10 +217,11 @@ class ParallelHybridSearch:
                 bm25_results = []
 
         except TimeoutError:
+            # In Python >= 3.11, builtin TimeoutError is the base for asyncio.TimeoutError.
             logger.error("Parallel search timed out after 60s")
             vector_task.cancel()
             bm25_task.cancel()
-            return []
+            raise SearchTimeoutError("Parallel search timed out after 60s")
         except Exception as e:
             logger.error(f"Parallel search failed: {e}")
             vector_task.cancel()
@@ -403,11 +412,17 @@ class ParallelHybridSearch:
 
         if loop is not None and loop.is_running():
             # Already inside an async context — cannot use run_until_complete.
-            # Create a new thread to run the coroutine safely.
-            import concurrent.futures
+            # Use a cached thread to run the coroutine safely.
+            coro = self.search_async(query, query_embedding, top_k, **kwargs)
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                return pool.submit(asyncio.run, self.search_async(query, query_embedding, top_k, **kwargs)).result()
+            def _run() -> list[SearchResult]:
+                return asyncio.run(coro)
+
+            if self._sync_executor is None:
+                self._sync_executor = concurrent.futures.ThreadPoolExecutor(
+                    max_workers=1, thread_name_prefix="parallel-search-sync"
+                )
+            return self._sync_executor.submit(_run).result()
         else:
             return asyncio.run(self.search_async(query, query_embedding, top_k, **kwargs))
 

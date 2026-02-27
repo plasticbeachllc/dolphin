@@ -186,14 +186,16 @@ class ParallelChunkCache:
 
     def size(self) -> int:
         """Get current cache size."""
-        return len(self._cache)
+        with self._lock:
+            return len(self._cache)
 
     def hit_rate(self) -> float:
-        """Get cache hit rate."""
-        total = self._hits + self._misses
-        if total == 0:
-            return 0.0
-        return (self._hits / total) * 100
+        """Get cache hit rate as a fraction (0.0–1.0)."""
+        with self._lock:
+            total = self._hits + self._misses
+            if total == 0:
+                return 0.0
+            return self._hits / total
 
 
 # Global cache instance

@@ -405,7 +405,9 @@ class GlobalAdaptiveNProbes:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = AdaptiveNProbes(target_latency_ms=target_latency_ms)
-        return cls._instance
+        instance = cls._instance
+        assert instance is not None  # guaranteed by double-checked lock above
+        return instance
 
     @classmethod
     def reset_instance(cls) -> None:

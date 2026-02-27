@@ -83,8 +83,15 @@ class KnowledgeSearchBackend:
         self._configure_bm25_statistics_collection()
 
     def shutdown(self) -> None:
-        """Shut down the search executor to release threads."""
-        self._search_executor.shutdown(wait=False)
+        """Shut down the search executor, waiting for in-flight tasks to complete."""
+        self._search_executor.shutdown(wait=True)
+
+    def __del__(self) -> None:
+        """Release executor threads on garbage collection."""
+        try:
+            self._search_executor.shutdown(wait=False)
+        except Exception:
+            pass
 
     @staticmethod
     def _normalize_string_list(values: Sequence[str] | None) -> list[str]:
@@ -401,6 +408,8 @@ class KnowledgeSearchBackend:
             vector_formatted = self._format_vector_results(vector_results)
             request_logger.debug("Vector search completed", {"results_count": len(vector_formatted)})
         except TimeoutError:
+            # In Python >= 3.11, builtin TimeoutError is the base for
+            # concurrent.futures.TimeoutError, so this catch is sufficient.
             request_logger.warning("Vector search timed out after 30s")
             vector_future.cancel()
         except Exception as e:
@@ -425,6 +434,8 @@ class KnowledgeSearchBackend:
                 )
                 request_logger.debug("BM25 results hydrated", {"hydrated_count": len(bm25_hydrated)})
             except TimeoutError:
+                # In Python >= 3.11, builtin TimeoutError is the base for
+                # concurrent.futures.TimeoutError, so this catch is sufficient.
                 request_logger.warning("BM25 search timed out after 30s")
                 bm25_future.cancel()
             except Exception as e:

@@ -58,6 +58,7 @@ class SQLiteConnectionPool:
         self._pool: Queue = Queue(maxsize=pool_size)
         self._overflow_count = 0
         self._overflow_lock = threading.Lock()
+        self._overflow_conns: set[int] = set()  # Track overflow connections by id()
 
         # Statistics
         self._created_connections = 0
@@ -172,6 +173,7 @@ class SQLiteConnectionPool:
                 self._overflow_count += 1
                 self._overflow_connections += 1
                 conn = self._create_connection()
+                self._overflow_conns.add(id(conn))
                 self._created_connections += 1
                 logger.info(f"Created overflow connection ({self._overflow_count}/{self.max_overflow})")
                 return conn
@@ -202,6 +204,7 @@ class SQLiteConnectionPool:
             conn: Connection to release
         """
         # Rollback any uncommitted transaction and verify connection health
+        conn_id = id(conn)
         try:
             conn.rollback()
         except sqlite3.Error:
@@ -211,7 +214,9 @@ class SQLiteConnectionPool:
             except sqlite3.Error:
                 pass
             with self._overflow_lock:
-                self._overflow_count = max(0, self._overflow_count - 1)
+                if conn_id in self._overflow_conns:
+                    self._overflow_conns.discard(conn_id)
+                    self._overflow_count = max(0, self._overflow_count - 1)
             return
 
         # Try to return to pool
@@ -220,6 +225,7 @@ class SQLiteConnectionPool:
         except Full:
             # Pool is full, this must be an overflow connection
             with self._overflow_lock:
+                self._overflow_conns.discard(conn_id)
                 self._overflow_count = max(0, self._overflow_count - 1)
             conn.close()
 
