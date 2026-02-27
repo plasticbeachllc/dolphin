@@ -209,18 +209,22 @@ def _read_file_lines(full_path: Path) -> list[str] | None:
     if cached is not None:
         _FILE_LINES_CACHE.move_to_end(key)
         return cached
+    # Read line-by-line so we can bail early for huge files without
+    # buffering the entire contents into memory via readlines().
     try:
+        lines: list[str] = []
         with open(full_path, encoding="utf-8") as fh:
-            lines = fh.readlines()
+            for line in fh:
+                lines.append(line)
+                if len(lines) > _FILE_LINES_MAX_LINES:
+                    _log.debug("Skipping cache for large file: %s", full_path)
+                    return lines  # return uncached; caller still gets content
     except (OSError, UnicodeDecodeError):
         return None
-    # Only cache files that won't blow up memory.
-    if len(lines) <= _FILE_LINES_MAX_LINES:
-        if len(_FILE_LINES_CACHE) >= _FILE_LINES_CACHE_MAX:
-            _FILE_LINES_CACHE.popitem(last=False)
-        _FILE_LINES_CACHE[key] = lines
-    else:
-        _log.debug("Skipping cache for large file: %s (%d lines)", full_path, len(lines))
+    # Cache files within the size limit.
+    if len(_FILE_LINES_CACHE) >= _FILE_LINES_CACHE_MAX:
+        _FILE_LINES_CACHE.popitem(last=False)
+    _FILE_LINES_CACHE[key] = lines
     return lines
 
 
