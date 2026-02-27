@@ -12,7 +12,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Annotated, TypedDict
+from typing import Annotated, Any, TypedDict
 
 import typer
 import uvicorn
@@ -509,29 +509,29 @@ def _emit_search_json(
 ) -> None:
     normalized_hits: list[dict[str, object]] = []
     for idx, hit in enumerate(hits, start=1):
-        normalized_hits.append(
-            {
-                "rank": idx,
-                "chunk_id": hit.get("chunk_id"),
-                "repo": hit.get("repo"),
-                "path": hit.get("path") or hit.get("file_path"),
-                "file_path": hit.get("file_path") or hit.get("path"),
-                "start_line": hit.get("start_line"),
-                "end_line": hit.get("end_line"),
-                "score": hit.get("score"),
-                "language": _detect_hit_language(hit),
-                "symbol_kind": hit.get("symbol_kind"),
-                "symbol_name": hit.get("symbol_name"),
-                "symbol_path": hit.get("symbol_path"),
-                "text_hash": hit.get("text_hash"),
-                "commit": hit.get("commit"),
-                "branch": hit.get("branch"),
-                "token_count": hit.get("token_count"),
-                "resource_link": hit.get("resource_link"),
-                "content": hit.get("content"),
-                "snippet": hit.get("snippet"),
-            }
-        )
+        normalized: dict[str, object] = {
+            "rank": idx,
+            "chunk_id": hit.get("chunk_id"),
+            "repo": hit.get("repo"),
+            "path": hit.get("path") or hit.get("file_path"),
+            "file_path": hit.get("file_path") or hit.get("path"),
+            "start_line": hit.get("start_line"),
+            "end_line": hit.get("end_line"),
+            "score": hit.get("score"),
+            "language": _detect_hit_language(hit),
+            "symbol_kind": hit.get("symbol_kind"),
+            "symbol_name": hit.get("symbol_name"),
+            "symbol_path": hit.get("symbol_path"),
+            "text_hash": hit.get("text_hash"),
+            "commit": hit.get("commit"),
+            "branch": hit.get("branch"),
+            "token_count": hit.get("token_count"),
+            "resource_link": hit.get("resource_link"),
+            "content": hit.get("content"),
+            "snippet": hit.get("snippet"),
+            "graph_context": hit.get("graph_context"),
+        }
+        normalized_hits.append(normalized)
 
     payload = {
         "query": query,
@@ -589,6 +589,87 @@ def _score_style(score: float) -> str:
     if score >= 0.4:
         return "dark_goldenrod"
     return "dim"
+
+
+def _render_graph_context_rich(graph_ctx: dict[str, Any], renderables: list[Any]) -> None:
+    """Append graph context renderables (nodes + relationships) to the panel body."""
+    from rich.markup import escape
+    from rich.text import Text
+
+    nodes: list[dict[str, Any]] = graph_ctx.get("nodes") or []
+    relationships: list[dict[str, Any]] = graph_ctx.get("relationships") or []
+
+    renderables.append(Text.from_markup("[bold steel_blue1]Graph Context[/bold steel_blue1]"))
+
+    if nodes:
+        for node in nodes:
+            ntype = node.get("type", "")
+            qname = node.get("qualified_name") or node.get("name", "")
+            sig = node.get("signature", "")
+            lr = node.get("line_range")
+            parts = [f"[cyan]{escape(str(ntype))}[/cyan] [bold]{escape(str(qname))}[/bold]"]
+            if sig:
+                parts.append(f"[dim]{escape(str(sig))}[/dim]")
+            if isinstance(lr, (list, tuple)) and len(lr) == 2:
+                parts.append(f"[dim]L{lr[0]}-{lr[1]}[/dim]")
+            renderables.append(Text.from_markup("  " + "  ".join(parts)))
+
+    if relationships:
+        renderables.append(Text.from_markup("[bold]Relationships[/bold]"))
+        for rel in relationships:
+            rtype = rel.get("type", "")
+            direction = rel.get("direction", "")
+            if direction == "outgoing":
+                target: dict[str, Any] = rel.get("target") or {}
+                tname = target.get("qualified_name") or target.get("name") or "<unknown>"
+                arrow = "\u2192"
+            elif direction == "incoming":
+                source: dict[str, Any] = rel.get("source") or {}
+                tname = source.get("qualified_name") or source.get("name") or "<unknown>"
+                arrow = "\u2190"
+            else:
+                continue
+            line_num = rel.get("line_number")
+            line_part = f" [dim]L{line_num}[/dim]" if line_num is not None else ""
+            markup = f"  [dim]{escape(str(rtype))}[/dim] {arrow} [bold]{escape(str(tname))}[/bold]{line_part}"
+            renderables.append(Text.from_markup(markup))
+
+
+def _render_graph_context_plain(graph_ctx: dict[str, Any]) -> None:
+    """Print graph context in plain text for non-TTY output."""
+    nodes: list[dict[str, Any]] = graph_ctx.get("nodes") or []
+    relationships: list[dict[str, Any]] = graph_ctx.get("relationships") or []
+
+    typer.echo("   Graph Context:")
+
+    if nodes:
+        for node in nodes:
+            ntype = node.get("type", "")
+            qname = node.get("qualified_name") or node.get("name", "")
+            sig = node.get("signature", "")
+            lr = node.get("line_range")
+            line_part = f" L{lr[0]}-{lr[1]}" if isinstance(lr, (list, tuple)) and len(lr) == 2 else ""
+            sig_part = f" - {sig}" if sig else ""
+            typer.echo(f"     {ntype} {qname}{sig_part}{line_part}")
+
+    if relationships:
+        typer.echo("   Relationships:")
+        for rel in relationships:
+            rtype = rel.get("type", "")
+            direction = rel.get("direction", "")
+            if direction == "outgoing":
+                target: dict[str, Any] = rel.get("target") or {}
+                tname = target.get("qualified_name") or target.get("name") or "<unknown>"
+                arrow = "->"
+            elif direction == "incoming":
+                source: dict[str, Any] = rel.get("source") or {}
+                tname = source.get("qualified_name") or source.get("name") or "<unknown>"
+                arrow = "<-"
+            else:
+                continue
+            line_num = rel.get("line_number")
+            line_part = f" L{line_num}" if line_num is not None else ""
+            typer.echo(f"     {rtype} {arrow} {tname}{line_part}")
 
 
 def _display_results(
@@ -705,6 +786,12 @@ def _display_results(
                 syntax = Syntax(code, "text", theme="one-dark", line_numbers=False, word_wrap=True)
             renderables.append(syntax)
 
+        # Graph context (only present when --graph-context is used)
+        graph_ctx = hit.get("graph_context")
+        if isinstance(graph_ctx, dict) and (graph_ctx.get("nodes") or graph_ctx.get("relationships")):
+            renderables.append(Text(""))  # blank line separator
+            _render_graph_context_rich(graph_ctx, renderables)
+
         console.print(Panel(Group(*renderables), title=title, subtitle=subtitle, expand=True, padding=(0, 1)))
 
     if not verbose:
@@ -778,6 +865,12 @@ def _display_results_plain(
             if len(lines) > max_lines:
                 typer.echo(f"   ... ({len(lines) - max_lines} more lines)")
             typer.echo("   ---")
+
+        # Graph context (only present when --graph-context is used)
+        graph_ctx = hit.get("graph_context")
+        if isinstance(graph_ctx, dict) and (graph_ctx.get("nodes") or graph_ctx.get("relationships")):
+            typer.echo("")
+            _render_graph_context_plain(graph_ctx)
 
     if not verbose:
         typer.echo("\nTip: pass --verbose for chunk IDs and metadata.")
