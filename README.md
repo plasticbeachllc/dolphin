@@ -1,8 +1,8 @@
 <p align="center">
   <h1 align="center">Dolphin</h1>
   <p align="center">
-    <strong>Semantic code search across all your repositories.</strong><br/>
-    Find the right code instantly — from your terminal, your editor, or your AI assistant.
+    <strong>Hybrid search across all your repositories.</strong><br/>
+    Find the right code from your terminal, your editor, or your AI assistant.
   </p>
   <p align="center">
     <a href="https://pypi.org/project/pb-dolphin/"><img src="https://img.shields.io/pypi/v/pb-dolphin.svg" alt="PyPI"></a>
@@ -13,9 +13,7 @@
 
 ---
 
-Dolphin indexes your codebases and lets you search them semantically — not just by filename or keyword, but by _meaning_. Ask for "authentication logic" and get back the actual auth code, ranked by relevance, across every repo you've indexed.
-
-It works three ways: as a **CLI** you run in your terminal, as a **REST API** other tools can call, and as an **MCP server** that plugs directly into AI coding assistants like Claude and Continue.dev.
+Dolphin indexes your repositories and lets you perform hybrid (semantic + keyword) search across them.
 
 ## Get started in 60 seconds
 
@@ -29,10 +27,11 @@ export OPENAI_API_KEY="sk-..."
 # Initialize, add a repo, and search
 dolphin init
 dolphin add-repo my-project /path/to/project
+dolphin index my-project
 dolphin search "database connection pooling"
 ```
 
-That's it. Dolphin indexes your code with language-aware chunking, embeds it, and returns ranked results.
+Dolphin indexes your code with language-aware chunking, embeds it, and returns ranked results.
 
 Want live re-indexing as you edit files? Start the server:
 
@@ -66,14 +65,14 @@ Make sure `dolphin serve` is running, and your AI assistant can now search, retr
         |
         v
   ┌───────────────────────────────────────┐
-  │             Dolphin                    │
-  │                                        │
+  │             Dolphin                   │
+  │                                       │
   │   CLI ─── REST API ─── MCP Bridge     │
-  │               |                        │
-  │        ┌──────┴──────┐                 │
-  │        v             v                 │
-  │    LanceDB       SQLite                │
-  │   (vectors)    (metadata + BM25)       │
+  │               |                       │
+  │        ┌──────┴──────┐                │
+  │        v             v                │
+  │    LanceDB       SQLite               │
+  │   (vectors)    (metadata + BM25)      │
   └───────────────────────────────────────┘
 ```
 
@@ -83,7 +82,7 @@ Make sure `dolphin serve` is running, and your AI assistant can now search, retr
 
 ## Features
 
-**Search that understands code**
+**Intelligent hybrid search**
 
 - Hybrid vector + BM25 keyword search with RRF fusion
 - Optional cross-encoder reranking for +20-30% ranking improvement
@@ -104,8 +103,8 @@ Make sure `dolphin serve` is running, and your AI assistant can now search, retr
 **Multiple interfaces**
 
 - `dolphin` CLI with compact, verbose, and JSON output modes
-- FastAPI server on port 7777 with full search and retrieval endpoints
-- MCP server for AI assistant integration via `bunx dolphin-mcp`
+- FastAPI server with full search and retrieval endpoints
+- MCP server for integration via `bunx dolphin-mcp`
 
 ## CLI reference
 
@@ -118,7 +117,7 @@ Make sure `dolphin serve` is running, and your AI assistant can now search, retr
 | `dolphin serve`                  | Start API server with file-watching       |
 | `dolphin status`                 | Show indexed repos and stats              |
 | `dolphin repos`                  | List registered repositories              |
-| `dolphin rm_repo <name>`         | Remove a repo and its data                |
+| `dolphin rm-repo <name>`         | Remove a repo and its data                |
 | `dolphin config --show`          | Display current config                    |
 
 ### Search options
@@ -200,22 +199,6 @@ dolphin index <repo-name> --full --force          # force re-index
 - Make sure `dolphin serve` is running
 - Check that Bun is installed: `bun --version`
 - Set `DOLPHIN_API_URL` if the server isn't at `http://127.0.0.1:7777`
-
-## Contributing
-
-```bash
-# Run tests
-uv run pytest tests/unit/ -v
-
-# Lint and type-check
-uv run ruff check --fix
-uv run ty check
-
-# MCP bridge tests
-cd mcp-bridge && bun test
-```
-
-See [docs/TESTING.md](docs/TESTING.md) for the full testing guide and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the system fits together.
 
 ## License
 
