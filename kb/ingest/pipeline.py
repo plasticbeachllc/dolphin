@@ -500,6 +500,13 @@ class IngestionPipeline:
 
         repo_config = load_repo_chunking_config(root)
 
+        def _fire(event: str, path: str) -> None:
+            if progress_callback is not None:
+                done = stats["files_done"] + stats["files_skipped_ignored"] + stats["files_error"]
+                progress_callback(
+                    _progress_event(event, done=done, total=len(files), chunks=stats["chunks_indexed"], path=path)
+                )
+
         for path in files:
             # Cooperative cancellation: stop cleanly between files
             self._check_cancelled()
@@ -521,26 +528,14 @@ class IngestionPipeline:
                                 if pruned:
                                     stats["chunks_pruned"] += pruned
                                 self.lancedb.prune_file_rows(repo_name, path, model=model_name)
-                    if progress_callback is not None:
-                        done = stats["files_done"] + stats["files_skipped_ignored"] + stats["files_error"]
-                        progress_callback(
-                            _progress_event(
-                                "file_skipped", done=done, total=len(files), chunks=stats["chunks_indexed"], path=path
-                            )
-                        )
+                    _fire("file_skipped", path)
                     continue
 
-                # Skip binary files and files that don't exist
+                # Skip missing/directory files (counted as errors, not ignored)
                 file_path = root / path
                 if not file_path.exists() or file_path.is_dir():
                     stats["files_error"] += 1
-                    if progress_callback is not None:
-                        done = stats["files_done"] + stats["files_skipped_ignored"] + stats["files_error"]
-                        progress_callback(
-                            _progress_event(
-                                "file_error", done=done, total=len(files), chunks=stats["chunks_indexed"], path=path
-                            )
-                        )
+                    _fire("file_error", path)
                     continue
 
                 # Resolve or upsert file_id
@@ -737,25 +732,13 @@ class IngestionPipeline:
                 # Log per-file summary
                 logger.info(self._format_index_summary(path, len(chunks), len(new_hashes), skipped_occurrences))
 
-                if progress_callback is not None:
-                    done = stats["files_done"] + stats["files_skipped_ignored"] + stats["files_error"]
-                    progress_callback(
-                        _progress_event(
-                            "file_complete", done=done, total=len(files), chunks=stats["chunks_indexed"], path=path
-                        )
-                    )
+                _fire("file_complete", path)
 
             except Exception as e:
                 stats["files_error"] += 1
                 error_logger.log_file_error(path, e)
                 logger.error(f"Error processing {path}: {e}")
-                if progress_callback is not None:
-                    done = stats["files_done"] + stats["files_skipped_ignored"] + stats["files_error"]
-                    progress_callback(
-                        _progress_event(
-                            "file_error", done=done, total=len(files), chunks=stats["chunks_indexed"], path=path
-                        )
-                    )
+                _fire("file_error", path)
                 continue
 
         return stats
@@ -1276,11 +1259,16 @@ class IngestionPipeline:
         # individual file_skipped callbacks, so it doesn't need this initial bulk callback.
         total_files = len(changed_files) + files_skipped_ignored
 
+        def _fire(event: str, path: str) -> None:
+            if progress_callback is not None:
+                done = files_done + files_skipped_ignored + files_error
+                progress_callback(
+                    _progress_event(event, done=done, total=total_files, chunks=chunks_indexed, path=path)
+                )
+
         # Fire initial callback for pre-filtered ignored files so progress starts correctly
-        if files_skipped_ignored > 0 and progress_callback is not None:
-            progress_callback(
-                _progress_event("file_skipped", done=files_skipped_ignored, total=total_files, chunks=0, path="")
-            )
+        if files_skipped_ignored > 0:
+            _fire("file_skipped", "")
 
         try:
             # Phase 1: Parallel Parsing
@@ -1357,13 +1345,7 @@ class IngestionPipeline:
                         except Exception as e:
                             files_error += 1
                             error_logger.log_file_error(path, e)
-                            if progress_callback is not None:
-                                done = files_done + files_skipped_ignored + files_error
-                                progress_callback(
-                                    _progress_event(
-                                        "file_error", done=done, total=total_files, chunks=chunks_indexed, path=path
-                                    )
-                                )
+                            _fire("file_error", path)
                             continue
 
                     # Execute Parallel Parsing
@@ -1377,17 +1359,7 @@ class IngestionPipeline:
                             files_error += 1
                             error = Exception(res.error) if res.error else Exception("Unknown error")
                             error_logger.log_file_error(str(res.file_path), error)
-                            if progress_callback is not None:
-                                done = files_done + files_skipped_ignored + files_error
-                                progress_callback(
-                                    _progress_event(
-                                        "file_error",
-                                        done=done,
-                                        total=total_files,
-                                        chunks=chunks_indexed,
-                                        path=str(res.file_path),
-                                    )
-                                )
+                            _fire("file_error", str(res.file_path))
                             continue
 
                         chunks = res.chunks
@@ -1445,13 +1417,7 @@ class IngestionPipeline:
                         except Exception as dedup_err:
                             files_error += 1
                             error_logger.log_file_error(path, dedup_err)
-                            if progress_callback is not None:
-                                done = files_done + files_skipped_ignored + files_error
-                                progress_callback(
-                                    _progress_event(
-                                        "file_error", done=done, total=total_files, chunks=chunks_indexed, path=path
-                                    )
-                                )
+                            _fire("file_error", path)
                             continue
                         skipped_occurrences = len(unchanged_chunks)
                         chunks_skipped += skipped_occurrences
@@ -1503,17 +1469,7 @@ class IngestionPipeline:
                             if isinstance(vectors, Exception):
                                 files_error += 1
                                 error_logger.log_file_error(task_data["path"], vectors)
-                                if progress_callback is not None:
-                                    done = files_done + files_skipped_ignored + files_error
-                                    progress_callback(
-                                        _progress_event(
-                                            "file_error",
-                                            done=done,
-                                            total=total_files,
-                                            chunks=chunks_indexed,
-                                            path=task_data["path"],
-                                        )
-                                    )
+                                _fire("file_error", task_data["path"])
                                 continue
 
                             # Extract task data
@@ -1629,13 +1585,7 @@ class IngestionPipeline:
                             logger.info(
                                 self._format_index_summary(path, len(chunks), len(new_hashes), skipped_occurrences)
                             )
-                            if progress_callback is not None:
-                                done = files_done + files_skipped_ignored + files_error
-                                progress_callback(
-                                    _progress_event(
-                                        "file_complete", done=done, total=total_files, chunks=chunks_indexed, path=path
-                                    )
-                                )
+                            _fire("file_complete", path)
 
             # Process deleted files using shared sync/async-safe logic.
             del_stats = self.process_deletions(

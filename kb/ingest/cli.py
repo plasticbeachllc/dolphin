@@ -6,9 +6,13 @@ import os
 import signal
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from rich.progress import Progress
 
 import typer
 from pathspec import PathSpec
@@ -52,6 +56,15 @@ def _read_config_template() -> str:
     return _CONFIG_TEMPLATE_PATH.read_text(encoding="utf-8")
 
 
+def _checklist_row(status: str, label: str, detail: str = "") -> str:
+    """Format a single readiness-checklist row with consistent alignment."""
+    status_styles = {"ok": "[green]ok[/green]", "missing": "[red]missing[/red]", "pending": "[dim]pending[/dim]"}
+    styled = status_styles.get(status, status)
+    # Pad to 10 visible chars so labels line up regardless of status word length.
+    pad = 10 - len(status)
+    return f"    {styled}{' ' * pad}{label:<15}{detail}"
+
+
 def _print_readiness_checklist(console: Console, config: KBConfig, config_path: Path) -> None:
     """Print a pass/fail readiness checklist after init."""
     store_root = config.resolved_store_root()
@@ -60,52 +73,42 @@ def _print_readiness_checklist(console: Console, config: KBConfig, config_path: 
     console.print("  [bold]Readiness check:[/bold]")
 
     # 1. Config file
-    if config_path.exists():
-        console.print(f"    [green]ok[/green]      Config         {escape(str(config_path))}")
-    else:
-        console.print(f"    [red]missing[/red]   Config         {escape(str(config_path))}")
+    status = "ok" if config_path.exists() else "missing"
+    console.print(_checklist_row(status, "Config", escape(str(config_path))))
 
     # 2. SQLite
     db_path = store_root / _METADATA_DB_NAME
-    if db_path.exists():
-        console.print(f"    [green]ok[/green]      SQLite         {escape(str(db_path))}")
-    else:
-        console.print(f"    [red]missing[/red]   SQLite         {escape(str(db_path))}")
+    status = "ok" if db_path.exists() else "missing"
+    console.print(_checklist_row(status, "SQLite", escape(str(db_path))))
 
     # 3. LanceDB
     lance_path = store_root / _LANCEDB_DIR_NAME
-    if lance_path.exists():
-        console.print(f"    [green]ok[/green]      LanceDB        {escape(str(lance_path))}")
-    else:
-        console.print(f"    [red]missing[/red]   LanceDB        {escape(str(lance_path))}")
+    status = "ok" if lance_path.exists() else "missing"
+    console.print(_checklist_row(status, "LanceDB", escape(str(lance_path))))
 
     # 4. KB API Key
     key_path = get_kb_key_path()
     if load_kb_api_key():
-        console.print(f"    [green]ok[/green]      KB API Key     {escape(str(key_path))}")
+        console.print(_checklist_row("ok", "KB API Key", escape(str(key_path))))
     else:
-        console.print("    [dim]pending[/dim]   KB API Key     (created on first [bold]dolphin serve[/bold])")
+        console.print(_checklist_row("pending", "KB API Key", "(created on first [bold]dolphin serve[/bold])"))
 
     # 5. OpenAI API Key (only when using OpenAI provider)
     missing_steps: list[str] = []
     if config.embedding_provider == "openai":
         env_var = config.openai_api_key_env
         if os.environ.get(env_var):
-            console.print(f"    [green]ok[/green]      {env_var}")
+            console.print(_checklist_row("ok", env_var))
         else:
-            console.print(f'    [red]missing[/red]   {env_var}  (set with: [bold]export {env_var}="sk-..."[/bold])')
+            console.print(_checklist_row("missing", env_var, f'(set with: [bold]export {env_var}="sk-..."[/bold])'))
             missing_steps.append(f'export {env_var}="sk-..."')
 
     # Next steps
     console.print()
     console.print("  [bold]Next steps:[/bold]")
-    step = 1
-    for cmd in missing_steps:
-        console.print(f"    {step}. {cmd}")
-        step += 1
-    console.print(f"    {step}. [bold]dolphin add-repo[/bold] <name> <path>")
-    step += 1
-    console.print(f"    {step}. [bold]dolphin index[/bold] <name>")
+    all_steps = [*missing_steps, "[bold]dolphin add-repo[/bold] <name> <path>", "[bold]dolphin index[/bold] <name>"]
+    for i, cmd in enumerate(all_steps, 1):
+        console.print(f"    {i}. {cmd}")
 
 
 def _build_pipeline(config: KBConfig) -> IngestionPipeline:
@@ -171,7 +174,7 @@ def init(
     try:
         get_or_create_kb_api_key()
     except Exception:
-        _log.debug("Could not pre-create KB API key; checklist will show 'pending'.", exc_info=True)
+        _log.warning("Could not pre-create KB API key; checklist will show 'pending'.", exc_info=True)
 
     _print_readiness_checklist(console, config, target)
 
@@ -214,7 +217,7 @@ def add_repo(
                 typer.echo(f"❌ Indexing failed: {e}", err=True)
 
 
-def _create_progress_display() -> tuple[Any, Any]:
+def _create_progress_display() -> tuple["Progress | None", Callable[[dict[str, Any]], None]]:
     """Create a Rich progress bar and return (progress, callback).
 
     Returns (None, line_callback) when stdout is not a TTY.
