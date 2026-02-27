@@ -11,7 +11,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, TypedDict
 
 import typer
 import uvicorn
@@ -195,29 +195,29 @@ def search(
     if snippet_limit <= 0 and (show_content or verbose):
         snippet_limit = min(top_k, 3)
 
-    _common_search_args = dict(
-        query=query,
-        repos=repos,
-        path_prefix=path_prefix,
-        exclude_paths=exclude_paths,
-        exclude_patterns=exclude_patterns,
-        top_k=request_top_k,
-        score_cutoff=score_cutoff,
-        max_snippets=snippet_limit,
-        context_before=context_before,
-        context_after=context_after,
-        include_graph_context=include_graph_context,
-    )
+    _common_search_args: _SearchArgs = {
+        "query": query,
+        "repos": repos,
+        "path_prefix": path_prefix,
+        "exclude_paths": exclude_paths,
+        "exclude_patterns": exclude_patterns,
+        "top_k": request_top_k,
+        "score_cutoff": score_cutoff,
+        "max_snippets": snippet_limit,
+        "context_before": context_before,
+        "context_after": context_after,
+        "include_graph_context": include_graph_context,
+    }
 
     result: tuple[list[dict[str, object]], dict[str, object], SQLiteMetadataStore | None] | None = None
 
     if not local:
-        result = _search_remote(**_common_search_args)  # type: ignore[arg-type]  # dict unpacking is safe here
+        result = _search_remote(**_common_search_args)
         if result is None:
             typer.echo("Server unavailable, falling back to local search.", err=True)
 
     if local or result is None:
-        hits, meta, sql_store = _search_local(**_common_search_args)  # type: ignore[arg-type]  # dict unpacking is safe here
+        hits, meta, sql_store = _search_local(**_common_search_args)
     else:
         hits, meta, sql_store = result
 
@@ -254,6 +254,22 @@ def search(
         languages=normalized_langs,
         max_lines=max(1, max_lines),
     )
+
+
+class _SearchArgs(TypedDict):
+    """Shared keyword arguments for local and remote search functions."""
+
+    query: str
+    repos: list[str] | None
+    path_prefix: list[str] | None
+    exclude_paths: list[str] | None
+    exclude_patterns: list[str] | None
+    top_k: int
+    score_cutoff: float
+    max_snippets: int
+    context_before: int
+    context_after: int
+    include_graph_context: bool
 
 
 def _search_local(
