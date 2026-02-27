@@ -424,6 +424,15 @@ class ParallelHybridSearch:
     ) -> list[SearchResult]:
         """Synchronous wrapper around search_async.
 
+        This method uses ``asyncio.run()`` and therefore **cannot** be called
+        from within a running event loop.  Callers in async contexts must use
+        ``await search_async(...)`` directly.
+
+        .. versionchanged:: 0.2.4
+            Previously fell back to a blocking thread-pool shim when called
+            from a running event loop.  Now raises ``RuntimeError`` instead
+            to prevent silent event-loop starvation.
+
         Args:
             query: Query text
             query_embedding: Optional pre-computed query embedding
@@ -434,6 +443,7 @@ class ParallelHybridSearch:
             List of SearchResult objects
 
         Raises:
+            RuntimeError: If called from inside a running event loop.
             SearchTimeoutError: If the underlying async search times out.
         """
         try:

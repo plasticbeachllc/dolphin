@@ -417,8 +417,8 @@ class KnowledgeSearchBackend:
             vector_formatted = self._format_vector_results(vector_results)
             request_logger.debug("Vector search completed", {"results_count": len(vector_formatted)})
         except TimeoutError:
-            # In Python >= 3.11, builtin TimeoutError is the base for
-            # concurrent.futures.TimeoutError, so this catch is sufficient.
+            # Python >= 3.12 (per pyproject.toml): builtin TimeoutError is the
+            # base for concurrent.futures.TimeoutError, so this catch is sufficient.
             request_logger.warning("Vector search timed out after 30s")
             # Note: cancel() only prevents execution if the task hasn't started;
             # already-running threads cannot be interrupted.  The timeout above

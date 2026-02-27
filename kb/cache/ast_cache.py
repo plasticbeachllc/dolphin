@@ -157,7 +157,12 @@ class ASTCache:
         """Calculate cache hit rate.
 
         Returns:
-            Hit rate as a fraction (0.0–1.0)
+            Hit rate as a fraction (0.0–1.0), consistent with
+            ``ParallelChunkCache.hit_rate()``.
+
+        .. versionchanged:: 0.2.4
+            Previously returned a percentage (0–100); now returns a
+            fraction (0.0–1.0) for consistency across cache classes.
         """
         with self._lock:
             return self._hit_rate_unlocked()
@@ -196,9 +201,7 @@ class ASTCache:
             with open(self.persist_path, "wb") as f:
                 pickle.dump(snapshot, f, protocol=pickle.HIGHEST_PROTOCOL)
         except Exception as e:
-            import logging
-
-            logging.warning(f"Failed to save AST cache to disk: {e}")
+            _logger.warning("Failed to save AST cache to disk: %s", e)
 
     def _load_from_disk(self) -> None:
         """Load cache from disk."""
@@ -219,9 +222,7 @@ class ASTCache:
                     self._cache.popitem(last=False)
 
         except Exception as e:
-            import logging
-
-            logging.warning(f"Failed to load AST cache from disk: {e}")
+            _logger.warning("Failed to load AST cache from disk: %s", e)
             with self._lock:
                 self._cache.clear()
 

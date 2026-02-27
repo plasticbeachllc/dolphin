@@ -16,27 +16,31 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # Blocklist pattern: reject values containing SQL-dangerous characters.
-# Specifically: double quotes, semicolons, backslashes, and SQL comment markers (--).
+# Specifically: double quotes, semicolons, backslashes, SQL comment markers
+# (-- and /*), and bare LIKE metacharacters (% and _).
 # Backslashes are rejected because some SQL engines interpret them as escape
 # characters, which could bypass quote protection.
+# LIKE wildcards (% and _) are blocked in *input values* — the code itself
+# converts user-supplied globs (* and ?) into LIKE patterns after sanitisation.
 # Single quotes are allowed but escaped via SQL doubling ("O'Brien" → "O''Brien").
 # Everything else (unicode, brackets, parens, etc.) is allowed so that real-world
 # repo names and file paths work without error.
-_SQL_DANGEROUS = re.compile(r"""[";\\]|--""")
+_SQL_DANGEROUS = re.compile(r"""[";\\%_]|--|/\*""")
 
 
-def _sanitize_filter_value(value: str) -> str:
+def _sanitize_filter_value(value: str) -> str | None:
     """Sanitize a string value for use in a LanceDB filter expression.
 
-    Rejects values containing SQL-dangerous characters (double quotes,
-    semicolons, comment markers).  Single quotes are escaped by doubling
-    (standard SQL escaping) so names like ``O'Briens-lib`` work correctly.
-    All other characters are allowed to avoid breaking searches on
-    legitimate repo/file names.
+    Returns ``None`` (instead of raising) when the value contains
+    SQL-dangerous characters so that callers can skip the offending
+    filter clause rather than aborting the entire search.
+
+    Single quotes are escaped by doubling (standard SQL escaping) so
+    names like ``O'Briens-lib`` work correctly.
     """
     if _SQL_DANGEROUS.search(value):
-        logger.warning("Filter value rejected — contains SQL-dangerous characters: %r", value)
-        raise ValueError(f"Invalid filter value: {value!r}")
+        logger.warning("Filter value skipped — contains SQL-dangerous characters: %r", value)
+        return None
     # Escape single quotes by doubling them (standard SQL escaping)
     return value.replace("'", "''")
 
@@ -139,31 +143,30 @@ class VectorPreFilter:
 
         # Repository filter (most common and effective)
         if criteria.repos:
-            if len(criteria.repos) == 1:
-                repo_filter = f"repo = '{_sanitize_filter_value(criteria.repos[0])}'"
-            else:
-                # Multiple repos - use IN clause
-                repo_list = ", ".join(f"'{_sanitize_filter_value(r)}'" for r in criteria.repos)
-                repo_filter = f"repo IN ({repo_list})"
-            conditions.append(repo_filter)
+            safe_repos = [s for r in criteria.repos if (s := _sanitize_filter_value(r)) is not None]
+            if len(safe_repos) == 1:
+                conditions.append(f"repo = '{safe_repos[0]}'")
+            elif safe_repos:
+                repo_list = ", ".join(f"'{r}'" for r in safe_repos)
+                conditions.append(f"repo IN ({repo_list})")
 
         # Language filter
         if criteria.languages:
-            if len(criteria.languages) == 1:
-                lang_filter = f"language = '{_sanitize_filter_value(criteria.languages[0])}'"
-            else:
-                lang_list = ", ".join(f"'{_sanitize_filter_value(lang)}'" for lang in criteria.languages)
-                lang_filter = f"language IN ({lang_list})"
-            conditions.append(lang_filter)
+            safe_langs = [s for lang in criteria.languages if (s := _sanitize_filter_value(lang)) is not None]
+            if len(safe_langs) == 1:
+                conditions.append(f"language = '{safe_langs[0]}'")
+            elif safe_langs:
+                lang_list = ", ".join(f"'{lang}'" for lang in safe_langs)
+                conditions.append(f"language IN ({lang_list})")
 
         # Symbol kind filter
         if criteria.symbol_kinds:
-            if len(criteria.symbol_kinds) == 1:
-                kind_filter = f"symbol_kind = '{_sanitize_filter_value(criteria.symbol_kinds[0])}'"
-            else:
-                kind_list = ", ".join(f"'{_sanitize_filter_value(k)}'" for k in criteria.symbol_kinds)
-                kind_filter = f"symbol_kind IN ({kind_list})"
-            conditions.append(kind_filter)
+            safe_kinds = [s for k in criteria.symbol_kinds if (s := _sanitize_filter_value(k)) is not None]
+            if len(safe_kinds) == 1:
+                conditions.append(f"symbol_kind = '{safe_kinds[0]}'")
+            elif safe_kinds:
+                kind_list = ", ".join(f"'{k}'" for k in safe_kinds)
+                conditions.append(f"symbol_kind IN ({kind_list})")
 
         # Token count filters
         if criteria.min_token_count is not None:
@@ -176,6 +179,8 @@ class VectorPreFilter:
         if criteria.exclude_paths:
             for exclude_path in criteria.exclude_paths:
                 sanitized = _sanitize_filter_value(exclude_path)
+                if sanitized is None:
+                    continue
                 # Always use LIKE for path matching (more flexible)
                 if "*" in exclude_path or "?" in exclude_path:
                     # Convert glob to SQL LIKE pattern
@@ -190,6 +195,8 @@ class VectorPreFilter:
             pattern_conditions = []
             for pattern in criteria.file_patterns:
                 sanitized = _sanitize_filter_value(pattern)
+                if sanitized is None:
+                    continue
                 # Convert glob to SQL LIKE pattern
                 like_pattern = sanitized.replace("*", "%").replace("?", "_")
                 pattern_conditions.append(f"path LIKE '{like_pattern}'")
