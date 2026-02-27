@@ -82,6 +82,26 @@ class KnowledgeSearchBackend:
         self._search_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="kb-search")
         self._configure_bm25_statistics_collection()
 
+    def shutdown(self) -> None:
+        """Shut down the search executor, waiting for in-flight tasks to complete.
+
+        Call this explicitly when the SearchBackend is no longer needed (e.g.
+        during application shutdown) to ensure all in-flight searches finish
+        cleanly.  If ``shutdown()`` is never called, ``__del__`` will perform
+        a best-effort non-blocking cleanup when the object is garbage-collected,
+        but in-flight work may be abandoned in that case.
+        """
+        self._search_executor.shutdown(wait=True)
+
+    def __del__(self) -> None:
+        """Best-effort cleanup if shutdown() was not called explicitly."""
+        executor = getattr(self, "_search_executor", None)
+        if executor is not None:
+            try:
+                executor.shutdown(wait=False)
+            except Exception:
+                pass
+
     @staticmethod
     def _normalize_string_list(values: Sequence[str] | None) -> list[str]:
         """Canonicalize list-like request fields for stable cache keys."""
@@ -271,7 +291,12 @@ class KnowledgeSearchBackend:
         return self.cache.get_search_results(request.query, **cache_params)
 
     async def search_async(self, request: SearchRequest) -> SearchResultSet:
-        """Execute search without blocking the event loop."""
+        """Execute search without blocking the event loop.
+
+        Raises:
+            SearchTimeoutError: Propagated from the underlying parallel
+                search if both vector and BM25 branches time out.
+        """
         cache_allowed = await asyncio.to_thread(self._is_cache_allowed, request)
         cache_params = self._build_search_cache_params(request) if cache_allowed else None
 
@@ -390,12 +415,20 @@ class KnowledgeSearchBackend:
                 top_k=num_candidates,
             )
 
-        # Vector search with error handling
+        # Vector search with error handling (timeout prevents indefinite hangs)
         vector_formatted = []
         try:
-            vector_results = vector_future.result()
+            vector_results = vector_future.result(timeout=30.0)
             vector_formatted = self._format_vector_results(vector_results)
             request_logger.debug("Vector search completed", {"results_count": len(vector_formatted)})
+        except TimeoutError:
+            # Python >= 3.12 (per pyproject.toml): builtin TimeoutError is the
+            # base for concurrent.futures.TimeoutError, so this catch is sufficient.
+            request_logger.warning("Vector search timed out after 30s")
+            # Note: cancel() only prevents execution if the task hasn't started;
+            # already-running threads cannot be interrupted.  The timeout above
+            # ensures we don't block the caller regardless.
+            vector_future.cancel()
         except Exception as e:
             # Log error but continue with empty vector results
             request_logger.warning("Vector search failed", error=e)
@@ -404,7 +437,7 @@ class KnowledgeSearchBackend:
         bm25_hydrated = []
         if bm25_future is not None:
             try:
-                bm25_results = bm25_future.result()
+                bm25_results = bm25_future.result(timeout=30.0)
                 request_logger.debug(
                     "BM25 search completed",
                     {
@@ -417,6 +450,12 @@ class KnowledgeSearchBackend:
                     bm25_results, self.sql_store, self.config.default_embed_model
                 )
                 request_logger.debug("BM25 results hydrated", {"hydrated_count": len(bm25_hydrated)})
+            except TimeoutError:
+                # Python >= 3.12 (per pyproject.toml): builtin TimeoutError is the
+                # base for concurrent.futures.TimeoutError, so this catch is sufficient.
+                request_logger.warning("BM25 search timed out after 30s")
+                # Note: cancel() only prevents execution if the task hasn't started.
+                bm25_future.cancel()
             except Exception as e:
                 # Log error but continue with empty BM25 results
                 request_logger.warning("BM25 search failed", error=e)

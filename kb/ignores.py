@@ -7,7 +7,7 @@ from pathlib import Path
 from pathspec import PathSpec
 
 try:
-    import tomllib  # Python 3.11+
+    import tomllib  # Python 3.12+ (stdlib)
 except ImportError:  # pragma: no cover
     import tomli as tomllib
 

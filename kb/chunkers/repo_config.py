@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
-    import tomllib  # Python 3.11+
+    import tomllib  # Python 3.12+ (stdlib)
 except ImportError:
     import tomli as tomllib
 

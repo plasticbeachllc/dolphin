@@ -14,6 +14,23 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "ParallelHybridSearch",
+    "SearchResult",
+    "SearchTimeoutError",
+    "create_parallel_search",
+    "reciprocal_rank_fusion",
+]
+
+
+class SearchTimeoutError(Exception):
+    """Raised when a parallel search exceeds its timeout.
+
+    Callers of :meth:`ParallelHybridSearch.search_async` (and the synchronous
+    :meth:`~ParallelHybridSearch.search` wrapper) should handle this exception
+    if they need to distinguish a timeout from an empty result set.
+    """
+
 
 @dataclass
 class SearchResult:
@@ -116,6 +133,7 @@ class ParallelHybridSearch:
         bm25_store: Any = None,
         embedding_provider: Any = None,
         vector_weight: float = 0.6,
+        search_timeout_s: float = 60.0,
     ):
         """Initialize parallel hybrid search.
 
@@ -127,6 +145,7 @@ class ParallelHybridSearch:
             bm25_store: Optional BM25 store (alternative to bm25_search_fn)
             embedding_provider: Optional embedding provider
             vector_weight: Weight for vector search results (default: 0.6)
+            search_timeout_s: Timeout in seconds for parallel search (default: 60)
         """
         # Create wrapper functions from stores if provided
         if vector_search_fn is None and vector_store is not None:
@@ -146,12 +165,21 @@ class ParallelHybridSearch:
         self.bm25_store = bm25_store
         self.embedding_provider = embedding_provider
         self.vector_weight = vector_weight
+        self.search_timeout_s = search_timeout_s
 
         # Statistics tracking
         self._total_searches = 0
         self._total_vector_time_ms = 0.0
         self._total_bm25_time_ms = 0.0
         self._total_time_ms = 0.0
+
+    def shutdown(self) -> None:
+        """Release resources held by this search instance.
+
+        Currently a no-op (no long-lived threads or connections are held),
+        but provided for consistent lifecycle management alongside other
+        backend components.
+        """
 
     async def search_async(
         self,
@@ -170,6 +198,10 @@ class ParallelHybridSearch:
 
         Returns:
             List of SearchResult objects, merged and ranked
+
+        Raises:
+            SearchTimeoutError: If both vector and BM25 searches fail to
+                complete within ``search_timeout_s`` seconds.
         """
         # Generate embedding if not provided
         if query_embedding is None and self.embedding_provider is not None:
@@ -188,12 +220,15 @@ class ParallelHybridSearch:
 
         bm25_task = asyncio.create_task(self._bm25_search_async(query, top_k, **kwargs))
 
-        # Wait for both to complete
+        # Wait for both to complete (with timeout to prevent indefinite hangs)
         try:
-            vector_results, bm25_results = await asyncio.gather(
-                vector_task,
-                bm25_task,
-                return_exceptions=True,
+            vector_results, bm25_results = await asyncio.wait_for(
+                asyncio.gather(
+                    vector_task,
+                    bm25_task,
+                    return_exceptions=True,
+                ),
+                timeout=self.search_timeout_s,
             )
 
             # Handle exceptions
@@ -205,8 +240,20 @@ class ParallelHybridSearch:
                 logger.warning(f"BM25 search failed: {bm25_results}")
                 bm25_results = []
 
+        except TimeoutError:
+            # Safe: pyproject.toml requires Python >= 3.12 where builtin
+            # TimeoutError is the base for asyncio.TimeoutError (PEP 3151).
+            logger.error("Parallel search timed out after %ss", self.search_timeout_s)
+            vector_task.cancel()
+            bm25_task.cancel()
+            # Await cancelled tasks to avoid "Task was destroyed" warnings.
+            await asyncio.gather(vector_task, bm25_task, return_exceptions=True)
+            raise SearchTimeoutError(f"Parallel search timed out after {self.search_timeout_s}s")
         except Exception as e:
             logger.error(f"Parallel search failed: {e}")
+            vector_task.cancel()
+            bm25_task.cancel()
+            await asyncio.gather(vector_task, bm25_task, return_exceptions=True)
             # Fall back to sequential
             return await self._search_sequential(query, query_embedding, top_k, **kwargs)
 
@@ -377,6 +424,15 @@ class ParallelHybridSearch:
     ) -> list[SearchResult]:
         """Synchronous wrapper around search_async.
 
+        This method uses ``asyncio.run()`` and therefore **cannot** be called
+        from within a running event loop.  Callers in async contexts must use
+        ``await search_async(...)`` directly.
+
+        .. versionchanged:: 0.2.4
+            Previously fell back to a blocking thread-pool shim when called
+            from a running event loop.  Now raises ``RuntimeError`` instead
+            to prevent silent event-loop starvation.
+
         Args:
             query: Query text
             query_embedding: Optional pre-computed query embedding
@@ -385,17 +441,20 @@ class ParallelHybridSearch:
 
         Returns:
             List of SearchResult objects
+
+        Raises:
+            RuntimeError: If called from inside a running event loop.
+            SearchTimeoutError: If the underlying async search times out.
         """
-        # Create event loop and run async search
-        import asyncio
-
         try:
-            loop = asyncio.get_event_loop()
+            asyncio.get_running_loop()
         except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            # No running loop — safe to use asyncio.run().
+            return asyncio.run(self.search_async(query, query_embedding, top_k, **kwargs))
 
-        return loop.run_until_complete(self.search_async(query, query_embedding, top_k, **kwargs))
+        raise RuntimeError(
+            "search() cannot be called from a running event loop — use 'await search_async(...)' instead"
+        )
 
     def get_stats(self) -> dict[str, Any]:
         """Get search statistics.

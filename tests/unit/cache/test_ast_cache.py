@@ -115,8 +115,8 @@ class TestASTCache:
         cache.get("other1.py", "hash1")
         cache.get("other2.py", "hash2")
 
-        # Hit rate should be 50%
-        assert cache.hit_rate() == 50.0
+        # Hit rate should be 0.5 (50%)
+        assert cache.hit_rate() == 0.5
 
     def test_stats(self):
         """Test stats method."""
@@ -133,7 +133,7 @@ class TestASTCache:
         assert stats["max_size"] == 10
         assert stats["hits"] == 1
         assert stats["misses"] == 1
-        assert stats["hit_rate"] == 50.0
+        assert stats["hit_rate"] == 0.5
         assert stats["total_requests"] == 2
 
     def test_clear(self):

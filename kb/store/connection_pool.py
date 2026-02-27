@@ -58,6 +58,10 @@ class SQLiteConnectionPool:
         self._pool: Queue = Queue(maxsize=pool_size)
         self._overflow_count = 0
         self._overflow_lock = threading.Lock()
+        # Track live overflow connections by id().  Entries are always removed
+        # under _overflow_lock *before* conn.close(), so Python cannot reuse an
+        # id() that is still in the set.
+        self._overflow_conns: set[int] = set()
 
         # Statistics
         self._created_connections = 0
@@ -89,9 +93,16 @@ class SQLiteConnectionPool:
         # Enable WAL mode for better concurrency
         if self.enable_wal:
             conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA wal_autocheckpoint=1000")
 
         # Always enforce foreign key constraints for metadata integrity
         conn.execute("PRAGMA foreign_keys=ON")
+
+        # Busy timeout: wait up to 5s on lock contention instead of failing
+        # immediately.  Note: this compounds with the pool's own acquisition
+        # ``timeout`` (default 30s).  In the worst case a caller may wait up
+        # to ``timeout + 5s`` total (pool wait + SQLite busy wait).
+        conn.execute("PRAGMA busy_timeout=5000")
 
         # Optimization pragmas
         conn.execute("PRAGMA synchronous=NORMAL")
@@ -168,6 +179,7 @@ class SQLiteConnectionPool:
                 self._overflow_count += 1
                 self._overflow_connections += 1
                 conn = self._create_connection()
+                self._overflow_conns.add(id(conn))
                 self._created_connections += 1
                 logger.info(f"Created overflow connection ({self._overflow_count}/{self.max_overflow})")
                 return conn
@@ -197,19 +209,40 @@ class SQLiteConnectionPool:
         Args:
             conn: Connection to release
         """
-        # Rollback any uncommitted transaction
+        # Rollback any uncommitted transaction and verify connection health
+        conn_id = id(conn)
         try:
             conn.rollback()
         except sqlite3.Error:
-            pass
+            # Connection is unhealthy — discard it instead of returning to pool.
+            # Remove from overflow set *before* close() so that Python cannot
+            # reuse the id() while it's still tracked.
+            with self._overflow_lock:
+                if conn_id in self._overflow_conns:
+                    self._overflow_conns.discard(conn_id)
+                    self._overflow_count = max(0, self._overflow_count - 1)
+            try:
+                conn.close()
+            except sqlite3.Error:
+                pass
+            return
 
         # Try to return to pool
         try:
             self._pool.put_nowait(conn)
-        except Full:
-            # Pool is full, this must be an overflow connection
+            # If this was an overflow connection that fit back into the pool,
+            # update accounting so future overflow slots aren't blocked.
             with self._overflow_lock:
-                self._overflow_count = max(0, self._overflow_count - 1)
+                if conn_id in self._overflow_conns:
+                    self._overflow_conns.discard(conn_id)
+                    self._overflow_count = max(0, self._overflow_count - 1)
+        except Full:
+            # Pool is full — close this overflow connection.
+            # Remove from set before close() to prevent id reuse collisions.
+            with self._overflow_lock:
+                if conn_id in self._overflow_conns:
+                    self._overflow_conns.discard(conn_id)
+                    self._overflow_count = max(0, self._overflow_count - 1)
             conn.close()
 
     def close_all(self) -> None:

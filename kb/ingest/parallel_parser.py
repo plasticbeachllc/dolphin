@@ -7,6 +7,8 @@ achieving significant speedup on multi-core systems.
 from __future__ import annotations
 
 import multiprocessing as mp
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -121,10 +123,9 @@ def parse_files_parallel(
 
 
 class ParallelChunkCache:
-    """LRU cache for parsed chunks to avoid re-parsing unchanged files.
+    """Thread-safe LRU cache for parsed chunks to avoid re-parsing unchanged files.
 
-    This cache stores parsed chunks indexed by (file_path, content_hash) to
-    enable fast incremental re-indexing.
+    Uses OrderedDict for O(1) LRU operations and a lock for thread safety.
     """
 
     def __init__(self, max_size: int = 1000):
@@ -133,10 +134,11 @@ class ParallelChunkCache:
         Args:
             max_size: Maximum number of files to cache (default: 1000)
         """
-
         self.max_size = max_size
-        self._cache: dict[tuple[str, str], list[Chunk]] = {}
-        self._access_order: list[tuple[str, str]] = []
+        self._cache: OrderedDict[tuple[str, str], list[Chunk]] = OrderedDict()
+        self._lock = threading.Lock()
+        self._hits = 0
+        self._misses = 0
 
     def get(self, file_path: str, content_hash: str) -> list[Chunk] | None:
         """Get cached chunks for a file.
@@ -149,13 +151,13 @@ class ParallelChunkCache:
             List of cached chunks or None if not found
         """
         key = (file_path, content_hash)
-        if key in self._cache:
-            # Move to end (most recently used)
-            if key in self._access_order:
-                self._access_order.remove(key)
-            self._access_order.append(key)
-            return self._cache[key]
-        return None
+        with self._lock:
+            if key in self._cache:
+                self._hits += 1
+                self._cache.move_to_end(key)
+                return self._cache[key]
+            self._misses += 1
+            return None
 
     def put(self, file_path: str, content_hash: str, chunks: list[Chunk]) -> None:
         """Store chunks in cache.
@@ -166,31 +168,34 @@ class ParallelChunkCache:
             chunks: List of chunks to cache
         """
         key = (file_path, content_hash)
-
-        # Remove oldest if at capacity
-        if len(self._cache) >= self.max_size and key not in self._cache:
-            if self._access_order:
-                oldest_key = self._access_order.pop(0)
-                self._cache.pop(oldest_key, None)
-
-        self._cache[key] = chunks
-        if key in self._access_order:
-            self._access_order.remove(key)
-        self._access_order.append(key)
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                self._cache[key] = chunks
+            else:
+                if len(self._cache) >= self.max_size:
+                    self._cache.popitem(last=False)  # Evict oldest
+                self._cache[key] = chunks
 
     def clear(self) -> None:
         """Clear all cached chunks."""
-        self._cache.clear()
-        self._access_order.clear()
+        with self._lock:
+            self._cache.clear()
+            self._hits = 0
+            self._misses = 0
 
     def size(self) -> int:
         """Get current cache size."""
-        return len(self._cache)
+        with self._lock:
+            return len(self._cache)
 
     def hit_rate(self) -> float:
-        """Get cache hit rate (requires tracking hits/misses)."""
-        # Simple implementation - could be enhanced with hit/miss counters
-        return 0.0
+        """Get cache hit rate as a fraction (0.0–1.0)."""
+        with self._lock:
+            total = self._hits + self._misses
+            if total == 0:
+                return 0.0
+            return self._hits / total
 
 
 # Global cache instance

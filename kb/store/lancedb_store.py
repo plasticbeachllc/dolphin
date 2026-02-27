@@ -8,6 +8,12 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# LanceDB uses Product Quantization (PQ) for IVF_PQ indices.  PQ training
+# requires at least this many rows (the default ``num_sub_vectors``).
+# See https://lancedb.github.io/lancedb/ann_indexes/ and the upstream
+# Lance error "Not enough rows to train PQ. Requires 256 rows".
+_MIN_ROWS_FOR_PQ_INDEX = 256
+
 
 class LanceDBStore:
     """LanceDB integration for vector storage and retrieval (Sprint 1).
@@ -141,7 +147,17 @@ class LanceDBStore:
             return
 
         try:
-            if table.count_rows() == 0:
+            row_count = table.count_rows()
+            # Brute-force KNN is fast enough below the PQ training
+            # threshold, and attempting index creation would fail.
+            if row_count < _MIN_ROWS_FOR_PQ_INDEX:
+                if row_count > 0:
+                    logger.debug(
+                        "Table '%s' has only %d rows (< %d); skipping vector index (brute-force is sufficient).",
+                        table_name,
+                        row_count,
+                        _MIN_ROWS_FOR_PQ_INDEX,
+                    )
                 return
         except Exception:
             # If row count is unavailable, continue best-effort.
