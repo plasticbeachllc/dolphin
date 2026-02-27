@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -230,7 +231,7 @@ def search(
     if not local:
         result = _search_remote(**_common_search_args)
         if result is None:
-            typer.echo("Server unavailable, falling back to local search.", err=True)
+            _log.debug("Server unavailable, falling back to local search")
 
     if local or result is None:
         hits, meta, sql_store = _search_local(**_common_search_args)
@@ -300,6 +301,13 @@ def _search_local(
             embedding_provider_type=config.embedding_provider,
             hybrid_search_enabled=True,
         )
+
+        # Suppress verbose structured logs from the search backend in CLI mode
+        # unless the user explicitly opted into a log level via DOLPHIN_LOG_LEVEL.
+        # We set the level on the stdlib logger directly (backend.logger.logger)
+        # after creation, which overrides the default INFO that StructuredLogger sets.
+        if not os.environ.get("DOLPHIN_LOG_LEVEL", "").strip():
+            backend.logger.logger.setLevel(logging.WARNING)
 
         # Create search request
         request = SearchRequest(
