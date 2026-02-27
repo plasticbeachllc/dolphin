@@ -216,10 +216,6 @@ class SQLiteConnectionPool:
         self._created_connections += 1
         return conn
 
-    def _is_overflow(self, conn: sqlite3.Connection) -> bool:
-        """Check whether *conn* was created as an overflow connection."""
-        return id(conn) in self._overflow_conns
-
     def _discard_overflow(self, conn: sqlite3.Connection) -> None:
         """Bookkeeping when an overflow connection is discarded.
 

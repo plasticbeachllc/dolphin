@@ -142,7 +142,7 @@ _cache_invalidation_healthy: bool = True
 # Module-level bounded LRU file-lines cache shared across search requests.
 # Keyed by (absolute_path_str, mtime) so file edits produce automatic misses.
 # CPython dict ops are GIL-protected so no additional lock is needed here.
-_FILE_LINES_CACHE: OrderedDict[tuple[str, float], list[str]] = OrderedDict()
+_FILE_LINES_CACHE: OrderedDict[tuple[str, float], list[str] | None] = OrderedDict()
 _FILE_LINES_CACHE_MAX = 256
 # Don't cache files larger than this to prevent memory bloat.
 _FILE_LINES_MAX_LINES = 50_000
@@ -205,10 +205,11 @@ def _read_file_lines(full_path: Path) -> list[str] | None:
     except OSError:
         return None
     key = (str(full_path), mtime)
-    cached = _FILE_LINES_CACHE.get(key)
-    if cached is not None:
+    _sentinel = object()
+    cached = _FILE_LINES_CACHE.get(key, _sentinel)
+    if cached is not _sentinel:
         _FILE_LINES_CACHE.move_to_end(key)
-        return cached
+        return cached  # type: ignore[return-value]
     # Read line-by-line so we can bail early for huge files without
     # buffering the entire contents into memory via readlines().
     try:
@@ -217,9 +218,12 @@ def _read_file_lines(full_path: Path) -> list[str] | None:
             for line in fh:
                 lines.append(line)
                 if len(lines) >= _FILE_LINES_MAX_LINES:
-                    # Return None so callers display "file too large" instead
-                    # of silently truncated content that looks complete.
+                    # Cache None so repeated requests for the same oversized
+                    # file are short-circuited without re-reading.
                     _log.debug("File too large to serve: %s (>%d lines)", full_path, _FILE_LINES_MAX_LINES)
+                    if len(_FILE_LINES_CACHE) >= _FILE_LINES_CACHE_MAX:
+                        _FILE_LINES_CACHE.popitem(last=False)
+                    _FILE_LINES_CACHE[key] = None
                     return None
     except (OSError, UnicodeDecodeError):
         return None
