@@ -161,6 +161,15 @@ class ParallelHybridSearch:
         self._total_bm25_time_ms = 0.0
         self._total_time_ms = 0.0
 
+    def __del__(self) -> None:
+        """Release the cached sync executor on garbage collection."""
+        executor = getattr(self, "_sync_executor", None)
+        if executor is not None:
+            try:
+                executor.shutdown(wait=False)
+            except Exception:
+                pass
+
     async def search_async(
         self,
         query: str,

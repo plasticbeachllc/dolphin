@@ -172,10 +172,14 @@ class EmbeddingQueue:
             await asyncio.wait_for(self.queue.join(), timeout=timeout)
         except TimeoutError:
             logger.warning(f"Embedding queue did not drain within {timeout}s, cancelling workers")
-        for w in self.workers:
-            w.cancel()
-        if self.workers:
-            await asyncio.gather(*self.workers, return_exceptions=True)
+        finally:
+            # Always cancel and await workers to avoid
+            # "Task was destroyed but it is pending!" warnings.
+            for w in self.workers:
+                w.cancel()
+            if self.workers:
+                await asyncio.gather(*self.workers, return_exceptions=True)
+            self.workers.clear()
 
     async def submit(self, texts: list[str], metadata: dict[str, Any]) -> list[list[float]]:
         """Submit texts for embedding and wait for result."""

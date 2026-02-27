@@ -127,13 +127,17 @@ class DynamicWorkerPool:
         resources = get_system_resources()
 
         # 1. CPU-based calculation
-        # If load matches CPUs, we are fully utilized
         current_load = resources.load_avg_1min
 
-        # Allow at least 1 worker per free core-equivalent, but be conservative
-        cpu_workers = max(self.min_workers, int(self.cpu_count * self.target_cpu_utilization))
+        # Start with a conservative ceiling based on target utilisation.
+        cpu_ceiling = int(self.cpu_count * self.target_cpu_utilization)
 
-        # If system is already heavily loaded, throttle back
+        # Subtract current system load so we don't pile on to a busy host,
+        # but never go below min_workers.
+        available = max(0, cpu_ceiling - int(current_load))
+        cpu_workers = max(self.min_workers, available)
+
+        # If the system is saturated beyond its core count, fall back to minimum.
         if current_load > self.cpu_count:
             cpu_workers = self.min_workers
 

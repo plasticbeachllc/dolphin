@@ -406,7 +406,8 @@ class GlobalAdaptiveNProbes:
                 if cls._instance is None:
                     cls._instance = AdaptiveNProbes(target_latency_ms=target_latency_ms)
         instance = cls._instance
-        assert instance is not None  # guaranteed by double-checked lock above
+        if instance is None:  # pragma: no cover — unreachable after double-checked lock
+            raise RuntimeError("AdaptiveNProbes failed to initialize")
         return instance
 
     @classmethod

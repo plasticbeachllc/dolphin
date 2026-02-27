@@ -88,10 +88,12 @@ class KnowledgeSearchBackend:
 
     def __del__(self) -> None:
         """Release executor threads on garbage collection."""
-        try:
-            self._search_executor.shutdown(wait=False)
-        except Exception:
-            pass
+        executor = getattr(self, "_search_executor", None)
+        if executor is not None:
+            try:
+                executor.shutdown(wait=False)
+            except Exception:
+                pass
 
     @staticmethod
     def _normalize_string_list(values: Sequence[str] | None) -> list[str]:
@@ -411,6 +413,9 @@ class KnowledgeSearchBackend:
             # In Python >= 3.11, builtin TimeoutError is the base for
             # concurrent.futures.TimeoutError, so this catch is sufficient.
             request_logger.warning("Vector search timed out after 30s")
+            # Note: cancel() only prevents execution if the task hasn't started;
+            # already-running threads cannot be interrupted.  The timeout above
+            # ensures we don't block the caller regardless.
             vector_future.cancel()
         except Exception as e:
             # Log error but continue with empty vector results
@@ -437,6 +442,7 @@ class KnowledgeSearchBackend:
                 # In Python >= 3.11, builtin TimeoutError is the base for
                 # concurrent.futures.TimeoutError, so this catch is sufficient.
                 request_logger.warning("BM25 search timed out after 30s")
+                # Note: cancel() only prevents execution if the task hasn't started.
                 bm25_future.cancel()
             except Exception as e:
                 # Log error but continue with empty BM25 results

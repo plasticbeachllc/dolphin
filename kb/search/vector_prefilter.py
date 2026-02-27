@@ -15,9 +15,12 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Pattern to validate filter string values: alphanumeric, hyphens, underscores,
-# dots, slashes, and spaces only.  Rejects quotes and SQL meta-characters.
-_SAFE_FILTER_VALUE = re.compile(r"^[a-zA-Z0-9_\-./\\ @:*?]+$")
+# Pattern to validate filter string values.  Allows common filename/repo chars
+# (alphanumeric, hyphens, underscores, dots, slashes, spaces, colons, parens,
+# hash, plus, tilde, equals, at-signs, glob wildcards).
+# Rejects only SQL-dangerous characters: quotes, semicolons, and comment markers.
+# Uses \Z (not $) so a trailing newline cannot bypass the check.
+_SAFE_FILTER_VALUE = re.compile(r"^[a-zA-Z0-9_\-./\\ @:*?()#+~=,]+\Z")
 
 
 def _sanitize_filter_value(value: str) -> str:
