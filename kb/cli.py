@@ -229,10 +229,10 @@ def search(
 
     if not local:
         result = _search_remote(**_common_search_args)
-        if result is None:
-            typer.echo("Server unavailable, falling back to local search.", err=True)
-
     if local or result is None:
+        import logging
+
+        logging.getLogger("kb").setLevel(logging.WARNING)
         hits, meta, sql_store = _search_local(**_common_search_args)
     else:
         hits, meta, sql_store = result
