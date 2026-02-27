@@ -384,7 +384,9 @@ class IngestionPipeline:
                 except Exception:
                     conn.rollback()
                     logger.error("Error clearing metadata for repo_id=%s", repo_id, exc_info=True)
-                    deletion_errors.append("metadata DB")
+                    # Don't append to deletion_errors — the re-raise already
+                    # surfaces this failure to the caller.  The finally block
+                    # below should only list earlier (LanceDB/graph) errors.
                     raise
         finally:
             if deletion_errors:

@@ -216,7 +216,7 @@ def _read_file_lines(full_path: Path) -> list[str] | None:
         with open(full_path, encoding="utf-8") as fh:
             for line in fh:
                 lines.append(line)
-                if len(lines) > _FILE_LINES_MAX_LINES:
+                if len(lines) >= _FILE_LINES_MAX_LINES:
                     # Return None so callers display "file too large" instead
                     # of silently truncated content that looks complete.
                     _log.debug("File too large to serve: %s (>%d lines)", full_path, _FILE_LINES_MAX_LINES)
@@ -468,13 +468,13 @@ def get_search_backend() -> SearchBackend:
 def reset_search_backend() -> None:
     """Restore the default empty backend, closing the previous one if applicable.
 
-    Note: ``close(wait=False)`` returns immediately.  A concurrent ``search()``
-    call that captured the old backend reference but hasn't yet called
-    ``executor.submit()`` may raise ``RuntimeError``.  This is acceptable
-    because reset is only called during config reload or test teardown — both
-    low-concurrency paths.  Do **not** change to ``wait=True`` without also
-    guarding the submit window, since that would block the caller on in-flight
-    searches.
+    Note: ``close()`` delegates to ``shutdown(wait=True)``, which **blocks**
+    until all in-flight search tasks finish.  This is acceptable because
+    reset is only called during config reload or test teardown — both
+    low-concurrency paths where waiting for completion is preferable to
+    leaving orphaned futures.  A concurrent ``search()`` call that captured
+    the old backend reference but hasn't yet called ``executor.submit()``
+    may raise ``RuntimeError`` after shutdown completes.
 
     ``_EmptySearchBackend.close()`` is a no-op, so the ``except Exception``
     guard only fires for real backends whose executor shutdown fails.

@@ -237,7 +237,10 @@ class SQLiteConnectionPool:
         Args:
             conn: Connection to release
         """
-        is_overflow = self._is_overflow(conn)
+        # Snap the overflow check under the lock so it's safe on free-threaded
+        # Python builds (3.13+ with -Xgil=0) as well as CPython with GIL.
+        with self._overflow_lock:
+            is_overflow = id(conn) in self._overflow_conns
 
         # Rollback any uncommitted transaction.
         # If rollback fails the connection may be in an inconsistent state,
@@ -278,8 +281,11 @@ class SQLiteConnectionPool:
             if is_overflow:
                 self._discard_overflow(conn)
         except Full:
-            # Pool is full — must be an overflow connection.
-            self._discard_overflow(conn)
+            # Pool is full — discard this connection.
+            if is_overflow:
+                self._discard_overflow(conn)
+            else:
+                logger.warning("Non-overflow connection discarded because pool is full (race)")
             conn.close()
 
     def close_all(self) -> None:
