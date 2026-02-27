@@ -529,10 +529,8 @@ def _emit_search_json(
             "resource_link": hit.get("resource_link"),
             "content": hit.get("content"),
             "snippet": hit.get("snippet"),
+            "graph_context": hit.get("graph_context"),
         }
-        graph_context = hit.get("graph_context")
-        if graph_context is not None:
-            normalized["graph_context"] = graph_context
         normalized_hits.append(normalized)
 
     payload = {
@@ -623,11 +621,11 @@ def _render_graph_context_rich(graph_ctx: dict[str, Any], renderables: list[Any]
             direction = rel.get("direction", "")
             if direction == "outgoing":
                 target: dict[str, Any] = rel.get("target") or {}
-                tname = target.get("qualified_name") or target.get("name", "")
+                tname = target.get("qualified_name") or target.get("name") or "<unknown>"
                 arrow = "\u2192"
             elif direction == "incoming":
                 source: dict[str, Any] = rel.get("source") or {}
-                tname = source.get("qualified_name") or source.get("name", "")
+                tname = source.get("qualified_name") or source.get("name") or "<unknown>"
                 arrow = "\u2190"
             else:
                 continue
@@ -660,11 +658,11 @@ def _render_graph_context_plain(graph_ctx: dict[str, Any]) -> None:
             direction = rel.get("direction", "")
             if direction == "outgoing":
                 target: dict[str, Any] = rel.get("target") or {}
-                tname = target.get("qualified_name") or target.get("name", "")
+                tname = target.get("qualified_name") or target.get("name") or "<unknown>"
                 arrow = "->"
             elif direction == "incoming":
                 source: dict[str, Any] = rel.get("source") or {}
-                tname = source.get("qualified_name") or source.get("name", "")
+                tname = source.get("qualified_name") or source.get("name") or "<unknown>"
                 arrow = "<-"
             else:
                 continue
