@@ -561,9 +561,9 @@ def _rich_lexer_for_language(language: str) -> str:
 def _score_style(score: float) -> str:
     """Return a rich style string based on score value."""
     if score >= 0.7:
-        return "bold green"
+        return "bold sea_green2"
     if score >= 0.4:
-        return "yellow"
+        return "dark_goldenrod"
     return "dim"
 
 
@@ -613,7 +613,7 @@ def _display_results(
     safe_query = escape(query)
     count = len(hits)
     plural = "s" if count != 1 else ""
-    console.print(f'\nFound [bold]{count}[/bold] result{plural} for [cyan]"{safe_query}"[/cyan]')
+    console.print(f'\nFound [bold]{count}[/bold] result{plural} for [steel_blue1]"{safe_query}"[/steel_blue1]')
     if languages:
         console.print(f"[dim]Language filter: {', '.join(languages)}[/dim]")
     if verbose and meta:
@@ -676,9 +676,9 @@ def _display_results(
 
             lexer = _rich_lexer_for_language(language)
             try:
-                syntax = Syntax(code, lexer, theme="monokai", line_numbers=False, word_wrap=True)
+                syntax = Syntax(code, lexer, theme="one-dark", line_numbers=False, word_wrap=True)
             except ClassNotFound:
-                syntax = Syntax(code, "text", theme="monokai", line_numbers=False, word_wrap=True)
+                syntax = Syntax(code, "text", theme="one-dark", line_numbers=False, word_wrap=True)
             renderables.append(syntax)
 
         console.print(Panel(Group(*renderables), title=title, subtitle=subtitle, expand=True, padding=(0, 1)))
