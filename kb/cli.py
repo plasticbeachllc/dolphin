@@ -532,8 +532,8 @@ def _extract_snippet_text(hit: dict[str, object], show_content: bool, verbose: b
     snippet_obj = hit.get("snippet")
     content = hit.get("content")
     snippet_text = None
-    if isinstance(snippet_obj, dict) and "text" in snippet_obj:
-        snippet_text = snippet_obj["text"]
+    if isinstance(snippet_obj, dict):
+        snippet_text = snippet_obj.get("text")  # type: ignore[call-overload]
     if not snippet_text and isinstance(content, str):
         snippet_text = content
     if isinstance(snippet_text, str) and snippet_text.strip():
