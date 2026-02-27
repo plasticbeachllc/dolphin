@@ -64,6 +64,9 @@ class MockSearchBackend:
         else:
             return SearchResultSet([], None)
 
+    def close(self):
+        pass
+
 
 class TestSearchIntegration:
     """Integration tests for search functionality."""

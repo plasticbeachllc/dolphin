@@ -533,7 +533,10 @@ def _extract_snippet_text(hit: dict[str, object], show_content: bool, verbose: b
     content = hit.get("content")
     snippet_text = None
     if isinstance(snippet_obj, dict) and "text" in snippet_obj:
-        snippet_text = snippet_obj["text"]
+        # snippet_obj is typed as object; after isinstance narrowing, ty still
+        # sees dict[Unknown, Unknown].  The explicit key check above makes
+        # the subscript safe at runtime.
+        snippet_text = snippet_obj["text"]  # type: ignore[index]
     if not snippet_text and isinstance(content, str):
         snippet_text = content
     if isinstance(snippet_text, str) and snippet_text.strip():

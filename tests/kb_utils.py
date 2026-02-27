@@ -94,6 +94,9 @@ class InMemoryKBBackend:
             )
         return SearchResultSet(matches[: request.top_k], None)
 
+    def close(self) -> None:
+        pass
+
 
 def _build_snippet(
     text: str,

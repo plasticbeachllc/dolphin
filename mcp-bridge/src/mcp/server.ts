@@ -4,6 +4,13 @@ import { tools } from "./tools/index.js";
 import { initLogger, logInfo, logWarn } from "../util/logger.js";
 import { CONFIG, getConfigSummary, validateConfig } from "../util/config.js";
 
+/** Shape of a tool entry as used during registration. */
+interface ToolEntry {
+  definition: { name: string; description?: string; annotations?: Record<string, unknown> };
+  inputSchema?: Record<string, unknown>;
+  handler: (...args: unknown[]) => unknown;
+}
+
 /** Dependency overrides for testing. All fields optional; defaults to real modules. */
 export interface CreateServerDeps {
   config?: { SERVER_NAME: string; SERVER_VERSION: string; MCP_PROTOCOL_VERSION: string };
@@ -12,12 +19,11 @@ export interface CreateServerDeps {
   initLogger?: () => Promise<void>;
   logInfo?: (...args: unknown[]) => unknown;
   logWarn?: (...args: unknown[]) => unknown;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- MCP SDK generics are too deep for TS to infer
   McpServerClass?: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- MCP SDK transport generics are too deep for TS to infer
   TransportClass?: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  toolList?: any[];
+  toolList?: ToolEntry[];
 }
 
 export async function createServer(deps: CreateServerDeps = {}): Promise<void> {
@@ -58,6 +64,14 @@ export async function createServer(deps: CreateServerDeps = {}): Promise<void> {
 
   // Register tools
   for (const tool of _tools) {
+    // Runtime guard: skip malformed tool entries that would crash registerTool.
+    if (!tool.definition?.name || typeof tool.handler !== "function") {
+      await _logWarn(
+        "tool_register",
+        `Skipping malformed tool: ${JSON.stringify(tool.definition?.name)}`
+      );
+      continue;
+    }
     // MCP SDK types can be extremely deep here; keep runtime behavior while avoiding TS instantiation blowups.
     const registerTool = server.registerTool.bind(server) as unknown as (
       name: string,

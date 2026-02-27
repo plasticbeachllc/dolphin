@@ -9,6 +9,8 @@ from fastapi import HTTPException
 
 from kb.security import PathValidationError, PathValidator
 
+_GIT_TIMEOUT_SECONDS = 30
+
 
 def normalize_repo_registration_path(path_str: str) -> Path:
     """Normalize repository registration path without filesystem access.
@@ -91,10 +93,16 @@ class GitRepository:
             RuntimeError: If the git command fails
         """
         try:
-            result = subprocess.check_output(["git", "-C", str(self.root), *args], stderr=subprocess.STDOUT)
+            result = subprocess.check_output(
+                ["git", "-C", str(self.root), *args], stderr=subprocess.STDOUT, timeout=_GIT_TIMEOUT_SECONDS
+            )
             return result.decode("utf-8").strip()
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(f"Git command timed out after {_GIT_TIMEOUT_SECONDS}s: {' '.join(args)}") from e
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Git command failed: {' '.join(args)}\n{e.output.decode('utf-8', errors='ignore')}")
+            raise RuntimeError(
+                f"Git command failed: {' '.join(args)}\n{e.output.decode('utf-8', errors='ignore')}"
+            ) from e
 
     def get_current_commit(self) -> str:
         """Get the current commit SHA.

@@ -29,6 +29,7 @@ from .utils import GitRepository, validate_path_within_repo
 _log = logging.getLogger(__name__)
 
 # Constants
+# Batch size for metadata hash lookups (distinct from config.embedding_batch_size for the embedding API).
 EMBEDDING_BATCH_SIZE = 128
 ESTIMATED_TOKENS_PER_CHUNK = 200
 CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_:-]+$")
@@ -80,8 +81,11 @@ async def request_validation_error_handler(request: Request, exc: RequestValidat
 def _load_default_config() -> KBConfig:
     try:
         return load_config()
+    except FileNotFoundError:
+        _log.info("No config file found; using defaults.")
+        return KBConfig()
     except Exception:
-        _log.warning("Failed to load config; using defaults.", exc_info=True)
+        _log.error("Failed to load config; using defaults. Fix config to avoid unexpected behavior.", exc_info=True)
         return KBConfig()
 
 
@@ -138,8 +142,11 @@ _cache_invalidation_healthy: bool = True
 # Module-level bounded LRU file-lines cache shared across search requests.
 # Keyed by (absolute_path_str, mtime) so file edits produce automatic misses.
 # CPython dict ops are GIL-protected so no additional lock is needed here.
-_FILE_LINES_CACHE: OrderedDict[tuple[str, float], list[str]] = OrderedDict()
+_FILE_LINES_CACHE: OrderedDict[tuple[str, float], list[str] | None] = OrderedDict()
 _FILE_LINES_CACHE_MAX = 256
+_FILE_LINES_CACHE_MISS = object()  # Sentinel to distinguish cached None from cache miss
+# Don't cache files larger than this to prevent memory bloat.
+_FILE_LINES_MAX_LINES = 50_000
 
 
 def get_sql_store():
@@ -199,15 +206,28 @@ def _read_file_lines(full_path: Path) -> list[str] | None:
     except OSError:
         return None
     key = (str(full_path), mtime)
-    cached = _FILE_LINES_CACHE.get(key)
-    if cached is not None:
+    cached = _FILE_LINES_CACHE.get(key, _FILE_LINES_CACHE_MISS)
+    if cached is not _FILE_LINES_CACHE_MISS:
         _FILE_LINES_CACHE.move_to_end(key)
-        return cached
+        return cached  # type: ignore[return-value]
+    # Read line-by-line so we can bail early for huge files without
+    # buffering the entire contents into memory via readlines().
     try:
+        lines: list[str] = []
         with open(full_path, encoding="utf-8") as fh:
-            lines = fh.readlines()
+            for line in fh:
+                lines.append(line)
+                if len(lines) >= _FILE_LINES_MAX_LINES:
+                    # Cache None so repeated requests for the same oversized
+                    # file are short-circuited without re-reading.
+                    _log.debug("File too large to serve: %s (>%d lines)", full_path, _FILE_LINES_MAX_LINES)
+                    if len(_FILE_LINES_CACHE) >= _FILE_LINES_CACHE_MAX:
+                        _FILE_LINES_CACHE.popitem(last=False)
+                    _FILE_LINES_CACHE[key] = None
+                    return None
     except (OSError, UnicodeDecodeError):
         return None
+    # Cache files within the size limit.
     if len(_FILE_LINES_CACHE) >= _FILE_LINES_CACHE_MAX:
         _FILE_LINES_CACHE.popitem(last=False)
     _FILE_LINES_CACHE[key] = lines
@@ -390,6 +410,8 @@ class SearchBackend(Protocol):
 
     def search(self, request: SearchRequest) -> SearchResultSet | Awaitable[SearchResultSet]: ...
 
+    def close(self) -> None: ...
+
 
 class _EmptySearchBackend:
     """Default backend that returns zero hits until retrieval is implemented."""
@@ -397,6 +419,9 @@ class _EmptySearchBackend:
     def search(self, request: SearchRequest) -> SearchResultSet:
         _ = request
         return SearchResultSet([], None)
+
+    def close(self) -> None:
+        pass
 
 
 _DEFAULT_BACKEND = _EmptySearchBackend()
@@ -445,8 +470,25 @@ def get_search_backend() -> SearchBackend:
 
 
 def reset_search_backend() -> None:
-    """Restore the default empty backend."""
+    """Restore the default empty backend, closing the previous one if applicable.
+
+    Note: ``close()`` delegates to ``shutdown(wait=True)``, which **blocks**
+    until all in-flight search tasks finish.  This is acceptable because
+    reset is only called during config reload or test teardown — both
+    low-concurrency paths where waiting for completion is preferable to
+    leaving orphaned futures.  A concurrent ``search()`` call that captured
+    the old backend reference but hasn't yet called ``executor.submit()``
+    may raise ``RuntimeError`` after shutdown completes.
+
+    ``_EmptySearchBackend.close()`` is a no-op, so the ``except Exception``
+    guard only fires for real backends whose executor shutdown fails.
+    """
+    old = _search_backend
     set_search_backend(None)
+    try:
+        old.close()
+    except Exception:
+        _log.warning("Error closing previous search backend", exc_info=True)
 
 
 def _invalidate_search_cache(repo_name: str) -> None:

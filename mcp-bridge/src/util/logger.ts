@@ -88,7 +88,11 @@ function toLogLevel(raw: string | undefined): LogLevel {
 
 const logger = createLogger("mcp-bridge", {
   sink: (line) => {
-    void writeLine(line).catch(() => undefined);
+    void writeLine(line).catch((err) => {
+      // Fallback to stderr so logging failures are visible during debugging.
+      const detail = err instanceof Error ? (err.stack ?? String(err)) : String(err);
+      process.stderr.write(`[log-write-error] ${detail}\n`);
+    });
   },
   minLevel: toLogLevel(CONFIG.LOG_LEVEL),
 });
