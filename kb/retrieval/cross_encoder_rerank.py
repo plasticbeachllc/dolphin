@@ -33,14 +33,16 @@ def _quiet_model_load():
     prev_level = httpx_logger.level
     httpx_logger.setLevel(logging.WARNING)
     devnull_fd = os.open(os.devnull, os.O_WRONLY)
-    saved_fd = os.dup(1)
     try:
+        saved_fd = os.dup(1)
         os.dup2(devnull_fd, 1)
+    finally:
+        os.close(devnull_fd)
+    try:
         yield
     finally:
         os.dup2(saved_fd, 1)
         os.close(saved_fd)
-        os.close(devnull_fd)
         httpx_logger.setLevel(prev_level)
 
 
