@@ -13,7 +13,7 @@
 
 ---
 
-Dolphin indexes your codebases and lets you search them semantically — not just by filename or keyword, but by *meaning*. Ask for "authentication logic" and get back the actual auth code, ranked by relevance, across every repo you've indexed.
+Dolphin indexes your codebases and lets you search them semantically — not just by filename or keyword, but by _meaning_. Ask for "authentication logic" and get back the actual auth code, ranked by relevance, across every repo you've indexed.
 
 It works three ways: as a **CLI** you run in your terminal, as a **REST API** other tools can call, and as an **MCP server** that plugs directly into AI coding assistants like Claude and Continue.dev.
 
@@ -84,38 +84,42 @@ Make sure `dolphin serve` is running, and your AI assistant can now search, retr
 ## Features
 
 **Search that understands code**
+
 - Hybrid vector + BM25 keyword search with RRF fusion
 - Optional cross-encoder reranking for +20-30% ranking improvement
 - MMR diversity to reduce redundant results
 - Filter by repo, language, path, or glob pattern
 
 **Language-aware indexing**
+
 - AST-based chunking for Python, TypeScript, JavaScript, Markdown, SQL, and Svelte
 - Fallback text chunking for everything else
 - Respects `.gitignore` — indexes only what matters
 
 **Live sync**
+
 - File-watching built into `dolphin serve` — edits are re-indexed automatically
 - Git-aware: handles branch switches gracefully
 
 **Multiple interfaces**
+
 - `dolphin` CLI with compact, verbose, and JSON output modes
 - FastAPI server on port 7777 with full search and retrieval endpoints
 - MCP server for AI assistant integration via `bunx dolphin-mcp`
 
 ## CLI reference
 
-| Command | What it does |
-|---|---|
-| `dolphin init` | Create config at `~/.dolphin/config.toml` |
-| `dolphin add-repo <name> <path>` | Register a repository |
-| `dolphin index <name>` | Index (or re-index) a repository |
-| `dolphin search <query>` | Search across indexed repos |
-| `dolphin serve` | Start API server with file-watching |
-| `dolphin status` | Show indexed repos and stats |
-| `dolphin repos` | List registered repositories |
-| `dolphin rm_repo <name>` | Remove a repo and its data |
-| `dolphin config --show` | Display current config |
+| Command                          | What it does                              |
+| -------------------------------- | ----------------------------------------- |
+| `dolphin init`                   | Create config at `~/.dolphin/config.toml` |
+| `dolphin add-repo <name> <path>` | Register a repository                     |
+| `dolphin index <name>`           | Index (or re-index) a repository          |
+| `dolphin search <query>`         | Search across indexed repos               |
+| `dolphin serve`                  | Start API server with file-watching       |
+| `dolphin status`                 | Show indexed repos and stats              |
+| `dolphin repos`                  | List registered repositories              |
+| `dolphin rm_repo <name>`         | Remove a repo and its data                |
+| `dolphin config --show`          | Display current config                    |
 
 ### Search options
 
@@ -166,13 +170,13 @@ Trade-offs: ~2GB disk for model weights, 2-3x slower searches. Worth it for larg
 
 ## Requirements
 
-| Dependency | Purpose |
-|---|---|
-| Python 3.12+ | Core runtime |
-| [uv](https://docs.astral.sh/uv/) | Python package management |
-| OpenAI API key | Embedding generation |
-| [Bun](https://bun.sh/) | MCP bridge runtime (optional) |
-| Git | Repository scanning |
+| Dependency                       | Purpose                       |
+| -------------------------------- | ----------------------------- |
+| Python 3.12+                     | Core runtime                  |
+| [uv](https://docs.astral.sh/uv/) | Python package management     |
+| OpenAI API key                   | Embedding generation          |
+| [Bun](https://bun.sh/)           | MCP bridge runtime (optional) |
+| Git                              | Repository scanning           |
 
 ## Troubleshooting
 
@@ -192,6 +196,7 @@ dolphin index <repo-name> --full --force          # force re-index
 ```
 
 **MCP not connecting?**
+
 - Make sure `dolphin serve` is running
 - Check that Bun is installed: `bun --version`
 - Set `DOLPHIN_API_URL` if the server isn't at `http://127.0.0.1:7777`
