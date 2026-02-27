@@ -599,9 +599,9 @@ def _render_graph_context_rich(graph_ctx: dict[str, Any], renderables: list[Any]
     nodes: list[dict[str, Any]] = graph_ctx.get("nodes") or []
     relationships: list[dict[str, Any]] = graph_ctx.get("relationships") or []
 
+    renderables.append(Text.from_markup("[bold steel_blue1]Graph Context[/bold steel_blue1]"))
+
     if nodes:
-        header = Text.from_markup("[bold steel_blue1]Graph Context[/bold steel_blue1]")
-        renderables.append(header)
         for node in nodes:
             ntype = node.get("type", "")
             qname = node.get("qualified_name") or node.get("name", "")
@@ -640,8 +640,9 @@ def _render_graph_context_plain(graph_ctx: dict[str, Any]) -> None:
     nodes: list[dict[str, Any]] = graph_ctx.get("nodes") or []
     relationships: list[dict[str, Any]] = graph_ctx.get("relationships") or []
 
+    typer.echo("   Graph Context:")
+
     if nodes:
-        typer.echo("   Graph Context:")
         for node in nodes:
             ntype = node.get("type", "")
             qname = node.get("qualified_name") or node.get("name", "")
