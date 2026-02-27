@@ -509,30 +509,31 @@ def _emit_search_json(
 ) -> None:
     normalized_hits: list[dict[str, object]] = []
     for idx, hit in enumerate(hits, start=1):
-        normalized_hits.append(
-            {
-                "rank": idx,
-                "chunk_id": hit.get("chunk_id"),
-                "repo": hit.get("repo"),
-                "path": hit.get("path") or hit.get("file_path"),
-                "file_path": hit.get("file_path") or hit.get("path"),
-                "start_line": hit.get("start_line"),
-                "end_line": hit.get("end_line"),
-                "score": hit.get("score"),
-                "language": _detect_hit_language(hit),
-                "symbol_kind": hit.get("symbol_kind"),
-                "symbol_name": hit.get("symbol_name"),
-                "symbol_path": hit.get("symbol_path"),
-                "text_hash": hit.get("text_hash"),
-                "commit": hit.get("commit"),
-                "branch": hit.get("branch"),
-                "token_count": hit.get("token_count"),
-                "resource_link": hit.get("resource_link"),
-                "content": hit.get("content"),
-                "snippet": hit.get("snippet"),
-                "graph_context": hit.get("graph_context"),
-            }
-        )
+        normalized: dict[str, object] = {
+            "rank": idx,
+            "chunk_id": hit.get("chunk_id"),
+            "repo": hit.get("repo"),
+            "path": hit.get("path") or hit.get("file_path"),
+            "file_path": hit.get("file_path") or hit.get("path"),
+            "start_line": hit.get("start_line"),
+            "end_line": hit.get("end_line"),
+            "score": hit.get("score"),
+            "language": _detect_hit_language(hit),
+            "symbol_kind": hit.get("symbol_kind"),
+            "symbol_name": hit.get("symbol_name"),
+            "symbol_path": hit.get("symbol_path"),
+            "text_hash": hit.get("text_hash"),
+            "commit": hit.get("commit"),
+            "branch": hit.get("branch"),
+            "token_count": hit.get("token_count"),
+            "resource_link": hit.get("resource_link"),
+            "content": hit.get("content"),
+            "snippet": hit.get("snippet"),
+        }
+        graph_context = hit.get("graph_context")
+        if graph_context is not None:
+            normalized["graph_context"] = graph_context
+        normalized_hits.append(normalized)
 
     payload = {
         "query": query,
@@ -631,7 +632,7 @@ def _render_graph_context_rich(graph_ctx: dict[str, Any], renderables: list[Any]
             else:
                 continue
             line_num = rel.get("line_number")
-            line_part = f" [dim]L{line_num}[/dim]" if line_num else ""
+            line_part = f" [dim]L{line_num}[/dim]" if line_num is not None else ""
             markup = f"  [dim]{escape(str(rtype))}[/dim] {arrow} [bold]{escape(str(tname))}[/bold]{line_part}"
             renderables.append(Text.from_markup(markup))
 
@@ -668,7 +669,7 @@ def _render_graph_context_plain(graph_ctx: dict[str, Any]) -> None:
             else:
                 continue
             line_num = rel.get("line_number")
-            line_part = f" L{line_num}" if line_num else ""
+            line_part = f" L{line_num}" if line_num is not None else ""
             typer.echo(f"     {rtype} {arrow} {tname}{line_part}")
 
 
