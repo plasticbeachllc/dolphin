@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -63,6 +64,11 @@ def dolphin_callback(
     version: bool = typer.Option(False, "--version", "-v", help="Show version and exit"),
 ):
     version_callback(version)
+
+    # Suppress verbose structured logs in CLI mode unless the user explicitly
+    # requested a log level via DOLPHIN_LOG_LEVEL.
+    if not os.environ.get("DOLPHIN_LOG_LEVEL", "").strip():
+        logging.getLogger("kb").setLevel(logging.WARNING)
 
 
 _log = StructuredLogger("kb.cli", {"component": "dolphin_cli"})
@@ -229,10 +235,10 @@ def search(
 
     if not local:
         result = _search_remote(**_common_search_args)
-    if local or result is None:
-        import logging
+        if result is None:
+            _log.debug("Server unavailable, falling back to local search")
 
-        logging.getLogger("kb").setLevel(logging.WARNING)
+    if local or result is None:
         hits, meta, sql_store = _search_local(**_common_search_args)
     else:
         hits, meta, sql_store = result
