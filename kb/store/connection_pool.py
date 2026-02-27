@@ -222,8 +222,14 @@ class SQLiteConnectionPool:
         # Try to return to pool
         try:
             self._pool.put_nowait(conn)
+            # If this was an overflow connection that fit back into the pool,
+            # update accounting so future overflow slots aren't blocked.
+            with self._overflow_lock:
+                if conn_id in self._overflow_conns:
+                    self._overflow_conns.discard(conn_id)
+                    self._overflow_count = max(0, self._overflow_count - 1)
         except Full:
-            # Pool is full, this must be an overflow connection
+            # Pool is full — close this overflow connection.
             with self._overflow_lock:
                 self._overflow_conns.discard(conn_id)
                 self._overflow_count = max(0, self._overflow_count - 1)

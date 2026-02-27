@@ -46,6 +46,7 @@ class GraphStore:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA wal_autocheckpoint = 1000")
         # busy_timeout handles lock contention; no need for the connect() timeout
         # parameter which duplicates this at the Python level.
         conn.execute("PRAGMA busy_timeout = 5000")

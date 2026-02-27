@@ -9,15 +9,29 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import logging
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "ParallelHybridSearch",
+    "SearchResult",
+    "SearchTimeoutError",
+    "create_parallel_search",
+    "reciprocal_rank_fusion",
+]
+
 
 class SearchTimeoutError(Exception):
-    """Raised when a parallel search exceeds its timeout."""
+    """Raised when a parallel search exceeds its timeout.
+
+    Callers of :meth:`ParallelHybridSearch.search_async` (and the synchronous
+    :meth:`~ParallelHybridSearch.search` wrapper) should handle this exception
+    if they need to distinguish a timeout from an empty result set.
+    """
 
 
 @dataclass
@@ -154,6 +168,7 @@ class ParallelHybridSearch:
 
         # Reusable executor for sync-to-async bridging (avoids per-call overhead)
         self._sync_executor: concurrent.futures.ThreadPoolExecutor | None = None
+        self._sync_executor_lock = threading.Lock()
 
         # Statistics tracking
         self._total_searches = 0
@@ -187,6 +202,10 @@ class ParallelHybridSearch:
 
         Returns:
             List of SearchResult objects, merged and ranked
+
+        Raises:
+            SearchTimeoutError: If both vector and BM25 searches fail to
+                complete within 60 seconds.
         """
         # Generate embedding if not provided
         if query_embedding is None and self.embedding_provider is not None:
@@ -413,6 +432,9 @@ class ParallelHybridSearch:
 
         Returns:
             List of SearchResult objects
+
+        Raises:
+            SearchTimeoutError: If the underlying async search times out.
         """
         try:
             loop = asyncio.get_running_loop()
@@ -428,10 +450,15 @@ class ParallelHybridSearch:
                 return asyncio.run(coro)
 
             if self._sync_executor is None:
-                self._sync_executor = concurrent.futures.ThreadPoolExecutor(
-                    max_workers=1, thread_name_prefix="parallel-search-sync"
-                )
-            return self._sync_executor.submit(_run).result()
+                with self._sync_executor_lock:
+                    if self._sync_executor is None:
+                        self._sync_executor = concurrent.futures.ThreadPoolExecutor(
+                            max_workers=1, thread_name_prefix="parallel-search-sync"
+                        )
+            executor = self._sync_executor
+            if executor is None:  # pragma: no cover — unreachable after double-checked lock
+                raise RuntimeError("Failed to initialize sync executor")
+            return executor.submit(_run).result()
         else:
             return asyncio.run(self.search_async(query, query_embedding, top_k, **kwargs))
 

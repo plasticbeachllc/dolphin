@@ -142,9 +142,11 @@ class LanceDBStore:
 
         try:
             row_count = table.count_rows()
-            # LanceDB PQ index training requires at least 256 rows.
-            # Skip index creation for small tables to avoid noisy errors;
-            # brute-force search is fast enough at this scale anyway.
+            # LanceDB uses Product Quantization (PQ) for IVF_PQ indices.
+            # PQ training requires at least 256 rows (the default num_sub_vectors);
+            # see https://lancedb.github.io/lancedb/ann_indexes/ and the upstream
+            # Lance error "Not enough rows to train PQ. Requires 256 rows".
+            # Brute-force KNN is fast enough at this scale anyway.
             if row_count < 256:
                 if row_count > 0:
                     logger.debug(
