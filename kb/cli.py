@@ -195,34 +195,31 @@ def search(
     if snippet_limit <= 0 and (show_content or verbose):
         snippet_limit = min(top_k, 3)
 
-    if local:
-        hits, meta, sql_store = _search_local(
-            query=query,
-            repos=repos,
-            path_prefix=path_prefix,
-            exclude_paths=exclude_paths,
-            exclude_patterns=exclude_patterns,
-            top_k=request_top_k,
-            score_cutoff=score_cutoff,
-            max_snippets=snippet_limit,
-            context_before=context_before,
-            context_after=context_after,
-            include_graph_context=include_graph_context,
-        )
+    search_kwargs = dict(
+        query=query,
+        repos=repos,
+        path_prefix=path_prefix,
+        exclude_paths=exclude_paths,
+        exclude_patterns=exclude_patterns,
+        top_k=request_top_k,
+        score_cutoff=score_cutoff,
+        max_snippets=snippet_limit,
+        context_before=context_before,
+        context_after=context_after,
+        include_graph_context=include_graph_context,
+    )
+
+    result: tuple[list[dict[str, object]], dict[str, object], SQLiteMetadataStore | None] | None = None
+
+    if not local:
+        result = _search_remote(**search_kwargs)
+        if result is None:
+            typer.echo("Server unavailable, falling back to local search.", err=True)
+
+    if local or result is None:
+        hits, meta, sql_store = _search_local(**search_kwargs)
     else:
-        hits, meta, sql_store = _search_remote(
-            query=query,
-            repos=repos,
-            path_prefix=path_prefix,
-            exclude_paths=exclude_paths,
-            exclude_patterns=exclude_patterns,
-            top_k=request_top_k,
-            score_cutoff=score_cutoff,
-            max_snippets=snippet_limit,
-            context_before=context_before,
-            context_after=context_after,
-            include_graph_context=include_graph_context,
-        )
+        hits, meta, sql_store = result
 
     if normalized_langs:
         hits = _apply_language_filter(hits, normalized_langs)
@@ -306,6 +303,16 @@ def _search_local(
         # Execute search
         hits, next_cursor = backend.search(request)
         result_hits = list(hits)
+
+        # Enrich hits with snippets (mirrors the API layer in app.py)
+        if max_snippets > 0 and backend.sql_store is not None:
+            from kb.api.app import _enrich_hits_with_snippets
+
+            snippet_limit = max(0, min(max_snippets, len(result_hits)))
+            result_hits[:snippet_limit] = _enrich_hits_with_snippets(
+                result_hits[:snippet_limit], request, backend.sql_store
+            )
+
         meta = {
             "top_k": top_k,
             "max_snippets": max_snippets,
@@ -335,8 +342,8 @@ def _search_remote(
     context_before: int,
     context_after: int,
     include_graph_context: bool,
-) -> tuple[list[dict[str, object]], dict[str, object], SQLiteMetadataStore | None]:
-    """Search using remote API server."""
+) -> tuple[list[dict[str, object]], dict[str, object], SQLiteMetadataStore | None] | None:
+    """Search using remote API server. Returns None on connection failure."""
     import requests
     import requests.exceptions  # Import the exceptions module explicitly
 
@@ -394,12 +401,7 @@ def _search_remote(
         return list(hits), meta, None
 
     except requests.exceptions.ConnectionError:
-        typer.echo("Error: Could not connect to dolphin API server.", err=True)
-        typer.echo(
-            "Tip: Use --local flag to search without server, or start server with: dolphin serve",
-            err=True,
-        )
-        raise typer.Exit(1)
+        return None
     except requests.exceptions.RequestException as e:
         typer.echo(f"Error: Search request failed: {e}", err=True)
         raise typer.Exit(1)
