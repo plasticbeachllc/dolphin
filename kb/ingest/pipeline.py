@@ -520,7 +520,9 @@ class IngestionPipeline:
                         progress_callback(
                             {
                                 "event": "file_skipped",
-                                "files_done": stats["files_done"] + stats["files_skipped_ignored"],
+                                "files_done": stats["files_done"]
+                                + stats["files_skipped_ignored"]
+                                + stats["files_error"],
                                 "total_files": len(files),
                                 "chunks_indexed": stats["chunks_indexed"],
                                 "current_file": path,
@@ -731,7 +733,7 @@ class IngestionPipeline:
                     progress_callback(
                         {
                             "event": "file_complete",
-                            "files_done": stats["files_done"] + stats["files_skipped_ignored"],
+                            "files_done": stats["files_done"] + stats["files_skipped_ignored"] + stats["files_error"],
                             "total_files": len(files),
                             "chunks_indexed": stats["chunks_indexed"],
                             "current_file": path,
@@ -1342,6 +1344,16 @@ class IngestionPipeline:
                         except Exception as e:
                             files_error += 1
                             error_logger.log_file_error(path, e)
+                            if progress_callback is not None:
+                                progress_callback(
+                                    {
+                                        "event": "file_error",
+                                        "files_done": files_done + files_skipped_ignored + files_error,
+                                        "total_files": len(changed_files),
+                                        "chunks_indexed": chunks_indexed,
+                                        "current_file": path,
+                                    }
+                                )
                             continue
 
                     # Execute Parallel Parsing
@@ -1355,6 +1367,16 @@ class IngestionPipeline:
                             files_error += 1
                             error = Exception(res.error) if res.error else Exception("Unknown error")
                             error_logger.log_file_error(str(res.file_path), error)
+                            if progress_callback is not None:
+                                progress_callback(
+                                    {
+                                        "event": "file_error",
+                                        "files_done": files_done + files_skipped_ignored + files_error,
+                                        "total_files": len(changed_files),
+                                        "chunks_indexed": chunks_indexed,
+                                        "current_file": str(res.file_path),
+                                    }
+                                )
                             continue
 
                         chunks = res.chunks
@@ -1412,6 +1434,16 @@ class IngestionPipeline:
                         except Exception as dedup_err:
                             files_error += 1
                             error_logger.log_file_error(path, dedup_err)
+                            if progress_callback is not None:
+                                progress_callback(
+                                    {
+                                        "event": "file_error",
+                                        "files_done": files_done + files_skipped_ignored + files_error,
+                                        "total_files": len(changed_files),
+                                        "chunks_indexed": chunks_indexed,
+                                        "current_file": path,
+                                    }
+                                )
                             continue
                         skipped_occurrences = len(unchanged_chunks)
                         chunks_skipped += skipped_occurrences
@@ -1461,7 +1493,18 @@ class IngestionPipeline:
                         # Process each result with its associated data
                         for task_data, vectors in zip(embedding_tasks, results):
                             if isinstance(vectors, Exception):
+                                files_error += 1
                                 error_logger.log_file_error(task_data["path"], vectors)
+                                if progress_callback is not None:
+                                    progress_callback(
+                                        {
+                                            "event": "file_error",
+                                            "files_done": files_done + files_skipped_ignored + files_error,
+                                            "total_files": len(changed_files),
+                                            "chunks_indexed": chunks_indexed,
+                                            "current_file": task_data["path"],
+                                        }
+                                    )
                                 continue
 
                             # Extract task data
@@ -1581,7 +1624,7 @@ class IngestionPipeline:
                                 progress_callback(
                                     {
                                         "event": "file_complete",
-                                        "files_done": files_done + files_skipped_ignored,
+                                        "files_done": files_done + files_skipped_ignored + files_error,
                                         "total_files": len(changed_files),
                                         "chunks_indexed": chunks_indexed,
                                         "current_file": path,

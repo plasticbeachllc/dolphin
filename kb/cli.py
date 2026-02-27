@@ -593,9 +593,9 @@ def _display_results(
 
     Falls back to plain text when stdout is not a TTY (for piping/scripting).
     """
-    from kb.terminal import _STDOUT_CONSOLE
+    from kb.terminal import STDOUT_CONSOLE
 
-    if not _STDOUT_CONSOLE.is_terminal:
+    if not STDOUT_CONSOLE.is_terminal:
         _display_results_plain(
             query=query,
             hits=hits,
@@ -608,11 +608,12 @@ def _display_results(
         return
 
     from rich.console import Group
+    from rich.markup import escape
     from rich.panel import Panel
     from rich.syntax import Syntax
     from rich.text import Text
 
-    console = _STDOUT_CONSOLE
+    console = STDOUT_CONSOLE
 
     if not hits:
         console.print()
@@ -620,7 +621,10 @@ def _display_results(
         print_hint("Try broadening your query, removing filters, or indexing more repositories.")
         return
 
-    console.print(f'\nFound [bold]{len(hits)}[/bold] result{"s" if len(hits) != 1 else ""} for [cyan]"{query}"[/cyan]')
+    safe_query = escape(query)
+    count = len(hits)
+    plural = "s" if count != 1 else ""
+    console.print(f'\nFound [bold]{count}[/bold] result{plural} for [cyan]"{safe_query}"[/cyan]')
     if languages:
         console.print(f"[dim]Language filter: {', '.join(languages)}[/dim]")
     if verbose and meta:
@@ -751,7 +755,7 @@ def _display_results_plain(
                 typer.echo(f"   resource={resource_link}")
 
         if show_content or verbose:
-            snippet_text = _extract_snippet_text(hit, show_content=True, verbose=True)
+            snippet_text = _extract_snippet_text(hit, show_content=show_content, verbose=verbose)
             if snippet_text:
                 lines = snippet_text.splitlines()
                 typer.echo("   ---")

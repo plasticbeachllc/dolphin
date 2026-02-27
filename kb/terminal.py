@@ -8,7 +8,7 @@ from rich.console import Console
 
 StatusLevel = Literal["step", "info", "success", "warn", "error"]
 
-_STDOUT_CONSOLE = Console(stderr=False, highlight=False, soft_wrap=True)
+STDOUT_CONSOLE = Console(stderr=False, highlight=False, soft_wrap=True)
 _STDERR_CONSOLE = Console(stderr=True, highlight=False, soft_wrap=True)
 
 _LEVEL_META: dict[StatusLevel, tuple[str, str]] = {
@@ -55,11 +55,11 @@ def print_status(
     stderr: bool = False,
 ) -> None:
     """Print a consistently styled status line."""
-    console = _STDERR_CONSOLE if stderr else _STDOUT_CONSOLE
+    console = _STDERR_CONSOLE if stderr else STDOUT_CONSOLE
     console.print(render_status_line(message, level=level, context=context))
 
 
 def print_hint(message: str, *, stderr: bool = False) -> None:
     """Print a muted follow-up hint line."""
-    console = _STDERR_CONSOLE if stderr else _STDOUT_CONSOLE
+    console = _STDERR_CONSOLE if stderr else STDOUT_CONSOLE
     console.print(f"[dim]Hint:[/dim] {message}")

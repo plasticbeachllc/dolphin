@@ -129,10 +129,11 @@ class TestInitCommand:
 
         # Create a config with openai provider
         original_template = _read_config_template()
+        assert 'provider = "openai"' in original_template, "Config template no longer defaults to openai provider"
         openai_template = original_template.replace(
             'store_root = "~/.dolphin/knowledge_store"',
             f'store_root = "{store_root}"',
-        ).replace('provider = "openai"', 'provider = "openai"')  # Already openai in template
+        )
         monkeypatch.setattr("kb.ingest.cli._read_config_template", lambda: openai_template)
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 

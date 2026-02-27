@@ -1,7 +1,9 @@
 # from __future__ import annotations
 import asyncio
+import contextlib
 import logging
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
@@ -214,13 +216,7 @@ def _create_progress_display() -> tuple[Any, Any]:
     Returns (None, line_callback) when stdout is not a TTY.
     Returns (Progress, rich_callback) when stdout is a TTY.
     """
-    import sys as _sys
-    from collections.abc import Callable
-    from typing import Any
-
-    _ProgressCallback = Callable[[dict[str, Any]], None]
-
-    if not (_sys.stdout is not None and hasattr(_sys.stdout, "isatty") and _sys.stdout.isatty()):
+    if not (sys.stdout is not None and hasattr(sys.stdout, "isatty") and sys.stdout.isatty()):
         # Non-TTY: periodic line output
         _last = {"n": 0}
 
@@ -253,17 +249,17 @@ def _create_progress_display() -> tuple[Any, Any]:
         TimeElapsedColumn(),
         transient=False,
     )
-    _task_id: list[TaskID | None] = [None]
+    _task_id: TaskID | None = None
 
     def _rich_callback(data: dict[str, Any]) -> None:
+        nonlocal _task_id
         total = data.get("total_files", 0)
         done = data.get("files_done", 0)
         chunks = data.get("chunks_indexed", 0)
 
-        if _task_id[0] is None:
-            _task_id[0] = progress.add_task("indexing", total=total, chunks=0)
-        tid = _task_id[0]
-        progress.update(tid, completed=done, chunks=chunks)
+        if _task_id is None:
+            _task_id = progress.add_task("indexing", total=total, chunks=0)
+        progress.update(_task_id, completed=done, chunks=chunks)
 
     return progress, _rich_callback
 
@@ -331,21 +327,10 @@ def index(
     print_status(f"Indexing {name}", level="step", context=ctx)
 
     t0 = time.monotonic()
+    progress_ctx = progress_display if progress_display is not None else contextlib.nullcontext()
     try:
-        if parallel:
-            if progress_display is not None:
-                with progress_display:
-                    result = asyncio.run(
-                        pipeline.index_parallel(
-                            name,
-                            dry_run=dry_run,
-                            force=force,
-                            full_reindex=full,
-                            max_workers=workers,
-                            progress_callback=progress_callback,
-                        )
-                    )
-            else:
+        with progress_ctx:
+            if parallel:
                 result = asyncio.run(
                     pipeline.index_parallel(
                         name,
@@ -356,16 +341,6 @@ def index(
                         progress_callback=progress_callback,
                     )
                 )
-        else:
-            if progress_display is not None:
-                with progress_display:
-                    result = pipeline.index(
-                        name,
-                        dry_run=dry_run,
-                        force=force,
-                        full_reindex=full,
-                        progress_callback=progress_callback,
-                    )
             else:
                 result = pipeline.index(
                     name,
