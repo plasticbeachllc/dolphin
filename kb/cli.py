@@ -148,6 +148,22 @@ def list_files(
     kb_list_files(name)
 
 
+class _SearchArgs(TypedDict):
+    """Shared keyword arguments for local and remote search functions."""
+
+    query: str
+    repos: list[str] | None
+    path_prefix: list[str] | None
+    exclude_paths: list[str] | None
+    exclude_patterns: list[str] | None
+    top_k: int
+    score_cutoff: float
+    max_snippets: int
+    context_before: int
+    context_after: int
+    include_graph_context: bool
+
+
 @app.command()
 def search(
     query: str = typer.Argument(..., help="Search query."),
@@ -254,22 +270,6 @@ def search(
         languages=normalized_langs,
         max_lines=max(1, max_lines),
     )
-
-
-class _SearchArgs(TypedDict):
-    """Shared keyword arguments for local and remote search functions."""
-
-    query: str
-    repos: list[str] | None
-    path_prefix: list[str] | None
-    exclude_paths: list[str] | None
-    exclude_patterns: list[str] | None
-    top_k: int
-    score_cutoff: float
-    max_snippets: int
-    context_before: int
-    context_after: int
-    include_graph_context: bool
 
 
 def _search_local(
