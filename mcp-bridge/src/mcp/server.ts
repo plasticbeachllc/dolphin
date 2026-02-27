@@ -66,7 +66,10 @@ export async function createServer(deps: CreateServerDeps = {}): Promise<void> {
   for (const tool of _tools) {
     // Runtime guard: skip malformed tool entries that would crash registerTool.
     if (!tool.definition?.name || typeof tool.handler !== "function") {
-      await _logWarn("tool_register", `Skipping malformed tool: ${JSON.stringify(tool.definition?.name)}`);
+      await _logWarn(
+        "tool_register",
+        `Skipping malformed tool: ${JSON.stringify(tool.definition?.name)}`
+      );
       continue;
     }
     // MCP SDK types can be extremely deep here; keep runtime behavior while avoiding TS instantiation blowups.
