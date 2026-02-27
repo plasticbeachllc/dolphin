@@ -398,6 +398,8 @@ class SearchBackend(Protocol):
 
     def search(self, request: SearchRequest) -> SearchResultSet | Awaitable[SearchResultSet]: ...
 
+    def close(self) -> None: ...
+
 
 class _EmptySearchBackend:
     """Default backend that returns zero hits until retrieval is implemented."""
@@ -405,6 +407,9 @@ class _EmptySearchBackend:
     def search(self, request: SearchRequest) -> SearchResultSet:
         _ = request
         return SearchResultSet([], None)
+
+    def close(self) -> None:
+        pass
 
 
 _DEFAULT_BACKEND = _EmptySearchBackend()
@@ -465,12 +470,10 @@ def reset_search_backend() -> None:
     """
     old = _search_backend
     set_search_backend(None)
-    close_fn = getattr(old, "close", None)
-    if close_fn is not None:
-        try:
-            close_fn()
-        except Exception:
-            _log.warning("Error closing previous search backend", exc_info=True)
+    try:
+        old.close()
+    except Exception:
+        _log.warning("Error closing previous search backend", exc_info=True)
 
 
 def _invalidate_search_cache(repo_name: str) -> None:

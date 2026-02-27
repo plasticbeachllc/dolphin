@@ -60,13 +60,16 @@ class SQLiteConnectionPool:
         self.timeout = timeout
         self.enable_wal = enable_wal
         self.mmap_size = mmap_size if mmap_size is not None else self.DEFAULT_MMAP_SIZE
+        if not isinstance(self.mmap_size, int) or self.mmap_size < 0:
+            raise ValueError(f"mmap_size must be a non-negative int, got {self.mmap_size!r}")
 
         self._pool: Queue = Queue(maxsize=pool_size)
         self._overflow_count = 0
         self._overflow_lock = threading.Lock()
-        # Track live overflow connections by id().  Entries are always removed
-        # under _overflow_lock *before* conn.close(), so Python cannot reuse an
-        # id() that is still in the set.
+        # Track which live connections are overflow (by id()) so release()
+        # can definitively distinguish pool vs. overflow connections.
+        # Entries are always removed under _overflow_lock *before* conn.close(),
+        # so Python cannot reuse an id() that is still in the set.
         self._overflow_conns: set[int] = set()
 
         # Statistics
@@ -211,15 +214,32 @@ class SQLiteConnectionPool:
         self._created_connections += 1
         return conn
 
+    def _is_overflow(self, conn: sqlite3.Connection) -> bool:
+        """Check whether *conn* was created as an overflow connection."""
+        return id(conn) in self._overflow_conns
+
+    def _discard_overflow(self, conn: sqlite3.Connection) -> None:
+        """Bookkeeping when an overflow connection is discarded.
+
+        Removes the connection from the overflow tracking set *before* the
+        caller closes it, preventing Python from reusing the id() while it
+        is still tracked.
+        """
+        with self._overflow_lock:
+            self._overflow_conns.discard(id(conn))
+            self._overflow_count = max(0, self._overflow_count - 1)
+
     def release(self, conn: sqlite3.Connection) -> None:
         """Release a connection back to the pool.
 
         Args:
             conn: Connection to release
         """
-        # Rollback any uncommitted transaction and verify connection health.
-        conn_id = id(conn)
-        is_overflow = conn_id in self._overflow_conns
+        is_overflow = self._is_overflow(conn)
+
+        # Rollback any uncommitted transaction.
+        # If rollback fails the connection may be in an inconsistent state,
+        # so discard it instead of returning a poisoned connection to the pool.
         try:
             conn.rollback()
         except sqlite3.Error:
@@ -228,9 +248,7 @@ class SQLiteConnectionPool:
             # Remove from overflow set *before* close() so that Python cannot
             # reuse the id() while it's still tracked.
             if is_overflow:
-                with self._overflow_lock:
-                    self._overflow_conns.discard(conn_id)
-                    self._overflow_count = max(0, self._overflow_count - 1)
+                self._discard_overflow(conn)
             try:
                 conn.close()
             except sqlite3.Error:
@@ -243,7 +261,7 @@ class SQLiteConnectionPool:
                     self._pool.put_nowait(fresh)
                     self._created_connections += 1
                 except Full:
-                    # Pool was filled between the check and put; close the spare.
+                    # Pool was filled between discard and put; close the spare.
                     if fresh is not None:
                         fresh.close()
                 except sqlite3.Error:
@@ -253,19 +271,13 @@ class SQLiteConnectionPool:
         # Try to return to pool
         try:
             self._pool.put_nowait(conn)
-            # If this was an overflow connection that fit back into the pool,
-            # update accounting so future overflow slots aren't blocked.
-            with self._overflow_lock:
-                if conn_id in self._overflow_conns:
-                    self._overflow_conns.discard(conn_id)
-                    self._overflow_count = max(0, self._overflow_count - 1)
+            # If this was an overflow conn that fit back into the pool (e.g.
+            # a pooled conn was lost), clear the overflow tag.
+            if is_overflow:
+                self._discard_overflow(conn)
         except Full:
-            # Pool is full — close this overflow connection.
-            # Remove from set before close() to prevent id reuse collisions.
-            with self._overflow_lock:
-                if conn_id in self._overflow_conns:
-                    self._overflow_conns.discard(conn_id)
-                    self._overflow_count = max(0, self._overflow_count - 1)
+            # Pool is full — must be an overflow connection.
+            self._discard_overflow(conn)
             conn.close()
 
     def close_all(self) -> None:

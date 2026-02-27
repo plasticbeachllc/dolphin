@@ -29,6 +29,9 @@ class MockSearchBackend:
             None,
         )
 
+    def close(self):
+        pass
+
 
 class TestHealthEndpoint:
     """Test /v1/health endpoint."""
@@ -164,6 +167,9 @@ class TestSearchEndpoint:
                     ],
                     None,
                 )
+
+            def close(self):
+                pass
 
         set_search_backend(BackendNoSnippet())
 

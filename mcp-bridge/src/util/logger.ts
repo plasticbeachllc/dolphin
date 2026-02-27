@@ -90,7 +90,8 @@ const logger = createLogger("mcp-bridge", {
   sink: (line) => {
     void writeLine(line).catch((err) => {
       // Fallback to stderr so logging failures are visible during debugging.
-      process.stderr.write(`[log-write-error] ${err}\n`);
+      const detail = err instanceof Error ? (err.stack ?? String(err)) : String(err);
+      process.stderr.write(`[log-write-error] ${detail}\n`);
     });
   },
   minLevel: toLogLevel(CONFIG.LOG_LEVEL),

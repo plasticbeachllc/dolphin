@@ -951,11 +951,11 @@ class SQLiteMetadataStore:
             column_values["chunks_pruned"] = int(chunks_pruned)
         if not column_values:
             return
-        # Guard against accidental injection: only allow known column names.
-        # All current callers pass literal keyword arguments, so this is a
-        # programming-error check rather than a runtime-input guard.
+        # Guard against injection into SQL string: only allow known column names.
+        # assert is stripped under -O, so use an explicit raise.
         for col in column_values:
-            assert col in self._ALLOWED_SESSION_COLUMNS, f"Disallowed session column: {col}"
+            if col not in self._ALLOWED_SESSION_COLUMNS:
+                raise ValueError(f"Disallowed session column: {col!r}")
         sets = [f"{col} = ?" for col in column_values]
         params: list[int] = list(column_values.values())
         sql = f"UPDATE sessions SET {', '.join(sets)} WHERE id = ?"

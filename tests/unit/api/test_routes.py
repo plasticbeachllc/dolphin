@@ -34,6 +34,9 @@ class _MockSearchBackend:
             raise self._error
         return (self._results, None)
 
+    def close(self):
+        pass
+
 
 def _make_api_client(monkeypatch, api_key: str = "test-key-routes"):
     """Return a TestClient with the given API key configured."""

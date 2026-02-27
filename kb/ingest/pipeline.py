@@ -293,100 +293,107 @@ class IngestionPipeline:
                 logger.warning("Could not delete graph data for repo_id=%s", repo_id, exc_info=True)
                 deletion_errors.append("graph data")
 
-        # Delete from metadata database
-        logger.info("  Clearing metadata...")
-        with self.metadata._connect() as conn:
-            cur = conn.cursor()
+        # Delete from metadata database.
+        # Use try/finally so the summary warning is emitted even if metadata
+        # deletion raises (the earlier LanceDB/graph errors would otherwise
+        # be lost in the re-raise).
+        try:
+            logger.info("  Clearing metadata...")
+            with self.metadata._connect() as conn:
+                cur = conn.cursor()
 
-            # Helper to check if table exists
-            def table_exists(table_name: str) -> bool:
-                cur.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-                    (table_name,),
-                )
-                return cur.fetchone() is not None
-
-            try:
-                # Get all file IDs for this repo
-                cur.execute("SELECT id FROM files WHERE repo_id = ?", (repo_id,))
-                file_ids = [row[0] for row in cur.fetchall()]
-
-                # Delete in correct order respecting foreign key constraints:
-
-                # 1. Delete code graph data (references code_nodes and files)
-                # Check table existence first to avoid swallowing real FK errors
-                if table_exists("node_aliases"):
+                # Helper to check if table exists
+                def table_exists(table_name: str) -> bool:
                     cur.execute(
-                        "DELETE FROM node_aliases WHERE file_id IN (SELECT id FROM files WHERE repo_id = ?)",
-                        (repo_id,),
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                        (table_name,),
                     )
+                    return cur.fetchone() is not None
 
-                if table_exists("cross_repo_references"):
-                    cur.execute(
-                        "DELETE FROM cross_repo_references WHERE file_id IN (SELECT id FROM files WHERE repo_id = ?)",
-                        (repo_id,),
-                    )
+                try:
+                    # Get all file IDs for this repo
+                    cur.execute("SELECT id FROM files WHERE repo_id = ?", (repo_id,))
+                    file_ids = [row[0] for row in cur.fetchall()]
 
-                if table_exists("code_edges"):
-                    cur.execute(
-                        "DELETE FROM code_edges WHERE source_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)",
-                        (repo_id,),
-                    )
-                    cur.execute(
-                        "DELETE FROM code_edges WHERE target_node_id IN (SELECT id FROM code_nodes WHERE repo_id = ?)",
-                        (repo_id,),
-                    )
+                    # Delete in correct order respecting foreign key constraints:
 
-                if table_exists("code_nodes"):
-                    cur.execute("DELETE FROM code_nodes WHERE repo_id = ?", (repo_id,))
-
-                # 2. Delete chunk locations (references chunk_content)
-                for file_id in file_ids:
-                    cur.execute(
-                        """
-                        DELETE FROM chunk_locations
-                        WHERE content_id IN (
-                            SELECT id FROM chunk_content WHERE file_id = ?
+                    # 1. Delete code graph data (references code_nodes and files)
+                    # Check table existence first to avoid swallowing real FK errors
+                    if table_exists("node_aliases"):
+                        cur.execute(
+                            "DELETE FROM node_aliases WHERE file_id IN (SELECT id FROM files WHERE repo_id = ?)",
+                            (repo_id,),
                         )
-                    """,
-                        (file_id,),
-                    )
 
-                # 3. Delete chunk content (references files)
-                cur.execute("DELETE FROM chunk_content WHERE repo_id = ?", (repo_id,))
+                    if table_exists("cross_repo_references"):
+                        _del_cross = (
+                            "DELETE FROM cross_repo_references"
+                            " WHERE file_id IN (SELECT id FROM files WHERE repo_id = ?)"
+                        )
+                        cur.execute(_del_cross, (repo_id,))
 
-                # 4. Delete from FTS5
-                cur.execute("DELETE FROM chunks_fts WHERE repo = ?", (repo_name,))
+                    if table_exists("code_edges"):
+                        _del_src = (
+                            "DELETE FROM code_edges WHERE source_node_id"
+                            " IN (SELECT id FROM code_nodes WHERE repo_id = ?)"
+                        )
+                        _del_tgt = (
+                            "DELETE FROM code_edges WHERE target_node_id"
+                            " IN (SELECT id FROM code_nodes WHERE repo_id = ?)"
+                        )
+                        cur.execute(_del_src, (repo_id,))
+                        cur.execute(_del_tgt, (repo_id,))
 
-                # 5. Delete file snapshots (references files)
-                if table_exists("file_snapshots"):
-                    cur.execute("DELETE FROM file_snapshots WHERE repo_id = ?", (repo_id,))
+                    if table_exists("code_nodes"):
+                        cur.execute("DELETE FROM code_nodes WHERE repo_id = ?", (repo_id,))
 
-                # 6. Delete files
-                cur.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
+                    # 2. Delete chunk locations (references chunk_content)
+                    for file_id in file_ids:
+                        cur.execute(
+                            """
+                            DELETE FROM chunk_locations
+                            WHERE content_id IN (
+                                SELECT id FROM chunk_content WHERE file_id = ?
+                            )
+                        """,
+                            (file_id,),
+                        )
 
-                # 7. Delete sessions
-                cur.execute("DELETE FROM sessions WHERE repo_id = ?", (repo_id,))
+                    # 3. Delete chunk content (references files)
+                    cur.execute("DELETE FROM chunk_content WHERE repo_id = ?", (repo_id,))
 
-                # 8. Delete pending changes
-                if table_exists("pending_changes"):
-                    cur.execute("DELETE FROM pending_changes WHERE repo_id = ?", (repo_id,))
+                    # 4. Delete from FTS5
+                    cur.execute("DELETE FROM chunks_fts WHERE repo = ?", (repo_name,))
 
-                conn.commit()
-                logger.info("  Metadata cleared successfully")
-            except Exception:
-                conn.rollback()
-                logger.error("Error clearing metadata for repo_id=%s", repo_id, exc_info=True)
-                deletion_errors.append("metadata DB")
-                raise
+                    # 5. Delete file snapshots (references files)
+                    if table_exists("file_snapshots"):
+                        cur.execute("DELETE FROM file_snapshots WHERE repo_id = ?", (repo_id,))
 
-        if deletion_errors:
-            logger.warning(
-                "Partial deletion for repo %s — failed to delete: %s. "
-                "Index may be inconsistent; consider a full reindex.",
-                repo_name,
-                ", ".join(deletion_errors),
-            )
+                    # 6. Delete files
+                    cur.execute("DELETE FROM files WHERE repo_id = ?", (repo_id,))
+
+                    # 7. Delete sessions
+                    cur.execute("DELETE FROM sessions WHERE repo_id = ?", (repo_id,))
+
+                    # 8. Delete pending changes
+                    if table_exists("pending_changes"):
+                        cur.execute("DELETE FROM pending_changes WHERE repo_id = ?", (repo_id,))
+
+                    conn.commit()
+                    logger.info("  Metadata cleared successfully")
+                except Exception:
+                    conn.rollback()
+                    logger.error("Error clearing metadata for repo_id=%s", repo_id, exc_info=True)
+                    deletion_errors.append("metadata DB")
+                    raise
+        finally:
+            if deletion_errors:
+                logger.warning(
+                    "Partial deletion for repo %s — failed to delete: %s. "
+                    "Index may be inconsistent; consider a full reindex.",
+                    repo_name,
+                    ", ".join(deletion_errors),
+                )
 
     def scan(self, repo_name: str, *, dry_run: bool = False, force: bool = False) -> dict:
         """Perform scanning for the named repository and persist file catalog.
