@@ -616,6 +616,7 @@ def _render_graph_context_rich(graph_ctx: dict[str, Any], renderables: list[Any]
             renderables.append(Text.from_markup("  " + "  ".join(parts)))
 
     if relationships:
+        renderables.append(Text.from_markup("[bold]Relationships[/bold]"))
         for rel in relationships:
             rtype = rel.get("type", "")
             direction = rel.get("direction", "")
@@ -623,10 +624,12 @@ def _render_graph_context_rich(graph_ctx: dict[str, Any], renderables: list[Any]
                 target: dict[str, Any] = rel.get("target") or {}
                 tname = target.get("qualified_name") or target.get("name", "")
                 arrow = "\u2192"
-            else:
+            elif direction == "incoming":
                 source: dict[str, Any] = rel.get("source") or {}
                 tname = source.get("qualified_name") or source.get("name", "")
                 arrow = "\u2190"
+            else:
+                continue
             line_num = rel.get("line_number")
             line_part = f" [dim]L{line_num}[/dim]" if line_num else ""
             markup = f"  [dim]{escape(str(rtype))}[/dim] {arrow} [bold]{escape(str(tname))}[/bold]{line_part}"
@@ -650,6 +653,7 @@ def _render_graph_context_plain(graph_ctx: dict[str, Any]) -> None:
             typer.echo(f"     {ntype} {qname}{sig_part}{line_part}")
 
     if relationships:
+        typer.echo("   Relationships:")
         for rel in relationships:
             rtype = rel.get("type", "")
             direction = rel.get("direction", "")
@@ -657,10 +661,12 @@ def _render_graph_context_plain(graph_ctx: dict[str, Any]) -> None:
                 target: dict[str, Any] = rel.get("target") or {}
                 tname = target.get("qualified_name") or target.get("name", "")
                 arrow = "->"
-            else:
+            elif direction == "incoming":
                 source: dict[str, Any] = rel.get("source") or {}
                 tname = source.get("qualified_name") or source.get("name", "")
                 arrow = "<-"
+            else:
+                continue
             line_num = rel.get("line_number")
             line_part = f" L{line_num}" if line_num else ""
             typer.echo(f"     {rtype} {arrow} {tname}{line_part}")
@@ -782,7 +788,7 @@ def _display_results(
 
         # Graph context (only present when --graph-context is used)
         graph_ctx = hit.get("graph_context")
-        if isinstance(graph_ctx, dict) and graph_ctx.get("nodes"):
+        if isinstance(graph_ctx, dict) and (graph_ctx.get("nodes") or graph_ctx.get("relationships")):
             renderables.append(Text(""))  # blank line separator
             _render_graph_context_rich(graph_ctx, renderables)
 
@@ -862,7 +868,8 @@ def _display_results_plain(
 
         # Graph context (only present when --graph-context is used)
         graph_ctx = hit.get("graph_context")
-        if isinstance(graph_ctx, dict) and graph_ctx.get("nodes"):
+        if isinstance(graph_ctx, dict) and (graph_ctx.get("nodes") or graph_ctx.get("relationships")):
+            typer.echo("")
             _render_graph_context_plain(graph_ctx)
 
     if not verbose:
