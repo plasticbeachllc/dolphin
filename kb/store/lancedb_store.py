@@ -141,7 +141,17 @@ class LanceDBStore:
             return
 
         try:
-            if table.count_rows() == 0:
+            row_count = table.count_rows()
+            # LanceDB PQ index training requires at least 256 rows.
+            # Skip index creation for small tables to avoid noisy errors;
+            # brute-force search is fast enough at this scale anyway.
+            if row_count < 256:
+                if row_count > 0:
+                    logger.debug(
+                        "Table '%s' has only %d rows (< 256); skipping vector index (brute-force is sufficient).",
+                        table_name,
+                        row_count,
+                    )
                 return
         except Exception:
             # If row count is unavailable, continue best-effort.
