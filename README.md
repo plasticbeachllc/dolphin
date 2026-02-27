@@ -39,11 +39,9 @@ Want live re-indexing as you edit files? Start the server:
 dolphin serve
 ```
 
-## Connect to your AI assistant (MCP)
+## Agent Integration
 
-Dolphin speaks [MCP](https://modelcontextprotocol.io/), so Claude Desktop, Continue.dev, and other MCP clients can search your code directly.
-
-Add this to your AI app's MCP config:
+A small companion MCP server is available at `bunx dolphin-mcp`. Add this to your AI app's MCP config:
 
 ```json
 {
@@ -57,6 +55,8 @@ Add this to your AI app's MCP config:
 ```
 
 Make sure `dolphin serve` is running, and your AI assistant can now search, retrieve chunks, and read files from your indexed repos.
+
+Additionally, a Claude skill is available for install from this repo.
 
 ## How it works
 
