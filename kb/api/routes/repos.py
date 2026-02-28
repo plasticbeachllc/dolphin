@@ -229,12 +229,8 @@ async def reindex_repo(repo_name: str, request: ReindexRequest, background_tasks
             task = task_queue.create_task(repo_name, all_files)
             logger.info(f"[Full Reindex] Created task {task.task_id} with {len(all_files)} files")
 
-            # If clear_existing is requested, trigger index drop
-            if request.clear_existing:
-                # This will be handled by the background task
-                pass
-
             # Queue background processing with full_reindex flag
+            # Note: clear_existing is forwarded to the background task via the kwarg below
             background_tasks.add_task(
                 _process_full_reindex_task,
                 task.task_id,

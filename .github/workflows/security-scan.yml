@@ -28,6 +28,7 @@ jobs:
         # - Impact: JSON parsing can be exploited to cause denial-of-service through uncontrolled recursion
         # - Reason for ignoring: We require OTLP support which depends on protobuf. No fix available yet from upstream.
         #   We accept this risk for the critical observability functionality provided by OTLP.
+        # TODO: re-enable when protobuf > 6.33.4 is available (track upstream fix)
         run: uv run pip-audit --local --skip-editable --progress-spinner=off --ignore-vuln CVE-2026-0994 --ignore-vuln GHSA-7gcm-g887-7qv7
 
 
