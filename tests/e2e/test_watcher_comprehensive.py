@@ -89,7 +89,6 @@ default_embed_model = "small"
         subprocess.run(
             [
                 "dolphin",
-                "kb",
                 "add-repo",
                 "test-repo",
                 str(git_repo),
@@ -259,7 +258,7 @@ provider = "stub"
 
         # 3. Add Repo
         subprocess.run(
-            ["dolphin", "kb", "add-repo", "test-repo", str(git_repo), "--no-index"],
+            ["dolphin", "add-repo", "test-repo", str(git_repo), "--no-index"],
             env=env,
             check=True,
             capture_output=True,

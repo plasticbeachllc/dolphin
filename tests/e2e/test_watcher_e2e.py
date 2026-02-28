@@ -69,7 +69,6 @@ default_embed_model = "small"
             "uv",
             "run",
             "dolphin",
-            "kb",
             "add-repo",
             "test-repo",
             str(git_repo),

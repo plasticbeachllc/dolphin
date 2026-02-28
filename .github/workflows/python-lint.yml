@@ -56,6 +56,6 @@ jobs:
             exit 0
           fi
           git commit -m "Python linting bot makes changes"
-          git pull --rebase origin ${{ github.event.pull_request.head.ref }} || true
+          git pull --rebase origin ${{ github.event.pull_request.head.ref }}
           git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
           git push origin ${{ github.event.pull_request.head.ref }}

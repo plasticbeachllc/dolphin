@@ -135,7 +135,7 @@ dolphin search "error handling" \
 Dolphin auto-creates its config at `~/.dolphin/config.toml` when you run `dolphin init`. The defaults work well out of the box.
 
 ```toml
-default_embed_model = "large"   # "small" (faster) or "large" (better)
+default_embed_model = "small"   # "small" (faster) or "large" (better)
 
 [retrieval]
 top_k = 8

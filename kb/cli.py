@@ -368,8 +368,7 @@ def _search_remote(
     include_graph_context: bool,
 ) -> tuple[list[dict[str, object]], dict[str, object], SQLiteMetadataStore | None] | None:
     """Search using remote API server. Returns None on connection failure."""
-    import requests
-    import requests.exceptions  # Import the exceptions module explicitly
+    import httpx
 
     from kb.api_key import load_kb_api_key
     from kb.config import load_config
@@ -405,7 +404,7 @@ def _search_remote(
             )
             raise typer.Exit(1)
 
-        response = requests.post(
+        response = httpx.post(
             endpoint,
             json=payload,
             headers={"X-API-Key": api_key},
@@ -424,9 +423,9 @@ def _search_remote(
         meta.setdefault("include_graph_context", include_graph_context)
         return list(hits), meta, None
 
-    except requests.exceptions.ConnectionError:
+    except httpx.ConnectError:
         return None
-    except requests.exceptions.RequestException as e:
+    except httpx.HTTPError as e:
         typer.echo(f"Error: Search request failed: {e}", err=True)
         raise typer.Exit(1)
 

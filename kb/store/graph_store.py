@@ -7,11 +7,14 @@ and cross-repository references.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import uuid
 from contextlib import closing
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class GraphStore:
@@ -45,8 +48,9 @@ class GraphStore:
         conn = sqlite3.connect(self.db_path, timeout=30)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("PRAGMA wal_autocheckpoint = 1000")
+        result = conn.execute("PRAGMA journal_mode = WAL").fetchone()
+        if result and result[0] != "wal":
+            logger.warning("Failed to enable WAL mode for graph store; got journal_mode=%s", result[0])
         # Wait up to 5 s on lock contention instead of failing immediately.
         conn.execute("PRAGMA busy_timeout = 5000")
         return conn
