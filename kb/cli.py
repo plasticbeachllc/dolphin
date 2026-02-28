@@ -97,9 +97,10 @@ def init(
 def add_repo(
     name: str = typer.Argument(..., help="Logical name for the repository."),
     path: Path = typer.Argument(..., help="Absolute path to the repository root."),
+    no_index: bool = typer.Option(False, "--no-index", help="Skip indexing prompt."),
 ) -> None:
     """Register or update a repository in the metadata store."""
-    kb_add_repo(name=name, path=path)
+    kb_add_repo(name=name, path=path, no_index=no_index)
 
 
 @app.command()

@@ -431,6 +431,10 @@ def _notify_server_reload(config: KBConfig) -> None:
         _log.debug("Could not load API key; skipping server notification.", exc_info=True)
         return
 
+    if not api_key:
+        _log.debug("No API key available; skipping server notification.")
+        return
+
     try:
         response = httpx.post(endpoint, headers={"X-API-Key": api_key}, timeout=2.0)
         if response.status_code == 200:
@@ -490,7 +494,7 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
         console.print("  [dim]Disabled (set reranking.enabled = true in config to enable)[/dim]")
     else:
         try:
-            from sentence_transformers import CrossEncoder as _CE  # noqa: F401  # ty: ignore[unresolved-import]
+            from sentence_transformers import CrossEncoder as _CE  # noqa: F401
 
             console.print(f"  [sea_green2]Enabled[/sea_green2] — model: {reranking_cfg.model}")
         except ImportError:
