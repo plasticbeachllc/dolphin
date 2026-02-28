@@ -40,8 +40,8 @@ async function rotateIfNeeded(): Promise<void> {
     if (await exists(src)) {
       try {
         await rename(src, dst);
-      } catch {
-        /* ignore */
+      } catch (err) {
+        process.stderr.write(`[log-rotate] rename ${src} -> ${dst} failed: ${err}\n`);
       }
     }
   }
@@ -50,8 +50,8 @@ async function rotateIfNeeded(): Promise<void> {
     if (await exists(LOG_FILE)) {
       await rename(LOG_FILE, `${LOG_FILE}.1`);
     }
-  } catch {
-    // ignore
+  } catch (err) {
+    process.stderr.write(`[log-rotate] rename ${LOG_FILE} -> ${LOG_FILE}.1 failed: ${err}\n`);
   }
 }
 

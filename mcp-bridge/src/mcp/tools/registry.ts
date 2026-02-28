@@ -1,4 +1,4 @@
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { ZodTypeAny } from "zod";
 import { makeSearchKnowledge } from "./search_knowledge.js";
 import { makeChunkGet } from "./chunk_get.js";
@@ -10,11 +10,12 @@ import { makeOpenRef } from "./open_ref.js";
 import { makeKbHealth } from "./kb_health.js";
 import { TOOL_VERSION } from "./version.js";
 
+export type ToolHandler = (args: unknown, signal?: AbortSignal) => Promise<CallToolResult>;
+
 export interface ToolRegistration {
   definition: Tool;
   inputSchema: ZodTypeAny;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  handler: any;
+  handler: ToolHandler;
   version: string;
 }
 

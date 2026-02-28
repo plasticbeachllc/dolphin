@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { tools } from "./tools/index.js";
+import { tools, type ToolHandler } from "./tools/index.js";
 import { initLogger, logInfo, logWarn } from "../util/logger.js";
 import { CONFIG, getConfigSummary, validateConfig } from "../util/config.js";
 
@@ -8,7 +8,7 @@ import { CONFIG, getConfigSummary, validateConfig } from "../util/config.js";
 interface ToolEntry {
   definition: { name: string; description?: string; annotations?: Record<string, unknown> };
   inputSchema?: Record<string, unknown>;
-  handler: (...args: unknown[]) => unknown;
+  handler: ToolHandler;
 }
 
 /** Dependency overrides for testing. All fields optional; defaults to real modules. */

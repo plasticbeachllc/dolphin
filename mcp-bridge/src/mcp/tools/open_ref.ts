@@ -1,4 +1,5 @@
 import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { ToolHandler } from "./registry.js";
 import { z } from "zod";
 import { restGetChunk, restGetFileSlice, KBClient } from "../../rest/client.js";
 import { mimeFromLangOrPath } from "../../util/mime.js";
@@ -28,8 +29,7 @@ const KB_URI_REGEX = /^kb:\/\/([^/]+)\/(.+)#L(\d+)-L(\d+)$/;
 export function makeOpenRef(client?: KBClient): {
   definition: Tool;
   inputSchema: typeof INPUT;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  handler: any;
+  handler: ToolHandler;
 } {
   const definition: Tool = {
     name: "open_ref",
