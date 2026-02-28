@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Logger Error Surfacing**: Log-write and log-rotation failures now emit to stderr instead of being silently swallowed.
 - **Test Rewrite**: Rewrote server integration tests to use DI instead of fragile `mock.module()` mocks.
 - **Tool Handler Type Safety**: Replaced `any` handler types across all tool registrations with a shared `ToolHandler` type, eliminating 8 eslint-disable directives.
-- **Config Cross-Validation**: Added `floor_exceeds_cap` and `cap_below_shrunk` diagnostics for inconsistent snippet size configurations.
+- **Config Cross-Validation**: Added `floor_exceeds_cap`, `floor_exceeds_shrunk_cap`, and `cap_below_shrunk` diagnostics to enforce `floor ≤ shrunk_cap ≤ cap` invariant for snippet size configurations.
 
 ### Fixed
 
@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- **`open_in_editor` Tool**: Deleted unregistered dead-code tool with path traversal vulnerability; functionality already covered by `buildVscodeFileUri()` in search result transforms.
+- **`open_in_editor` Tool**: Deleted unregistered dead-code tool (never wired into the tool registry) that constructed `vscode://file/` URIs from unsanitized paths; functionality already covered by `buildVscodeFileUri()` in search result transforms.
 
 ### Known Issues
 
