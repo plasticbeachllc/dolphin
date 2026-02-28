@@ -67,7 +67,9 @@ function buildFallbackSchema(schema: any): InternalJsonSchema {
     const values = def.entries ?? def.values;
     // entries may be an object { key: value } — extract values
     const enumValues =
-      values && typeof values === "object" && !Array.isArray(values) ? Object.values(values) : values;
+      values && typeof values === "object" && !Array.isArray(values)
+        ? Object.values(values)
+        : values;
     return { type: "string", enum: enumValues };
   }
 
