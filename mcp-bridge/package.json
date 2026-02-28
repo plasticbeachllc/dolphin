@@ -49,12 +49,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/plasticbeachllc/dolphin-mcp.git"
+    "url": "https://github.com/plasticbeachllc/dolphin.git"
   },
   "bugs": {
-    "url": "https://github.com/plasticbeachllc/dolphin-mcp/issues"
+    "url": "https://github.com/plasticbeachllc/dolphin/issues"
   },
-  "homepage": "https://github.com/plasticbeachllc/dolphin-mcp#readme",
+  "homepage": "https://github.com/plasticbeachllc/dolphin#readme",
   "license": "MIT",
   "engines": {
     "bun": ">=1.0.0"
