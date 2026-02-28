@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ReDoS Surface Reduction**: Forced `minimatch@10.2.2` via workspace override to remove known vulnerable minimatch ranges from the resolved graph.
 - **Audit Delta**: Reduced Bun audit findings from 11 advisories to 1 remaining advisory.
 - **Debug Comment Cleanup**: Removed stale `// DEBUG:` prefixes from snippet fetcher log calls.
+- **Floating Promise in `createServer()`**: Added missing `await` on final `logInfo` call to prevent dropped startup log entries on fast process exit.
 
 ### Removed
 
