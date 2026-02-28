@@ -38,7 +38,8 @@ function unwrapOptional(inner: ZodTypeAny): { schema: ZodTypeAny; optional: bool
 function isIntegerSchema(def: any): boolean {
   // z.int() — def itself has check: "number_format"
   if (def.check === "number_format") return true;
-  // z.number().int() — check is in the checks array
+  // z.number().int() — check is in the checks array.
+  // Most fragile introspection point: c._zod.def.check is 4 levels into private API.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (
     def.checks?.some((c: any) => c?._zod?.def?.check === "number_format" || c?.kind === "int") ??
@@ -74,6 +75,7 @@ function buildFallbackSchema(schema: any): InternalJsonSchema {
       values && typeof values === "object" && !Array.isArray(values)
         ? Object.values(values)
         : values;
+    if (!enumValues) return { type: "string" };
     return { type: "string", enum: enumValues };
   }
 
@@ -129,7 +131,8 @@ function convertZodToJsonSchema(schema: ZodTypeAny): any {
     // Cast to any to prevent TypeScript from evaluating the complex recursive generics
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return zodToJsonSchema(schema as any);
-  } catch {
+  } catch (e) {
+    console.error("[schema] zodToJsonSchema failed, using fallback:", e);
     return {};
   }
 }
