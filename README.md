@@ -164,7 +164,7 @@ Then in `~/.dolphin/config.toml`:
 enabled = true
 ```
 
-Trade-offs: ~2GB disk for model weights, 2-3x slower searches. Worth it for large codebases where precision matters.
+Trade-offs: ~2GB disk for model weights, 2-3x slower searches.
 
 ## Requirements
 
