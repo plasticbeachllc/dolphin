@@ -18,6 +18,7 @@ from kb.ingest._helpers import worker_ignore_sigint
 
 logger = logging.getLogger(__name__)
 
+
 # Try to import psutil for advanced resource monitoring
 try:
     import psutil

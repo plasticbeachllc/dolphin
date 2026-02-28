@@ -490,7 +490,7 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
         console.print("  [dim]Disabled (set reranking.enabled = true in config to enable)[/dim]")
     else:
         try:
-            from sentence_transformers import CrossEncoder as _CE  # noqa: F401
+            from sentence_transformers import CrossEncoder as _CE  # noqa: F401  # ty: ignore[unresolved-import]
 
             console.print(f"  [sea_green2]Enabled[/sea_green2] — model: {reranking_cfg.model}")
         except ImportError:

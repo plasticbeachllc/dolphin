@@ -87,19 +87,6 @@ mmr_enabled = false
 mmr_lambda = 0.7
 
 # ======================================================================
-# HYBRID SEARCH (BM25 + Vector Search)
-# ======================================================================
-[retrieval.hybrid_search]
-# Enable hybrid search combining lexical (BM25) and semantic (vector) search
-enabled = true
-
-# Fusion method for combining results: "rrf" (Reciprocal Rank Fusion)
-fusion_method = "rrf"
-
-# RRF constant (standard value is 60)
-fusion_k = 60
-
-# ======================================================================
 # ANN (Approximate Nearest Neighbor) PARAMETER TUNING
 # ======================================================================
 [retrieval.ann]
@@ -109,15 +96,6 @@ fusion_k = 60
 # - adaptive: Dynamically adjusts based on query type and dataset size
 # - custom: Use specific nprobes/refine_factor values
 strategy = "adaptive"
-
-# Distance metric for similarity: "cosine", "L2", or "dot"
-metric = "cosine"
-
-# Estimated dataset size for adaptive tuning
-estimated_dataset_size = 100000
-
-# Default query type for adaptive logic: "identifier", "concept", or "example"
-default_query_type = "concept"
 
 # ======================================================================
 # CROSS-ENCODER RERANKING
