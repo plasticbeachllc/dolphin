@@ -375,10 +375,9 @@ function attachZodIssues(
 ) {
   if (result.success) return;
   for (const issue of result.error.issues) {
-    const path = [basePath, ...issue.path].filter((x) => x !== undefined && x !== "") as (
-      | string
-      | number
-    )[];
+    const path = [basePath, ...issue.path].filter(
+      (x): x is string | number => (typeof x === "string" ? x !== "" : typeof x === "number")
+    );
     if (issue.code === "unrecognized_keys") {
       addDiagnostic(diagnostics, {
         level: "warn",

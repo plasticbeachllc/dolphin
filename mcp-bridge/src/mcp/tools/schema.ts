@@ -15,11 +15,11 @@ interface InternalJsonSchema {
   [key: string]: unknown;
 }
 
-// Zod v4 internal API access — verified against zod@4.3.6.
-// v4 stores schema definitions at schema._zod.def; v3 used schema._def.
+// Zod v4 internal API access — verified against zod@4.3.6 (v4-only).
+// v4 stores schema definitions at schema._zod.def.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getZodDef(schema: any): any {
-  return schema?._zod?.def ?? schema?._def;
+  return schema?._zod?.def;
 }
 
 function unwrapOptional(inner: ZodTypeAny): { schema: ZodTypeAny; optional: boolean } {
@@ -76,7 +76,11 @@ function buildFallbackSchema(schema: any): InternalJsonSchema {
         ? Object.values(values)
         : values;
     if (!enumValues) return { type: "string" };
-    return { type: "string", enum: enumValues };
+    // Filter to strings only — numeric/mixed enums are not representable as JSON Schema string enums
+    const stringValues = (Array.isArray(enumValues) ? enumValues : []).filter(
+      (v): v is string => typeof v === "string"
+    );
+    return stringValues.length > 0 ? { type: "string", enum: stringValues } : { type: "string" };
   }
 
   if (typeName === "array") {
