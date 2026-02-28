@@ -109,17 +109,17 @@ Additionally, a Claude skill is available in this repo's marketplace as a person
 
 Dolphin uses language-aware AST chunkers for the best possible search quality. Files in other recognized languages fall back to token-window chunking, and completely unknown extensions use a generic text chunker.
 
-| Language              | Extensions                         | Chunker     |
-| --------------------- | ---------------------------------- | ----------- |
-| Python                | `.py`, `.pyw`, `.pyi`              | AST         |
-| TypeScript            | `.ts`, `.tsx`                      | AST         |
-| JavaScript            | `.js`, `.jsx`, `.mjs`, `.cjs`      | AST         |
-| Markdown              | `.md`, `.markdown`                 | AST         |
-| SQL                   | `.sql`                             | AST         |
-| Svelte                | `.svelte`                          | AST         |
-| Go, Rust, Java, C/C++ | `.go`, `.rs`, `.java`, `.c`, `.cpp` | Token-window |
-| Ruby, PHP, C#, Swift, Kotlin | `.rb`, `.php`, `.cs`, `.swift`, `.kt` | Token-window |
-| Shell                 | `.sh`, `.bash`, `.zsh`             | Token-window |
+| Language                       | Extensions                                | Chunker      |
+| ------------------------------ | ----------------------------------------- | ------------ |
+| Python                         | `.py`, `.pyw`, `.pyi`                     | AST          |
+| TypeScript                     | `.ts`, `.tsx`                             | AST          |
+| JavaScript                     | `.js`, `.jsx`, `.mjs`, `.cjs`             | AST          |
+| Markdown                       | `.md`, `.markdown`                        | AST          |
+| SQL                            | `.sql`                                    | AST          |
+| Svelte                         | `.svelte`                                 | AST          |
+| Go, Rust, Java, C/C++          | `.go`, `.rs`, `.java`, `.c`, `.cpp`       | Token-window |
+| Ruby, PHP, C#, Swift, Kotlin   | `.rb`, `.php`, `.cs`, `.swift`, `.kt`     | Token-window |
+| Shell                          | `.sh`, `.bash`, `.zsh`                    | Token-window |
 | Config (JSON, YAML, TOML, XML) | `.json`, `.yaml`, `.yml`, `.toml`, `.xml` | Token-window |
 
 You can customize extension mappings in `~/.dolphin/config.toml` under the `[languages]` section.
