@@ -211,7 +211,7 @@ class HybridSearchValidator:
             targets_met.append("❌ Precision improvement target missed")
             print("❌ Precision improvement target missed (< 20%)")
 
-        validation_results["targets"]["targets_met"] = targets_met  # type: ignore[index]
+        validation_results["targets"]["targets_met"] = targets_met
 
         if all(
             [

@@ -242,6 +242,7 @@ class TestTypeScriptChunker:
                 method_chunk = method_chunks[0]
                 # Symbol path should reflect the hierarchy
                 # Current implementation may only show immediate parent
+                assert method_chunk.symbol_path is not None
                 assert "OuterClass" in method_chunk.symbol_path
                 assert "innerMethod" in method_chunk.symbol_path
 
@@ -249,5 +250,6 @@ class TestTypeScriptChunker:
                 function_chunk = function_chunks[0]
                 # Symbol path should reflect namespace hierarchy
                 # Current implementation may not include full namespace path
+                assert function_chunk.symbol_path is not None
                 assert "nestedFunction" in function_chunk.symbol_path
                 # Outer and Inner namespaces may not be included in current implementation
