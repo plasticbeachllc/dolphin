@@ -2,7 +2,7 @@
 
 ## Threat Model
 
-Dolphin currently runs **local-only** — the API server, MCP bridge, and storage all live on the developer's machine. There is no network-facing attack surface today.
+Dolphin currently runs **local-only** — the API server, MCP bridge, and storage all live on the developer's machine. The API server and MCP bridge listen on localhost sockets, so while there is no remote attack surface, they are still reachable by local processes and potentially vulnerable to DNS rebinding or CSRF from malicious web pages. Both should bind to `127.0.0.1` only.
 
 The primary risk is **path traversal**: MCP clients and CLI users submit file paths that could escape the workspace root. All other input validation follows from this.
 
@@ -11,6 +11,17 @@ The primary risk is **path traversal**: MCP clients and CLI users submit file pa
 ---
 
 ## Path Traversal Protection
+
+### Why a dedicated validator
+
+Simple `../` checks are insufficient. Attackers bypass naive filters with:
+
+- **URL encoding / double encoding:** `%2e%2e/`, `%252e%252e/`
+- **Null byte injection:** `file.txt\0.jpg` truncates the path at the null byte
+- **Unicode homoglyphs:** visually identical dot characters (`\u2024`) that evade string matching
+- **UNC / Windows paths:** `\\server\share\file`, `..\..\..\`
+
+`PathValidator` normalizes and resolves all of these before checking containment.
 
 ### PathValidator
 
@@ -51,7 +62,9 @@ Hardcoded paths and bundled templates do **not** need validation.
 
 ---
 
-## Developer Checklist
+## Checklists
+
+### For developers
 
 Before submitting code that touches file paths:
 
@@ -60,6 +73,14 @@ Before submitting code that touches file paths:
 - [ ] `PathValidationError` is caught and logged (without leaking full paths)
 - [ ] No path construction via string concatenation with user input
 - [ ] Run `python scripts/security-pentest.py` locally (27 tests covering basic traversal, URL encoding, null bytes, unicode homoglyphs, absolute/UNC paths, and edge cases)
+
+### For reviewers
+
+Apply the same checklist above when reviewing PRs that touch file handling. Additionally:
+
+- [ ] No new file operations bypass `PathValidator` for user-supplied paths
+- [ ] Error messages do not expose absolute paths or directory structure
+- [ ] New functionality has corresponding security test coverage
 
 ---
 
@@ -78,4 +99,6 @@ PRs are blocked until vulnerabilities are resolved.
 
 - [OWASP Path Traversal](https://owasp.org/www-community/attacks/Path_Traversal)
 - [CWE-22: Improper Limitation of a Pathname](https://cwe.mitre.org/data/definitions/22.html)
+- PathValidator (TypeScript): `shared/security/path-validator.ts`
+- PathValidator (Python): `kb/security/path_validator.py`
 - Penetration tests: `scripts/security-pentest.py`
