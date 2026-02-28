@@ -1,4 +1,5 @@
 import type { Tool, CallToolResult, TextContent } from "@modelcontextprotocol/sdk/types.js";
+import type { ToolHandler } from "./registry.js";
 import { CONFIG } from "../../util/config.js";
 import { mimeFromLangOrPath } from "../../util/mime.js";
 import { logInfo, logError } from "../../util/logger.js";
@@ -27,8 +28,7 @@ import { normalizeToolError, formatToolErrorText } from "./error.js";
 export function makeSearchKnowledge(): {
   definition: Tool;
   inputSchema: typeof SEARCH_INPUT;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  handler: any;
+  handler: ToolHandler;
 } {
   const definition: Tool = {
     name: "search",

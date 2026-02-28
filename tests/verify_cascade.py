@@ -40,6 +40,7 @@ with Session(engine) as session:
     session.commit()
     session.refresh(repo)
 
+    assert repo.id is not None
     file = File(repo_id=repo.id, path="test.py")
     session.add(file)
     session.commit()

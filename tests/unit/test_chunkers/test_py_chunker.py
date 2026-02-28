@@ -198,6 +198,7 @@ class OuterClass:
                 method_chunk = method_chunks[0]
                 # Symbol path should reflect the hierarchy
                 # Note: Current implementation may only show immediate parent class
+                assert method_chunk.symbol_path is not None
                 assert "InnerClass" in method_chunk.symbol_path
                 assert "nested_method" in method_chunk.symbol_path
                 # OuterClass may not be included in current symbol path implementation

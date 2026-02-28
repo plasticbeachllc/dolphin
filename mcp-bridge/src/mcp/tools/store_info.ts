@@ -1,4 +1,5 @@
 import type { Tool, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { ToolHandler } from "./registry.js";
 import { z } from "zod";
 import { restListRepos, KBClient } from "../../rest/client.js";
 import { logInfo, logError } from "../../util/logger.js";
@@ -13,8 +14,7 @@ const INPUT_SCHEMA = buildToolInputSchema(INPUT);
 export function makeStoreInfo(client?: KBClient): {
   definition: Tool;
   inputSchema: typeof INPUT;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  handler: any;
+  handler: ToolHandler;
 } {
   const definition: Tool = {
     name: "store_info",

@@ -229,5 +229,8 @@ known-first-party = ["kb"]
 combine-as-imports = true
 split-on-trailing-comma = false
 
+[tool.ty.analysis]
+allowed-unresolved-imports = ["sentence_transformers.**"]
+
 [tool.ty.environment]
 python-version = "3.12"

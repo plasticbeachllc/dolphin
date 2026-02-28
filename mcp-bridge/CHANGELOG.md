@@ -11,8 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Server Dependency Injection**: `createServer()` now accepts an optional `CreateServerDeps` parameter for config, logger, transport, and tools, enabling clean unit testing without `mock.module()`.
 - **Malformed Tool Guard**: Tool registration skips entries with missing `name` or non-function `handler` and logs a warning instead of crashing.
-- **Logger Error Surfacing**: Log-write failures now emit to stderr instead of being silently swallowed.
+- **Logger Error Surfacing**: Log-write and log-rotation failures now emit to stderr instead of being silently swallowed.
 - **Test Rewrite**: Rewrote server integration tests to use DI instead of fragile `mock.module()` mocks.
+- **Tool Handler Type Safety**: Replaced `any` handler types across all tool registrations with a shared `ToolHandler` type, eliminating 8 eslint-disable directives.
+- **Config Cross-Validation**: Added `floor_exceeds_cap`, `floor_exceeds_shrunk_cap`, and `cap_below_shrunk` diagnostics to enforce `floor ≤ shrunk_cap ≤ cap` invariant for snippet size configurations.
 
 ### Fixed
 
@@ -20,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ReDoS Surface Reduction**: Forced `minimatch@10.2.2` via workspace override to remove known vulnerable minimatch ranges from the resolved graph.
 - **Audit Delta**: Reduced Bun audit findings from 11 advisories to 1 remaining advisory.
 - **Debug Comment Cleanup**: Removed stale `// DEBUG:` prefixes from snippet fetcher log calls.
+- **Floating Promise in `createServer()`**: Added missing `await` on final `logInfo` call to prevent dropped startup log entries on fast process exit.
+
+### Removed
+
+- **`open_in_editor` Tool**: Deleted unregistered dead-code tool (never wired into the tool registry) that constructed `vscode://file/` URIs from unsanitized paths; functionality already covered by `buildVscodeFileUri()` in search result transforms.
 
 ### Known Issues
 

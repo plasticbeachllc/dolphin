@@ -91,12 +91,7 @@ def chunk_source(
     try:
         source_bytes = source.encode("utf-8")
         parser = _get_parser(lang_key)
-        # Robust parse invocation (align with py_chunker)
-        parse_fn = getattr(parser, "parse", None)
-        if callable(parse_fn):
-            tree = parse_fn(source_bytes)
-        else:
-            tree = parser.parse_bytes(source_bytes)
+        tree = parser.parse(source_bytes)
         root = tree.root_node
     except Exception as e:  # noqa: BLE001
         _log.warning(
@@ -526,11 +521,7 @@ def extract_graph_data(source: str, *, lang: str = "typescript") -> tuple[list[G
     try:
         source_bytes = source.encode("utf-8")
         parser = _get_parser(lang_key)
-        parse_fn = getattr(parser, "parse", None)
-        if callable(parse_fn):
-            tree = parse_fn(source_bytes)
-        else:
-            tree = parser.parse_bytes(source_bytes)
+        tree = parser.parse(source_bytes)
         root = tree.root_node
     except Exception as e:  # noqa: BLE001
         _log.warning("Tree-sitter parse failed for graph extraction: %s", e)

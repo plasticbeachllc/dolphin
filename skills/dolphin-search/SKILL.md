@@ -36,8 +36,9 @@ uv run dolphin search "your query" --json [options]
 | `--max-snippets N`                   | Include content for top N hits                            | 0         |
 | `--context-before N`                 | Context lines before match                                | 0         |
 | `--context-after N`                  | Context lines after match                                 | 0         |
-| `--graph-context`                    | Include knowledge graph context                           | off       |
-| `--local` / `-l`                     | Search without API server (slower startup)                | remote    |
+| `--graph-context`                    | Include knowledge graph relationships and entities        | off       |
+| `--show-content` / `--verbose`       | Enrich results with code snippets (local and remote)      | off       |
+| `--local` / `-l`                     | Force local search (rarely needed — auto-fallback exists) | remote    |
 | `--json`                             | Machine-readable JSON output                              | off       |
 
 **Always use `--json` when calling from this skill** so results are structured.
@@ -56,6 +57,9 @@ uv run dolphin search "error handling" --json --max-snippets 3 --context-before 
 
 # Exclude test files
 uv run dolphin search "caching logic" --json -x "*.test.*" -x "tests/*"
+
+# With graph context (shows imports, calls, type relationships)
+uv run dolphin search "search backend" --json --graph-context -k 5
 ```
 
 ### Get a Chunk by ID
@@ -115,7 +119,10 @@ Use chunk IDs from search results to fetch full chunk content.
 
 ## Troubleshooting
 
-If remote search fails with a connection error, either:
+Search auto-falls back to local mode when the API server is unavailable, so most queries work without a running server. If you need to start the server explicitly:
 
-1. Start the server: `uv run dolphin serve`
-2. Or use local mode: add `--local` flag (slower but needs no server)
+```bash
+uv run dolphin serve
+```
+
+Use `--local` to force local-only search (bypasses the server entirely, slower startup).

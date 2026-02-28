@@ -980,6 +980,48 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ConfigLoadResu
     });
   }
 
+  if (minSnippetFloorResolved.value > snippetCharCapResolved.value) {
+    addDiagnostic(diagnostics, {
+      level: "warn",
+      code: "floor_exceeds_cap",
+      message: "min_snippet_char_floor exceeds snippet_char_cap",
+      path: "mcp.response.min_snippet_char_floor",
+      source: minSnippetFloorResolved.source,
+      details: {
+        min_floor: minSnippetFloorResolved.value,
+        snippet_cap: snippetCharCapResolved.value,
+      },
+    });
+  }
+
+  if (minSnippetFloorResolved.value > shrunkSnippetCharCap) {
+    addDiagnostic(diagnostics, {
+      level: "warn",
+      code: "floor_exceeds_shrunk_cap",
+      message: "min_snippet_char_floor exceeds shrunk_snippet_char_cap",
+      path: "mcp.response.min_snippet_char_floor",
+      source: minSnippetFloorResolved.source,
+      details: {
+        min_floor: minSnippetFloorResolved.value,
+        shrunk_cap: shrunkSnippetCharCap,
+      },
+    });
+  }
+
+  if (snippetCharCapResolved.value < shrunkSnippetCharCap) {
+    addDiagnostic(diagnostics, {
+      level: "warn",
+      code: "cap_below_shrunk",
+      message: "snippet_char_cap is less than shrunk_snippet_char_cap",
+      path: "mcp.limits.snippet_char_cap",
+      source: snippetCharCapResolved.source,
+      details: {
+        snippet_cap: snippetCharCapResolved.value,
+        shrunk_cap: shrunkSnippetCharCap,
+      },
+    });
+  }
+
   const topKDefaultResolved = resolveValue(
     mcpEnv.search?.top_k_default,
     mcpToml.search?.top_k_default,
