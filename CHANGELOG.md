@@ -33,9 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CORS Origins**: Now configurable via `ApiConfig.cors_origins` instead of hardcoded.
 - **Uvicorn Reload**: Gated behind `DOLPHIN_DEV_MODE` env var (previously always enabled).
 - **Noisy Log Suppression**: CLI search suppresses INFO-level structured logs unless `DOLPHIN_LOG_LEVEL` is explicitly set.
+- **Thread Safety & Timeouts**: Added timeout protections to `ThreadPoolExecutor` futures and subprocess calls; thread-safe AST cache with locks (#195).
 
 ### Fixed
 
+- **Graph Context Rendering**: `--graph-context` now renders relationship and entity information in CLI search output; previously silently dropped (#203).
+- **Reranker Model-Load Noise**: Suppress safetensors and httpx logging during cross-encoder reranker initialization for cleaner startup (#204).
+- **Worktree Indexing Prevention**: Added `.claude/worktrees` to built-in ignore patterns to prevent git worktree copies from being indexed (#205).
 - **Ctrl-C Shutdown**: Suppress SIGINT in worker processes to prevent traceback spam (#182); cancel ingestion pipeline (#183) and `process_deletions` (#184) on server shutdown.
 - **Typer.Exit Traceback**: Replaced `typer.Exit()` with `sys.exit()` in `main()` to avoid visible traceback on normal exit (#189).
 - **Config Missing Error**: Clean user-facing error when config file is absent instead of unhandled exception (#188).

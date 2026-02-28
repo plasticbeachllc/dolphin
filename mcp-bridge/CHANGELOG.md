@@ -5,13 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.4] - 2026-02-27
+
+### Changed
+
+- **Server Dependency Injection**: `createServer()` now accepts an optional `CreateServerDeps` parameter for config, logger, transport, and tools, enabling clean unit testing without `mock.module()`.
+- **Malformed Tool Guard**: Tool registration skips entries with missing `name` or non-function `handler` and logs a warning instead of crashing.
+- **Logger Error Surfacing**: Log-write failures now emit to stderr instead of being silently swallowed.
+- **Test Rewrite**: Rewrote server integration tests to use DI instead of fragile `mock.module()` mocks.
 
 ### Fixed
 
 - **Dependency Security Hardening**: Added root-workspace transitive overrides for MCP runtime dependency paths so SDK-adjacent advisories resolve to patched versions (`ajv@8.18.0`, `body-parser@2.2.2`, `qs@6.15.0`, `hono@4.12.0`).
 - **ReDoS Surface Reduction**: Forced `minimatch@10.2.2` via workspace override to remove known vulnerable minimatch ranges from the resolved graph.
 - **Audit Delta**: Reduced Bun audit findings from 11 advisories to 1 remaining advisory.
+- **Debug Comment Cleanup**: Removed stale `// DEBUG:` prefixes from snippet fetcher log calls.
 
 ### Known Issues
 
