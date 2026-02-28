@@ -369,13 +369,13 @@ function pathToString(path: (string | number)[]): string {
 
 function attachZodIssues(
   diagnostics: ConfigDiagnostic[],
-  result: z.SafeParseReturnType<unknown, unknown>,
+  result: z.ZodSafeParseResult<unknown>,
   source: ConfigSource,
   basePath: string
 ) {
   if (result.success) return;
   for (const issue of result.error.issues) {
-    const path = [basePath, ...issue.path].filter(Boolean);
+    const path = [basePath, ...issue.path].filter(Boolean) as (string | number)[];
     if (issue.code === "unrecognized_keys") {
       addDiagnostic(diagnostics, {
         level: "warn",
