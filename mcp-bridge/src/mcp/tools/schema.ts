@@ -15,6 +15,8 @@ interface InternalJsonSchema {
   [key: string]: unknown;
 }
 
+// Zod v4 internal API access — verified against zod@4.3.6.
+// v4 stores schema definitions at schema._zod.def; v3 used schema._def.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getZodDef(schema: any): any {
   return schema?._zod?.def ?? schema?._def;
@@ -24,12 +26,21 @@ function unwrapOptional(inner: ZodTypeAny): { schema: ZodTypeAny; optional: bool
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let current: any = inner;
   let optional = false;
-  const def = () => getZodDef(current);
-  while (def()?.type === "optional" || def()?.type === "default") {
+  let d;
+  while ((d = getZodDef(current))?.type === "optional" || d?.type === "default") {
     optional = true;
-    current = def().innerType;
+    current = d.innerType;
   }
   return { schema: current, optional };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function isIntegerSchema(def: any): boolean {
+  // z.int() — def itself has check: "number_format"
+  if (def.check === "number_format") return true;
+  // z.number().int() — check is in the checks array
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return def.checks?.some((c: any) => c?._zod?.def?.check === "number_format" || c?.kind === "int") ?? false;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,17 +56,7 @@ function buildFallbackSchema(schema: any): InternalJsonSchema {
   }
 
   if (typeName === "number") {
-    // In Zod v4, .int() adds a "number_format" check; detect via checks
-    const isInt = def.checks?.some(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (check: any) => (check?._zod?.def?.check ?? check?.check ?? check?.kind) === "number_format"
-    );
-    return { type: isInt ? "integer" : "number" };
-  }
-
-  // z.int() in Zod v4 creates a schema with def.type === "int"
-  if (typeName === "int") {
-    return { type: "integer" };
+    return { type: isIntegerSchema(def) ? "integer" : "number" };
   }
 
   if (typeName === "boolean") {
@@ -121,9 +122,13 @@ function buildFallbackSchema(schema: any): InternalJsonSchema {
 // Helper to isolate type-heavy zodToJsonSchema call
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function convertZodToJsonSchema(schema: ZodTypeAny): any {
-  // Cast to any to prevent TypeScript from evaluating the complex recursive generics
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return zodToJsonSchema(schema as any);
+  try {
+    // Cast to any to prevent TypeScript from evaluating the complex recursive generics
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return zodToJsonSchema(schema as any);
+  } catch {
+    return {};
+  }
 }
 
 type ExtendedJsonSchema = InternalJsonSchema & {
