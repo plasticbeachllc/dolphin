@@ -55,7 +55,7 @@ A small companion MCP server is available at `bunx dolphin-mcp`. Add this to you
 
 Make sure `dolphin serve` is running, and your agent can now search, retrieve chunks, and read files from your indexed repos.
 
-Additionally, a Claude skill is available for install from this repo.
+Additionally, a Claude skill is available in this repo's marketplace as a personal Plugin.
 
 ## How it works
 
