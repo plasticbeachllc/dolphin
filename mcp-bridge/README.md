@@ -54,16 +54,16 @@ dolphin-mcp doctor            # connectivity & config checks
 
 All tools return MCP `content` blocks with `_meta` (tool_version, latency_ms, warnings). Errors set `isError: true`.
 
-| Tool            | Description                                              |
-| --------------- | -------------------------------------------------------- |
-| `search`        | Semantic search across indexed repos (ranked candidates) |
-| `chunk.get`     | Fetch chunk content by ID                                |
-| `metadata.get`  | Fetch chunk metadata without content                     |
-| `file.lines`    | Fetch a file slice [start, end] from disk                |
-| `store.info`    | Report namespaces, dims, limits, counts                  |
-| `open_ref`      | Open a `kb://` URI or chunk_id                           |
-| `repos.list`    | List indexed repos with paths and counts                 |
-| `health`        | Check KB API health (shallow or deep)                    |
+| Tool           | Description                                              |
+| -------------- | -------------------------------------------------------- |
+| `search`       | Semantic search across indexed repos (ranked candidates) |
+| `chunk.get`    | Fetch chunk content by ID                                |
+| `metadata.get` | Fetch chunk metadata without content                     |
+| `file.lines`   | Fetch a file slice [start, end] from disk                |
+| `store.info`   | Report namespaces, dims, limits, counts                  |
+| `open_ref`     | Open a `kb://` URI or chunk_id                           |
+| `repos.list`   | List indexed repos with paths and counts                 |
+| `health`       | Check KB API health (shallow or deep)                    |
 
 ### `search`
 
