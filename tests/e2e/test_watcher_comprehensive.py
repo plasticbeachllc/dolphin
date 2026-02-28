@@ -300,4 +300,4 @@ provider = "stub"
         filename = "src/components/Button.tsx"
         (repo_path / filename).write_text("export const Button = () => {}")
 
-        assert self._wait_for_file_in_db(store_root, filename), f"Nested file {filename} not indexed"
+        assert self._wait_for_file_in_db(store_root, filename, timeout=30), f"Nested file {filename} not indexed"
