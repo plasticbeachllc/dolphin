@@ -40,7 +40,10 @@ function isIntegerSchema(def: any): boolean {
   if (def.check === "number_format") return true;
   // z.number().int() — check is in the checks array
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return def.checks?.some((c: any) => c?._zod?.def?.check === "number_format" || c?.kind === "int") ?? false;
+  return (
+    def.checks?.some((c: any) => c?._zod?.def?.check === "number_format" || c?.kind === "int") ??
+    false
+  );
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
