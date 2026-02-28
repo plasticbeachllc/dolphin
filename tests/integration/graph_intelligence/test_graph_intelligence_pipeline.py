@@ -43,6 +43,12 @@ def temp_repo():
         check=True,
         capture_output=True,
     )
+    subprocess.run(
+        ["git", "config", "commit.gpgsign", "false"],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+    )
 
     # Create Python files with functions and calls
     main_py = repo_path / "main.py"
@@ -376,6 +382,12 @@ class TestEdgeCases:
         )
         subprocess.run(
             ["git", "config", "user.name", "Test User"],
+            cwd=empty_repo,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "commit.gpgsign", "false"],
             cwd=empty_repo,
             check=True,
             capture_output=True,

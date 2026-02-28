@@ -90,7 +90,7 @@ bun run --hot src/index.ts
 ### 7. Run Indexing (optional)
 
 ```bash
-uv run dolphin kb index <repo-name>
+uv run dolphin index <repo-name>
 ```
 
 ## Configuration

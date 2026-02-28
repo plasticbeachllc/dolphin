@@ -16,12 +16,6 @@ store_root = "~/.dolphin/knowledge_store"
 endpoint = "127.0.0.1:7777"
 
 # ======================================================================
-# COST CONTROL
-# ======================================================================
-# Maximum USD spending per indexing session to prevent runaway costs
-per_session_spend_cap_usd = 10.0
-
-# ======================================================================
 # EMBEDDING CONFIGURATION
 # ======================================================================
 # Note: Section name is "embedding" (singular), not "embeddings"
@@ -30,7 +24,7 @@ per_session_spend_cap_usd = 10.0
 provider = "openai"
 
 # Default embedding model: "small" (1536-dim) or "large" (3072-dim)
-default_embed_model = "large"
+default_embed_model = "small"
 
 # Number of texts to embed per API call
 batch_size = 100
@@ -42,8 +36,12 @@ api_key_env = "OPENAI_API_KEY"
 concurrency = 3
 
 # ======================================================================
-# IGNORE PATTERNS
+# INDEXING
 # ======================================================================
+[indexing]
+# Maximum USD spending per indexing session to prevent runaway costs
+per_session_spend_cap_usd = 10.0
+
 # Files and directories to ignore during indexing (gitignore-style glob patterns)
 ignore = [
     ".git/",
@@ -59,6 +57,8 @@ ignore = [
     "*.db",
     "*.sqlite",
     "*.sqlite3",
+    ".gitignore",
+    ".claude/worktrees/",
 ]
 
 # Exceptions to ignore patterns - files matching these will NOT be ignored

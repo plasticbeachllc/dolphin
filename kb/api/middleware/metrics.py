@@ -3,6 +3,7 @@ Prometheus metrics middleware for FastAPI.
 Instruments all endpoints with essential metrics for debugging and latency monitoring.
 """
 
+import platform
 import time
 from collections.abc import Callable
 
@@ -81,7 +82,18 @@ indexed_chunks_total = Gauge("kb_indexed_chunks_total", "Total number of indexed
 
 # System info
 kb_info = Info("kb_api", "Knowledge Bank API information")
-kb_info.info({"version": "0.2.0", "python_version": "3.12"})
+
+
+def _get_app_version() -> str:
+    try:
+        from importlib.metadata import PackageNotFoundError, version as _pkg_version
+
+        return _pkg_version("pb-dolphin")
+    except PackageNotFoundError:
+        return "dev"
+
+
+kb_info.info({"version": _get_app_version(), "python_version": platform.python_version()})
 
 # ============================================================================
 # Middleware

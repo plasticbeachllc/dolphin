@@ -8,21 +8,19 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, TypedDict
 
 import typer
 import uvicorn
 
-# Import kb CLI functions for top-level commands
-# Import subcommand apps
 from kb.api_key import get_or_create_kb_api_key
-from kb.config import load_config
+from kb.config import ConfigNotFoundError, load_config
 from kb.ingest.cli import (
     add_repo as kb_add_repo,
-    app as kb_app,
     index as kb_index,
     init as kb_init,
     list_files as kb_list_files,
@@ -68,10 +66,6 @@ def dolphin_callback(
     version_callback(version)
 
 
-# Add subcommand apps
-app.add_typer(kb_app, name="kb", help="Knowledge base management commands")
-
-
 _log = StructuredLogger("kb.cli", {"component": "dolphin_cli"})
 MAX_SNIPPET_LINES_DISPLAY = 8
 
@@ -103,9 +97,10 @@ def init(
 def add_repo(
     name: str = typer.Argument(..., help="Logical name for the repository."),
     path: Path = typer.Argument(..., help="Absolute path to the repository root."),
+    no_index: bool = typer.Option(False, "--no-index", help="Skip indexing prompt."),
 ) -> None:
     """Register or update a repository in the metadata store."""
-    kb_add_repo(name=name, path=path)
+    kb_add_repo(name=name, path=path, no_index=no_index)
 
 
 @app.command()
@@ -155,6 +150,22 @@ def list_files(
     kb_list_files(name)
 
 
+class _SearchArgs(TypedDict):
+    """Shared keyword arguments for local and remote search functions."""
+
+    query: str
+    repos: list[str] | None
+    path_prefix: list[str] | None
+    exclude_paths: list[str] | None
+    exclude_patterns: list[str] | None
+    top_k: int
+    score_cutoff: float
+    max_snippets: int
+    context_before: int
+    context_after: int
+    include_graph_context: bool
+
+
 @app.command()
 def search(
     query: str = typer.Argument(..., help="Search query."),
@@ -202,34 +213,31 @@ def search(
     if snippet_limit <= 0 and (show_content or verbose):
         snippet_limit = min(top_k, 3)
 
-    if local:
-        hits, meta, sql_store = _search_local(
-            query=query,
-            repos=repos,
-            path_prefix=path_prefix,
-            exclude_paths=exclude_paths,
-            exclude_patterns=exclude_patterns,
-            top_k=request_top_k,
-            score_cutoff=score_cutoff,
-            max_snippets=snippet_limit,
-            context_before=context_before,
-            context_after=context_after,
-            include_graph_context=include_graph_context,
-        )
+    _common_search_args: _SearchArgs = {
+        "query": query,
+        "repos": repos,
+        "path_prefix": path_prefix,
+        "exclude_paths": exclude_paths,
+        "exclude_patterns": exclude_patterns,
+        "top_k": request_top_k,
+        "score_cutoff": score_cutoff,
+        "max_snippets": snippet_limit,
+        "context_before": context_before,
+        "context_after": context_after,
+        "include_graph_context": include_graph_context,
+    }
+
+    result: tuple[list[dict[str, object]], dict[str, object], SQLiteMetadataStore | None] | None = None
+
+    if not local:
+        result = _search_remote(**_common_search_args)
+        if result is None:
+            _log.debug("Server unavailable, falling back to local search")
+
+    if local or result is None:
+        hits, meta, sql_store = _search_local(**_common_search_args)
     else:
-        hits, meta, sql_store = _search_remote(
-            query=query,
-            repos=repos,
-            path_prefix=path_prefix,
-            exclude_paths=exclude_paths,
-            exclude_patterns=exclude_patterns,
-            top_k=request_top_k,
-            score_cutoff=score_cutoff,
-            max_snippets=snippet_limit,
-            context_before=context_before,
-            context_after=context_after,
-            include_graph_context=include_graph_context,
-        )
+        hits, meta, sql_store = result
 
     if normalized_langs:
         hits = _apply_language_filter(hits, normalized_langs)
@@ -295,6 +303,13 @@ def _search_local(
             hybrid_search_enabled=True,
         )
 
+        # Suppress verbose structured logs from the search backend in CLI mode
+        # unless the user explicitly opted into a log level via DOLPHIN_LOG_LEVEL.
+        # We set the level on the stdlib logger directly (backend.logger.logger)
+        # after creation, which overrides the default INFO that StructuredLogger sets.
+        if not os.environ.get("DOLPHIN_LOG_LEVEL", "").strip():
+            backend.logger.logger.setLevel(logging.WARNING)
+
         # Create search request
         request = SearchRequest(
             query=query,
@@ -313,6 +328,16 @@ def _search_local(
         # Execute search
         hits, next_cursor = backend.search(request)
         result_hits = list(hits)
+
+        # Enrich hits with snippets (mirrors the API layer in app.py)
+        if max_snippets > 0 and backend.sql_store is not None:
+            from kb.api.app import _enrich_hits_with_snippets
+
+            snippet_limit = max(0, min(max_snippets, len(result_hits)))
+            result_hits[:snippet_limit] = _enrich_hits_with_snippets(
+                result_hits[:snippet_limit], request, backend.sql_store
+            )
+
         meta = {
             "top_k": top_k,
             "max_snippets": max_snippets,
@@ -342,10 +367,9 @@ def _search_remote(
     context_before: int,
     context_after: int,
     include_graph_context: bool,
-) -> tuple[list[dict[str, object]], dict[str, object], SQLiteMetadataStore | None]:
-    """Search using remote API server."""
-    import requests
-    import requests.exceptions  # Import the exceptions module explicitly
+) -> tuple[list[dict[str, object]], dict[str, object], SQLiteMetadataStore | None] | None:
+    """Search using remote API server. Returns None on connection failure."""
+    import httpx
 
     from kb.api_key import load_kb_api_key
     from kb.config import load_config
@@ -381,7 +405,7 @@ def _search_remote(
             )
             raise typer.Exit(1)
 
-        response = requests.post(
+        response = httpx.post(
             endpoint,
             json=payload,
             headers={"X-API-Key": api_key},
@@ -400,14 +424,9 @@ def _search_remote(
         meta.setdefault("include_graph_context", include_graph_context)
         return list(hits), meta, None
 
-    except requests.exceptions.ConnectionError:
-        typer.echo("Error: Could not connect to dolphin API server.", err=True)
-        typer.echo(
-            "Tip: Use --local flag to search without server, or start server with: dolphin serve",
-            err=True,
-        )
-        raise typer.Exit(1)
-    except requests.exceptions.RequestException as e:
+    except httpx.ConnectError:
+        return None
+    except httpx.HTTPError as e:
         typer.echo(f"Error: Search request failed: {e}", err=True)
         raise typer.Exit(1)
 
@@ -490,29 +509,29 @@ def _emit_search_json(
 ) -> None:
     normalized_hits: list[dict[str, object]] = []
     for idx, hit in enumerate(hits, start=1):
-        normalized_hits.append(
-            {
-                "rank": idx,
-                "chunk_id": hit.get("chunk_id"),
-                "repo": hit.get("repo"),
-                "path": hit.get("path") or hit.get("file_path"),
-                "file_path": hit.get("file_path") or hit.get("path"),
-                "start_line": hit.get("start_line"),
-                "end_line": hit.get("end_line"),
-                "score": hit.get("score"),
-                "language": _detect_hit_language(hit),
-                "symbol_kind": hit.get("symbol_kind"),
-                "symbol_name": hit.get("symbol_name"),
-                "symbol_path": hit.get("symbol_path"),
-                "text_hash": hit.get("text_hash"),
-                "commit": hit.get("commit"),
-                "branch": hit.get("branch"),
-                "token_count": hit.get("token_count"),
-                "resource_link": hit.get("resource_link"),
-                "content": hit.get("content"),
-                "snippet": hit.get("snippet"),
-            }
-        )
+        normalized: dict[str, object] = {
+            "rank": idx,
+            "chunk_id": hit.get("chunk_id"),
+            "repo": hit.get("repo"),
+            "path": hit.get("path") or hit.get("file_path"),
+            "file_path": hit.get("file_path") or hit.get("path"),
+            "start_line": hit.get("start_line"),
+            "end_line": hit.get("end_line"),
+            "score": hit.get("score"),
+            "language": _detect_hit_language(hit),
+            "symbol_kind": hit.get("symbol_kind"),
+            "symbol_name": hit.get("symbol_name"),
+            "symbol_path": hit.get("symbol_path"),
+            "text_hash": hit.get("text_hash"),
+            "commit": hit.get("commit"),
+            "branch": hit.get("branch"),
+            "token_count": hit.get("token_count"),
+            "resource_link": hit.get("resource_link"),
+            "content": hit.get("content"),
+            "snippet": hit.get("snippet"),
+            "graph_context": hit.get("graph_context"),
+        }
+        normalized_hits.append(normalized)
 
     payload = {
         "query": query,
@@ -532,6 +551,127 @@ def _emit_search_json(
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
 
 
+def _extract_snippet_text(hit: dict[str, object], show_content: bool, verbose: bool) -> str | None:
+    """Extract displayable snippet text from a search hit."""
+    if not (show_content or verbose):
+        return None
+    snippet_obj = hit.get("snippet")
+    content = hit.get("content")
+    snippet_text = None
+    if isinstance(snippet_obj, dict) and "text" in snippet_obj:
+        # snippet_obj is typed as object; after isinstance narrowing, ty still
+        # sees dict[Unknown, Unknown].  The explicit key check above makes
+        # the subscript safe at runtime.
+        snippet_text = snippet_obj["text"]  # type: ignore[index]
+    if not snippet_text and isinstance(content, str):
+        snippet_text = content
+    if isinstance(snippet_text, str) and snippet_text.strip():
+        return snippet_text
+    return None
+
+
+_LANGUAGE_TO_LEXER_OVERRIDES: dict[str, str] = {
+    "svelte": "html",
+    "shell": "bash",
+}
+
+
+def _rich_lexer_for_language(language: str) -> str:
+    """Map dolphin language names to Pygments lexer names."""
+    lang = language.lower()
+    return _LANGUAGE_TO_LEXER_OVERRIDES.get(lang, lang)
+
+
+def _score_style(score: float) -> str:
+    """Return a rich style string based on score value."""
+    if score >= 0.7:
+        return "bold sea_green2"
+    if score >= 0.4:
+        return "dark_goldenrod"
+    return "dim"
+
+
+def _render_graph_context_rich(graph_ctx: dict[str, Any], renderables: list[Any]) -> None:
+    """Append graph context renderables (nodes + relationships) to the panel body."""
+    from rich.markup import escape
+    from rich.text import Text
+
+    nodes: list[dict[str, Any]] = graph_ctx.get("nodes") or []
+    relationships: list[dict[str, Any]] = graph_ctx.get("relationships") or []
+
+    renderables.append(Text.from_markup("[bold steel_blue1]Graph Context[/bold steel_blue1]"))
+
+    if nodes:
+        for node in nodes:
+            ntype = node.get("type", "")
+            qname = node.get("qualified_name") or node.get("name", "")
+            sig = node.get("signature", "")
+            lr = node.get("line_range")
+            parts = [f"[cyan]{escape(str(ntype))}[/cyan] [bold]{escape(str(qname))}[/bold]"]
+            if sig:
+                parts.append(f"[dim]{escape(str(sig))}[/dim]")
+            if isinstance(lr, (list, tuple)) and len(lr) == 2:
+                parts.append(f"[dim]L{lr[0]}-{lr[1]}[/dim]")
+            renderables.append(Text.from_markup("  " + "  ".join(parts)))
+
+    if relationships:
+        renderables.append(Text.from_markup("[bold]Relationships[/bold]"))
+        for rel in relationships:
+            rtype = rel.get("type", "")
+            direction = rel.get("direction", "")
+            if direction == "outgoing":
+                target: dict[str, Any] = rel.get("target") or {}
+                tname = target.get("qualified_name") or target.get("name") or "<unknown>"
+                arrow = "\u2192"
+            elif direction == "incoming":
+                source: dict[str, Any] = rel.get("source") or {}
+                tname = source.get("qualified_name") or source.get("name") or "<unknown>"
+                arrow = "\u2190"
+            else:
+                continue
+            line_num = rel.get("line_number")
+            line_part = f" [dim]L{line_num}[/dim]" if line_num is not None else ""
+            markup = f"  [dim]{escape(str(rtype))}[/dim] {arrow} [bold]{escape(str(tname))}[/bold]{line_part}"
+            renderables.append(Text.from_markup(markup))
+
+
+def _render_graph_context_plain(graph_ctx: dict[str, Any]) -> None:
+    """Print graph context in plain text for non-TTY output."""
+    nodes: list[dict[str, Any]] = graph_ctx.get("nodes") or []
+    relationships: list[dict[str, Any]] = graph_ctx.get("relationships") or []
+
+    typer.echo("   Graph Context:")
+
+    if nodes:
+        for node in nodes:
+            ntype = node.get("type", "")
+            qname = node.get("qualified_name") or node.get("name", "")
+            sig = node.get("signature", "")
+            lr = node.get("line_range")
+            line_part = f" L{lr[0]}-{lr[1]}" if isinstance(lr, (list, tuple)) and len(lr) == 2 else ""
+            sig_part = f" - {sig}" if sig else ""
+            typer.echo(f"     {ntype} {qname}{sig_part}{line_part}")
+
+    if relationships:
+        typer.echo("   Relationships:")
+        for rel in relationships:
+            rtype = rel.get("type", "")
+            direction = rel.get("direction", "")
+            if direction == "outgoing":
+                target: dict[str, Any] = rel.get("target") or {}
+                tname = target.get("qualified_name") or target.get("name") or "<unknown>"
+                arrow = "->"
+            elif direction == "incoming":
+                source: dict[str, Any] = rel.get("source") or {}
+                tname = source.get("qualified_name") or source.get("name") or "<unknown>"
+                arrow = "<-"
+            else:
+                continue
+            line_num = rel.get("line_number")
+            line_part = f" L{line_num}" if line_num is not None else ""
+            typer.echo(f"     {rtype} {arrow} {tname}{line_part}")
+
+
 def _display_results(
     *,
     query: str,
@@ -542,7 +682,133 @@ def _display_results(
     languages: list[str],
     max_lines: int = MAX_SNIPPET_LINES_DISPLAY,
 ) -> None:
-    """Display compact search results by default, verbose details on demand."""
+    """Display search results using rich panels with syntax highlighting.
+
+    Falls back to plain text when stdout is not a TTY (for piping/scripting).
+    """
+    from kb.terminal import STDOUT_CONSOLE, is_tty
+
+    if not is_tty():
+        _display_results_plain(
+            query=query,
+            hits=hits,
+            show_content=show_content,
+            verbose=verbose,
+            meta=meta,
+            languages=languages,
+            max_lines=max_lines,
+        )
+        return
+
+    from pygments.util import ClassNotFound
+    from rich.console import Group, RenderableType
+    from rich.markup import escape
+    from rich.panel import Panel
+    from rich.syntax import Syntax
+    from rich.text import Text
+
+    console = STDOUT_CONSOLE
+
+    if not hits:
+        console.print()
+        console.print("[dim]No results found.[/dim]")
+        print_hint("Try broadening your query, removing filters, or indexing more repositories.")
+        return
+
+    safe_query = escape(query)
+    count = len(hits)
+    plural = "s" if count != 1 else ""
+    console.print(f'\nFound [bold]{count}[/bold] result{plural} for [steel_blue1]"{safe_query}"[/steel_blue1]')
+    if languages:
+        console.print(f"[dim]Language filter: {', '.join(languages)}[/dim]")
+    if verbose and meta:
+        top_k = meta.get("top_k")
+        model = meta.get("model")
+        latency = meta.get("latency_ms")
+        console.print(f"[dim]Meta: top_k={top_k} model={escape(str(model))} latency_ms={latency}[/dim]")
+    console.print()
+
+    for i, hit in enumerate(hits, 1):
+        score_value = hit.get("score", 0.0)
+        score = float(score_value) if isinstance(score_value, (int, float)) else 0.0
+        repo = str(hit.get("repo", "unknown"))
+        path = str(hit.get("path") or hit.get("file_path") or "unknown")
+        start_line = hit.get("start_line")
+        end_line = hit.get("end_line")
+        language = _detect_hit_language(hit)
+        symbol_name = hit.get("symbol_name")
+        symbol_kind = hit.get("symbol_kind")
+
+        # Build location string
+        if isinstance(start_line, int) and isinstance(end_line, int):
+            location = f"{repo}/{path}:{start_line}-{end_line}"
+        else:
+            location = f"{repo}/{path}"
+
+        # Panel title and subtitle
+        style = _score_style(score)
+        title = f"[bold]{i}. {escape(location)}[/bold]"
+        subtitle = f"[{style}]{score:.2f}[/{style}]"
+
+        # Build panel body
+        renderables: list[RenderableType] = []
+
+        # Symbol + language info line
+        info_parts: list[str] = []
+        if isinstance(symbol_name, str) and symbol_name:
+            kind_label = str(symbol_kind) if symbol_kind else "symbol"
+            info_parts.append(f"[cyan]{escape(kind_label)}:{escape(symbol_name)}[/cyan]")
+        info_parts.append(f"[dim]{escape(language)}[/dim]")
+
+        if verbose:
+            chunk_id = hit.get("chunk_id")
+            if chunk_id:
+                info_parts.append(f"[dim]chunk_id={escape(str(chunk_id))}[/dim]")
+            resource_link = hit.get("resource_link")
+            if resource_link:
+                info_parts.append(f"[dim]resource={escape(str(resource_link))}[/dim]")
+
+        renderables.append(Text.from_markup("  ".join(info_parts)))
+
+        # Code snippet
+        snippet_text = _extract_snippet_text(hit, show_content, verbose)
+        if snippet_text:
+            lines = snippet_text.splitlines()
+            display_lines = lines[:max_lines]
+            code = "\n".join(display_lines)
+            if len(lines) > max_lines:
+                code += f"\n... ({len(lines) - max_lines} more lines)"
+
+            lexer = _rich_lexer_for_language(language)
+            try:
+                syntax = Syntax(code, lexer, theme="one-dark", line_numbers=False, word_wrap=True)
+            except ClassNotFound:
+                syntax = Syntax(code, "text", theme="one-dark", line_numbers=False, word_wrap=True)
+            renderables.append(syntax)
+
+        # Graph context (only present when --graph-context is used)
+        graph_ctx = hit.get("graph_context")
+        if isinstance(graph_ctx, dict) and (graph_ctx.get("nodes") or graph_ctx.get("relationships")):
+            renderables.append(Text(""))  # blank line separator
+            _render_graph_context_rich(graph_ctx, renderables)
+
+        console.print(Panel(Group(*renderables), title=title, subtitle=subtitle, expand=True, padding=(0, 1)))
+
+    if not verbose:
+        print_hint("pass --verbose for chunk IDs and metadata.")
+
+
+def _display_results_plain(
+    *,
+    query: str,
+    hits: list[dict[str, object]],
+    show_content: bool,
+    verbose: bool,
+    meta: dict[str, object],
+    languages: list[str],
+    max_lines: int = MAX_SNIPPET_LINES_DISPLAY,
+) -> None:
+    """Plain-text fallback for non-TTY output (piping, scripts)."""
     if not hits:
         typer.echo("No results found.")
         return
@@ -590,26 +856,24 @@ def _display_results(
             if resource_link:
                 typer.echo(f"   resource={resource_link}")
 
-        if show_content or verbose:
-            snippet_obj = hit.get("snippet")
-            content = hit.get("content")
-            snippet_text = None
-            if isinstance(snippet_obj, dict):
-                snippet_text = snippet_obj.get("text")
-            if not snippet_text and isinstance(content, str):
-                snippet_text = content
+        snippet_text = _extract_snippet_text(hit, show_content=show_content, verbose=verbose)
+        if snippet_text:
+            lines = snippet_text.splitlines()
+            typer.echo("   ---")
+            for line in lines[:max_lines]:
+                typer.echo(f"   {line}")
+            if len(lines) > max_lines:
+                typer.echo(f"   ... ({len(lines) - max_lines} more lines)")
+            typer.echo("   ---")
 
-            if isinstance(snippet_text, str) and snippet_text.strip():
-                lines = snippet_text.splitlines()
-                typer.echo("   ---")
-                for line in lines[:max_lines]:
-                    typer.echo(f"   {line}")
-                if len(lines) > max_lines:
-                    typer.echo(f"   ... ({len(lines) - max_lines} more lines)")
-                typer.echo("   ---")
+        # Graph context (only present when --graph-context is used)
+        graph_ctx = hit.get("graph_context")
+        if isinstance(graph_ctx, dict) and (graph_ctx.get("nodes") or graph_ctx.get("relationships")):
+            typer.echo("")
+            _render_graph_context_plain(graph_ctx)
 
     if not verbose:
-        typer.echo("\nTip: pass --verbose for expanded metadata and snippets.")
+        typer.echo("\nTip: pass --verbose for chunk IDs and metadata.")
 
 
 @app.command()
@@ -769,6 +1033,8 @@ def serve(
                         f"Will re-index automatically on startup.",
                         level="warn",
                     )
+        except ConfigNotFoundError:
+            raise
         except Exception as e:
             print_status(
                 "Failed to list repositories for automatic watcher startup.",
@@ -923,7 +1189,11 @@ def config(
 
 def main() -> None:
     """Entry point for the dolphin CLI."""
-    app()
+    try:
+        app()
+    except ConfigNotFoundError as e:
+        print_status(str(e), level="error", stderr=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

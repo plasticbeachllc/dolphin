@@ -453,6 +453,97 @@ class TestPipelineProcessFiles:
         # Should not raise and files_done = 0
         assert stats["files_done"] == 0
 
+    def test_process_files_calls_progress_callback(self, pipeline_setup):
+        """Test process_files invokes the progress callback after each file."""
+        pipeline, repo_path, metadata, repo_id, session_id = pipeline_setup
+        from pathspec import PathSpec
+
+        from kb.ingest.error_logging import ErrorLogger
+
+        error_logger = ErrorLogger(repo_path, str(session_id))
+        ignore_spec = PathSpec.from_lines("gitignore", [])
+
+        events: list[dict] = []
+        pipeline.process_files(
+            repo_id=repo_id,
+            repo_name="test-repo",
+            root=repo_path,
+            files=["test.py", "utils.py"],
+            ignore_spec=ignore_spec,
+            embed_model="small",
+            session_id=session_id,
+            commit_sha="abc123",
+            branch="main",
+            dry_run=True,
+            error_logger=error_logger,
+            progress_callback=events.append,
+        )
+
+        assert len(events) >= 2
+        assert all("files_done" in e for e in events)
+        assert all("total_files" in e for e in events)
+        assert all("chunks_indexed" in e for e in events)
+        assert all("current_file" in e for e in events)
+        # files_done should increase
+        done_values = [e["files_done"] for e in events]
+        assert done_values == sorted(done_values)
+
+    def test_process_files_callback_none_is_safe(self, pipeline_setup):
+        """Test process_files works correctly with progress_callback=None."""
+        pipeline, repo_path, metadata, repo_id, session_id = pipeline_setup
+        from pathspec import PathSpec
+
+        from kb.ingest.error_logging import ErrorLogger
+
+        error_logger = ErrorLogger(repo_path, str(session_id))
+        ignore_spec = PathSpec.from_lines("gitignore", [])
+
+        # Should not raise
+        stats = pipeline.process_files(
+            repo_id=repo_id,
+            repo_name="test-repo",
+            root=repo_path,
+            files=["test.py"],
+            ignore_spec=ignore_spec,
+            embed_model="small",
+            session_id=session_id,
+            commit_sha="abc123",
+            branch="main",
+            dry_run=True,
+            error_logger=error_logger,
+            progress_callback=None,
+        )
+        assert stats["files_done"] >= 1
+
+    def test_process_files_callback_on_skipped(self, pipeline_setup):
+        """Test progress callback is called for skipped (ignored) files."""
+        pipeline, repo_path, metadata, repo_id, session_id = pipeline_setup
+        from pathspec import PathSpec
+
+        from kb.ingest.error_logging import ErrorLogger
+
+        error_logger = ErrorLogger(repo_path, str(session_id))
+        ignore_spec = PathSpec.from_lines("gitignore", ["*.py"])
+
+        events: list[dict] = []
+        pipeline.process_files(
+            repo_id=repo_id,
+            repo_name="test-repo",
+            root=repo_path,
+            files=["test.py"],
+            ignore_spec=ignore_spec,
+            embed_model="small",
+            session_id=session_id,
+            commit_sha="abc123",
+            branch="main",
+            dry_run=True,
+            error_logger=error_logger,
+            progress_callback=events.append,
+        )
+
+        assert len(events) >= 1
+        assert events[0]["event"] == "file_skipped"
+
 
 class TestPipelineProcessDeletions:
     """Test IngestionPipeline process_deletions operation."""
@@ -591,6 +682,55 @@ class TestPipelineProcessDeletions:
         assert stats["chunks_pruned"] == 0
         assert pruned_models == []
         assert metadata.get_file_id(repo_id, "deleted.py") == file_id
+
+    def test_process_deletions_stops_on_cancel(self, pipeline_setup, monkeypatch):
+        """process_deletions should stop between files when cancel is requested."""
+        pipeline, repo_path, metadata, repo_id, file_id = pipeline_setup
+        from kb.ingest.error_logging import ErrorLogger
+
+        # Register a second file so there are two to delete
+        metadata.upsert_file(
+            repo_id=repo_id,
+            path="other.py",
+            ext=".py",
+            language="python",
+            is_binary=False,
+            size_bytes=50,
+        )
+
+        # Track which files the cleanup helper is called on
+        cleaned_files: list[str] = []
+        orig_cleanup = pipeline._cleanup_deleted_file_dependencies
+
+        def tracking_cleanup(repo_id_arg, repo_name_arg, file_id_arg, path_arg):
+            cleaned_files.append(path_arg)
+            return orig_cleanup(repo_id_arg, repo_name_arg, file_id_arg, path_arg)
+
+        monkeypatch.setattr(pipeline, "_cleanup_deleted_file_dependencies", tracking_cleanup)
+
+        pipeline.request_cancel()
+        error_logger = ErrorLogger(repo_path, "session1")
+
+        with pytest.raises(Exception, match="cancelled"):
+            pipeline.process_deletions(
+                repo_id=repo_id,
+                repo_name="test-repo",
+                files=["deleted.py", "other.py"],
+                embed_model="small",
+                dry_run=False,
+                error_logger=error_logger,
+            )
+
+        # Cancel fires before the first file is touched, so nothing should be cleaned
+        assert cleaned_files == []
+
+    def test_is_cancel_requested_reflects_state(self, pipeline_setup):
+        """is_cancel_requested returns False initially and True after request_cancel."""
+        pipeline, *_ = pipeline_setup
+
+        assert not pipeline.is_cancel_requested()
+        pipeline.request_cancel()
+        assert pipeline.is_cancel_requested()
 
 
 class TestPipelineDropRepoIndex:
@@ -821,6 +961,11 @@ async def test_parallel_indexing_increments_error_on_dedup_failure(tmp_path, mon
     )
     subprocess.run(
         ["git", "-C", str(repo_path), "config", "user.name", "Test"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_path), "config", "commit.gpgsign", "false"],
         check=True,
         capture_output=True,
     )

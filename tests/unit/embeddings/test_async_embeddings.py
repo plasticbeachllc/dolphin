@@ -66,21 +66,14 @@ class TestAsyncEmbeddings:
 
     @pytest.mark.asyncio
     async def test_openai_provider_close(self):
-        """Test that OpenAI async client is properly closed"""
-        # Create provider with dummy API key
+        """Test that OpenAI provider close() works without error"""
         provider = OpenAIEmbeddingProvider(
-            api_key="sk-test-dummy-key",
-            validate_key=False,  # Don't validate to avoid API call
+            api_key="sk-test-dummy-key-for-unit-tests",
+            validate_key=False,
         )
 
-        assert hasattr(provider, "async_client")
-
-        # Close the provider
+        # close() should not raise even when no client has been created yet
         await provider.close()
-
-        # Async client should be closed (we can't easily test this directly,
-        # but we verify close() doesn't raise an error)
-        assert True  # If we got here, close() worked
 
     @pytest.mark.asyncio
     async def test_async_embed_error_handling(self):

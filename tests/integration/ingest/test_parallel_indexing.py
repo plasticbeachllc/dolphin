@@ -61,6 +61,7 @@ def sample_repo(tmp_path: Path) -> Path:
     subprocess.run(["git", "init"], cwd=repo_path, check=True)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True)
     subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True)
+    subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=repo_path, check=True)
 
     # Add files
     (repo_path / "file1.py").write_text("def foo():\n    pass\n")

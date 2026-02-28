@@ -11,6 +11,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.4] - 2026-02-27
+
+### Added
+
+- **CLI Init Checklist**: `dolphin init` now prints a pass/fail readiness checklist (config, SQLite, LanceDB, API keys) with numbered next steps.
+- **Rich Search Panels**: `dolphin search` renders results as Rich panels with syntax-highlighted snippets, color-coded scores, and symbol metadata; non-TTY falls back to plain text.
+- **Indexing Progress Bar**: Rich progress display during `dolphin index` with file/chunk counts and elapsed time; non-TTY line-based fallback.
+- **Auto-Fallback to Local Search**: `dolphin search` silently falls back to local search when the API server is unavailable, removing the need for `--local`.
+- **Verbose Local Snippets**: `--verbose` / `--show-content` now enriches local search results with code snippets (previously API-only).
+
+### Changed
+
+- **Flat CLI Structure**: Removed `kb` subcommand layer; all commands promoted to top-level (`dolphin add-repo`, `dolphin index`, etc. instead of `dolphin kb add-repo`).
+- **Default Embedding Model**: Changed from `large` to `small` (`text-embedding-3-small`), reducing cost and latency for typical workloads.
+- **CLI Design Language**: Unified ocean color palette (`deep_sky_blue3`, `steel_blue1`, `sea_green2`) with nautical emoji and `one-dark` syntax theme; Rich gracefully degrades on 16-color terminals.
+- **Exception Specificity**: Replaced bare `raise Exception()` with `RuntimeError`/`ValueError`; narrowed `except Exception` to specific types in search backend.
+- **N+1 Query Fix**: Added batch `get_repos_by_names()` and consolidated dependency count queries into single `UNION ALL`.
+- **File-Lines Cache**: Upgraded from FIFO to LRU with `OrderedDict`, capped at 50K lines.
+- **Default mmap_size**: Reduced from 30 GB to configurable 256 MB.
+- **CORS Origins**: Now configurable via `ApiConfig.cors_origins` instead of hardcoded.
+- **Uvicorn Reload**: Gated behind `DOLPHIN_DEV_MODE` env var (previously always enabled).
+- **Noisy Log Suppression**: CLI search suppresses INFO-level structured logs unless `DOLPHIN_LOG_LEVEL` is explicitly set.
+- **Thread Safety & Timeouts**: Added timeout protections to `ThreadPoolExecutor` futures and subprocess calls; thread-safe AST cache with locks (#195).
+
+### Fixed
+
+- **Graph Context Rendering**: `--graph-context` now renders relationship and entity information in CLI search output; previously silently dropped (#203).
+- **Reranker Model-Load Noise**: Suppress safetensors and httpx logging during cross-encoder reranker initialization for cleaner startup (#204).
+- **Worktree Indexing Prevention**: Added `.claude/worktrees` to built-in ignore patterns to prevent git worktree copies from being indexed (#205).
+- **Ctrl-C Shutdown**: Suppress SIGINT in worker processes to prevent traceback spam (#182); cancel ingestion pipeline (#183) and `process_deletions` (#184) on server shutdown.
+- **Typer.Exit Traceback**: Replaced `typer.Exit()` with `sys.exit()` in `main()` to avoid visible traceback on normal exit (#189).
+- **Config Missing Error**: Clean user-facing error when config file is absent instead of unhandled exception (#188).
+- **Config Path Resolution**: Fixed path resolution and added legacy config location fallback (#187).
+- **Connection Pool Poisoning**: Discard connections on rollback failure instead of returning them to pool.
+
+---
+
 ## [0.2.3] - 2026-02-23
 
 ### Added

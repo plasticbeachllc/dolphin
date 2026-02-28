@@ -1,37 +1,131 @@
 # from __future__ import annotations
 import asyncio
+import contextlib
 import logging
 import os
+import signal
 import sys
+import time
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
+from typing import Any, Literal, cast
 
 import typer
 from pathspec import PathSpec
 from rich import box
 from rich.console import Console
+from rich.markup import escape
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
-from ..config import DEFAULT_CONFIG_PATH, KBConfig, load_config
+from ..api_key import get_kb_key_path, get_or_create_kb_api_key, load_kb_api_key
+from ..config import DEFAULT_CONFIG_PATH, ConfigNotFoundError, KBConfig, load_config
 from ..embeddings.provider import create_provider, set_default_provider
 from ..ignores import build_ignore_set, load_repo_ignores
 from ..store import LanceDBStore, SQLiteMetadataStore
+from ..terminal import print_status
 from .pipeline import IngestionPipeline
 
 _log = logging.getLogger(__name__)
 
+
+@dataclass
+class ResetStats:
+    """Accumulator for repo-reset statistics."""
+
+    repos_removed: int = 0
+    files_deleted: int = 0
+    content_deleted: int = 0
+    locations_deleted: int = 0
+    sessions_deleted: int = 0
+    vectors_deleted: int = 0
+    errors: list[str] = field(default_factory=list)
+
+
 app = typer.Typer(help="Unified knowledge store ingestion CLI.")
 
 _CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "config_template.toml"
+_METADATA_DB_NAME = "metadata.db"
+_LANCEDB_DIR_NAME = "lancedb"
 
 
 def _read_config_template() -> str:
     return _CONFIG_TEMPLATE_PATH.read_text(encoding="utf-8")
 
 
+_ChecklistStatus = Literal["ok", "missing", "pending"]
+
+_STATUS_STYLES: dict[_ChecklistStatus, str] = {
+    "ok": "[sea_green2]ok[/sea_green2]",
+    "missing": "[indian_red1]missing[/indian_red1]",
+    "pending": "[dim]pending[/dim]",
+}
+
+
+_CHECKLIST_STATUS_WIDTH = 10
+_CHECKLIST_LABEL_WIDTH = 15
+
+
+def _checklist_row(status: _ChecklistStatus, label: str, detail: str = "") -> str:
+    """Format a single readiness-checklist row with consistent alignment."""
+    styled = _STATUS_STYLES[status]
+    # Pad so the visible status text occupies a fixed width, keeping labels aligned.
+    pad = max(0, _CHECKLIST_STATUS_WIDTH - len(status))
+    col_width = max(_CHECKLIST_LABEL_WIDTH, len(label) + 1)
+    return f"    {styled}{' ' * pad}{label:<{col_width}}{detail}"
+
+
+def _print_readiness_checklist(console: Console, config: KBConfig, config_path: Path) -> None:
+    """Print a pass/fail readiness checklist after init."""
+    store_root = config.resolved_store_root()
+
+    console.print()
+    console.print("  [bold]Readiness check:[/bold]")
+
+    # 1. Config file
+    status = "ok" if config_path.exists() else "missing"
+    console.print(_checklist_row(status, "Config", escape(str(config_path))))
+
+    # 2. SQLite
+    db_path = store_root / _METADATA_DB_NAME
+    status = "ok" if db_path.exists() else "missing"
+    console.print(_checklist_row(status, "SQLite", escape(str(db_path))))
+
+    # 3. LanceDB
+    lance_path = store_root / _LANCEDB_DIR_NAME
+    status = "ok" if lance_path.exists() else "missing"
+    console.print(_checklist_row(status, "LanceDB", escape(str(lance_path))))
+
+    # 4. KB API Key
+    key_path = get_kb_key_path()
+    if load_kb_api_key():
+        console.print(_checklist_row("ok", "KB API Key", escape(str(key_path))))
+    else:
+        console.print(_checklist_row("pending", "KB API Key", "(will retry on [bold]dolphin serve[/bold])"))
+
+    # 5. Embedding provider API key check
+    # TODO: extend for other providers (Cohere, Anthropic, etc.) when supported
+    missing_steps: list[str] = []
+    if config.embedding_provider == "openai":
+        env_var = config.openai_api_key_env
+        if os.environ.get(env_var):
+            console.print(_checklist_row("ok", env_var))
+        else:
+            console.print(_checklist_row("missing", env_var, f'(set with: [bold]export {env_var}="sk-..."[/bold])'))
+            missing_steps.append(f'export {env_var}="sk-..."')
+
+    # Next steps
+    console.print()
+    console.print("  [bold]Next steps:[/bold]")
+    all_steps = [*missing_steps, "[bold]dolphin add-repo[/bold] <name> <path>", "[bold]dolphin index[/bold] <name>"]
+    for i, cmd in enumerate(all_steps, 1):
+        console.print(f"    {i}. {cmd}")
+
+
 def _build_pipeline(config: KBConfig) -> IngestionPipeline:
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()  # Ensure schema (and migrations) are applied before use
 
     # Configure embedding provider for ingestion pipeline
@@ -71,65 +165,31 @@ def init(
         config_content = _read_config_template()
         created = True
 
-    # Prompt for default embedding model if we are creating new or purely interactive
-    # (Simple approach: we just append/replace the setting in the TOML string?
-    #  Or we just guide the user. For a robust CLI, let's just write the file first.)
-
-    # If creating fresh, let's ask for preference
-    if created and sys.stdin is not None and sys.stdin.isatty():
-        model_choice = (
-            typer.prompt(
-                "Select default embedding model",
-                default="large",
-                show_choices=True,
-                type=str,
-            )
-            .strip()
-            .lower()
-        )
-
-        if model_choice not in ("small", "large"):
-            model_choice = "large"
-            console.print("[yellow]Invalid choice, defaulting to 'large'.[/yellow]")
-
-        # Patch the template string before writing
-        # We assume the template has `default_embed_model = "large"` or similar
-        # A simple replace works for the template
-        if 'default_embed_model = "large"' in config_content:
-            config_content = config_content.replace(
-                'default_embed_model = "large"',
-                f'default_embed_model = "{model_choice}"',
-            )
-        elif 'default_embed_model = "small"' in config_content:
-            config_content = config_content.replace(
-                'default_embed_model = "small"',
-                f'default_embed_model = "{model_choice}"',
-            )
-
+    if created:
         target.write_text(config_content, encoding="utf-8")
-        console.print(f"Created knowledge store config at [bold green]{target}[/bold green]")
-    elif created:
-        # Non-interactive, write default
-        target.write_text(config_content, encoding="utf-8")
-        console.print(f"Created knowledge store config at [bold green]{target}[/bold green]")
+        console.print(f"Created knowledge store config at [bold sea_green2]{target}[/bold sea_green2]")
 
     # Load config and initialize storage backends.
     config = load_config(target)
     store_root = config.resolved_store_root()
     store_root.mkdir(parents=True, exist_ok=True)
 
-    metadata = SQLiteMetadataStore(store_root / "metadata.db")
+    metadata = SQLiteMetadataStore(store_root / _METADATA_DB_NAME)
     metadata.initialize()
-    console.print(f"SQLite initialized at [bold cyan]{metadata.db_path}[/bold cyan]")
+    console.print(f"SQLite initialized at [bold steel_blue1]{metadata.db_path}[/bold steel_blue1]")
 
-    lancedb = LanceDBStore(store_root / "lancedb")
+    lancedb = LanceDBStore(store_root / _LANCEDB_DIR_NAME)
     lancedb.initialize_collections()
-    console.print(f"LanceDB root initialized at [bold cyan]{lancedb.root}[/bold cyan]")
+    console.print(f"LanceDB root initialized at [bold steel_blue1]{lancedb.root}[/bold steel_blue1]")
 
-    if created:
-        console.print("Initialization complete. You can now run [bold]kb add-repo[/bold] and [bold]kb index[/bold].")
-    else:
-        console.print("[green]Initialization verified. Nothing else to do.[/green]")
+    # Ensure KB API key exists so the checklist can report it
+    try:
+        get_or_create_kb_api_key()
+    except Exception:
+        _log.warning("Could not pre-create KB API key; checklist will show 'pending'.", exc_info=True)
+        console.print("[dim]Warning: could not create KB API key (check permissions)[/dim]")
+
+    _print_readiness_checklist(console, config, target)
 
 
 @app.command("add-repo")
@@ -148,28 +208,77 @@ def add_repo(
     # Use the global default model from config
     model = config.default_embed_model
 
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
     metadata.record_repo(name=name, path=repo_path, default_embed_model=model)
 
     typer.echo(f"Repository registered: name='{name}', path='{repo_path}'")
 
-    # Note: We rely on 'kb index' to handle any model mismatch if this was an update
+    # Note: We rely on 'dolphin index' to handle any model mismatch if this was an update
     # to an existing repo that had a different model.
 
     # Only prompt for indexing in interactive mode (skip in tests or if --no-index)
-    import sys
-
     if not no_index and sys.stdin is not None and sys.stdin.isatty():
         if typer.confirm(f"Do you want to index '{name}' now?", default=False):
             typer.echo(f"Starting index for {name}...")
             pipeline = _build_pipeline(config)
             try:
                 pipeline.index(name, dry_run=False, force=False)
-                typer.echo(f"✅ Indexing complete for {name}")
+                typer.echo(f"⛵ Indexing complete for {name}")
             except Exception as e:
                 _log.error("Indexing failed during add-repo prompt for %s", name, exc_info=True)
-                typer.echo(f"❌ Indexing failed: {e}", err=True)
+                typer.echo(f"🚩 Indexing failed: {e}", err=True)
+
+
+def _create_progress_display() -> tuple[Progress | None, Callable[[dict[str, Any]], None]]:
+    """Create a Rich progress bar and return (progress, callback).
+
+    Returns (None, line_callback) when stdout is not a TTY.
+    Returns (Progress, rich_callback) when stdout is a TTY.
+    """
+    from ..terminal import STDERR_CONSOLE, is_tty
+
+    if not is_tty():
+        # Non-TTY: periodic line output to stderr
+        _last_n = 0
+        _started = False
+
+        def _line_callback(data: dict[str, Any]) -> None:
+            nonlocal _last_n, _started
+            n = data.get("files_done", 0)
+            total = data.get("total_files", 0)
+            if not _started and total > 0:
+                STDERR_CONSOLE.print(f"  Indexing {total} files...")
+                _started = True
+            step = max(1, total // 10) if total > 0 else 1
+            if n - _last_n >= step or (n == total and total > 0):
+                STDERR_CONSOLE.print(
+                    f"  Progress: {n}/{total} files processed, {data.get('chunks_indexed', 0):,} chunks"
+                )
+                _last_n = n
+
+        return None, _line_callback
+
+    progress = Progress(
+        SpinnerColumn(),
+        TextColumn("[bold deep_sky_blue3]Indexing"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TextColumn("files"),
+        TextColumn("[dim]{task.fields[chunks]:,} chunks[/dim]"),
+        TimeElapsedColumn(),
+        transient=True,
+    )
+    _task_id: TaskID = progress.add_task("indexing", total=None, chunks=0)
+
+    def _rich_callback(data: dict[str, Any]) -> None:
+        total = data.get("total_files", 0)
+        done = data.get("files_done", 0)
+        chunks = data.get("chunks_indexed", 0)
+        # Use total or None so Rich shows a spinner when total is unknown/zero
+        progress.update(_task_id, total=total or None, completed=done, chunks=chunks)
+
+    return progress, _rich_callback
 
 
 @app.command()
@@ -190,7 +299,7 @@ def index(
     config = load_config()
 
     # Require repo to be pre-registered via: uv run dolphin add-repo <name> <abs/repo/path>
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
     repo_record = metadata.get_repo_by_name(name)
     if not repo_record:
@@ -212,8 +321,6 @@ def index(
         typer.echo(f"Recovered {aborted} stale session(s) from a previous run.")
 
     # Install SIGINT handler so Ctrl-C stops cleanly between files
-    import signal
-
     _original_sigint = signal.getsignal(signal.SIGINT)
 
     def _sigint_handler(signum, frame):
@@ -222,17 +329,37 @@ def index(
 
     signal.signal(signal.SIGINT, _sigint_handler)
 
+    progress_display, progress_callback = _create_progress_display()
+
+    mode = "parallel" if parallel else "sequential"
+    ctx: dict[str, object] = {"mode": mode}
+    if parallel:
+        ctx["workers"] = workers or "auto"
+    print_status(f"Indexing {name}", level="step", context=ctx)
+
+    t0 = time.monotonic()
+    progress_ctx = progress_display if progress_display is not None else contextlib.nullcontext()
     try:
-        if parallel:
-            # Run async parallel indexing
-            typer.echo(f"Starting parallel indexing for {name} (workers={workers or 'auto'})...")
-            result = asyncio.run(
-                pipeline.index_parallel(name, dry_run=dry_run, force=force, full_reindex=full, max_workers=workers)
-            )
-        else:
-            # Legacy sequential indexing
-            typer.echo(f"Starting sequential indexing for {name}...")
-            result = pipeline.index(name, dry_run=dry_run, force=force, full_reindex=full)
+        with progress_ctx:
+            if parallel:
+                result = asyncio.run(
+                    pipeline.index_parallel(
+                        name,
+                        dry_run=dry_run,
+                        force=force,
+                        full_reindex=full,
+                        max_workers=workers,
+                        progress_callback=progress_callback,
+                    )
+                )
+            else:
+                result = pipeline.index(
+                    name,
+                    dry_run=dry_run,
+                    force=force,
+                    full_reindex=full,
+                    progress_callback=progress_callback,
+                )
 
     except Exception as e:
         from .pipeline import _CancelledError
@@ -249,24 +376,32 @@ def index(
     finally:
         signal.signal(signal.SIGINT, _original_sigint)
 
+    elapsed = time.monotonic() - t0
+    elapsed_str = f"{int(elapsed)}s" if elapsed < 60 else f"{int(elapsed // 60)}m{int(elapsed % 60):02d}s"
+
     files_indexed = result.get("files_indexed", 0)
     chunks_indexed = result.get("chunks_indexed", 0)
     files_skipped_ignored = result.get("files_skipped_ignored", 0)
     files_error = result.get("files_error", 0)
     chunks_pruned = result.get("chunks_pruned", 0)
 
-    summary = f"Indexed {files_indexed} file{'s' if files_indexed != 1 else ''} ({chunks_indexed:,} chunks)."
+    summary_ctx: dict[str, object] = {
+        "files": files_indexed,
+        "chunks": f"{chunks_indexed:,}",
+        "elapsed": elapsed_str,
+    }
+    print_status("Indexing complete", level="success", context=summary_ctx)
+
     skips: list[str] = []
     if files_skipped_ignored:
         skips.append(f"{files_skipped_ignored} ignored")
     if files_error:
         skips.append(f"{files_error} error{'s' if files_error != 1 else ''}")
     if skips:
-        summary += f" Skipped: {', '.join(skips)}."
-    typer.echo(summary)
+        typer.echo(f"     Skipped: {', '.join(skips)}.")
 
     if chunks_pruned:
-        typer.echo(f"  Pruned {chunks_pruned:,} stale chunk{'s' if chunks_pruned != 1 else ''}.")
+        typer.echo(f"     Pruned {chunks_pruned:,} stale chunk{'s' if chunks_pruned != 1 else ''}.")
 
     # Prune chunks for files matching ignore patterns (e.g., after ignore config changes)
     if not dry_run:
@@ -284,7 +419,7 @@ def index(
 
 def _notify_server_reload(config: KBConfig) -> None:
     """Notify the running server to reload its backend."""
-    import requests
+    import httpx
 
     from ..api_key import load_kb_api_key
 
@@ -296,13 +431,17 @@ def _notify_server_reload(config: KBConfig) -> None:
         _log.debug("Could not load API key; skipping server notification.", exc_info=True)
         return
 
+    if not api_key:
+        _log.debug("No API key available; skipping server notification.")
+        return
+
     try:
-        response = requests.post(endpoint, headers={"X-API-Key": api_key}, timeout=2.0)
+        response = httpx.post(endpoint, headers={"X-API-Key": api_key}, timeout=2.0)
         if response.status_code == 200:
-            typer.echo(f"🔄 Server notified: {response.json().get('message')}")
+            typer.echo(f"🧭 Server notified: {response.json().get('message')}")
         elif response.status_code != 404:  # Ignore 404 if old server running
             typer.echo(f"⚠️  Server reload failed: {response.status_code}", err=True)
-    except requests.RequestException:
+    except httpx.HTTPError:
         # Server probably not running, which is fine
         pass
 
@@ -311,7 +450,7 @@ def _notify_server_reload(config: KBConfig) -> None:
 def status(name: str | None = typer.Argument(None, help="Optional repo name.")) -> None:
     """Report knowledge store status with detailed repository listing."""
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     # Ensure DB and schema exist before summarizing.
     metadata.initialize()
 
@@ -321,9 +460,9 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
     console = Console()
 
     # Summary Table
-    console.print("\n[bold]📊 Knowledge Store Summary[/bold]")
+    console.print("\n[bold]🗺️  Knowledge Store Summary[/bold]")
     summary_table = Table(show_header=False, box=box.SIMPLE)
-    summary_table.add_column("Metric", style="cyan")
+    summary_table.add_column("Metric", style="steel_blue1")
     summary_table.add_column("Value", style="bold white")
     summary_table.add_row("Total Repositories", str(summary["repos"]))
     summary_table.add_row("Total Files", str(summary["files"]))
@@ -333,9 +472,9 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
     # List all registered repositories
     repos = metadata.list_all_repos()
     if repos:
-        console.print("\n[bold]📚 Registered Repositories[/bold]")
+        console.print("\n[bold]⚓ Registered Repositories[/bold]")
         repo_table = Table(box=box.ROUNDED)
-        repo_table.add_column("Name", style="green")
+        repo_table.add_column("Name", style="sea_green2")
         repo_table.add_column("Path", style="dim")
         repo_table.add_column("Embed Model")
         repo_table.add_column("Created", style="dim")
@@ -346,21 +485,21 @@ def status(name: str | None = typer.Argument(None, help="Optional repo name.")) 
             )
         console.print(repo_table)
     else:
-        console.print("\n[yellow]No repositories registered.[/yellow]")
+        console.print("\n[dark_goldenrod]No repositories registered.[/dark_goldenrod]")
 
     # Reranking status
-    console.print("\n[bold]🔍 Reranking[/bold]")
+    console.print("\n[bold]🔭 Reranking[/bold]")
     reranking_cfg = config.retrieval.reranking
     if not reranking_cfg.enabled:
         console.print("  [dim]Disabled (set reranking.enabled = true in config to enable)[/dim]")
     else:
         try:
-            from sentence_transformers import CrossEncoder as _CE  # noqa: F401  # ty: ignore[unresolved-import]
+            from sentence_transformers import CrossEncoder as _CE  # noqa: F401
 
-            console.print(f"  [green]Enabled[/green] — model: {reranking_cfg.model}")
+            console.print(f"  [sea_green2]Enabled[/sea_green2] — model: {reranking_cfg.model}")
         except ImportError:
             console.print(
-                "  [red]Enabled in config but dependencies are missing.[/red]\n"
+                "  [indian_red1]Enabled in config but dependencies are missing.[/indian_red1]\n"
                 "  Install with: [bold]uv pip install pb-dolphin\\[reranking][/bold]"
             )
 
@@ -480,10 +619,10 @@ def prune_ignored(
     config = load_config()
     repo = config.resolved_store_root()
 
-    metadata = SQLiteMetadataStore(repo / "metadata.db")
+    metadata = SQLiteMetadataStore(repo / _METADATA_DB_NAME)
     metadata.initialize()
 
-    lancedb = LanceDBStore(repo / "lancedb")
+    lancedb = LanceDBStore(repo / _LANCEDB_DIR_NAME)
     lancedb.initialize_collections()
 
     result = _prune_ignored_files(name, metadata, lancedb, config, dry_run=dry_run)
@@ -495,7 +634,7 @@ def prune_ignored(
         typer.echo(f"  Files: {files_pruned}")
         typer.echo(f"  Chunks: {total_chunks_pruned}")
     else:
-        typer.echo(f"✅ Pruned ignored content from '{name}':")
+        typer.echo(f"⛵ Pruned ignored content from '{name}':")
         typer.echo(f"  Files: {files_pruned}")
         typer.echo(f"  Chunks: {total_chunks_pruned}")
 
@@ -521,10 +660,10 @@ def rm_repo(
     - Provides detailed statistics
     """
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
 
     # Get repo info
     repo = metadata.get_repo_by_name(name)
@@ -561,7 +700,7 @@ def rm_repo(
 
         # Display cleanup statistics
         stats = result["cleanup_stats"]
-        typer.echo(f"\n✓ Repository '{name}' removed successfully.")
+        typer.echo(f"\n⛵ Repository '{name}' removed successfully.")
         typer.echo("\nCleanup Statistics:")
         typer.echo(f"  Files deleted: {stats['files_deleted']}")
         typer.echo(f"  Chunk content deleted: {stats['content_deleted']}")
@@ -628,9 +767,9 @@ def reset_repo(
 
     # Load config and stores
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
 
     # If repo exists, wipe it (no confirmation, force=True for automatic cleanup)
     repo = metadata.get_repo_by_name(name)
@@ -659,7 +798,7 @@ def reset_repo(
 
     # Re-register repo
     metadata.record_repo(name=name, path=repo_path, default_embed_model=model)
-    typer.echo(f"✓ Repository '{name}' re-registered: path='{repo_path}', default_embed_model='{model}'")
+    typer.echo(f"⛵ Repository '{name}' re-registered: path='{repo_path}', default_embed_model='{model}'")
 
 
 @app.command()
@@ -681,7 +820,7 @@ def list_files(
     Output is one file path per line for easy grepping.
     """
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
     # Resolve repo
@@ -716,9 +855,9 @@ def search(
     """Search indexed code semantically (local backend).
 
     Examples:
-        dolphin kb search "authentication logic" --repo myapp
-        dolphin kb search "database migration" --path src/db --top-k 5
-        dolphin kb search "error handling" --show-content
+        dolphin search "authentication logic" --repo myapp
+        dolphin search "database migration" --path src/db --top-k 5
+        dolphin search "error handling" --show-content
     """
     from ..api.app import SearchRequest
     from ..api.search_backend import create_search_backend
@@ -751,7 +890,7 @@ def search(
             typer.echo("No results found.")
             return
 
-        typer.echo(f"\n🔍 Found {len(hits)} result(s):\n")
+        typer.echo(f"\n🔭 Found {len(hits)} result(s):\n")
 
         for i, hit in enumerate(hits, 1):
             score = hit.get("score", 0.0)
@@ -816,10 +955,10 @@ def validate_repo(
     - LanceDB vector consistency
     """
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
 
     # Get repo info
     repo = metadata.get_repo_by_name(name)
@@ -836,9 +975,9 @@ def validate_repo(
 
         # Display results
         if report["valid"]:
-            typer.echo(f"\n✓ Repository '{name}' is consistent.")
+            typer.echo(f"\n  ✓ Repository '{name}' is consistent.")
         else:
-            typer.echo(f"\n⚠️  Repository '{name}' has consistency issues:", err=True)
+            typer.echo(f"\n🚩 Repository '{name}' has consistency issues:", err=True)
             for issue in report["issues"]:
                 typer.echo(f"  - {issue}", err=True)
 
@@ -860,7 +999,7 @@ def validate_repo(
             typer.echo(f"  {model}: {count}")
 
         if not report["valid"]:
-            typer.echo(f"\nTip: Run 'kb repair-repo {name}' to fix these issues.")
+            typer.echo(f"\nTip: Run 'dolphin repair-repo {name}' to fix these issues.")
             raise typer.Exit(code=1)
 
     except Exception as e:
@@ -882,10 +1021,10 @@ def repair_repo(
     - Remove orphaned files
     """
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
 
     # Get repo info
     repo = metadata.get_repo_by_name(name)
@@ -922,14 +1061,14 @@ def repair_repo(
 
         if repair_report["success"]:
             if repair_report["repairs_performed"]:
-                typer.echo(f"\n✓ Repository '{name}' repaired successfully.")
+                typer.echo(f"\n⛵ Repository '{name}' repaired successfully.")
                 typer.echo("\nRepairs performed:")
                 for repair in repair_report["repairs_performed"]:
                     typer.echo(f"  - {repair}")
             else:
-                typer.echo(f"\n✓ No repairs needed for '{name}'.")
+                typer.echo(f"\n  ✓ No repairs needed for '{name}'.")
         else:
-            typer.echo("\n⚠️  Repair completed with errors:", err=True)
+            typer.echo("\n🚩 Repair completed with errors:", err=True)
             for error in repair_report["errors"]:
                 typer.echo(f"  - {error}", err=True)
             raise typer.Exit(code=1)
@@ -943,7 +1082,7 @@ def repair_repo(
 def list_repos() -> None:
     """List all registered repositories."""
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
     repos = metadata.list_all_repos()
@@ -951,7 +1090,7 @@ def list_repos() -> None:
         typer.echo("No repositories registered.")
         return
 
-    typer.echo(f"\n📚 Registered Repositories ({len(repos)}):\n")
+    typer.echo(f"\n⚓ Registered Repositories ({len(repos)}):\n")
     for repo in repos:
         typer.echo(f"  • {repo['name']}")
         typer.echo(f"    Path: {repo['root_path']}")
@@ -975,10 +1114,10 @@ def reset_all(
     This is a nuclear option for complete cleanup.
     """
     config = load_config()
-    metadata = SQLiteMetadataStore(config.resolved_store_root() / "metadata.db")
+    metadata = SQLiteMetadataStore(config.resolved_store_root() / _METADATA_DB_NAME)
     metadata.initialize()
 
-    lancedb = LanceDBStore(config.resolved_store_root() / "lancedb")
+    lancedb = LanceDBStore(config.resolved_store_root() / _LANCEDB_DIR_NAME)
 
     # Get all repos for cleanup
     repos = metadata.list_all_repos()
@@ -1007,27 +1146,19 @@ def reset_all(
 
     # Remove all repos using enhanced cleanup
     typer.echo("\n🧹 Removing all repositories with comprehensive cleanup...")
-    total_stats = {
-        "repos_removed": 0,
-        "files_deleted": 0,
-        "content_deleted": 0,
-        "locations_deleted": 0,
-        "sessions_deleted": 0,
-        "vectors_deleted": 0,
-        "errors": [],
-    }
+    total_stats = ResetStats()
 
     for repo in repos:
         try:
             result = metadata.rm_repo_with_lancedb(lancedb, repo["name"], force=True)
             stats = result["cleanup_stats"]
 
-            total_stats["repos_removed"] += 1  # type: ignore[operator]
-            total_stats["files_deleted"] += stats["files_deleted"]
-            total_stats["content_deleted"] += stats["content_deleted"]
-            total_stats["locations_deleted"] += stats["locations_deleted"]
-            total_stats["sessions_deleted"] += stats["sessions_deleted"]
-            total_stats["vectors_deleted"] += (
+            total_stats.repos_removed += 1
+            total_stats.files_deleted += stats["files_deleted"]
+            total_stats.content_deleted += stats["content_deleted"]
+            total_stats.locations_deleted += stats["locations_deleted"]
+            total_stats.sessions_deleted += stats["sessions_deleted"]
+            total_stats.vectors_deleted += (
                 stats["lancedb_vectors"]["small_deleted"] + stats["lancedb_vectors"]["large_deleted"]
             )
 
@@ -1035,35 +1166,39 @@ def reset_all(
 
             # Capture any warnings
             if "lancedb_warnings" in result:
-                total_stats["errors"].extend(result["lancedb_warnings"])  # type: ignore[attr-defined]
+                total_stats.errors.extend(result["lancedb_warnings"])
 
         except Exception as e:
             error_msg = f"Failed to remove {repo['name']}: {e}"
             _log.error("Failed to remove repo %s during reset", repo["name"], exc_info=True)
-            total_stats["errors"].append(error_msg)  # type: ignore[attr-defined]
-            typer.echo(f"  ✗ {error_msg}", err=True)
+            total_stats.errors.append(error_msg)
+            typer.echo(f"  🚩 {error_msg}", err=True)
 
     # Display final summary
-    typer.echo("\n✅ Reset complete!")
+    typer.echo("\n⛵ Reset complete!")
     typer.echo("\nCleanup Statistics:")
-    typer.echo(f"  Repositories removed: {total_stats['repos_removed']}")
-    typer.echo(f"  Files deleted: {total_stats['files_deleted']}")
-    typer.echo(f"  Chunks deleted: {total_stats['content_deleted']}")
-    typer.echo(f"  Locations deleted: {total_stats['locations_deleted']}")
-    typer.echo(f"  Sessions deleted: {total_stats['sessions_deleted']}")
-    typer.echo(f"  Vectors deleted: {total_stats['vectors_deleted']}")
+    typer.echo(f"  Repositories removed: {total_stats.repos_removed}")
+    typer.echo(f"  Files deleted: {total_stats.files_deleted}")
+    typer.echo(f"  Chunks deleted: {total_stats.content_deleted}")
+    typer.echo(f"  Locations deleted: {total_stats.locations_deleted}")
+    typer.echo(f"  Sessions deleted: {total_stats.sessions_deleted}")
+    typer.echo(f"  Vectors deleted: {total_stats.vectors_deleted}")
 
-    if total_stats["errors"]:
-        typer.echo(f"\n⚠️  Warnings ({len(total_stats['errors'])}):")  # type: ignore[arg-type]
-        for error in total_stats["errors"]:  # type: ignore[union-attr]
+    if total_stats.errors:
+        typer.echo(f"\n⚠️  Warnings ({len(total_stats.errors)}):")
+        for error in total_stats.errors:
             typer.echo(f"  - {error}", err=True)
 
     typer.echo(f"\nConfiguration preserved at: {config.resolved_store_root()}")
-    typer.echo("You can now run 'dolphin kb add-repo' to register new repositories.")
+    typer.echo("You can now run 'dolphin add-repo' to register new repositories.")
 
 
 def main() -> None:
-    app()
+    try:
+        app()
+    except ConfigNotFoundError as e:
+        print_status(str(e), level="error", stderr=True)
+        raise typer.Exit(1) from None
 
 
 if __name__ == "__main__":

@@ -1,7 +1,12 @@
 """Basic smoke tests for CLI functionality."""
 
+from unittest.mock import patch
+
+import pytest
 from typer.testing import CliRunner
 
+from kb.cli import main
+from kb.config import ConfigNotFoundError
 from kb.ingest.cli import app
 
 runner = CliRunner()
@@ -83,3 +88,14 @@ class TestCLIBasics:
         """Test that index requires a repository name."""
         result = runner.invoke(app, ["index"])
         assert result.exit_code != 0
+
+
+class TestMainEntrypoint:
+    """Tests for the dolphin CLI main() entrypoint."""
+
+    def test_config_not_found_exits_cleanly(self):
+        """Regression: ConfigNotFoundError should exit with code 1, no traceback."""
+        with patch("kb.cli.app", side_effect=ConfigNotFoundError("No configuration found.")):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code == 1

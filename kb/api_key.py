@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 KB_API_KEY_FILENAME = "kb_api_key"
 
@@ -61,8 +64,10 @@ def get_or_create_kb_api_key() -> str:
         try:
             os.chmod(path, 0o600)
         except OSError:
-            # Best effort – ignore on unsupported platforms (e.g., Windows)
-            pass
+            logger.warning(
+                "Could not set restrictive permissions on API key file %s; file may be readable by other users",
+                path,
+            )
         return key
     except FileExistsError:
         # Another process created it – read and return value if possible.

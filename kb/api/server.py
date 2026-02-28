@@ -265,6 +265,19 @@ async def lifespan_handler(app_instance: FastAPI):
     # Shutdown: Clean up resources
     print_status("Shutting down dolphin server runtime.", level="step", stderr=True)
 
+    # Signal the ingestion pipeline to stop processing between files.
+    # This allows any in-progress index/process_files call running in a
+    # watcher thread (or background task) to exit cooperatively rather than
+    # continuing to process the entire file list after Ctrl-C.
+    pipeline = get_pipeline()
+    if pipeline is not None:
+        try:
+            pipeline.request_cancel()
+        except Exception as e:
+            print_status(
+                "Failed to request pipeline cancellation.", level="warn", context={"error": str(e)}, stderr=True
+            )
+
     # Cancel watcher tasks
     if watch_tasks:
         print_status(
@@ -340,7 +353,8 @@ def main():
     """Entry point for kb-api command."""
     import uvicorn
 
-    uvicorn.run("kb.api.server:app_with_lifespan", host="0.0.0.0", port=8000, reload=True)
+    dev_mode = os.environ.get("DOLPHIN_DEV_MODE", "").lower() in ("1", "true", "yes")
+    uvicorn.run("kb.api.server:app_with_lifespan", host="0.0.0.0", port=8000, reload=dev_mode)
 
 
 if __name__ == "__main__":

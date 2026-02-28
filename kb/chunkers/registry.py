@@ -79,7 +79,7 @@ def _load_global_extension_map() -> dict[str, str]:
     Returns an empty map if no [languages] section is found.
     """
     try:
-        # Import TOML library (Python 3.11+ has tomllib, else use tomli)
+        # Import TOML library (Python 3.12+ stdlib, else tomli fallback)
         try:
             import tomllib
         except ImportError:

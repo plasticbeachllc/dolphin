@@ -85,7 +85,7 @@ bun run --hot src/index.ts
 
 ```bash
 # From project root
-uv run dolphin kb index <repo-name>
+uv run dolphin index <repo-name>
 ```
 
 ### 6. View in Grafana

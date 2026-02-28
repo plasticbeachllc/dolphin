@@ -6,13 +6,14 @@ import hmac
 import logging
 import re
 import threading
+from collections import OrderedDict
 from collections.abc import Awaitable, Iterable, Sequence
 from inspect import isawaitable, iscoroutinefunction
 from pathlib import Path
 from time import perf_counter
 from typing import Any, NamedTuple, Protocol, cast
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -23,11 +24,12 @@ from ..config import KBConfig, load_config
 from ..store.sqlite_meta import SQLiteMetadataStore, generate_fts_content_id
 from ..utils.tokens import estimate_tokens
 from .task_queue import TaskStatus, get_task_queue
-from .utils import GitRepository, normalize_repo_registration_path, validate_path_within_repo
+from .utils import GitRepository, validate_path_within_repo
 
 _log = logging.getLogger(__name__)
 
 # Constants
+# Batch size for metadata hash lookups (distinct from config.embedding_batch_size for the embedding API).
 EMBEDDING_BATCH_SIZE = 128
 ESTIMATED_TOKENS_PER_CHUNK = 200
 CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_:-]+$")
@@ -79,8 +81,11 @@ async def request_validation_error_handler(request: Request, exc: RequestValidat
 def _load_default_config() -> KBConfig:
     try:
         return load_config()
+    except FileNotFoundError:
+        _log.info("No config file found; using defaults.")
+        return KBConfig()
     except Exception:
-        _log.warning("Failed to load config; using defaults.", exc_info=True)
+        _log.error("Failed to load config; using defaults. Fix config to avoid unexpected behavior.", exc_info=True)
         return KBConfig()
 
 
@@ -92,9 +97,7 @@ _API_LIMITS = _DEFAULT_CONFIG.api
 # accepts both. We need to help the type checker by explicitly typing this.
 app.add_middleware(
     cast(type, CORSMiddleware),
-    allow_origins=[
-        "http://localhost:3000",  # Development only
-    ],
+    allow_origins=_API_LIMITS.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["X-API-Key", "Content-Type", "Accept"],
@@ -136,11 +139,24 @@ _store_lock = threading.Lock()
 # check can surface it without re-running a live invalidation.
 _cache_invalidation_healthy: bool = True
 
-# Module-level bounded file-lines cache shared across search requests.
+# Module-level bounded LRU file-lines cache shared across search requests.
 # Keyed by (absolute_path_str, mtime) so file edits produce automatic misses.
 # CPython dict ops are GIL-protected so no additional lock is needed here.
-_FILE_LINES_CACHE: dict[tuple[str, float], list[str]] = {}
+_FILE_LINES_CACHE: OrderedDict[tuple[str, float], list[str] | None] = OrderedDict()
 _FILE_LINES_CACHE_MAX = 256
+_FILE_LINES_CACHE_MISS = object()  # Sentinel to distinguish cached None from cache miss
+# Don't cache files larger than this to prevent memory bloat.
+_FILE_LINES_MAX_LINES = 50_000
+
+
+def get_sql_store():
+    """Return the current SQL metadata store (or None if not yet initialised)."""
+    return _sql_store
+
+
+def get_lance_store():
+    """Return the current LanceDB vector store (or None if not yet initialised)."""
+    return _lance_store
 
 
 def set_stores(sql_store, lance_store):
@@ -180,26 +196,40 @@ def reset_stores():
 
 
 def _read_file_lines(full_path: Path) -> list[str] | None:
-    """Read file lines using the module-level bounded cache keyed on (path, mtime).
+    """Read file lines using the module-level bounded LRU cache keyed on (path, mtime).
 
-    Returns None on any read error.  Cache entries are evicted FIFO when the
-    cache exceeds ``_FILE_LINES_CACHE_MAX`` entries.
+    Returns None on any read error.  The least-recently-used entry is evicted
+    when the cache exceeds ``_FILE_LINES_CACHE_MAX`` entries.
     """
     try:
         mtime = full_path.stat().st_mtime
     except OSError:
         return None
     key = (str(full_path), mtime)
-    cached = _FILE_LINES_CACHE.get(key)
-    if cached is not None:
-        return cached
+    cached = _FILE_LINES_CACHE.get(key, _FILE_LINES_CACHE_MISS)
+    if cached is not _FILE_LINES_CACHE_MISS:
+        _FILE_LINES_CACHE.move_to_end(key)
+        return cached  # type: ignore[return-value]
+    # Read line-by-line so we can bail early for huge files without
+    # buffering the entire contents into memory via readlines().
     try:
+        lines: list[str] = []
         with open(full_path, encoding="utf-8") as fh:
-            lines = fh.readlines()
+            for line in fh:
+                lines.append(line)
+                if len(lines) >= _FILE_LINES_MAX_LINES:
+                    # Cache None so repeated requests for the same oversized
+                    # file are short-circuited without re-reading.
+                    _log.debug("File too large to serve: %s (>%d lines)", full_path, _FILE_LINES_MAX_LINES)
+                    if len(_FILE_LINES_CACHE) >= _FILE_LINES_CACHE_MAX:
+                        _FILE_LINES_CACHE.popitem(last=False)
+                    _FILE_LINES_CACHE[key] = None
+                    return None
     except (OSError, UnicodeDecodeError):
         return None
+    # Cache files within the size limit.
     if len(_FILE_LINES_CACHE) >= _FILE_LINES_CACHE_MAX:
-        _FILE_LINES_CACHE.pop(next(iter(_FILE_LINES_CACHE)))
+        _FILE_LINES_CACHE.popitem(last=False)
     _FILE_LINES_CACHE[key] = lines
     return lines
 
@@ -380,6 +410,8 @@ class SearchBackend(Protocol):
 
     def search(self, request: SearchRequest) -> SearchResultSet | Awaitable[SearchResultSet]: ...
 
+    def close(self) -> None: ...
+
 
 class _EmptySearchBackend:
     """Default backend that returns zero hits until retrieval is implemented."""
@@ -387,6 +419,9 @@ class _EmptySearchBackend:
     def search(self, request: SearchRequest) -> SearchResultSet:
         _ = request
         return SearchResultSet([], None)
+
+    def close(self) -> None:
+        pass
 
 
 _DEFAULT_BACKEND = _EmptySearchBackend()
@@ -435,8 +470,25 @@ def get_search_backend() -> SearchBackend:
 
 
 def reset_search_backend() -> None:
-    """Restore the default empty backend."""
+    """Restore the default empty backend, closing the previous one if applicable.
+
+    Note: ``close()`` delegates to ``shutdown(wait=True)``, which **blocks**
+    until all in-flight search tasks finish.  This is acceptable because
+    reset is only called during config reload or test teardown — both
+    low-concurrency paths where waiting for completion is preferable to
+    leaving orphaned futures.  A concurrent ``search()`` call that captured
+    the old backend reference but hasn't yet called ``executor.submit()``
+    may raise ``RuntimeError`` after shutdown completes.
+
+    ``_EmptySearchBackend.close()`` is a no-op, so the ``except Exception``
+    guard only fires for real backends whose executor shutdown fails.
+    """
+    old = _search_backend
     set_search_backend(None)
+    try:
+        old.close()
+    except Exception:
+        _log.warning("Error closing previous search backend", exc_info=True)
 
 
 def _invalidate_search_cache(repo_name: str) -> None:
@@ -525,18 +577,13 @@ async def health(check: str = Query(default="shallow")) -> dict[str, object]:
     return {"status": overall, "checks": checks}
 
 
-@app.get("/v1/health")
-async def health_v1(check: str = Query(default="shallow")) -> dict[str, object]:
-    """Health check endpoint (v1)."""
-    return await health(check)
-
-
 async def search(request: SearchRequest) -> dict[str, Any]:
     """Search implementation used by the versioned API."""
     backend = get_search_backend()
 
     if request.repos and _sql_store is not None:
-        missing = [repo for repo in request.repos if not _sql_store.get_repo_by_name(repo)]
+        found = _sql_store.get_repos_by_names(list(request.repos))
+        missing = [r for r in request.repos if r not in found]
         if missing:
             raise HTTPException(status_code=404, detail=f"Repository not found: {', '.join(missing)}")
 
@@ -604,73 +651,6 @@ async def search(request: SearchRequest) -> dict[str, Any]:
         if request.ann_refine_factor:
             meta["ann_refine_factor"] = request.ann_refine_factor
 
-    # Extract next_cursor if provided by backend (usually attached to the last hit or a wrapper)
-    # Since the backend returns a simple list of dicts, we need a convention.
-    # The convention defined in the implementation plan implies the backend does the filtering.
-    # We need to compute the cursor *here* or have the backend return it.
-    # Given the protocol `Sequence[dict]`, the backend can't easily return side-channel data
-    # without breaking the contract or using a special attribute.
-    #
-    # However, to keep it clean, let's have the backend attach `next_cursor` to the `meta` dict
-    # if we modify the backend signature, OR, more simply, we can inspect the backend results.
-    #
-    # BUT wait, the `search` function in `app.py` calls `backend.search(request)`.
-    # `backend.search` returns `Sequence[dict]`.
-    #
-    # Let's check `search_backend.py`. It returns `list[dict]`.
-    #
-    # To support `next_cursor`, we should probably let the backend return it,
-    # OR calculate it here if the backend is strictly just returning hits.
-    # BUT the backend needs to know if there are *more* results to determine if a cursor is valid.
-    #
-    # OPTION: The backend already computes `final_results`.
-    # If `len(final_results) == top_k`, there *might* be more.
-    # To be precise, the backend implementation in the plan says "Compute next_cursor if more results exist".
-    #
-    # Let's modify `SearchBackend` protocol or return type? No, that's a breaking change for other backends if any.
-    #
-    # ALTERNATIVE: The backend can attach `_next_cursor` to the last result? Dirty.
-    #
-    # Better: Update `SearchBackend.search` to return `tuple[Sequence[dict], str | None]`?
-    # Or just return a specialized object.
-    #
-    # Let's look at `SearchBackend` protocol in `app.py`.
-    # It is: `def search(self, request: SearchRequest) -> Sequence[dict[str, object]] | Awaitable[...]`
-    #
-    # If I change this, I break `_EmptySearchBackend` and others.
-    #
-    # Let's look at `search_backend.py`.
-    #
-    # I'll stick to a slightly less invasive approach:
-    # The `backend.search` will return the results.
-    # The `backend` *object* could provide a helper to generate a cursor, OR
-    # checking the plan again: "Update SearchBackend.search method to ... Compute next_cursor if more results exist".
-    #
-    # If I change the return signature, I must update `app.py`, `_EmptySearchBackend`, etc.
-    # This seems necessary for a robust implementation.
-    #
-    # Let's see if we can just update `app.py` to handle a tuple return or an object.
-    # But `app.py` currently thinks it gets `hits`.
-    #
-    # Let's Modify `SearchBackend` protocol to return `SearchResult` object or similar?
-    # Or just `dict` with hits and meta?
-    #
-    # `app.py` currently: `raw_hits = backend.search(request)`
-    #
-    # If I change `backend.search` to return `tuple[hits, cursor]`, I can update `app.py` easily.
-    #
-    # Let's do that. It makes the most sense.
-
-    # Retrieve next_cursor if returned by backend (handling backward compatibility check)
-    next_cursor = None
-    if isinstance(hits_list, dict) and "hits" in hits_list:
-        # Backend returned a dict wrapper
-        next_cursor = hits_list.get("next_cursor")
-        hits_list = hits_list["hits"]
-    elif isinstance(hits_list, tuple) and len(hits_list) == 2:
-        # Backend returned (hits, cursor)
-        hits_list, next_cursor = hits_list
-
     if next_cursor:
         meta["next_cursor"] = next_cursor
 
@@ -689,12 +669,6 @@ async def search(request: SearchRequest) -> dict[str, Any]:
     if warnings:
         response["warnings"] = warnings
     return response
-
-
-@app.post("/v1/search")
-async def search_v1(request: SearchRequest) -> dict[str, object]:
-    """Dispatch the search request to the configured backend (v1)."""
-    return await search(request)
 
 
 async def list_repos() -> dict[str, list[dict[str, object]]]:
@@ -725,12 +699,6 @@ async def list_repos() -> dict[str, list[dict[str, object]]]:
 
         logging.error("Failed to list repositories", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
-
-@app.get("/v1/repos")
-async def list_repos_v1() -> dict[str, list[dict[str, object]]]:
-    """List all registered repositories with metadata (v1)."""
-    return await list_repos()
 
 
 async def fetch_chunk(chunk_id: str) -> dict[str, object]:
@@ -803,12 +771,6 @@ async def fetch_chunk(chunk_id: str) -> dict[str, object]:
 
         logging.error(f"Error fetching chunk {chunk_id}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error fetching chunk: {str(e)}")
-
-
-@app.get("/v1/chunks/{chunk_id}")
-async def fetch_chunk_v1(chunk_id: str) -> dict[str, object]:
-    """Fetch a specific chunk by ID (v1)."""
-    return await fetch_chunk(chunk_id)
 
 
 async def fetch_file_slice(
@@ -887,17 +849,6 @@ async def fetch_file_slice(
 
         logging.error(f"Error reading file: {full_path}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
-
-
-@app.get("/v1/file")
-async def fetch_file_slice_v1(
-    repo: str = Query(..., description="Repository name"),
-    path: str = Query(..., description="File path relative to repo root"),
-    start: int = Query(1, description="Start line (1-indexed, inclusive)"),
-    end: int = Query(..., description="End line (1-indexed, inclusive)"),
-) -> dict[str, object]:
-    """Fetch a slice of a file by line range (v1)."""
-    return await fetch_file_slice(repo=repo, path=path, start=start, end=end)
 
 
 class RegisterRepoRequest(BaseModel):
@@ -1019,96 +970,7 @@ class DriftDetectionResponse(BaseModel):
     total: int
 
 
-@app.post("/v1/repos")
-async def register_repo(request: RegisterRepoRequest) -> RegisterRepoResponse:
-    """Register a new repository for indexing.
-
-    This creates a repository entry in the metadata store, allowing it to be indexed.
-    """
-    if _sql_store is None:
-        raise HTTPException(status_code=503, detail="SQL store not initialized")
-
-    # Check if repo already exists
-    existing = _sql_store.get_repo_by_name(request.name)
-    if existing:
-        return RegisterRepoResponse(
-            repo_id=existing["id"],
-            name=request.name,
-            path=existing["root_path"],
-            message=f"Repository '{request.name}' already registered",
-        )
-
-    # Normalize and sanitize request path. Existence/type checks occur at actual use sites.
-    normalized_repo_path = normalize_repo_registration_path(request.path)
-
-    # Register the repository
-    try:
-        _sql_store.record_repo(
-            name=request.name,
-            path=normalized_repo_path,
-            default_embed_model=request.default_embed_model,
-        )
-
-        # Get the registered repo to retrieve its ID
-        repo = _sql_store.get_repo_by_name(request.name)
-        if not repo:
-            raise HTTPException(status_code=500, detail="Failed to retrieve registered repository")
-
-        # Return normalized path from database to ensure consistency
-        return RegisterRepoResponse(
-            repo_id=repo["id"],
-            name=request.name,
-            path=repo["root_path"],
-            message=f"Repository '{request.name}' registered successfully",
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to register repository: {str(e)}")
-
-
-@app.post("/v1/admin/reload")
-async def admin_reload_backend() -> dict[str, str]:
-    """Reload the search backend and store connections.
-
-    This is used by the indexing CLI to notify the server that the index has changed.
-    """
-    # Import here to avoid circular dependency with server.py
-    # server.py imports app.py, so app.py cannot import server.py at top level
-    try:
-        from .server import reload_search_backend
-
-        reload_search_backend()
-        return {"status": "ok", "message": "Search backend reloaded"}
-    except Exception as e:
-        import logging
-
-        logging.error("Failed to reload backend", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Reload failed: {str(e)}")
-
-
-@app.post("/v1/admin/rebuild-fts5")
-async def rebuild_fts5() -> dict[str, str]:
-    """Rebuild the FTS5 table with updated schema.
-
-    This drops and recreates the FTS5 table. After calling this endpoint,
-    you should trigger a full re-index to populate the FTS5 table with
-    the new deterministic content_ids.
-    """
-    if _sql_store is None:
-        raise HTTPException(status_code=503, detail="SQL store not initialized")
-
-    try:
-        _sql_store.rebuild_fts5_table()
-        return {
-            "status": "success",
-            "message": "FTS5 table rebuilt successfully. Please trigger a re-index to populate it.",
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to rebuild FTS5 table: {str(e)}")
-
-
-async def _process_index_task(task_id: str, repo_name: str, files: list[str]) -> None:
+async def process_index_task(task_id: str, repo_name: str, files: list[str]) -> None:
     """Background task to process file indexing."""
     import asyncio
 
@@ -1120,12 +982,12 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
         await task_queue.update_task(task_id, status=TaskStatus.PROCESSING)
 
         if _sql_store is None or _lance_store is None:
-            raise Exception("Stores not initialized")
+            raise RuntimeError("Stores not initialized")
 
         # Get repo
         repo = _sql_store.get_repo_by_name(repo_name)
         if not repo:
-            raise Exception(f"Repository '{repo_name}' not found")
+            raise ValueError(f"Repository '{repo_name}' not found")
 
         repo_id = int(repo["id"])
         root = Path(repo["root_path"])
@@ -1469,444 +1331,6 @@ async def _process_index_task(task_id: str, repo_name: str, files: list[str]) ->
         await task_queue.update_task(task_id, status=TaskStatus.FAILED, error=error_msg)
 
 
-@app.post("/v1/index")
-async def index_files(request: IndexRequest, background_tasks: BackgroundTasks) -> IndexResponse:
-    """Queue files for indexing and return immediately with task ID.
-
-    This endpoint creates an indexing task and processes it in the background.
-    Use GET /v1/index/status/{task_id} to check progress.
-    """
-    if _sql_store is None or _lance_store is None:
-        raise HTTPException(status_code=503, detail="Stores not initialized")
-
-    # Validate repo exists
-    repo = _sql_store.get_repo_by_name(request.repo)
-    if not repo:
-        raise HTTPException(status_code=404, detail=f"Repository '{request.repo}' not found")
-
-    # Create task
-    task_queue = get_task_queue()
-    task = task_queue.create_task(request.repo, request.files)
-
-    # Queue background processing
-    background_tasks.add_task(_process_index_task, task.task_id, request.repo, request.files)
-
-    return IndexResponse(
-        task_id=task.task_id,
-        status="queued",
-        message=f"Queued {len(request.files)} files for indexing",
-    )
-
-
-@app.get("/v1/index/status/{task_id}")
-async def get_index_status(task_id: str) -> IndexStatusResponse:
-    """Get the status of an indexing task."""
-    task_queue = get_task_queue()
-    task = task_queue.get_task(task_id)
-
-    if not task:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
-
-    return IndexStatusResponse(
-        task_id=task.task_id,
-        status=task.status.value,
-        progress=task.progress,
-        total=task.total,
-        indexed=task.indexed,  # Use real-time task field instead of result
-        skipped=task.skipped,  # Use real-time task field instead of result
-        current_file=task.current_file,  # Current file being processed
-        error=task.error,
-        result=task.result,
-    )
-
-
-@app.get("/v1/index/tasks")
-async def list_index_tasks(repo: str | None = None) -> dict:
-    """List all indexing tasks, optionally filtered by repository."""
-    task_queue = get_task_queue()
-    tasks = task_queue.get_all_tasks(repo)
-
-    return {
-        "tasks": [
-            {
-                "task_id": t.task_id,
-                "repo": t.repo,
-                "status": t.status.value,
-                "progress": t.progress,
-                "total": t.total,
-                "created_at": t.created_at.isoformat(),
-                "error": t.error,
-            }
-            for t in tasks
-        ]
-    }
-
-
-@app.get("/v1/repos/{repo_name}/stats")
-async def get_repo_stats(repo_name: str) -> RepoStatsResponse:
-    """Get repository statistics for cost estimation and UI display.
-
-    Returns file count, chunk count, token count, and last index timestamp.
-    Used by the frontend to calculate reindex costs and show current status.
-    """
-    if _sql_store is None:
-        raise HTTPException(status_code=503, detail="SQL store not initialized")
-
-    # Get repo
-    repo = _sql_store.get_repo_by_name(repo_name)
-    if not repo:
-        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
-
-    repo_id = int(repo["id"])
-    repo_path = repo["root_path"]
-    embed_model = repo.get("default_embed_model", "large")
-
-    try:
-        from contextlib import closing
-
-        with _sql_store._connect() as conn, closing(conn.cursor()) as cur:
-            # Count files
-            cur.execute("SELECT COUNT(*) FROM files WHERE repo_id = ?", (repo_id,))
-            files_count = cur.fetchone()[0]
-
-            # Count chunks
-            cur.execute("SELECT COUNT(*) FROM chunk_content WHERE repo_id = ?", (repo_id,))
-            chunks_count = cur.fetchone()[0]
-
-            # Sum token counts (from LanceDB metadata or estimate)
-            total_tokens = chunks_count * ESTIMATED_TOKENS_PER_CHUNK
-
-            # Get last successful session timestamp
-            cur.execute(
-                """
-                SELECT MAX(created_at)
-                FROM sessions
-                WHERE repo_id = ? AND status = 'succeeded'
-            """,
-                (repo_id,),
-            )
-            last_indexed_row = cur.fetchone()
-            last_indexed = last_indexed_row[0] if last_indexed_row[0] else None
-
-            # Check if reindex is needed (simple heuristic: no successful sessions)
-            cur.execute(
-                """
-                SELECT COUNT(*)
-                FROM sessions
-                WHERE repo_id = ? AND status = 'succeeded'
-            """,
-                (repo_id,),
-            )
-            successful_sessions = cur.fetchone()[0]
-            needs_reindex = successful_sessions == 0
-
-        return RepoStatsResponse(
-            name=repo_name,
-            path=repo_path,
-            files_count=files_count,
-            chunks_count=chunks_count,
-            total_tokens=total_tokens,
-            embed_model=embed_model,
-            last_indexed=last_indexed,
-            needs_reindex=needs_reindex,
-        )
-
-    except Exception as e:
-        import logging
-
-        logging.error(f"Failed to get stats for repo {repo_name}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get repo stats: {str(e)}")
-
-
-@app.post("/v1/repos/{repo_name}/reindex")
-async def reindex_repo(repo_name: str, request: ReindexRequest, background_tasks: BackgroundTasks) -> IndexResponse:
-    """Trigger a full or incremental reindex of the repository.
-
-    Full reindex clears existing index and reprocesses all files.
-    Incremental reindex only processes changed files.
-
-    Requires confirmation for full reindex due to cost implications.
-    """
-    if _sql_store is None or _lance_store is None:
-        raise HTTPException(status_code=503, detail="Stores not initialized")
-
-    # Pipeline is only required for full reindex with clear_existing
-    if request.mode == "full" and request.clear_existing and _pipeline is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Pipeline not initialized (required for index clearing)",
-        )
-
-    # Get repo
-    repo = _sql_store.get_repo_by_name(repo_name)
-    if not repo:
-        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
-
-    # Validate mode
-    if request.mode not in ["full", "incremental"]:
-        raise HTTPException(status_code=400, detail="Mode must be 'full' or 'incremental'")
-
-    # Require confirmation for full reindex
-    if request.mode == "full" and not request.confirmed:
-        raise HTTPException(
-            status_code=400,
-            detail="Full reindex requires confirmation due to cost implications",
-        )
-
-    try:
-        # For full reindex, use pipeline's full_reindex flag
-        if request.mode == "full":
-            # Queue full reindex task
-            import logging
-            from pathlib import Path
-
-            logger = logging.getLogger(__name__)
-            repo_id = int(repo["id"])
-            root = Path(repo["root_path"])
-
-            # Get all tracked files
-            from ..ingest._helpers import get_all_tracked_files
-
-            all_files = get_all_tracked_files(root)
-
-            logger.info(f"[Full Reindex] Found {len(all_files)} tracked files for {repo_name}")
-            logger.info(f"[Full Reindex] Root path: {root}")
-            if all_files:
-                logger.info(f"[Full Reindex] First 5 files: {all_files[:5]}")
-            else:
-                logger.warning(f"[Full Reindex] NO TRACKED FILES FOUND for {repo_name} at {root}")
-
-            # Create task
-            task_queue = get_task_queue()
-            task = task_queue.create_task(repo_name, all_files)
-            logger.info(f"[Full Reindex] Created task {task.task_id} with {len(all_files)} files")
-
-            # If clear_existing is requested, trigger index drop
-            if request.clear_existing:
-                # This will be handled by the background task
-                pass
-
-            # Queue background processing with full_reindex flag
-            background_tasks.add_task(
-                _process_full_reindex_task,
-                task.task_id,
-                repo_name,
-                all_files,
-                clear_existing=request.clear_existing,
-            )
-
-            return IndexResponse(
-                task_id=task.task_id,
-                status="queued",
-                message=f"Full reindex queued: {len(all_files)} files to process",
-            )
-        else:
-            # Incremental mode: use existing git-diff-based indexing
-            # Get changed files since last commit
-            from pathlib import Path
-
-            from ..ingest._helpers import git_changed_files_modified_added
-
-            repo_id = int(repo["id"])
-            root = Path(repo["root_path"])
-
-            # Get last successful commit
-            last_success = _sql_store.get_last_successful_commit(repo_id)
-
-            if last_success:
-                # Get current commit
-                try:
-                    git_repo = GitRepository(root)
-                    commit_sha = git_repo.get_current_commit()
-
-                    # Get changed files
-                    changed_files = git_changed_files_modified_added(root, last_success, commit_sha)
-                except Exception:
-                    # Fallback: queue all tracked files
-                    from ..ingest._helpers import get_all_tracked_files
-
-                    changed_files = get_all_tracked_files(root)
-            else:
-                # No previous index: process all files
-                from ..ingest._helpers import get_all_tracked_files
-
-                changed_files = get_all_tracked_files(root)
-
-            if not changed_files:
-                raise HTTPException(status_code=400, detail="No files to index (all files up to date)")
-
-            # Create task
-            task_queue = get_task_queue()
-            task = task_queue.create_task(repo_name, changed_files)
-
-            # Queue background processing
-            background_tasks.add_task(_process_index_task, task.task_id, repo_name, changed_files)
-
-            return IndexResponse(
-                task_id=task.task_id,
-                status="queued",
-                message=f"Incremental index queued: {len(changed_files)} files to process",
-            )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to trigger reindex: {str(e)}")
-
-
-@app.delete("/v1/repos/{repo_name}/index")
-async def clear_repo_index(repo_name: str, confirmed: bool = False) -> dict:
-    """Clear all indexed data for a repository.
-
-    This removes all chunks, vectors, and metadata for the repository.
-    Requires confirmation due to destructive nature.
-    """
-    if not confirmed:
-        raise HTTPException(status_code=400, detail="Index clearing requires confirmation parameter")
-
-    if _sql_store is None or _lance_store is None or _pipeline is None:
-        raise HTTPException(status_code=503, detail="Stores not initialized")
-
-    # Get repo
-    repo = _sql_store.get_repo_by_name(repo_name)
-    if not repo:
-        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
-
-    repo_id = int(repo["id"])
-
-    try:
-        # Use pipeline's _drop_repo_index method
-        _pipeline._drop_repo_index(repo_id, repo_name)
-        _invalidate_search_cache(repo_name)
-
-        return {
-            "success": True,
-            "message": f"Index cleared for repository '{repo_name}'",
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to clear index: {str(e)}")
-
-
-# =====================
-# File Sync Endpoints (Phase 2)
-# =====================
-
-
-@app.post("/v1/repos/{repo_name}/changes")
-async def record_pending_changes(repo_name: str, request: PendingChangeRequest) -> dict:
-    """Record pending file changes detected by file watcher.
-
-    This endpoint is called by clients when files are created, modified, or deleted.
-    Changes are persisted to survive crashes and restarts.
-    """
-    if _sql_store is None:
-        raise HTTPException(status_code=503, detail="SQL store not initialized")
-
-    # Get repo
-    repo = _sql_store.get_repo_by_name(repo_name)
-    if not repo:
-        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
-
-    repo_id = int(repo["id"])
-
-    try:
-        change_ids = []
-        for change in request.changes:
-            change_id = _sql_store.record_pending_change(
-                repo_id=repo_id,
-                file_path=change.file_path,
-                change_type=change.change_type,
-                old_path=change.old_path,
-            )
-            change_ids.append(change_id)
-
-        return {
-            "change_ids": change_ids,
-            "message": f"Recorded {len(change_ids)} pending changes for '{repo_name}'",
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to record changes: {str(e)}")
-
-
-@app.get("/v1/repos/{repo_name}/pending-changes")
-async def get_pending_changes(repo_name: str, limit: int = 1000) -> dict:
-    """Get unprocessed pending changes for a repository.
-
-    This endpoint returns all file changes that have been detected but not yet indexed.
-    Used by the auto-sync manager to process pending changes.
-    """
-    if _sql_store is None:
-        raise HTTPException(status_code=503, detail="SQL store not initialized")
-
-    # Get repo
-    repo = _sql_store.get_repo_by_name(repo_name)
-    if not repo:
-        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
-
-    repo_id = int(repo["id"])
-
-    try:
-        changes = _sql_store.get_pending_changes(repo_id=repo_id, limit=limit)
-
-        # Add processed field to each change for compatibility
-        for change in changes:
-            change["processed"] = False
-
-        return {"changes": changes, "total": len(changes)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get pending changes: {str(e)}")
-
-
-@app.post("/v1/repos/{repo_name}/changes/mark-processed")
-async def mark_changes_processed(repo_name: str, request: MarkProcessedRequest) -> dict:
-    """Mark pending changes as processed after indexing.
-
-    This endpoint is called after the auto-sync manager successfully indexes pending changes.
-    """
-    if _sql_store is None:
-        raise HTTPException(status_code=503, detail="SQL store not initialized")
-
-    # Get repo
-    repo = _sql_store.get_repo_by_name(repo_name)
-    if not repo:
-        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
-
-    try:
-        processed = _sql_store.mark_changes_processed(request.change_ids)
-
-        return {
-            "processed_count": processed,
-            "message": f"Marked {processed} changes as processed",
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to mark changes as processed: {str(e)}")
-
-
-@app.get("/v1/repos/{repo_name}/drift")
-async def detect_drift(repo_name: str) -> DriftDetectionResponse:
-    """Detect files that have changed since last indexing (drift detection).
-
-    This endpoint compares current file state with snapshots taken during indexing
-    to identify files that were modified while clients were offline or during crashes.
-    """
-    if _sql_store is None:
-        raise HTTPException(status_code=503, detail="SQL store not initialized")
-
-    # Get repo
-    repo = _sql_store.get_repo_by_name(repo_name)
-    if not repo:
-        raise HTTPException(status_code=404, detail=f"Repository '{repo_name}' not found")
-
-    repo_id = int(repo["id"])
-
-    try:
-        drift_events = await asyncio.to_thread(_sql_store.detect_drift, repo_id)
-
-        return DriftDetectionResponse(drift_events=drift_events, total=len(drift_events))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to detect drift: {str(e)}")
-
-
 async def _process_full_reindex_task(
     task_id: str, repo_name: str, files: list[str], clear_existing: bool = False
 ) -> None:
@@ -1928,12 +1352,12 @@ async def _process_full_reindex_task(
         # If clear_existing is True, we need pipeline (also validated in handler)
         if clear_existing:
             if _sql_store is None or _pipeline is None:
-                raise Exception("Stores not initialized for index clearing")
+                raise RuntimeError("Stores not initialized for index clearing")
 
             # Get repo
             repo = _sql_store.get_repo_by_name(repo_name)
             if not repo:
-                raise Exception(f"Repository '{repo_name}' not found")
+                raise ValueError(f"Repository '{repo_name}' not found")
 
             repo_id = int(repo["id"])
 
@@ -1944,7 +1368,7 @@ async def _process_full_reindex_task(
 
         logger.info(f"[Full Reindex Task] About to process {len(files)} files for {repo_name}")
         # Now process all files using standard indexing
-        await _process_index_task(task_id, repo_name, files)
+        await process_index_task(task_id, repo_name, files)
         logger.info("[Full Reindex Task] Completed processing")
 
     except Exception as e:
@@ -1954,10 +1378,22 @@ async def _process_full_reindex_task(
         await task_queue.update_task(task_id, status=TaskStatus.FAILED, error=error_msg)
 
 
+# ---------------------------------------------------------------------------
+# Register route modules
+# ---------------------------------------------------------------------------
+from .routes import files_router, health_router, repos_router, search_router, tasks_router  # noqa: E402
+
+app.include_router(health_router)
+app.include_router(search_router)
+app.include_router(repos_router)
+app.include_router(files_router)
+app.include_router(tasks_router)
+
+
 def main() -> None:
     import uvicorn
 
-    uvicorn.run("pb_kb.api.app:app", host="127.0.0.1", port=7777, reload=False)
+    uvicorn.run("kb.api.app:app", host="127.0.0.1", port=7777, reload=False)
 
 
 if __name__ == "__main__":

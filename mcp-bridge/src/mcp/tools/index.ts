@@ -1,1 +1,1 @@
-export { tools, type ToolRegistration } from "./registry.js";
+export { tools, type ToolRegistration, type ToolHandler } from "./registry.js";

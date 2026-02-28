@@ -156,18 +156,53 @@ class EmbeddingQueue:
         self._shutdown = False
 
     def start(self, num_workers: int = 3):
-        """Start background workers."""
-        for _ in range(num_workers):
-            self.workers.append(asyncio.create_task(self._worker_loop()))
+        """Start background workers.
 
-    async def stop(self):
-        """Stop workers and wait for queue to drain."""
-        self._shutdown = True
-        await self.queue.join()
-        for w in self.workers:
-            w.cancel()
+        Resets the shutdown flag so that a previously-stopped instance can be
+        reused.  Must be called before submitting new work.
+
+        Raises:
+            RuntimeError: If workers are already running (call stop() first).
+        """
         if self.workers:
-            await asyncio.gather(*self.workers, return_exceptions=True)
+            raise RuntimeError("Workers already running — call stop() before start()")
+        tasks: list[asyncio.Task] = []
+        try:
+            for _ in range(num_workers):
+                tasks.append(asyncio.create_task(self._worker_loop()))
+        except Exception:
+            # Cancel any tasks that were created before the failure.
+            for t in tasks:
+                t.cancel()
+            raise
+        self._shutdown = False
+        self.workers = tasks
+
+    async def stop(self, timeout: float = 30.0):
+        """Stop workers and wait for queue to drain.
+
+        Safe to call multiple times; subsequent calls are no-ops.
+        After stop() returns the instance may be restarted via start().
+
+        Args:
+            timeout: Maximum seconds to wait for the queue to drain before
+                     force-cancelling workers.
+        """
+        if self._shutdown and not self.workers:
+            return
+        self._shutdown = True
+        try:
+            await asyncio.wait_for(self.queue.join(), timeout=timeout)
+        except TimeoutError:
+            logger.warning(f"Embedding queue did not drain within {timeout}s, cancelling workers")
+        finally:
+            # Always cancel and await workers to avoid
+            # "Task was destroyed but it is pending!" warnings.
+            for w in self.workers:
+                w.cancel()
+            if self.workers:
+                await asyncio.gather(*self.workers, return_exceptions=True)
+            self.workers.clear()
 
     async def submit(self, texts: list[str], metadata: dict[str, Any]) -> list[list[float]]:
         """Submit texts for embedding and wait for result."""

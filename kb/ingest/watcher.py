@@ -73,8 +73,7 @@ class RepoWatcher:
         """Start watching the repository for changes."""
         self._stop_event = asyncio.Event()
         self._stop_requested.clear()
-        assert self._stop_event is not None
-        print(f"Starting watcher for {self.repo_name} at {self.root}")
+        logger.info("Starting watcher for %s at %s", self.repo_name, self.root)
 
         try:
             try:
@@ -83,26 +82,26 @@ class RepoWatcher:
                     reason="Aborted on startup: previous watcher session did not complete cleanly",
                 )
                 if aborted:
-                    print(f"⚠️  Aborted {aborted} stale session(s) for {self.repo_name}")
+                    logger.warning("Aborted %d stale session(s) for %s", aborted, self.repo_name)
             except Exception as e:
-                logger.warning(f"Failed to abort stale sessions for {self.repo_name}: {e}", exc_info=True)
+                logger.warning("Failed to abort stale sessions for %s: %s", self.repo_name, e, exc_info=True)
 
             if self._should_stop():
                 return
 
             # Perform startup sync to ensure index is up to date with HEAD.
             # We use force=True to allow dirty working tree (since we are watching for edits).
-            print(f"Performing startup sync for {self.repo_name}...")
+            logger.info("Performing startup sync for %s", self.repo_name)
             try:
                 # Explicitly copy context so the embedding provider ContextVar
                 # propagates to the executor thread (Python <3.14 does not do
                 # this automatically in run_in_executor).
                 ctx = contextvars.copy_context()
                 _do_index = lambda: self.pipeline.index(self.repo_name, dry_run=False, force=True)  # noqa: E731
-                await asyncio.get_event_loop().run_in_executor(self._executor, ctx.run, _do_index)
-                print(f"Startup sync complete for {self.repo_name}")
+                await asyncio.get_running_loop().run_in_executor(self._executor, ctx.run, _do_index)
+                logger.info("Startup sync complete for %s", self.repo_name)
             except Exception as e:
-                logger.error(f"Startup sync failed for {self.repo_name}: {e}", exc_info=True)
+                logger.error("Startup sync failed for %s: %s", self.repo_name, e, exc_info=True)
 
             if self._should_stop():
                 return
@@ -170,16 +169,16 @@ class RepoWatcher:
 
     async def _check_branch_switch(self):
         try:
-            new_state = await asyncio.get_event_loop().run_in_executor(
+            new_state = await asyncio.get_running_loop().run_in_executor(
                 self._executor, get_current_branch_state, self.root
             )
 
             if self.current_branch_state and detect_branch_switch(self.current_branch_state, new_state):
-                print(f"Branch switch detected: {self.current_branch_state.branch} -> {new_state.branch}")
+                logger.info("Branch switch detected: %s -> %s", self.current_branch_state.branch, new_state.branch)
                 self.current_branch_state = new_state
 
                 # Trigger branch reconciliation
-                await asyncio.get_event_loop().run_in_executor(
+                await asyncio.get_running_loop().run_in_executor(
                     self._executor, self.pipeline.reconcile_branch_switch, self.repo_name
                 )
             else:
@@ -274,12 +273,12 @@ class RepoWatcher:
                         )
                 conn.commit()
 
-        await asyncio.get_event_loop().run_in_executor(self._executor, _db_op)
+        await asyncio.get_running_loop().run_in_executor(self._executor, _db_op)
 
     async def _process_pending_changes(self):
         """Process all pending changes in the database."""
         ctx = contextvars.copy_context()
-        await asyncio.get_event_loop().run_in_executor(self._executor, ctx.run, self._process_pending_sync)
+        await asyncio.get_running_loop().run_in_executor(self._executor, ctx.run, self._process_pending_sync)
 
     def _process_pending_sync(self):
         """Synchronous processing logic (runs in thread pool)."""
@@ -291,7 +290,7 @@ class RepoWatcher:
         if not changes:
             return
 
-        print(f"Processing {len(changes)} pending changes for {self.repo_name}...")
+        logger.info("Processing %d pending changes for %s", len(changes), self.repo_name)
 
         # Group by type
         to_process = []  # modified or added
@@ -385,11 +384,15 @@ class RepoWatcher:
 
             # Close session
             self.metadata.set_session_status(session_id, "succeeded")
-            print(f"Batch processed successfully (session {session_id})")
+            logger.info("Batch processed successfully (session %s)", session_id)
 
         except Exception as e:
-            logger.error(f"Error processing batch: {e}", exc_info=True)
-            self.metadata.set_session_status(session_id, "failed")
+            if self.pipeline.is_cancel_requested():
+                logger.info("Batch processing interrupted by shutdown request for %s", self.repo_name)
+                self.metadata.set_session_status(session_id, "aborted", notes="interrupted by shutdown")
+            else:
+                logger.error(f"Error processing batch: {e}", exc_info=True)
+                self.metadata.set_session_status(session_id, "failed")
 
     def _find_missing_files_in_db(self) -> list[str]:
         """Return file paths that exist in metadata but not on disk."""

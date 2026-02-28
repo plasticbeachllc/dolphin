@@ -129,7 +129,8 @@ def test_query_builds_index_once_per_table():
     mock_search_query.to_list.return_value = []
 
     mock_table = MagicMock()
-    mock_table.count_rows.return_value = 1
+    # PQ index training requires >= 256 rows; use 300 to trigger index creation.
+    mock_table.count_rows.return_value = 300
     mock_table.list_indices.return_value = []
     mock_table.search.return_value = mock_search_query
 
@@ -142,6 +143,31 @@ def test_query_builds_index_once_per_table():
     store.query(query_vector, model="small", top_k=1)
 
     assert mock_table.create_index.call_count == 1
+
+
+def test_query_skips_index_for_small_tables():
+    """Tables with fewer than 256 rows should skip index creation (brute-force is sufficient)."""
+    store = LanceDBStore("memory://test_skip_small")
+
+    mock_search_query = MagicMock()
+    mock_search_query.limit.return_value = mock_search_query
+    mock_search_query.metric.return_value = mock_search_query
+    mock_search_query.nprobes.return_value = mock_search_query
+    mock_search_query.refine_factor.return_value = mock_search_query
+    mock_search_query.to_list.return_value = []
+
+    mock_table = MagicMock()
+    mock_table.count_rows.return_value = 10
+    mock_table.search.return_value = mock_search_query
+
+    mock_db = MagicMock()
+    mock_db.open_table.return_value = mock_table
+    store._db = mock_db
+
+    query_vector = [0.1] * 1536
+    store.query(query_vector, model="small", top_k=1)
+
+    mock_table.create_index.assert_not_called()
 
 
 def test_connect_called_once_under_concurrent_threads():

@@ -14,14 +14,9 @@ from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from typing import ClassVar
 
+from kb.ingest._helpers import worker_ignore_sigint
+
 logger = logging.getLogger(__name__)
-
-
-def _worker_init() -> None:
-    """Ignore SIGINT in worker processes; the main process owns shutdown."""
-    import signal
-
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
 # Try to import psutil for advanced resource monitoring
@@ -125,22 +120,25 @@ class DynamicWorkerPool:
             f"using={self._optimal_workers} workers"
         )
 
-        # Create executor; workers ignore SIGINT so the main process handles Ctrl-C cleanly
-        self._executor = ProcessPoolExecutor(max_workers=self._optimal_workers, initializer=_worker_init)
+        # Create executor — workers ignore SIGINT so only the main process handles Ctrl-C
+        self._executor = ProcessPoolExecutor(max_workers=self._optimal_workers, initializer=worker_ignore_sigint)
 
     def _calculate_optimal_workers(self) -> int:
         """Calculate optimal number of workers based on current system state."""
         resources = get_system_resources()
 
         # 1. CPU-based calculation
-        # If load matches CPUs, we are fully utilized
         current_load = resources.load_avg_1min
-        max(0, self.cpu_count * self.target_cpu_utilization - current_load)
 
-        # Allow at least 1 worker per free core-equivalent, but be conservative
-        cpu_workers = max(self.min_workers, int(self.cpu_count * self.target_cpu_utilization))
+        # Start with a conservative ceiling based on target utilisation.
+        cpu_ceiling = int(self.cpu_count * self.target_cpu_utilization)
 
-        # If system is already heavily loaded, throttle back
+        # Subtract current system load so we don't pile on to a busy host,
+        # but never go below min_workers.
+        available = max(0, cpu_ceiling - int(current_load))
+        cpu_workers = max(self.min_workers, available)
+
+        # If the system is saturated beyond its core count, fall back to minimum.
         if current_load > self.cpu_count:
             cpu_workers = self.min_workers
 

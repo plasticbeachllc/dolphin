@@ -8,11 +8,44 @@ before the expensive KNN search operation.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Blocklist pattern: reject values containing SQL injection characters.
+# Blocks double quotes, semicolons, backslashes, and SQL comment markers
+# (-- and /*).  Underscores, percent signs, and other common path/identifier
+# characters are intentionally allowed — LIKE wildcards are escaped
+# separately by ``_escape_like_literals``.
+_SQL_DANGEROUS = re.compile(r"""[";\\]|--|/\*""")
+
+
+def _sanitize_filter_value(value: str) -> str | None:
+    """Sanitize a string value for use in SQL filter expressions.
+
+    Returns ``None`` (instead of raising) when the value contains
+    SQL-dangerous characters so that callers can skip the offending
+    filter clause rather than aborting the entire search.
+
+    Single quotes are escaped by doubling (standard SQL escaping) so
+    names like ``O'Briens-lib`` work correctly.
+    """
+    if _SQL_DANGEROUS.search(value):
+        logger.warning("Filter value skipped — contains SQL-dangerous characters: %r", value)
+        return None
+    return value.replace("'", "''")
+
+
+def _escape_like_literals(value: str) -> str:
+    """Escape LIKE metacharacters (``%`` and ``_``) so they match literally.
+
+    Call this on sanitized text *before* converting glob wildcards
+    (``*`` / ``?``) into LIKE wildcards (``%`` / ``_``).
+    """
+    return value.replace("%", "\\%").replace("_", "\\_")
 
 
 @dataclass
@@ -113,31 +146,30 @@ class VectorPreFilter:
 
         # Repository filter (most common and effective)
         if criteria.repos:
-            if len(criteria.repos) == 1:
-                repo_filter = f"repo = '{criteria.repos[0]}'"
-            else:
-                # Multiple repos - use IN clause
-                repo_list = ", ".join(f"'{r}'" for r in criteria.repos)
-                repo_filter = f"repo IN ({repo_list})"
-            conditions.append(repo_filter)
+            safe_repos = [s for r in criteria.repos if (s := _sanitize_filter_value(r)) is not None]
+            if len(safe_repos) == 1:
+                conditions.append(f"repo = '{safe_repos[0]}'")
+            elif safe_repos:
+                repo_list = ", ".join(f"'{r}'" for r in safe_repos)
+                conditions.append(f"repo IN ({repo_list})")
 
         # Language filter
         if criteria.languages:
-            if len(criteria.languages) == 1:
-                lang_filter = f"language = '{criteria.languages[0]}'"
-            else:
-                lang_list = ", ".join(f"'{lang}'" for lang in criteria.languages)
-                lang_filter = f"language IN ({lang_list})"
-            conditions.append(lang_filter)
+            safe_langs = [s for lang in criteria.languages if (s := _sanitize_filter_value(lang)) is not None]
+            if len(safe_langs) == 1:
+                conditions.append(f"language = '{safe_langs[0]}'")
+            elif safe_langs:
+                lang_list = ", ".join(f"'{lang}'" for lang in safe_langs)
+                conditions.append(f"language IN ({lang_list})")
 
         # Symbol kind filter
         if criteria.symbol_kinds:
-            if len(criteria.symbol_kinds) == 1:
-                kind_filter = f"symbol_kind = '{criteria.symbol_kinds[0]}'"
-            else:
-                kind_list = ", ".join(f"'{k}'" for k in criteria.symbol_kinds)
-                kind_filter = f"symbol_kind IN ({kind_list})"
-            conditions.append(kind_filter)
+            safe_kinds = [s for k in criteria.symbol_kinds if (s := _sanitize_filter_value(k)) is not None]
+            if len(safe_kinds) == 1:
+                conditions.append(f"symbol_kind = '{safe_kinds[0]}'")
+            elif safe_kinds:
+                kind_list = ", ".join(f"'{k}'" for k in safe_kinds)
+                conditions.append(f"symbol_kind IN ({kind_list})")
 
         # Token count filters
         if criteria.min_token_count is not None:
@@ -149,21 +181,28 @@ class VectorPreFilter:
         # File path exclusions
         if criteria.exclude_paths:
             for exclude_path in criteria.exclude_paths:
-                # Always use LIKE for path matching (more flexible)
+                sanitized = _sanitize_filter_value(exclude_path)
+                if sanitized is None:
+                    continue
                 if "*" in exclude_path or "?" in exclude_path:
-                    # Convert glob to SQL LIKE pattern
-                    like_pattern = exclude_path.replace("*", "%").replace("?", "_")
+                    # Escape literal LIKE chars, then convert globs to LIKE wildcards
+                    escaped = _escape_like_literals(sanitized)
+                    like_pattern = escaped.replace("*", "%").replace("?", "_")
                     conditions.append(f"path NOT LIKE '{like_pattern}'")
                 else:
-                    # Use LIKE with % for prefix matching
-                    conditions.append(f"path NOT LIKE '{exclude_path}%'")
+                    escaped = _escape_like_literals(sanitized)
+                    conditions.append(f"path NOT LIKE '{escaped}%'")
 
         # File pattern inclusions
         if criteria.file_patterns:
             pattern_conditions = []
             for pattern in criteria.file_patterns:
-                # Convert glob to SQL LIKE pattern
-                like_pattern = pattern.replace("*", "%").replace("?", "_")
+                sanitized = _sanitize_filter_value(pattern)
+                if sanitized is None:
+                    continue
+                # Escape literal LIKE chars, then convert globs to LIKE wildcards
+                escaped = _escape_like_literals(sanitized)
+                like_pattern = escaped.replace("*", "%").replace("?", "_")
                 pattern_conditions.append(f"path LIKE '{like_pattern}'")
 
             # OR together all patterns

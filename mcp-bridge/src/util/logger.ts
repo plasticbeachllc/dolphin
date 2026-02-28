@@ -40,8 +40,8 @@ async function rotateIfNeeded(): Promise<void> {
     if (await exists(src)) {
       try {
         await rename(src, dst);
-      } catch {
-        /* ignore */
+      } catch (err) {
+        process.stderr.write(`[log-rotate] rename ${src} -> ${dst} failed: ${err}\n`);
       }
     }
   }
@@ -50,8 +50,8 @@ async function rotateIfNeeded(): Promise<void> {
     if (await exists(LOG_FILE)) {
       await rename(LOG_FILE, `${LOG_FILE}.1`);
     }
-  } catch {
-    // ignore
+  } catch (err) {
+    process.stderr.write(`[log-rotate] rename ${LOG_FILE} -> ${LOG_FILE}.1 failed: ${err}\n`);
   }
 }
 
@@ -88,7 +88,11 @@ function toLogLevel(raw: string | undefined): LogLevel {
 
 const logger = createLogger("mcp-bridge", {
   sink: (line) => {
-    void writeLine(line).catch(() => undefined);
+    void writeLine(line).catch((err) => {
+      // Fallback to stderr so logging failures are visible during debugging.
+      const detail = err instanceof Error ? (err.stack ?? String(err)) : String(err);
+      process.stderr.write(`[log-write-error] ${detail}\n`);
+    });
   },
   minLevel: toLogLevel(CONFIG.LOG_LEVEL),
 });

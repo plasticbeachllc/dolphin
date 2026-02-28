@@ -17,6 +17,7 @@ def git_init_and_commit(path: Path):
     subprocess.check_call(["git", "init"], cwd=path)
     subprocess.check_call(["git", "config", "user.name", "Test User"], cwd=path)
     subprocess.check_call(["git", "config", "user.email", "test@example.com"], cwd=path)
+    subprocess.check_call(["git", "config", "commit.gpgsign", "false"], cwd=path)
     (path / "README.md").write_text("initial commit")
     subprocess.check_call(["git", "add", "README.md"], cwd=path)
     subprocess.check_call(["git", "commit", "-m", "Initial commit"], cwd=path)
@@ -60,17 +61,22 @@ def rerank_backend(tmp_path):
         subprocess.check_call(["git", "add", f"file_{i}.py"], cwd=tmp_path)
     subprocess.check_call(["git", "commit", "-m", "Add dummy files"], cwd=tmp_path)
 
-    # We need to mock the embedding provider
+    # We need to mock the embedding provider; use side_effect so the mock
+    # always returns exactly as many vectors as texts were passed in.
+    def _fake_embed(texts, *args, **kwargs):
+        return [[0.1] * 1536 for _ in texts]
+
     with patch(
         "kb.embeddings.provider.embed_texts_with_retry",
-        return_value=[[0.1] * 1536, [0.2] * 1536],
+        side_effect=_fake_embed,
     ):
         pipeline.index(repo_name="test_repo", full_reindex=True)
 
-    # Force FTS rebuild to avoid malformed index errors in tests
-    with metadata._connect() as conn:
-        conn.execute("INSERT INTO chunks_fts(chunks_fts) VALUES('rebuild')")
-        conn.commit()
+    # Rebuild the FTS5 table so it is in a clean, valid state before
+    # create_search_backend runs PRAGMA integrity_check.  The self-contained
+    # FTS5 table used here does not support the external-content 'rebuild'
+    # command; rebuild_fts5_table() correctly drops and recreates it.
+    metadata.rebuild_fts5_table()
 
     # Now, create the search backend using the pre-populated stores
     backend = create_search_backend(store_root=store_root, reranker_config={"enabled": True, "model": "test-model"})
