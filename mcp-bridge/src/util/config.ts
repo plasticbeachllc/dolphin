@@ -994,6 +994,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ConfigLoadResu
     });
   }
 
+  if (minSnippetFloorResolved.value > shrunkSnippetCharCap) {
+    addDiagnostic(diagnostics, {
+      level: "warn",
+      code: "floor_exceeds_shrunk_cap",
+      message: "min_snippet_char_floor exceeds shrunk_snippet_char_cap",
+      path: "mcp.response.min_snippet_char_floor",
+      source: minSnippetFloorResolved.source,
+      details: {
+        min_floor: minSnippetFloorResolved.value,
+        shrunk_cap: shrunkSnippetCharCap,
+      },
+    });
+  }
+
   if (snippetCharCapResolved.value < shrunkSnippetCharCap) {
     addDiagnostic(diagnostics, {
       level: "warn",

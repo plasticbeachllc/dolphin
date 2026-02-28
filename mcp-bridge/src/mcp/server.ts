@@ -96,5 +96,5 @@ export async function createServer(deps: CreateServerDeps = {}): Promise<void> {
   const transport = new Transport();
   await server.connect(transport);
 
-  _logInfo("server_start", "MCP server started", { protocolVersion: MCP_PROTOCOL_VERSION });
+  await _logInfo("server_start", "MCP server started", { protocolVersion: MCP_PROTOCOL_VERSION });
 }
