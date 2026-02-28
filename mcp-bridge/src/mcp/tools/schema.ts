@@ -1,6 +1,5 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { ZodTypeAny } from "zod";
-import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
 /**
@@ -16,65 +15,104 @@ interface InternalJsonSchema {
   [key: string]: unknown;
 }
 
+// Zod v4 internal API access — verified against zod@4.3.6 (v4-only).
+// v4 stores schema definitions at schema._zod.def.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getZodDef(schema: any): any {
+  return schema?._zod?.def;
+}
+
 function unwrapOptional(inner: ZodTypeAny): { schema: ZodTypeAny; optional: boolean } {
-  let current = inner;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let current: any = inner;
   let optional = false;
-  while (current instanceof z.ZodOptional || current instanceof z.ZodDefault) {
+  let d;
+  while ((d = getZodDef(current))?.type === "optional" || d?.type === "default") {
     optional = true;
-    current = current._def.innerType;
+    current = d.innerType;
   }
   return { schema: current, optional };
 }
 
-function buildFallbackSchema(schema: ZodTypeAny): InternalJsonSchema {
-  if (!schema || typeof schema !== "object" || !("_def" in schema)) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function isIntegerSchema(def: any): boolean {
+  // z.int() — def itself has check: "number_format"
+  if (def.check === "number_format") return true;
+  // z.number().int() — check is in the checks array.
+  // Most fragile introspection point: c._zod.def.check is 4 levels into private API.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (
+    def.checks?.some((c: any) => c?._zod?.def?.check === "number_format" || c?.kind === "int") ??
+    false
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildFallbackSchema(schema: any): InternalJsonSchema {
+  const def = getZodDef(schema);
+  if (!def) {
     return { type: "object", properties: {} };
   }
-  const typeName = schema._def.typeName as string;
+  const typeName = def.type as string;
 
-  if (schema instanceof z.ZodString) {
+  if (typeName === "string") {
     return { type: "string" };
   }
 
-  if (schema instanceof z.ZodNumber) {
-    const isInt = schema._def.checks?.some((check) => check.kind === "int");
-    return { type: isInt ? "integer" : "number" };
+  if (typeName === "number") {
+    return { type: isIntegerSchema(def) ? "integer" : "number" };
   }
 
-  if (schema instanceof z.ZodBoolean) {
+  if (typeName === "boolean") {
     return { type: "boolean" };
   }
 
-  if (schema instanceof z.ZodEnum) {
-    return { type: "string", enum: schema._def.values };
+  if (typeName === "enum") {
+    // Zod v4 uses `entries`, v3 uses `values`
+    const values = def.entries ?? def.values;
+    // entries may be an object { key: value } — extract values
+    const enumValues =
+      values && typeof values === "object" && !Array.isArray(values)
+        ? Object.values(values)
+        : values;
+    if (!enumValues) return { type: "string" };
+    // Filter to strings only — numeric/mixed enums are not representable as JSON Schema string enums
+    const stringValues = (Array.isArray(enumValues) ? enumValues : []).filter(
+      (v): v is string => typeof v === "string"
+    );
+    return stringValues.length > 0 ? { type: "string", enum: stringValues } : { type: "string" };
   }
 
-  if (schema instanceof z.ZodArray) {
-    return { type: "array", items: buildFallbackSchema(schema._def.type) };
+  if (typeName === "array") {
+    // Zod v4 uses `element`, v3 uses `type`
+    const elementSchema = def.element ?? def.type;
+    return { type: "array", items: elementSchema ? buildFallbackSchema(elementSchema) : {} };
   }
 
-  if (schema instanceof z.ZodNullable) {
-    const innerSchema = buildFallbackSchema(schema._def.innerType);
+  if (typeName === "nullable") {
+    const innerSchema = buildFallbackSchema(def.innerType);
     const innerType = innerSchema.type ?? "string";
     const types = Array.isArray(innerType) ? innerType : [innerType];
     return { ...innerSchema, type: [...types, "null"] };
   }
 
-  if (schema instanceof z.ZodObject) {
-    const shape = typeof schema._def.shape === "function" ? schema._def.shape() : schema._def.shape;
+  if (typeName === "object") {
+    const shape = typeof def.shape === "function" ? def.shape() : def.shape;
     const properties: Record<string, InternalJsonSchema> = {};
     const required: string[] = [];
 
-    Object.entries(shape).forEach(([key, value]) => {
-      if (!value || typeof value !== "object" || !("_def" in value)) {
-        return;
-      }
-      const { schema: inner, optional } = unwrapOptional(value as ZodTypeAny);
-      properties[key] = buildFallbackSchema(inner);
-      if (!optional) {
-        required.push(key);
-      }
-    });
+    if (shape && typeof shape === "object") {
+      Object.entries(shape).forEach(([key, value]) => {
+        if (!value || typeof value !== "object") {
+          return;
+        }
+        const { schema: inner, optional } = unwrapOptional(value as ZodTypeAny);
+        properties[key] = buildFallbackSchema(inner);
+        if (!optional) {
+          required.push(key);
+        }
+      });
+    }
 
     const output: InternalJsonSchema = { type: "object", properties };
     if (required.length > 0) {
@@ -83,9 +121,8 @@ function buildFallbackSchema(schema: ZodTypeAny): InternalJsonSchema {
     return output;
   }
 
-  if (typeName === "ZodOptional" || typeName === "ZodDefault") {
-    const inner = schema._def.innerType as ZodTypeAny;
-    return buildFallbackSchema(inner);
+  if (typeName === "optional" || typeName === "default") {
+    return buildFallbackSchema(def.innerType);
   }
 
   return { type: "object", properties: {} };
@@ -94,9 +131,14 @@ function buildFallbackSchema(schema: ZodTypeAny): InternalJsonSchema {
 // Helper to isolate type-heavy zodToJsonSchema call
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function convertZodToJsonSchema(schema: ZodTypeAny): any {
-  // Cast to any to prevent TypeScript from evaluating the complex recursive generics
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return zodToJsonSchema(schema as any);
+  try {
+    // Cast to any to prevent TypeScript from evaluating the complex recursive generics
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return zodToJsonSchema(schema as any);
+  } catch (e) {
+    console.error("[schema] zodToJsonSchema failed, using fallback:", e);
+    return {};
+  }
 }
 
 type ExtendedJsonSchema = InternalJsonSchema & {
