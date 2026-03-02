@@ -300,6 +300,9 @@ def _run_index_with_progress(
 
     Shared by both ``add-repo`` (when the user confirms indexing) and the
     standalone ``index`` command so they stay in sync.
+
+    On failure the error and traceback are printed to stderr before re-raising,
+    so callers can catch the exception without duplicating output.
     """
     from .pipeline import _CancelledError
 
@@ -314,14 +317,11 @@ def _run_index_with_progress(
         if aborted:
             typer.echo(f"Recovered {aborted} stale session(s) from a previous run.")
 
-    # SIGINT handler for clean Ctrl-C cancellation
     _original_sigint = signal.getsignal(signal.SIGINT)
 
     def _sigint_handler(signum: int, frame: object) -> None:
         typer.echo("\nInterrupt received — stopping after current files…")
         pipeline.request_cancel()
-
-    signal.signal(signal.SIGINT, _sigint_handler)
 
     progress_display, progress_callback = _create_progress_display()
 
@@ -333,6 +333,7 @@ def _run_index_with_progress(
 
     t0 = time.monotonic()
     progress_ctx = progress_display if progress_display is not None else contextlib.nullcontext()
+    signal.signal(signal.SIGINT, _sigint_handler)
     try:
         with progress_ctx:
             if parallel:
@@ -360,7 +361,7 @@ def _run_index_with_progress(
         typer.echo("Run the same command again to continue from where you left off.")
         raise typer.Exit(code=130)
     except Exception as e:
-        typer.echo(f"Indexing failed: {e}")
+        typer.echo(f"Indexing failed: {e}", err=True)
         traceback.print_exc()
         raise
     finally:
@@ -438,9 +439,22 @@ def index(
         raise typer.Exit(code=2)
 
     pipeline = _build_pipeline(config)
-    _run_index_with_progress(
-        pipeline, name, config, dry_run=dry_run, force=force, full_reindex=full, parallel=parallel, max_workers=workers
-    )
+    try:
+        _run_index_with_progress(
+            pipeline,
+            name,
+            config,
+            dry_run=dry_run,
+            force=force,
+            full_reindex=full,
+            parallel=parallel,
+            max_workers=workers,
+        )
+    except (typer.Exit, SystemExit, KeyboardInterrupt):
+        raise
+    except Exception:
+        # _run_index_with_progress already printed the error and traceback
+        raise typer.Exit(code=1)
 
 
 def _notify_server_reload(config: KBConfig) -> None:
