@@ -227,8 +227,11 @@ def add_repo(
             except (typer.Exit, KeyboardInterrupt, SystemExit):
                 raise
             except Exception:
-                # Repo was already registered — don't crash the CLI on indexing failure
-                _log.error("Indexing failed during add-repo for %s", name, exc_info=True)
+                # Repo was already registered — don't crash the CLI on indexing failure.
+                # _run_index_with_progress already printed the error and traceback.
+                typer.echo(
+                    f"Repository '{name}' was registered. Run 'dolphin index {name}' to retry indexing.", err=True
+                )
 
 
 def _create_progress_display() -> tuple[Progress | None, Callable[[dict[str, Any]], None]]:
@@ -314,7 +317,7 @@ def _run_index_with_progress(
     # SIGINT handler for clean Ctrl-C cancellation
     _original_sigint = signal.getsignal(signal.SIGINT)
 
-    def _sigint_handler(signum, frame):
+    def _sigint_handler(signum: int, frame: object) -> None:
         typer.echo("\nInterrupt received — stopping after current files…")
         pipeline.request_cancel()
 
@@ -567,10 +570,6 @@ def _prune_ignored_files(
     if repo_level_exceptions:
         ignore_patterns = build_ignore_set(ignore_patterns, repo_level_exceptions)
     ignore_patterns.update(extra_security)
-
-    # Manually add bun.lock patterns to test
-    ignore_patterns.add("bun.lock")
-    ignore_patterns.add("**/bun.lock")
 
     ignore_spec = PathSpec.from_lines("gitignore", ignore_patterns)
 
