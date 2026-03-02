@@ -6,6 +6,7 @@ import os
 import signal
 import sys
 import time
+import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -221,7 +222,13 @@ def add_repo(
     if not no_index and sys.stdin is not None and sys.stdin.isatty():
         if typer.confirm(f"Do you want to index '{name}' now?", default=False):
             pipeline = _build_pipeline(config)
-            _run_index_with_progress(pipeline, name, config)
+            try:
+                _run_index_with_progress(pipeline, name, config)
+            except (typer.Exit, KeyboardInterrupt, SystemExit):
+                raise
+            except Exception:
+                # Repo was already registered — don't crash the CLI on indexing failure
+                _log.error("Indexing failed during add-repo for %s", name, exc_info=True)
 
 
 def _create_progress_display() -> tuple[Progress | None, Callable[[dict[str, Any]], None]]:
@@ -345,14 +352,12 @@ def _run_index_with_progress(
                     progress_callback=progress_callback,
                 )
 
+    except (KeyboardInterrupt, _CancelledError):
+        typer.echo("Indexing interrupted. Progress up to the last completed file has been saved.")
+        typer.echo("Run the same command again to continue from where you left off.")
+        raise typer.Exit(code=130)
     except Exception as e:
-        if isinstance(e, _CancelledError):
-            typer.echo("Indexing interrupted. Progress up to the last completed file has been saved.")
-            typer.echo("Run the same command again to continue from where you left off.")
-            raise typer.Exit(code=130)
         typer.echo(f"Indexing failed: {e}")
-        import traceback
-
         traceback.print_exc()
         raise
     finally:
