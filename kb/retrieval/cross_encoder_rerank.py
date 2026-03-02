@@ -49,10 +49,19 @@ def _quiet_model_load():
 
     try:
         # Capture stderr to a temp file for replay on failure; stdout goes to /dev/null.
+        # Guard each allocation so partial failures don't leak fds.
         stderr_capture = tempfile.TemporaryFile()
-        devnull_fd = os.open(os.devnull, os.O_WRONLY)
-        saved_stdout = os.dup(1)
-        saved_stderr = os.dup(2)
+        devnull_fd = saved_stdout = saved_stderr = -1
+        try:
+            devnull_fd = os.open(os.devnull, os.O_WRONLY)
+            saved_stdout = os.dup(1)
+            saved_stderr = os.dup(2)
+        except OSError:
+            for fd in (devnull_fd, saved_stdout, saved_stderr):
+                if fd >= 0:
+                    os.close(fd)
+            stderr_capture.close()
+            raise
 
         # dup2 calls mutate process-global fd state — keep them inside try so
         # finally always restores even if the second dup2 fails.
@@ -65,17 +74,19 @@ def _quiet_model_load():
             failed = True
             raise
         finally:
-            os.close(devnull_fd)  # always close; dup2 already duped it to fd 1
+            os.close(devnull_fd)  # close our copy; fd 1 now independently references /dev/null
             os.dup2(saved_stdout, 1)
             os.close(saved_stdout)
             os.dup2(saved_stderr, 2)
             os.close(saved_stderr)
-            if failed:
-                stderr_capture.seek(0)
-                captured = stderr_capture.read()
-                if captured:
-                    os.write(2, captured)  # fd 2 is restored; avoids StringIO issues in tests
-            stderr_capture.close()
+            try:
+                if failed:
+                    stderr_capture.seek(0)
+                    captured = stderr_capture.read()
+                    if captured:
+                        os.write(2, captured)
+            finally:
+                stderr_capture.close()
     finally:
         for name in noisy_loggers:
             logging.getLogger(name).setLevel(prev_levels[name])
