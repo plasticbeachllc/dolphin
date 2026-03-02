@@ -222,12 +222,44 @@ def add_repo(
         if typer.confirm(f"Do you want to index '{name}' now?", default=False):
             typer.echo(f"Starting index for {name}...")
             pipeline = _build_pipeline(config)
+            progress_display, progress_callback = _create_progress_display()
+            progress_ctx = progress_display if progress_display is not None else contextlib.nullcontext()
+
+            _original_sigint = signal.getsignal(signal.SIGINT)
+
+            def _sigint_handler(signum, frame):
+                typer.echo("\nInterrupt received — stopping after current files…")
+                pipeline.request_cancel()
+
+            signal.signal(signal.SIGINT, _sigint_handler)
+            t0 = time.monotonic()
             try:
-                pipeline.index(name, dry_run=False, force=False)
-                typer.echo(f"⛵ Indexing complete for {name}")
+                with progress_ctx:
+                    result = asyncio.run(
+                        pipeline.index_parallel(
+                            name,
+                            dry_run=False,
+                            force=False,
+                            progress_callback=progress_callback,
+                        )
+                    )
+                elapsed = time.monotonic() - t0
+                elapsed_str = f"{int(elapsed)}s" if elapsed < 60 else f"{int(elapsed // 60)}m{int(elapsed % 60):02d}s"
+                typer.echo(
+                    f"Indexing complete for {name}: "
+                    f"{result.get('files_indexed', 0)} files, "
+                    f"{result.get('chunks_indexed', 0):,} chunks in {elapsed_str}"
+                )
             except Exception as e:
+                from .pipeline import _CancelledError
+
+                if isinstance(e, (KeyboardInterrupt, _CancelledError)):
+                    typer.echo("Indexing interrupted. Progress has been saved.")
+                    raise typer.Exit(code=130)
                 _log.error("Indexing failed during add-repo prompt for %s", name, exc_info=True)
-                typer.echo(f"🚩 Indexing failed: {e}", err=True)
+                typer.echo(f"Indexing failed: {e}", err=True)
+            finally:
+                signal.signal(signal.SIGINT, _original_sigint)
 
 
 def _create_progress_display() -> tuple[Progress | None, Callable[[dict[str, Any]], None]]:
