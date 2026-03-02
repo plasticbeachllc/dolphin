@@ -223,11 +223,16 @@ def add_repo(
         if typer.confirm(f"Do you want to index '{name}' now?", default=False):
             pipeline = _build_pipeline(config)
             try:
-                _run_index_with_progress(pipeline, name, config)
+                _run_index_with_progress(
+                    pipeline,
+                    name,
+                    config,
+                    cancel_hint=f"Repository '{name}' was registered. Run 'dolphin index {name}' to resume.",
+                )
             except typer.Exit as e:
                 if e.exit_code == 130:
-                    # Cancellation — override generic message with add-repo-specific guidance
-                    typer.echo(f"Repository '{name}' was registered. Run 'dolphin index {name}' to resume.", err=True)
+                    # Registration succeeded; the user only cancelled the optional indexing step.
+                    return
                 raise
             except (KeyboardInterrupt, SystemExit):
                 raise
@@ -301,6 +306,7 @@ def _run_index_with_progress(
     full_reindex: bool = False,
     parallel: bool = True,
     max_workers: int | None = None,
+    cancel_hint: str | None = None,
 ) -> dict[str, Any]:
     """Run indexing with progress display, SIGINT handling, prune, and server reload.
 
@@ -309,6 +315,10 @@ def _run_index_with_progress(
 
     On failure the error and traceback are printed to stderr before re-raising,
     so callers can catch the exception without duplicating output.
+
+    Args:
+        cancel_hint: If provided, replaces the default "Run the same command
+            again" guidance shown when the user cancels with Ctrl-C.
     """
     from .pipeline import _CancelledError
 
@@ -365,7 +375,8 @@ def _run_index_with_progress(
 
     except (KeyboardInterrupt, _CancelledError):
         typer.echo("Indexing interrupted. Progress up to the last completed file has been saved.")
-        typer.echo("Run the same command again to continue from where you left off.")
+        hint = cancel_hint or "Run the same command again to continue from where you left off."
+        typer.echo(hint)
         raise typer.Exit(code=130)
     except Exception as e:
         typer.echo(f"Indexing failed: {e}", err=True)
