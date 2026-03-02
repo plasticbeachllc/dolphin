@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
+import tempfile
 from collections.abc import Sequence
 from contextlib import contextmanager
 
@@ -25,32 +27,52 @@ except ImportError:
 def _quiet_model_load():
     """Suppress noisy stdout/stderr and library logs during model loading.
 
-    Uses fd-level redirect (os.dup2) rather than sys.stdout patching so that output from
-    native extensions (e.g. safetensors Rust bindings writing to fd 1/2) is also captured.
-    Patches global state — acceptable here since model loading is one-time init.
+    Redirects stdout to ``/dev/null`` and stderr to a temporary buffer so that
+    native extension output (safetensors, torch, etc.) is captured.  On success
+    the buffer is discarded; on exception the captured stderr is replayed so
+    native-layer diagnostics (CUDA errors, OOM, etc.) are not lost.
+
+    Called during synchronous ``__init__`` — no async tasks should be active
+    since fd redirection is process-global.  httpx/httpcore are handled at the
+    server level (``server.py``) and intentionally excluded here so that
+    non-server callers keep their own log levels after the context exits.
     """
-    # Suppress noisy loggers from the ML stack
-    noisy_loggers = ["httpx", "httpcore", "transformers", "sentence_transformers", "huggingface_hub"]
+    # Suppress noisy loggers from the ML stack (httpx/httpcore handled by server.py)
+    noisy_loggers = ["transformers", "sentence_transformers", "huggingface_hub"]
     prev_levels = {}
     for name in noisy_loggers:
         lgr = logging.getLogger(name)
         prev_levels[name] = lgr.level
         lgr.setLevel(logging.WARNING)
 
-    # Redirect both stdout and stderr at the fd level
+    # Capture stderr to a temp file for replay on failure; stdout goes to /dev/null.
+    stderr_capture = tempfile.TemporaryFile()
     devnull_fd = os.open(os.devnull, os.O_WRONLY)
     saved_stdout = os.dup(1)
     saved_stderr = os.dup(2)
-    os.dup2(devnull_fd, 1)
-    os.dup2(devnull_fd, 2)
-    os.close(devnull_fd)
+
+    # dup2 calls mutate process-global fd state — keep them inside try so
+    # finally always restores even if the second dup2 fails.
+    failed = False
     try:
+        os.dup2(devnull_fd, 1)
+        os.dup2(stderr_capture.fileno(), 2)
+        os.close(devnull_fd)
         yield
+    except BaseException:
+        failed = True
+        raise
     finally:
         os.dup2(saved_stdout, 1)
         os.close(saved_stdout)
         os.dup2(saved_stderr, 2)
         os.close(saved_stderr)
+        if failed:
+            stderr_capture.seek(0)
+            captured = stderr_capture.read()
+            if captured:
+                sys.stderr.buffer.write(captured)
+        stderr_capture.close()
         for name in noisy_loggers:
             logging.getLogger(name).setLevel(prev_levels[name])
 
