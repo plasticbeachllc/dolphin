@@ -23,25 +23,36 @@ except ImportError:
 
 @contextmanager
 def _quiet_model_load():
-    """Suppress noisy stdout (safetensors LOAD REPORT) and httpx INFO logs during model loading.
+    """Suppress noisy stdout/stderr and library logs during model loading.
 
     Uses fd-level redirect (os.dup2) rather than sys.stdout patching so that output from
-    native extensions (e.g. safetensors Rust bindings writing to fd 1) is also captured.
+    native extensions (e.g. safetensors Rust bindings writing to fd 1/2) is also captured.
     Patches global state — acceptable here since model loading is one-time init.
     """
-    httpx_logger = logging.getLogger("httpx")
-    prev_level = httpx_logger.level
-    httpx_logger.setLevel(logging.WARNING)
+    # Suppress noisy loggers from the ML stack
+    noisy_loggers = ["httpx", "httpcore", "transformers", "sentence_transformers", "huggingface_hub"]
+    prev_levels = {}
+    for name in noisy_loggers:
+        lgr = logging.getLogger(name)
+        prev_levels[name] = lgr.level
+        lgr.setLevel(logging.WARNING)
+
+    # Redirect both stdout and stderr at the fd level
     devnull_fd = os.open(os.devnull, os.O_WRONLY)
-    saved_fd = os.dup(1)
+    saved_stdout = os.dup(1)
+    saved_stderr = os.dup(2)
     os.dup2(devnull_fd, 1)
+    os.dup2(devnull_fd, 2)
     os.close(devnull_fd)
     try:
         yield
     finally:
-        os.dup2(saved_fd, 1)
-        os.close(saved_fd)
-        httpx_logger.setLevel(prev_level)
+        os.dup2(saved_stdout, 1)
+        os.close(saved_stdout)
+        os.dup2(saved_stderr, 2)
+        os.close(saved_stderr)
+        for name in noisy_loggers:
+            logging.getLogger(name).setLevel(prev_levels[name])
 
 
 class CrossEncoderReranker:
