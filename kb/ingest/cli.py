@@ -224,7 +224,12 @@ def add_repo(
             pipeline = _build_pipeline(config)
             try:
                 _run_index_with_progress(pipeline, name, config)
-            except (typer.Exit, KeyboardInterrupt, SystemExit):
+            except typer.Exit as e:
+                if e.exit_code == 130:
+                    # Cancellation — override generic message with add-repo-specific guidance
+                    typer.echo(f"Repository '{name}' was registered. Run 'dolphin index {name}' to resume.", err=True)
+                raise
+            except (KeyboardInterrupt, SystemExit):
                 raise
             except Exception:
                 # Repo was already registered — don't crash the CLI on indexing failure.
@@ -232,6 +237,7 @@ def add_repo(
                 typer.echo(
                     f"Repository '{name}' was registered. Run 'dolphin index {name}' to retry indexing.", err=True
                 )
+                raise typer.Exit(code=1)
 
 
 def _create_progress_display() -> tuple[Progress | None, Callable[[dict[str, Any]], None]]:
@@ -332,6 +338,7 @@ def _run_index_with_progress(
     print_status(f"Indexing {name}", level="step", context=status_ctx)
 
     t0 = time.monotonic()
+    result: dict[str, Any] = {}
     progress_ctx = progress_display if progress_display is not None else contextlib.nullcontext()
     signal.signal(signal.SIGINT, _sigint_handler)
     try:
