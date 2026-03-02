@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import tempfile
 from collections.abc import Sequence
 from contextlib import contextmanager
 
@@ -23,25 +24,72 @@ except ImportError:
 
 @contextmanager
 def _quiet_model_load():
-    """Suppress noisy stdout (safetensors LOAD REPORT) and httpx INFO logs during model loading.
+    """Suppress noisy stdout/stderr and library logs during model loading.
 
-    Uses fd-level redirect (os.dup2) rather than sys.stdout patching so that output from
-    native extensions (e.g. safetensors Rust bindings writing to fd 1) is also captured.
-    Patches global state — acceptable here since model loading is one-time init.
+    Redirects stdout to ``/dev/null`` and stderr to a temporary buffer so that
+    native extension output (safetensors, torch, etc.) is captured.  On success
+    the buffer is discarded; on exception the captured stderr is replayed so
+    native-layer diagnostics (CUDA errors, OOM, etc.) are not lost.
+
+    **Threading constraint**: fd redirection is process-global.  This must only
+    be called during synchronous startup (``__init__``) before the server
+    accepts connections.  Any threads writing to fd 1/2 concurrently will have
+    output captured or discarded.  httpx/httpcore are handled at the server
+    level (``server.py``) and intentionally excluded here so that non-server
+    callers keep their own log levels after the context exits.
     """
-    httpx_logger = logging.getLogger("httpx")
-    prev_level = httpx_logger.level
-    httpx_logger.setLevel(logging.WARNING)
-    devnull_fd = os.open(os.devnull, os.O_WRONLY)
-    saved_fd = os.dup(1)
-    os.dup2(devnull_fd, 1)
-    os.close(devnull_fd)
+    # Suppress noisy loggers from the ML stack (httpx/httpcore handled by server.py).
+    # Wrapped in an outer try/finally so levels are restored even if fd setup fails.
+    noisy_loggers = ["transformers", "sentence_transformers", "huggingface_hub"]
+    prev_levels = {}
+    for name in noisy_loggers:
+        lgr = logging.getLogger(name)
+        prev_levels[name] = lgr.level
+        lgr.setLevel(logging.WARNING)
+
     try:
-        yield
+        # Capture stderr to a temp file for replay on failure; stdout goes to /dev/null.
+        # Guard each allocation so partial failures don't leak fds.
+        stderr_capture = tempfile.TemporaryFile()
+        devnull_fd = saved_stdout = saved_stderr = -1
+        try:
+            devnull_fd = os.open(os.devnull, os.O_WRONLY)
+            saved_stdout = os.dup(1)
+            saved_stderr = os.dup(2)
+        except OSError:
+            for fd in (devnull_fd, saved_stdout, saved_stderr):
+                if fd >= 0:
+                    os.close(fd)
+            stderr_capture.close()
+            raise
+
+        # dup2 calls mutate process-global fd state — keep them inside try so
+        # finally always restores even if the second dup2 fails.
+        failed = False
+        try:
+            os.dup2(devnull_fd, 1)
+            os.dup2(stderr_capture.fileno(), 2)
+            yield
+        except BaseException:
+            failed = True
+            raise
+        finally:
+            os.close(devnull_fd)  # close our copy; fd 1 now independently references /dev/null
+            os.dup2(saved_stdout, 1)
+            os.close(saved_stdout)
+            os.dup2(saved_stderr, 2)
+            os.close(saved_stderr)
+            try:
+                if failed:
+                    stderr_capture.seek(0)
+                    captured = stderr_capture.read()
+                    if captured:
+                        os.write(2, captured)
+            finally:
+                stderr_capture.close()
     finally:
-        os.dup2(saved_fd, 1)
-        os.close(saved_fd)
-        httpx_logger.setLevel(prev_level)
+        for name in noisy_loggers:
+            logging.getLogger(name).setLevel(prev_levels[name])
 
 
 class CrossEncoderReranker:
