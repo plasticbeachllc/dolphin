@@ -4,6 +4,7 @@ import logging
 import threading
 from collections.abc import Iterable, Sequence
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -22,8 +23,8 @@ class LanceDBStore:
     embedding dimensions and ensure the root directory exists.
     """
 
-    MODEL_TO_TABLE: dict[str, str] = {"small": "chunks_small", "large": "chunks_large"}
-    MODEL_TO_DIM: dict[str, int] = {"small": 1536, "large": 3072}
+    MODEL_TO_TABLE = MappingProxyType({"small": "chunks_small", "large": "chunks_large"})
+    MODEL_TO_DIM = MappingProxyType({"small": 1536, "large": 3072})
 
     def _resolve_model(self, model: str) -> tuple[str, int]:
         """Validate model and return (table_name, dimension)."""

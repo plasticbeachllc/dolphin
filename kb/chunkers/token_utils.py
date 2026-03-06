@@ -100,6 +100,9 @@ def slice_text_by_token_ranges(
 def trim_and_tokenize(raw_text: str, tokenizer: tiktoken.Encoding | None = None) -> tuple[str, int, int, int]:
     """Trim leading/trailing newlines and compute token_count.
 
+    If *tokenizer* is ``None``, falls back to the default "small" model
+    tokenizer (cl100k_base).
+
     Returns: (trimmed_text, token_count, leading_newlines, trailing_newlines)
     """
     lead_trim = len(raw_text) - len(raw_text.lstrip("\n"))
