@@ -2,7 +2,7 @@
 # Log everything to file — Claude.ai swallows stdout/stderr on failure.
 # After session starts: cat /tmp/session-start.log
 LOG="/tmp/session-start.log"
-exec > >(tee -a "$LOG") 2>&1
+exec >>"$LOG" 2>&1
 
 echo "=== session-start $(date -Iseconds 2>/dev/null || date) ==="
 echo "shell: ${BASH_VERSION:-unknown}"
