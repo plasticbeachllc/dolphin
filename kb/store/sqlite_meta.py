@@ -1782,6 +1782,9 @@ class SQLiteMetadataStore:
             # Runtime schema migration check - ensure FTS5 table has text_hash column.
             # Only runs once per instance; subsequent calls skip this check.
             # Guarded by a lock to prevent concurrent threads from racing.
+            # Note: the cursor is opened outside the lock; this is safe because
+            # SQLite reads schema from disk on each execute, so Thread B's cursor
+            # will see Thread A's committed migration.
             if not self._fts5_schema_validated:
                 with self._fts5_schema_lock:
                     if not self._fts5_schema_validated:

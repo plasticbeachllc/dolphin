@@ -36,7 +36,7 @@ EMBEDDING_BATCH_SIZE = 128
 ESTIMATED_TOKENS_PER_CHUNK = RETRIEVAL_PARAMS.ESTIMATED_TOKENS_PER_CHUNK
 CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_:-]+$")
 
-_APP_VERSION = _get_pkg_version(fallback="0.0.0-dev")
+_APP_VERSION = _get_pkg_version(fallback="dev")
 
 app = FastAPI(title="Unified Knowledge Store", version=_APP_VERSION)
 

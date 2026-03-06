@@ -29,7 +29,7 @@ class LanceDBStore:
     def _resolve_model(self, model: str) -> tuple[str, int]:
         """Validate model and return (table_name, dimension)."""
         if model not in self.MODEL_TO_TABLE:
-            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
+            raise ValueError(f"Unknown model: {model!r}. Must be one of: {sorted(self.MODEL_TO_TABLE)}")
         return self.MODEL_TO_TABLE[model], self.MODEL_TO_DIM[model]
 
     def __init__(self, root: str | Path) -> None:

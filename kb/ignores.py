@@ -67,6 +67,9 @@ DEFAULT_IGNORE_PATTERNS: tuple[str, ...] = (
 )
 
 
+# Supplemental security patterns — not exhaustive.  These catch the most common
+# credential and secret files.  Repository-specific rules should be added to
+# .dolphin/config.toml under [indexing] extra_ignore_patterns.
 SECURITY_IGNORE_PATTERNS: frozenset[str] = frozenset(
     {
         "**/id_rsa",

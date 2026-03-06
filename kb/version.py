@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError
+
 
 def get_version(fallback: str = "dev") -> str:
     """Return the installed pb-dolphin package version, or *fallback* if unavailable."""
@@ -9,5 +11,5 @@ def get_version(fallback: str = "dev") -> str:
         from importlib.metadata import version
 
         return version("pb-dolphin")
-    except Exception:
+    except PackageNotFoundError:
         return fallback
