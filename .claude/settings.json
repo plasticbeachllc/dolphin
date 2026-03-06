@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .sessions/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
