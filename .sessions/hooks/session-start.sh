@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 WORKSPACE="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$WORKSPACE"
@@ -24,21 +24,26 @@ done
 if ! command -v just >/dev/null 2>&1; then
   JUST_DIR="$HOME/.local/bin"
   mkdir -p "$JUST_DIR"
-  curl -fsSL https://github.com/casey/just/releases/download/1.40.0/just-1.40.0-x86_64-unknown-linux-musl.tar.gz \
-    | tar -xz -C "$JUST_DIR" just
-  export PATH="$JUST_DIR:$PATH"
-  append_env "export PATH=\"$JUST_DIR:\$PATH\""
+  if curl -fsSL https://github.com/casey/just/releases/download/1.40.0/just-1.40.0-x86_64-unknown-linux-musl.tar.gz \
+    | tar -xz -C "$JUST_DIR" just 2>/dev/null; then
+    export PATH="$JUST_DIR:$PATH"
+    append_env "export PATH=\"$JUST_DIR:\$PATH\""
+  else
+    echo "Warning: failed to install just" >&2
+  fi
 fi
 
 # Python deps
 if command -v uv >/dev/null 2>&1 && [ -f pyproject.toml ]; then
-  uv sync --group dev --group test
+  uv sync --group dev --group test || echo "Warning: uv sync failed" >&2
 fi
 
 # JS deps
 if command -v bun >/dev/null 2>&1; then
   for dir in mcp-bridge shared; do
-    [ -f "$dir/package.json" ] && (cd "$dir" && bun install)
+    if [ -f "$dir/package.json" ]; then
+      (cd "$dir" && bun install) || echo "Warning: bun install failed in $dir" >&2
+    fi
   done
 fi
 
