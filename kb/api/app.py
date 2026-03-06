@@ -36,7 +36,7 @@ EMBEDDING_BATCH_SIZE = 128
 ESTIMATED_TOKENS_PER_CHUNK = RETRIEVAL_PARAMS.ESTIMATED_TOKENS_PER_CHUNK
 CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_:-]+$")
 
-_APP_VERSION = _get_pkg_version(fallback="0.0.0")
+_APP_VERSION = _get_pkg_version(fallback="dev")
 
 app = FastAPI(title="Unified Knowledge Store", version=_APP_VERSION)
 
@@ -90,17 +90,6 @@ _DEFAULT_CONFIG = _load_default_config()
 _API_LIMITS = _DEFAULT_CONFIG.api
 
 
-def _get_expected_api_key() -> str | None:
-    """Return expected API key, checking env vars first then file-based key."""
-    import os
-
-    for name in ("DOLPHIN_API_KEY", "DOLPHIN_KB_API_KEY"):
-        value = os.environ.get(name, "").strip()
-        if value:
-            return value
-    return load_kb_api_key()
-
-
 # Add CORS middleware for local development clients.
 # Note: CORSMiddleware is a class, not a factory function, but FastAPI's add_middleware
 # accepts both. We need to help the type checker by explicitly typing this.
@@ -128,7 +117,7 @@ async def validate_api_key(request: Request, call_next):
     # Protect all /v1/ endpoints with API key authentication
     if request.url.path.startswith("/v1/") and request.url.path != "/v1/health":
         api_key = request.headers.get("X-API-Key")
-        expected_key = _get_expected_api_key()
+        expected_key = load_kb_api_key()
 
         if not api_key or not hmac.compare_digest(api_key, expected_key or ""):
             return JSONResponse({"error": "Unauthorized", "detail": "Valid API key required"}, status_code=401)

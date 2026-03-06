@@ -8,7 +8,7 @@ import tree_sitter_python as tspython
 from tree_sitter import Language, Parser
 
 from .graph_types import GraphEdge, GraphNode
-from .token_utils import get_tokenizer, trim_and_tokenize, window_text_by_tokens
+from .token_utils import get_tokenizer, trim_and_tokenize as _trim_and_tokenize, window_text_by_tokens
 from .types import Chunk
 
 _log = logging.getLogger(__name__)
@@ -179,9 +179,6 @@ def _offset_to_abs_line(start_row: int, line_offsets: list[int], offset: int) ->
     """Convert a local character offset within a symbol to absolute 1-based line number."""
     line_idx = bisect.bisect_right(line_offsets, offset) - 1
     return (start_row + 1) + max(0, line_idx)
-
-
-_trim_and_tokenize = trim_and_tokenize
 
 
 def _extract_symbols(root, source: str) -> list[Symbol]:

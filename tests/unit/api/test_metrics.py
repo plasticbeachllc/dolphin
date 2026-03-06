@@ -447,9 +447,9 @@ class TestVersionInfo:
         from importlib.metadata import PackageNotFoundError
 
         with patch("importlib.metadata.version", side_effect=PackageNotFoundError("pb-dolphin")):
-            # _get_app_version is now get_version from kb.version; default fallback is "unknown"
+            # _get_app_version is now get_version from kb.version; default fallback is "dev"
             version = _get_app_version()
-            assert version == "unknown"
+            assert version == "dev"
 
     def test_version_info_metric_contains_python_version(self):
         """The kb_api_info metric includes the python_version label."""

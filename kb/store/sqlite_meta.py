@@ -199,6 +199,7 @@ class SQLiteMetadataStore:
         self._bm25_stats_path: Path | None = None
         self._connection_pool: SQLiteConnectionPool | None = None
         self._applied_startup_migrations: list[str] = []
+        self._fts5_schema_lock = threading.Lock()
         self._fts5_schema_validated = False
 
     def _get_connection_pool(self) -> SQLiteConnectionPool:
@@ -1780,35 +1781,38 @@ class SQLiteMetadataStore:
         with self._connect() as conn, closing(conn.cursor()) as cur:
             # Runtime schema migration check - ensure FTS5 table has text_hash column.
             # Only runs once per instance; subsequent calls skip this check.
+            # Guarded by a lock to prevent concurrent threads from racing.
             if not self._fts5_schema_validated:
-                try:
-                    cur.execute("SELECT text_hash FROM chunks_fts LIMIT 0")
-                except sqlite3.OperationalError as e:
-                    error_msg = str(e).lower()
-                    if "text_hash" in error_msg and ("no column" in error_msg or "no such column" in error_msg):
-                        logger.warning(
-                            f"[FTS5 Migration] Runtime check: text_hash column missing ({e}), migrating now..."
-                        )
-                        cur.execute("DROP TABLE IF EXISTS chunks_fts")
-                        cur.execute(
-                            """
-                            CREATE VIRTUAL TABLE chunks_fts USING fts5(
-                                content_id UNINDEXED,
-                                repo UNINDEXED,
-                                path UNINDEXED,
-                                text_hash UNINDEXED,
-                                content,
-                                symbol_name,
-                                symbol_path,
-                                tokenize='porter unicode61'
-                            )
-                        """
-                        )
-                        conn.commit()
-                        logger.info("[FTS5 Migration] Runtime migration complete")
-                    else:
-                        raise
-                self._fts5_schema_validated = True
+                with self._fts5_schema_lock:
+                    if not self._fts5_schema_validated:
+                        try:
+                            cur.execute("SELECT text_hash FROM chunks_fts LIMIT 0")
+                        except sqlite3.OperationalError as e:
+                            error_msg = str(e).lower()
+                            if "text_hash" in error_msg and ("no column" in error_msg or "no such column" in error_msg):
+                                logger.warning(
+                                    f"[FTS5 Migration] Runtime check: text_hash column missing ({e}), migrating now..."
+                                )
+                                cur.execute("DROP TABLE IF EXISTS chunks_fts")
+                                cur.execute(
+                                    """
+                                    CREATE VIRTUAL TABLE chunks_fts USING fts5(
+                                        content_id UNINDEXED,
+                                        repo UNINDEXED,
+                                        path UNINDEXED,
+                                        text_hash UNINDEXED,
+                                        content,
+                                        symbol_name,
+                                        symbol_path,
+                                        tokenize='porter unicode61'
+                                    )
+                                """
+                                )
+                                conn.commit()
+                                logger.info("[FTS5 Migration] Runtime migration complete")
+                            else:
+                                raise
+                        self._fts5_schema_validated = True
 
             # Proceed with bulk insert (enrich content with path/symbol tokens)
             cur.executemany(
