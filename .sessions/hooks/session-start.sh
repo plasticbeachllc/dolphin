@@ -6,7 +6,7 @@ cd "$WORKSPACE"
 
 # Claude Code sets CLAUDE_ENV_FILE for SessionStart hooks; write exports there
 # to persist env vars across the session.
-append_env() { [ -n "${CLAUDE_ENV_FILE:-}" ] && echo "$1" >> "$CLAUDE_ENV_FILE"; }
+append_env() { [ -n "${CLAUDE_ENV_FILE:-}" ] && echo "$1" >> "$CLAUDE_ENV_FILE" || true; }
 
 # Expose common tool paths
 for p in "$HOME/.local/bin" "$HOME/.bun/bin"; do
@@ -22,8 +22,12 @@ done
 
 # Install just if missing
 if ! command -v just >/dev/null 2>&1; then
+  JUST_DIR="$HOME/.local/bin"
+  mkdir -p "$JUST_DIR"
   curl -fsSL https://github.com/casey/just/releases/download/1.40.0/just-1.40.0-x86_64-unknown-linux-musl.tar.gz \
-    | tar -xz -C /usr/local/bin just
+    | tar -xz -C "$JUST_DIR" just
+  export PATH="$JUST_DIR:$PATH"
+  append_env "export PATH=\"$JUST_DIR:\$PATH\""
 fi
 
 # Python deps
