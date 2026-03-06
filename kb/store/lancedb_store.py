@@ -22,6 +22,15 @@ class LanceDBStore:
     embedding dimensions and ensure the root directory exists.
     """
 
+    MODEL_TO_TABLE: dict[str, str] = {"small": "chunks_small", "large": "chunks_large"}
+    MODEL_TO_DIM: dict[str, int] = {"small": 1536, "large": 3072}
+
+    def _resolve_model(self, model: str) -> tuple[str, int]:
+        """Validate model and return (table_name, dimension)."""
+        if model not in self.MODEL_TO_TABLE:
+            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
+        return self.MODEL_TO_TABLE[model], self.MODEL_TO_DIM[model]
+
     def __init__(self, root: str | Path) -> None:
         # Handle both file paths and in-memory URIs
         # In-memory URIs like "memory://name" should remain as strings
@@ -74,12 +83,7 @@ class LanceDBStore:
         """
         import pyarrow as pa
 
-        model_to_dim = {"small": 1536, "large": 3072}
-
-        if model not in model_to_dim:
-            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
-
-        dim = model_to_dim[model]
+        _, dim = self._resolve_model(model)
 
         # Use fixed-size list for LanceDB vector search to work properly
         vector_field = pa.field("vector", pa.list_(pa.float32(), dim))
@@ -278,15 +282,7 @@ class LanceDBStore:
             chunks: Iterable of chunk dictionaries with LanceDB schema
             model: Embedding model name ('small' or 'large')
         """
-        # Map model to table name and expected dimension
-        model_to_table = {"small": "chunks_small", "large": "chunks_large"}
-        model_to_dim = {"small": 1536, "large": 3072}
-
-        if model not in model_to_table:
-            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
-
-        table_name = model_to_table[model]
-        expected_dim = model_to_dim[model]
+        table_name, expected_dim = self._resolve_model(model)
 
         # Use cached connection
         db = self.connect()
@@ -388,18 +384,15 @@ class LanceDBStore:
         keep_ids: set[str] | None = None,
     ) -> None:
         """Remove vectors for a given repo/path, optionally preserving specific row IDs."""
-        model_to_table = {"small": "chunks_small", "large": "chunks_large"}
-
-        if model not in model_to_table:
-            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
+        table_name, _ = self._resolve_model(model)
 
         # Use cached connection
         db = self.connect()
         try:
-            table = db.open_table(model_to_table[model])
+            table = db.open_table(table_name)
         except Exception:
             # Nothing to prune if the table does not exist yet
-            logger.debug("Table '%s' not yet created; nothing to prune.", model_to_table[model], exc_info=True)
+            logger.debug("Table '%s' not yet created; nothing to prune.", table_name, exc_info=True)
             return
 
         repo_expr = repr(repo)
@@ -424,20 +417,15 @@ class LanceDBStore:
             repo: Repository name
             model: Embedding model ('small' or 'large')
         """
-        model_to_table = {"small": "chunks_small", "large": "chunks_large"}
-
-        if model not in model_to_table:
-            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
+        table_name, _ = self._resolve_model(model)
 
         # Use cached connection
         db = self.connect()
         try:
-            table = db.open_table(model_to_table[model])
+            table = db.open_table(table_name)
         except Exception:
             # Nothing to delete if the table does not exist yet
-            logger.debug(
-                "Table '%s' not yet created; nothing to delete for repo=%s.", model_to_table[model], repo, exc_info=True
-            )
+            logger.debug("Table '%s' not yet created; nothing to delete for repo=%s.", table_name, repo, exc_info=True)
             return
 
         repo_expr = repr(repo)
@@ -460,20 +448,15 @@ class LanceDBStore:
         Returns:
             Number of vectors found for the repository
         """
-        model_to_table = {"small": "chunks_small", "large": "chunks_large"}
-
-        if model not in model_to_table:
-            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
+        table_name, _ = self._resolve_model(model)
 
         # Use cached connection
         db = self.connect()
         try:
-            table = db.open_table(model_to_table[model])
+            table = db.open_table(table_name)
         except Exception:
             # Table doesn't exist yet
-            logger.debug(
-                "Table '%s' not yet created; vector count=0 for repo=%s.", model_to_table[model], repo, exc_info=True
-            )
+            logger.debug("Table '%s' not yet created; vector count=0 for repo=%s.", table_name, repo, exc_info=True)
             return 0
 
         repo_expr = repr(repo)
@@ -513,15 +496,7 @@ class LanceDBStore:
         if ann_params is None:
             ann_params = ANNParams()  # Default configuration
 
-        # Map model to table name and expected dimension
-        model_to_table = {"small": "chunks_small", "large": "chunks_large"}
-        model_to_dim = {"small": 1536, "large": 3072}
-
-        if model not in model_to_table:
-            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
-
-        table_name = model_to_table[model]
-        expected_dim = model_to_dim[model]
+        table_name, expected_dim = self._resolve_model(model)
 
         # Validate query vector dimension
         if len(query_vector) != expected_dim:
@@ -591,13 +566,7 @@ class LanceDBStore:
         Returns:
             Chunk dictionary if found, None otherwise
         """
-        # Map model to table name
-        model_to_table = {"small": "chunks_small", "large": "chunks_large"}
-
-        if model not in model_to_table:
-            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
-
-        table_name = model_to_table[model]
+        table_name, _ = self._resolve_model(model)
 
         # Connect to database and open table using cached connection logic
         db = self.connect()
@@ -628,10 +597,7 @@ class LanceDBStore:
         Returns:
             Dictionary mapping text_hash -> vector
         """
-        model_to_table = {"small": "chunks_small", "large": "chunks_large"}
-
-        if model not in model_to_table:
-            raise ValueError(f"Unknown model: {model}. Must be 'small' or 'large'")
+        table_name, _ = self._resolve_model(model)
 
         hash_list = list(hashes)
         if not hash_list:
@@ -640,9 +606,9 @@ class LanceDBStore:
         # Use cached connection
         db = self.connect()
         try:
-            table = db.open_table(model_to_table[model])
+            table = db.open_table(table_name)
         except Exception:
-            logger.warning("Failed to open table '%s'.", model_to_table[model], exc_info=True)
+            logger.warning("Failed to open table '%s'.", table_name, exc_info=True)
             return {}
 
         repo_expr = repr(repo)

@@ -23,7 +23,7 @@ from rich.table import Table
 from ..api_key import get_kb_key_path, get_or_create_kb_api_key, load_kb_api_key
 from ..config import DEFAULT_CONFIG_PATH, ConfigNotFoundError, KBConfig, load_config
 from ..embeddings.provider import create_provider, set_default_provider
-from ..ignores import build_ignore_set, load_repo_ignores
+from ..ignores import SECURITY_IGNORE_PATTERNS, build_ignore_set, load_repo_ignores
 from ..store import LanceDBStore, SQLiteMetadataStore
 from ..terminal import print_status
 from .pipeline import IngestionPipeline
@@ -584,16 +584,6 @@ def _prune_ignored_files(
     repo_root = Path(str(repo_record["root_path"]))
 
     # Build ignore spec
-    extra_security = {
-        "**/id_rsa",
-        "**/*.pem",
-        "**/.aws/**",
-        "**/gcloud/**",
-        "**/secrets/**",
-        "**/*keys.json",
-        "**/*service_account.json",
-        "**/*auth.json",
-    }
     ignore_patterns = build_ignore_set(config.ignore, config.ignore_exceptions)
     repo_level_patterns, repo_level_exceptions = load_repo_ignores(repo_root)
     if repo_level_patterns:
@@ -601,7 +591,7 @@ def _prune_ignored_files(
     # Apply repo-level exceptions
     if repo_level_exceptions:
         ignore_patterns = build_ignore_set(ignore_patterns, repo_level_exceptions)
-    ignore_patterns.update(extra_security)
+    ignore_patterns.update(SECURITY_IGNORE_PATTERNS)
 
     ignore_spec = PathSpec.from_lines("gitignore", ignore_patterns)
 

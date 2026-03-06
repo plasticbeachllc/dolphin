@@ -68,6 +68,10 @@ class RetrievalConstants:
     EMBEDDING_TIMEOUT_SECONDS: float = 10.0
     """Maximum time for embedding generation."""
 
+    # Token Estimation
+    ESTIMATED_TOKENS_PER_CHUNK: int = 200
+    """Rough estimate of tokens per chunk, used for API response size estimation."""
+
     # Cache TTL
     RESULT_CACHE_TTL_SECONDS: int = 3600
     """Cache search results for 1 hour.

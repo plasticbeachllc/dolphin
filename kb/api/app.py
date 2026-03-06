@@ -21,8 +21,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..api_key import load_kb_api_key
 from ..config import KBConfig, load_config
+from ..constants.retrieval_config import RETRIEVAL_PARAMS
 from ..store.sqlite_meta import SQLiteMetadataStore, generate_fts_content_id
 from ..utils.tokens import estimate_tokens
+from ..version import get_version as _get_pkg_version
 from .task_queue import TaskStatus, get_task_queue
 from .utils import GitRepository, validate_path_within_repo
 
@@ -31,15 +33,10 @@ _log = logging.getLogger(__name__)
 # Constants
 # Batch size for metadata hash lookups (distinct from config.embedding_batch_size for the embedding API).
 EMBEDDING_BATCH_SIZE = 128
-ESTIMATED_TOKENS_PER_CHUNK = 200
+ESTIMATED_TOKENS_PER_CHUNK = RETRIEVAL_PARAMS.ESTIMATED_TOKENS_PER_CHUNK
 CHUNK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_:-]+$")
 
-try:
-    from importlib.metadata import version as _pkg_version
-
-    _APP_VERSION = _pkg_version("pb-dolphin")
-except Exception:
-    _APP_VERSION = "0.0.0"
+_APP_VERSION = _get_pkg_version(fallback="0.0.0")
 
 app = FastAPI(title="Unified Knowledge Store", version=_APP_VERSION)
 
@@ -92,6 +89,18 @@ def _load_default_config() -> KBConfig:
 _DEFAULT_CONFIG = _load_default_config()
 _API_LIMITS = _DEFAULT_CONFIG.api
 
+
+def _get_expected_api_key() -> str | None:
+    """Return expected API key, checking env vars first then file-based key."""
+    import os
+
+    for name in ("DOLPHIN_API_KEY", "DOLPHIN_KB_API_KEY"):
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return load_kb_api_key()
+
+
 # Add CORS middleware for local development clients.
 # Note: CORSMiddleware is a class, not a factory function, but FastAPI's add_middleware
 # accepts both. We need to help the type checker by explicitly typing this.
@@ -119,7 +128,7 @@ async def validate_api_key(request: Request, call_next):
     # Protect all /v1/ endpoints with API key authentication
     if request.url.path.startswith("/v1/") and request.url.path != "/v1/health":
         api_key = request.headers.get("X-API-Key")
-        expected_key = load_kb_api_key()
+        expected_key = _get_expected_api_key()
 
         if not api_key or not hmac.compare_digest(api_key, expected_key or ""):
             return JSONResponse({"error": "Unauthorized", "detail": "Valid API key required"}, status_code=401)
@@ -1159,8 +1168,9 @@ async def process_index_task(task_id: str, repo_name: str, files: list[str]) -> 
 
             _sql_store.prune_invalidated_content_for_file(repo_id, file_id, embed_model, set(desired.keys()))
 
-            # Build token count lookup
+            # Build quick lookups for token_count and chunk text by hash
             occ_token_counts = {(ch.start_line, ch.end_line): getattr(ch, "token_count", 0) for ch in chunks}
+            hash_to_text: dict[str, str] = {ch.text_hash: ch.text for ch in chunks}
 
             # Persist vectors to LanceDB and prepare FTS5 chunks
             payload = []
@@ -1172,11 +1182,7 @@ async def process_index_task(task_id: str, repo_name: str, files: list[str]) -> 
                 # Prepare chunk for FTS5 indexing (once per hash, independent of vector status)
                 # FTS5 is for BM25 text search and should work even without embeddings
                 if content_id:
-                    chunk_text = None
-                    for chunk in chunks:
-                        if chunk.text_hash == h:
-                            chunk_text = chunk.text
-                            break
+                    chunk_text = hash_to_text.get(h)
 
                     if chunk_text:
                         # Generate deterministic FTS5 content_id (independent of embed_model)

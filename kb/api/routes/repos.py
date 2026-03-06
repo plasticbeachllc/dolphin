@@ -10,6 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 import kb.api.app as _app_mod
 
+from ...constants.retrieval_config import RETRIEVAL_PARAMS
 from ..app import (
     DriftDetectionResponse,
     IndexResponse,
@@ -32,7 +33,7 @@ _log = logging.getLogger(__name__)
 router = APIRouter()
 
 # ---- Constants re-used for token estimation ----
-ESTIMATED_TOKENS_PER_CHUNK = 200
+ESTIMATED_TOKENS_PER_CHUNK = RETRIEVAL_PARAMS.ESTIMATED_TOKENS_PER_CHUNK
 
 
 @router.get("/v1/repos")

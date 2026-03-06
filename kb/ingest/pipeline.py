@@ -20,7 +20,7 @@ from ..constants.retrieval_config import RETRIEVAL_PARAMS
 from ..embeddings.provider import embed_texts_with_retry
 from ..graph_intelligence.graph_manager import GraphManager
 from ..hashing import hash_text
-from ..ignores import build_ignore_set, load_repo_ignores
+from ..ignores import SECURITY_IGNORE_PATTERNS, build_ignore_set, load_repo_ignores
 from ..ingest._helpers import (
     build_desired_map,
     get_all_tracked_files,
@@ -419,16 +419,6 @@ class IngestionPipeline:
 
         # Build ignore patterns using shared utility (returns set, not PathSpec)
         # For scan, we need the pattern set directly, not PathSpec
-        extra_security = {
-            "**/id_rsa",
-            "**/*.pem",
-            "**/.aws/**",
-            "**/gcloud/**",
-            "**/secrets/**",
-            "**/*keys.json",
-            "**/*service_account.json",
-            "**/*auth.json",
-        }
         ignore_patterns = build_ignore_set(self.config.ignore, self.config.ignore_exceptions)
         # Merge repo-level ignores from .dolphin/config.toml
         repo_level_patterns, repo_level_exceptions = load_repo_ignores(root)
@@ -437,7 +427,7 @@ class IngestionPipeline:
         # Apply repo-level exceptions
         if repo_level_exceptions:
             ignore_patterns = build_ignore_set(ignore_patterns, repo_level_exceptions)
-        ignore_patterns.update(extra_security)
+        ignore_patterns.update(SECURITY_IGNORE_PATTERNS)
 
         # Scan
         candidates: list[FileCandidate] = scan_repo(root, ignore_patterns)
@@ -663,10 +653,11 @@ class IngestionPipeline:
 
                     self.metadata.prune_invalidated_content_for_file(repo_id, file_id, embed_model, set(desired.keys()))
 
-                    # Build a quick lookup for token_count by occurrence position
+                    # Build quick lookups for token_count and chunk text by hash
                     occ_token_counts: dict[tuple[int, int], int] = {
                         (ch.start_line, ch.end_line): getattr(ch, "token_count", 0) for ch in chunks
                     }
+                    hash_to_text: dict[str, str] = {ch.text_hash: ch.text for ch in chunks}
 
                     # Persist vectors to LanceDB (per occurrence)
                     payload = []
@@ -705,12 +696,7 @@ class IngestionPipeline:
 
                             # Prepare chunk for FTS5 indexing (only for first occurrence per hash)
                             if content_id and idx == 0:  # First occurrence only
-                                # Find the chunk text for this hash
-                                chunk_text = None
-                                for chunk in chunks:
-                                    if chunk.text_hash == h:
-                                        chunk_text = chunk.text
-                                        break
+                                chunk_text = hash_to_text.get(h)
 
                                 if chunk_text:
                                     # Generate deterministic FTS5 content_id (independent of embed_model)
@@ -1176,23 +1162,13 @@ class IngestionPipeline:
         error_logger = ErrorLogger(root, str(session_id))
 
         # Build ignore spec
-        extra_security = {
-            "**/id_rsa",
-            "**/*.pem",
-            "**/.aws/**",
-            "**/gcloud/**",
-            "**/secrets/**",
-            "**/*keys.json",
-            "**/*service_account.json",
-            "**/*auth.json",
-        }
         ignore_patterns = build_ignore_set(self.config.ignore, self.config.ignore_exceptions)
         repo_level_patterns, repo_level_exceptions = load_repo_ignores(root)
         if repo_level_patterns:
             ignore_patterns.update(repo_level_patterns)
         if repo_level_exceptions:
             ignore_patterns = build_ignore_set(ignore_patterns, repo_level_exceptions)
-        ignore_patterns.update(extra_security)
+        ignore_patterns.update(SECURITY_IGNORE_PATTERNS)
 
         # Determine changed files
         files_skipped_ignored = 0
